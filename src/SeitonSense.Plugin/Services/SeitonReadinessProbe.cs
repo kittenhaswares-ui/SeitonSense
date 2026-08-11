@@ -13,28 +13,17 @@ internal static class SeitonReadinessProbe
     internal const uint UnsealedStatusId = 3192;
     internal const float MaximumRange = 20f;
 
-    internal static unsafe bool IsAvailableForTarget(
+    internal static unsafe bool TryGetReadyAction(
         IPlayerCharacter localPlayer,
-        IPlayerCharacter target,
-        out uint resolvedActionId,
-        out uint actionStatus,
-        out uint rangeStatus)
+        out uint resolvedActionId)
     {
         resolvedActionId = 0;
-        actionStatus = uint.MaxValue;
-        rangeStatus = uint.MaxValue;
 
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return false;
 
         var sourceObject = (GameObject*)localPlayer.Address;
-        var targetObject = (GameObject*)target.Address;
-        if (sourceObject == null || targetObject == null ||
-            sourceObject->EntityId != localPlayer.EntityId ||
-            targetObject->EntityId != target.EntityId)
-        {
-            return false;
-        }
+        if (sourceObject == null || sourceObject->EntityId != localPlayer.EntityId) return false;
 
         resolvedActionId = actionManager->GetAdjustedActionId(BaseActionId);
         if (resolvedActionId is not (BaseActionId or FollowUpActionId)) return false;
@@ -67,20 +56,33 @@ internal static class SeitonReadinessProbe
             }
         }
 
-        if (!ActionManager.CanUseActionOnTarget(resolvedActionId, targetObject)) return false;
+        // Cooldown is stable resource state (not facing, animation lock, casting, or current target).
+        // The old per-target action-status gate flickered during movement and prevented alerts.
+        return actionManager->IsActionOffCooldown(ActionType.Action, resolvedActionId);
+    }
+
+    internal static unsafe bool HasRangeAndLineOfSight(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter target,
+        uint resolvedActionId,
+        out uint rangeStatus)
+    {
+        rangeStatus = uint.MaxValue;
+        if (resolvedActionId is not (BaseActionId or FollowUpActionId)) return false;
+
+        var sourceObject = (GameObject*)localPlayer.Address;
+        var targetObject = (GameObject*)target.Address;
+        if (sourceObject == null || targetObject == null ||
+            sourceObject->EntityId != localPlayer.EntityId ||
+            targetObject->EntityId != target.EntityId)
+        {
+            return false;
+        }
+
         rangeStatus = ActionManager.GetActionInRangeOrLoS(
             resolvedActionId,
             sourceObject,
             targetObject);
-        if (!SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeStatus)) return false;
-
-        actionStatus = actionManager->GetActionStatus(
-            ActionType.Action,
-            resolvedActionId,
-            target.GameObjectId,
-            true,
-            true);
-        return actionStatus == 0 &&
-               actionManager->IsActionOffCooldown(ActionType.Action, resolvedActionId);
+        return SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeStatus);
     }
 }

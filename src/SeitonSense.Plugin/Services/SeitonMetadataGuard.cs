@@ -6,9 +6,17 @@ using ActionSheet = Lumina.Excel.Sheets.Action;
 
 namespace SeitonSense.Plugin.Services;
 
-internal static class SeitonMetadataGuard
+internal sealed record PvPMetadataValidation(
+    bool SeitonVerified,
+    bool GuardVerified,
+    bool RecuperateVerified)
 {
-    internal static bool Validate(IDataManager dataManager, IPluginLog log)
+    public static PvPMetadataValidation None { get; } = new(false, false, false);
+}
+
+internal static class PvPMetadataGuard
+{
+    internal static PvPMetadataValidation Validate(IDataManager dataManager, IPluginLog log)
     {
         try
         {
@@ -16,9 +24,9 @@ internal static class SeitonMetadataGuard
             var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
 
-            var valid =
-                ValidateAction(actions, descriptions, SeitonReadinessProbe.BaseActionId, 100, 14, 1) &&
-                ValidateAction(actions, descriptions, SeitonReadinessProbe.FollowUpActionId, 10, 10, 3192) &&
+            var seitonVerified =
+                ValidateSeitonAction(actions, descriptions, SeitonReadinessProbe.BaseActionId, 100, 14, 1) &&
+                ValidateSeitonAction(actions, descriptions, SeitonReadinessProbe.FollowUpActionId, 10, 10, 3192) &&
                 statuses.TryGetRow(SeitonReadinessProbe.UnsealedStatusId, out var unsealed) &&
                 unsealed.Name.ToString() == "Unsealed Seiton Tenchu" &&
                 unsealed.Icon == 214945 &&
@@ -26,25 +34,45 @@ internal static class SeitonMetadataGuard
                     "Able to execute Seiton Tenchu.",
                     StringComparison.Ordinal);
 
-            if (valid)
-            {
-                log.Information("Seiton Sense verified current Seiton actions and Unsealed status metadata.");
-                return true;
-            }
+            var guardVerified =
+                actions.TryGetRow(EnemyCombatConstants.GuardActionId, out var guard) &&
+                guard.Name.ToString() == "Guard" &&
+                guard.Icon == EnemyCombatConstants.GuardIconId &&
+                guard.IsPvP &&
+                guard.Recast100ms == 300 &&
+                statuses.TryGetRow(EnemyCombatConstants.GuardStatusId, out var guardStatus) &&
+                guardStatus.Name.ToString() == "Guard" &&
+                statuses.TryGetRow(EnemyCombatConstants.GuardStatusAlternateId, out var alternateGuardStatus) &&
+                alternateGuardStatus.Name.ToString() == "Guard";
 
-            log.Warning(
-                "Seiton Sense disabled live alerts because current game data no longer matches " +
-                "the verified Seiton Tenchu metadata.");
-            return false;
+            var recuperateVerified =
+                actions.TryGetRow(EnemyCombatConstants.RecuperateActionId, out var recuperate) &&
+                recuperate.Name.ToString() == "Recuperate" &&
+                recuperate.Icon == EnemyCombatConstants.RecuperateIconId &&
+                recuperate.IsPvP &&
+                recuperate.PrimaryCostValue == EnemyCombatConstants.RecuperateMpCost;
+
+            var validation = new PvPMetadataValidation(
+                seitonVerified,
+                guardVerified,
+                recuperateVerified);
+
+            log.Information(
+                "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}.",
+                validation.SeitonVerified,
+                validation.GuardVerified,
+                validation.RecuperateVerified);
+
+            return validation;
         }
         catch (Exception exception)
         {
             log.Warning(exception, "Seiton Sense metadata validation failed closed.");
-            return false;
+            return PvPMetadataValidation.None;
         }
     }
 
-    private static bool ValidateAction(
+    private static bool ValidateSeitonAction(
         ExcelSheet<ActionSheet> actions,
         ExcelSheet<ActionTransient> descriptions,
         uint actionId,

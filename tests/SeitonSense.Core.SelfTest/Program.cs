@@ -7,15 +7,23 @@ var tests = new (string Name, Action Run)[]
     ("invalid HP fails closed", InvalidHpFailsClosed),
     ("enemy slot labels are exact", EnemySlotLabelsAreExact),
     ("enemy validation fails closed", EnemyValidationFailsClosed),
-    ("label appears on first actionable sample", LabelAppearsImmediately),
-    ("flash requires two actionable samples", FlashRequiresTwoSamples),
-    ("flash does not repeat in the same window", FlashDoesNotRepeat),
-    ("range or readiness loss does not rearm", ReadinessLossDoesNotRearm),
-    ("stable healing rearms once", StableHealingRearms),
-    ("flash timeline is bounded", FlashTimelineIsBounded),
     ("native range result accepts facing-only failure", NativeRangeResultIsExact),
     ("known CC territories are complete", KnownCcTerritoriesAreComplete),
     ("CC matching remains fail closed", CcMatchingIsFailClosed),
+    ("visibility ignores a short false sample", VisibilityHasFalseGrace),
+    ("visibility hard reset is immediate", VisibilityHardResetIsImmediate),
+    ("unknown Guard never claims cooldown", UnknownGuardFailsClosed),
+    ("Guard action starts a 30 second cooldown", GuardActionTracksCooldown),
+    ("Guard status infers a stable deadline", GuardStatusInfersDeadline),
+    ("Guard status tracks a later activation", GuardStatusTracksLaterActivation),
+    ("Guard revive resets the cooldown", GuardReviveResetsCooldown),
+    ("low MP requires a stable trusted sample", LowMpRequiresStableTrustedSample),
+    ("low MP uses exit hysteresis", LowMpUsesExitHysteresis),
+    ("low MP trust loss cancels only a pending transition", LowMpTrustLossIsStable),
+    ("low MP thresholds are exact", LowMpThresholdsAreExact),
+    ("Seiton popup is one shot and rearms", StablePopupIsOneShot),
+    ("Seiton range jitter cannot rearm", SeitonRangeJitterCannotRearm),
+    ("Seiton popup rearm must remain stable", SeitonPopupRearmMustRemainStable),
 };
 
 var failures = new List<string>();
@@ -88,66 +96,6 @@ static void EnemyValidationFailsClosed()
     False(EnemySlotRules.CanUseResolvedEnemy(false, false, true, false, true, false, 10, 100), "untargetable");
 }
 
-static void LabelAppearsImmediately()
-{
-    var decision = ExecuteAlertRules.Observe(ExecuteAlertState.Initial, 49, 100, true, 1000);
-    True(decision.ShowLabel, "label");
-    False(decision.TriggerFlash, "first sample flash");
-}
-
-static void FlashRequiresTwoSamples()
-{
-    var first = ExecuteAlertRules.Observe(ExecuteAlertState.Initial, 49, 100, true, 1000);
-    var second = ExecuteAlertRules.Observe(first.NextState, 49, 100, true, 1050);
-    True(second.ShowLabel, "second label");
-    True(second.TriggerFlash, "second sample flash");
-    False(second.NextState.Armed, "latch consumed");
-}
-
-static void FlashDoesNotRepeat()
-{
-    var state = ExecuteAlertState.Initial;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1000).NextState;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1050).NextState;
-    var third = ExecuteAlertRules.Observe(state, 10, 100, true, 1100);
-    True(third.ShowLabel, "continued label");
-    False(third.TriggerFlash, "no repeat");
-}
-
-static void ReadinessLossDoesNotRearm()
-{
-    var state = ExecuteAlertState.Initial;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1000).NextState;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1050).NextState;
-    state = ExecuteAlertRules.Observe(state, 49, 100, false, 1100).NextState;
-    var availableAgain = ExecuteAlertRules.Observe(state, 49, 100, true, 1150);
-    False(availableAgain.TriggerFlash, "range/readiness toggle cannot rearm");
-}
-
-static void StableHealingRearms()
-{
-    var state = ExecuteAlertState.Initial;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1000).NextState;
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1050).NextState;
-    state = ExecuteAlertRules.Observe(state, 52, 100, false, 1100).NextState;
-    state = ExecuteAlertRules.Observe(state, 52, 100, false, 1499).NextState;
-    False(state.Armed, "not yet rearmed");
-    state = ExecuteAlertRules.Observe(state, 52, 100, false, 1500).NextState;
-    True(state.Armed, "rearmed after 400ms");
-    state = ExecuteAlertRules.Observe(state, 49, 100, true, 1550).NextState;
-    var secondWindow = ExecuteAlertRules.Observe(state, 49, 100, true, 1600);
-    True(secondWindow.TriggerFlash, "new execute window flashes once");
-}
-
-static void FlashTimelineIsBounded()
-{
-    Equal(0f, FlashTimeline.Remaining01(0, 0, 0), "empty timeline");
-    Equal(0f, FlashTimeline.Remaining01(999, 1000, 1400), "before start");
-    Equal(1f, FlashTimeline.Remaining01(1000, 1000, 1400), "start");
-    Equal(0.5f, FlashTimeline.Remaining01(1200, 1000, 1400), "middle");
-    Equal(0f, FlashTimeline.Remaining01(1400, 1000, 1400), "end");
-}
-
 static void NativeRangeResultIsExact()
 {
     True(SeitonRangeRules.HasNativeRangeAndLineOfSight(0), "native success");
@@ -177,6 +125,174 @@ static void CcMatchingIsFailClosed()
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, false, true, 43, false, false), "invalid condition");
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, true, false, 43, false, false), "non-PvP condition");
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, true, true, 12, false, false), "unrelated mode");
+}
+
+static void VisibilityHasFalseGrace()
+{
+    var state = DebouncedVisibilityRules.Observe(DebouncedVisibilityState.Initial, true, 1_000);
+    state = DebouncedVisibilityRules.Observe(state, false, 1_050);
+    True(state.IsVisible, "first false sample remains visible");
+    state = DebouncedVisibilityRules.Observe(state, true, 1_100);
+    True(state.IsVisible, "true sample cancels pending hide");
+    state = DebouncedVisibilityRules.Observe(state, false, 1_150);
+    state = DebouncedVisibilityRules.Observe(state, false, 1_349);
+    True(state.IsVisible, "inside grace");
+    state = DebouncedVisibilityRules.Observe(state, false, 1_350);
+    False(state.IsVisible, "grace elapsed");
+}
+
+static void VisibilityHardResetIsImmediate()
+{
+    var state = DebouncedVisibilityRules.Observe(DebouncedVisibilityState.Initial, true, 1_000);
+    state = DebouncedVisibilityRules.Observe(state, true, 1_001, hardReset: true);
+    False(state.IsVisible, "hard reset overrides a visible observation");
+}
+
+static void UnknownGuardFailsClosed()
+{
+    Equal(GuardAvailability.Unknown, GuardCooldownRules.GetAvailability(GuardCooldownState.Initial, 1_000), "unknown state");
+    False(GuardCooldownRules.ShouldShowCrossedIcon(GuardCooldownState.Initial, 1_000), "unknown has no crossed icon");
+}
+
+static void GuardActionTracksCooldown()
+{
+    var state = GuardCooldownRules.ObserveAction(GuardCooldownState.Initial, 1_000);
+    Equal(GuardAvailability.Unavailable, GuardCooldownRules.GetAvailability(state, 30_999), "before deadline");
+    Equal(1L, GuardCooldownRules.RemainingMilliseconds(state, 30_999), "remaining time");
+    Equal(GuardAvailability.Ready, GuardCooldownRules.GetAvailability(state, 31_000), "at deadline");
+}
+
+static void GuardStatusInfersDeadline()
+{
+    var state = GuardCooldownRules.ObserveStatus(GuardCooldownState.Initial, 10_000, 2_000);
+    Equal(38_000L, state.ReadyAtMilliseconds, "now plus remaining plus 26 seconds");
+    state = GuardCooldownRules.ObserveStatus(state, 10_100, 2_000);
+    Equal(38_000L, state.ReadyAtMilliseconds, "stale remaining time cannot extend deadline");
+    state = GuardCooldownRules.ObserveStatus(state, 10_200, 1_600);
+    Equal(38_000L, state.ReadyAtMilliseconds, "later status cannot move the inferred deadline");
+}
+
+static void GuardStatusTracksLaterActivation()
+{
+    var state = GuardCooldownRules.ObserveStatus(GuardCooldownState.Initial, 10_000, 2_000);
+    state = GuardCooldownRules.ObserveStatus(state, 38_000, 4_000);
+    Equal(68_000L, state.ReadyAtMilliseconds, "new status after prior recast gets a new deadline");
+}
+
+static void GuardReviveResetsCooldown()
+{
+    var state = GuardCooldownRules.ObserveAction(GuardCooldownState.Initial, 1_000);
+    state = GuardCooldownRules.ObserveRevive();
+    Equal(GuardAvailability.Ready, GuardCooldownRules.GetAvailability(state, 1_001), "recast reset on revive");
+}
+
+static void LowMpRequiresStableTrustedSample()
+{
+    var state = LowMpRules.Observe(LowMpState.Initial, 1_500, trustedSample: false, 1_000);
+    False(LowMpRules.ShouldShowCrossedIcon(state), "untrusted low sample");
+    state = LowMpRules.Observe(state, 1_500, trustedSample: true, 1_050);
+    False(LowMpRules.ShouldShowCrossedIcon(state), "debounce begins");
+    state = LowMpRules.Observe(state, 1_500, trustedSample: true, 1_199);
+    False(LowMpRules.ShouldShowCrossedIcon(state), "inside debounce");
+    state = LowMpRules.Observe(state, 1_500, trustedSample: true, 1_200);
+    True(LowMpRules.ShouldShowCrossedIcon(state), "stable low MP");
+}
+
+static void LowMpUsesExitHysteresis()
+{
+    var state = LowMpRules.Observe(LowMpState.Initial, 1_000, true, 1_000, debounceMilliseconds: 0);
+    True(LowMpRules.ShouldShowCrossedIcon(state), "entered below 2000");
+    state = LowMpRules.Observe(state, 2_100, true, 1_050, debounceMilliseconds: 0);
+    True(LowMpRules.ShouldShowCrossedIcon(state), "2100 remains unavailable");
+    state = LowMpRules.Observe(state, 2_300, true, 1_100);
+    state = LowMpRules.Observe(state, 2_300, true, 1_250);
+    False(LowMpRules.ShouldShowCrossedIcon(state), "2300 exits after debounce");
+}
+
+static void LowMpTrustLossIsStable()
+{
+    var pending = LowMpRules.Observe(LowMpState.Initial, 1_500, true, 1_000);
+    pending = LowMpRules.Observe(pending, 0, false, 1_100);
+    pending = LowMpRules.Observe(pending, 1_500, true, 1_200);
+    False(LowMpRules.ShouldShowCrossedIcon(pending), "untrusted gap restarts pending entry");
+    pending = LowMpRules.Observe(pending, 1_500, true, 1_350);
+    True(LowMpRules.ShouldShowCrossedIcon(pending), "restarted entry completes after full debounce");
+
+    var latched = LowMpRules.Observe(LowMpState.Initial, 1_000, true, 2_000, debounceMilliseconds: 0);
+    latched = LowMpRules.Observe(latched, 0, false, 2_100);
+    True(LowMpRules.ShouldShowCrossedIcon(latched), "missing sample preserves an established low-MP icon");
+}
+
+static void LowMpThresholdsAreExact()
+{
+    var ready = LowMpRules.Observe(LowMpState.Initial, 2_000, true, 1_000, debounceMilliseconds: 0);
+    False(LowMpRules.ShouldShowCrossedIcon(ready), "exactly 2000 can afford Recuperate");
+
+    var low = LowMpRules.Observe(LowMpState.Initial, 1_999, true, 1_000, debounceMilliseconds: 0);
+    True(LowMpRules.ShouldShowCrossedIcon(low), "1999 cannot afford Recuperate");
+    low = LowMpRules.Observe(low, 2_299, true, 1_050, debounceMilliseconds: 0);
+    True(LowMpRules.ShouldShowCrossedIcon(low), "2299 remains inside recovery hysteresis");
+    low = LowMpRules.Observe(low, 2_300, true, 1_100, debounceMilliseconds: 0);
+    False(LowMpRules.ShouldShowCrossedIcon(low), "exactly 2300 clears hysteresis");
+}
+
+static void StablePopupIsOneShot()
+{
+    var decision = StablePopupRules.Observe(StablePopupState.Initial, true, false, 1_000);
+    False(decision.TriggerPopup, "first true sample");
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 1_049);
+    False(decision.TriggerPopup, "not stable long enough");
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 1_050);
+    True(decision.TriggerPopup, "stable rising edge");
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 1_500);
+    False(decision.TriggerPopup, "latched one shot");
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_600);
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_900);
+    True(decision.NextState.Armed, "stable false rearms");
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 2_000, stableTrueMilliseconds: 0);
+    True(decision.TriggerPopup, "new rising edge triggers");
+}
+
+static void SeitonRangeJitterCannotRearm()
+{
+    var decision = StablePopupRules.Observe(
+        StablePopupState.Initial,
+        candidate: true,
+        rearmCondition: false,
+        nowMilliseconds: 1_000,
+        stableTrueMilliseconds: 0);
+    True(decision.TriggerPopup, "initial popup");
+
+    decision = StablePopupRules.Observe(decision.NextState, false, false, 1_100);
+    decision = StablePopupRules.Observe(decision.NextState, false, false, 2_000);
+    False(decision.NextState.Armed, "range loss remains latched");
+
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 2_050, stableTrueMilliseconds: 0);
+    False(decision.TriggerPopup, "walking back into range cannot pop again");
+}
+
+static void SeitonPopupRearmMustRemainStable()
+{
+    var decision = StablePopupRules.Observe(
+        StablePopupState.Initial,
+        candidate: true,
+        rearmCondition: false,
+        nowMilliseconds: 1_000,
+        stableTrueMilliseconds: 0);
+    True(decision.TriggerPopup, "initial popup");
+
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_100);
+    decision = StablePopupRules.Observe(decision.NextState, false, false, 1_399);
+    False(decision.NextState.Armed, "interrupted rearm is cancelled");
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_400);
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_699);
+    False(decision.NextState.Armed, "new rearm has not reached boundary");
+    decision = StablePopupRules.Observe(decision.NextState, false, true, 1_700);
+    True(decision.NextState.Armed, "exact 300 ms rearms");
+
+    decision = StablePopupRules.Observe(decision.NextState, true, false, 2_000, hardReset: true);
+    True(decision.NextState.Armed, "hard reset restores initial armed state");
+    False(decision.TriggerPopup, "hard reset never emits a popup");
 }
 
 static void True(bool condition, string label)

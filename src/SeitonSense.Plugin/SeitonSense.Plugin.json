@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "Show the exact S1-S5 execute slot when a CC enemy drops below 50% HP.",
-  "Description": "A display-only Ninja PvP overlay that maps the game's real enemy slots <e1>-<e5> to S1-S5, shows the matching slot above enemies below Seiton Tenchu's HP threshold, and flashes once on entry.",
+  "Punchline": "Stable PvP nameplate indicators for Seiton, Guard, and low MP.",
+  "Description": "A display-only Crystalline Conflict HUD for every job. It anchors extra icons beside native enemy job icons, tracks observed Guard cooldown and low MP, and gives Ninja a customizable job-icon plus S1-S5 Seiton popup.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",
@@ -10,6 +10,7 @@
   "Tags": [
     "pvp",
     "ninja",
+    "nameplate",
     "hud",
     "utility"
   ]
