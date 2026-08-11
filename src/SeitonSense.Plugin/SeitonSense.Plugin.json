@@ -1,0 +1,16 @@
+{
+  "Author": "kittenhaswares-ui",
+  "Name": "Seiton Sense",
+  "Punchline": "Show the exact S1-S5 execute slot when a CC enemy drops below 50% HP.",
+  "Description": "A display-only Ninja PvP overlay that maps the game's real enemy slots <e1>-<e5> to S1-S5, shows the matching slot above enemies below Seiton Tenchu's HP threshold, and flashes once on entry.",
+  "InternalName": "SeitonSense.Plugin",
+  "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "Tags": [
+    "pvp",
+    "ninja",
+    "hud",
+    "utility"
+  ]
+}
