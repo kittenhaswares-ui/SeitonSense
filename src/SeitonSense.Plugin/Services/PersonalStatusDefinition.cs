@@ -6,7 +6,8 @@ internal enum PersonalStatusFeature
 {
     Wildfire = 0,
     DeathWarrant = 1,
-    Purify = 2,
+    MarksmanSpite = 2,
+    Purify = 3,
 }
 
 internal sealed record PersonalStatusDefinition(
@@ -33,6 +34,16 @@ internal static class PersonalStatusDefinitions
         EnemyCombatConstants.DeathWarrantStatusIconId,
         PersonalDebuffAlertKind.Warning,
         PersonalStatusFeature.DeathWarrant,
+        false);
+
+    // This is an incoming-action warning rather than a status-sheet row. It is
+    // deliberately absent from Find(), which scans only the local StatusList.
+    internal static PersonalStatusDefinition MarksmanSpite { get; } = new(
+        EnemyCombatConstants.MarksmanSpiteActionId,
+        "Marksman's Spite",
+        EnemyCombatConstants.MarksmanSpiteIconId,
+        PersonalDebuffAlertKind.Warning,
+        PersonalStatusFeature.MarksmanSpite,
         false);
 
     internal static PersonalStatusDefinition Stun { get; } = new(
@@ -84,7 +95,7 @@ internal static class PersonalStatusDefinitions
         true);
 
     internal static IReadOnlyList<PersonalStatusDefinition> All { get; } =
-        [Wildfire, DeathWarrant, Stun, Heavy, Bind, Silence, DeepFreeze, MiracleOfNature];
+        [MarksmanSpite, Wildfire, DeathWarrant, Stun, Heavy, Bind, Silence, DeepFreeze, MiracleOfNature];
 
     internal static PersonalStatusDefinition? Find(uint statusId) =>
         statusId switch
@@ -107,6 +118,7 @@ internal static class PersonalStatusDefinitions
         {
             PersonalStatusFeature.Wildfire => metadata.WildfireVerified,
             PersonalStatusFeature.DeathWarrant => metadata.DeathWarrantVerified,
+            PersonalStatusFeature.MarksmanSpite => metadata.MarksmanSpiteVerified,
             PersonalStatusFeature.Purify => metadata.PurifyVerified,
             _ => false,
         };

@@ -18,6 +18,7 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 GuardColor = new(0.25f, 0.72f, 1f, 1f);
     private static readonly Vector4 ManaColor = new(0.24f, 0.48f, 1f, 1f);
     private static readonly Vector4 WarningColor = new(1f, 0.43f, 0.1f, 1f);
+    private static readonly Vector4 LethalWarningColor = new(1f, 0.08f, 0.22f, 1f);
     private static readonly Vector4 CleanseColor = new(0.34f, 0.82f, 1f, 1f);
     private static readonly Vector4 CrossColor = new(1f, 0.12f, 0.12f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
@@ -84,6 +85,10 @@ internal sealed class OverlayRenderer
 
         var statuses = personal.Statuses
             .Where(status => status.ExpiresAtMilliseconds > now)
+            .OrderByDescending(static status =>
+                status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId)
+            .ThenByDescending(static status => status.AlertKind)
+            .ThenBy(static status => status.ExpiresAtMilliseconds)
             .Take(4)
             .ToArray();
         for (var index = 0; index < statuses.Length; index++)
@@ -119,9 +124,11 @@ internal sealed class OverlayRenderer
 
         var topLeft = center - (cardSize * 0.5f);
         var bottomRight = center + (cardSize * 0.5f);
-        var accent = status.AlertKind == PersonalDebuffAlertKind.CleanseUrgent
-            ? CleanseColor
-            : WarningColor;
+        var accent = status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId
+            ? LethalWarningColor
+            : status.AlertKind == PersonalDebuffAlertKind.CleanseUrgent
+                ? CleanseColor
+                : WarningColor;
         var draw = ImGui.GetForegroundDrawList();
         var rounding = 10f * scale;
         draw.AddRectFilled(
@@ -153,6 +160,7 @@ internal sealed class OverlayRenderer
         var title = status.StatusId switch
         {
             EnemyCombatConstants.DeathWarrantStatusId => "DEATH WARRANT / RICHTBEFEHL",
+            EnemyCombatConstants.MarksmanSpiteActionId => "MCH LIMIT BREAK ON YOU",
             EnemyCombatConstants.MiracleOfNatureStatusId => "MIRACLE OF NATURE",
             _ => status.Name.ToUpperInvariant(),
         };
@@ -179,6 +187,8 @@ internal sealed class OverlayRenderer
         EmergencyPurifyProbeSnapshot purify,
         string countdown)
     {
+        if (status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId)
+            return "INCOMING  •  GUARD NOW";
         if (status.AlertKind != PersonalDebuffAlertKind.CleanseUrgent)
             return $"DANGER  •  {countdown}";
         if (!configuration.ExperimentalPurifyOnNextKey)
@@ -662,7 +672,18 @@ internal sealed class OverlayRenderer
         DrawIndicatorSlots(anchor, enemy);
 
         var now = Environment.TickCount64;
-        var warning = new PersonalStatusSnapshot(
+        var mchWarning = new PersonalStatusSnapshot(
+            EnemyCombatConstants.MarksmanSpiteActionId,
+            "Marksman's Spite",
+            EnemyCombatConstants.MarksmanSpiteIconId,
+            PersonalDebuffAlertKind.Warning,
+            2,
+            2,
+            1_800,
+            now + 1_800,
+            now,
+            true);
+        var purifyWarning = new PersonalStatusSnapshot(
             EnemyCombatConstants.MiracleOfNatureStatusId,
             "Miracle of Nature",
             EnemyCombatConstants.MiracleOfNatureStatusIconId,
@@ -674,7 +695,13 @@ internal sealed class OverlayRenderer
             now,
             true);
         DrawPersonalWarningCard(
-            warning,
+            mchWarning,
+            EmergencyPurifyProbeSnapshot.Initial,
+            0,
+            2,
+            now);
+        DrawPersonalWarningCard(
+            purifyWarning,
             EmergencyPurifyProbeSnapshot.Initial with
             {
                 Phase = EmergencyPurifyBufferPhase.WaitingForFreshKey,
@@ -682,8 +709,8 @@ internal sealed class OverlayRenderer
                     EnemyCombatConstants.MiracleOfNatureStatusId,
                     1),
             },
-            0,
             1,
+            2,
             now);
     }
 

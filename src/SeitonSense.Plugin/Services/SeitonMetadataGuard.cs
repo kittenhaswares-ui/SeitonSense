@@ -12,9 +12,10 @@ internal sealed record PvPMetadataValidation(
     bool RecuperateVerified,
     bool WildfireVerified,
     bool DeathWarrantVerified,
+    bool MarksmanSpiteVerified,
     bool PurifyVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -118,6 +119,40 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var marksmanSpiteVerified = ValidateFeature("Marksman's Spite", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+
+            if (!actions.TryGetRow(EnemyCombatConstants.MarksmanSpiteActionId, out var action) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.MarksmanSpiteActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return action.Name.ToString() == "Marksman's Spite" &&
+                   action.Icon == EnemyCombatConstants.MarksmanSpiteIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.RowId == EnemyCombatConstants.MachinistJobId &&
+                   action.Range == 50 &&
+                   action.EffectRange == 0 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.MarksmanSpiteRecast100ms &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   !action.AffectsPosition &&
+                   action.CastType == 1 &&
+                   action.AnimationEnd.RowId == EnemyCombatConstants.MarksmanSpiteTimelineId &&
+                   description.Contains("potency of 40,000", StringComparison.Ordinal) &&
+                   description.Contains("limit gauge is full", StringComparison.Ordinal);
+        });
+
         var purifyVerified = ValidateFeature("Purify", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
@@ -211,16 +246,18 @@ internal static class PvPMetadataGuard
             recuperateVerified,
             wildfireVerified,
             deathWarrantVerified,
+            marksmanSpiteVerified,
             purifyVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}, " +
-            "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, Purify={Purify}.",
+            "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, Purify={Purify}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.RecuperateVerified,
             validation.WildfireVerified,
             validation.DeathWarrantVerified,
+            validation.MarksmanSpiteVerified,
             validation.PurifyVerified);
 
         return validation;

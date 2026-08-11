@@ -32,7 +32,7 @@ function Assert-Literals([string]$Content, [string[]]$Required, [string]$Label) 
 
 $forbiddenChecks = [ordered]@{
     'network client APIs' = '\b(HttpClient|HttpClientFactory|HttpRequestMessage|WebRequest|TcpClient|UdpClient|Socket|ClientWebSocket|WebSocket)\b|\bSystem\.Net(?:\.|\b)'
-    'hooks or signature scans' = '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|MinHook)\b'
+    'signature scans or unmanaged hook libraries' = '\b(SignatureAttribute|SigScanner|MinHook)\b'
     'target mutation services' = '(?-i:\bTargetManager\b)|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*='
     'native UI or input injection' = '\b(SendInput|keybd_event|mouse_event|ExecuteCommand|SetRawValue|ClearAll|FireCallback|SendEvent)\b'
     'gameplay file writes' = '\b(File\.Write|FileStream|StreamWriter|Directory\.CreateDirectory)\b'
@@ -52,6 +52,8 @@ $readinessPath = Join-Path $pluginServicesRoot 'SeitonReadinessProbe.cs'
 $namePlateAnchorPath = Join-Path $pluginServicesRoot 'NamePlateAnchorTracker.cs'
 $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
+$nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
+$machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
@@ -61,15 +63,43 @@ $allowedUnsafe = @(
     $readinessPath,
     $namePlateAnchorPath,
     $inputContextPath,
-    $purifyProbePath
+    $purifyProbePath,
+    $nearAssistPath,
+    $machinistLimitBreakCapturePath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
 $unexpectedUnsafe = @($unsafeMatches | Where-Object { $allowedUnsafe -notcontains $_.Path })
 if ($unexpectedUnsafe.Count -gt 0) {
     $locations = $unexpectedUnsafe | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Unsafe code is allowed only in the five narrow probes: $($locations -join ', ')"
+    throw "Unsafe code is allowed only in the seven narrow probes: $($locations -join ', ')"
 }
+
+# Near Assist owns one target-only action detour. The warning-only MCH capture owns
+# one read-only ActionEffect receive hook. Plugin.cs only constructor-injects interop.
+$interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
+$unexpectedInterop = @($interopMatches | Where-Object {
+    $_.Path -notin @($pluginPath, $nearAssistPath, $machinistLimitBreakCapturePath)
+})
+if ($unexpectedInterop.Count -gt 0) {
+    $locations = $unexpectedInterop | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Only Near Assist and the warning-only MCH capture may own native hooks: $($locations -join ', ')"
+}
+$pluginSource = Read-RequiredSource $pluginPath 'Plugin entry point'
+if ([regex]::Matches($pluginSource, '\bIGameInteropProvider\b').Count -ne 1 -or
+    $pluginSource -match '\b(Hook<|HookFromAddress)\b') {
+    throw 'Plugin.cs may only constructor-inject one IGameInteropProvider; it may not create a hook.'
+}
+Assert-Literals $pluginSource @(
+    'NearAssistCommand = "/nearassist"',
+    'NearAssistAliasCommand = "/ssassist"',
+    'new NearAssistRedirector(',
+    'AllowedInMacros = true',
+    'nearAssistCommandRegistered = commandManager.AddHandler(',
+    'if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand)',
+    'if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand)',
+    'nearAssist.Dispose()'
+) 'Near Assist command ownership and lifecycle'
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
         throw "Expected narrow probe is missing: $allowed"
@@ -109,15 +139,41 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
     throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
-# Action execution remains globally forbidden except for one exact Purify call.
+# Action initiation remains globally forbidden except for one exact Purify call.
+# Near Assist may only forward an already incoming action through one Original call.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
-    $_.Path -ne $purifyProbePath -or $_.Line -notmatch '\bUseAction\b'
+    $_.Path -notin @($purifyProbePath, $nearAssistPath) -or $_.Line -notmatch '\bUseAction\b'
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe may contain one native UseAction call: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe and the bounded Near Assist detour may reference UseAction: $($locations -join ', ')"
 }
+
+$mchCapture = Read-RequiredSource $machinistLimitBreakCapturePath 'Machinist limit-break capture'
+Assert-Literals $mchCapture @(
+    'Hook<ActionEffectHandler.Delegates.Receive>',
+    'ActionEffectHandler.MemberFunctionPointers.Receive',
+    'MachinistLimitBreakMarkerRules.IsExactEarlyTargetMarker',
+    'header->NumTargets != 1',
+    'targetEntityIds[0].ObjectId == localEntityId',
+    'finally',
+    'OriginalDisposeSafe',
+    'ConcurrentQueue<MachinistLimitBreakWarning>',
+    'MaximumQueuedWarnings = 64'
+) 'Warning-only MCH LB early-marker capture'
+if ([regex]::Matches($mchCapture, '\bOriginalDisposeSafe\s*\(').Count -ne 1 -or
+    $mchCapture -match '\b(UseAction|SetTarget|TargetManager|SendInput|keybd_event)\b') {
+    throw 'MCH LB capture must call its original exactly once and may never initiate an action or change input/targets.'
+}
+
+$mchMarkerRules = Read-RequiredSource (Join-Path $coreRoot 'MachinistLimitBreakMarkerRules.cs') 'MCH LB marker rules'
+Assert-Literals $mchMarkerRules @(
+    'MarksmanSpiteActionId = 29_415',
+    'TargetMarkerEffectType = 0x1B',
+    'MaximumTargets = 32',
+    '!hasAdditionalEffects'
+) 'Exact MCH LB early-marker rules'
 
 $purifyProbe = Read-RequiredSource $purifyProbePath 'Emergency Purify probe'
 $useActionCalls = [regex]::Matches($purifyProbe, '\bUseAction\s*\(')
@@ -156,6 +212,61 @@ if ($purifyProbe -match '\b(for|foreach|while)\s*\(|\bdo\s*\{' -or
     $purifyProbe -match '\b(Retry|QueuedAction|ActionQueued|Enqueue|Dequeue)\b|\bQueue\s*[<(]' -or
     $purifyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget)\b') {
     throw 'Emergency Purify probe must not loop, retry, queue, hook, scan signatures, or access target mutation APIs.'
+}
+
+$nearAssist = Read-RequiredSource $nearAssistPath 'Near Assist redirector'
+$normalizedNearAssist = $nearAssist -replace '\s+', ' '
+Assert-Literals $nearAssist @(
+    'HookFromAddress<ActionManager.Delegates.UseAction>',
+    'ActionManager.MemberFunctionPointers.UseAction',
+    'NearAssistOneShotRules.Arm',
+    'NearAssistOneShotRules.Observe',
+    'NearAssistSelectionRules.SelectBestIndex',
+    'NearAssistSelectionRules.ClassifyPlayableJob',
+    'EnemySlotResolver.Resolve',
+    'GetNativeHardTargetId',
+    'GetActionInRangeOrLoS',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'SupportedPvPContext.CrystallineConflict',
+    'IsImmediatePvPActionMacroLine',
+    '"/pvpac"',
+    '"<t>"',
+    'oneShotState = NearAssistOneShotState.Initial',
+    'oneShotState = decision.NextState'
+) 'Near Assist redirector'
+$nearAssistSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistSelectionRules.cs') 'Near Assist smart selection rules'
+Assert-Literals $nearAssistSelection @(
+    'RolePreferenceWindowYalms = 8f',
+    'NearAssistAllyRole.RangedDamage',
+    'NearAssistAllyRole.MeleeDamage',
+    'NearAssistAllyRole.SupportOrUnknown',
+    '23 or 25 or 27 or 31 or 35 or 38 or 42',
+    '20 or 22 or 30 or 34 or 39 or 41'
+) 'Near Assist smart selection rules'
+if ([regex]::Matches($nearAssist, 'HookFromAddress<ActionManager\.Delegates\.UseAction>').Count -ne 1) {
+    throw 'Near Assist must create exactly one generated ActionManager.UseAction hook.'
+}
+if ([regex]::Matches($nearAssist, '\buseActionHook!\.Original\s*\(').Count -ne 1) {
+    throw 'Near Assist must call the hook Original exactly once from its detour.'
+}
+if ($nearAssist -match '(?:->|\.)UseAction\s*\(' -or
+    $nearAssist -match '(?-i:\b(UseActionLocation|ExecuteAction|SendAction|ActionQueued|QueuedAction|Enqueue|Dequeue|Retry)\b)' -or
+    $nearAssist -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Near Assist may forward one Original call but must never initiate, retry, queue, or visibly mutate a target.'
+}
+if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*forwardedTargetId\s*,\s*extraParam\s*,\s*mode\s*,\s*comboRouteId\s*,\s*outOptAreaTargeted\s*\)') {
+    throw 'Near Assist Original must preserve every native action argument except the bounded forwardedTargetId.'
+}
+$consumeState = [regex]::Match($nearAssist, 'oneShotState\s*=\s*NearAssistOneShotState\.Initial\s*;')
+$originalCall = [regex]::Match($nearAssist, '\buseActionHook!\.Original\s*\(')
+if (-not $consumeState.Success -or -not $originalCall.Success -or $consumeState.Index -gt $originalCall.Index) {
+    throw 'Near Assist must consume its one-shot state before the sole Original call.'
+}
+if ($nearAssist -match '\bCanUseActionOnTarget\s*\(') {
+    throw 'Near Assist must not restore the transient target-usability prefilter that defeats native macro queuing.'
+}
+if ($nearAssist -match 'mode\s*==\s*ActionManager\.UseActionMode\.None') {
+    throw 'Near Assist must not treat ambiguous normal-mode hotbar calls as Macro provenance.'
 }
 
 $slotResolver = Read-RequiredSource $slotResolverPath 'Enemy slot resolver'
@@ -320,6 +431,8 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.WildfireStatusId',
     'EnemyCombatConstants.DeathWarrantActionId',
     'EnemyCombatConstants.DeathWarrantStatusId',
+    'EnemyCombatConstants.MarksmanSpiteActionId',
+    'EnemyCombatConstants.MarksmanSpiteTimelineId',
     'EnemyCombatConstants.PvPStunStatusId',
     'EnemyCombatConstants.PvPHeavyStatusId',
     'EnemyCombatConstants.PvPBindStatusId',
@@ -330,6 +443,7 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.ResilienceStatusId',
     'ValidateFeature("Wildfire"',
     'ValidateFeature("Death Warrant"',
+    'ValidateFeature("Marksman''s Spite"',
     'ValidateFeature("Purify"'
 ) 'Metadata guard'
 
@@ -338,6 +452,9 @@ $exactCombatIds = [ordered]@{
     WildfireStatusId = 1323
     DeathWarrantActionId = 29549
     DeathWarrantStatusId = 3206
+    MarksmanSpiteActionId = 29415
+    MarksmanSpiteIconId = 9636
+    MarksmanSpiteTimelineId = 11546
     PvPStunStatusId = 1343
     PvPHeavyStatusId = 1344
     PvPBindStatusId = 1345
@@ -359,6 +476,7 @@ $personalStatus = Read-RequiredSource $personalStatusPath 'Personal status servi
 Assert-Literals ($personalStatus + $personalDefinitions) @(
     'EnemyCombatConstants.WildfireStatusId',
     'EnemyCombatConstants.DeathWarrantStatusId',
+    'EnemyCombatConstants.MarksmanSpiteActionId',
     'EnemyCombatConstants.PvPStunStatusId',
     'EnemyCombatConstants.PvPHeavyStatusId',
     'EnemyCombatConstants.PvPBindStatusId',
@@ -470,15 +588,22 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 7',
+    'public int Version { get; set; } = 9',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
     'if (Version < 7)',
     'ApplyFocusGlowDefaults(false)',
     'ApplyCurrentTargetHighlightDefaults(false)',
-    'ShowCurrentTargetInfoHud = false'
-) 'Held-key and target-highlight configuration migration'
+    'ShowCurrentTargetInfoHud = false',
+    'if (Version < 8)',
+    'EnableNearAssistMacro = false',
+    'NearAssistMaxAllyDistance = 25f',
+    'NearAssistPreferDamageRoles = true',
+    'if (Version < 9)',
+    'WarnMarksmanSpite = true',
+    'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)'
+) 'Held-key, target-highlight, and Near Assist configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -497,4 +622,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.4.0.0 safety contract verified across $($sourceFiles.Count) source files; target access is read-only and separate from native nameplate icons, while one physical input generation still permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.5.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one consumed target-only action detour, MCH LB capture is warning-only, target displays remain read-only, and one physical input generation still permits at most one native Purify attempt."

@@ -55,6 +55,39 @@ internal sealed class SettingsWindow : Window
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC NEAR ASSIST MACRO (OPT-IN)");
+        changed |= Checkbox(
+            "Enable one-shot /nearassist macro targeting",
+            configuration.EnableNearAssistMacro,
+            value => configuration.EnableNearAssistMacro = value);
+        changed |= Slider(
+            "Maximum distance to ally",
+            configuration.NearAssistMaxAllyDistance,
+            5f,
+            30f,
+            value => configuration.NearAssistMaxAllyDistance = value,
+            "%.0f yalm");
+        changed |= Checkbox(
+            "Smart preference: nearby ranged/caster DPS, then melee DPS",
+            configuration.NearAssistPreferDamageRoles,
+            value => configuration.NearAssistPreferDamageRoles = value);
+        ImGui.TextUnformatted("Macro:");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearassist");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Crystalline Conflict only. /nearassist arms one 500 ms token for the immediately following hostile " +
+            "macro action. Smart preference considers only allies whose distance from you is at most the nearest " +
+            "valid candidate's distance plus 8 yalms, " +
+            "then favors ranged/caster DPS, melee DPS, and finally support; disabling it uses strict nearest distance. " +
+            "Only that ally's exact native <e1>-<e5> hard target is considered. Identity plus native range/line-of-sight " +
+            "are checked again for the actual action. If any check fails, the original <t> target is preserved. " +
+            "It never visibly changes your selected target, sends no action by itself, and never retries. Disable " +
+            "the standalone NearAssist plugin before using this command in Seiton Sense; /ssassist is the " +
+            "temporary collision-free alias.");
+        ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Focus and current-target highlights", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped(
@@ -246,9 +279,15 @@ internal sealed class SettingsWindow : Window
             configuration.WarnDeathWarrant,
             value => configuration.WarnDeathWarrant = value);
         changed |= Checkbox(
+            "Marksman's Spite / MCH LB aimed at you",
+            configuration.WarnMarksmanSpite,
+            value => configuration.WarnMarksmanSpite = value);
+        changed |= Checkbox(
             "All Purify-removable debuff warnings",
             configuration.WarnPurifiableCrowdControl,
             value => configuration.WarnPurifiableCrowdControl = value);
+        ImGui.TextDisabled(
+            "The MCH LB alert is warning-only. It never presses Guard or another action.");
         changed |= Slider("Warning horizontal position", configuration.PersonalWarningScreenX, 0.05f, 0.95f, value => configuration.PersonalWarningScreenX = value, "%.2f");
         changed |= Slider("Warning vertical position", configuration.PersonalWarningScreenY, 0.08f, 0.9f, value => configuration.PersonalWarningScreenY = value, "%.2f");
         changed |= Slider("Warning scale", configuration.PersonalWarningScale, 0.55f, 1.8f, value => configuration.PersonalWarningScale = value, "%.2f x");
@@ -294,7 +333,7 @@ internal sealed class SettingsWindow : Window
         changed |= Slider("Extra icon background", configuration.NameplateBackgroundOpacity, 0f, 1f, value => configuration.NameplateBackgroundOpacity = value, "%.2f");
 
         ImGui.Spacing();
-        if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview nameplate"))
+        if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
             overlay.PreviewEnabled = !overlay.PreviewEnabled;
         ImGui.SameLine();
         if (ImGui.Button("Preview Seiton popup")) overlay.TriggerPreviewPopup();
@@ -310,6 +349,7 @@ internal sealed class SettingsWindow : Window
         ImGui.TextUnformatted("Live diagnostics");
         ImGui.TextWrapped($"{tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}");
         var personal = personalStatus.Snapshot;
+        var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
@@ -317,14 +357,20 @@ internal sealed class SettingsWindow : Window
             $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
             $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}, " +
             $"buffered={personal.Purify.BufferRemainingMilliseconds} ms");
+        ImGui.TextWrapped(
+            $"MCH LB capture: hook={mchLimitBreak.CaptureRunning}, queue={mchLimitBreak.QueueDepth}, " +
+            $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
+            $"errors={mchLimitBreak.CaptureErrors}, drops={mchLimitBreak.DroppedWarnings}");
 
         ImGui.Spacing();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
-            "cooldowns are never guessed. Seiton Sense never changes a target and uploads no gameplay data " +
-            "to an external service. The optional Purify experiment is the only feature that can request an " +
-            "action, and it is disabled by default. Like all third-party modifications, use it at your own risk.");
+            "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
+            "and uploads no gameplay data to an external service. The optional Near Assist module may replace " +
+            "only the target ID on one armed macro action; the optional Purify experiment is the only feature " +
+            "that can initiate an action. Both are disabled by default. Like all third-party modifications, use " +
+            "it at your own risk.");
         ImGui.PopTextWrapPos();
 
         if (changed) configuration.Save();

@@ -5,6 +5,14 @@ using SeitonSense.Plugin.Models;
 
 namespace SeitonSense.Plugin.Services;
 
+internal readonly record struct MachinistLimitBreakDiagnostics(
+    bool CaptureRunning,
+    int QueueDepth,
+    long AcceptedWarnings,
+    long CaptureErrors,
+    long DroppedWarnings,
+    bool WarningActive);
+
 internal sealed class PersonalStatusService : IDisposable
 {
     private readonly IClientState clientState;
@@ -15,6 +23,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
     private readonly EmergencyPurifyProbe emergencyPurify;
+    private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
     private readonly Dictionary<uint, ObservedPersonalStatus> lastPresentations = [];
     private readonly Dictionary<StatusPulseKey, long> pulseStartedAt = [];
@@ -22,8 +31,10 @@ internal sealed class PersonalStatusService : IDisposable
     private PersonalAlertSnapshot snapshot = PersonalAlertSnapshot.Inactive;
     private ulong nextInstanceToken = 1;
     private long nextErrorLogAt;
+    private long acceptedMachinistLimitBreakWarnings;
     private long purifyMissingObservedAt = -1;
     private DebouncedVisibilityState resiliencePresence = DebouncedVisibilityState.Initial;
+    private MachinistLimitBreakThreatState? machinistLimitBreakThreat;
     private uint activeTerritory = uint.MaxValue;
     private ulong activeLocalPlayerId;
     private SupportedPvPContext activeContext;
@@ -36,6 +47,7 @@ internal sealed class PersonalStatusService : IDisposable
         IFramework framework,
         IDutyState dutyState,
         IKeyState keyState,
+        MachinistLimitBreakCapture machinistLimitBreakCapture,
         IPluginLog log,
         PluginConfiguration configuration,
         PvPMetadataValidation metadata)
@@ -48,15 +60,34 @@ internal sealed class PersonalStatusService : IDisposable
         this.configuration = configuration;
         this.metadata = metadata;
         emergencyPurify = new EmergencyPurifyProbe(new GameInputContextProbe(keyState), log);
+        this.machinistLimitBreakCapture = machinistLimitBreakCapture;
     }
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
+    internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
+        machinistLimitBreakCapture.IsRunning,
+        machinistLimitBreakCapture.QueueDepth,
+        Interlocked.Read(ref acceptedMachinistLimitBreakWarnings),
+        machinistLimitBreakCapture.CaptureErrors,
+        machinistLimitBreakCapture.DroppedWarnings,
+        machinistLimitBreakThreat is { ExpiresAtMilliseconds: var expiresAt } &&
+        expiresAt > Environment.TickCount64);
 
     internal void Start()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (started) return;
         started = true;
+        try
+        {
+            machinistLimitBreakCapture.Start();
+        }
+        catch (Exception exception)
+        {
+            log.Warning(
+                exception,
+                "Seiton Sense MCH limit-break capture is unavailable; other features remain active.");
+        }
         framework.Update += OnFrameworkUpdate;
     }
 
@@ -65,6 +96,7 @@ internal sealed class PersonalStatusService : IDisposable
         if (disposed) return;
         disposed = true;
         if (started) framework.Update -= OnFrameworkUpdate;
+        machinistLimitBreakCapture.Dispose();
         ResetRuntime();
     }
 
@@ -82,6 +114,9 @@ internal sealed class PersonalStatusService : IDisposable
             alertStates = [];
             lastPresentations.Clear();
             pulseStartedAt.Clear();
+            machinistLimitBreakCapture.SetLocalEntityId(0);
+            machinistLimitBreakCapture.ClearWarnings();
+            machinistLimitBreakThreat = null;
             var purify = emergencyPurify.FailClosed(now);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
@@ -119,6 +154,7 @@ internal sealed class PersonalStatusService : IDisposable
         var anyWarningEnabled = configuration.ShowPersonalWarnings &&
                                 (configuration.WarnWildfire ||
                                  configuration.WarnDeathWarrant ||
+                                 configuration.WarnMarksmanSpite ||
                                  configuration.WarnPurifiableCrowdControl);
         var shouldScanStatuses = configuration.Enabled &&
                                  isSupportedPvPContext &&
@@ -129,6 +165,19 @@ internal sealed class PersonalStatusService : IDisposable
         var observed = shouldScanStatuses
             ? ScanExactStatuses(localPlayer, now)
             : [];
+        var shouldCaptureMachinistLimitBreak = configuration.Enabled &&
+                                               configuration.ShowPersonalWarnings &&
+                                               configuration.WarnMarksmanSpite &&
+                                               metadata.MarksmanSpiteVerified &&
+                                               isSupportedPvPContext &&
+                                               alive &&
+                                               localPlayer is not null;
+        machinistLimitBreakCapture.SetLocalEntityId(
+            shouldCaptureMachinistLimitBreak ? localPlayer!.EntityId : 0);
+        if (shouldCaptureMachinistLimitBreak && localPlayer is not null)
+            AppendMachinistLimitBreakThreat(observed, localPlayer, context, now);
+        else
+            ClearMachinistLimitBreakThreat();
         if (!shouldScanStatuses) instanceTokens.Clear();
         var resilienceObserved = shouldScanStatuses &&
                                  metadata.PurifyVerified &&
@@ -333,6 +382,65 @@ internal sealed class PersonalStatusService : IDisposable
         return results.ToArray();
     }
 
+    private void AppendMachinistLimitBreakThreat(
+        ICollection<ObservedPersonalStatus> observed,
+        IPlayerCharacter localPlayer,
+        SupportedPvPContext context,
+        long nowMilliseconds)
+    {
+        while (machinistLimitBreakCapture.TryDequeue(out var warning))
+        {
+            if (warning.TargetEntityId != localPlayer.EntityId ||
+                warning.ObservedAtMilliseconds > nowMilliseconds ||
+                nowMilliseconds - warning.ObservedAtMilliseconds > 1_000 ||
+                !MachinistLimitBreakThreatResolver.IsVerifiedOpponent(
+                    objectTable,
+                    warning.CasterEntityId,
+                    localPlayer,
+                    context))
+            {
+                continue;
+            }
+
+            var duplicate = machinistLimitBreakThreat is { } current &&
+                            current.CasterEntityId == warning.CasterEntityId &&
+                            current.GlobalSequence == warning.GlobalSequence &&
+                            current.SourceSequence == warning.SourceSequence;
+            if (duplicate) continue;
+
+            machinistLimitBreakThreat = new MachinistLimitBreakThreatState(
+                warning.CasterEntityId,
+                warning.GlobalSequence,
+                warning.SourceSequence,
+                NextInstanceToken(),
+                warning.ObservedAtMilliseconds,
+                SaturatingAdd(
+                    warning.ObservedAtMilliseconds,
+                    EnemyCombatConstants.MarksmanSpiteWarningDurationMilliseconds));
+            Interlocked.Increment(ref acceptedMachinistLimitBreakWarnings);
+        }
+
+        if (machinistLimitBreakThreat is not { } threat ||
+            threat.ExpiresAtMilliseconds <= nowMilliseconds)
+        {
+            machinistLimitBreakThreat = null;
+            return;
+        }
+
+        observed.Add(new ObservedPersonalStatus(
+            PersonalStatusDefinitions.MarksmanSpite,
+            threat.CasterEntityId,
+            threat.InstanceToken,
+            Math.Max(1, threat.ExpiresAtMilliseconds - nowMilliseconds),
+            threat.ExpiresAtMilliseconds));
+    }
+
+    private void ClearMachinistLimitBreakThreat()
+    {
+        machinistLimitBreakCapture.ClearWarnings();
+        machinistLimitBreakThreat = null;
+    }
+
     private PurifyCcStatusInstance? SelectPurifyStatus(
         IReadOnlyList<ObservedPersonalStatus> observed,
         long nowMilliseconds,
@@ -386,6 +494,7 @@ internal sealed class PersonalStatusService : IDisposable
         {
             PersonalStatusFeature.Wildfire => configuration.WarnWildfire,
             PersonalStatusFeature.DeathWarrant => configuration.WarnDeathWarrant,
+            PersonalStatusFeature.MarksmanSpite => configuration.WarnMarksmanSpite,
             PersonalStatusFeature.Purify => configuration.WarnPurifiableCrowdControl,
             _ => false,
         };
@@ -431,6 +540,7 @@ internal sealed class PersonalStatusService : IDisposable
         instanceTokens.Clear();
         lastPresentations.Clear();
         pulseStartedAt.Clear();
+        ClearMachinistLimitBreakThreat();
         purifyMissingObservedAt = -1;
         resiliencePresence = DebouncedVisibilityState.Initial;
         alertStates = [];
@@ -468,6 +578,14 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly record struct StatusIdentityState(ulong Token, long LastSeenAtMilliseconds);
 
     private readonly record struct StatusPulseKey(uint StatusId, ulong InstanceToken);
+
+    private readonly record struct MachinistLimitBreakThreatState(
+        uint CasterEntityId,
+        uint GlobalSequence,
+        ushort SourceSequence,
+        ulong InstanceToken,
+        long ObservedAtMilliseconds,
+        long ExpiresAtMilliseconds);
 
     private sealed record ObservedPersonalStatus(
         PersonalStatusDefinition Definition,

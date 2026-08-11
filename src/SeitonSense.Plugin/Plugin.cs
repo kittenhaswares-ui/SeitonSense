@@ -13,6 +13,8 @@ public sealed class Plugin : IDalamudPlugin
 {
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
+    private const string NearAssistCommand = "/nearassist";
+    private const string NearAssistAliasCommand = "/ssassist";
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly ICommandManager commandManager;
@@ -22,10 +24,13 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windowSystem = new("SeitonSense");
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
+    private readonly NearAssistRedirector nearAssist;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly SettingsWindow settingsWindow;
+    private readonly bool nearAssistCommandRegistered;
+    private readonly bool nearAssistAliasRegistered;
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
@@ -42,6 +47,7 @@ public sealed class Plugin : IDalamudPlugin
         INamePlateGui namePlateGui,
         IKeyState keyState,
         ITextureProvider textureProvider,
+        IGameInteropProvider interop,
         IPluginLog log)
     {
         this.pluginInterface = pluginInterface;
@@ -53,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
         configuration.Initialize(pluginInterface);
 
         var metadata = PvPMetadataGuard.Validate(dataManager, log);
+        var machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
         tracker = new ExecuteTracker(
             clientState,
             objectTable,
@@ -68,9 +75,20 @@ public sealed class Plugin : IDalamudPlugin
             framework,
             dutyState,
             keyState,
+            machinistLimitBreakCapture,
             log,
             configuration,
             metadata);
+        nearAssist = new NearAssistRedirector(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            dataManager,
+            interop,
+            framework,
+            log);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         targetHighlights = new TargetHighlightRenderer(
             configuration,
@@ -91,9 +109,40 @@ public sealed class Plugin : IDalamudPlugin
         settingsWindow = new SettingsWindow(configuration, tracker, personalStatus, overlay);
         windowSystem.AddWindow(settingsWindow);
 
-        const string help = "Open Seiton Sense. Subcommands: show, hide, preview, flash, debug, reset, help.";
-        commandManager.AddHandler(Command, new CommandInfo(OnCommand) { HelpMessage = help });
-        commandManager.AddHandler(AliasCommand, new CommandInfo(OnCommand) { HelpMessage = help });
+        const string help = "Open Seiton Sense. Subcommands: show, hide, preview, flash, debug, assist, reset, help.";
+        commandManager.AddHandler(
+            Command,
+            new CommandInfo(OnCommand) { AllowedInMacros = true, HelpMessage = help });
+        commandManager.AddHandler(
+            AliasCommand,
+            new CommandInfo(OnCommand) { AllowedInMacros = true, HelpMessage = help });
+        const string nearAssistHelp =
+            "CC-only one-shot macro assist. Put this directly above /pvpac \"Ability\" <t>.";
+        nearAssistCommandRegistered = commandManager.AddHandler(
+            NearAssistCommand,
+            new CommandInfo(OnNearAssistCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = nearAssistHelp,
+            });
+        nearAssistAliasRegistered = commandManager.AddHandler(
+            NearAssistAliasCommand,
+            new CommandInfo(OnNearAssistCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = nearAssistHelp,
+            });
+        if (!nearAssistCommandRegistered)
+        {
+            log.Warning(
+                "/nearassist is already owned by another plugin; /ssassist registered={Registered}.",
+                nearAssistAliasRegistered);
+            chatGui.PrintError(
+                "[Seiton Sense] /nearassist is still owned by the old NearAssist plugin. " +
+                (nearAssistAliasRegistered
+                    ? "Disable it and reload, or use /ssassist meanwhile."
+                    : "Disable it and reload before using the integrated helper."));
+        }
 
         pluginInterface.UiBuilder.Draw += Draw;
         pluginInterface.UiBuilder.OpenMainUi += OpenSettings;
@@ -101,6 +150,7 @@ public sealed class Plugin : IDalamudPlugin
         namePlateAnchors.Start();
         tracker.Start();
         personalStatus.Start();
+        nearAssist.Start();
     }
 
     public void Dispose()
@@ -108,8 +158,11 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.Draw -= Draw;
         pluginInterface.UiBuilder.OpenMainUi -= OpenSettings;
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
+        if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
+        if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        nearAssist.Dispose();
         personalStatus.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
@@ -163,13 +216,24 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             case "debug":
                 var personal = personalStatus.Snapshot;
+                var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
+                var assist = nearAssist.Diagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
                     $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
                     $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
                     $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
-                    $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}");
+                    $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}, " +
+                    $"mchlb[hook={mchLimitBreak.CaptureRunning},q={mchLimitBreak.QueueDepth}," +
+                    $"accepted={mchLimitBreak.AcceptedWarnings},active={mchLimitBreak.WarningActive}," +
+                    $"errors={mchLimitBreak.CaptureErrors},drops={mchLimitBreak.DroppedWarnings}], " +
+                    $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
+                    $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
+                    $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}]");
+                return;
+            case "assist":
+                nearAssist.Arm();
                 return;
             case "reset":
                 configuration.ResetToDefaults();
@@ -189,8 +253,24 @@ public sealed class Plugin : IDalamudPlugin
 
     private void PrintHelp(bool error = false)
     {
-        const string text = "Usage: /seiton [show|hide|preview|flash|debug|reset|help]. /ssense is an alias.";
+        const string text =
+            "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
+            "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
+    }
+
+    private void OnNearAssistCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.Arm();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Near Assist command failed closed.");
+        }
     }
 }

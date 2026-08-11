@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.0.0
+
+- Added an independently configurable, warning-only Marksman's Spite alert.
+  It recognizes the exact early MCH-LB target-marker event aimed at the local
+  player and rejects the later damage/miss event, leaving roughly the normal
+  visible sniper reaction window. The alert never presses Guard or any action.
+- The marker observer is bounded, read-only, enemy/job validated, and active
+  only for supported PvP while the warning is enabled. Metadata drift disables
+  only this alert; no character name or combat history is stored.
+
+- Integrated a default-off, Crystalline Conflict-only Near Assist macro helper.
+  `/nearassist` arms one 500 ms token for only the immediately following hostile
+  macro action; the command never sends an action itself.
+- Near Assist defaults to a 25-yalm smart search. Among allies no farther from
+  you than the nearest candidate plus 8 yalms, it prefers ranged/caster DPS, then melee
+  DPS, then support; an option restores strict nearest-distance selection.
+  The chosen ally must hard-target an exact opponent from FFXIV's canonical
+  `<e1>`-`<e5>` CC list.
+- Re-resolves the same enemy slot and checks the exact action's native range and
+  line of sight at dispatch time. Success may replace only that action's target
+  ID; every failure preserves the original `<t>` target exactly.
+- Added a configurable 5-30 yalm ally-search radius with a 25-yalm default. This
+  search radius is independent of the actual action-range check.
+- Added one-shot and fail-closed boundaries: no visible hard/soft/focus target
+  change, direct action, alternate opponent, retry, or Wolves' Den/Frontline/
+  Rival Wings fallback.
+- Bumped the configuration schema to 9. Near Assist is disabled on update and
+  reset so existing users must opt in deliberately; prior HUD, target-highlight,
+  warning, and Purify settings remain unchanged. The new warning defaults on
+  like Wildfire and Death Warrant and can be disabled separately.
+- Retired the standalone NearAssist workflow. Disable or remove the old plugin
+  before loading this version because both use the `/nearassist` command.
+
 ## 0.4.0.0
 
 - Integrated the Super Focus Glow visual language as a separate, optional
