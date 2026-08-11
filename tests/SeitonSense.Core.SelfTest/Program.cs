@@ -52,6 +52,14 @@ var tests = new (string Name, Action Run)[]
     ("Purify tracks the exact status instance", EmergencyPurifyBufferSelfTests.ExactStatusReplacementNeedsANewKey),
     ("Purify temporary gates do not spend an attempt", EmergencyPurifyBufferSelfTests.TemporarySafetyGatesDoNotSpendAnAttempt),
     ("Purify hard reset and invalid inputs fail closed", EmergencyPurifyBufferSelfTests.HardResetAndInvalidInputsFailClosed),
+    ("target and focus on the same actor are combined", TargetHighlightRulesSelfTests.SameObjectIsCombined),
+    ("different current and focus targets stay ordered", TargetHighlightRulesSelfTests.DifferentObjectsRemainOrdered),
+    ("target PvP-only gating is per source", TargetHighlightRulesSelfTests.PvpGateIsPerSource),
+    ("invalid target identities fail closed", TargetHighlightRulesSelfTests.InvalidIdentitiesFailClosed),
+    ("target HP formatting is safe", TargetHighlightRulesSelfTests.HpFormattingIsSafe),
+    ("target distance formatting is safe", TargetHighlightRulesSelfTests.DistanceFormattingIsSafe),
+    ("target S-slot formatting is exact", TargetHighlightRulesSelfTests.EnemySlotFormattingIsExact),
+    ("combined target info uses safe same-identity fallbacks", TargetHighlightRulesSelfTests.CombinedPlanUsesOnlySafeFallbacks),
 };
 
 var failures = new List<string>();

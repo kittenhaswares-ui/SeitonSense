@@ -1,3 +1,4 @@
+using System.Numerics;
 using Dalamud.Configuration;
 using Dalamud.Plugin;
 
@@ -5,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 7;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -41,6 +42,47 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PurifyOnSilence { get; set; } = true;
     public bool PurifyOnDeepFreeze { get; set; } = true;
     public bool PurifyOnMiracleOfNature { get; set; } = true;
+    public bool EnableFocusGlow { get; set; }
+    public bool FocusHideWithGameUi { get; set; } = true;
+    public bool FocusDrawInForeground { get; set; } = true;
+    public bool FocusShowGroundRing { get; set; } = true;
+    public bool FocusShowTargetHalo { get; set; } = true;
+    public bool FocusShowRays { get; set; } = true;
+    public bool FocusShowChevron { get; set; } = true;
+    public bool FocusShowLabel { get; set; } = true;
+    public bool FocusRainbowMode { get; set; }
+    public bool FocusReducedMotion { get; set; }
+    public Vector4 FocusGlowColor { get; set; } = new(1f, 0f, 0f, 1f);
+    public float FocusIntensity { get; set; } = 0.55f;
+    public float FocusSizeScale { get; set; } = 1.18f;
+    public float FocusAuraRadius { get; set; } = 56f;
+    public float FocusPulseSpeed { get; set; } = 0.6f;
+    public float FocusPulseAmount { get; set; } = 0.2f;
+    public float FocusGroundPadding { get; set; } = 0.75f;
+    public float FocusVerticalOffset { get; set; } = 0.15f;
+    public bool EnableCurrentTargetHighlight { get; set; }
+    public bool CurrentTargetPvPOnly { get; set; } = true;
+    public bool CurrentTargetDrawInForeground { get; set; } = true;
+    public bool CurrentTargetShowGroundRing { get; set; } = true;
+    public bool CurrentTargetShowTargetHalo { get; set; } = true;
+    public bool CurrentTargetShowRays { get; set; }
+    public bool CurrentTargetShowChevron { get; set; } = true;
+    public bool CurrentTargetShowLabel { get; set; } = true;
+    public bool CurrentTargetRainbowMode { get; set; }
+    public bool CurrentTargetReducedMotion { get; set; }
+    public Vector4 CurrentTargetGlowColor { get; set; } = new(0.05f, 0.9f, 1f, 1f);
+    public float CurrentTargetIntensity { get; set; } = 0.9f;
+    public float CurrentTargetSizeScale { get; set; } = 1f;
+    public float CurrentTargetAuraRadius { get; set; } = 52f;
+    public float CurrentTargetPulseSpeed { get; set; } = 0.5f;
+    public float CurrentTargetPulseAmount { get; set; } = 0.12f;
+    public float CurrentTargetGroundPadding { get; set; } = 0.55f;
+    public float CurrentTargetVerticalOffset { get; set; } = 0.15f;
+    // This is a fixed screen-space card, not a nameplate/job-icon attachment.
+    public bool ShowCurrentTargetInfoHud { get; set; }
+    public float CurrentTargetInfoScreenX { get; set; } = 0.5f;
+    public float CurrentTargetInfoScreenY { get; set; } = 0.7f;
+    public float CurrentTargetInfoScale { get; set; } = 1f;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -48,7 +90,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 6) return;
+        if (Version >= 7) return;
 
         if (Version < 3)
         {
@@ -80,7 +122,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             PurifyOnHeldGameplayKey = false;
         }
 
-        Version = 6;
+        if (Version < 7)
+        {
+            // Both target-overlay modules are explicit opt-ins. Upgrading users keep
+            // their existing HUD and Purify behavior without a surprise overlay.
+            ApplyFocusGlowDefaults(false);
+            ApplyCurrentTargetHighlightDefaults(false);
+        }
+
+        Version = 7;
         Save();
     }
 
@@ -88,7 +138,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 6;
+        Version = 7;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -124,5 +174,74 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PurifyOnSilence = true;
         PurifyOnDeepFreeze = true;
         PurifyOnMiracleOfNature = true;
+        ApplyFocusGlowDefaults(false);
+        ApplyCurrentTargetHighlightDefaults(false);
+    }
+
+    public void ApplyFocusGlowPreset() => ApplyFocusGlowDefaults(true);
+
+    public void ApplyCurrentTargetHighlightPreset()
+    {
+        // Restoring the world-highlight appearance must not silently disable or move the
+        // independently configured fixed information HUD.
+        var showInfoHud = ShowCurrentTargetInfoHud;
+        var infoScreenX = CurrentTargetInfoScreenX;
+        var infoScreenY = CurrentTargetInfoScreenY;
+        var infoScale = CurrentTargetInfoScale;
+
+        ApplyCurrentTargetHighlightDefaults(true);
+
+        ShowCurrentTargetInfoHud = showInfoHud;
+        CurrentTargetInfoScreenX = infoScreenX;
+        CurrentTargetInfoScreenY = infoScreenY;
+        CurrentTargetInfoScale = infoScale;
+    }
+
+    private void ApplyFocusGlowDefaults(bool enabled)
+    {
+        EnableFocusGlow = enabled;
+        FocusHideWithGameUi = true;
+        FocusDrawInForeground = true;
+        FocusShowGroundRing = true;
+        FocusShowTargetHalo = true;
+        FocusShowRays = true;
+        FocusShowChevron = true;
+        FocusShowLabel = true;
+        FocusRainbowMode = false;
+        FocusReducedMotion = false;
+        FocusGlowColor = new Vector4(1f, 0f, 0f, 1f);
+        FocusIntensity = 0.55f;
+        FocusSizeScale = 1.18f;
+        FocusAuraRadius = 56f;
+        FocusPulseSpeed = 0.6f;
+        FocusPulseAmount = 0.2f;
+        FocusGroundPadding = 0.75f;
+        FocusVerticalOffset = 0.15f;
+    }
+
+    private void ApplyCurrentTargetHighlightDefaults(bool enabled)
+    {
+        EnableCurrentTargetHighlight = enabled;
+        CurrentTargetPvPOnly = true;
+        CurrentTargetDrawInForeground = true;
+        CurrentTargetShowGroundRing = true;
+        CurrentTargetShowTargetHalo = true;
+        CurrentTargetShowRays = false;
+        CurrentTargetShowChevron = true;
+        CurrentTargetShowLabel = true;
+        CurrentTargetRainbowMode = false;
+        CurrentTargetReducedMotion = false;
+        CurrentTargetGlowColor = new Vector4(0.05f, 0.9f, 1f, 1f);
+        CurrentTargetIntensity = 0.9f;
+        CurrentTargetSizeScale = 1f;
+        CurrentTargetAuraRadius = 52f;
+        CurrentTargetPulseSpeed = 0.5f;
+        CurrentTargetPulseAmount = 0.12f;
+        CurrentTargetGroundPadding = 0.55f;
+        CurrentTargetVerticalOffset = 0.15f;
+        ShowCurrentTargetInfoHud = false;
+        CurrentTargetInfoScreenX = 0.5f;
+        CurrentTargetInfoScreenY = 0.7f;
+        CurrentTargetInfoScale = 1f;
     }
 }

@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $sourceRoot = Join-Path $resolvedRoot 'src'
 $pluginServicesRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\Services'
+$pluginUiRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\UI'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
 $sourceFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse |
     Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
@@ -32,7 +33,7 @@ function Assert-Literals([string]$Content, [string[]]$Required, [string]$Label) 
 $forbiddenChecks = [ordered]@{
     'network client APIs' = '\b(HttpClient|HttpClientFactory|HttpRequestMessage|WebRequest|TcpClient|UdpClient|Socket|ClientWebSocket|WebSocket)\b|\bSystem\.Net(?:\.|\b)'
     'hooks or signature scans' = '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|MinHook)\b'
-    'target mutation services' = '\b(ITargetManager|TargetManager|SetTarget)\b|\.Target\s*='
+    'target mutation services' = '(?-i:\bTargetManager\b)|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*='
     'native UI or input injection' = '\b(SendInput|keybd_event|mouse_event|ExecuteCommand|SetRawValue|ClearAll|FireCallback|SendEvent)\b'
     'gameplay file writes' = '\b(File\.Write|FileStream|StreamWriter|Directory\.CreateDirectory)\b'
     'native UI mutation' = '\b(LoadIconTexture|UnloadTexture|ToggleVisibility|SetPosition|SetScale|Destroy)\s*\('
@@ -53,6 +54,8 @@ $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
+$pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
+$targetHighlightPath = Join-Path $pluginUiRoot 'TargetHighlightRenderer.cs'
 $allowedUnsafe = @(
     $slotResolverPath,
     $readinessPath,
@@ -74,6 +77,36 @@ foreach ($allowed in $allowedUnsafe) {
     if (-not ($unsafeMatches.Path -contains $allowed)) {
         throw "Expected narrow probe contains no explicit unsafe boundary: $allowed"
     }
+}
+
+# Target highlighting may read the current and focus targets in one dedicated renderer.
+# No other feature may acquire ITargetManager, and no target setter is permitted anywhere.
+$targetManagerMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bITargetManager\b')
+$unexpectedTargetManager = @($targetManagerMatches | Where-Object {
+    $_.Path -notin @($pluginPath, $targetHighlightPath)
+})
+if ($unexpectedTargetManager.Count -gt 0) {
+    $locations = $unexpectedTargetManager | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "ITargetManager is allowed only for constructor injection and the dedicated read-only renderer: $($locations -join ', ')"
+}
+$targetHighlight = Read-RequiredSource $targetHighlightPath 'Target highlight renderer'
+Assert-Literals $targetHighlight @(
+    'targetManager.Target',
+    'targetManager.FocusTarget',
+    'TargetHighlightRules.BuildPlan',
+    'DrawCurrentTargetInfoHud',
+    '!tracker.IsActive',
+    'fixed HUD card',
+    'never attaches anything to a nameplate'
+) 'Read-only target highlight renderer'
+if ($targetHighlight -match '\b(SetTarget|UseAction|UseActionLocation)\b' -or
+    $targetHighlight -match '(?-i:\bTargetManager\b)' -or
+    $targetHighlight -match '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $targetHighlight -match '\b(INamePlateGui|NamePlateAnchorTracker|NamePlateObject|NameIcon)\b') {
+    throw 'Target highlighting must remain read-only and separate from native nameplates and existing icon slots.'
+}
+if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+') {
+    throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
 # Action execution remains globally forbidden except for one exact Purify call.
@@ -437,11 +470,15 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 6',
+    'public int Version { get; set; } = 7',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
-    'PurifyOnHeldGameplayKey = false'
-) 'Held-key configuration migration'
+    'PurifyOnHeldGameplayKey = false',
+    'if (Version < 7)',
+    'ApplyFocusGlowDefaults(false)',
+    'ApplyCurrentTargetHighlightDefaults(false)',
+    'ShowCurrentTargetInfoHud = false'
+) 'Held-key and target-highlight configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -460,4 +497,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.3.0.3 safety contract verified across $($sourceFiles.Count) source files; fresh and opt-in held-key input use physical generations, key state remains read-only, and one generation permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.4.0.0 safety contract verified across $($sourceFiles.Count) source files; target access is read-only and separate from native nameplate icons, while one physical input generation still permits at most one native Purify attempt."

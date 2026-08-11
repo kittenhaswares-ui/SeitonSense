@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
     private readonly NamePlateAnchorTracker namePlateAnchors;
+    private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly SettingsWindow settingsWindow;
 
@@ -36,6 +37,7 @@ public sealed class Plugin : IDalamudPlugin
         IDutyState dutyState,
         IPartyList partyList,
         IDataManager dataManager,
+        ITargetManager targetManager,
         IGameGui gameGui,
         INamePlateGui namePlateGui,
         IKeyState keyState,
@@ -70,6 +72,15 @@ public sealed class Plugin : IDalamudPlugin
             configuration,
             metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
+        targetHighlights = new TargetHighlightRenderer(
+            configuration,
+            pluginInterface,
+            clientState,
+            objectTable,
+            targetManager,
+            gameGui,
+            textureProvider,
+            tracker);
         overlay = new OverlayRenderer(
             configuration,
             tracker,
@@ -108,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         windowSystem.Draw();
+        targetHighlights.Draw();
         overlay.Draw();
     }
 

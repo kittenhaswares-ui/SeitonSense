@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "Persistent Seiton decisions, PvP warnings, and an optional physical-input Purify helper.",
-  "Description": "A local Crystalline Conflict reaction-cue HUD with an optional Wolves' Den duel test mode. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see selected PvP warnings. The one-attempt Purify helper supports fresh keys plus an optional held-key trigger and separate toggles for every removable CC type.",
+  "Punchline": "PvP decisions, Purify assistance, and unmistakable target highlights.",
+  "Description": "A local Crystalline Conflict and Wolves' Den reaction-cue HUD. It includes Ninja Seiton decisions, selected PvP warnings, an opt-in one-attempt Purify helper, and optional focus/current-target highlights with a separate fixed target-information card.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",
@@ -12,6 +12,7 @@
     "ninja",
     "nameplate",
     "hud",
+    "focus-target",
     "utility"
   ]
 }

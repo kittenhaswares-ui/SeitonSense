@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0.0
+
+- Integrated the Super Focus Glow visual language as a separate, optional
+  focus-target module: projected hitbox ring, layered halo, rays, chevrons,
+  label, pulse, color, foreground, rainbow, and reduced-motion controls.
+- Added a distinct optional current-target highlight with an independent cyan
+  default style and a default-on PvP-only safety boundary.
+- Added a separate configurable current-target information card at a fixed
+  screen position. It never attaches information to native nameplates, job
+  icons, health bars, or Seiton Sense's existing nameplate slots.
+- Added focus and current-target presets. The focus preset reproduces the
+  migrated red Super Focus Glow setup; this first release does not read or
+  modify the standalone plugin's configuration file.
+- Bumped the configuration schema to 7. All three new display modules are
+  disabled by default, and schema-6 HUD, warning, held-key, and per-debuff
+  Purify settings remain unchanged on update.
+
 ## 0.3.0.3
 
 - Added a separate, default-off option allowing a gameplay key that was already
