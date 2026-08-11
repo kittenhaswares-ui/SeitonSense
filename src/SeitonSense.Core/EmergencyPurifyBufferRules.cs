@@ -109,7 +109,7 @@ public static class EmergencyPurifyBufferRules
             previous.LastObservedAtMilliseconds >= 0 &&
             observation.NowMilliseconds < previous.LastObservedAtMilliseconds)
         {
-            return CancelAndLockIfPresent(
+            return CancelAndWaitIfPresent(
                 status ?? previous.StatusInstance,
                 observation.NowMilliseconds,
                 EmergencyPurifyBufferCancelReason.ClockMovedBackwards);
@@ -128,7 +128,7 @@ public static class EmergencyPurifyBufferRules
                 });
             }
 
-            return CancelAndLockIfPresent(status, observation.NowMilliseconds, gateFailure);
+            return CancelAndWaitIfPresent(status, observation.NowMilliseconds, gateFailure);
         }
 
         if (status is null)
@@ -142,16 +142,26 @@ public static class EmergencyPurifyBufferRules
 
         if (previous.Phase == EmergencyPurifyBufferPhase.WaitingForStatus)
         {
-            return new EmergencyPurifyBufferDecision(
-                WaitingForFreshKey(status.Value, observation.NowMilliseconds),
-                EmergencyPurifyBufferDecisionKind.StatusObserved,
-                EmergencyPurifyBufferCancelReason.None);
+            var waiting = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
+            if (!observation.FreshKeyPressed)
+            {
+                return new EmergencyPurifyBufferDecision(
+                    waiting,
+                    EmergencyPurifyBufferDecisionKind.StatusObserved,
+                    EmergencyPurifyBufferCancelReason.None);
+            }
+
+            return ArmOrDispatch(waiting, observation);
         }
 
         if (previous.StatusInstance != status)
         {
+            var replacement = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
+            if (observation.FreshKeyPressed)
+                return ArmOrDispatch(replacement, observation);
+
             return Cancelled(
-                WaitingForFreshKey(status.Value, observation.NowMilliseconds),
+                replacement,
                 EmergencyPurifyBufferCancelReason.StatusInstanceChanged);
         }
 
@@ -164,7 +174,7 @@ public static class EmergencyPurifyBufferRules
             if (observation.NowMilliseconds >= current.ExpiresAtMilliseconds)
             {
                 return Cancelled(
-                    Spend(current, observation.NowMilliseconds),
+                    WaitingForFreshKey(status.Value, observation.NowMilliseconds),
                     EmergencyPurifyBufferCancelReason.TimedOut);
             }
 
@@ -182,26 +192,7 @@ public static class EmergencyPurifyBufferRules
         if (!observation.FreshKeyPressed)
             return NoDecision(current);
 
-        var bufferMilliseconds = NormalizeBufferMilliseconds(observation.BufferMilliseconds);
-        var buffered = current with
-        {
-            Phase = EmergencyPurifyBufferPhase.Buffered,
-            ArmedAtMilliseconds = observation.NowMilliseconds,
-            ExpiresAtMilliseconds = SaturatingAdd(observation.NowMilliseconds, bufferMilliseconds),
-        };
-
-        if (observation.PurifyLocallyReady)
-        {
-            return new EmergencyPurifyBufferDecision(
-                Spend(buffered, observation.NowMilliseconds),
-                EmergencyPurifyBufferDecisionKind.Dispatch,
-                EmergencyPurifyBufferCancelReason.None);
-        }
-
-        return new EmergencyPurifyBufferDecision(
-            buffered,
-            EmergencyPurifyBufferDecisionKind.Armed,
-            EmergencyPurifyBufferCancelReason.None);
+        return ArmOrDispatch(current, observation);
     }
 
     public static long NormalizeBufferMilliseconds(long requestedMilliseconds) =>
@@ -226,7 +217,7 @@ public static class EmergencyPurifyBufferRules
         return EmergencyPurifyBufferCancelReason.None;
     }
 
-    private static EmergencyPurifyBufferDecision CancelAndLockIfPresent(
+    private static EmergencyPurifyBufferDecision CancelAndWaitIfPresent(
         PurifyCcStatusInstance? status,
         long nowMilliseconds,
         EmergencyPurifyBufferCancelReason reason)
@@ -234,14 +225,30 @@ public static class EmergencyPurifyBufferRules
         if (status is not { IsValid: true } validStatus)
             return Cancelled(EmergencyPurifyBufferState.Initial, reason);
 
-        var locked = new EmergencyPurifyBufferState(
-            EmergencyPurifyBufferPhase.SpentUntilStatusGone,
-            validStatus,
-            nowMilliseconds,
-            -1,
-            -1,
-            nowMilliseconds);
-        return Cancelled(locked, reason);
+        return Cancelled(WaitingForFreshKey(validStatus, nowMilliseconds), reason);
+    }
+
+    private static EmergencyPurifyBufferDecision ArmOrDispatch(
+        EmergencyPurifyBufferState current,
+        EmergencyPurifyBufferObservation observation)
+    {
+        var bufferMilliseconds = NormalizeBufferMilliseconds(observation.BufferMilliseconds);
+        var buffered = current with
+        {
+            Phase = EmergencyPurifyBufferPhase.Buffered,
+            ArmedAtMilliseconds = observation.NowMilliseconds,
+            ExpiresAtMilliseconds = SaturatingAdd(observation.NowMilliseconds, bufferMilliseconds),
+        };
+
+        return observation.PurifyLocallyReady
+            ? new EmergencyPurifyBufferDecision(
+                Spend(buffered, observation.NowMilliseconds),
+                EmergencyPurifyBufferDecisionKind.Dispatch,
+                EmergencyPurifyBufferCancelReason.None)
+            : new EmergencyPurifyBufferDecision(
+                buffered,
+                EmergencyPurifyBufferDecisionKind.Armed,
+                EmergencyPurifyBufferCancelReason.None);
     }
 
     private static EmergencyPurifyBufferState WaitingForFreshKey(

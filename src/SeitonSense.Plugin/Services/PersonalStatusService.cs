@@ -115,6 +115,7 @@ internal sealed class PersonalStatusService : IDisposable
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
         var alive = IsAlive(localPlayer);
+        var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
         var anyWarningEnabled = configuration.ShowPersonalWarnings &&
                                 (configuration.WarnWildfire ||
                                  configuration.WarnDeathWarrant ||
@@ -123,7 +124,8 @@ internal sealed class PersonalStatusService : IDisposable
                                  isSupportedPvPContext &&
                                  alive &&
                                  (anyWarningEnabled ||
-                                  configuration.ExperimentalPurifyOnNextKey);
+                                  (configuration.ExperimentalPurifyOnNextKey &&
+                                   anyPurifyAutomationEnabled));
         var observed = shouldScanStatuses
             ? ScanExactStatuses(localPlayer, now)
             : [];
@@ -151,6 +153,7 @@ internal sealed class PersonalStatusService : IDisposable
             out var purifyStatusCurrentlyObserved);
         var purifyConfigurationEnabled = configuration.Enabled &&
                                          configuration.ExperimentalPurifyOnNextKey &&
+                                         anyPurifyAutomationEnabled &&
                                          metadata.PurifyVerified;
         var purify = emergencyPurify.Observe(
             localPlayer,
@@ -185,17 +188,11 @@ internal sealed class PersonalStatusService : IDisposable
             conditionValid ? condition.Value.ContentUICategory.RowId : 0,
             conditionValid && condition.Value.CrystallineConflictCasualRoulette,
             conditionValid && condition.Value.CrystallineConflictRankedRoulette);
-        if (context != SupportedPvPContext.WolvesDen) return context;
-
-        var localPlayer = objectTable.LocalPlayer;
-        if (localPlayer is null) return SupportedPvPContext.None;
-        var opponent = WolvesDenOpponentResolver.Resolve(
-            objectTable,
-            localPlayer,
-            out _,
-            out _,
-            out _);
-        return opponent is null ? SupportedPvPContext.None : SupportedPvPContext.WolvesDen;
+        // Personal warnings and self-Purify do not need an enemy actor. The exact
+        // duel-opponent resolver remains mandatory for the enemy HUD, while this
+        // self-only path needs only the supported Wolves' Den PvP context plus an
+        // exact locally observed status.
+        return context;
     }
 
     private List<ObservedPersonalStatus> ScanExactStatuses(
@@ -342,10 +339,12 @@ internal sealed class PersonalStatusService : IDisposable
     {
         currentlyObserved = false;
         var purifiable = observed
-            .Where(static status => status.Definition.CanTriggerPurifyBuffer)
+            .Where(status =>
+                status.Definition.CanTriggerPurifyBuffer &&
+                IsPurifyAutomationEnabled(status.Definition.StatusId))
             .ToArray();
         var tracked = emergencyPurify.TrackedStatusInstance;
-        if (tracked is not null)
+        if (tracked is not null && IsPurifyAutomationEnabled(tracked.Value.StatusId))
         {
             var same = purifiable.FirstOrDefault(status =>
                 status.Definition.StatusId == tracked.Value.StatusId &&
@@ -387,6 +386,26 @@ internal sealed class PersonalStatusService : IDisposable
             PersonalStatusFeature.Wildfire => configuration.WarnWildfire,
             PersonalStatusFeature.DeathWarrant => configuration.WarnDeathWarrant,
             PersonalStatusFeature.Purify => configuration.WarnPurifiableCrowdControl,
+            _ => false,
+        };
+
+    private bool AnyPurifyAutomationEnabled() =>
+        configuration.PurifyOnStun ||
+        configuration.PurifyOnHeavy ||
+        configuration.PurifyOnBind ||
+        configuration.PurifyOnSilence ||
+        configuration.PurifyOnDeepFreeze ||
+        configuration.PurifyOnMiracleOfNature;
+
+    private bool IsPurifyAutomationEnabled(uint statusId) =>
+        statusId switch
+        {
+            EnemyCombatConstants.PvPStunStatusId => configuration.PurifyOnStun,
+            EnemyCombatConstants.PvPHeavyStatusId => configuration.PurifyOnHeavy,
+            EnemyCombatConstants.PvPBindStatusId => configuration.PurifyOnBind,
+            EnemyCombatConstants.PvPSilenceStatusId => configuration.PurifyOnSilence,
+            EnemyCombatConstants.DeepFreezeStatusId => configuration.PurifyOnDeepFreeze,
+            EnemyCombatConstants.MiracleOfNatureStatusId => configuration.PurifyOnMiracleOfNature,
             _ => false,
         };
 

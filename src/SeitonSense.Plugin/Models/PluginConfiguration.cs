@@ -5,7 +5,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 4;
+    public int Version { get; set; } = 5;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -34,6 +34,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float PersonalWarningScale { get; set; } = 1f;
     public bool ExperimentalPurifyOnNextKey { get; set; }
     public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
+    public bool PurifyOnStun { get; set; } = true;
+    public bool PurifyOnHeavy { get; set; } = true;
+    public bool PurifyOnBind { get; set; } = true;
+    public bool PurifyOnSilence { get; set; } = true;
+    public bool PurifyOnDeepFreeze { get; set; } = true;
+    public bool PurifyOnMiracleOfNature { get; set; } = true;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -41,7 +47,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 4) return;
+        if (Version >= 5) return;
 
         if (Version < 3)
         {
@@ -49,10 +55,24 @@ public sealed class PluginConfiguration : IPluginConfiguration
             if (Math.Abs(PopupIconSize - 76f) < 0.001f) PopupIconSize = 96f;
         }
 
-        // This release is explicitly a Wolves' Den test build. Existing users get
-        // the test context immediately, while the separate Purify experiment stays off.
-        EnableWolvesDenTesting = true;
-        Version = 4;
+        if (Version < 4)
+        {
+            // This release is explicitly a Wolves' Den test build. Existing users get
+            // the test context immediately, while the separate Purify experiment stays off.
+            EnableWolvesDenTesting = true;
+        }
+
+        if (Version < 5)
+        {
+            PurifyOnStun = true;
+            PurifyOnHeavy = true;
+            PurifyOnBind = true;
+            PurifyOnSilence = true;
+            PurifyOnDeepFreeze = true;
+            PurifyOnMiracleOfNature = true;
+        }
+
+        Version = 5;
         Save();
     }
 
@@ -60,7 +80,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 4;
+        Version = 5;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -89,5 +109,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PersonalWarningScale = 1f;
         ExperimentalPurifyOnNextKey = false;
         ExperimentalPurifyBufferMilliseconds = 750;
+        PurifyOnStun = true;
+        PurifyOnHeavy = true;
+        PurifyOnBind = true;
+        PurifyOnSilence = true;
+        PurifyOnDeepFreeze = true;
+        PurifyOnMiracleOfNature = true;
     }
 }

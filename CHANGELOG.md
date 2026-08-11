@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0.2
+
+- Fixed the opt-in Purify helper discarding the first important key edge by
+  keeping a read-only input baseline throughout supported PvP and accepting a
+  fresh edge on the first observed debuff frame.
+- Removed fragile animation-lock, action-status, adjusted-ID, cooldown, MP, and
+  targetability prefilters. A selected debuff plus one fresh key now produces
+  exactly one normal native Purify request; FFXIV validates/queues it and no
+  failed or rejected request is retried.
+- Ordinary ImGui keyboard capture no longer masquerades as text entry, so the
+  helper can be tested while its settings window is visible. Real chat/text
+  input still blocks it without consuming the debuff window.
+- Completed the current Purify suite: Stun, Heavy, Bind, Silence, Deep Freeze,
+  and Miracle of Nature. Each type now has an independent auto-Purify toggle;
+  the warning display can remain enabled for types whose automation is off.
+- Personal warnings and self-Purify in Wolves' Den no longer depend on resolving
+  an enemy HUD actor. Enemy nameplate/Seiton data keeps the strict duel-opponent
+  requirement.
+
 ## 0.3.0.1
 
 - Added an enabled-by-default Wolves' Den duel test mode for the complete HUD:

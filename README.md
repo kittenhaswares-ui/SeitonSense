@@ -4,7 +4,7 @@ Seiton Sense is a Crystalline Conflict reaction-cue HUD for every job, with an
 enabled-by-default Wolves' Den duel test mode. It adds small status icons beside
 the job icon in each enemy's native nameplate, shows local warnings for selected
 dangerous debuffs, and gives Ninja a persistent Seiton decision cue. An optional
-experimental Purify input buffer is available but disabled by default.
+experimental Purify-on-next-key helper is available but disabled by default.
 
 ## What it shows
 
@@ -28,9 +28,10 @@ experimental Purify input buffer is available but disabled by default.
   current cost of Recuperate. Initial zero values are ignored until MP has been
   observed reliably; entering and leaving the state is debounced.
 - **Warnings on you:** Wildfire and Death Warrant receive compact danger
-  warnings. Stun and Miracle of Nature receive urgent Purify warnings. Each
-  verified status gets an entry pulse and a stable remaining-time display
-  instead of repeatedly flashing from transient samples.
+  warnings. Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature
+  receive urgent Purify warnings. Each verified status gets an entry pulse and
+  a stable remaining-time display instead of repeatedly flashing from
+  transient samples.
 
 Guard does not block the Seiton alert because Seiton Tenchu ignores Guard.
 
@@ -59,23 +60,25 @@ animation lock, casting, and current-target state. A short false-grace prevents
 single range/line-of-sight samples from blinking the icon. Cue rearming is
 separate, so walking out of and back into range cannot spam the entry pulse.
 
-## Experimental Purify buffer
+## Experimental Purify on next key
 
 The optional **Purify on next fresh gameplay key** experiment is disabled by
-default. It arms only for the exact, locally observed Stun or Miracle of Nature
-status instance. A key that was already held when the status appeared does not
-count; the next fresh key-down can arm a bounded 100-1,000 ms wait (750 ms by
-default) for Purify to become locally usable.
+default. It supports the exact current Purify list: Stun, Heavy, Bind, Silence,
+Deep Freeze, and Miracle of Nature. Every type has its own toggle, so Heavy can
+be left as a warning while Stun or Silence still trigger the helper. While the
+opt-in is active in supported PvP, the plugin keeps a read-only key baseline;
+a key already held before the debuff does not count, but a genuine new key edge
+on the first observed status frame does.
 
 The original key is never swallowed, replaced, delayed, or replayed. One key
-can cause at most one native Purify attempt. The attempt is marked consumed
-before it is sent, so a client or server rejection is never retried. Seiton
-Sense itself does not select another action, change targets, fabricate input,
-alter packets, or manipulate network replies. Another plugin configured to
-rewrite Purify or its target can still alter the downstream call; disable such
-rules while testing this experiment. The buffer cancels or locks on timeout,
-status replacement/removal, death, text input, disabling the feature, or
-leaving the supported PvP context.
+causes exactly one native Purify attempt immediately. FFXIV then decides whether
+that normal action request can queue or execute. The attempt is marked consumed
+before it is sent, so a client or server rejection is never retried. Temporary
+chat/UI focus no longer consumes the debuff window; it simply requires another
+fresh key after typing ends. Seiton Sense does not select another action, change
+targets, fabricate input, alter packets, or manipulate network replies. Another
+plugin configured to rewrite Purify or its target can still alter the downstream
+call; disable such rules while testing this experiment.
 
 ## Install
 
@@ -99,7 +102,8 @@ update through the same repository.
 
 The cue label, scale, position, entry-pulse duration, personal-warning layout,
 nameplate icon size, spacing, and individual indicators are configurable. The
-experimental Purify buffer has its own explicit opt-in switch and timeout.
+experimental Purify helper has one master opt-in plus a separate toggle for
+each supported debuff type.
 
 ## Scope and privacy
 

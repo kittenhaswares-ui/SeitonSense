@@ -43,6 +43,38 @@ internal static class PersonalStatusDefinitions
         PersonalStatusFeature.Purify,
         true);
 
+    internal static PersonalStatusDefinition Heavy { get; } = new(
+        EnemyCombatConstants.PvPHeavyStatusId,
+        "Heavy",
+        EnemyCombatConstants.HeavyStatusIconId,
+        PersonalDebuffAlertKind.CleanseUrgent,
+        PersonalStatusFeature.Purify,
+        true);
+
+    internal static PersonalStatusDefinition Bind { get; } = new(
+        EnemyCombatConstants.PvPBindStatusId,
+        "Bind",
+        EnemyCombatConstants.BindStatusIconId,
+        PersonalDebuffAlertKind.CleanseUrgent,
+        PersonalStatusFeature.Purify,
+        true);
+
+    internal static PersonalStatusDefinition Silence { get; } = new(
+        EnemyCombatConstants.PvPSilenceStatusId,
+        "Silence",
+        EnemyCombatConstants.SilenceStatusIconId,
+        PersonalDebuffAlertKind.CleanseUrgent,
+        PersonalStatusFeature.Purify,
+        true);
+
+    internal static PersonalStatusDefinition DeepFreeze { get; } = new(
+        EnemyCombatConstants.DeepFreezeStatusId,
+        "Deep Freeze",
+        EnemyCombatConstants.DeepFreezeStatusIconId,
+        PersonalDebuffAlertKind.CleanseUrgent,
+        PersonalStatusFeature.Purify,
+        true);
+
     internal static PersonalStatusDefinition MiracleOfNature { get; } = new(
         EnemyCombatConstants.MiracleOfNatureStatusId,
         "Miracle of Nature",
@@ -52,7 +84,7 @@ internal static class PersonalStatusDefinitions
         true);
 
     internal static IReadOnlyList<PersonalStatusDefinition> All { get; } =
-        [Wildfire, DeathWarrant, Stun, MiracleOfNature];
+        [Wildfire, DeathWarrant, Stun, Heavy, Bind, Silence, DeepFreeze, MiracleOfNature];
 
     internal static PersonalStatusDefinition? Find(uint statusId) =>
         statusId switch
@@ -60,6 +92,10 @@ internal static class PersonalStatusDefinitions
             EnemyCombatConstants.WildfireStatusId => Wildfire,
             EnemyCombatConstants.DeathWarrantStatusId => DeathWarrant,
             EnemyCombatConstants.PvPStunStatusId => Stun,
+            EnemyCombatConstants.PvPHeavyStatusId => Heavy,
+            EnemyCombatConstants.PvPBindStatusId => Bind,
+            EnemyCombatConstants.PvPSilenceStatusId => Silence,
+            EnemyCombatConstants.DeepFreezeStatusId => DeepFreeze,
             EnemyCombatConstants.MiracleOfNatureStatusId => MiracleOfNature,
             _ => null,
         };
