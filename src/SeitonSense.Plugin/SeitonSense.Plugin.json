@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "PvP decisions, Purify assistance, and unmistakable target highlights.",
-  "Description": "A local Crystalline Conflict and Wolves' Den reaction-cue HUD. It includes Ninja Seiton decisions, selected PvP warnings, an opt-in one-attempt Purify helper, and optional focus/current-target highlights with a separate fixed target-information card.",
+  "Punchline": "PvP decisions, MCH LB warnings, Near Assist, Purify, and highlights.",
+  "Description": "A local Crystalline Conflict and Wolves' Den reaction-cue HUD. It includes Ninja Seiton decisions, selected PvP warnings including an incoming Marksman's Spite target alert, an opt-in CC-only one-shot Near Assist macro target, an opt-in one-attempt Purify helper, and optional focus/current-target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",
@@ -12,6 +12,7 @@
     "ninja",
     "nameplate",
     "hud",
+    "assist",
     "focus-target",
     "utility"
   ]

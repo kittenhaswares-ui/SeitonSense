@@ -25,6 +25,12 @@ internal static class EnemyCombatConstants
     internal const uint WildfireStatusId = 1323;
     internal const uint WildfireStatusIconId = 213011;
 
+    internal const uint MarksmanSpiteActionId = 29415;
+    internal const uint MarksmanSpiteIconId = 9636;
+    internal const uint MarksmanSpiteTimelineId = 11546;
+    internal const ushort MarksmanSpiteRecast100ms = 100;
+    internal const long MarksmanSpiteWarningDurationMilliseconds = 1_800;
+
     internal const uint DeathWarrantActionId = 29549;
     internal const uint DeathWarrantActionIconId = 9669;
     internal const ushort DeathWarrantRecast100ms = 240;

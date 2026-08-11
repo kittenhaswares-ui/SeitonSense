@@ -60,6 +60,23 @@ var tests = new (string Name, Action Run)[]
     ("target distance formatting is safe", TargetHighlightRulesSelfTests.DistanceFormattingIsSafe),
     ("target S-slot formatting is exact", TargetHighlightRulesSelfTests.EnemySlotFormattingIsExact),
     ("combined target info uses safe same-identity fallbacks", TargetHighlightRulesSelfTests.CombinedPlanUsesOnlySafeFallbacks),
+    ("Near Assist rewrites one eligible macro action", NearAssistOneShotSelfTests.ValidAttemptRewritesExactlyOnce),
+    ("Near Assist timeout fails closed at its boundary", NearAssistOneShotSelfTests.TimeoutFailsClosedAtBoundary),
+    ("Near Assist rejects slot and identity drift", NearAssistOneShotSelfTests.EnemySlotAndIdentityDriftFailClosed),
+    ("Near Assist range and line-of-sight failures consume", NearAssistOneShotSelfTests.RangeAndLineOfSightFailureConsumes),
+    ("Near Assist rejects unsafe action shapes and modes", NearAssistOneShotSelfTests.ActionShapeAndModeFailuresConsume),
+    ("Near Assist ignores unrelated non-macro calls", NearAssistOneShotSelfTests.NonMacroCallsDoNotStealTheToken),
+    ("Near Assist preserves a changed original target", NearAssistOneShotSelfTests.OwnTargetDriftPreservesTheActualCallTarget),
+    ("Near Assist replacement keeps only the newest token", NearAssistOneShotSelfTests.ReplacementUsesOnlyTheNewestToken),
+    ("Near Assist invalid state and resets fail closed", NearAssistOneShotSelfTests.InvalidStateAndResetsPreserveOriginalBits),
+    ("Near Assist nearest mode stays predictable", NearAssistSelectionSelfTests.NearestModeIsPredictable),
+    ("Near Assist smart mode prefers nearby damage roles", NearAssistSelectionSelfTests.SmartModePrefersDamageInsideTheNearbyCluster),
+    ("Near Assist smart mode cannot pull across the arena", NearAssistSelectionSelfTests.SmartModeCannotPullAcrossTheArena),
+    ("Near Assist same-role tie breaks are stable", NearAssistSelectionSelfTests.SameRoleUsesDistanceThenStableEntityId),
+    ("Near Assist invalid selection candidates fail closed", NearAssistSelectionSelfTests.InvalidCandidatesFailClosed),
+    ("Near Assist current PvP damage jobs are classified", NearAssistSelectionSelfTests.CurrentPlayableDamageJobsAreClassifiedExactly),
+    ("MCH LB exact early target marker is accepted", MachinistLimitBreakMarkerSelfTests.ExactMarkerIsAccepted),
+    ("MCH LB damage and ambiguous packets fail closed", MachinistLimitBreakMarkerSelfTests.DamageAndAmbiguousPacketsFailClosed),
 };
 
 var failures = new List<string>();

@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 7;
+    public int Version { get; set; } = 9;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -29,6 +29,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowPersonalWarnings { get; set; } = true;
     public bool WarnWildfire { get; set; } = true;
     public bool WarnDeathWarrant { get; set; } = true;
+    public bool WarnMarksmanSpite { get; set; } = true;
     public bool WarnPurifiableCrowdControl { get; set; } = true;
     public float PersonalWarningScreenX { get; set; } = 0.5f;
     public float PersonalWarningScreenY { get; set; } = 0.34f;
@@ -83,6 +84,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float CurrentTargetInfoScreenX { get; set; } = 0.5f;
     public float CurrentTargetInfoScreenY { get; set; } = 0.7f;
     public float CurrentTargetInfoScale { get; set; } = 1f;
+    public bool EnableNearAssistMacro { get; set; }
+    public float NearAssistMaxAllyDistance { get; set; } = 25f;
+    public bool NearAssistPreferDamageRoles { get; set; } = true;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -90,7 +94,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 7) return;
+        var repairedNearAssistDistance = ClampNearAssistDistance();
+        if (Version >= 9)
+        {
+            if (repairedNearAssistDistance) Save();
+            return;
+        }
 
         if (Version < 3)
         {
@@ -130,7 +139,24 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ApplyCurrentTargetHighlightDefaults(false);
         }
 
-        Version = 7;
+        if (Version < 8)
+        {
+            // Near Assist can rewrite the target ID of one explicitly armed macro action,
+            // so every existing installation must opt in deliberately after updating.
+            EnableNearAssistMacro = false;
+            NearAssistMaxAllyDistance = 25f;
+            NearAssistPreferDamageRoles = true;
+        }
+
+        if (Version < 9)
+        {
+            // Warning-only feature: existing users receive the same opt-out behavior
+            // as Wildfire and Death Warrant. It never presses Guard or another action.
+            WarnMarksmanSpite = true;
+        }
+
+        Version = 9;
+        ClampNearAssistDistance();
         Save();
     }
 
@@ -138,7 +164,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 7;
+        Version = 9;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -161,6 +187,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowPersonalWarnings = true;
         WarnWildfire = true;
         WarnDeathWarrant = true;
+        WarnMarksmanSpite = true;
         WarnPurifiableCrowdControl = true;
         PersonalWarningScreenX = 0.5f;
         PersonalWarningScreenY = 0.34f;
@@ -176,6 +203,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PurifyOnMiracleOfNature = true;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
+        EnableNearAssistMacro = false;
+        NearAssistMaxAllyDistance = 25f;
+        NearAssistPreferDamageRoles = true;
     }
 
     public void ApplyFocusGlowPreset() => ApplyFocusGlowDefaults(true);
@@ -243,5 +273,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
         CurrentTargetInfoScreenX = 0.5f;
         CurrentTargetInfoScreenY = 0.7f;
         CurrentTargetInfoScale = 1f;
+    }
+
+    private bool ClampNearAssistDistance()
+    {
+        var clamped = float.IsFinite(NearAssistMaxAllyDistance)
+            ? Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)
+            : 25f;
+        if (Math.Abs(clamped - NearAssistMaxAllyDistance) < 0.001f) return false;
+        NearAssistMaxAllyDistance = clamped;
+        return true;
     }
 }
