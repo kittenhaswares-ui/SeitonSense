@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0.1
+
+- Keep valid execute labels visible when the only native result is that the
+  player is not currently facing the enemy.
+- Continue to suppress alerts for line-of-sight failures, out-of-range targets,
+  and unknown native results.
+
 ## 0.1.0.0
 
 - Initial Ninja-only Crystalline Conflict execute overlay.

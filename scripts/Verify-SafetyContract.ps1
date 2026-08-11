@@ -72,6 +72,14 @@ foreach ($required in @('ExecuteThreshold.IsBelowHalf', 'IsAvailableForTarget', 
     if ($tracker -notmatch [regex]::Escape($required)) { throw "Tracker is missing required fail-closed gate: $required" }
 }
 
+$rangeRules = Get-Content -LiteralPath (Join-Path $sourceRoot 'SeitonSense.Core\SeitonRangeRules.cs') -Raw
+foreach ($required in @('Ready = 0', 'NotFacingTarget = 565', 'HasNativeRangeAndLineOfSight')) {
+    if ($rangeRules -notmatch [regex]::Escape($required)) { throw "Range allowlist is missing required proof: $required" }
+}
+if ($readiness -notmatch [regex]::Escape('SeitonRangeRules.HasNativeRangeAndLineOfSight')) {
+    throw 'Readiness probe must use the strict native range and line-of-sight allowlist.'
+}
+
 $metadata = Get-Content -LiteralPath (Join-Path $sourceRoot 'SeitonSense.Plugin\Services\SeitonMetadataGuard.cs') -Raw
 foreach ($required in @(
     'SeitonReadinessProbe.BaseActionId',
