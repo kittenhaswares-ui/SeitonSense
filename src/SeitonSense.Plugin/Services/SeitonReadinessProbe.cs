@@ -2,6 +2,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -71,7 +72,7 @@ internal static class SeitonReadinessProbe
             resolvedActionId,
             sourceObject,
             targetObject);
-        if (rangeStatus != 0) return false;
+        if (!SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeStatus)) return false;
 
         actionStatus = actionManager->GetActionStatus(
             ActionType.Action,

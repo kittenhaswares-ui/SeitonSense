@@ -13,6 +13,7 @@ var tests = new (string Name, Action Run)[]
     ("range or readiness loss does not rearm", ReadinessLossDoesNotRearm),
     ("stable healing rearms once", StableHealingRearms),
     ("flash timeline is bounded", FlashTimelineIsBounded),
+    ("native range result accepts facing-only failure", NativeRangeResultIsExact),
     ("known CC territories are complete", KnownCcTerritoriesAreComplete),
     ("CC matching remains fail closed", CcMatchingIsFailClosed),
 };
@@ -145,6 +146,15 @@ static void FlashTimelineIsBounded()
     Equal(1f, FlashTimeline.Remaining01(1000, 1000, 1400), "start");
     Equal(0.5f, FlashTimeline.Remaining01(1200, 1000, 1400), "middle");
     Equal(0f, FlashTimeline.Remaining01(1400, 1000, 1400), "end");
+}
+
+static void NativeRangeResultIsExact()
+{
+    True(SeitonRangeRules.HasNativeRangeAndLineOfSight(0), "native success");
+    True(SeitonRangeRules.HasNativeRangeAndLineOfSight(565), "not-facing still has range and line of sight");
+    False(SeitonRangeRules.HasNativeRangeAndLineOfSight(562), "line of sight failure");
+    False(SeitonRangeRules.HasNativeRangeAndLineOfSight(566), "out of range");
+    False(SeitonRangeRules.HasNativeRangeAndLineOfSight(uint.MaxValue), "unknown result");
 }
 
 static void KnownCcTerritoriesAreComplete()

@@ -48,6 +48,8 @@ Subcommands: `show`, `hide`, `preview`, `flash`, `debug`, `reset`, `help`.
   are the native CC enemy-party slots.
 - The alert marks the current execute opportunity; it cannot guarantee future
   HP or that the target will still be valid when you press.
+- Being turned away does not hide an otherwise valid alert; actual range and
+  line-of-sight failures still do.
 - Only enemies currently represented to your game client can be labeled.
 - A game update can change action or arena data and may require a plugin update.
   The strict startup check disables live alerts instead of guessing when the
