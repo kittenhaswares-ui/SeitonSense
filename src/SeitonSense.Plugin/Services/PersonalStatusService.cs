@@ -26,6 +26,7 @@ internal sealed class PersonalStatusService : IDisposable
     private DebouncedVisibilityState resiliencePresence = DebouncedVisibilityState.Initial;
     private uint activeTerritory = uint.MaxValue;
     private ulong activeLocalPlayerId;
+    private SupportedPvPContext activeContext;
     private bool started;
     private bool disposed;
 
@@ -84,7 +85,7 @@ internal sealed class PersonalStatusService : IDisposable
             var purify = emergencyPurify.FailClosed(now);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
-                false,
+                SupportedPvPContext.None,
                 false,
                 [],
                 purify));
@@ -99,24 +100,27 @@ internal sealed class PersonalStatusService : IDisposable
         var now = Environment.TickCount64;
         var localPlayer = objectTable.LocalPlayer;
         var localPlayerId = localPlayer?.GameObjectId ?? 0;
+        var context = ResolveSupportedPvPContext();
         var hardReset = activeTerritory != clientState.TerritoryType ||
-                        activeLocalPlayerId != localPlayerId;
+                        activeLocalPlayerId != localPlayerId ||
+                        activeContext != context;
         if (hardReset)
         {
             activeTerritory = clientState.TerritoryType;
             activeLocalPlayerId = localPlayerId;
+            activeContext = context;
             ClearStatusTracking();
             emergencyPurify.Reset();
         }
 
-        var isCc = IsCrystallineConflict();
+        var isSupportedPvPContext = context != SupportedPvPContext.None;
         var alive = IsAlive(localPlayer);
         var anyWarningEnabled = configuration.ShowPersonalWarnings &&
                                 (configuration.WarnWildfire ||
                                  configuration.WarnDeathWarrant ||
                                  configuration.WarnPurifiableCrowdControl);
         var shouldScanStatuses = configuration.Enabled &&
-                                 isCc &&
+                                 isSupportedPvPContext &&
                                  alive &&
                                  (anyWarningEnabled ||
                                   configuration.ExperimentalPurifyOnNextKey);
@@ -136,7 +140,7 @@ internal sealed class PersonalStatusService : IDisposable
         var resilienceActive = resiliencePresence.IsVisible;
         var warningsActive = configuration.Enabled &&
                              configuration.ShowPersonalWarnings &&
-                             isCc &&
+                             isSupportedPvPContext &&
                              alive &&
                              !hardReset;
         var statuses = BuildAlertSnapshots(observed, now, warningsActive, hardReset);
@@ -150,7 +154,7 @@ internal sealed class PersonalStatusService : IDisposable
                                          metadata.PurifyVerified;
         var purify = emergencyPurify.Observe(
             localPlayer,
-            isCc,
+            isSupportedPvPContext,
             purifyConfigurationEnabled,
             purifyStatus,
             purifyStatusCurrentlyObserved,
@@ -160,25 +164,38 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
-            configuration.Enabled && isCc && alive && !hardReset,
-            isCc,
+            configuration.Enabled && isSupportedPvPContext && alive && !hardReset,
+            context,
             alive,
             statuses,
             purify));
     }
 
-    private bool IsCrystallineConflict()
+    private SupportedPvPContext ResolveSupportedPvPContext()
     {
         var condition = dutyState.ContentFinderCondition;
         var conditionValid = condition.IsValid;
-        return PvPMatchRules.IsCrystallineConflict(
+        var context = PvPMatchRules.ResolveSupportedContext(
+            clientState.IsPvP,
             clientState.IsPvPExcludingDen,
+            configuration.EnableWolvesDenTesting,
             clientState.TerritoryType,
             conditionValid,
             conditionValid && condition.Value.PvP,
             conditionValid ? condition.Value.ContentUICategory.RowId : 0,
             conditionValid && condition.Value.CrystallineConflictCasualRoulette,
             conditionValid && condition.Value.CrystallineConflictRankedRoulette);
+        if (context != SupportedPvPContext.WolvesDen) return context;
+
+        var localPlayer = objectTable.LocalPlayer;
+        if (localPlayer is null) return SupportedPvPContext.None;
+        var opponent = WolvesDenOpponentResolver.Resolve(
+            objectTable,
+            localPlayer,
+            out _,
+            out _,
+            out _);
+        return opponent is null ? SupportedPvPContext.None : SupportedPvPContext.WolvesDen;
     }
 
     private List<ObservedPersonalStatus> ScanExactStatuses(

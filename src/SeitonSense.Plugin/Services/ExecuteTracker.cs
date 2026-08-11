@@ -26,6 +26,8 @@ internal sealed class ExecuteTracker : IDisposable
     private long nextUpdateAt;
     private long nextErrorLogAt;
     private uint activeTerritory;
+    private SupportedPvPContext activeContext;
+    private uint activeWolvesDenOpponentEntityId;
     private bool started;
     private bool disposed;
 
@@ -106,19 +108,29 @@ internal sealed class ExecuteTracker : IDisposable
         var conditionPvP = condition.IsValid && condition.Value.PvP;
         var casual = condition.IsValid && condition.Value.CrystallineConflictCasualRoulette;
         var ranked = condition.IsValid && condition.Value.CrystallineConflictRankedRoulette;
-        var isCc = PvPMatchRules.IsCrystallineConflict(
+        var context = PvPMatchRules.ResolveSupportedContext(
+            clientState.IsPvP,
             clientState.IsPvPExcludingDen,
+            configuration.EnableWolvesDenTesting,
             clientState.TerritoryType,
             condition.IsValid,
             conditionPvP,
             categoryId,
             casual,
             ranked);
+        if (context != activeContext)
+        {
+            ResetRuntime();
+            activeContext = context;
+        }
+
+        var isCc = context == SupportedPvPContext.CrystallineConflict;
+        var isWolvesDen = context == SupportedPvPContext.WolvesDen;
 
         var localPlayer = objectTable.LocalPlayer;
         var isNinja = localPlayer is not null &&
                       ExecuteThreshold.IsNinja(localPlayer.ClassJob.IsValid ? localPlayer.ClassJob.RowId : 0);
-        if (!configuration.Enabled || !isCc || localPlayer is null)
+        if (!configuration.Enabled || context == SupportedPvPContext.None || localPlayer is null)
         {
             ResetRuntime();
             Volatile.Write(ref diagnostics, new TrackerDiagnostics(
@@ -128,6 +140,7 @@ internal sealed class ExecuteTracker : IDisposable
                 metadata.RecuperateVerified,
                 isNinja,
                 isCc,
+                isWolvesDen,
                 clientState.IsPvP,
                 clientState.TerritoryType,
                 conditionId,
@@ -138,7 +151,11 @@ internal sealed class ExecuteTracker : IDisposable
                 0,
                 0,
                 0,
-                0));
+                0,
+                isWolvesDen ? 1 : isCc ? 5 : 0,
+                0,
+                false,
+                false));
             return;
         }
 
@@ -151,10 +168,43 @@ internal sealed class ExecuteTracker : IDisposable
             .Select(player => player.EntityId)
             .Where(IsNetworkEntityId)
             .ToHashSet();
-        var partyFallbackReady = PvPMatchRules.IsPublicCrystallineConflictTerritory(clientState.TerritoryType) &&
+        var partyFallbackReady = isCc &&
+                                 PvPMatchRules.IsPublicCrystallineConflictTerritory(clientState.TerritoryType) &&
                                  partyEntityIds.Count == 5 &&
                                  partyEntityIds.Contains(localPlayer.EntityId) &&
                                  partyEntityIds.IsSubsetOf(visibleEntityIds);
+
+        var resolvedPlayers = new List<(int Slot, IPlayerCharacter Player)>(isWolvesDen ? 1 : 5);
+        var wolvesDenNativeEnemyEntityId = 0u;
+        var wolvesDenNativePlayerResolved = false;
+        var wolvesDenHostileFlag = false;
+        if (isCc)
+        {
+            for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
+            {
+                var player = EnemySlotResolver.Resolve(objectTable, slot);
+                if (player is not null) resolvedPlayers.Add((slot, player));
+            }
+        }
+        else
+        {
+            var opponent = WolvesDenOpponentResolver.Resolve(
+                objectTable,
+                localPlayer,
+                out wolvesDenNativeEnemyEntityId,
+                out wolvesDenNativePlayerResolved,
+                out wolvesDenHostileFlag);
+            var opponentEntityId = opponent?.EntityId ?? 0;
+            if (opponentEntityId != activeWolvesDenOpponentEntityId)
+            {
+                runtimeStates.Clear();
+                Interlocked.Exchange(ref popups, []);
+                activeWolvesDenOpponentEntityId = opponentEntityId;
+            }
+
+            if (opponent is not null)
+                resolvedPlayers.Add((EnemySlotRules.FirstSlot, opponent));
+        }
 
         var seitonActionId = 0u;
         var localAlive = !localPlayer.IsDead && localPlayer.CurrentHp > 0;
@@ -175,17 +225,18 @@ internal sealed class ExecuteTracker : IDisposable
         var guardUnavailableSlots = 0;
         var lowMpSlots = 0;
 
-        for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
+        foreach (var (slot, player) in resolvedPlayers)
         {
-            var player = EnemySlotResolver.Resolve(objectTable, slot);
-            if (player is null || !resolvedEntityIds.Add(player.EntityId)) continue;
+            if (!resolvedEntityIds.Add(player.EntityId)) continue;
             resolvedSlots++;
 
             var isAlly = partyEntityIds.Contains(player.EntityId) ||
                          (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
             var isEnemy = player.GameObjectId != localPlayer.GameObjectId &&
-                          !isAlly &&
-                          ((player.StatusFlags & StatusFlags.Hostile) != 0 || partyFallbackReady);
+                          (isWolvesDen
+                              ? (player.StatusFlags & StatusFlags.Hostile) != 0
+                              : !isAlly &&
+                                ((player.StatusFlags & StatusFlags.Hostile) != 0 || partyFallbackReady));
             if (!isEnemy) continue;
 
             if (!runtimeStates.TryGetValue(player.EntityId, out var state))
@@ -310,12 +361,13 @@ internal sealed class ExecuteTracker : IDisposable
         Interlocked.Exchange(ref enemies, snapshots.ToArray());
         Interlocked.Exchange(ref popups, activePopups.ToArray());
         Volatile.Write(ref diagnostics, new TrackerDiagnostics(
-            true,
+            isCc || resolvedPlayers.Count == 1,
             metadata.SeitonVerified,
             metadata.GuardVerified,
             metadata.RecuperateVerified,
             isNinja,
-            true,
+            isCc,
+            isWolvesDen,
             clientState.IsPvP,
             clientState.TerritoryType,
             conditionId,
@@ -326,7 +378,11 @@ internal sealed class ExecuteTracker : IDisposable
             guardUnavailableSlots,
             lowMpSlots,
             activePopups.Count,
-            seitonActionId));
+            seitonActionId,
+            isWolvesDen ? 1 : 5,
+            wolvesDenNativeEnemyEntityId,
+            wolvesDenNativePlayerResolved,
+            wolvesDenHostileFlag));
     }
 
     private static bool TryGetGuardRemainingMilliseconds(
@@ -360,6 +416,7 @@ internal sealed class ExecuteTracker : IDisposable
     private void ResetRuntime()
     {
         runtimeStates.Clear();
+        activeWolvesDenOpponentEntityId = 0;
         Interlocked.Exchange(ref enemies, []);
         Interlocked.Exchange(ref popups, []);
     }

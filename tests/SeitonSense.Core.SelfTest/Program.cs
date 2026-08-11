@@ -10,6 +10,8 @@ var tests = new (string Name, Action Run)[]
     ("native range result accepts facing-only failure", NativeRangeResultIsExact),
     ("known CC territories are complete", KnownCcTerritoriesAreComplete),
     ("CC matching remains fail closed", CcMatchingIsFailClosed),
+    ("supported PvP context keeps Wolves' Den opt-in", SupportedPvpContextIsExact),
+    ("Wolves' Den opponent selection is strict", WolvesDenOpponentSelectionIsStrict),
     ("visibility ignores a short false sample", VisibilityHasFalseGrace),
     ("visibility hard reset is immediate", VisibilityHardResetIsImmediate),
     ("unknown Guard never claims cooldown", UnknownGuardFailsClosed),
@@ -38,7 +40,7 @@ var tests = new (string Name, Action Run)[]
     ("ready Purify dispatches once at the key edge", EmergencyPurifyBufferSelfTests.ReadyAtArmDispatchesExactlyOnce),
     ("Purify timeout is bounded and terminal", EmergencyPurifyBufferSelfTests.TimeoutIsBoundedAndTerminal),
     ("Purify rearms only after status absence", EmergencyPurifyBufferSelfTests.StatusAbsenceIsTheOnlyRearmForSameInstance),
-    ("Purify tracks the exact CC status instance", EmergencyPurifyBufferSelfTests.ExactStatusReplacementNeedsANewKey),
+    ("Purify tracks the exact status instance", EmergencyPurifyBufferSelfTests.ExactStatusReplacementNeedsANewKey),
     ("Purify safety gates cancel and latch", EmergencyPurifyBufferSelfTests.SafetyGatesCancelAndLatch),
     ("Purify hard reset and invalid inputs fail closed", EmergencyPurifyBufferSelfTests.HardResetAndInvalidInputsFailClosed),
 };
@@ -142,6 +144,145 @@ static void CcMatchingIsFailClosed()
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, false, true, 43, false, false), "invalid condition");
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, true, false, 43, false, false), "non-PvP condition");
     False(PvPMatchRules.IsCrystallineConflict(true, 9999, true, true, 12, false, false), "unrelated mode");
+}
+
+static void SupportedPvpContextIsExact()
+{
+    Equal(
+        SupportedPvPContext.CrystallineConflict,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: true,
+            isPvPExcludingWolvesDen: true,
+            includeWolvesDenTesting: false,
+            territoryId: 1032,
+            conditionValid: false,
+            conditionPvP: false,
+            contentUiCategoryId: 0,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "known CC remains supported without Wolves' Den opt-in");
+
+    Equal(
+        SupportedPvPContext.WolvesDen,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: true,
+            isPvPExcludingWolvesDen: false,
+            includeWolvesDenTesting: true,
+            territoryId: 250,
+            conditionValid: false,
+            conditionPvP: false,
+            contentUiCategoryId: 0,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "Wolves' Den flags plus opt-in");
+
+    Equal(
+        SupportedPvPContext.None,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: true,
+            isPvPExcludingWolvesDen: false,
+            includeWolvesDenTesting: false,
+            territoryId: 250,
+            conditionValid: false,
+            conditionPvP: false,
+            contentUiCategoryId: 0,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "Wolves' Den is disabled without opt-in");
+
+    Equal(
+        SupportedPvPContext.None,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: false,
+            isPvPExcludingWolvesDen: false,
+            includeWolvesDenTesting: true,
+            territoryId: 250,
+            conditionValid: false,
+            conditionPvP: false,
+            contentUiCategoryId: 0,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "non-PvP cannot become Wolves' Den");
+
+    Equal(
+        SupportedPvPContext.None,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: true,
+            isPvPExcludingWolvesDen: false,
+            includeWolvesDenTesting: true,
+            territoryId: 9999,
+            conditionValid: false,
+            conditionPvP: false,
+            contentUiCategoryId: 0,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "Wolves' Den flags outside territory 250 fail closed");
+
+    Equal(
+        SupportedPvPContext.None,
+        PvPMatchRules.ResolveSupportedContext(
+            isPvP: true,
+            isPvPExcludingWolvesDen: true,
+            includeWolvesDenTesting: true,
+            territoryId: 9999,
+            conditionValid: true,
+            conditionPvP: true,
+            contentUiCategoryId: 45,
+            casualRoulette: false,
+            rankedRoulette: false),
+        "Frontline or Rival Wings remains excluded");
+}
+
+static void WolvesDenOpponentSelectionIsStrict()
+{
+    var enemy = new WolvesDenOpponentCandidate(
+        EntityId: 100,
+        GameObjectId: 1_000,
+        MatchesNativeDuelEnemyId: true,
+        HasValidAddress: true,
+        IsPlayerCharacter: true,
+        IsSelf: false,
+        HasHostileFlag: true,
+        IsTargetable: true);
+
+    var resolved = WolvesDenOpponentRules.ResolveSingleSlot([enemy]);
+    True(resolved.HasValue, "one strict hostile resolves");
+    Equal(EnemySlotRules.FirstSlot, resolved!.Value.Slot, "duel opponent uses S1");
+    Equal(100u, resolved.Value.EntityId, "resolved entity is preserved");
+
+    False(WolvesDenOpponentRules.ResolveSingleSlot([]).HasValue, "zero candidates fail closed");
+    False(
+        WolvesDenOpponentRules.ResolveSingleSlot([enemy, enemy with { EntityId = 101 }]).HasValue,
+        "multiple hostile candidates fail closed");
+
+    var rejectedCandidates = new[]
+    {
+        enemy with { EntityId = 0 },
+        enemy with { EntityId = 0xE0000000 },
+        enemy with { GameObjectId = 0 },
+        enemy with { GameObjectId = 0xE0000000 },
+        enemy with { MatchesNativeDuelEnemyId = false },
+        enemy with { HasValidAddress = false },
+        enemy with { IsPlayerCharacter = false },
+        enemy with { IsSelf = true },
+        enemy with { HasHostileFlag = false },
+        enemy with { IsTargetable = false },
+    };
+
+    foreach (var candidate in rejectedCandidates)
+    {
+        False(
+            WolvesDenOpponentRules.ResolveSingleSlot([candidate]).HasValue,
+            $"ineligible candidate fails closed: {candidate}");
+    }
+
+    resolved = WolvesDenOpponentRules.ResolveSingleSlot([
+        enemy with { MatchesNativeDuelEnemyId = false },
+        enemy,
+        enemy with { HasHostileFlag = false },
+    ]);
+    True(resolved.HasValue, "ineligible bystanders do not block one strict hostile");
+    Equal(100u, resolved!.Value.EntityId, "strict hostile remains S1");
 }
 
 static void VisibilityHasFalseGrace()

@@ -52,6 +52,7 @@ $namePlateAnchorPath = Join-Path $pluginServicesRoot 'NamePlateAnchorTracker.cs'
 $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
+$wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $allowedUnsafe = @(
     $slotResolverPath,
     $readinessPath,
@@ -125,6 +126,48 @@ $slotResolver = Read-RequiredSource $slotResolverPath 'Enemy slot resolver'
 if ($slotResolver -notmatch 'ResolvePlaceholder\(\$"<e\{slot\}>"\s*,\s*1\s*,\s*0\s*\)') {
     throw 'Enemy slots must come from exact native <e1>-<e5> placeholder resolution.'
 }
+Assert-Literals $slotResolver @(
+    'GameMain.Instance',
+    'PvPDuelManager.EnemyEntityId',
+    'ResolveWolvesDenDuelOpponent',
+    'objectTable.SearchByEntityId(nativeEnemyEntityId)'
+) 'Native Wolves Den duel identity'
+
+$pvpMatchRules = Read-RequiredSource (Join-Path $coreRoot 'PvPMatchRules.cs') 'Supported PvP context rules'
+Assert-Literals $pvpMatchRules @(
+    'SupportedPvPContext.CrystallineConflict',
+    'SupportedPvPContext.WolvesDen',
+    'WolvesDenPierTerritoryId = 250',
+    'territoryId == WolvesDenPierTerritoryId'
+) 'Supported PvP context rules'
+$normalizedPvpMatchRules = $pvpMatchRules -replace '\s+', ' '
+if ($normalizedPvpMatchRules -notmatch 'includeWolvesDenTesting\s*&&\s*isPvP\s*&&\s*!isPvPExcludingWolvesDen\s*&&\s*territoryId\s*==\s*WolvesDenPierTerritoryId') {
+    throw "Wolves' Den must require opt-in, live PvP, the excluding-Den inverse, and exact territory 250."
+}
+
+$wolvesDenRules = Read-RequiredSource (Join-Path $coreRoot 'WolvesDenOpponentRules.cs') 'Wolves Den opponent rules'
+Assert-Literals $wolvesDenRules @(
+    'ResolveSingleSlot',
+    'candidate.MatchesNativeDuelEnemyId',
+    'candidate.HasValidAddress',
+    '!candidate.IsSelf',
+    'candidate.HasHostileFlag',
+    'candidate.IsTargetable',
+    'EnemySlotRules.FirstSlot'
+) 'Wolves Den opponent rules'
+$wolvesDenResolver = Read-RequiredSource $wolvesDenResolverPath 'Wolves Den opponent resolver'
+Assert-Literals $wolvesDenResolver @(
+    'WolvesDenOpponentRules.ResolveSingleSlot',
+    'StatusFlags.Hostile',
+    'player.IsTargetable',
+    'player.Address != 0'
+) 'Wolves Den opponent resolver'
+if ($wolvesDenResolver -match '\b(StatusFlags\.(PartyMember|AllianceMember)|partyEntityIds)\b') {
+    throw "Native duel opponents must not be rejected merely because the players stayed in a party."
+}
+if ($wolvesDenResolver -match '\b(Write|Set|UseAction|TargetManager|ResolvePlaceholder)\b') {
+    throw 'Wolves Den opponent resolver must remain read-only and must not pretend to provide native CC slots.'
+}
 if ($slotResolver -match '\b(Write|Set|UseAction|TargetManager)\b') {
     throw 'Enemy slot resolver must remain read-only.'
 }
@@ -185,11 +228,20 @@ Assert-Literals $tracker @(
     'TryGetReadyAction',
     'HasRangeAndLineOfSight',
     'EnemySlotResolver.Resolve',
+    'PvPMatchRules.ResolveSupportedContext',
+    'configuration.EnableWolvesDenTesting',
+    'WolvesDenOpponentResolver.Resolve',
+    'context == SupportedPvPContext.CrystallineConflict',
+    'context == SupportedPvPContext.WolvesDen',
     'PersistentSeitonCueRules.IsPreparationBand',
     'PersistentSeitonCueRules.Observe',
     'GuardCooldownRules.ObserveStatus',
     'LowMpRules.Observe'
 ) 'Execute tracker'
+$normalizedTracker = $tracker -replace '\s+', ' '
+if ($normalizedTracker -notmatch 'isWolvesDen\s*\?\s*\(player\.StatusFlags\s*&\s*StatusFlags\.Hostile\)\s*!=\s*0\s*:\s*!isAlly') {
+    throw "Wolves' Den must accept the exact hostile duel opponent even when the players stayed in a party."
+}
 
 $overlay = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
 Assert-Literals $overlay @(
@@ -276,7 +328,10 @@ Assert-Literals $personalStatus @(
     'StatusIdentityState',
     'PersonalDebuffAlertRules.MissingGraceMilliseconds',
     'DebouncedVisibilityRules.Observe',
-    'resiliencePresence.IsVisible'
+    'resiliencePresence.IsVisible',
+    'PvPMatchRules.ResolveSupportedContext',
+    'configuration.EnableWolvesDenTesting',
+    'WolvesDenOpponentResolver.Resolve'
 ) 'Personal status service'
 
 $stateAssignment = [regex]::Match(
@@ -335,4 +390,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.3 safety contract verified across $($sourceFiles.Count) source files; only one gated native Purify attempt is allowed, and network, hooks, target mutation, UI/input injection, retries, and queues remain forbidden."
+Write-Host "Seiton Sense v0.3.0.1 safety contract verified across $($sourceFiles.Count) source files; CC keeps native enemy slots, Wolves' Den requires one strict hostile, and only one gated native Purify attempt is allowed."

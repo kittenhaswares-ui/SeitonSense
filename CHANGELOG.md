@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0.1
+
+- Added an enabled-by-default Wolves' Den duel test mode for the complete HUD:
+  Seiton cues, Guard/MP nameplate indicators, personal debuff warnings, and the
+  separately opt-in Purify experiment.
+- A duel is accepted only when FFXIV exposes one valid, targetable native duel
+  opponent carrying the hostile flag. That opponent receives a synthetic
+  visual `S1`; missing or invalid identity fails closed. Party-member duels are
+  supported because the native duel identity remains authoritative.
+- Crystalline Conflict still uses FFXIV's exact native `<e1>`-`<e5>` order.
+  Wolves' Den `S1` does not claim that the `<e1>` macro placeholder exists in a
+  duel. Frontline and Rival Wings remain excluded.
+- Duel state is cleared when the strict opponent disappears or changes so a
+  Guard estimate or Seiton cue cannot leak into a later duel.
+
 ## 0.3.0.0
 
 - Replaced the short-only Seiton prompt with a persistent, center-adjacent

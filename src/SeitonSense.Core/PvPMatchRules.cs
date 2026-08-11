@@ -1,7 +1,16 @@
 namespace SeitonSense.Core;
 
+public enum SupportedPvPContext
+{
+    None,
+    CrystallineConflict,
+    WolvesDen,
+}
+
 public static class PvPMatchRules
 {
+    public const uint WolvesDenPierTerritoryId = 250;
+
     public static bool IsPublicCrystallineConflictTerritory(uint territoryId) => territoryId is
         1032 or // The Palaistra
         1033 or // The Volcanic Heart
@@ -34,4 +43,35 @@ public static class PvPMatchRules
         (IsKnownCrystallineConflictTerritory(territoryId) ||
          (conditionValid && conditionPvP &&
           (contentUiCategoryId is 43 or 44 || casualRoulette || rankedRoulette)));
+
+    public static SupportedPvPContext ResolveSupportedContext(
+        bool isPvP,
+        bool isPvPExcludingWolvesDen,
+        bool includeWolvesDenTesting,
+        uint territoryId,
+        bool conditionValid,
+        bool conditionPvP,
+        uint contentUiCategoryId,
+        bool casualRoulette,
+        bool rankedRoulette)
+    {
+        if (IsCrystallineConflict(
+                isPvPExcludingWolvesDen,
+                territoryId,
+                conditionValid,
+                conditionPvP,
+                contentUiCategoryId,
+                casualRoulette,
+                rankedRoulette))
+        {
+            return SupportedPvPContext.CrystallineConflict;
+        }
+
+        return includeWolvesDenTesting &&
+               isPvP &&
+               !isPvPExcludingWolvesDen &&
+               territoryId == WolvesDenPierTerritoryId
+            ? SupportedPvPContext.WolvesDen
+            : SupportedPvPContext.None;
+    }
 }

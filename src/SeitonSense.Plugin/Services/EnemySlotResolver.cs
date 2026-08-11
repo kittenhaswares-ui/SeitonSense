@@ -1,5 +1,6 @@
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
 namespace SeitonSense.Plugin.Services;
@@ -23,6 +24,25 @@ internal static class EnemySlotResolver
         return player is not null &&
                player.EntityId == entityId &&
                player.Address == (nint)nativeObject
+            ? player
+            : null;
+    }
+
+    internal static unsafe IPlayerCharacter? ResolveWolvesDenDuelOpponent(
+        IObjectTable objectTable,
+        out uint nativeEnemyEntityId)
+    {
+        nativeEnemyEntityId = 0;
+        var gameMain = GameMain.Instance();
+        if (gameMain == null) return null;
+
+        nativeEnemyEntityId = gameMain->PvPDuelManager.EnemyEntityId;
+        if (nativeEnemyEntityId is 0 or 0xE0000000u) return null;
+
+        var player = objectTable.SearchByEntityId(nativeEnemyEntityId) as IPlayerCharacter;
+        return player is not null &&
+               player.EntityId == nativeEnemyEntityId &&
+               player.Address != 0
             ? player
             : null;
     }

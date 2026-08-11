@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "Persistent Seiton decisions, personal PvP warnings, and an optional Purify buffer.",
-    "Description": "A local Crystalline Conflict reaction-cue HUD. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see Wildfire, Death Warrant, Stun, and Miracle warnings. The experimental one-key/one-attempt Purify buffer is disabled by default.",
+    "Description": "A local Crystalline Conflict reaction-cue HUD with an optional Wolves' Den duel test mode. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see selected PvP warnings. The one-key/one-attempt Purify experiment is disabled by default.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.3.0.0",
-    "Changelog": "Added persistent job-icon + SHIFT/S-slot Seiton decisions with optional PREP, plus local Wildfire, Death Warrant, Stun, and Miracle warnings. Added an experimental Purify-on-next-fresh-key buffer, disabled by default: the original key remains, one key permits at most one native attempt, and Seiton Sense does not retry, retarget, or manipulate networking.",
+    "AssemblyVersion": "0.3.0.1",
+    "Changelog": "Added a Wolves' Den duel test mode for the complete HUD and optional Purify experiment. FFXIV's exact native duel opponent is shown as synthetic S1, including party-member duels; invalid identity fails closed. Crystalline Conflict keeps native S1-S5 mapping, while Frontline and Rival Wings remain excluded.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -22,6 +22,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786447332"
+    "LastUpdate": "1786449620"
   }
 ]
