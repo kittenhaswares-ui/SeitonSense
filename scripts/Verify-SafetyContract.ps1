@@ -103,7 +103,12 @@ Assert-Literals $purifyProbe @(
     'inputContext.Reset()',
     'localPlayerIdentityValid',
     'statusCurrentlyObserved',
-    'resilienceActive'
+    'resilienceActive',
+    'allowHeldKeyAtStatusEntry',
+    'heldKeyOptionJustEnabled',
+    '!allowHeldKeyAtStatusEntry || heldKeyOptionJustEnabled',
+    'decision.ShouldConsumeInputGeneration',
+    'inputContext.ConsumeHeldGameplayKeys()'
 ) 'Emergency Purify probe'
 if ($purifyProbe -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMp|PurifyMpCost|CurrentMount|IsTargetable|GetGameObjectId)\b') {
     throw 'Emergency Purify must not restore the fragile local readiness filters removed by the reliability hotfix.'
@@ -212,7 +217,10 @@ Assert-Literals $inputContext @(
     'GetValidVirtualKeys',
     'RaptureAtkModule.Instance',
     'IsTextInputActive',
-    'WantTextInput'
+    'WantTextInput',
+    'PhysicalGameplayKeyRules.Observe',
+    'PhysicalGameplayKeyRules.Consume',
+    'ConsumeHeldGameplayKeys'
 ) 'Game input context probe'
 if ($inputContext -match 'io\.WantCaptureKeyboard') {
     throw 'Ordinary ImGui keyboard capture must not masquerade as active text input.'
@@ -341,6 +349,7 @@ Assert-Literals $personalStatus @(
     'configuration.PurifyOnSilence',
     'configuration.PurifyOnDeepFreeze',
     'configuration.PurifyOnMiracleOfNature',
+    'configuration.PurifyOnHeldGameplayKey',
     'IsPurifyAutomationEnabled',
     'EnemyCombatConstants.ResilienceStatusId',
     'purifyStatusCurrentlyObserved',
@@ -361,6 +370,19 @@ $stateAssignment = [regex]::Match(
 $tryUsePurify = [regex]::Match($purifyProbe, '\bTryUsePurifyOnce\s*\(')
 if (-not $stateAssignment.Success -or -not $tryUsePurify.Success -or $stateAssignment.Index -gt $tryUsePurify.Index) {
     throw 'Emergency Purify runtime must assign the decision NextState before calling TryUsePurifyOnce.'
+}
+$consumeHeldInput = [regex]::Match(
+    $purifyProbe.Substring($stateAssignment.Index),
+    '\binputContext\.ConsumeHeldGameplayKeys\s*\(')
+$consumeHeldInputIndex = if ($consumeHeldInput.Success) {
+    $stateAssignment.Index + $consumeHeldInput.Index
+} else {
+    -1
+}
+if (-not $consumeHeldInput.Success -or
+    $stateAssignment.Index -gt $consumeHeldInputIndex -or
+    $consumeHeldInputIndex -gt $tryUsePurify.Index) {
+    throw 'Emergency Purify must store state and consume the physical key generation before attempting Purify.'
 }
 if ([regex]::Matches($purifyProbe, '\bTryUsePurifyOnce\s*\(').Count -ne 2) {
     throw 'Emergency Purify probe must have one TryUsePurifyOnce call site and one method definition.'
@@ -393,8 +415,33 @@ Assert-Literals $purifyRules @(
     'ResilienceActive',
     'CancelAndWaitIfPresent',
     'ArmOrDispatch',
-    'public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch'
+    'ResolveStatusEntryTrigger',
+    'HeldKeyAtStatusEntry',
+    'AllowHeldKeyAtStatusEntry',
+    'public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch',
+    'public bool ShouldConsumeInputGeneration'
 ) 'Emergency Purify buffer rules'
+if ([regex]::Matches($purifyRules, '\bResolveStatusEntryTrigger\s*\(').Count -ne 3) {
+    throw 'Held-key level must be resolved only for initial status entry, status replacement, and its method definition.'
+}
+
+$physicalKeyRules = Read-RequiredSource (Join-Path $coreRoot 'PhysicalGameplayKeyRules.cs') 'Physical gameplay key rules'
+Assert-Literals $physicalKeyRules @(
+    'A key that is already down when observation starts is not new player',
+    'previous.IsConsumed || pressedWhileTyping',
+    'isFreshPress && !pressedWhileTyping',
+    'eligible && !consumed && !pressedWhileTyping',
+    'public static PhysicalGameplayKeyState Consume'
+) 'Physical gameplay key generation rules'
+
+$configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
+$configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
+Assert-Literals $configuration @(
+    'public int Version { get; set; } = 6',
+    'public bool PurifyOnHeldGameplayKey { get; set; }',
+    'if (Version < 6)',
+    'PurifyOnHeldGameplayKey = false'
+) 'Held-key configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -413,4 +460,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.3.0.2 safety contract verified across $($sourceFiles.Count) source files; all six current Purify CC types are selectable, key state is read-only, and one fresh key permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.3.0.3 safety contract verified across $($sourceFiles.Count) source files; fresh and opt-in held-key input use physical generations, key state remains read-only, and one generation permits at most one native Purify attempt."

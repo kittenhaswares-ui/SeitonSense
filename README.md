@@ -62,23 +62,33 @@ separate, so walking out of and back into range cannot spam the entry pulse.
 
 ## Experimental Purify on next key
 
-The optional **Purify on next fresh gameplay key** experiment is disabled by
-default. It supports the exact current Purify list: Stun, Heavy, Bind, Silence,
-Deep Freeze, and Miracle of Nature. Every type has its own toggle, so Heavy can
-be left as a warning while Stun or Silence still trigger the helper. While the
-opt-in is active in supported PvP, the plugin keeps a read-only key baseline;
-a key already held before the debuff does not count, but a genuine new key edge
-on the first observed status frame does.
+The optional **Purify on next gameplay key** experiment is disabled by default.
+It supports the exact current Purify list: Stun, Heavy, Bind, Silence, Deep
+Freeze, and Miracle of Nature. Every type has its own toggle, so Heavy can be
+left as a warning while Stun or Silence still trigger the helper. While the
+opt-in is active in supported PvP, the plugin keeps a read-only physical-key
+baseline. A genuine new key edge can trigger immediately.
 
-The original key is never swallowed, replaced, delayed, or replayed. One key
-causes exactly one native Purify attempt immediately. FFXIV then decides whether
-that normal action request can queue or execute. The attempt is marked consumed
-before it is sent, so a client or server rejection is never retried. Temporary
-chat/UI focus no longer consumes the debuff window; it simply requires another
+A separate, default-off option lets a gameplay key that was physically pressed
+before the debuff trigger when that enabled CC first appears. This deliberately
+includes movement keys such as WASD as well as hotbar keys. The press must have
+been observed after the baseline was established and outside chat/text input.
+Keys already down when the option/plugin starts, or keys used while typing,
+stay ineligible until released. ReAction Turbo's logical repeat pulses do not
+create new physical key generations.
+
+The original key is never swallowed, replaced, delayed, or replayed. One
+physical press/hold generation causes at most one native Purify attempt. It is
+consumed when the intent arms, before any action request; the same continuously
+held key cannot trigger again after a timeout, status replacement, or status
+reapplication. Releasing and pressing creates a new generation. FFXIV decides
+whether the normal Purify request can queue or execute, and a client or server
+rejection is never retried. Temporary chat/UI focus simply requires another
 fresh key after typing ends. Seiton Sense does not select another action, change
-targets, fabricate input, alter packets, or manipulate network replies. Another
-plugin configured to rewrite Purify or its target can still alter the downstream
-call; disable such rules while testing this experiment.
+targets, fabricate input, alter packets, or manipulate network replies. ReAction
+may continue repeating its original hotbar action independently. Another plugin
+configured to rewrite Purify or its target can still alter the downstream call;
+disable such rules while testing this experiment.
 
 ## Install
 
@@ -102,8 +112,8 @@ update through the same repository.
 
 The cue label, scale, position, entry-pulse duration, personal-warning layout,
 nameplate icon size, spacing, and individual indicators are configurable. The
-experimental Purify helper has one master opt-in plus a separate toggle for
-each supported debuff type.
+experimental Purify helper has one master opt-in, a separate held-key option,
+and a separate toggle for each supported debuff type.
 
 ## Scope and privacy
 

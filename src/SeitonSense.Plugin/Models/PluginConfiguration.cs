@@ -5,7 +5,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 5;
+    public int Version { get; set; } = 6;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -34,6 +34,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float PersonalWarningScale { get; set; } = 1f;
     public bool ExperimentalPurifyOnNextKey { get; set; }
     public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
+    public bool PurifyOnHeldGameplayKey { get; set; }
     public bool PurifyOnStun { get; set; } = true;
     public bool PurifyOnHeavy { get; set; } = true;
     public bool PurifyOnBind { get; set; } = true;
@@ -47,7 +48,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 5) return;
+        if (Version >= 6) return;
 
         if (Version < 3)
         {
@@ -72,7 +73,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             PurifyOnMiracleOfNature = true;
         }
 
-        Version = 5;
+        if (Version < 6)
+        {
+            // Held-key activation is a separate, deliberately explicit opt-in.
+            // Existing users keep the proven fresh-key behavior after updating.
+            PurifyOnHeldGameplayKey = false;
+        }
+
+        Version = 6;
         Save();
     }
 
@@ -80,7 +88,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 5;
+        Version = 6;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -109,6 +117,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PersonalWarningScale = 1f;
         ExperimentalPurifyOnNextKey = false;
         ExperimentalPurifyBufferMilliseconds = 750;
+        PurifyOnHeldGameplayKey = false;
         PurifyOnStun = true;
         PurifyOnHeavy = true;
         PurifyOnBind = true;

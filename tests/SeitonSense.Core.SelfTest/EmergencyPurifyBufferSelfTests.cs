@@ -21,6 +21,112 @@ internal static class EmergencyPurifyBufferSelfTests
         False(decision.ShouldDispatch, "same continuous status still gets at most one attempt");
     }
 
+    public static void HeldKeyAtStatusEntryIsExplicitAndOneShot()
+    {
+        var disabled = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: false,
+            locallyReady: true,
+            now: 1_000);
+        False(disabled.ShouldDispatch, "held input is disabled unless explicitly opted in");
+
+        var enabled = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 2_000);
+        True(enabled.ShouldDispatch, "eligible held input dispatches when the status first appears");
+        Equal(
+            EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry,
+            enabled.InputTrigger,
+            "held trigger is explicit");
+        True(enabled.ShouldConsumeInputGeneration, "held generation is consumed before the attempt");
+
+        var repeated = Observe(
+            enabled.NextState,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 2_001);
+        False(repeated.ShouldDispatch, "continuous hold cannot repeat for the same status");
+    }
+
+    public static void HeldKeyOnlyCountsAtStatusEntry()
+    {
+        var waiting = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_000).NextState;
+
+        var heldLater = Observe(
+            waiting,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_001);
+        False(heldLater.ShouldDispatch, "a held level cannot arm after the status-entry frame");
+
+        var freshLater = Observe(
+            heldLater.NextState,
+            StatusA,
+            freshKey: true,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_002);
+        True(freshLater.ShouldDispatch, "a later real down-edge still dispatches");
+        Equal(
+            EmergencyPurifyInputTrigger.FreshKeyPress,
+            freshLater.InputTrigger,
+            "fresh edge wins over held level");
+        True(freshLater.ShouldConsumeInputGeneration, "fresh trigger also consumes its held generation");
+    }
+
+    public static void FreshEdgeWinsWhenFreshAndHeldCoincide()
+    {
+        var decision = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            freshKey: true,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_000);
+
+        True(decision.ShouldDispatch, "coincident inputs still create only one decision");
+        Equal(
+            EmergencyPurifyInputTrigger.FreshKeyPress,
+            decision.InputTrigger,
+            "the real down-edge owns the coincident intent");
+    }
+
+    public static void HeldKeyIsConsumedWhenItOnlyArms()
+    {
+        var armed = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: false,
+            now: 1_000);
+
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, armed.Kind, "locked Purify arms the held intent");
+        True(armed.ShouldConsumeInputGeneration, "held generation is consumed at arm, not delayed until dispatch");
+        False(armed.ShouldDispatch, "arming does not fake an action call");
+
+        var ready = Observe(armed.NextState, StatusA, locallyReady: true, now: 1_001);
+        True(ready.ShouldDispatch, "the one buffered intent dispatches when locally ready");
+        False(ready.ShouldConsumeInputGeneration, "dispatch does not claim a second physical generation");
+    }
+
     public static void DispatchConsumesBeforeAttempt()
     {
         var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
@@ -203,6 +309,8 @@ internal static class EmergencyPurifyBufferSelfTests
         EmergencyPurifyBufferState state,
         PurifyCcStatusInstance? status,
         bool freshKey = false,
+        bool heldKeyEligible = false,
+        bool allowHeldKey = false,
         bool locallyReady = false,
         long now = 0,
         bool hardReset = false,
@@ -212,6 +320,8 @@ internal static class EmergencyPurifyBufferSelfTests
             ValidObservation(status, now) with
             {
                 FreshKeyPressed = freshKey,
+                HeldKeyEligible = heldKeyEligible,
+                AllowHeldKeyAtStatusEntry = allowHeldKey,
                 PurifyLocallyReady = locallyReady,
                 HardReset = hardReset,
                 BufferMilliseconds = bufferMilliseconds,
@@ -229,6 +339,8 @@ internal static class EmergencyPurifyBufferSelfTests
             IsTextInputActive: false,
             StatusInstance: status,
             FreshKeyPressed: false,
+            HeldKeyEligible: false,
+            AllowHeldKeyAtStatusEntry: false,
             PurifyLocallyReady: false,
             NowMilliseconds: now);
 

@@ -155,7 +155,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
                     $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
-                    $"ready={personal.Purify.LocallyReady}, key={personal.Purify.FreshGameplayKey}, " +
+                    $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
+                    $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
                     $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}");
                 return;
             case "reset":

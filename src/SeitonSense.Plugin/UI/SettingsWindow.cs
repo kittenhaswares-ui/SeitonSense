@@ -132,6 +132,10 @@ internal sealed class SettingsWindow : Window
             "Use one Purify attempt on the next fresh gameplay key",
             configuration.ExperimentalPurifyOnNextKey,
             value => configuration.ExperimentalPurifyOnNextKey = value);
+        changed |= Checkbox(
+            "A held gameplay key may trigger when the debuff appears (includes WASD)",
+            configuration.PurifyOnHeldGameplayKey,
+            value => configuration.PurifyOnHeldGameplayKey = value);
         ImGui.TextUnformatted("Trigger separately for:");
         changed |= Checkbox("Stun", configuration.PurifyOnStun, value => configuration.PurifyOnStun = value);
         ImGui.SameLine();
@@ -148,9 +152,11 @@ internal sealed class SettingsWindow : Window
             value => configuration.PurifyOnMiracleOfNature = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only the exact enabled debuff types can trigger this. A key that was already held does not count. " +
-            "The original key is not swallowed. The fresh key sends one native Purify attempt immediately, and FFXIV " +
-            "decides whether it can queue or execute it. There is no retry after rejection. Disable " +
+            "Only the exact enabled debuff types can trigger this. By default, an already-held key does not count. " +
+            "Enable the separate held-key option if a physical key pressed before the debuff should count once. " +
+            "ReAction Turbo pulses do not create new physical presses. The original key is not swallowed. Seiton Sense " +
+            "sends one native Purify attempt immediately, and FFXIV decides whether it can queue or execute it. " +
+            "The same physical hold cannot trigger again until released, and there is no retry after rejection. Disable " +
             "rules in other plugins that rewrite Purify or its target while testing.");
         ImGui.PopTextWrapPos();
 
@@ -180,7 +186,8 @@ internal sealed class SettingsWindow : Window
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
-            $"ready={personal.Purify.LocallyReady}, key={personal.Purify.FreshGameplayKey}, " +
+            $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
+            $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
             $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}, " +
             $"buffered={personal.Purify.BufferRemainingMilliseconds} ms");
 
