@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PluginConfiguration configuration;
     private readonly WindowSystem windowSystem = new("SeitonSense");
     private readonly ExecuteTracker tracker;
+    private readonly PersonalStatusService personalStatus;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly OverlayRenderer overlay;
     private readonly SettingsWindow settingsWindow;
@@ -37,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
         IDataManager dataManager,
         IGameGui gameGui,
         INamePlateGui namePlateGui,
+        IKeyState keyState,
         ITextureProvider textureProvider,
         IPluginLog log)
     {
@@ -58,14 +60,24 @@ public sealed class Plugin : IDalamudPlugin
             log,
             configuration,
             metadata);
+        personalStatus = new PersonalStatusService(
+            clientState,
+            objectTable,
+            framework,
+            dutyState,
+            keyState,
+            log,
+            configuration,
+            metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         overlay = new OverlayRenderer(
             configuration,
             tracker,
+            personalStatus,
             namePlateAnchors,
             gameGui,
             textureProvider);
-        settingsWindow = new SettingsWindow(configuration, tracker, overlay);
+        settingsWindow = new SettingsWindow(configuration, tracker, personalStatus, overlay);
         windowSystem.AddWindow(settingsWindow);
 
         const string help = "Open Seiton Sense. Subcommands: show, hide, preview, flash, debug, reset, help.";
@@ -77,6 +89,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
         namePlateAnchors.Start();
         tracker.Start();
+        personalStatus.Start();
     }
 
     public void Dispose()
@@ -86,6 +99,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        personalStatus.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
         windowSystem.RemoveAllWindows();
@@ -136,8 +150,13 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.TriggerPreviewPopup();
                 return;
             case "debug":
+                var personal = personalStatus.Snapshot;
                 chatGui.Print(
-                    $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}");
+                    $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
+                    $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
+                    $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
+                    $"ready={personal.Purify.LocallyReady}, key={personal.Purify.FreshGameplayKey}, " +
+                    $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}");
                 return;
             case "reset":
                 configuration.ResetToDefaults();

@@ -19,6 +19,16 @@ jobs:
           dotnet-version: 10.0.x
       - name: Restore
         run: dotnet restore SeitonSense.slnx --locked-mode
+      # The Dalamud plugin project references assemblies shipped by a local
+      # XIVLauncher installation. The release script performs that full build
+      # before packaging; hosted CI can reproducibly compile the dependency-free
+      # policy core and verify the committed, source-fingerprinted plugin ZIP.
+      - name: Build dependency-free core
+        run: >-
+          dotnet build
+          src/SeitonSense.Core/SeitonSense.Core.csproj
+          --configuration Release
+          --no-restore
       - name: Verify committed package
         shell: pwsh
         run: |

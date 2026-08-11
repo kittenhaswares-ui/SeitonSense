@@ -1,17 +1,24 @@
 # Seiton Sense
 
-Seiton Sense is a display-only Crystalline Conflict HUD for every job. It adds
-small status icons beside the job icon in each enemy's native nameplate, using
-the nameplate's own final screen position instead of a separate 3D-world
-projection.
+Seiton Sense is a Crystalline Conflict reaction-cue HUD for every job. It adds
+small status icons beside the job icon in each enemy's native nameplate, shows
+local warnings for selected dangerous debuffs, and gives Ninja a persistent
+Seiton decision cue. An optional experimental Purify input buffer is available
+but disabled by default.
 
 ## What it shows
 
-- **Seiton (NIN only):** when your Seiton resource is ready, an enemy is
-  strictly below 50% HP, and the native range/line-of-sight check passes, the
-  nameplate gets a Seiton icon with the exact `S1`-`S5` enemy slot.
-- **Seiton popup:** the same stable execute window triggers one customizable,
-  short popup with that enemy's official job icon and `S1`-`S5` label.
+- **Persistent Seiton cue (NIN only):** when your Seiton resource is ready, an
+  enemy is strictly below 50% HP, and the native range/line-of-sight check
+  passes, a center-adjacent card remains visible with the enemy's official job
+  icon and the exact `SHIFT + 1` through `SHIFT + 5` decision. `SHIFT` is the
+  default configurable key label; it does not change your actual keybinds.
+- **Seiton preparation:** an optional amber `PREP` card appears from 50% up to,
+  but not including, 60% HP. Entering the real execute window still produces a
+  short pulse, but the decision card then remains visible while the verified
+  window remains valid.
+- **Nameplate Seiton:** the native-nameplate indicator and exact `S1`-`S5` slot
+  remain available alongside the larger decision cue.
 - **Guard unavailable:** after this client actually observes an enemy Guard,
   a crossed Guard icon and optional countdown remain until its 30-second recast
   is estimated ready. Unknown Guard cooldowns are not guessed. KO and revive
@@ -19,6 +26,10 @@ projection.
 - **Low MP:** a crossed blue Standard-issue Elixir appears below 2,000 MP, the
   current cost of Recuperate. Initial zero values are ignored until MP has been
   observed reliably; entering and leaving the state is debounced.
+- **Warnings on you:** Wildfire and Death Warrant receive compact danger
+  warnings. Stun and Miracle of Nature receive urgent Purify warnings. Each
+  verified status gets an entry pulse and a stable remaining-time display
+  instead of repeatedly flashing from transient samples.
 
 Guard does not block the Seiton alert because Seiton Tenchu ignores Guard.
 
@@ -35,8 +46,26 @@ anchors fail closed.
 
 Seiton's stable resource state is checked separately from transient facing,
 animation lock, casting, and current-target state. A short false-grace prevents
-single range/line-of-sight samples from blinking the icon. Popup rearming is
-separate, so walking out of and back into range cannot spam it.
+single range/line-of-sight samples from blinking the icon. Cue rearming is
+separate, so walking out of and back into range cannot spam the entry pulse.
+
+## Experimental Purify buffer
+
+The optional **Purify on next fresh gameplay key** experiment is disabled by
+default. It arms only for the exact, locally observed Stun or Miracle of Nature
+status instance. A key that was already held when the status appeared does not
+count; the next fresh key-down can arm a bounded 100-1,000 ms wait (750 ms by
+default) for Purify to become locally usable.
+
+The original key is never swallowed, replaced, delayed, or replayed. One key
+can cause at most one native Purify attempt. The attempt is marked consumed
+before it is sent, so a client or server rejection is never retried. Seiton
+Sense itself does not select another action, change targets, fabricate input,
+alter packets, or manipulate network replies. Another plugin configured to
+rewrite Purify or its target can still alter the downstream call; disable such
+rules while testing this experiment. The buffer cancels or locks on timeout,
+status replacement/removal, death, text input, disabling the feature, or
+leaving Crystalline Conflict.
 
 ## Install
 
@@ -58,19 +87,21 @@ update through the same repository.
 - `/seiton debug` — print one bounded diagnostic line
 - `/seiton reset` — restore defaults
 
-The popup duration, size, position, background, nameplate icon size, spacing,
-and individual indicators are configurable.
+The cue label, scale, position, entry-pulse duration, personal-warning layout,
+nameplate icon size, spacing, and individual indicators are configurable. The
+experimental Purify buffer has its own explicit opt-in switch and timeout.
 
 ## Scope and privacy
 
 Seiton Sense is CC-only and has no server, account, telemetry, or gameplay
 upload. It does not read character names or Home Worlds and stores no combat
-history. Only local display settings are persisted through Dalamud.
+history or key history. Only local settings are persisted through Dalamud.
 
-It never targets, presses an action, changes input, modifies a native nameplate,
-or guarantees that a displayed execute will land. Guard cooldown is an estimate
-derived only from a locally observed Guard status; unobserved state stays
-unknown.
+The display features never target or press actions. The opt-in Purify experiment
+is the sole feature allowed to request an action, under the one-key/one-attempt
+rules above. Guard cooldown is an estimate derived only from a locally observed
+Guard status; unobserved state stays unknown. No displayed cue or experimental
+action request is guaranteed to succeed.
 
 Like all third-party FFXIV modifications, use is at your own risk. This is a
 custom-repository plugin and is not distributed through Dalamud's official
@@ -78,7 +109,11 @@ plugin repository.
 
 ## Build and validation
 
-The project targets Dalamud API 15 / .NET 10. The release workflow performs a
-locked restore, warning-free build, dependency-free core tests, display-only
-safety checks, source fingerprinting, and ZIP/manifest verification. Exact
-visual placement still needs a real CC check after FFXIV or Dalamud UI changes.
+The project targets Dalamud API 15 / .NET 10. The local release script performs
+a locked restore, warning-free full build, dependency-free core tests,
+bounded-input safety checks, source fingerprinting, and ZIP/manifest
+verification. Hosted CI rebuilds the dependency-free core and verifies the
+committed, source-fingerprinted plugin package because Dalamud's plugin SDK
+requires assemblies from a local XIVLauncher installation. Exact visual
+placement and the optional Purify experiment still need a real CC check after
+FFXIV, Dalamud, or input-handling changes.

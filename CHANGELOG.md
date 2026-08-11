@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0.0
+
+- Replaced the short-only Seiton prompt with a persistent, center-adjacent
+  official job-icon card showing the configurable key label and exact S1-S5
+  slot; the default presentation reads `SHIFT + 1-5`.
+- Added an optional `PREP` cue for verified Seiton candidates from 50% to below
+  60% HP, while retaining a one-time pulse when the real execute window begins.
+- Added stable local warnings and countdowns for Wildfire, Death Warrant, Stun,
+  and Miracle of Nature, with independent Patch 7.5 metadata validation.
+- Added an experimental Purify-on-next-fresh-key buffer, disabled by default.
+  The original key remains untouched and one key permits at most one native
+  Purify attempt within the configured bounded window.
+- Purify attempts are consumed before dispatch: there is no retry after client
+  or server rejection, no alternative action or target change by Seiton Sense,
+  and no packet or network-reply manipulation. Rules in other plugins that
+  rewrite Purify remain outside this guarantee.
+- Added fail-closed cancellation for timeout, status removal/replacement, death,
+  text input, configuration disable, and leaving Crystalline Conflict.
+- The plugin remains local-only with no accounts, telemetry, gameplay upload,
+  character-name collection, or stored input history.
+
 ## 0.2.0.0
 
 - Replaced 20 Hz world-projected overhead labels with per-frame, read-only

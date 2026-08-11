@@ -24,6 +24,23 @@ var tests = new (string Name, Action Run)[]
     ("Seiton popup is one shot and rearms", StablePopupIsOneShot),
     ("Seiton range jitter cannot rearm", SeitonRangeJitterCannotRearm),
     ("Seiton popup rearm must remain stable", SeitonPopupRearmMustRemainStable),
+    ("persistent Seiton cue enters once and remains visible", PersistentSeitonCueEntersOnce),
+    ("persistent Seiton cue ignores range jitter", PersistentSeitonCueIgnoresRangeJitter),
+    ("persistent Seiton cue rearms only from semantic recovery", PersistentSeitonCueRearmsSemantically),
+    ("Seiton preparation band is optional and exact", SeitonPreparationBandIsExact),
+    ("personal debuff alerts deduplicate and order by urgency", PersonalDebuffsDeduplicateAndOrder),
+    ("personal debuff refresh does not repulse", PersonalDebuffRefreshDoesNotRepulse),
+    ("personal debuff missing grace prevents flicker", PersonalDebuffMissingGracePreventsFlicker),
+    ("personal debuff escalation pulses once", PersonalDebuffEscalationPulsesOnce),
+    ("personal debuff lifecycle fails closed", PersonalDebuffLifecycleFailsClosed),
+    ("Purify buffer requires a fresh post-status key", EmergencyPurifyBufferSelfTests.RequiresFreshPostStatusKey),
+    ("Purify dispatch consumes before the attempt", EmergencyPurifyBufferSelfTests.DispatchConsumesBeforeAttempt),
+    ("ready Purify dispatches once at the key edge", EmergencyPurifyBufferSelfTests.ReadyAtArmDispatchesExactlyOnce),
+    ("Purify timeout is bounded and terminal", EmergencyPurifyBufferSelfTests.TimeoutIsBoundedAndTerminal),
+    ("Purify rearms only after status absence", EmergencyPurifyBufferSelfTests.StatusAbsenceIsTheOnlyRearmForSameInstance),
+    ("Purify tracks the exact CC status instance", EmergencyPurifyBufferSelfTests.ExactStatusReplacementNeedsANewKey),
+    ("Purify safety gates cancel and latch", EmergencyPurifyBufferSelfTests.SafetyGatesCancelAndLatch),
+    ("Purify hard reset and invalid inputs fail closed", EmergencyPurifyBufferSelfTests.HardResetAndInvalidInputsFailClosed),
 };
 
 var failures = new List<string>();
@@ -139,6 +156,26 @@ static void VisibilityHasFalseGrace()
     True(state.IsVisible, "inside grace");
     state = DebouncedVisibilityRules.Observe(state, false, 1_350);
     False(state.IsVisible, "grace elapsed");
+
+    state = DebouncedVisibilityRules.Observe(DebouncedVisibilityState.Initial, true, 2_000);
+    state = DebouncedVisibilityRules.Observe(
+        state,
+        false,
+        2_050,
+        falseGraceMilliseconds: PersonalDebuffAlertRules.MissingGraceMilliseconds);
+    True(state.IsVisible, "Resilience-style status gap remains active inside 150 ms grace");
+    state = DebouncedVisibilityRules.Observe(
+        state,
+        false,
+        2_199,
+        falseGraceMilliseconds: PersonalDebuffAlertRules.MissingGraceMilliseconds);
+    True(state.IsVisible, "custom grace remains active before its exact boundary");
+    state = DebouncedVisibilityRules.Observe(
+        state,
+        false,
+        2_200,
+        falseGraceMilliseconds: PersonalDebuffAlertRules.MissingGraceMilliseconds);
+    False(state.IsVisible, "custom grace expires at its exact boundary");
 }
 
 static void VisibilityHardResetIsImmediate()
@@ -294,6 +331,232 @@ static void SeitonPopupRearmMustRemainStable()
     True(decision.NextState.Armed, "hard reset restores initial armed state");
     False(decision.TriggerPopup, "hard reset never emits a popup");
 }
+
+static void PersistentSeitonCueEntersOnce()
+{
+    var decision = ObserveSeiton(PersistentSeitonCueState.Initial, hp: 49, now: 1_000);
+    Equal(SeitonCueKind.Hidden, decision.Cue, "execute entry waits for stability");
+    False(decision.TriggerEntryPulse, "first sample does not pulse");
+
+    decision = ObserveSeiton(decision.NextState, hp: 49, now: 1_050);
+    Equal(SeitonCueKind.Execute, decision.Cue, "execute cue appears at stable boundary");
+    True(decision.TriggerEntryPulse, "execute entry pulses once");
+
+    decision = ObserveSeiton(decision.NextState, hp: 48, now: 5_000);
+    Equal(SeitonCueKind.Execute, decision.Cue, "cue remains visible while eligible");
+    False(decision.TriggerEntryPulse, "persistent cue does not repeatedly pulse");
+}
+
+static void PersistentSeitonCueIgnoresRangeJitter()
+{
+    var decision = ObserveSeiton(
+        PersistentSeitonCueState.Initial,
+        hp: 49,
+        now: 1_000,
+        stableExecuteMilliseconds: 0);
+    True(decision.TriggerEntryPulse, "initial entry pulse");
+
+    decision = ObserveSeiton(decision.NextState, hp: 49, now: 1_100, inRange: false);
+    Equal(SeitonCueKind.Execute, decision.Cue, "short range loss retains cue");
+    decision = ObserveSeiton(decision.NextState, hp: 49, now: 1_300, inRange: false);
+    Equal(SeitonCueKind.Hidden, decision.Cue, "sustained range loss hides cue");
+
+    decision = ObserveSeiton(decision.NextState, hp: 49, now: 1_350, inRange: true);
+    Equal(SeitonCueKind.Execute, decision.Cue, "return to range restores persistent cue");
+    False(decision.TriggerEntryPulse, "range return never repulses");
+
+    decision = ObserveSeiton(decision.NextState, hp: 52, now: 1_400, inRange: false);
+    Equal(SeitonCueKind.Hidden, decision.Cue, "healing out of execute range clears a stale cue immediately");
+}
+
+static void PersistentSeitonCueRearmsSemantically()
+{
+    var decision = ObserveSeiton(
+        PersistentSeitonCueState.Initial,
+        hp: 49,
+        now: 1_000,
+        stableExecuteMilliseconds: 0);
+    True(decision.TriggerEntryPulse, "first execute entry");
+
+    decision = ObserveSeiton(decision.NextState, hp: 51, now: 1_100);
+    Equal(SeitonCueKind.Preparation, decision.Cue, "51 percent is no longer falsely actionable");
+    False(decision.TriggerEntryPulse, "threshold jitter does not repulse");
+
+    decision = ObserveSeiton(
+        decision.NextState,
+        hp: 49,
+        now: 1_150,
+        stableExecuteMilliseconds: 0);
+    Equal(SeitonCueKind.Execute, decision.Cue, "falling below half restores the execute cue");
+    False(decision.TriggerEntryPulse, "sub-52 percent jitter does not rearm the entry pulse");
+
+    decision = ObserveSeiton(decision.NextState, hp: 52, now: 1_200);
+    Equal(SeitonCueKind.Preparation, decision.Cue, "52 percent rearms into preparation");
+    decision = ObserveSeiton(
+        decision.NextState,
+        hp: 49,
+        now: 1_300,
+        stableExecuteMilliseconds: 0);
+    True(decision.TriggerEntryPulse, "new execute entry after semantic recovery pulses");
+
+    decision = ObserveSeiton(decision.NextState, hp: 49, now: 1_400, resourceReady: false);
+    Equal(SeitonCueKind.Hidden, decision.Cue, "resource use clears cue");
+    decision = ObserveSeiton(
+        decision.NextState,
+        hp: 49,
+        now: 1_500,
+        stableExecuteMilliseconds: 0);
+    True(decision.TriggerEntryPulse, "new resource activation rearms pulse");
+}
+
+static void SeitonPreparationBandIsExact()
+{
+    True(PersistentSeitonCueRules.IsPreparationBand(50, 100), "exactly 50 percent");
+    True(PersistentSeitonCueRules.IsPreparationBand(59_999, 100_000), "below 60 percent");
+    False(PersistentSeitonCueRules.IsPreparationBand(49, 100), "execute band");
+    False(PersistentSeitonCueRules.IsPreparationBand(60, 100), "exactly 60 percent");
+    False(PersistentSeitonCueRules.IsPreparationBand(0, 100), "dead target");
+
+    var shown = ObserveSeiton(PersistentSeitonCueState.Initial, hp: 55, now: 1_000);
+    Equal(SeitonCueKind.Preparation, shown.Cue, "preparation enabled");
+    var hidden = ObserveSeiton(
+        PersistentSeitonCueState.Initial,
+        hp: 55,
+        now: 1_000,
+        showPreparation: false);
+    Equal(SeitonCueKind.Hidden, hidden.Cue, "preparation disabled");
+
+    hidden = ObserveSeiton(
+        shown.NextState,
+        hp: 55,
+        now: 1_050,
+        inRange: false,
+        showPreparation: false);
+    Equal(SeitonCueKind.Hidden, hidden.Cue, "disabled preparation never survives range grace");
+
+    hidden = ObserveSeiton(shown.NextState, hp: 60, now: 1_050, inRange: false);
+    Equal(SeitonCueKind.Hidden, hidden.Cue, "leaving the preparation band clears stale grace");
+}
+
+static void PersonalDebuffsDeduplicateAndOrder()
+{
+    var observations = new[]
+    {
+        new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 7_000),
+        new PersonalDebuffObservation(20, PersonalDebuffAlertKind.CleanseUrgent, 4_000),
+        new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 8_000),
+        new PersonalDebuffObservation(30, PersonalDebuffAlertKind.Warning, 3_000),
+    };
+    var decision = PersonalDebuffAlertRules.Observe([], observations, 1_000);
+
+    Equal(3, decision.Alerts.Length, "duplicate status collapsed");
+    Equal(20u, decision.Alerts[0].StatusId, "cleanse warning ordered first");
+    Equal(30u, decision.Alerts[1].StatusId, "shorter regular warning ordered next");
+    Equal(10u, decision.Alerts[2].StatusId, "longer warning ordered last");
+    Equal(7_000L, decision.Alerts[2].RemainingMilliseconds, "newest duplicate expiry retained");
+    True(decision.Alerts.All(alert => alert.TriggerEntryPulse), "each unique entry pulses once");
+}
+
+static void PersonalDebuffRefreshDoesNotRepulse()
+{
+    var first = PersonalDebuffAlertRules.Observe(
+        [],
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 3_000)],
+        1_000);
+    True(first.Alerts[0].TriggerEntryPulse, "first observation pulses");
+
+    var refreshed = PersonalDebuffAlertRules.Observe(
+        first.NextStates,
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 5_000)],
+        1_100);
+    Equal(3_900L, refreshed.Alerts[0].RemainingMilliseconds, "countdown uses refreshed expiry");
+    False(refreshed.Alerts[0].TriggerEntryPulse, "duration refresh is not a new application");
+}
+
+static void PersonalDebuffMissingGracePreventsFlicker()
+{
+    var first = PersonalDebuffAlertRules.Observe(
+        [],
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 5_000)],
+        1_000);
+    var missing = PersonalDebuffAlertRules.Observe(first.NextStates, [], 1_050);
+    Equal(1, missing.Alerts.Length, "first missing sample remains visible");
+    False(missing.Alerts[0].TriggerEntryPulse, "missing grace never pulses");
+
+    var returned = PersonalDebuffAlertRules.Observe(
+        missing.NextStates,
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 5_000)],
+        1_199);
+    False(returned.Alerts[0].TriggerEntryPulse, "return inside grace is same application");
+
+    missing = PersonalDebuffAlertRules.Observe(returned.NextStates, [], 1_300);
+    var removed = PersonalDebuffAlertRules.Observe(missing.NextStates, [], 1_450);
+    Equal(0, removed.Alerts.Length, "missing grace boundary removes warning");
+    var reapplied = PersonalDebuffAlertRules.Observe(
+        removed.NextStates,
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 6_000)],
+        1_500);
+    True(reapplied.Alerts[0].TriggerEntryPulse, "application after removal pulses again");
+}
+
+static void PersonalDebuffEscalationPulsesOnce()
+{
+    var first = PersonalDebuffAlertRules.Observe(
+        [],
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.Warning, 5_000)],
+        1_000);
+    var escalated = PersonalDebuffAlertRules.Observe(
+        first.NextStates,
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.CleanseUrgent, 5_000)],
+        1_100);
+    True(escalated.Alerts[0].TriggerEntryPulse, "urgency escalation gets attention once");
+    var stable = PersonalDebuffAlertRules.Observe(
+        escalated.NextStates,
+        [new PersonalDebuffObservation(10, PersonalDebuffAlertKind.CleanseUrgent, 5_000)],
+        1_200);
+    False(stable.Alerts[0].TriggerEntryPulse, "stable urgent alert does not repulse");
+}
+
+static void PersonalDebuffLifecycleFailsClosed()
+{
+    var decision = PersonalDebuffAlertRules.Observe(
+        [],
+        [
+            new PersonalDebuffObservation(0, PersonalDebuffAlertKind.Warning, 5_000),
+            new PersonalDebuffObservation(10, (PersonalDebuffAlertKind)99, 5_000),
+            new PersonalDebuffObservation(20, PersonalDebuffAlertKind.Warning, 1_000),
+        ],
+        1_000);
+    Equal(0, decision.Alerts.Length, "invalid and expired observations are ignored");
+
+    decision = PersonalDebuffAlertRules.Observe(
+        [],
+        [new PersonalDebuffObservation(30, PersonalDebuffAlertKind.CleanseUrgent, 5_000)],
+        1_100,
+        hardReset: true);
+    Equal(0, decision.Alerts.Length, "hard reset clears alerts immediately");
+    Equal(0, decision.NextStates.Length, "hard reset clears lifecycle state");
+}
+
+static PersistentSeitonCueDecision ObserveSeiton(
+    PersistentSeitonCueState state,
+    uint hp,
+    long now,
+    bool resourceReady = true,
+    bool inRange = true,
+    bool showPreparation = true,
+    long stableExecuteMilliseconds = PersistentSeitonCueRules.StableExecuteMilliseconds) =>
+    PersistentSeitonCueRules.Observe(
+        state,
+        resourceReady,
+        targetPresent: true,
+        trustedHealthSample: true,
+        hp,
+        maximumHp: 100,
+        inRange,
+        showPreparation,
+        now,
+        stableExecuteMilliseconds: stableExecuteMilliseconds);
 
 static void True(bool condition, string label)
 {

@@ -1,3 +1,5 @@
+using SeitonSense.Core;
+
 namespace SeitonSense.Plugin.Services;
 
 internal sealed record EnemyHudSnapshot(
@@ -5,7 +7,8 @@ internal sealed record EnemyHudSnapshot(
     ulong GameObjectId,
     uint EntityId,
     uint JobId,
-    bool SeitonEligible,
+    SeitonCueKind SeitonCue,
+    long SeitonPulseStartedAtMilliseconds,
     bool GuardUnavailable,
     float GuardCooldownRemainingSeconds,
     bool LowMp,
@@ -13,4 +16,5 @@ internal sealed record EnemyHudSnapshot(
     uint MaxMp)
 {
     public string SlotLabel => $"S{Slot}";
+    public bool SeitonEligible => SeitonCue == SeitonCueKind.Execute;
 }
