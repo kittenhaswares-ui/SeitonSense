@@ -159,6 +159,7 @@ internal sealed class PersonalStatusService : IDisposable
             localPlayer,
             isSupportedPvPContext,
             purifyConfigurationEnabled,
+            configuration.PurifyOnHeldGameplayKey,
             purifyStatus,
             purifyStatusCurrentlyObserved,
             resilienceActive,

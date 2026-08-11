@@ -2,6 +2,7 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -9,17 +10,23 @@ internal readonly record struct GameInputContextSnapshot(
     bool ProbeSucceeded,
     bool IsTextInputActive,
     bool FreshGameplayKeyPressed,
-    VirtualKey FreshGameplayKey)
+    VirtualKey FreshGameplayKey,
+    bool HeldGameplayKeyEligible,
+    VirtualKey HeldGameplayKey)
 {
     internal static GameInputContextSnapshot NotObserved => new(
         false,
         false,
+        false,
+        VirtualKey.NO_KEY,
         false,
         VirtualKey.NO_KEY);
 
     internal static GameInputContextSnapshot FailedClosed => new(
         false,
         true,
+        false,
+        VirtualKey.NO_KEY,
         false,
         VirtualKey.NO_KEY);
 }
@@ -30,8 +37,7 @@ internal sealed class GameInputContextProbe
 
     private readonly IKeyState keyState;
     private readonly VirtualKey[] gameplayKeys;
-    private readonly bool[] previousPressed;
-    private bool primed;
+    private readonly PhysicalGameplayKeyState[] keyGenerations;
 
     internal GameInputContextProbe(IKeyState keyState)
     {
@@ -50,7 +56,7 @@ internal sealed class GameInputContextProbe
             gameplayKeys = [];
         }
 
-        previousPressed = new bool[gameplayKeys.Length];
+        keyGenerations = new PhysicalGameplayKeyState[gameplayKeys.Length];
     }
 
     internal unsafe GameInputContextSnapshot Observe()
@@ -63,21 +69,6 @@ internal sealed class GameInputContextProbe
 
         try
         {
-            var freshKey = VirtualKey.NO_KEY;
-            for (var index = 0; index < gameplayKeys.Length; index++)
-            {
-                var pressed = keyState[gameplayKeys[index]];
-                if (primed && pressed && !previousPressed[index] && freshKey == VirtualKey.NO_KEY)
-                    freshKey = gameplayKeys[index];
-                previousPressed[index] = pressed;
-            }
-
-            if (!primed)
-            {
-                primed = true;
-                freshKey = VirtualKey.NO_KEY;
-            }
-
             var atkModule = RaptureAtkModule.Instance();
             if (atkModule == null)
             {
@@ -92,11 +83,28 @@ internal sealed class GameInputContextProbe
             // inert while its checkbox was visible.
             var textInputActive = atkModule->IsTextInputActive() ||
                                   io.WantTextInput;
+            var freshKey = VirtualKey.NO_KEY;
+            var heldKey = VirtualKey.NO_KEY;
+            for (var index = 0; index < gameplayKeys.Length; index++)
+            {
+                var pressed = keyState[gameplayKeys[index]];
+                var decision = PhysicalGameplayKeyRules.Observe(
+                    keyGenerations[index],
+                    new PhysicalGameplayKeyObservation(pressed, textInputActive));
+                keyGenerations[index] = decision.NextState;
+                if (decision.IsFreshPress && freshKey == VirtualKey.NO_KEY)
+                    freshKey = gameplayKeys[index];
+                if (decision.IsHeldEligible && heldKey == VirtualKey.NO_KEY)
+                    heldKey = gameplayKeys[index];
+            }
+
             return new GameInputContextSnapshot(
                 true,
                 textInputActive,
                 !textInputActive && freshKey != VirtualKey.NO_KEY,
-                !textInputActive ? freshKey : VirtualKey.NO_KEY);
+                !textInputActive ? freshKey : VirtualKey.NO_KEY,
+                !textInputActive && heldKey != VirtualKey.NO_KEY,
+                !textInputActive ? heldKey : VirtualKey.NO_KEY);
         }
         catch
         {
@@ -107,8 +115,16 @@ internal sealed class GameInputContextProbe
 
     internal void Reset()
     {
-        primed = false;
-        Array.Clear(previousPressed);
+        Array.Clear(keyGenerations);
+    }
+
+    internal void ConsumeHeldGameplayKeys()
+    {
+        for (var index = 0; index < keyGenerations.Length; index++)
+        {
+            if (!keyGenerations[index].IsDown) continue;
+            keyGenerations[index] = PhysicalGameplayKeyRules.Consume(keyGenerations[index]);
+        }
     }
 
     private static HashSet<int> BuildCandidateVirtualKeyCodes()

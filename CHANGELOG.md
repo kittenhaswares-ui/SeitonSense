@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0.3
+
+- Added a separate, default-off option allowing a gameplay key that was already
+  physically pressed before an enabled CC to trigger the one-attempt Purify
+  helper when that status first appears. This intentionally includes WASD.
+- Added per-key physical hold generations. ReAction Turbo's logical repeats do
+  not create new input, and the generation is consumed as soon as Purify arms
+  or dispatches. A continuous hold cannot trigger again after timeout, status
+  replacement, or status reapplication; the key must be released first.
+- Keys already down during initial observation, option activation, reset, or
+  text input remain ineligible until released. Fresh-key behavior and all six
+  individual debuff toggles remain unchanged.
+- Added dependency-free coverage for held-generation priming, consumption,
+  release, text input, reset, status-entry authorization, and one-shot behavior.
+
 ## 0.3.0.2
 
 - Fixed the opt-in Purify helper discarding the first important key edge by

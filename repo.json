@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Persistent Seiton decisions, PvP warnings, and an optional one-key Purify helper.",
-    "Description": "A local Crystalline Conflict reaction-cue HUD with an optional Wolves' Den duel test mode. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see selected PvP warnings. The one-key/one-attempt Purify helper has separate toggles for every removable CC type and is disabled by default.",
+    "Punchline": "Persistent Seiton decisions, PvP warnings, and an optional physical-input Purify helper.",
+    "Description": "A local Crystalline Conflict reaction-cue HUD with an optional Wolves' Den duel test mode. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see selected PvP warnings. The one-attempt Purify helper supports fresh keys plus a separate held-key option and individual toggles for every removable CC type.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.3.0.2",
-    "Changelog": "Fixed the Purify helper by continuously priming fresh-key detection, accepting the first valid edge, and removing fragile readiness filters. Added every current Purify-removable CC with independent toggles: Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature. One fresh key still makes at most one native Purify attempt with no retry.",
+    "AssemblyVersion": "0.3.0.3",
+    "Changelog": "Added a separate default-off held-key trigger, including WASD and hotbar keys. Physical key generations are consumed when Purify arms, so ReAction Turbo pulses and one continuous hold cannot create another Seiton Sense attempt until release. Fresh-key behavior and all six per-debuff toggles remain unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -22,6 +22,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786451777"
+    "LastUpdate": "1786453905"
   }
 ]

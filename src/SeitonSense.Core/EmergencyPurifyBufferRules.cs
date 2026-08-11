@@ -22,6 +22,13 @@ public enum EmergencyPurifyBufferDecisionKind
     Cancelled = 4,
 }
 
+public enum EmergencyPurifyInputTrigger
+{
+    None = 0,
+    FreshKeyPress = 1,
+    HeldKeyAtStatusEntry = 2,
+}
+
 public enum EmergencyPurifyBufferCancelReason
 {
     None = 0,
@@ -65,6 +72,8 @@ public readonly record struct EmergencyPurifyBufferObservation(
     bool IsTextInputActive,
     PurifyCcStatusInstance? StatusInstance,
     bool FreshKeyPressed,
+    bool HeldKeyEligible,
+    bool AllowHeldKeyAtStatusEntry,
     bool PurifyLocallyReady,
     long NowMilliseconds,
     bool HardReset = false,
@@ -73,11 +82,19 @@ public readonly record struct EmergencyPurifyBufferObservation(
 public readonly record struct EmergencyPurifyBufferDecision(
     EmergencyPurifyBufferState NextState,
     EmergencyPurifyBufferDecisionKind Kind,
-    EmergencyPurifyBufferCancelReason CancelReason)
+    EmergencyPurifyBufferCancelReason CancelReason,
+    EmergencyPurifyInputTrigger InputTrigger = EmergencyPurifyInputTrigger.None)
 {
     // The caller must store NextState before attempting the action. Dispatch decisions
     // already carry a spent state, so a failed or rejected attempt cannot be retried.
     public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch;
+
+    // Consume every currently-down physical key generation as soon as one input
+    // owns this intent. This prevents one continuous ReAction hold from becoming
+    // a second Purify after a timeout or status replacement.
+    public bool ShouldConsumeInputGeneration =>
+        InputTrigger != EmergencyPurifyInputTrigger.None &&
+        Kind is EmergencyPurifyBufferDecisionKind.Armed or EmergencyPurifyBufferDecisionKind.Dispatch;
 }
 
 public static class EmergencyPurifyBufferRules
@@ -143,7 +160,8 @@ public static class EmergencyPurifyBufferRules
         if (previous.Phase == EmergencyPurifyBufferPhase.WaitingForStatus)
         {
             var waiting = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
-            if (!observation.FreshKeyPressed)
+            var entryTrigger = ResolveStatusEntryTrigger(observation);
+            if (entryTrigger == EmergencyPurifyInputTrigger.None)
             {
                 return new EmergencyPurifyBufferDecision(
                     waiting,
@@ -151,14 +169,15 @@ public static class EmergencyPurifyBufferRules
                     EmergencyPurifyBufferCancelReason.None);
             }
 
-            return ArmOrDispatch(waiting, observation);
+            return ArmOrDispatch(waiting, observation, entryTrigger);
         }
 
         if (previous.StatusInstance != status)
         {
             var replacement = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
-            if (observation.FreshKeyPressed)
-                return ArmOrDispatch(replacement, observation);
+            var replacementTrigger = ResolveStatusEntryTrigger(observation);
+            if (replacementTrigger != EmergencyPurifyInputTrigger.None)
+                return ArmOrDispatch(replacement, observation, replacementTrigger);
 
             return Cancelled(
                 replacement,
@@ -192,7 +211,10 @@ public static class EmergencyPurifyBufferRules
         if (!observation.FreshKeyPressed)
             return NoDecision(current);
 
-        return ArmOrDispatch(current, observation);
+        return ArmOrDispatch(
+            current,
+            observation,
+            EmergencyPurifyInputTrigger.FreshKeyPress);
     }
 
     public static long NormalizeBufferMilliseconds(long requestedMilliseconds) =>
@@ -230,7 +252,8 @@ public static class EmergencyPurifyBufferRules
 
     private static EmergencyPurifyBufferDecision ArmOrDispatch(
         EmergencyPurifyBufferState current,
-        EmergencyPurifyBufferObservation observation)
+        EmergencyPurifyBufferObservation observation,
+        EmergencyPurifyInputTrigger inputTrigger)
     {
         var bufferMilliseconds = NormalizeBufferMilliseconds(observation.BufferMilliseconds);
         var buffered = current with
@@ -244,11 +267,24 @@ public static class EmergencyPurifyBufferRules
             ? new EmergencyPurifyBufferDecision(
                 Spend(buffered, observation.NowMilliseconds),
                 EmergencyPurifyBufferDecisionKind.Dispatch,
-                EmergencyPurifyBufferCancelReason.None)
+                EmergencyPurifyBufferCancelReason.None,
+                inputTrigger)
             : new EmergencyPurifyBufferDecision(
                 buffered,
                 EmergencyPurifyBufferDecisionKind.Armed,
-                EmergencyPurifyBufferCancelReason.None);
+                EmergencyPurifyBufferCancelReason.None,
+                inputTrigger);
+    }
+
+    private static EmergencyPurifyInputTrigger ResolveStatusEntryTrigger(
+        EmergencyPurifyBufferObservation observation)
+    {
+        if (observation.FreshKeyPressed)
+            return EmergencyPurifyInputTrigger.FreshKeyPress;
+        if (observation.AllowHeldKeyAtStatusEntry && observation.HeldKeyEligible)
+            return EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry;
+
+        return EmergencyPurifyInputTrigger.None;
     }
 
     private static EmergencyPurifyBufferState WaitingForFreshKey(
