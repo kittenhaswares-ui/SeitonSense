@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SeitonSense.Core/SeitonSense.Core.csproj" />
+    <Project Path="src/SeitonSense.Plugin/SeitonSense.Plugin.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SeitonSense.Core.SelfTest/SeitonSense.Core.SelfTest.csproj" />
+  </Folder>
+</Solution>
