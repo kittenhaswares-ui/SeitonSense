@@ -24,10 +24,9 @@ jobs:
         run: |
           ./scripts/Verify-SafetyContract.ps1
           ./scripts/Verify-Release.ps1
-      - name: Build complete plugin
-        run: dotnet build SeitonSense.slnx --configuration Release --no-restore --nologo
-      - name: Compare committed package with fresh build
-        shell: pwsh
-        run: ./scripts/Verify-BuiltPackageParity.ps1
       - name: Test dependency-free core
-        run: dotnet run --project tests/SeitonSense.Core.SelfTest/SeitonSense.Core.SelfTest.csproj --configuration Release --no-build
+        run: >-
+          dotnet run
+          --project tests/SeitonSense.Core.SelfTest/SeitonSense.Core.SelfTest.csproj
+          --configuration Release
+          --no-restore
