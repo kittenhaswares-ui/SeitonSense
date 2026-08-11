@@ -35,14 +35,24 @@ internal sealed class SettingsWindow : Window
 
         ImGui.TextColored(new Vector4(0.98f, 0.2f, 0.48f, 1f), "PVP REACTION CUES");
         ImGui.TextWrapped(
-            "Active for every job in Crystalline Conflict. Extra icons are anchored to the game's native " +
-            "job icon above each enemy instead of projecting a separate marker from the 3D world.");
+            "Active for every job in Crystalline Conflict and, while the test option is enabled, Wolves' Den " +
+            "duels. Extra icons are anchored to the game's native job icon above each enemy.");
         ImGui.TextWrapped(
             "Ninja additionally gets a persistent, center-adjacent SHIFT + 1-5 cue while a target is " +
             "inside the verified Seiton window. The short pop is only the entry signal.");
 
         ImGui.Spacing();
         changed |= Checkbox("Enable Seiton Sense", configuration.Enabled, value => configuration.Enabled = value);
+        changed |= Checkbox(
+            "Enable Wolves' Den duel testing",
+            configuration.EnableWolvesDenTesting,
+            value => configuration.EnableWolvesDenTesting = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "FFXIV's exact hostile duel opponent is shown as synthetic S1, including party-member duels. " +
+            "This is only a visual label; the CC <e1> macro placeholder may not exist in a duel. " +
+            "Frontline and Rival Wings stay excluded.");
+        ImGui.PopTextWrapPos();
 
         ImGui.Separator();
         ImGui.TextUnformatted("Nameplate indicators");
@@ -133,7 +143,7 @@ internal sealed class SettingsWindow : Window
         ImGui.TextDisabled(
             "Only exact Stun or Miracle of Nature can arm this. A key that was already held does not count. " +
             "The original key is not swallowed. Purify is attempted once at the first locally usable moment; " +
-            "there is no retry after rejection, timeout, death, chat focus, or leaving the match. Disable " +
+            "there is no retry after rejection, timeout, death, chat focus, or leaving the supported PvP context. Disable " +
             "rules in other plugins that rewrite Purify or its target while testing.");
         ImGui.PopTextWrapPos();
 

@@ -27,7 +27,7 @@ public enum EmergencyPurifyBufferCancelReason
     None = 0,
     StatusGone = 1,
     StatusInstanceChanged = 2,
-    OutsideCrystallineConflict = 3,
+    OutsideSupportedPvPContext = 3,
     PlayerDead = 4,
     TextInputActive = 5,
     ConfigurationDisabled = 6,
@@ -58,7 +58,7 @@ public readonly record struct EmergencyPurifyBufferState(
 
 public readonly record struct EmergencyPurifyBufferObservation(
     bool ConfigurationEnabled,
-    bool IsCrystallineConflict,
+    bool IsSupportedPvPContext,
     bool IsAlive,
     bool IsLocalPlayerIdentityValid,
     bool IsResilienceActive,
@@ -212,8 +212,8 @@ public static class EmergencyPurifyBufferRules
     {
         if (!observation.ConfigurationEnabled)
             return EmergencyPurifyBufferCancelReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
-            return EmergencyPurifyBufferCancelReason.OutsideCrystallineConflict;
+        if (!observation.IsSupportedPvPContext)
+            return EmergencyPurifyBufferCancelReason.OutsideSupportedPvPContext;
         if (!observation.IsAlive)
             return EmergencyPurifyBufferCancelReason.PlayerDead;
         if (!observation.IsLocalPlayerIdentityValid)

@@ -2,10 +2,11 @@
 
 Seiton Sense does not create accounts, contact a server, upload gameplay data,
 or store combat history. While active, it transiently reads your current job,
-PvP duty, local limit gauge and statuses, visible enemy slots, jobs, HP, MP,
-Guard statuses, and the screen bounds of native job icons from the local FFXIV
-client. It does not read character names or Home Worlds, and none of that
-gameplay data is persisted.
+supported PvP context, local limit gauge and statuses, visible enemy slots or
+the native Wolves' Den duel-opponent entity ID, jobs, HP, MP, Guard statuses,
+and the screen bounds of native job icons from the local FFXIV client. It does
+not read character names or Home Worlds, and none of that gameplay data is
+persisted.
 
 If the experimental Purify buffer is explicitly enabled, the plugin also reads
 fresh local key-down edges while an exact Stun or Miracle of Nature instance is

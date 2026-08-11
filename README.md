@@ -1,10 +1,10 @@
 # Seiton Sense
 
-Seiton Sense is a Crystalline Conflict reaction-cue HUD for every job. It adds
-small status icons beside the job icon in each enemy's native nameplate, shows
-local warnings for selected dangerous debuffs, and gives Ninja a persistent
-Seiton decision cue. An optional experimental Purify input buffer is available
-but disabled by default.
+Seiton Sense is a Crystalline Conflict reaction-cue HUD for every job, with an
+enabled-by-default Wolves' Den duel test mode. It adds small status icons beside
+the job icon in each enemy's native nameplate, shows local warnings for selected
+dangerous debuffs, and gives Ninja a persistent Seiton decision cue. An optional
+experimental Purify input buffer is available but disabled by default.
 
 ## What it shows
 
@@ -22,7 +22,8 @@ but disabled by default.
 - **Guard unavailable:** after this client actually observes an enemy Guard,
   a crossed Guard icon and optional countdown remain until its 30-second recast
   is estimated ready. Unknown Guard cooldowns are not guessed. KO and revive
-  clear the cooldown because CC resets recasts on revive.
+  clear the cooldown in CC; changing or losing the strict duel opponent clears
+  the estimate in Wolves' Den.
 - **Low MP:** a crossed blue Standard-issue Elixir appears below 2,000 MP, the
   current cost of Recuperate. Initial zero values are ignored until MP has been
   observed reliably; entering and leaving the state is debounced.
@@ -32,6 +33,15 @@ but disabled by default.
   instead of repeatedly flashing from transient samples.
 
 Guard does not block the Seiton alert because Seiton Tenchu ignores Guard.
+
+In Crystalline Conflict, `S1`-`S5` always follows FFXIV's native
+`<e1>`-`<e5>` enemy-list order. In Wolves' Den, the plugin accepts only one
+strict hostile duel opponent and labels that player synthetic `S1`. This is a
+visual aid only: it does not claim that FFXIV's `<e1>` macro placeholder exists
+in a duel. Staying in the same party does not block the test mode because the
+native duel-opponent identity and hostile flag remain authoritative. If the
+opponent is absent or invalid, the duel HUD shows nothing. Frontline and Rival
+Wings are deliberately excluded from this test release.
 
 ## Stable nameplate anchoring
 
@@ -65,7 +75,7 @@ alter packets, or manipulate network replies. Another plugin configured to
 rewrite Purify or its target can still alter the downstream call; disable such
 rules while testing this experiment. The buffer cancels or locks on timeout,
 status replacement/removal, death, text input, disabling the feature, or
-leaving Crystalline Conflict.
+leaving the supported PvP context.
 
 ## Install
 
@@ -93,9 +103,10 @@ experimental Purify buffer has its own explicit opt-in switch and timeout.
 
 ## Scope and privacy
 
-Seiton Sense is CC-only and has no server, account, telemetry, or gameplay
-upload. It does not read character names or Home Worlds and stores no combat
-history or key history. Only local settings are persisted through Dalamud.
+Seiton Sense supports Crystalline Conflict plus the optional Wolves' Den duel
+test mode and has no server, account, telemetry, or gameplay upload. It does
+not read character names or Home Worlds and stores no combat history or key
+history. Only local settings are persisted through Dalamud.
 
 The display features never target or press actions. The opt-in Purify experiment
 is the sole feature allowed to request an action, under the one-key/one-attempt
@@ -115,5 +126,5 @@ bounded-input safety checks, source fingerprinting, and ZIP/manifest
 verification. Hosted CI rebuilds the dependency-free core and verifies the
 committed, source-fingerprinted plugin package because Dalamud's plugin SDK
 requires assemblies from a local XIVLauncher installation. Exact visual
-placement and the optional Purify experiment still need a real CC check after
-FFXIV, Dalamud, or input-handling changes.
+placement and the optional Purify experiment still need a real CC or Wolves'
+Den duel check after FFXIV, Dalamud, or input-handling changes.

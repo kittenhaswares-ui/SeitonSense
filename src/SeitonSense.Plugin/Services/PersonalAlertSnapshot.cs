@@ -4,14 +4,14 @@ namespace SeitonSense.Plugin.Services;
 
 internal sealed record PersonalAlertSnapshot(
     bool Active,
-    bool IsCrystallineConflict,
+    SupportedPvPContext Context,
     bool LocalPlayerAlive,
     PersonalStatusSnapshot[] Statuses,
     EmergencyPurifyProbeSnapshot Purify)
 {
     internal static PersonalAlertSnapshot Inactive { get; } = new(
         false,
-        false,
+        SupportedPvPContext.None,
         false,
         [],
         EmergencyPurifyProbeSnapshot.Initial);

@@ -53,7 +53,7 @@ internal sealed class EmergencyPurifyProbe
 
     internal unsafe EmergencyPurifyProbeSnapshot Observe(
         IPlayerCharacter? localPlayer,
-        bool isCrystallineConflict,
+        bool isSupportedPvPContext,
         bool configurationEnabled,
         PurifyCcStatusInstance? statusInstance,
         bool statusCurrentlyObserved,
@@ -66,7 +66,7 @@ internal sealed class EmergencyPurifyProbe
         var localPlayerIdentityValid = alive && HasValidLocalPlayer(localPlayer!);
         var shouldObserveInput = !hardReset &&
                                  configurationEnabled &&
-                                 isCrystallineConflict &&
+                                 isSupportedPvPContext &&
                                  localPlayerIdentityValid &&
                                  statusCurrentlyObserved &&
                                  !resilienceActive &&
@@ -78,7 +78,7 @@ internal sealed class EmergencyPurifyProbe
 
         var locallyReady = !hardReset &&
                            configurationEnabled &&
-                           isCrystallineConflict &&
+                           isSupportedPvPContext &&
                            localPlayerIdentityValid &&
                            statusCurrentlyObserved &&
                            !resilienceActive &&
@@ -89,7 +89,7 @@ internal sealed class EmergencyPurifyProbe
             state,
             new EmergencyPurifyBufferObservation(
                 configurationEnabled,
-                isCrystallineConflict,
+                isSupportedPvPContext,
                 alive,
                 localPlayerIdentityValid,
                 resilienceActive,
@@ -148,7 +148,7 @@ internal sealed class EmergencyPurifyProbe
             state,
             new EmergencyPurifyBufferObservation(
                 ConfigurationEnabled: false,
-                IsCrystallineConflict: true,
+                IsSupportedPvPContext: true,
                 IsAlive: true,
                 IsLocalPlayerIdentityValid: true,
                 IsResilienceActive: false,

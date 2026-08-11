@@ -5,8 +5,9 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
     public bool Enabled { get; set; } = true;
+    public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
     public bool ShowGuardUnavailable { get; set; } = true;
     public bool ShowGuardCountdown { get; set; } = true;
@@ -40,11 +41,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 3) return;
+        if (Version >= 4) return;
 
-        if (Math.Abs(PopupScreenY - 0.2f) < 0.001f) PopupScreenY = 0.55f;
-        if (Math.Abs(PopupIconSize - 76f) < 0.001f) PopupIconSize = 96f;
-        Version = 3;
+        if (Version < 3)
+        {
+            if (Math.Abs(PopupScreenY - 0.2f) < 0.001f) PopupScreenY = 0.55f;
+            if (Math.Abs(PopupIconSize - 76f) < 0.001f) PopupIconSize = 96f;
+        }
+
+        // This release is explicitly a Wolves' Den test build. Existing users get
+        // the test context immediately, while the separate Purify experiment stays off.
+        EnableWolvesDenTesting = true;
+        Version = 4;
         Save();
     }
 
@@ -52,8 +60,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 3;
+        Version = 4;
         Enabled = true;
+        EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
         ShowGuardUnavailable = true;
         ShowGuardCountdown = true;

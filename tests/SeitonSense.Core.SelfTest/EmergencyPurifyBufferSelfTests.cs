@@ -134,9 +134,9 @@ internal static class EmergencyPurifyBufferSelfTests
             EmergencyPurifyBufferCancelReason.ConfigurationDisabled,
             "configuration off");
         AssertGateCancellation(
-            observation => observation with { IsCrystallineConflict = false },
-            EmergencyPurifyBufferCancelReason.OutsideCrystallineConflict,
-            "outside CC");
+            observation => observation with { IsSupportedPvPContext = false },
+            EmergencyPurifyBufferCancelReason.OutsideSupportedPvPContext,
+            "outside supported PvP context");
         AssertGateCancellation(
             observation => observation with { IsAlive = false },
             EmergencyPurifyBufferCancelReason.PlayerDead,
@@ -237,7 +237,7 @@ internal static class EmergencyPurifyBufferSelfTests
         long now) =>
         new(
             ConfigurationEnabled: true,
-            IsCrystallineConflict: true,
+            IsSupportedPvPContext: true,
             IsAlive: true,
             IsLocalPlayerIdentityValid: true,
             IsResilienceActive: false,
