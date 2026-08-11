@@ -154,6 +154,38 @@ internal static class PvPMetadataGuard
                        expectMovementLock: true,
                        expectActionLock: true,
                        expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.PvPHeavyStatusId, out var heavy) &&
+                   ValidatePurifiableStatus(
+                       heavy,
+                       "Heavy",
+                       EnemyCombatConstants.HeavyStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: false,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.PvPBindStatusId, out var bind) &&
+                   ValidatePurifiableStatus(
+                       bind,
+                       "Bind",
+                       EnemyCombatConstants.BindStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: false,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.PvPSilenceStatusId, out var silence) &&
+                   ValidatePurifiableStatus(
+                       silence,
+                       "Silence",
+                       EnemyCombatConstants.SilenceStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: true,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.DeepFreezeStatusId, out var deepFreeze) &&
+                   ValidatePurifiableStatus(
+                       deepFreeze,
+                       "Deep Freeze",
+                       EnemyCombatConstants.DeepFreezeStatusIconId,
+                       expectMovementLock: true,
+                       expectActionLock: true,
+                       expectTransfiguration: false) &&
                    statuses.TryGetRow(EnemyCombatConstants.MiracleOfNatureStatusId, out var miracle) &&
                    ValidatePurifiableStatus(
                        miracle,

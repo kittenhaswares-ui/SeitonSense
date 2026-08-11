@@ -8,15 +8,17 @@ and the screen bounds of native job icons from the local FFXIV client. It does
 not read character names or Home Worlds, and none of that gameplay data is
 persisted.
 
-If the experimental Purify buffer is explicitly enabled, the plugin also reads
-fresh local key-down edges while an exact Stun or Miracle of Nature instance is
-active. It does not record key text or key history, swallow or replay the
-original key, change targets, or transmit input. A fresh key can request at most
-one native Purify attempt; a rejected or failed attempt is never retried. Other
-plugins can still alter that downstream call if they are configured to rewrite
-Purify or its target. The experiment is disabled by default.
+If the experimental Purify helper is explicitly enabled, the plugin also reads
+current local key-down states while you are in a supported PvP context. This
+read-only baseline distinguishes an already-held key from a genuinely fresh
+edge when Stun, Heavy, Bind, Silence, Deep Freeze, or Miracle of Nature appears.
+It does not log or persist key text/history, swallow or replay the original key,
+change targets, or transmit input. A fresh key can request at most one native
+Purify attempt; a rejected or failed attempt is never retried. Other plugins can
+still alter that downstream call if configured to rewrite Purify or its target.
+The experiment is disabled by default.
 
-Only local display settings and the Purify opt-in/timing settings are saved
+Only local display settings and the Purify opt-in/per-debuff settings are saved
 through Dalamud. Like all third-party FFXIV modifications, use is at your own
 risk; Seiton Sense is distributed through a custom repository, not Dalamud's
 official plugin repository.

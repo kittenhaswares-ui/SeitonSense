@@ -5,7 +5,7 @@ internal static class EmergencyPurifyBufferSelfTests
     private static readonly PurifyCcStatusInstance StatusA = new(1343, 1);
     private static readonly PurifyCcStatusInstance StatusB = new(4325, 2);
 
-    public static void RequiresFreshPostStatusKey()
+    public static void SameFrameFreshKeyCanDispatch()
     {
         var decision = Observe(
             EmergencyPurifyBufferState.Initial,
@@ -14,16 +14,11 @@ internal static class EmergencyPurifyBufferSelfTests
             locallyReady: true,
             now: 1_000);
 
-        Equal(EmergencyPurifyBufferDecisionKind.StatusObserved, decision.Kind, "status entry decision");
-        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, decision.NextState.Phase, "status entry phase");
-        False(decision.ShouldDispatch, "key from the status-observation frame is ignored");
+        True(decision.ShouldDispatch, "a real fresh edge is not lost when the status first appears");
+        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, decision.NextState.Phase, "dispatch consumes first");
 
-        decision = Observe(decision.NextState, StatusA, freshKey: false, locallyReady: true, now: 1_001);
-        Equal(EmergencyPurifyBufferDecisionKind.None, decision.Kind, "old held key cannot arm");
-
-        decision = Observe(decision.NextState, StatusA, freshKey: true, locallyReady: false, now: 1_002);
-        Equal(EmergencyPurifyBufferDecisionKind.Armed, decision.Kind, "fresh post-status key arms");
-        Equal(EmergencyPurifyBufferPhase.Buffered, decision.NextState.Phase, "armed phase");
+        decision = Observe(decision.NextState, StatusA, freshKey: true, locallyReady: true, now: 1_001);
+        False(decision.ShouldDispatch, "same continuous status still gets at most one attempt");
     }
 
     public static void DispatchConsumesBeforeAttempt()
@@ -63,7 +58,7 @@ internal static class EmergencyPurifyBufferSelfTests
         False(decision.ShouldDispatch, "next ready frame does not repeat");
     }
 
-    public static void TimeoutIsBoundedAndTerminal()
+    public static void TimeoutWithoutAttemptCanRearm()
     {
         Equal(750L, EmergencyPurifyBufferRules.DefaultBufferMilliseconds, "default buffer");
         Equal(100L, EmergencyPurifyBufferRules.NormalizeBufferMilliseconds(-1), "minimum clamp");
@@ -85,10 +80,10 @@ internal static class EmergencyPurifyBufferSelfTests
         var boundary = Observe(inside.NextState, StatusA, locallyReady: true, now: 1_850);
         Equal(EmergencyPurifyBufferDecisionKind.Cancelled, boundary.Kind, "deadline wins over readiness");
         Equal(EmergencyPurifyBufferCancelReason.TimedOut, boundary.CancelReason, "timeout reason exposed");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, boundary.NextState.Phase, "timeout is terminal");
+        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, boundary.NextState.Phase, "timeout does not fake an action attempt");
 
         var sameStatus = Observe(boundary.NextState, StatusA, freshKey: true, locallyReady: true, now: 1_851);
-        False(sameStatus.ShouldDispatch, "timeout cannot be rearmed by another key");
+        True(sameStatus.ShouldDispatch, "a later distinct key can try after a no-attempt timeout");
     }
 
     public static void StatusAbsenceIsTheOnlyRearmForSameInstance()
@@ -104,9 +99,7 @@ internal static class EmergencyPurifyBufferSelfTests
         Equal(EmergencyPurifyBufferState.Initial, gone.NextState, "absence rearms the lifecycle");
 
         var seenAgain = Observe(gone.NextState, StatusA, freshKey: true, locallyReady: true, now: 2_002);
-        False(seenAgain.ShouldDispatch, "new continuous instance still needs a post-status key");
-        var dispatchedAgain = Observe(seenAgain.NextState, StatusA, freshKey: true, locallyReady: true, now: 2_003);
-        True(dispatchedAgain.ShouldDispatch, "fresh key after absence can dispatch");
+        True(seenAgain.ShouldDispatch, "a fresh edge on the new status frame can dispatch");
     }
 
     public static void ExactStatusReplacementNeedsANewKey()
@@ -115,19 +108,11 @@ internal static class EmergencyPurifyBufferSelfTests
         state = Observe(state, StatusA, freshKey: true, locallyReady: false, now: 1_100).NextState;
 
         var replaced = Observe(state, StatusB, freshKey: true, locallyReady: true, now: 1_200);
-        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, replaced.Kind, "old exact instance is cancelled");
-        Equal(
-            EmergencyPurifyBufferCancelReason.StatusInstanceChanged,
-            replaced.CancelReason,
-            "replacement reason exposed");
-        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, replaced.NextState.Phase, "replacement is observed first");
-        False(replaced.ShouldDispatch, "same-frame replacement key is ignored");
-
-        var fresh = Observe(replaced.NextState, StatusB, freshKey: true, locallyReady: true, now: 1_201);
-        True(fresh.ShouldDispatch, "new exact instance accepts a later key");
+        True(replaced.ShouldDispatch, "a fresh key can dispatch for the replacement status immediately");
+        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, replaced.NextState.Phase, "replacement dispatch consumes");
     }
 
-    public static void SafetyGatesCancelAndLatch()
+    public static void TemporarySafetyGatesDoNotSpendAnAttempt()
     {
         AssertGateCancellation(
             observation => observation with { ConfigurationEnabled = false },
@@ -177,7 +162,7 @@ internal static class EmergencyPurifyBufferSelfTests
         state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 3_000).NextState;
         var backwards = Observe(state, StatusA, freshKey: true, locallyReady: true, now: 2_999);
         Equal(EmergencyPurifyBufferCancelReason.ClockMovedBackwards, backwards.CancelReason, "clock regression reason");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, backwards.NextState.Phase, "clock regression latches");
+        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, backwards.NextState.Phase, "clock regression waits without faking an attempt");
         False(backwards.ShouldDispatch, "clock regression never dispatches");
     }
 
@@ -197,13 +182,13 @@ internal static class EmergencyPurifyBufferSelfTests
         var cancelled = EmergencyPurifyBufferRules.Observe(state, mutate(baseObservation));
         Equal(EmergencyPurifyBufferDecisionKind.Cancelled, cancelled.Kind, $"{label} decision");
         Equal(expectedReason, cancelled.CancelReason, $"{label} reason");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, cancelled.NextState.Phase, $"{label} latch");
+        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, cancelled.NextState.Phase, $"{label} waits");
         False(cancelled.ShouldDispatch, $"{label} blocks dispatch");
 
         var repeatedCancellation = EmergencyPurifyBufferRules.Observe(
             cancelled.NextState,
             mutate(baseObservation with { NowMilliseconds = 1_201 }));
-        Equal(EmergencyPurifyBufferDecisionKind.None, repeatedCancellation.Kind, $"{label} cancellation is an edge");
+        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, repeatedCancellation.Kind, $"{label} remains blocked");
 
         var restored = Observe(
             repeatedCancellation.NextState,
@@ -211,7 +196,7 @@ internal static class EmergencyPurifyBufferSelfTests
             freshKey: true,
             locallyReady: true,
             now: 1_202);
-        False(restored.ShouldDispatch, $"{label} cannot rearm while status remains");
+        True(restored.ShouldDispatch, $"{label} never consumed the later real key");
     }
 
     private static EmergencyPurifyBufferDecision Observe(

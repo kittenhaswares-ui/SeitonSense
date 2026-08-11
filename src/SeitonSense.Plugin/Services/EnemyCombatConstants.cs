@@ -34,8 +34,16 @@ internal static class EnemyCombatConstants
 
     internal const uint PvPStunStatusId = 1343;
     internal const uint StunStatusIconId = 215004;
+    internal const uint PvPHeavyStatusId = 1344;
+    internal const uint HeavyStatusIconId = 215002;
+    internal const uint PvPBindStatusId = 1345;
+    internal const uint BindStatusIconId = 215003;
+    internal const uint PvPSilenceStatusId = 1347;
+    internal const uint SilenceStatusIconId = 215005;
     internal const uint MiracleOfNatureStatusId = 3085;
     internal const uint MiracleOfNatureStatusIconId = 214979;
+    internal const uint DeepFreezeStatusId = 3219;
+    internal const uint DeepFreezeStatusIconId = 215637;
 
     internal const uint PurifyActionId = 29056;
     internal const uint PurifyIconId = 9112;

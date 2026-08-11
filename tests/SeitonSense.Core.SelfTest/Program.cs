@@ -35,13 +35,13 @@ var tests = new (string Name, Action Run)[]
     ("personal debuff missing grace prevents flicker", PersonalDebuffMissingGracePreventsFlicker),
     ("personal debuff escalation pulses once", PersonalDebuffEscalationPulsesOnce),
     ("personal debuff lifecycle fails closed", PersonalDebuffLifecycleFailsClosed),
-    ("Purify buffer requires a fresh post-status key", EmergencyPurifyBufferSelfTests.RequiresFreshPostStatusKey),
+    ("Purify accepts a same-frame fresh key", EmergencyPurifyBufferSelfTests.SameFrameFreshKeyCanDispatch),
     ("Purify dispatch consumes before the attempt", EmergencyPurifyBufferSelfTests.DispatchConsumesBeforeAttempt),
     ("ready Purify dispatches once at the key edge", EmergencyPurifyBufferSelfTests.ReadyAtArmDispatchesExactlyOnce),
-    ("Purify timeout is bounded and terminal", EmergencyPurifyBufferSelfTests.TimeoutIsBoundedAndTerminal),
+    ("Purify timeout without an attempt can rearm", EmergencyPurifyBufferSelfTests.TimeoutWithoutAttemptCanRearm),
     ("Purify rearms only after status absence", EmergencyPurifyBufferSelfTests.StatusAbsenceIsTheOnlyRearmForSameInstance),
     ("Purify tracks the exact status instance", EmergencyPurifyBufferSelfTests.ExactStatusReplacementNeedsANewKey),
-    ("Purify safety gates cancel and latch", EmergencyPurifyBufferSelfTests.SafetyGatesCancelAndLatch),
+    ("Purify temporary gates do not spend an attempt", EmergencyPurifyBufferSelfTests.TemporarySafetyGatesDoNotSpendAnAttempt),
     ("Purify hard reset and invalid inputs fail closed", EmergencyPurifyBufferSelfTests.HardResetAndInvalidInputsFailClosed),
 };
 

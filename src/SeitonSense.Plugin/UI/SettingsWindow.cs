@@ -119,7 +119,7 @@ internal sealed class SettingsWindow : Window
             configuration.WarnDeathWarrant,
             value => configuration.WarnDeathWarrant = value);
         changed |= Checkbox(
-            "Stun and Miracle of Nature",
+            "All Purify-removable debuff warnings",
             configuration.WarnPurifiableCrowdControl,
             value => configuration.WarnPurifiableCrowdControl = value);
         changed |= Slider("Warning horizontal position", configuration.PersonalWarningScreenX, 0.05f, 0.95f, value => configuration.PersonalWarningScreenX = value, "%.2f");
@@ -127,23 +127,30 @@ internal sealed class SettingsWindow : Window
         changed |= Slider("Warning scale", configuration.PersonalWarningScale, 0.55f, 1.8f, value => configuration.PersonalWarningScale = value, "%.2f x");
 
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(1f, 0.7f, 0.12f, 1f), "EXPERIMENTAL PURIFY BUFFER");
+        ImGui.TextColored(new Vector4(1f, 0.7f, 0.12f, 1f), "EXPERIMENTAL PURIFY ON NEXT KEY");
         changed |= Checkbox(
             "Use one Purify attempt on the next fresh gameplay key",
             configuration.ExperimentalPurifyOnNextKey,
             value => configuration.ExperimentalPurifyOnNextKey = value);
-        changed |= SliderInt(
-            "Maximum wait after that key",
-            configuration.ExperimentalPurifyBufferMilliseconds,
-            100,
-            1000,
-            value => configuration.ExperimentalPurifyBufferMilliseconds = value,
-            "%d ms");
+        ImGui.TextUnformatted("Trigger separately for:");
+        changed |= Checkbox("Stun", configuration.PurifyOnStun, value => configuration.PurifyOnStun = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Heavy", configuration.PurifyOnHeavy, value => configuration.PurifyOnHeavy = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Bind", configuration.PurifyOnBind, value => configuration.PurifyOnBind = value);
+        changed |= Checkbox("Silence", configuration.PurifyOnSilence, value => configuration.PurifyOnSilence = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Deep Freeze", configuration.PurifyOnDeepFreeze, value => configuration.PurifyOnDeepFreeze = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Miracle of Nature",
+            configuration.PurifyOnMiracleOfNature,
+            value => configuration.PurifyOnMiracleOfNature = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only exact Stun or Miracle of Nature can arm this. A key that was already held does not count. " +
-            "The original key is not swallowed. Purify is attempted once at the first locally usable moment; " +
-            "there is no retry after rejection, timeout, death, chat focus, or leaving the supported PvP context. Disable " +
+            "Only the exact enabled debuff types can trigger this. A key that was already held does not count. " +
+            "The original key is not swallowed. The fresh key sends one native Purify attempt immediately, and FFXIV " +
+            "decides whether it can queue or execute it. There is no retry after rejection. Disable " +
             "rules in other plugins that rewrite Purify or its target while testing.");
         ImGui.PopTextWrapPos();
 

@@ -97,24 +97,22 @@ if ($normalizedPurifyProbe -notmatch 'UseAction\s*\(\s*ActionType\.Action\s*,\s*
 }
 Assert-Literals $purifyProbe @(
     'EmergencyPurifyBufferRules.Observe',
-    'GetAdjustedActionId',
-    'GetActionStatus',
-    'IsActionOffCooldown',
-    'AnimationLock',
-    'CurrentMp',
-    'EnemyCombatConstants.PurifyMpCost',
+    'ActionManager.Instance',
     'shouldObserveInput',
     'configurationEnabled',
-    'statusInstance is { IsValid: true }',
     'inputContext.Reset()',
     'localPlayerIdentityValid',
     'statusCurrentlyObserved',
-    'resilienceActive',
-    'GetGameObjectId()',
-    'AnimationLock < 0f'
+    'resilienceActive'
 ) 'Emergency Purify probe'
+if ($purifyProbe -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMp|PurifyMpCost|CurrentMount|IsTargetable|GetGameObjectId)\b') {
+    throw 'Emergency Purify must not restore the fragile local readiness filters removed by the reliability hotfix.'
+}
+if ($normalizedPurifyProbe -match 'shouldObserveInput\s*=\s*[^;]*statusCurrentlyObserved') {
+    throw 'The opted-in PvP key baseline must be primed before a Purify-removable status appears.'
+}
 if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3) {
-    throw 'Emergency Purify must require a currently observed exact status for both input sampling and dispatch readiness.'
+    throw 'Emergency Purify must require a currently observed exact status for edge authorization and dispatch readiness.'
 }
 if ($purifyProbe -match '\b(for|foreach|while)\s*\(|\bdo\s*\{' -or
     $purifyProbe -match '\b(Retry|QueuedAction|ActionQueued|Enqueue|Dequeue)\b|\bQueue\s*[<(]' -or
@@ -214,9 +212,11 @@ Assert-Literals $inputContext @(
     'GetValidVirtualKeys',
     'RaptureAtkModule.Instance',
     'IsTextInputActive',
-    'WantTextInput',
-    'WantCaptureKeyboard'
+    'WantTextInput'
 ) 'Game input context probe'
+if ($inputContext -match 'io\.WantCaptureKeyboard') {
+    throw 'Ordinary ImGui keyboard capture must not masquerade as active text input.'
+}
 if ($inputContext -match '\b(SetRawValue|ClearAll|FireCallback|SendEvent|SetPosition|SetScale|ToggleVisibility)\b') {
     throw 'Game input context probe must remain read-only.'
 }
@@ -280,6 +280,10 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.DeathWarrantActionId',
     'EnemyCombatConstants.DeathWarrantStatusId',
     'EnemyCombatConstants.PvPStunStatusId',
+    'EnemyCombatConstants.PvPHeavyStatusId',
+    'EnemyCombatConstants.PvPBindStatusId',
+    'EnemyCombatConstants.PvPSilenceStatusId',
+    'EnemyCombatConstants.DeepFreezeStatusId',
     'EnemyCombatConstants.MiracleOfNatureStatusId',
     'EnemyCombatConstants.PurifyActionId',
     'EnemyCombatConstants.ResilienceStatusId',
@@ -294,6 +298,10 @@ $exactCombatIds = [ordered]@{
     DeathWarrantActionId = 29549
     DeathWarrantStatusId = 3206
     PvPStunStatusId = 1343
+    PvPHeavyStatusId = 1344
+    PvPBindStatusId = 1345
+    PvPSilenceStatusId = 1347
+    DeepFreezeStatusId = 3219
     MiracleOfNatureStatusId = 3085
     PurifyActionId = 29056
     ResilienceStatusId = 3248
@@ -311,6 +319,10 @@ Assert-Literals ($personalStatus + $personalDefinitions) @(
     'EnemyCombatConstants.WildfireStatusId',
     'EnemyCombatConstants.DeathWarrantStatusId',
     'EnemyCombatConstants.PvPStunStatusId',
+    'EnemyCombatConstants.PvPHeavyStatusId',
+    'EnemyCombatConstants.PvPBindStatusId',
+    'EnemyCombatConstants.PvPSilenceStatusId',
+    'EnemyCombatConstants.DeepFreezeStatusId',
     'EnemyCombatConstants.MiracleOfNatureStatusId'
 ) 'Personal status exact-ID mapping'
 Assert-Literals $personalStatus @(
@@ -323,6 +335,13 @@ Assert-Literals $personalStatus @(
     'emergencyPurify.Observe',
     'shouldScanStatuses',
     'configuration.ExperimentalPurifyOnNextKey',
+    'configuration.PurifyOnStun',
+    'configuration.PurifyOnHeavy',
+    'configuration.PurifyOnBind',
+    'configuration.PurifyOnSilence',
+    'configuration.PurifyOnDeepFreeze',
+    'configuration.PurifyOnMiracleOfNature',
+    'IsPurifyAutomationEnabled',
     'EnemyCombatConstants.ResilienceStatusId',
     'purifyStatusCurrentlyObserved',
     'StatusIdentityState',
@@ -330,9 +349,11 @@ Assert-Literals $personalStatus @(
     'DebouncedVisibilityRules.Observe',
     'resiliencePresence.IsVisible',
     'PvPMatchRules.ResolveSupportedContext',
-    'configuration.EnableWolvesDenTesting',
-    'WolvesDenOpponentResolver.Resolve'
+    'configuration.EnableWolvesDenTesting'
 ) 'Personal status service'
+if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
+    throw 'Self warnings and self-Purify must not depend on resolving an enemy HUD actor.'
+}
 
 $stateAssignment = [regex]::Match(
     $purifyProbe,
@@ -370,6 +391,8 @@ Assert-Literals $purifyRules @(
     'MaximumBufferMilliseconds = 1_000',
     'LocalPlayerIdentityInvalid',
     'ResilienceActive',
+    'CancelAndWaitIfPresent',
+    'ArmOrDispatch',
     'public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch'
 ) 'Emergency Purify buffer rules'
 
@@ -390,4 +413,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.3.0.1 safety contract verified across $($sourceFiles.Count) source files; CC keeps native enemy slots, Wolves' Den requires one strict hostile, and only one gated native Purify attempt is allowed."
+Write-Host "Seiton Sense v0.3.0.2 safety contract verified across $($sourceFiles.Count) source files; all six current Purify CC types are selectable, key state is read-only, and one fresh key permits at most one native Purify attempt."

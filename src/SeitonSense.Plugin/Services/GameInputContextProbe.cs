@@ -86,9 +86,12 @@ internal sealed class GameInputContextProbe
             }
 
             var io = ImGui.GetIO();
+            // WantCaptureKeyboard is true for an ordinary focused ImGui window as
+            // well, including our own settings window. It is not proof that the
+            // player is typing and previously made the opt-in appear completely
+            // inert while its checkbox was visible.
             var textInputActive = atkModule->IsTextInputActive() ||
-                                  io.WantTextInput ||
-                                  io.WantCaptureKeyboard;
+                                  io.WantTextInput;
             return new GameInputContextSnapshot(
                 true,
                 textInputActive,

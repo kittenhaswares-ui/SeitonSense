@@ -2,7 +2,6 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -34,10 +33,6 @@ internal sealed record EmergencyPurifyProbeSnapshot(
 
 internal sealed class EmergencyPurifyProbe
 {
-    // A tiny residual lock is within the game's normal local submission window. The
-    // authoritative action-status and cooldown checks below still have to pass.
-    private const float MaximumAnimationLockSeconds = 0.05f;
-
     private readonly GameInputContextProbe inputContext;
     private readonly IPluginLog log;
     private EmergencyPurifyBufferState state = EmergencyPurifyBufferState.Initial;
@@ -64,13 +59,12 @@ internal sealed class EmergencyPurifyProbe
     {
         var alive = IsAlive(localPlayer);
         var localPlayerIdentityValid = alive && HasValidLocalPlayer(localPlayer!);
+        // Keep a baseline throughout the opted-in PvP context. Starting the key
+        // probe only after CC appeared discarded the most important first press.
         var shouldObserveInput = !hardReset &&
                                  configurationEnabled &&
                                  isSupportedPvPContext &&
-                                 localPlayerIdentityValid &&
-                                 statusCurrentlyObserved &&
-                                 !resilienceActive &&
-                                 statusInstance is { IsValid: true };
+                                 localPlayerIdentityValid;
         var input = shouldObserveInput
             ? inputContext.Observe()
             : GameInputContextSnapshot.NotObserved;
@@ -83,7 +77,7 @@ internal sealed class EmergencyPurifyProbe
                            statusCurrentlyObserved &&
                            !resilienceActive &&
                            !input.IsTextInputActive &&
-                           IsPurifyLocallyReady(localPlayer!);
+                           ActionManager.Instance() != null;
 
         var decision = EmergencyPurifyBufferRules.Observe(
             state,
@@ -95,7 +89,9 @@ internal sealed class EmergencyPurifyProbe
                 resilienceActive,
                 input.IsTextInputActive,
                 statusInstance,
-                input.ProbeSucceeded && input.FreshGameplayKeyPressed,
+                statusCurrentlyObserved &&
+                input.ProbeSucceeded &&
+                input.FreshGameplayKeyPressed,
                 locallyReady,
                 nowMilliseconds,
                 hardReset,
@@ -177,44 +173,12 @@ internal sealed class EmergencyPurifyProbe
         localPlayer.CurrentHp > 0 &&
         localPlayer.MaxHp >= localPlayer.CurrentHp;
 
-    private static unsafe bool IsPurifyLocallyReady(IPlayerCharacter localPlayer)
-    {
-        if (!HasValidLocalPlayer(localPlayer) ||
-            localPlayer.MaxMp == 0 ||
-            localPlayer.CurrentMp > localPlayer.MaxMp ||
-            localPlayer.CurrentMp < EnemyCombatConstants.PurifyMpCost)
-        {
-            return false;
-        }
-
-        var actionManager = ActionManager.Instance();
-        if (actionManager == null ||
-            !float.IsFinite(actionManager->AnimationLock) ||
-            actionManager->AnimationLock < 0f ||
-            actionManager->AnimationLock > MaximumAnimationLockSeconds ||
-            actionManager->GetAdjustedActionId(EnemyCombatConstants.PurifyActionId) !=
-            EnemyCombatConstants.PurifyActionId ||
-            !actionManager->IsActionOffCooldown(
-                ActionType.Action,
-                EnemyCombatConstants.PurifyActionId))
-        {
-            return false;
-        }
-
-        return actionManager->GetActionStatus(
-                   ActionType.Action,
-                   EnemyCombatConstants.PurifyActionId,
-                   localPlayer.GameObjectId,
-                   true,
-                   true) == 0;
-    }
-
     private static unsafe bool TryUsePurifyOnce(
         IPlayerCharacter localPlayer,
         out bool attempted)
     {
         attempted = false;
-        if (!IsPurifyLocallyReady(localPlayer)) return false;
+        if (!HasValidLocalPlayer(localPlayer)) return false;
 
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return false;
@@ -229,27 +193,11 @@ internal sealed class EmergencyPurifyProbe
             0);
     }
 
-    private static unsafe bool HasValidLocalPlayer(IPlayerCharacter localPlayer)
-    {
-        if (!IsAlive(localPlayer) ||
-            localPlayer.GameObjectId is 0 or 0xE0000000)
-        {
-            return false;
-        }
-
-        var gameObject = (GameObject*)localPlayer.Address;
-        if (gameObject == null ||
-            !localPlayer.IsTargetable ||
-            localPlayer.CurrentMount is not null)
-        {
-            return false;
-        }
-
-        var nativeId = gameObject->GetGameObjectId();
-        return gameObject->EntityId == localPlayer.EntityId &&
-               nativeId.ObjectId == localPlayer.EntityId &&
-               nativeId.Id == localPlayer.GameObjectId;
-    }
+    private static bool HasValidLocalPlayer(IPlayerCharacter localPlayer) =>
+        IsAlive(localPlayer) &&
+        localPlayer.Address != 0 &&
+        localPlayer.EntityId is not 0 and not 0xE0000000 &&
+        localPlayer.GameObjectId is not 0 and not 0xE0000000;
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {
