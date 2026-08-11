@@ -5,6 +5,9 @@ enabled-by-default Wolves' Den duel test mode. It adds small status icons beside
 the job icon in each enemy's native nameplate, shows local warnings for selected
 dangerous debuffs, and gives Ninja a persistent Seiton decision cue. An optional
 experimental Purify-on-next-key helper is available but disabled by default.
+Optional focus-target and current-target highlights plus a separate fixed
+target-information card are also included; all three additions are disabled by
+default.
 
 ## What it shows
 
@@ -32,6 +35,19 @@ experimental Purify-on-next-key helper is available but disabled by default.
   receive urgent Purify warnings. Each verified status gets an entry pulse and
   a stable remaining-time display instead of repeatedly flashing from
   transient samples.
+- **Focus-target glow:** the visual elements from Super Focus Glow are available
+  as an independent module for the focus target you set manually: projected
+  hitbox ring, layered halo, rays, chevrons, label, pulse, foreground, rainbow,
+  color, and reduced-motion controls. The included red preset uses intensity
+  `0.55`, size `1.18`, radius `56`, pulse speed `0.6`, pulse strength `0.2`,
+  ground padding `0.75`, and vertical offset `0.15`.
+- **Current-target highlight:** a separate cyan style can distinguish your
+  manually selected current target. It has independent visual controls and is
+  PvP-only by default.
+- **Current-target information:** an independently configurable fixed HUD card
+  can show safe target context such as job, HP, distance, and CC enemy slot when
+  those values are available. It is never inserted beside a nameplate job icon,
+  health bar, or any of Seiton Sense's existing indicator slots.
 
 Guard does not block the Seiton alert because Seiton Tenchu ignores Guard.
 
@@ -43,6 +59,21 @@ in a duel. Staying in the same party does not block the test mode because the
 native duel-opponent identity and hostile flag remain authoritative. If the
 opponent is absent or invalid, the duel HUD shows nothing. Frontline and Rival
 Wings are deliberately excluded from this test release.
+
+## Focus and current-target highlights
+
+The two highlights only observe targets already selected through FFXIV. They do
+not choose, retain, assist, or change a target. Losing the relevant target makes
+its overlay disappear. The fixed information card is a normal screen-positioned
+overlay with independent X/Y/scale controls; it is not nameplate content.
+
+The focus glow, current-target highlight, and information card are each opt-in.
+The current-target visual defaults to PvP-only, while the focus module remains
+available wherever the standalone Super Focus Glow renderer was available. The
+focus preset recreates the migrated red setup, but this first integrated release
+does not read, import, modify, or delete the standalone plugin's configuration.
+Disable the standalone renderer before enabling the integrated focus module to
+avoid drawing both overlays over the same actor.
 
 ## Stable nameplate anchoring
 
@@ -111,16 +142,19 @@ update through the same repository.
 - `/seiton reset` — restore defaults
 
 The cue label, scale, position, entry-pulse duration, personal-warning layout,
-nameplate icon size, spacing, and individual indicators are configurable. The
-experimental Purify helper has one master opt-in, a separate held-key option,
-and a separate toggle for each supported debuff type.
+nameplate icon size, spacing, focus/current-target styles, fixed target-card
+position, and individual indicators are configurable. The experimental Purify
+helper has one master opt-in, a separate held-key option, and a separate toggle
+for each supported debuff type.
 
 ## Scope and privacy
 
 Seiton Sense supports Crystalline Conflict plus the optional Wolves' Den duel
 test mode and has no server, account, telemetry, or gameplay upload. It does
 not read character names or Home Worlds and stores no combat history or key
-history. Only local settings are persisted through Dalamud.
+history. The optional target modules transiently inspect only the manually
+selected current/focus target and locally available display data. Only local
+settings are persisted through Dalamud.
 
 The display features never target or press actions. The opt-in Purify experiment
 is the sole feature allowed to request an action, under the one-key/one-attempt
