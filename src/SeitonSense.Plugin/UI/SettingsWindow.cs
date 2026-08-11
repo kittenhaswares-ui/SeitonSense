@@ -171,9 +171,9 @@ internal sealed class SettingsWindow : Window
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
-            "cooldowns are never guessed. Seiton Sense itself never changes a target and sends no gameplay " +
-            "data. The optional Purify experiment is the only feature that can request an action, and it is " +
-            "disabled by default.");
+            "cooldowns are never guessed. Seiton Sense never changes a target and uploads no gameplay data " +
+            "to an external service. The optional Purify experiment is the only feature that can request an " +
+            "action, and it is disabled by default. Like all third-party modifications, use it at your own risk.");
         ImGui.PopTextWrapPos();
 
         if (changed) configuration.Save();
