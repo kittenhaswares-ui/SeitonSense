@@ -157,7 +157,9 @@ internal sealed class ExecuteTracker : IDisposable
                                  partyEntityIds.IsSubsetOf(visibleEntityIds);
 
         var seitonActionId = 0u;
+        var localAlive = !localPlayer.IsDead && localPlayer.CurrentHp > 0;
         var seitonResourceReady = isNinja &&
+                                  localAlive &&
                                   metadata.SeitonVerified &&
                                   SeitonReadinessProbe.TryGetReadyAction(localPlayer, out seitonActionId);
 
@@ -196,8 +198,9 @@ internal sealed class ExecuteTracker : IDisposable
             if (!alive)
             {
                 state.WasDead = true;
-                state.SeitonVisibility = DebouncedVisibilityState.Initial;
-                state.Popup = StablePopupState.Initial;
+                state.SeitonCue = PersistentSeitonCueState.Initial;
+                state.SeitonPulseStartedAtMilliseconds = -1;
+                activePopups.RemoveAll(popup => popup.GameObjectId == player.GameObjectId);
                 continue;
             }
 
@@ -206,8 +209,8 @@ internal sealed class ExecuteTracker : IDisposable
                 state.WasDead = false;
                 state.Guard = GuardCooldownRules.ObserveRevive();
                 state.LowMp = LowMpState.Initial;
-                state.SeitonVisibility = DebouncedVisibilityState.Initial;
-                state.Popup = StablePopupState.Initial;
+                state.SeitonCue = PersistentSeitonCueState.Initial;
+                state.SeitonPulseStartedAtMilliseconds = -1;
             }
 
             if (!player.IsTargetable || !ExecuteThreshold.HasValidHp(player.CurrentHp, player.MaxHp)) continue;
@@ -234,8 +237,11 @@ internal sealed class ExecuteTracker : IDisposable
                 : LowMpRules.Observe(state.LowMp, 0, false, now, hardReset: true);
 
             var belowHalf = ExecuteThreshold.IsBelowHalf(player.CurrentHp, player.MaxHp);
+            var preparationBand = PersistentSeitonCueRules.IsPreparationBand(
+                player.CurrentHp,
+                player.MaxHp);
             var inRange = false;
-            if (seitonResourceReady && belowHalf)
+            if (seitonResourceReady && (belowHalf || preparationBand))
             {
                 inRange = SeitonReadinessProbe.HasRangeAndLineOfSight(
                     localPlayer,
@@ -245,26 +251,27 @@ internal sealed class ExecuteTracker : IDisposable
                 if (inRange) inRangeSlots++;
             }
 
-            var rawSeitonEligible = seitonResourceReady && belowHalf && inRange;
-            state.SeitonVisibility = DebouncedVisibilityRules.Observe(
-                state.SeitonVisibility,
+            var cueDecision = PersistentSeitonCueRules.Observe(
+                state.SeitonCue,
+                seitonResourceReady,
+                targetPresent: true,
+                trustedHealthSample: true,
+                player.CurrentHp,
+                player.MaxHp,
                 inRange,
-                now,
-                hardReset: !seitonResourceReady || !belowHalf);
-            var showSeiton = state.SeitonVisibility.IsVisible;
-            if (showSeiton) seitonSlots++;
-
-            var rearmPopup = !seitonResourceReady ||
-                             ExecuteThreshold.IsAtOrAboveRearm(player.CurrentHp, player.MaxHp);
-            var popupDecision = StablePopupRules.Observe(
-                state.Popup,
-                rawSeitonEligible,
-                rearmPopup,
+                configuration.ShowSeitonPreparation,
                 now,
                 hardReset: !isNinja || !metadata.SeitonVerified);
-            state.Popup = popupDecision.NextState;
-            if (popupDecision.TriggerPopup)
+            state.SeitonCue = cueDecision.NextState;
+            var showSeiton = cueDecision.Cue == SeitonCueKind.Execute;
+            if (showSeiton) seitonSlots++;
+
+            if (!showSeiton)
+                activePopups.RemoveAll(popup => popup.GameObjectId == player.GameObjectId);
+
+            if (cueDecision.TriggerEntryPulse)
             {
+                state.SeitonPulseStartedAtMilliseconds = now;
                 activePopups.RemoveAll(popup => popup.GameObjectId == player.GameObjectId);
                 var duration = (long)Math.Clamp(configuration.PopupDurationMilliseconds, 300f, 2000f);
                 activePopups.Add(new SeitonPopupSnapshot(
@@ -289,7 +296,8 @@ internal sealed class ExecuteTracker : IDisposable
                 player.GameObjectId,
                 player.EntityId,
                 player.ClassJob.IsValid ? player.ClassJob.RowId : 0,
-                showSeiton,
+                cueDecision.Cue,
+                state.SeitonPulseStartedAtMilliseconds,
                 guardUnavailable,
                 guardRemainingSeconds,
                 lowMp,
@@ -362,8 +370,8 @@ internal sealed class ExecuteTracker : IDisposable
     {
         public GuardCooldownState Guard { get; set; } = GuardCooldownState.Initial;
         public LowMpState LowMp { get; set; } = LowMpState.Initial;
-        public DebouncedVisibilityState SeitonVisibility { get; set; } = DebouncedVisibilityState.Initial;
-        public StablePopupState Popup { get; set; } = StablePopupState.Initial;
+        public PersistentSeitonCueState SeitonCue { get; set; } = PersistentSeitonCueState.Initial;
+        public long SeitonPulseStartedAtMilliseconds { get; set; } = -1;
         public bool WasDead { get; set; }
     }
 }

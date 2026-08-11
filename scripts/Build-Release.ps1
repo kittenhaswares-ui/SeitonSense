@@ -21,7 +21,7 @@ New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 
 & (Join-Path $PSScriptRoot 'Verify-SafetyContract.ps1') -RepositoryRoot $projectRoot
 
-dotnet restore $solution --use-lock-file
+dotnet restore $solution --locked-mode
 if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
 
 dotnet build $solution -c Release --no-restore --nologo

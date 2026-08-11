@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Stable PvP nameplate indicators for Seiton, Guard, and low MP.",
-    "Description": "A display-only Crystalline Conflict HUD for every job. Extra icons are anchored beside native enemy job icons; observed Guard cooldown and low MP are shown for everyone, while Ninja gets an exact S1-S5 Seiton popup.",
+    "Punchline": "Persistent Seiton decisions, personal PvP warnings, and an optional Purify buffer.",
+    "Description": "A local Crystalline Conflict reaction-cue HUD. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see Wildfire, Death Warrant, Stun, and Miracle warnings. The experimental one-key/one-attempt Purify buffer is disabled by default.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.2.0.0",
-    "Changelog": "Rebuilt the overlay around FFXIV's native nameplate job-icon bounds to remove world-projection jitter. Added all-job crossed Guard-cooldown and low-MP elixir indicators. Ninja now gets a configurable job-icon + exact S1-S5 popup with stable readiness logic that ignores transient facing/action-lock noise.",
+    "AssemblyVersion": "0.3.0.0",
+    "Changelog": "Added persistent job-icon + SHIFT/S-slot Seiton decisions with optional PREP, plus local Wildfire, Death Warrant, Stun, and Miracle warnings. Added an experimental Purify-on-next-fresh-key buffer, disabled by default: the original key remains, one key permits at most one native attempt, and Seiton Sense does not retry, retarget, or manipulate networking.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -22,6 +22,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786431092"
+    "LastUpdate": "1786447332"
   }
 ]

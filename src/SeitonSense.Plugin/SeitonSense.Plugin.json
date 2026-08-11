@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "Stable PvP nameplate indicators for Seiton, Guard, and low MP.",
-  "Description": "A display-only Crystalline Conflict HUD for every job. It anchors extra icons beside native enemy job icons, tracks observed Guard cooldown and low MP, and gives Ninja a customizable job-icon plus S1-S5 Seiton popup.",
+  "Punchline": "Persistent Seiton decisions, personal PvP warnings, and an optional Purify buffer.",
+  "Description": "A local Crystalline Conflict reaction-cue HUD. Ninja gets persistent PREP and SHIFT+slot Seiton decisions; every job can see Wildfire, Death Warrant, Stun, and Miracle warnings. The experimental one-key/one-attempt Purify buffer is disabled by default.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

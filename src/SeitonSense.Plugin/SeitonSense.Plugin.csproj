@@ -1,12 +1,12 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.2.0.0</Version>
-    <AssemblyVersion>0.2.0.0</AssemblyVersion>
-    <FileVersion>0.2.0.0</FileVersion>
+    <Version>0.3.0.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
     <AssemblyName>SeitonSense.Plugin</AssemblyName>
     <RootNamespace>SeitonSense.Plugin</RootNamespace>
     <Authors>kittenhaswares-ui</Authors>
-    <Description>Stable all-job PvP nameplate indicators for Seiton, Guard, and MP.</Description>
+    <Description>Persistent Seiton decisions, personal PvP warnings, and an opt-in bounded Purify buffer.</Description>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

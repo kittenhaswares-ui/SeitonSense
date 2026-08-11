@@ -5,21 +5,34 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
     public bool Enabled { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
     public bool ShowGuardUnavailable { get; set; } = true;
     public bool ShowGuardCountdown { get; set; } = true;
     public bool ShowLowMp { get; set; } = true;
     public bool ShowSeitonPopup { get; set; } = true;
+    public bool ShowPersistentSeitonCue { get; set; } = true;
+    public bool ShowSeitonPreparation { get; set; } = true;
+    public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
     public float NameplateBackgroundOpacity { get; set; } = 0.84f;
     public float PopupDurationMilliseconds { get; set; } = 850f;
-    public float PopupIconSize { get; set; } = 76f;
+    public float PopupIconSize { get; set; } = 96f;
     public float PopupScreenX { get; set; } = 0.5f;
-    public float PopupScreenY { get; set; } = 0.2f;
+    public float PopupScreenY { get; set; } = 0.55f;
     public float PopupBackgroundOpacity { get; set; } = 0.88f;
+    public float PersistentCueScale { get; set; } = 1f;
+    public bool ShowPersonalWarnings { get; set; } = true;
+    public bool WarnWildfire { get; set; } = true;
+    public bool WarnDeathWarrant { get; set; } = true;
+    public bool WarnPurifiableCrowdControl { get; set; } = true;
+    public float PersonalWarningScreenX { get; set; } = 0.5f;
+    public float PersonalWarningScreenY { get; set; } = 0.34f;
+    public float PersonalWarningScale { get; set; } = 1f;
+    public bool ExperimentalPurifyOnNextKey { get; set; }
+    public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -27,11 +40,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        if (Version >= 2) return;
+        if (Version >= 3) return;
 
-        // v0.2 replaces the world-projected overlay with native-nameplate anchors.
-        // Newly added properties already carry the new safe defaults.
-        Version = 2;
+        if (Math.Abs(PopupScreenY - 0.2f) < 0.001f) PopupScreenY = 0.55f;
+        if (Math.Abs(PopupIconSize - 76f) < 0.001f) PopupIconSize = 96f;
+        Version = 3;
         Save();
     }
 
@@ -39,20 +52,33 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 2;
+        Version = 3;
         Enabled = true;
         ShowNameplateSeiton = true;
         ShowGuardUnavailable = true;
         ShowGuardCountdown = true;
         ShowLowMp = true;
         ShowSeitonPopup = true;
+        ShowPersistentSeitonCue = true;
+        ShowSeitonPreparation = true;
+        SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
         NameplateBackgroundOpacity = 0.84f;
         PopupDurationMilliseconds = 850f;
-        PopupIconSize = 76f;
+        PopupIconSize = 96f;
         PopupScreenX = 0.5f;
-        PopupScreenY = 0.2f;
+        PopupScreenY = 0.55f;
         PopupBackgroundOpacity = 0.88f;
+        PersistentCueScale = 1f;
+        ShowPersonalWarnings = true;
+        WarnWildfire = true;
+        WarnDeathWarrant = true;
+        WarnPurifiableCrowdControl = true;
+        PersonalWarningScreenX = 0.5f;
+        PersonalWarningScreenY = 0.34f;
+        PersonalWarningScale = 1f;
+        ExperimentalPurifyOnNextKey = false;
+        ExperimentalPurifyBufferMilliseconds = 750;
     }
 }
