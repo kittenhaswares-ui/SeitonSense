@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PluginConfiguration configuration;
     private readonly WindowSystem windowSystem = new("SeitonSense");
     private readonly ExecuteTracker tracker;
+    private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly OverlayRenderer overlay;
     private readonly SettingsWindow settingsWindow;
 
@@ -35,6 +36,8 @@ public sealed class Plugin : IDalamudPlugin
         IPartyList partyList,
         IDataManager dataManager,
         IGameGui gameGui,
+        INamePlateGui namePlateGui,
+        ITextureProvider textureProvider,
         IPluginLog log)
     {
         this.pluginInterface = pluginInterface;
@@ -45,7 +48,7 @@ public sealed class Plugin : IDalamudPlugin
         configuration = pluginInterface.GetPluginConfig() as PluginConfiguration ?? new PluginConfiguration();
         configuration.Initialize(pluginInterface);
 
-        var metadataVerified = SeitonMetadataGuard.Validate(dataManager, log);
+        var metadata = PvPMetadataGuard.Validate(dataManager, log);
         tracker = new ExecuteTracker(
             clientState,
             objectTable,
@@ -54,8 +57,14 @@ public sealed class Plugin : IDalamudPlugin
             partyList,
             log,
             configuration,
-            metadataVerified);
-        overlay = new OverlayRenderer(configuration, tracker, gameGui);
+            metadata);
+        namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
+        overlay = new OverlayRenderer(
+            configuration,
+            tracker,
+            namePlateAnchors,
+            gameGui,
+            textureProvider);
         settingsWindow = new SettingsWindow(configuration, tracker, overlay);
         windowSystem.AddWindow(settingsWindow);
 
@@ -66,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.Draw += Draw;
         pluginInterface.UiBuilder.OpenMainUi += OpenSettings;
         pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
+        namePlateAnchors.Start();
         tracker.Start();
     }
 
@@ -77,6 +87,7 @@ public sealed class Plugin : IDalamudPlugin
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
         tracker.Dispose();
+        namePlateAnchors.Dispose();
         windowSystem.RemoveAllWindows();
     }
 
@@ -122,10 +133,11 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print($"[Seiton Sense] Preview {(overlay.PreviewEnabled ? "enabled" : "disabled")}.");
                 return;
             case "flash":
-                overlay.TriggerPreviewFlash();
+                overlay.TriggerPreviewPopup();
                 return;
             case "debug":
-                chatGui.Print($"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}");
+                chatGui.Print(
+                    $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}");
                 return;
             case "reset":
                 configuration.ResetToDefaults();

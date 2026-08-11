@@ -24,7 +24,7 @@ jobs:
         run: |
           ./scripts/Verify-SafetyContract.ps1
           ./scripts/Verify-Release.ps1
-      - name: Build and test dependency-free core
+      - name: Test dependency-free core
         run: >-
           dotnet run
           --project tests/SeitonSense.Core.SelfTest/SeitonSense.Core.SelfTest.csproj

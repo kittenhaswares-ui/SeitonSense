@@ -1,4 +1,3 @@
-using System.Numerics;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
@@ -19,10 +18,10 @@ internal sealed class ExecuteTracker : IDisposable
     private readonly IPartyList partyList;
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
-    private readonly bool metadataVerified;
-    private readonly Dictionary<uint, ExecuteAlertState> alertStates = [];
-    private EnemyExecuteSnapshot[] enemies = [];
-    private FlashSnapshot flash = FlashSnapshot.None;
+    private readonly PvPMetadataValidation metadata;
+    private readonly Dictionary<uint, EnemyRuntimeState> runtimeStates = [];
+    private EnemyHudSnapshot[] enemies = [];
+    private SeitonPopupSnapshot[] popups = [];
     private TrackerDiagnostics diagnostics;
     private long nextUpdateAt;
     private long nextErrorLogAt;
@@ -38,7 +37,7 @@ internal sealed class ExecuteTracker : IDisposable
         IPartyList partyList,
         IPluginLog log,
         PluginConfiguration configuration,
-        bool metadataVerified)
+        PvPMetadataValidation metadata)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
@@ -47,13 +46,13 @@ internal sealed class ExecuteTracker : IDisposable
         this.partyList = partyList;
         this.log = log;
         this.configuration = configuration;
-        this.metadataVerified = metadataVerified;
-        diagnostics = TrackerDiagnostics.Inactive(clientState.TerritoryType, metadataVerified);
+        this.metadata = metadata;
+        diagnostics = TrackerDiagnostics.Inactive(clientState.TerritoryType, metadata);
     }
 
     public bool IsActive => Diagnostics.Active;
-    public IReadOnlyList<EnemyExecuteSnapshot> Enemies => Volatile.Read(ref enemies);
-    public FlashSnapshot Flash => Volatile.Read(ref flash);
+    public IReadOnlyList<EnemyHudSnapshot> Enemies => Volatile.Read(ref enemies);
+    public IReadOnlyList<SeitonPopupSnapshot> Popups => Volatile.Read(ref popups);
     public TrackerDiagnostics Diagnostics => Volatile.Read(ref diagnostics);
 
     public void Start()
@@ -84,7 +83,7 @@ internal sealed class ExecuteTracker : IDisposable
         catch (Exception exception)
         {
             ResetRuntime();
-            Volatile.Write(ref diagnostics, TrackerDiagnostics.Inactive(clientState.TerritoryType, metadataVerified));
+            Volatile.Write(ref diagnostics, TrackerDiagnostics.Inactive(clientState.TerritoryType, metadata));
             var now = Environment.TickCount64;
             if (now < nextErrorLogAt) return;
             nextErrorLogAt = now + 10_000;
@@ -119,12 +118,14 @@ internal sealed class ExecuteTracker : IDisposable
         var localPlayer = objectTable.LocalPlayer;
         var isNinja = localPlayer is not null &&
                       ExecuteThreshold.IsNinja(localPlayer.ClassJob.IsValid ? localPlayer.ClassJob.RowId : 0);
-        if (!configuration.Enabled || !metadataVerified || !isCc || !isNinja || localPlayer is null)
+        if (!configuration.Enabled || !isCc || localPlayer is null)
         {
             ResetRuntime();
             Volatile.Write(ref diagnostics, new TrackerDiagnostics(
                 false,
-                metadataVerified,
+                metadata.SeitonVerified,
+                metadata.GuardVerified,
+                metadata.RecuperateVerified,
                 isNinja,
                 isCc,
                 clientState.IsPvP,
@@ -136,7 +137,8 @@ internal sealed class ExecuteTracker : IDisposable
                 0,
                 0,
                 0,
-                false));
+                0,
+                0));
             return;
         }
 
@@ -154,14 +156,23 @@ internal sealed class ExecuteTracker : IDisposable
                                  partyEntityIds.Contains(localPlayer.EntityId) &&
                                  partyEntityIds.IsSubsetOf(visibleEntityIds);
 
+        var seitonActionId = 0u;
+        var seitonResourceReady = isNinja &&
+                                  metadata.SeitonVerified &&
+                                  SeitonReadinessProbe.TryGetReadyAction(localPlayer, out seitonActionId);
+
+        var snapshots = new List<EnemyHudSnapshot>(5);
+        var activePopups = Popups
+            .Where(popup => popup.EndsAtMilliseconds > now)
+            .ToList();
         var resolvedEntityIds = new HashSet<uint>();
-        var snapshots = new List<EnemyExecuteSnapshot>(5);
-        var flashSlots = new List<string>(5);
         var resolvedSlots = 0;
         var validEnemySlots = 0;
         var inRangeSlots = 0;
-        var readySlots = 0;
-        var resolvedSeitonActionId = 0u;
+        var seitonSlots = 0;
+        var guardUnavailableSlots = 0;
+        var lowMpSlots = 0;
+
         for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
         {
             var player = EnemySlotResolver.Resolve(objectTable, slot);
@@ -170,72 +181,132 @@ internal sealed class ExecuteTracker : IDisposable
 
             var isAlly = partyEntityIds.Contains(player.EntityId) ||
                          (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
-            var usable = EnemySlotRules.CanUseResolvedEnemy(
-                player.GameObjectId == localPlayer.GameObjectId,
-                isAlly,
-                (player.StatusFlags & StatusFlags.Hostile) != 0,
-                partyFallbackReady,
-                !player.IsDead,
-                player.IsTargetable,
-                player.CurrentHp,
-                player.MaxHp);
-            if (!usable)
+            var isEnemy = player.GameObjectId != localPlayer.GameObjectId &&
+                          !isAlly &&
+                          ((player.StatusFlags & StatusFlags.Hostile) != 0 || partyFallbackReady);
+            if (!isEnemy) continue;
+
+            if (!runtimeStates.TryGetValue(player.EntityId, out var state))
             {
-                if (player.IsDead || player.CurrentHp == 0) alertStates.Remove(player.EntityId);
+                state = new EnemyRuntimeState();
+                runtimeStates[player.EntityId] = state;
+            }
+
+            var alive = !player.IsDead && player.CurrentHp > 0;
+            if (!alive)
+            {
+                state.WasDead = true;
+                state.SeitonVisibility = DebouncedVisibilityState.Initial;
+                state.Popup = StablePopupState.Initial;
                 continue;
             }
 
-            validEnemySlots++;
-            var actionReady = false;
-            var inRange = false;
-            if (ExecuteThreshold.IsBelowHalf(player.CurrentHp, player.MaxHp))
+            if (state.WasDead)
             {
-                actionReady = SeitonReadinessProbe.IsAvailableForTarget(
-                    localPlayer,
-                    player,
-                    out var actionId,
-                    out _,
-                    out var rangeStatus);
-                inRange = rangeStatus == 0;
-                if (actionId != 0) resolvedSeitonActionId = actionId;
-                if (inRange) inRangeSlots++;
-                if (actionReady) readySlots++;
+                state.WasDead = false;
+                state.Guard = GuardCooldownRules.ObserveRevive();
+                state.LowMp = LowMpState.Initial;
+                state.SeitonVisibility = DebouncedVisibilityState.Initial;
+                state.Popup = StablePopupState.Initial;
             }
 
-            var previous = alertStates.GetValueOrDefault(player.EntityId, ExecuteAlertState.Initial);
-            var decision = ExecuteAlertRules.Observe(
-                previous,
-                player.CurrentHp,
-                player.MaxHp,
-                inRange && actionReady,
-                now);
-            alertStates[player.EntityId] = decision.NextState;
-            if (decision.TriggerFlash) flashSlots.Add(EnemySlotRules.Label(slot));
-            if (!decision.ShowLabel) continue;
+            if (!player.IsTargetable || !ExecuteThreshold.HasValidHp(player.CurrentHp, player.MaxHp)) continue;
+            validEnemySlots++;
 
-            snapshots.Add(new EnemyExecuteSnapshot(
+            if (metadata.GuardVerified && TryGetGuardRemainingMilliseconds(player, out var guardRemaining))
+            {
+                state.Guard = GuardCooldownRules.ObserveStatus(state.Guard, now, guardRemaining);
+            }
+
+            if (!metadata.GuardVerified)
+            {
+                state.Guard = GuardCooldownRules.HardReset();
+            }
+
+            var plausibleMp = player.MaxMp > 0 && player.CurrentMp <= player.MaxMp;
+            var trustedMp = plausibleMp && (player.CurrentMp > 0 || state.LowMp.HasTrustedSample);
+            state.LowMp = metadata.RecuperateVerified
+                ? LowMpRules.Observe(
+                    state.LowMp,
+                    (int)Math.Min(player.CurrentMp, int.MaxValue),
+                    trustedMp,
+                    now)
+                : LowMpRules.Observe(state.LowMp, 0, false, now, hardReset: true);
+
+            var belowHalf = ExecuteThreshold.IsBelowHalf(player.CurrentHp, player.MaxHp);
+            var inRange = false;
+            if (seitonResourceReady && belowHalf)
+            {
+                inRange = SeitonReadinessProbe.HasRangeAndLineOfSight(
+                    localPlayer,
+                    player,
+                    seitonActionId,
+                    out _);
+                if (inRange) inRangeSlots++;
+            }
+
+            var rawSeitonEligible = seitonResourceReady && belowHalf && inRange;
+            state.SeitonVisibility = DebouncedVisibilityRules.Observe(
+                state.SeitonVisibility,
+                inRange,
+                now,
+                hardReset: !seitonResourceReady || !belowHalf);
+            var showSeiton = state.SeitonVisibility.IsVisible;
+            if (showSeiton) seitonSlots++;
+
+            var rearmPopup = !seitonResourceReady ||
+                             ExecuteThreshold.IsAtOrAboveRearm(player.CurrentHp, player.MaxHp);
+            var popupDecision = StablePopupRules.Observe(
+                state.Popup,
+                rawSeitonEligible,
+                rearmPopup,
+                now,
+                hardReset: !isNinja || !metadata.SeitonVerified);
+            state.Popup = popupDecision.NextState;
+            if (popupDecision.TriggerPopup)
+            {
+                activePopups.RemoveAll(popup => popup.GameObjectId == player.GameObjectId);
+                var duration = (long)Math.Clamp(configuration.PopupDurationMilliseconds, 300f, 2000f);
+                activePopups.Add(new SeitonPopupSnapshot(
+                    player.GameObjectId,
+                    slot,
+                    player.ClassJob.IsValid ? player.ClassJob.RowId : 0,
+                    now,
+                    now + duration));
+            }
+
+            var guardUnavailable = metadata.GuardVerified &&
+                                   GuardCooldownRules.ShouldShowCrossedIcon(state.Guard, now);
+            var guardRemainingSeconds = guardUnavailable
+                ? GuardCooldownRules.RemainingMilliseconds(state.Guard, now) / 1000f
+                : 0f;
+            var lowMp = metadata.RecuperateVerified && LowMpRules.ShouldShowCrossedIcon(state.LowMp);
+            if (guardUnavailable) guardUnavailableSlots++;
+            if (lowMp) lowMpSlots++;
+
+            snapshots.Add(new EnemyHudSnapshot(
                 slot,
-                player.Position,
-                player.CurrentHp,
-                player.MaxHp));
-        }
-
-        if (flashSlots.Count > 0)
-        {
-            var duration = (long)Math.Clamp(configuration.FlashDurationMilliseconds, 200f, 1000f);
-            Volatile.Write(ref flash, new FlashSnapshot(now, now + duration, string.Join(" + ", flashSlots)));
-        }
-        else if (Flash.EndsAtMilliseconds <= now)
-        {
-            Volatile.Write(ref flash, FlashSnapshot.None);
+                player.GameObjectId,
+                player.EntityId,
+                player.ClassJob.IsValid ? player.ClassJob.RowId : 0,
+                showSeiton,
+                guardUnavailable,
+                guardRemainingSeconds,
+                lowMp,
+                player.CurrentMp,
+                player.MaxMp));
         }
 
         snapshots.Sort(static (left, right) => left.Slot.CompareTo(right.Slot));
+        activePopups.Sort(static (left, right) => left.Slot.CompareTo(right.Slot));
         Interlocked.Exchange(ref enemies, snapshots.ToArray());
+        Interlocked.Exchange(ref popups, activePopups.ToArray());
         Volatile.Write(ref diagnostics, new TrackerDiagnostics(
             true,
-            true,
-            true,
+            metadata.SeitonVerified,
+            metadata.GuardVerified,
+            metadata.RecuperateVerified,
+            isNinja,
             true,
             clientState.IsPvP,
             clientState.TerritoryType,
@@ -243,19 +314,56 @@ internal sealed class ExecuteTracker : IDisposable
             resolvedSlots,
             validEnemySlots,
             inRangeSlots,
-            readySlots,
-            snapshots.Count,
-            resolvedSeitonActionId,
-            Flash.EndsAtMilliseconds > now));
+            seitonSlots,
+            guardUnavailableSlots,
+            lowMpSlots,
+            activePopups.Count,
+            seitonActionId));
+    }
+
+    private static bool TryGetGuardRemainingMilliseconds(
+        IPlayerCharacter player,
+        out long remainingMilliseconds)
+    {
+        var bestRemaining = 0f;
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId is not (EnemyCombatConstants.GuardStatusId or EnemyCombatConstants.GuardStatusAlternateId) ||
+                !float.IsFinite(status.RemainingTime) ||
+                status.RemainingTime <= 0f)
+            {
+                continue;
+            }
+
+            bestRemaining = Math.Max(bestRemaining, status.RemainingTime);
+        }
+
+        if (bestRemaining <= 0f)
+        {
+            remainingMilliseconds = 0;
+            return false;
+        }
+
+        remainingMilliseconds = (long)Math.Round(
+            Math.Clamp(bestRemaining, 0f, EnemyCombatConstants.GuardDurationSeconds) * 1000f);
+        return true;
     }
 
     private void ResetRuntime()
     {
-        alertStates.Clear();
+        runtimeStates.Clear();
         Interlocked.Exchange(ref enemies, []);
-        Volatile.Write(ref flash, FlashSnapshot.None);
+        Interlocked.Exchange(ref popups, []);
     }
 
     private static bool IsNetworkEntityId(uint entityId) => entityId is not 0 and not 0xE0000000;
 
+    private sealed class EnemyRuntimeState
+    {
+        public GuardCooldownState Guard { get; set; } = GuardCooldownState.Initial;
+        public LowMpState LowMp { get; set; } = LowMpState.Initial;
+        public DebouncedVisibilityState SeitonVisibility { get; set; } = DebouncedVisibilityState.Initial;
+        public StablePopupState Popup { get; set; } = StablePopupState.Initial;
+        public bool WasDead { get; set; }
+    }
 }
