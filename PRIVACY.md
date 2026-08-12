@@ -106,7 +106,7 @@ Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the Near Assist opt-in/search/preferences,
 target-highlight settings, and the Purify opt-in/held-key/per-debuff controls.
-Configuration schema 10 does not save observed actors, targets, combat events,
+Configuration schema 11 does not save observed actors, targets, combat events,
 status timers, or key state.
 
 The integrated focus preset does not read, import, modify, or delete standalone

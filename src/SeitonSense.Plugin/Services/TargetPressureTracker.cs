@@ -65,6 +65,7 @@ internal sealed class TargetPressureTracker : IDisposable
     internal TargetPressureRuntimeSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal bool IsActive => Snapshot.Active;
     internal TargetPressureDiagnostics Diagnostics => Volatile.Read(ref diagnostics);
+    internal int VerifiedProtectionStatusCount => verifiedProtectionStatusIds.Count;
 
     internal void Start()
     {

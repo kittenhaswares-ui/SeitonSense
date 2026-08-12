@@ -609,6 +609,16 @@ if ($ambiguousWardNames.Count -gt 0 -or $ccProtectionKind -match '\b(SingleHitWa
 
 $overlay = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
 Assert-Literals $overlay @(
+    'DrawCcProtectionEmblem(anchor, activeProtections, now)',
+    'OrderByDescending(static candidate => candidate.ExpiresAtMilliseconds)',
+    'DrawStaticCcChevrons',
+    'if (finalRequiredHeight > availableHeight) return',
+    'new Vector4(1f, 0.18f, 0.22f, 1f)',
+    'Pack(new Vector4(1f, 0.07f, 0.1f, 1f))',
+    'private static Vector2 PixelSnap',
+    'CcProtectionPreviewEnabled'
+) 'Static crossed-CC native-nameplate protection emblem'
+Assert-Literals $overlay @(
     'DrawLiveSeitonDecisionStack',
     'MergeLiveSeitonCards',
     'BuildCenteredOffsets',
@@ -800,7 +810,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 10',
+    'public int Version { get; set; } = 11',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -822,8 +832,11 @@ Assert-Literals $configuration @(
     'ShowCcProtection = true',
     'MchLimitBreakSoundEnabled = true',
     'MchLimitBreakSoundId = 6',
+    'if (Version < 11)',
+    'CcProtectionEmblemScale = 1f',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
-    'Math.Clamp(MchLimitBreakSoundId, 1, 16)'
+    'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
+    'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f'
 ) 'Held-key, target-highlight, Near Assist, pressure, immunity, and warning configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
@@ -843,4 +856,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.6.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one bounded target-only detour without live macro-line timing dependence, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.6.0.2 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one bounded target-only detour without live macro-line timing dependence, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist rendered in a static crossed-CC native-nameplate emblem, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."

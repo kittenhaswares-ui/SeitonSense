@@ -3,6 +3,7 @@ using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 using SeitonSense.Plugin.Services;
 using SeitonSense.Plugin.UI;
@@ -308,6 +309,7 @@ public sealed class Plugin : IDalamudPlugin
             case "hide":
                 configuration.Enabled = false;
                 overlay.PreviewEnabled = false;
+                overlay.CcProtectionPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 break;
             case "preview":
@@ -334,7 +336,9 @@ public sealed class Plugin : IDalamudPlugin
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
-                    $"pressure[{pressureTracker.Diagnostics.ToChatLine()}]");
+                    $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
+                    $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
+                    $"{CcProtectionStatusCatalog.Definitions.Count}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -344,6 +348,7 @@ public sealed class Plugin : IDalamudPlugin
             case "reset":
                 configuration.ResetToDefaults();
                 overlay.PreviewEnabled = false;
+                overlay.CcProtectionPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
