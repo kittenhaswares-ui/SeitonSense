@@ -30,6 +30,7 @@ internal sealed class TargetHighlightRenderer
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
     private readonly ExecuteTracker tracker;
+    private readonly TargetPressureTracker pressureTracker;
 
     public TargetHighlightRenderer(
         PluginConfiguration configuration,
@@ -39,7 +40,8 @@ internal sealed class TargetHighlightRenderer
         ITargetManager targetManager,
         IGameGui gameGui,
         ITextureProvider textureProvider,
-        ExecuteTracker tracker)
+        ExecuteTracker tracker,
+        TargetPressureTracker pressureTracker)
     {
         this.configuration = configuration;
         this.pluginInterface = pluginInterface;
@@ -49,6 +51,7 @@ internal sealed class TargetHighlightRenderer
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
         this.tracker = tracker;
+        this.pressureTracker = pressureTracker;
     }
 
     public void Draw()
@@ -410,12 +413,17 @@ internal sealed class TargetHighlightRenderer
             1.03f * configuredScale,
             new Vector4(1f, 0.98f, 1f, 1f));
 
-        var details = BuildTargetDetails(item, character);
+        var pressure = pressureTracker.Snapshot.Find(target.GameObjectId, target.EntityId);
+        var details = BuildTargetDetails(item, character, pressure);
+        var detailsScale = FitHudTextScale(
+            details,
+            0.78f * configuredScale,
+            Math.Max(1f, bottomRight.X - textLeft - (14f * scale)));
         DrawHudText(
             draw,
             new Vector2(textLeft, topLeft.Y + (64f * scale)),
             details,
-            0.78f * configuredScale,
+            detailsScale,
             new Vector4(0.82f, 0.88f, 0.98f, 1f));
 
         if (character is { MaxHp: > 0 } && item.HpPercent is not null)
@@ -432,13 +440,22 @@ internal sealed class TargetHighlightRenderer
         }
     }
 
-    private static string BuildTargetDetails(TargetHighlightPlanItem item, ICharacter? character)
+    private static string BuildTargetDetails(
+        TargetHighlightPlanItem item,
+        ICharacter? character,
+        TargetPressureOpponentSnapshot? pressure)
     {
-        var details = new List<string>(3);
+        var details = new List<string>(6);
         if (character is { MaxHp: > 0 } && item.HpPercent is not null)
             details.Add($"{character.CurrentHp:N0}/{character.MaxHp:N0}");
 
         if (!string.IsNullOrEmpty(item.DistanceLabel)) details.Add(item.DistanceLabel);
+        if (pressure is { TeamTargetCount: > 0 })
+            details.Add($"P{pressure.TeamTargetCount} TEAM");
+        if (pressure?.HasDirectIncomingIntent == true)
+            details.Add("TARGETING YOU");
+        else if (pressure?.IsIncoming == true)
+            details.Add("RECENT PRESSURE");
 
         return details.Count > 0 ? string.Join("  •  ", details) : "READ-ONLY TARGET HIGHLIGHT";
     }
@@ -451,10 +468,18 @@ internal sealed class TargetHighlightRenderer
         Vector4 color)
     {
         var font = ImGui.GetFont();
-        var fontSize = ImGui.GetFontSize() * Math.Max(0.5f, fontScale);
+        var fontSize = ImGui.GetFontSize() * Math.Max(0.35f, fontScale);
         var shadowOffset = Math.Max(1f, ImGuiHelpers.GlobalScale);
         draw.AddText(font, fontSize, position + new Vector2(shadowOffset), PackColor(new Vector4(0f, 0f, 0f, 1f), 0.98f), text);
         draw.AddText(font, fontSize, position, PackColor(color, 1f), text);
+    }
+
+    private static float FitHudTextScale(string text, float desiredScale, float maximumWidth)
+    {
+        var width = ImGui.CalcTextSize(text).X;
+        if (width <= 0f) return desiredScale;
+        var minimumScale = Math.Min(0.35f, desiredScale);
+        return Math.Clamp(Math.Min(desiredScale, maximumWidth / width), minimumScale, desiredScale);
     }
 
     private bool TryDrawGameIcon(
@@ -567,17 +592,17 @@ internal sealed class TargetHighlightRenderer
             centerDistance,
             localHitboxRadius,
             target.HitboxRadius,
-            ResolveExactEnemySlot(target.GameObjectId));
+            ResolveExactEnemySlot(target.GameObjectId, target.EntityId));
     }
 
-    private int ResolveExactEnemySlot(ulong gameObjectId)
+    private int ResolveExactEnemySlot(ulong gameObjectId, uint entityId)
     {
         if (!tracker.IsActive || !TargetHighlightRules.IsValidGameObjectId(gameObjectId)) return 0;
 
         var slot = 0;
         foreach (var enemy in tracker.Enemies)
         {
-            if (enemy.GameObjectId != gameObjectId) continue;
+            if (enemy.GameObjectId != gameObjectId || enemy.EntityId != entityId) continue;
             if (slot != 0) return 0;
             slot = enemy.Slot;
         }

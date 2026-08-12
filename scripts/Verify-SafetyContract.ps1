@@ -54,10 +54,15 @@ $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
+$machinistLimitBreakWarningSoundPath = Join-Path $pluginServicesRoot 'MachinistLimitBreakWarningSound.cs'
+$targetPressureTrackerPath = Join-Path $pluginServicesRoot 'TargetPressureTracker.cs'
+$targetPressureSnapshotPath = Join-Path $pluginServicesRoot 'TargetPressureSnapshot.cs'
+$ccProtectionMetadataGuardPath = Join-Path $pluginServicesRoot 'CcProtectionMetadataGuard.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
 $targetHighlightPath = Join-Path $pluginUiRoot 'TargetHighlightRenderer.cs'
+$pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
 $allowedUnsafe = @(
     $slotResolverPath,
     $readinessPath,
@@ -65,25 +70,27 @@ $allowedUnsafe = @(
     $inputContextPath,
     $purifyProbePath,
     $nearAssistPath,
-    $machinistLimitBreakCapturePath
+    $machinistLimitBreakCapturePath,
+    $machinistLimitBreakWarningSoundPath,
+    $targetPressureTrackerPath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
 $unexpectedUnsafe = @($unsafeMatches | Where-Object { $allowedUnsafe -notcontains $_.Path })
 if ($unexpectedUnsafe.Count -gt 0) {
     $locations = $unexpectedUnsafe | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Unsafe code is allowed only in the seven narrow probes: $($locations -join ', ')"
+    throw "Unsafe code is allowed only in the nine reviewed native boundaries: $($locations -join ', ')"
 }
 
-# Near Assist owns one target-only action detour. The warning-only MCH capture owns
-# one read-only ActionEffect receive hook. Plugin.cs only constructor-injects interop.
+# Near Assist owns one target-only action detour. The MCH/pressure capture owns one
+# read-only ActionEffect receive hook. Plugin.cs only constructor-injects interop.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
     $_.Path -notin @($pluginPath, $nearAssistPath, $machinistLimitBreakCapturePath)
 })
 if ($unexpectedInterop.Count -gt 0) {
     $locations = $unexpectedInterop | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only Near Assist and the warning-only MCH capture may own native hooks: $($locations -join ', ')"
+    throw "Only Near Assist and the read-only MCH/pressure capture may own native hooks: $($locations -join ', ')"
 }
 $pluginSource = Read-RequiredSource $pluginPath 'Plugin entry point'
 if ([regex]::Matches($pluginSource, '\bIGameInteropProvider\b').Count -ne 1 -or
@@ -150,6 +157,47 @@ if ($unexpectedAction.Count -gt 0) {
     throw "Only EmergencyPurifyProbe and the bounded Near Assist detour may reference UseAction: $($locations -join ', ')"
 }
 
+# Warning audio is restricted to one bounded client-owned chat sound. External audio
+# libraries, audio-file reads, URLs, and any second native sound path fail the build.
+$warningSound = Read-RequiredSource $machinistLimitBreakWarningSoundPath 'Machinist limit-break warning sound'
+Assert-Literals $warningSound @(
+    'ThreatCooldownMilliseconds = 2_000',
+    'PreviewCooldownMilliseconds = 350',
+    'threatToken == 0',
+    'threatToken == lastThreatToken',
+    'lastThreatToken = threatToken',
+    'nextThreatSoundAt = SaturatingAdd(nowMilliseconds, ThreatCooldownMilliseconds)',
+    'soundId is < 1 or > 16',
+    'UIGlobals.PlayChatSoundEffect((uint)soundId)',
+    'MCH warning sound failed closed'
+) 'Bounded MCH warning sound'
+if ([regex]::Matches($warningSound, '\bUIGlobals\.PlayChatSoundEffect\s*\(').Count -ne 1) {
+    throw 'MCH warning sound must contain exactly one client-owned PlayChatSoundEffect call.'
+}
+$consumeThreatToken = [regex]::Match($warningSound, '\blastThreatToken\s*=\s*threatToken\s*;')
+$playThreatSound = [regex]::Match($warningSound, '\breturn\s+TryPlay\s*\(\s*soundId\s*\)\s*;')
+if (-not $consumeThreatToken.Success -or -not $playThreatSound.Success -or
+    $consumeThreatToken.Index -gt $playThreatSound.Index) {
+    throw 'MCH threat sound must consume its one-shot token before the native sound request.'
+}
+if ($warningSound -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
+    throw 'MCH warning audio must never initiate actions or mutate input/targets.'
+}
+$soundApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UIGlobals\.PlayChatSoundEffect|SoundPlayer|MediaPlayer|PlaySound|sndPlaySound|NAudio|FMOD|XAudio2|AudioClient|WaveOut|WasapiOut)\b')
+$unexpectedSoundApis = @($soundApiMatches | Where-Object {
+    $_.Path -ne $machinistLimitBreakWarningSoundPath -or
+    $_.Line -notmatch '\bUIGlobals\.PlayChatSoundEffect\s*\(\s*\(uint\)soundId\s*\)'
+})
+if ($unexpectedSoundApis.Count -gt 0) {
+    $locations = $unexpectedSoundApis | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Only the exact client-owned MCH chat sound call is permitted: $($locations -join ', ')"
+}
+$externalAudioMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(File\.(?:ReadAllBytes(?:Async)?|ReadAllText(?:Async)?|OpenRead|Open)|FileStream|SoundPlayer|MediaPlayer|PlaySound|sndPlaySound|NAudio|FMOD|XAudio2|AudioClient|WaveOut|WasapiOut|DllImport|LibraryImport|NativeLibrary\.Load|Process\.Start)\b|https?://')
+if ($externalAudioMatches.Count -gt 0) {
+    $locations = $externalAudioMatches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "External audio files, URLs, and playback libraries are forbidden: $($locations -join ', ')"
+}
+
 $mchCapture = Read-RequiredSource $machinistLimitBreakCapturePath 'Machinist limit-break capture'
 Assert-Literals $mchCapture @(
     'Hook<ActionEffectHandler.Delegates.Receive>',
@@ -160,11 +208,19 @@ Assert-Literals $mchCapture @(
     'finally',
     'OriginalDisposeSafe',
     'ConcurrentQueue<MachinistLimitBreakWarning>',
-    'MaximumQueuedWarnings = 64'
-) 'Warning-only MCH LB early-marker capture'
-if ([regex]::Matches($mchCapture, '\bOriginalDisposeSafe\s*\(').Count -ne 1 -or
-    $mchCapture -match '\b(UseAction|SetTarget|TargetManager|SendInput|keybd_event)\b') {
-    throw 'MCH LB capture must call its original exactly once and may never initiate an action or change input/targets.'
+    'MaximumQueuedWarnings = 64',
+    'ConcurrentQueue<TargetPressureCaptureEvent>',
+    'MaximumQueuedPressureEvents = 128',
+    'SetPressureLocalEntityId',
+    'TryCapturePressure',
+    'HasHarmfulPressureEffect',
+    'pressureEvent.TargetEntityId != CurrentPressureLocalEntityId'
+) 'Read-only MCH LB and pressure ActionEffect capture'
+if ([regex]::Matches($mchCapture, '\bHookFromAddress\s*\(').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bHook<ActionEffectHandler\.Delegates\.Receive>').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bOriginalDisposeSafe\s*\(').Count -ne 1 -or
+    $mchCapture -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|SetTarget|TargetManager|SendInput|keybd_event|mouse_event)\b') {
+    throw 'MCH/pressure capture must own exactly one ActionEffect hook, call its original exactly once, and never initiate an action or change input/targets.'
 }
 
 $mchMarkerRules = Read-RequiredSource (Join-Path $coreRoot 'MachinistLimitBreakMarkerRules.cs') 'MCH LB marker rules'
@@ -220,19 +276,41 @@ Assert-Literals $nearAssist @(
     'HookFromAddress<ActionManager.Delegates.UseAction>',
     'ActionManager.MemberFunctionPointers.UseAction',
     'NearAssistOneShotRules.Arm',
+    'NearAssistOneShotRules.ArmFallback',
     'NearAssistOneShotRules.Observe',
-    'NearAssistSelectionRules.SelectBestIndex',
     'NearAssistSelectionRules.ClassifyPlayableJob',
+    'NearAssistPressureSelectionRules.SelectBestIndex',
+    'configuration.NearAssistPreferTeamPressure',
     'EnemySlotResolver.Resolve',
     'GetNativeHardTargetId',
     'GetActionInRangeOrLoS',
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
     'SupportedPvPContext.CrystallineConflict',
-    'IsImmediatePvPActionMacroLine',
+    'TokenLifetimeMilliseconds = 750',
+    'TryGetImmediatePvPActionMacroLine',
     '"/pvpac"',
+    '"/pvpaction"',
     '"<t>"',
+    '"<target>"',
+    '"<me>"',
+    '"<self>"',
+    'mode != ActionManager.UseActionMode.Queue',
+    'mode == ActionManager.UseActionMode.None',
+    '!TryGetImmediatePvPActionMacroLine(candidate.ArmMacroLine, out selfCarrier)',
+    'RaptureShellModule.Instance()',
+    'shell->MacroLocked',
+    'shell->MacroCurrentLine <= 0',
+    'currentLine < armMacroLine',
+    'currentLine > armMacroLine + 2',
+    'lineText.TrimStart()',
+    'char.IsWhiteSpace(line[command.Length])',
     'oneShotState = NearAssistOneShotState.Initial',
-    'oneShotState = decision.NextState'
+    'oneShotState = decision.NextState',
+    'token.HasRedirectCandidate',
+    'InvalidCarrierTargetId = 0',
+    'consumedSelfCarrier ? InvalidCarrierTargetId : targetId',
+    'if (!rewritten && consumedSelfCarrier)',
+    'forwardedTargetId = InvalidCarrierTargetId'
 ) 'Near Assist redirector'
 $nearAssistSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistSelectionRules.cs') 'Near Assist smart selection rules'
 Assert-Literals $nearAssistSelection @(
@@ -250,7 +328,7 @@ if ([regex]::Matches($nearAssist, '\buseActionHook!\.Original\s*\(').Count -ne 1
     throw 'Near Assist must call the hook Original exactly once from its detour.'
 }
 if ($nearAssist -match '(?:->|\.)UseAction\s*\(' -or
-    $nearAssist -match '(?-i:\b(UseActionLocation|ExecuteAction|SendAction|ActionQueued|QueuedAction|Enqueue|Dequeue|Retry)\b)' -or
+    $nearAssist -match '(?-i:\b(UseActionLocation|ExecuteAction|SendAction|ActionQueued|QueuedAction|QueueAction|RetryAction|RetryDispatch)\b)' -or
     $nearAssist -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'Near Assist may forward one Original call but must never initiate, retry, queue, or visibly mutate a target.'
 }
@@ -265,8 +343,19 @@ if (-not $consumeState.Success -or -not $originalCall.Success -or $consumeState.
 if ($nearAssist -match '\bCanUseActionOnTarget\s*\(') {
     throw 'Near Assist must not restore the transient target-usability prefilter that defeats native macro queuing.'
 }
-if ($nearAssist -match 'mode\s*==\s*ActionManager\.UseActionMode\.None') {
-    throw 'Near Assist must not treat ambiguous normal-mode hotbar calls as Macro provenance.'
+if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.None').Count -ne 2 -or
+    [regex]::Matches($nearAssist, '\bmode\s*!=\s*ActionManager\.UseActionMode\.Queue').Count -lt 2) {
+    throw 'Near Assist may recognize normal-mode Turbo calls only in its two reviewed mode gates, and Queue must remain rejected.'
+}
+if ($normalizedNearAssist -notmatch '!IsPotentialMacroAction\s*\(\s*actionType\s*,\s*mode\s*\)\s*\|\|\s*!TryGetImmediatePvPActionMacroLine\s*\(\s*candidate\.ArmMacroLine\s*,\s*out selfCarrier\s*\)') {
+    throw 'Near Assist Mode.None support must remain gated by the exact immediate PvP macro-line proof before token consumption.'
+}
+if ($normalizedNearAssist -notmatch 'var isPvPActionCommand = StartsWithCommand\s*\(\s*line\s*,\s*"/pvpac"\s*\)\s*\|\|\s*StartsWithCommand\s*\(\s*line\s*,\s*"/pvpaction"\s*\)\s*;[\s\S]*?var hasCurrentTargetPlaceholder =[\s\S]*?"<t>"[\s\S]*?"<target>"[\s\S]*?var hasSelfCarrierPlaceholder =[\s\S]*?"<me>"[\s\S]*?"<self>"[\s\S]*?selfCarrier = isPvPActionCommand && hasSelfCarrierPlaceholder && !hasCurrentTargetPlaceholder; return isPvPActionCommand && \(hasCurrentTargetPlaceholder \|\| selfCarrier\)') {
+    throw 'Near Assist macro provenance must be an immediate /pvpac or /pvpaction line with an explicit current-target or self-carrier placeholder.'
+}
+if ($normalizedNearAssist -notmatch 'if \(!rewritten && consumedSelfCarrier\) forwardedTargetId = InvalidCarrierTargetId;' -or
+    $normalizedNearAssist -notmatch 'forwardedTargetId = consumedSelfCarrier \? InvalidCarrierTargetId : targetId;') {
+    throw 'A failed or exceptional self-carrier redirect must be made invalid so the authored <t> fallback can run.'
 }
 
 $slotResolver = Read-RequiredSource $slotResolverPath 'Enemy slot resolver'
@@ -393,6 +482,129 @@ Assert-Literals $tracker @(
 $normalizedTracker = $tracker -replace '\s+', ' '
 if ($normalizedTracker -notmatch 'isWolvesDen\s*\?\s*\(player\.StatusFlags\s*&\s*StatusFlags\.Hostile\)\s*!=\s*0\s*:\s*!isAlly') {
     throw "Wolves' Den must accept the exact hostile duel opponent even when the players stayed in a party."
+}
+
+# The integrated HOWMANY/pressure path may observe exact actor identity, hard/cast
+# targets, and bounded ActionEffect evidence. It must never mutate game state.
+$targetPressureTracker = Read-RequiredSource $targetPressureTrackerPath 'Target pressure tracker'
+$targetPressureSnapshot = Read-RequiredSource $targetPressureSnapshotPath 'Target pressure runtime snapshot'
+$coreTargetPressure = Read-RequiredSource (Join-Path $coreRoot 'TargetPressureSnapshot.cs') 'Target pressure core snapshot'
+$nearAssistPressureSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistPressureSelectionRules.cs') 'Near Assist pressure selection rules'
+$pressureCounter = Read-RequiredSource $pressureCounterPath 'Pressure counter window'
+Assert-Literals $targetPressureTracker @(
+    'UpdateIntervalMilliseconds = 100',
+    'clientState.IsPvPExcludingDen',
+    'configuration.PressureIncludeWolvesDen',
+    'executeTracker.Enemies',
+    'CorePressureSnapshot.Build',
+    'TargetPressureSources.HardTarget',
+    'TargetPressureSources.CastTarget',
+    'TargetPressureSources.RecentHarmfulAction',
+    'TargetPressureSources.MachinistLimitBreakEarlyMarker',
+    'ResolveNativeHardTarget',
+    'native->EntityId != player.EntityId',
+    'GetTargetId().ObjectId',
+    'Snapshot.Find(gameObjectId, entityId)',
+    'CcProtectionStatusCatalog.BuildIndicators',
+    'indicator.StatusId is 3054 or 3673 ? 3054u : indicator.StatusId',
+    'now - state.LastSeenAtMilliseconds >= ProtectionMissingGraceMilliseconds'
+) 'Read-only target pressure tracker'
+Assert-Literals $coreTargetPressure @(
+    'TargetPressureSources.HardTarget',
+    'TargetPressureSources.CastTarget',
+    'TargetPressureSources.RecentHarmfulAction',
+    'TargetPressureSources.MachinistLimitBreakEarlyMarker',
+    'ambiguousEnemyIdentities.Contains(observation.Actor)',
+    'observation.HardTarget == localPlayer',
+    'observation.CastTarget == localPlayer',
+    'ally.HardTarget is { } hardTarget',
+    'enemies.ContainsKey(ally.HardTarget!.Value)',
+    'counts[pair.Value] = counts.GetValueOrDefault(pair.Value) + 1'
+) 'Exact-identity target pressure aggregation'
+Assert-Literals $nearAssistPressureSelection @(
+    'if (!followTeamPressure)',
+    'NearAssistSelectionRules.SelectBestIndex',
+    'RolePreferenceWindowYalms',
+    'candidate.AllyTargetCount > current.AllyTargetCount',
+    'candidate.ExactEnemyTarget.IsValid'
+) 'Optional Near Assist pressure preference'
+Assert-Literals $pressureCounter @(
+    'tracker.Snapshot.Opponents.Where',
+    'TargetPressureEvidence',
+    'opponent.IsIncoming'
+) 'Read-only pressure counter'
+Assert-Literals $targetPressureSnapshot @(
+    'TargetPressureEvidence IncomingEvidence',
+    'int TeamTargetCount',
+    'IncomingEvidence != TargetPressureEvidence.None'
+) 'Immutable target pressure runtime snapshot'
+$pressureReadOnlySources = @(
+    $targetPressureTracker,
+    $targetPressureSnapshot,
+    $coreTargetPressure,
+    $nearAssistPressureSelection,
+    $pressureCounter
+) -join "`n"
+if ($pressureReadOnlySources -match '\b(ActionManager|UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RaptureShellModule|HookFromAddress|Hook<)\b') {
+    throw 'Integrated pressure tracking and display must remain read-only and hook-free.'
+}
+if ($targetPressureTracker -match '->\s*[A-Za-z_]\w*\s*=(?!=)' -or
+    $targetPressureTracker -match '\b(Marshal\.Write|Unsafe\.Write|MemoryMarshal\.Write)\b') {
+    throw 'The target-pressure native boundary may validate and read actor identity, but may never write native memory.'
+}
+$missingGrace = [regex]::Match($targetPressureTracker, '\bProtectionMissingGraceMilliseconds\s*=\s*(?<Value>\d+)\s*;')
+if (-not $missingGrace.Success -or
+    [int]$missingGrace.Groups['Value'].Value -lt 100 -or
+    [int]$missingGrace.Groups['Value'].Value -gt 250) {
+    throw 'CC-protection missing-frame grace must stay narrowly bounded between 100 and 250 milliseconds.'
+}
+
+# Full CC immunity is an exact metadata-verified allowlist. One-hit/ambiguous
+# wards are deliberately excluded rather than being presented as full immunity.
+$ccProtectionCatalog = Read-RequiredSource (Join-Path $coreRoot 'CcProtectionStatusCatalog.cs') 'CC protection catalog'
+$ccProtectionKind = Read-RequiredSource (Join-Path $coreRoot 'CcProtectionKind.cs') 'CC protection kinds'
+$ccProtectionMetadata = Read-RequiredSource $ccProtectionMetadataGuardPath 'CC protection metadata guard'
+Assert-Literals $ccProtectionCatalog @(
+    'new(3054, "Guard", 214890, CcProtectionKind.Guard, 4.25f',
+    'new(3673, "Guard", 214715, CcProtectionKind.Guard, 4.25f',
+    'new(3248, "Resilience", 214891, CcProtectionKind.FullImmunity, 2.25f',
+    'new(1303, "Inner Release", 212556, CcProtectionKind.FullImmunity, 15.25f',
+    'new(1320, "Meikyo Shisui", 214955, CcProtectionKind.FullImmunity, 3.25f',
+    'new(4096, "Hardened Scales", 214992, CcProtectionKind.FullImmunity, 4.25f',
+    'new(4477, "Swift", 216678, CcProtectionKind.FullImmunity, 4.25f',
+    '!float.IsFinite(observation.RemainingTime)',
+    'observation.RemainingTime > entry.Definition.MaximumRemainingTime'
+) 'Exact full CC-protection catalog'
+Assert-Literals $ccProtectionMetadata @(
+    'ClientLanguage.English',
+    'row.Value.Icon == definition.IconId',
+    'row.Value.StatusCategory == 1',
+    '!row.Value.CanDispel',
+    '!row.Value.IsPermanent',
+    'definition.ExpectedDescriptionFragment',
+    'verified.Clear()'
+) 'Fail-closed CC-protection metadata validation'
+Assert-Literals $targetPressureTracker @(
+    '1303 => jobId == 21',
+    '1320 => jobId == 34',
+    '4096 => jobId == 41',
+    '4477 => isLargeScalePvP'
+) 'Job- and mode-scoped CC protections'
+$catalogDefinitions = [regex]::Matches(
+    $ccProtectionCatalog,
+    '(?m)^\s*new\s*\(\s*(?<Id>\d+)\s*,\s*"(?<Name>[^"]+)"')
+$catalogIds = @($catalogDefinitions | ForEach-Object { [uint]$_.Groups['Id'].Value } | Sort-Object)
+$expectedCatalogIds = @(1303u, 1320u, 3054u, 3248u, 3673u, 4096u, 4477u)
+if ($ccProtectionCatalog -match '\bnew\s+CcProtectionDefinition\s*\(' -or
+    $catalogDefinitions.Count -ne $expectedCatalogIds.Count -or
+    ($catalogIds -join ',') -ne ($expectedCatalogIds -join ',')) {
+    throw "CC protection catalog must contain only the seven reviewed full-protection statuses; found $($catalogIds -join ',')."
+}
+$ambiguousWardNames = @($catalogDefinitions | Where-Object {
+    $_.Groups['Name'].Value -in @('Aquaveil', "The Warden's Paean", 'Seraph Flight')
+})
+if ($ambiguousWardNames.Count -gt 0 -or $ccProtectionKind -match '\b(SingleHitWard|OneHitWard|ReactiveWard)\b') {
+    throw 'Aquaveil, Warden''s Paean, Seraph Flight, and other one-hit wards must remain outside the full-immunity catalog.'
 }
 
 $overlay = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
@@ -588,7 +800,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 9',
+    'public int Version { get; set; } = 10',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -602,8 +814,17 @@ Assert-Literals $configuration @(
     'NearAssistPreferDamageRoles = true',
     'if (Version < 9)',
     'WarnMarksmanSpite = true',
-    'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)'
-) 'Held-key, target-highlight, and Near Assist configuration migration'
+    'if (Version < 10)',
+    'NearAssistPreferTeamPressure = false',
+    'ShowPressureCounter = true',
+    'ShowIncomingPressureOnNameplates = true',
+    'ShowTeamPressureOnNameplates = true',
+    'ShowCcProtection = true',
+    'MchLimitBreakSoundEnabled = true',
+    'MchLimitBreakSoundId = 6',
+    'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
+    'Math.Clamp(MchLimitBreakSoundId, 1, 16)'
+) 'Held-key, target-highlight, Near Assist, pressure, immunity, and warning configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -622,4 +843,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.5.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one consumed target-only action detour, MCH LB capture is warning-only, target displays remain read-only, and one physical input generation still permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.6.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one immediate-macro-proven target-only detour, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."

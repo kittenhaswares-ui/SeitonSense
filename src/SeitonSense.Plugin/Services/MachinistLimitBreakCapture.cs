@@ -15,21 +15,35 @@ internal readonly record struct MachinistLimitBreakWarning(
     uint GlobalSequence,
     ushort SourceSequence);
 
+internal readonly record struct TargetPressureCaptureEvent(
+    long ObservedAtMilliseconds,
+    uint CasterEntityId,
+    uint TargetEntityId,
+    TargetPressureEvidence Evidence,
+    uint GlobalSequence,
+    ushort SourceSequence);
+
 internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 {
     private const int EffectSlotsPerTarget = 8;
     private const int MaximumQueuedWarnings = 64;
+    private const int MaximumQueuedPressureEvents = 128;
+    private const int MaximumTargetsPerAction = 32;
 
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
     private readonly ConcurrentQueue<MachinistLimitBreakWarning> pendingWarnings = new();
+    private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
 
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
-    private int localEntityIdBits;
+    private int machinistLocalEntityIdBits;
+    private int pressureLocalEntityIdBits;
     private int queuedWarningCount;
+    private int queuedPressureEventCount;
     private int captureBlocked = 1;
     private long captureErrors;
     private long droppedWarnings;
+    private long droppedPressureEvents;
     private bool disposed;
 
     public MachinistLimitBreakCapture(IGameInteropProvider interop, IPluginLog log)
@@ -39,10 +53,13 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     }
 
     public bool IsRunning { get; private set; }
-    public uint CurrentLocalEntityId => unchecked((uint)Volatile.Read(ref localEntityIdBits));
+    public uint CurrentMachinistLocalEntityId => unchecked((uint)Volatile.Read(ref machinistLocalEntityIdBits));
+    public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
     public int QueueDepth => Math.Max(0, Volatile.Read(ref queuedWarningCount));
+    public int PressureQueueDepth => Math.Max(0, Volatile.Read(ref queuedPressureEventCount));
     public long CaptureErrors => Interlocked.Read(ref captureErrors);
     public long DroppedWarnings => Interlocked.Read(ref droppedWarnings);
+    public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
 
     public void Start()
     {
@@ -67,13 +84,22 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         }
     }
 
-    public void SetLocalEntityId(uint entityId)
+    public void SetMachinistLocalEntityId(uint entityId)
     {
         var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
         var previous = unchecked((uint)Interlocked.Exchange(
-            ref localEntityIdBits,
+            ref machinistLocalEntityIdBits,
             unchecked((int)normalized)));
         if (previous != normalized) ClearWarnings();
+    }
+
+    public void SetPressureLocalEntityId(uint entityId)
+    {
+        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
+        var previous = unchecked((uint)Interlocked.Exchange(
+            ref pressureLocalEntityIdBits,
+            unchecked((int)normalized)));
+        if (previous != normalized) ClearPressureEvents();
     }
 
     public bool TryDequeue(out MachinistLimitBreakWarning warning)
@@ -83,10 +109,23 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return true;
     }
 
+    public bool TryDequeuePressure(out TargetPressureCaptureEvent pressureEvent)
+    {
+        if (!pendingPressureEvents.TryDequeue(out pressureEvent)) return false;
+        Interlocked.Decrement(ref queuedPressureEventCount);
+        return true;
+    }
+
     public void ClearWarnings()
     {
         while (pendingWarnings.TryDequeue(out _))
             Interlocked.Decrement(ref queuedWarningCount);
+    }
+
+    public void ClearPressureEvents()
+    {
+        while (pendingPressureEvents.TryDequeue(out _))
+            Interlocked.Decrement(ref queuedPressureEventCount);
     }
 
     public void Dispose()
@@ -94,10 +133,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (disposed) return;
         disposed = true;
         Volatile.Write(ref captureBlocked, 1);
-        Interlocked.Exchange(ref localEntityIdBits, 0);
+        Interlocked.Exchange(ref machinistLocalEntityIdBits, 0);
+        Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
         actionEffectHook?.Dispose();
         IsRunning = false;
         ClearWarnings();
+        ClearPressureEvents();
     }
 
     private void ActionEffectDetour(
@@ -108,11 +149,15 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         ActionEffectHandler.TargetEffects* effects,
         GameObjectId* targetEntityIds)
     {
-        MachinistLimitBreakWarning? captured = null;
+        MachinistLimitBreakWarning? capturedWarning = null;
+        TargetPressureCaptureEvent? capturedPressure = null;
         try
         {
             if (Volatile.Read(ref captureBlocked) == 0)
-                captured = TryCapture(casterEntityId, header, effects, targetEntityIds);
+            {
+                capturedWarning = TryCaptureMachinistWarning(casterEntityId, header, effects, targetEntityIds);
+                capturedPressure = TryCapturePressure(casterEntityId, header, effects, targetEntityIds);
+            }
         }
         catch (Exception exception)
         {
@@ -131,16 +176,17 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                 targetEntityIds);
         }
 
-        if (captured is { } warning) Enqueue(warning);
+        if (capturedWarning is { } warning) Enqueue(warning);
+        if (capturedPressure is { } pressure) EnqueuePressure(pressure);
     }
 
-    private MachinistLimitBreakWarning? TryCapture(
+    private MachinistLimitBreakWarning? TryCaptureMachinistWarning(
         uint casterEntityId,
         ActionEffectHandler.Header* header,
         ActionEffectHandler.TargetEffects* effects,
         GameObjectId* targetEntityIds)
     {
-        var localEntityId = CurrentLocalEntityId;
+        var localEntityId = CurrentMachinistLocalEntityId;
         if (!IsNetworkEntityId(localEntityId) ||
             !IsNetworkEntityId(casterEntityId) ||
             casterEntityId == localEntityId ||
@@ -182,11 +228,58 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             header->SourceSequence);
     }
 
+    private TargetPressureCaptureEvent? TryCapturePressure(
+        uint casterEntityId,
+        ActionEffectHandler.Header* header,
+        ActionEffectHandler.TargetEffects* effects,
+        GameObjectId* targetEntityIds)
+    {
+        var localEntityId = CurrentPressureLocalEntityId;
+        if (!IsNetworkEntityId(localEntityId) ||
+            !IsNetworkEntityId(casterEntityId) ||
+            casterEntityId == localEntityId ||
+            header == null ||
+            effects == null ||
+            targetEntityIds == null ||
+            header->NumTargets is 0 or > MaximumTargetsPerAction)
+        {
+            return null;
+        }
+
+        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
+        for (var index = 0; index < header->NumTargets; index++)
+        {
+            if (targetEntityIds[index].ObjectId != localEntityId) continue;
+
+            var evidence = HasHarmfulPressureEffect(&effects[index])
+                ? TargetPressureEvidence.RecentHarmfulAction
+                : TargetPressureEvidence.None;
+            if (actionId == EnemyCombatConstants.MarksmanSpiteActionId &&
+                header->NumTargets == 1 &&
+                effects[index].Effects[0].Type == 0x1B &&
+                HasOnlyEmptyAdditionalEffects(effects[index].Effects))
+            {
+                evidence |= TargetPressureEvidence.MachinistLimitBreakMarker;
+            }
+
+            if (evidence == TargetPressureEvidence.None) return null;
+            return new TargetPressureCaptureEvent(
+                Environment.TickCount64,
+                casterEntityId,
+                localEntityId,
+                evidence,
+                header->GlobalSequence,
+                header->SourceSequence);
+        }
+
+        return null;
+    }
+
     private void Enqueue(MachinistLimitBreakWarning warning)
     {
         if (disposed ||
             Volatile.Read(ref captureBlocked) != 0 ||
-            warning.TargetEntityId != CurrentLocalEntityId)
+            warning.TargetEntityId != CurrentMachinistLocalEntityId)
         {
             return;
         }
@@ -200,6 +293,47 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         }
 
         pendingWarnings.Enqueue(warning);
+    }
+
+    private void EnqueuePressure(TargetPressureCaptureEvent pressureEvent)
+    {
+        if (disposed ||
+            Volatile.Read(ref captureBlocked) != 0 ||
+            pressureEvent.TargetEntityId != CurrentPressureLocalEntityId)
+        {
+            return;
+        }
+
+        var depth = Interlocked.Increment(ref queuedPressureEventCount);
+        if (depth > MaximumQueuedPressureEvents)
+        {
+            Interlocked.Decrement(ref queuedPressureEventCount);
+            Interlocked.Increment(ref droppedPressureEvents);
+            return;
+        }
+
+        pendingPressureEvents.Enqueue(pressureEvent);
+    }
+
+    private static bool HasHarmfulPressureEffect(ActionEffectHandler.TargetEffects* targetEffects)
+    {
+        var slots = targetEffects->Effects;
+        for (var index = 0; index < slots.Length; index++)
+        {
+            if (slots[index].Type is 1 or 2 or 3 or 5 or 6 or 7 or 74) return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasOnlyEmptyAdditionalEffects(Span<ActionEffectHandler.Effect> effects)
+    {
+        for (var index = 1; index < effects.Length; index++)
+        {
+            if (!IsEmpty(effects[index])) return false;
+        }
+
+        return true;
     }
 
     private static bool IsEmpty(ActionEffectHandler.Effect effect) =>

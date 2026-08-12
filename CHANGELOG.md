@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.6.0.0
+
+- Integrated the useful HOWMANY pressure view into Seiton Sense. The movable
+  counter combines exact enemy hard-target, cast-target, bounded recent harmful
+  action, and early MCH-LB-marker evidence. Its main number now uses an explicit
+  pixel-sized game font for a sharper result, with optional job icons, CC slots,
+  threat colors, background, locking, and click-through.
+- Added enemy-nameplate pressure cues in permanently reserved slots: `P#` is the
+  number of valid allies currently hard-targeting that exact enemy, while
+  `YOU`, `HIT`, and `LB` distinguish direct intent, recent harmful action, and
+  the Marksman's Spite marker aimed at the local player.
+- Added an optional Near Assist team-pressure preference. It ranks pressure
+  inside the existing nearby-candidate window, then retains the normal
+  damage-role/distance preference and original macro fallback. It is off by
+  default.
+- Added stable, emphasized CC-protection icons and remaining-time labels beside
+  native job icons. The exact validated catalog is Guard `3054`/`3673` folded
+  into one family, Resilience `3248`, WAR Inner Release `1303`, SAM Meikyo
+  Shisui `1320`, VPR Hardened Scales `4096`, and large-scale-only Swift `4477`.
+  One-hit, partial, and ambiguous wards are deliberately excluded.
+- Hardened native-nameplate joins with exact game-object plus network-entity
+  identity, fixed indicator slots, stale-identity rejection, a short missing
+  sample grace, and non-drifting absolute status expiry. Active Guard replaces
+  the crossed Guard-cooldown presentation instead of duplicating it.
+- Enlarged the Marksman's Spite warning by default and added a selectable,
+  testable built-in FFXIV sound. A verified threat produces at most one sound
+  attempt; the feature remains warning-only and never presses Guard.
+- Added personal-warning background opacity independent of icon, text, and
+  border opacity, allowing a fully transparent card fill without hiding the
+  warning.
+- Reorganized settings into Overview, Pressure, Warnings, Seiton, Assist,
+  Targets, and Advanced tabs.
+- Updated Near Assist to a 750 ms CC-only token, a 25-yalm default search, and
+  Turbo-compatible exact macro provenance. The recommended targetless macro can
+  use a `<me>`/`<self>` carrier followed by the normal `<t>` line; the compact
+  two-line `<t>` form remains supported. A selected target is not required for
+  a valid carrier redirect attempt. An unredirected carrier, including the
+  no-candidate case, is made invalid so self-targetable hostile skills cannot
+  consume it before the authored `<t>` fallback.
+- Preserved the one-shot Near Assist boundary: one incoming macro action, one
+  possible target-ID replacement, one original game call, no visible target
+  switch, alternate action, generic queued-action mode, or retry. Near Assist
+  remains unavailable in Wolves' Den, Frontline, and Rival Wings.
+- Kept pressure and protection available independently of Near Assist. Wolves'
+  Den warning/protection testing uses the strict duel opponent, with a separate
+  pressure opt-in; pressure and verified protection also support large-scale
+  PvP without CC enemy-slot labels.
+- Extended the fixed current-target information card with team and incoming
+  pressure context while keeping it separate from native nameplates.
+- Bumped the configuration schema to 10. Existing Near Assist distances of 15
+  yalms or less migrate to the new 25-yalm default; new pressure, protection,
+  warning-opacity, and MCH-sound controls receive bounded defaults.
+- Updated privacy documentation for the bounded action-effect pressure observer,
+  exact actor/status data, local built-in sound, and transient macro provenance.
+
 ## 0.5.0.0
 
 - Added an independently configurable, warning-only Marksman's Spite alert.

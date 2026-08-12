@@ -13,36 +13,108 @@ internal sealed class SettingsWindow : Window
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
     private readonly OverlayRenderer overlay;
+    private readonly TargetPressureTracker pressureTracker;
+    private readonly PressureCounterWindow pressureCounter;
 
     public SettingsWindow(
         PluginConfiguration configuration,
         ExecuteTracker tracker,
         PersonalStatusService personalStatus,
-        OverlayRenderer overlay)
+        OverlayRenderer overlay,
+        TargetPressureTracker pressureTracker,
+        PressureCounterWindow pressureCounter)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
         this.tracker = tracker;
         this.personalStatus = personalStatus;
         this.overlay = overlay;
-        Size = new Vector2(640f, 760f);
+        this.pressureTracker = pressureTracker;
+        this.pressureCounter = pressureCounter;
+        Size = new Vector2(700f, 760f);
         SizeCondition = ImGuiCond.FirstUseEver;
     }
 
     public override void Draw()
     {
-        var changed = false;
-
         ImGui.TextColored(new Vector4(0.98f, 0.2f, 0.48f, 1f), "PVP REACTION CUES");
+        ImGui.SameLine();
+        ImGui.TextDisabled("Seiton, pressure, warnings and target clarity in one place");
+
+        var changed = Checkbox(
+            "Enable Seiton Sense",
+            configuration.Enabled,
+            value => configuration.Enabled = value);
+
+        ImGui.Separator();
+        if (ImGui.BeginTabBar("SeitonSenseSettingsTabs"))
+        {
+            if (ImGui.BeginTabItem("Overview"))
+            {
+                changed |= DrawOverviewTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Pressure"))
+            {
+                changed |= DrawPressureTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Warnings"))
+            {
+                changed |= DrawWarningsTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Seiton"))
+            {
+                changed |= DrawSeitonTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Assist"))
+            {
+                changed |= DrawAssistTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Targets"))
+            {
+                changed |= DrawTargetsTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Advanced"))
+            {
+                changed |= DrawAdvancedTab();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+
+        if (changed) configuration.Save();
+    }
+
+    public override void OnClose()
+    {
+        overlay.PreviewEnabled = false;
+        pressureCounter.PreviewEnabled = false;
+    }
+
+    private bool DrawOverviewTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
         ImGui.TextWrapped(
-            "Active for every job in Crystalline Conflict and, while the test option is enabled, Wolves' Den " +
-            "duels. Extra icons are anchored to the game's native job icon above each enemy.");
+            "Seiton Sense combines stable native-nameplate cues, personal warnings, target highlights, " +
+            "pressure information and an optional one-shot Near Assist macro helper.");
         ImGui.TextWrapped(
-            "Ninja additionally gets a persistent, center-adjacent SHIFT + 1-5 cue while a target is " +
-            "inside the verified Seiton window. The short pop is only the entry signal.");
+            "Crystalline Conflict is supported directly. Wolves' Den support is an explicit testing option; " +
+            "Frontline and Rival Wings remain excluded from the original Seiton slot tracker.");
 
         ImGui.Spacing();
-        changed |= Checkbox("Enable Seiton Sense", configuration.Enabled, value => configuration.Enabled = value);
         changed |= Checkbox(
             "Enable Wolves' Den duel testing",
             configuration.EnableWolvesDenTesting,
@@ -50,172 +122,290 @@ internal sealed class SettingsWindow : Window
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "FFXIV's exact hostile duel opponent is shown as synthetic S1, including party-member duels. " +
-            "This is only a visual label; the CC <e1> macro placeholder may not exist in a duel. " +
-            "Frontline and Rival Wings stay excluded.");
+            "This is only a visual label; the CC <e1> macro placeholder may not exist in a duel.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC NEAR ASSIST MACRO (OPT-IN)");
-        changed |= Checkbox(
-            "Enable one-shot /nearassist macro targeting",
-            configuration.EnableNearAssistMacro,
-            value => configuration.EnableNearAssistMacro = value);
-        changed |= Slider(
-            "Maximum distance to ally",
-            configuration.NearAssistMaxAllyDistance,
-            5f,
-            30f,
-            value => configuration.NearAssistMaxAllyDistance = value,
-            "%.0f yalm");
-        changed |= Checkbox(
-            "Smart preference: nearby ranged/caster DPS, then melee DPS",
-            configuration.NearAssistPreferDamageRoles,
-            value => configuration.NearAssistPreferDamageRoles = value);
-        ImGui.TextUnformatted("Macro:");
-        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearassist");
-        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
-        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
-        ImGui.TextDisabled(
-            "Crystalline Conflict only. /nearassist arms one 500 ms token for the immediately following hostile " +
-            "macro action. Smart preference considers only allies whose distance from you is at most the nearest " +
-            "valid candidate's distance plus 8 yalms, " +
-            "then favors ranged/caster DPS, melee DPS, and finally support; disabling it uses strict nearest distance. " +
-            "Only that ally's exact native <e1>-<e5> hard target is considered. Identity plus native range/line-of-sight " +
-            "are checked again for the actual action. If any check fails, the original <t> target is preserved. " +
-            "It never visibly changes your selected target, sends no action by itself, and never retries. Disable " +
-            "the standalone NearAssist plugin before using this command in Seiton Sense; /ssassist is the " +
-            "temporary collision-free alias.");
-        ImGui.PopTextWrapPos();
-
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Focus and current-target highlights", ImGuiTreeNodeFlags.DefaultOpen))
+        ImGui.TextUnformatted("Preview and reset");
+        if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
+            overlay.PreviewEnabled = !overlay.PreviewEnabled;
+        ImGui.SameLine();
+        if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop pressure preview" : "Preview pressure"))
+            pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
+        ImGui.SameLine();
+        if (ImGui.Button("Preview Seiton popup")) overlay.TriggerPreviewPopup();
+        ImGui.SameLine();
+        if (ImGui.Button("Reset defaults"))
         {
-            ImGui.TextWrapped(
-                "Focus Glow is the former Super Focus Glow renderer inside Seiton Sense. Current Target reads " +
-                "only your manually selected hard target; it never selects or changes a target.");
-
-            changed |= Checkbox(
-                "Enable focus-target glow",
-                configuration.EnableFocusGlow,
-                value => configuration.EnableFocusGlow = value);
-            ImGui.SameLine();
-            if (ImGui.Button("Restore focus preset"))
-            {
-                configuration.ApplyFocusGlowPreset();
-                changed = true;
-            }
-
-            changed |= Checkbox(
-                "Focus: hide with game UI",
-                configuration.FocusHideWithGameUi,
-                value => configuration.FocusHideWithGameUi = value);
-            ImGui.SameLine();
-            changed |= Checkbox(
-                "Focus: foreground",
-                configuration.FocusDrawInForeground,
-                value => configuration.FocusDrawInForeground = value);
-
-            if (ImGui.TreeNode("Focus appearance"))
-            {
-                changed |= Checkbox("Focus ground ring", configuration.FocusShowGroundRing, value => configuration.FocusShowGroundRing = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Focus halo", configuration.FocusShowTargetHalo, value => configuration.FocusShowTargetHalo = value);
-                changed |= Checkbox("Focus rotating rays", configuration.FocusShowRays, value => configuration.FocusShowRays = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Focus chevrons", configuration.FocusShowChevron, value => configuration.FocusShowChevron = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Focus label", configuration.FocusShowLabel, value => configuration.FocusShowLabel = value);
-                changed |= Checkbox("Focus rainbow", configuration.FocusRainbowMode, value => configuration.FocusRainbowMode = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Focus reduced motion", configuration.FocusReducedMotion, value => configuration.FocusReducedMotion = value);
-
-                var focusColor = configuration.FocusGlowColor;
-                if (ImGui.ColorEdit4("Focus color", ref focusColor))
-                {
-                    configuration.FocusGlowColor = focusColor;
-                    changed = true;
-                }
-
-                changed |= Slider("Focus intensity", configuration.FocusIntensity, 0.25f, 2.5f, value => configuration.FocusIntensity = value, "%.2f");
-                changed |= Slider("Focus size", configuration.FocusSizeScale, 0.6f, 2f, value => configuration.FocusSizeScale = value, "%.2f x");
-                changed |= Slider("Focus halo radius", configuration.FocusAuraRadius, 24f, 120f, value => configuration.FocusAuraRadius = value, "%.0f px");
-                changed |= Slider("Focus pulse speed", configuration.FocusPulseSpeed, 0.1f, 2f, value => configuration.FocusPulseSpeed = value, "%.2f Hz");
-                changed |= Slider("Focus pulse strength", configuration.FocusPulseAmount, 0f, 0.45f, value => configuration.FocusPulseAmount = value, "%.2f");
-                changed |= Slider("Focus hitbox padding", configuration.FocusGroundPadding, 0f, 4f, value => configuration.FocusGroundPadding = value, "%.2f yalm");
-                changed |= Slider("Focus vertical offset", configuration.FocusVerticalOffset, -1f, 5f, value => configuration.FocusVerticalOffset = value, "%.2f yalm");
-                ImGui.TreePop();
-            }
-
-            ImGui.Spacing();
-            changed |= Checkbox(
-                "Highlight current hard target",
-                configuration.EnableCurrentTargetHighlight,
-                value => configuration.EnableCurrentTargetHighlight = value);
-            ImGui.SameLine();
-            if (ImGui.Button("Restore target preset"))
-            {
-                configuration.ApplyCurrentTargetHighlightPreset();
-                changed = true;
-            }
-
-            changed |= Checkbox(
-                "Current target: PvP only",
-                configuration.CurrentTargetPvPOnly,
-                value => configuration.CurrentTargetPvPOnly = value);
-            ImGui.SameLine();
-            changed |= Checkbox(
-                "Current target: foreground",
-                configuration.CurrentTargetDrawInForeground,
-                value => configuration.CurrentTargetDrawInForeground = value);
-            changed |= Checkbox(
-                "Separate fixed target-information HUD",
-                configuration.ShowCurrentTargetInfoHud,
-                value => configuration.ShowCurrentTargetInfoHud = value);
-
-            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
-            ImGui.TextDisabled(
-                "The target-information HUD is a separate fixed card. Nothing from this module is attached to " +
-                "nameplates, native job icons, native health bars, or Seiton's Guard/MP/Seiton indicator slots.");
-            ImGui.PopTextWrapPos();
-
-            changed |= Slider("Target HUD horizontal position", configuration.CurrentTargetInfoScreenX, 0.02f, 0.98f, value => configuration.CurrentTargetInfoScreenX = value, "%.2f");
-            changed |= Slider("Target HUD vertical position", configuration.CurrentTargetInfoScreenY, 0.02f, 0.98f, value => configuration.CurrentTargetInfoScreenY = value, "%.2f");
-            changed |= Slider("Target HUD scale", configuration.CurrentTargetInfoScale, 0.55f, 1.8f, value => configuration.CurrentTargetInfoScale = value, "%.2f x");
-
-            if (ImGui.TreeNode("Current-target appearance"))
-            {
-                changed |= Checkbox("Target ground ring", configuration.CurrentTargetShowGroundRing, value => configuration.CurrentTargetShowGroundRing = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Target halo", configuration.CurrentTargetShowTargetHalo, value => configuration.CurrentTargetShowTargetHalo = value);
-                changed |= Checkbox("Target rotating rays", configuration.CurrentTargetShowRays, value => configuration.CurrentTargetShowRays = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Target chevrons", configuration.CurrentTargetShowChevron, value => configuration.CurrentTargetShowChevron = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Target label", configuration.CurrentTargetShowLabel, value => configuration.CurrentTargetShowLabel = value);
-                changed |= Checkbox("Target rainbow", configuration.CurrentTargetRainbowMode, value => configuration.CurrentTargetRainbowMode = value);
-                ImGui.SameLine();
-                changed |= Checkbox("Target reduced motion", configuration.CurrentTargetReducedMotion, value => configuration.CurrentTargetReducedMotion = value);
-
-                var targetColor = configuration.CurrentTargetGlowColor;
-                if (ImGui.ColorEdit4("Target color", ref targetColor))
-                {
-                    configuration.CurrentTargetGlowColor = targetColor;
-                    changed = true;
-                }
-
-                changed |= Slider("Target intensity", configuration.CurrentTargetIntensity, 0.25f, 2.5f, value => configuration.CurrentTargetIntensity = value, "%.2f");
-                changed |= Slider("Target size", configuration.CurrentTargetSizeScale, 0.6f, 2f, value => configuration.CurrentTargetSizeScale = value, "%.2f x");
-                changed |= Slider("Target halo radius", configuration.CurrentTargetAuraRadius, 24f, 120f, value => configuration.CurrentTargetAuraRadius = value, "%.0f px");
-                changed |= Slider("Target pulse speed", configuration.CurrentTargetPulseSpeed, 0.1f, 2f, value => configuration.CurrentTargetPulseSpeed = value, "%.2f Hz");
-                changed |= Slider("Target pulse strength", configuration.CurrentTargetPulseAmount, 0f, 0.45f, value => configuration.CurrentTargetPulseAmount = value, "%.2f");
-                changed |= Slider("Target hitbox padding", configuration.CurrentTargetGroundPadding, 0f, 4f, value => configuration.CurrentTargetGroundPadding = value, "%.2f yalm");
-                changed |= Slider("Target vertical offset", configuration.CurrentTargetVerticalOffset, -1f, 5f, value => configuration.CurrentTargetVerticalOffset = value, "%.2f yalm");
-                ImGui.TreePop();
-            }
+            configuration.ResetToDefaults();
+            overlay.PreviewEnabled = false;
+            pressureCounter.PreviewEnabled = false;
+            pressureCounter.ResetWindowPosition();
+            changed = true;
         }
 
+        return changed;
+    }
+
+    private bool DrawPressureTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
+        ImGui.TextWrapped(
+            "Incoming pressure counts enemies currently committed to you. Team pressure shows how many allies " +
+            "are hard-targeting each enemy. Recent harmful actions are kept briefly so the counter stays readable.");
+
+        changed |= Checkbox(
+            "Show incoming-pressure counter",
+            configuration.ShowPressureCounter,
+            value => configuration.ShowPressureCounter = value);
+        changed |= Checkbox(
+            "Lock pressure counter",
+            configuration.PressureLocked,
+            value => configuration.PressureLocked = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Click-through while locked",
+            configuration.PressureClickThroughWhenLocked,
+            value => configuration.PressureClickThroughWhenLocked = value);
+        changed |= Checkbox(
+            "Show counter background",
+            configuration.PressureShowBackground,
+            value => configuration.PressureShowBackground = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Use threat colors",
+            configuration.PressureUseThreatColors,
+            value => configuration.PressureUseThreatColors = value);
+        changed |= Checkbox(
+            "Show attacker job icons",
+            configuration.PressureShowJobIcons,
+            value => configuration.PressureShowJobIcons = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Show CC enemy slots",
+            configuration.PressureShowEnemySlots,
+            value => configuration.PressureShowEnemySlots = value);
+        changed |= Checkbox(
+            "Include Wolves' Den pressure testing",
+            configuration.PressureIncludeWolvesDen,
+            value => configuration.PressureIncludeWolvesDen = value);
+
         ImGui.Separator();
-        ImGui.TextUnformatted("Nameplate indicators");
+        ImGui.TextUnformatted("Counter appearance");
+        changed |= Slider(
+            "Sharp number size",
+            configuration.PressureNumberPixelSize,
+            36f,
+            128f,
+            value => configuration.PressureNumberPixelSize = value,
+            "%.0f px");
+        changed |= Slider(
+            "Job icon size",
+            configuration.PressureIconSize,
+            16f,
+            72f,
+            value => configuration.PressureIconSize = value,
+            "%.0f px");
+        changed |= Slider(
+            "Job icon spacing",
+            configuration.PressureIconSpacing,
+            0f,
+            16f,
+            value => configuration.PressureIconSpacing = value,
+            "%.1f px");
+        changed |= Slider(
+            "Counter background opacity",
+            configuration.PressureBackgroundOpacity,
+            0f,
+            1f,
+            value => configuration.PressureBackgroundOpacity = value,
+            "%.2f");
+        changed |= SliderInt(
+            "Icons per row",
+            configuration.PressureIconsPerRow,
+            1,
+            16,
+            value => configuration.PressureIconsPerRow = value,
+            "%d");
+        changed |= Slider(
+            "Recent-pressure memory",
+            configuration.PressureWindowSeconds,
+            0.5f,
+            8f,
+            value => configuration.PressureWindowSeconds = value,
+            "%.1f s");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Native nameplates");
+        changed |= Checkbox(
+            "Show incoming pressure on nameplates",
+            configuration.ShowIncomingPressureOnNameplates,
+            value => configuration.ShowIncomingPressureOnNameplates = value);
+        changed |= Checkbox(
+            "Show team pressure on enemy nameplates",
+            configuration.ShowTeamPressureOnNameplates,
+            value => configuration.ShowTeamPressureOnNameplates = value);
+        ImGui.TextDisabled(
+            "Hard-target/cast pressure and recent-action pressure are displayed as distinct states; neither " +
+            "changes your selected target.");
+        if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop counter preview" : "Preview counter"))
+            pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
+        ImGui.SameLine();
+        if (ImGui.Button("Reset counter position")) pressureCounter.ResetWindowPosition();
+        ImGui.TextDisabled(pressureTracker.Diagnostics.ToChatLine());
+
+        return changed;
+    }
+
+    private bool DrawWarningsTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Warnings on you");
+        changed |= Checkbox(
+            "Show personal debuff warnings",
+            configuration.ShowPersonalWarnings,
+            value => configuration.ShowPersonalWarnings = value);
+        changed |= Checkbox("Wildfire", configuration.WarnWildfire, value => configuration.WarnWildfire = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Death Warrant / Richtbefehl",
+            configuration.WarnDeathWarrant,
+            value => configuration.WarnDeathWarrant = value);
+        changed |= Checkbox(
+            "Marksman's Spite / MCH LB aimed at you",
+            configuration.WarnMarksmanSpite,
+            value => configuration.WarnMarksmanSpite = value);
+        changed |= Checkbox(
+            "All Purify-removable debuff warnings",
+            configuration.WarnPurifiableCrowdControl,
+            value => configuration.WarnPurifiableCrowdControl = value);
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Warning appearance");
+        changed |= Slider(
+            "Warning horizontal position",
+            configuration.PersonalWarningScreenX,
+            0.05f,
+            0.95f,
+            value => configuration.PersonalWarningScreenX = value,
+            "%.2f");
+        changed |= Slider(
+            "Warning vertical position",
+            configuration.PersonalWarningScreenY,
+            0.08f,
+            0.9f,
+            value => configuration.PersonalWarningScreenY = value,
+            "%.2f");
+        changed |= Slider(
+            "Warning scale",
+            configuration.PersonalWarningScale,
+            0.55f,
+            1.8f,
+            value => configuration.PersonalWarningScale = value,
+            "%.2f x");
+        changed |= Slider(
+            "Warning background opacity",
+            configuration.PersonalWarningBackgroundOpacity,
+            0f,
+            1f,
+            value => configuration.PersonalWarningBackgroundOpacity = value,
+            "%.2f");
+        ImGui.TextDisabled("At 0, the warning text, icon and border remain visible while the card fill disappears.");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Marksman's Spite");
+        changed |= Slider(
+            "MCH LB warning size",
+            configuration.MarksmanSpiteWarningScale,
+            1f,
+            2f,
+            value => configuration.MarksmanSpiteWarningScale = value,
+            "%.2f x");
+        changed |= Checkbox(
+            "Play a sound for a verified MCH LB warning",
+            configuration.MchLimitBreakSoundEnabled,
+            value => configuration.MchLimitBreakSoundEnabled = value);
+        changed |= SliderInt(
+            "MCH warning sound",
+            configuration.MchLimitBreakSoundId,
+            1,
+            16,
+            value => configuration.MchLimitBreakSoundId = value,
+            "Sound %d");
+        if (ImGui.Button("Test MCH warning sound"))
+            personalStatus.PlayMachinistLimitBreakSoundPreview();
+        ImGui.TextDisabled("The alert is warning-only. It never presses Guard or another action.");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Enemy CC protection");
+        changed |= Checkbox(
+            "Show visible CC protection above native nameplates",
+            configuration.ShowCcProtection,
+            value => configuration.ShowCcProtection = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Countdown",
+            configuration.ShowCcProtectionCountdown,
+            value => configuration.ShowCcProtectionCountdown = value);
+        ImGui.TextDisabled(
+            "Uses stable native-nameplate anchors and verified status metadata for Guard, Resilience, " +
+            "SAM, WAR, VPR and large-scale PvP immunity.");
+        ImGui.TextDisabled("Ambiguous one-hit wards are intentionally not labelled as full immunity.");
+
+        ImGui.Spacing();
+        if (ImGui.CollapsingHeader("Advanced: experimental Purify on next key"))
+            changed |= DrawPurifyControls();
+
+        return changed;
+    }
+
+    private bool DrawPurifyControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Use one Purify attempt on the next fresh gameplay key",
+            configuration.ExperimentalPurifyOnNextKey,
+            value => configuration.ExperimentalPurifyOnNextKey = value);
+        changed |= Checkbox(
+            "A held gameplay key may trigger when the debuff appears (includes WASD)",
+            configuration.PurifyOnHeldGameplayKey,
+            value => configuration.PurifyOnHeldGameplayKey = value);
+        ImGui.TextUnformatted("Trigger separately for:");
+        changed |= Checkbox("Stun", configuration.PurifyOnStun, value => configuration.PurifyOnStun = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Heavy", configuration.PurifyOnHeavy, value => configuration.PurifyOnHeavy = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Bind", configuration.PurifyOnBind, value => configuration.PurifyOnBind = value);
+        changed |= Checkbox("Silence", configuration.PurifyOnSilence, value => configuration.PurifyOnSilence = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Deep Freeze",
+            configuration.PurifyOnDeepFreeze,
+            value => configuration.PurifyOnDeepFreeze = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Miracle of Nature",
+            configuration.PurifyOnMiracleOfNature,
+            value => configuration.PurifyOnMiracleOfNature = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Only the exact enabled debuff types can trigger this. By default, an already-held key does not count. " +
+            "Enable the separate held-key option if a physical key pressed before the debuff should count once. " +
+            "ReAction Turbo pulses do not create new physical presses. The original key is not swallowed. Seiton Sense " +
+            "sends one native Purify attempt immediately, and FFXIV decides whether it can queue or execute it. " +
+            "The same physical hold cannot trigger again until released, and there is no retry after rejection. Disable " +
+            "rules in other plugins that rewrite Purify or its target while testing.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawSeitonTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Native nameplate indicators");
         changed |= Checkbox(
             "Seiton-ready icon + S-slot (NIN)",
             configuration.ShowNameplateSeiton,
@@ -251,99 +441,293 @@ internal sealed class SettingsWindow : Window
             configuration.SeitonKeyLabel = keyLabel;
             changed = true;
         }
-        changed |= Slider("Persistent cue scale", configuration.PersistentCueScale, 0.55f, 1.8f, value => configuration.PersistentCueScale = value, "%.2f x");
 
+        changed |= Slider(
+            "Persistent cue scale",
+            configuration.PersistentCueScale,
+            0.55f,
+            1.8f,
+            value => configuration.PersistentCueScale = value,
+            "%.2f x");
         changed |= Checkbox(
             "Entry pop animation",
             configuration.ShowSeitonPopup,
             value => configuration.ShowSeitonPopup = value);
-        changed |= Slider("Popup duration", configuration.PopupDurationMilliseconds, 300f, 2000f, value => configuration.PopupDurationMilliseconds = value, "%.0f ms");
-        changed |= Slider("Entry pop size", configuration.PopupIconSize, 48f, 140f, value => configuration.PopupIconSize = value, "%.0f px");
-        changed |= Slider("Cue horizontal position", configuration.PopupScreenX, 0.05f, 0.95f, value => configuration.PopupScreenX = value, "%.2f");
-        changed |= Slider("Cue vertical position", configuration.PopupScreenY, 0.08f, 0.9f, value => configuration.PopupScreenY = value, "%.2f");
-        changed |= Slider("Cue background", configuration.PopupBackgroundOpacity, 0f, 1f, value => configuration.PopupBackgroundOpacity = value, "%.2f");
+        changed |= Slider(
+            "Popup duration",
+            configuration.PopupDurationMilliseconds,
+            300f,
+            2000f,
+            value => configuration.PopupDurationMilliseconds = value,
+            "%.0f ms");
+        changed |= Slider(
+            "Entry pop size",
+            configuration.PopupIconSize,
+            48f,
+            140f,
+            value => configuration.PopupIconSize = value,
+            "%.0f px");
+        changed |= Slider(
+            "Cue horizontal position",
+            configuration.PopupScreenX,
+            0.05f,
+            0.95f,
+            value => configuration.PopupScreenX = value,
+            "%.2f");
+        changed |= Slider(
+            "Cue vertical position",
+            configuration.PopupScreenY,
+            0.08f,
+            0.9f,
+            value => configuration.PopupScreenY = value,
+            "%.2f");
+        changed |= Slider(
+            "Cue background",
+            configuration.PopupBackgroundOpacity,
+            0f,
+            1f,
+            value => configuration.PopupBackgroundOpacity = value,
+            "%.2f");
+
+        return changed;
+    }
+
+    private bool DrawAssistTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC NEAR ASSIST MACRO (OPT-IN)");
+        changed |= Checkbox(
+            "Enable one-shot /nearassist macro targeting",
+            configuration.EnableNearAssistMacro,
+            value => configuration.EnableNearAssistMacro = value);
+        changed |= Slider(
+            "Maximum distance to ally",
+            configuration.NearAssistMaxAllyDistance,
+            5f,
+            30f,
+            value => configuration.NearAssistMaxAllyDistance = value,
+            "%.0f yalm");
+        changed |= Checkbox(
+            "Smart preference: nearby ranged/caster DPS, then melee DPS",
+            configuration.NearAssistPreferDamageRoles,
+            value => configuration.NearAssistPreferDamageRoles = value);
+        changed |= Checkbox(
+            "Prefer allies attacking the highest team-pressure target",
+            configuration.NearAssistPreferTeamPressure,
+            value => configuration.NearAssistPreferTeamPressure = value);
+        ImGui.TextDisabled(
+            "Team-pressure preference is independent and opt-in. If no valid pressure candidate exists, the " +
+            "normal smart/nearest selection and then your original <t> target remain the fallback.");
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Warnings on you");
-        changed |= Checkbox(
-            "Show personal debuff warnings",
-            configuration.ShowPersonalWarnings,
-            value => configuration.ShowPersonalWarnings = value);
-        changed |= Checkbox(
-            "Wildfire",
-            configuration.WarnWildfire,
-            value => configuration.WarnWildfire = value);
-        ImGui.SameLine();
-        changed |= Checkbox(
-            "Death Warrant / Richtbefehl",
-            configuration.WarnDeathWarrant,
-            value => configuration.WarnDeathWarrant = value);
-        changed |= Checkbox(
-            "Marksman's Spite / MCH LB aimed at you",
-            configuration.WarnMarksmanSpite,
-            value => configuration.WarnMarksmanSpite = value);
-        changed |= Checkbox(
-            "All Purify-removable debuff warnings",
-            configuration.WarnPurifiableCrowdControl,
-            value => configuration.WarnPurifiableCrowdControl = value);
-        ImGui.TextDisabled(
-            "The MCH LB alert is warning-only. It never presses Guard or another action.");
-        changed |= Slider("Warning horizontal position", configuration.PersonalWarningScreenX, 0.05f, 0.95f, value => configuration.PersonalWarningScreenX = value, "%.2f");
-        changed |= Slider("Warning vertical position", configuration.PersonalWarningScreenY, 0.08f, 0.9f, value => configuration.PersonalWarningScreenY = value, "%.2f");
-        changed |= Slider("Warning scale", configuration.PersonalWarningScale, 0.55f, 1.8f, value => configuration.PersonalWarningScale = value, "%.2f x");
-
-        ImGui.Spacing();
-        ImGui.TextColored(new Vector4(1f, 0.7f, 0.12f, 1f), "EXPERIMENTAL PURIFY ON NEXT KEY");
-        changed |= Checkbox(
-            "Use one Purify attempt on the next fresh gameplay key",
-            configuration.ExperimentalPurifyOnNextKey,
-            value => configuration.ExperimentalPurifyOnNextKey = value);
-        changed |= Checkbox(
-            "A held gameplay key may trigger when the debuff appears (includes WASD)",
-            configuration.PurifyOnHeldGameplayKey,
-            value => configuration.PurifyOnHeldGameplayKey = value);
-        ImGui.TextUnformatted("Trigger separately for:");
-        changed |= Checkbox("Stun", configuration.PurifyOnStun, value => configuration.PurifyOnStun = value);
-        ImGui.SameLine();
-        changed |= Checkbox("Heavy", configuration.PurifyOnHeavy, value => configuration.PurifyOnHeavy = value);
-        ImGui.SameLine();
-        changed |= Checkbox("Bind", configuration.PurifyOnBind, value => configuration.PurifyOnBind = value);
-        changed |= Checkbox("Silence", configuration.PurifyOnSilence, value => configuration.PurifyOnSilence = value);
-        ImGui.SameLine();
-        changed |= Checkbox("Deep Freeze", configuration.PurifyOnDeepFreeze, value => configuration.PurifyOnDeepFreeze = value);
-        ImGui.SameLine();
-        changed |= Checkbox(
-            "Miracle of Nature",
-            configuration.PurifyOnMiracleOfNature,
-            value => configuration.PurifyOnMiracleOfNature = value);
+        ImGui.TextUnformatted("Reliable targetless macro with vanilla <t> fallback:");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearassist");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <me>");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only the exact enabled debuff types can trigger this. By default, an already-held key does not count. " +
-            "Enable the separate held-key option if a physical key pressed before the debuff should count once. " +
-            "ReAction Turbo pulses do not create new physical presses. The original key is not swallowed. Seiton Sense " +
-            "sends one native Purify attempt immediately, and FFXIV decides whether it can queue or execute it. " +
-            "The same physical hold cannot trigger again until released, and there is no retry after rejection. Disable " +
-            "rules in other plugins that rewrite Purify or its target while testing.");
+            "Crystalline Conflict only. /nearassist arms one 750 ms token for the immediately following hostile " +
+            "macro action. Smart preference considers only allies whose distance from you is at most the nearest " +
+            "valid candidate's distance plus 8 yalms, then favors ranged/caster DPS, melee DPS, and finally support; " +
+            "disabling it uses strict nearest distance. Only that ally's exact native <e1>-<e5> hard target is " +
+            "considered. The chosen enemy and native range/line-of-sight are checked for the actual action. Your own " +
+            "selected target is not required: the hostile <me> line is a deliberate carrier which Seiton may redirect; " +
+            "if no redirect is possible Seiton invalidates only that carrier attempt, then the following vanilla <t> " +
+            "line remains your fallback. This also prevents self-targetable hostile skills from firing on you. " +
+            "The compact two-line /nearassist + <t> form remains supported when you already have a target. Turbo Hotbar " +
+            "may repeat the authored macro, but Seiton adds no repeat or retry " +
+            "of its own. It never visibly changes your selected target or sends an action by itself. Disable the " +
+            "standalone NearAssist plugin before using this command; /ssassist remains the collision-free alias.");
         ImGui.PopTextWrapPos();
 
-        ImGui.Separator();
-        ImGui.TextUnformatted("Nameplate appearance");
-        changed |= Slider("Extra icon size", configuration.NameplateIconScale, 0.55f, 1.5f, value => configuration.NameplateIconScale = value, "%.2f x native");
-        changed |= Slider("Extra icon spacing", configuration.NameplateIconSpacing, 0f, 12f, value => configuration.NameplateIconSpacing = value, "%.1f px");
-        changed |= Slider("Extra icon background", configuration.NameplateBackgroundOpacity, 0f, 1f, value => configuration.NameplateBackgroundOpacity = value, "%.2f");
+        return changed;
+    }
 
+    private bool DrawTargetsTab()
+    {
+        var changed = false;
         ImGui.Spacing();
-        if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
-            overlay.PreviewEnabled = !overlay.PreviewEnabled;
+        ImGui.TextWrapped(
+            "Focus Glow is the former Super Focus Glow renderer inside Seiton Sense. Current Target reads only " +
+            "your manually selected hard target; it never selects or changes a target.");
+
+        ImGui.TextUnformatted("Focus target");
+        changed |= Checkbox(
+            "Enable focus-target glow",
+            configuration.EnableFocusGlow,
+            value => configuration.EnableFocusGlow = value);
         ImGui.SameLine();
-        if (ImGui.Button("Preview Seiton popup")) overlay.TriggerPreviewPopup();
-        ImGui.SameLine();
-        if (ImGui.Button("Reset defaults"))
+        if (ImGui.Button("Restore focus preset"))
         {
-            configuration.ResetToDefaults();
-            overlay.PreviewEnabled = false;
+            configuration.ApplyFocusGlowPreset();
             changed = true;
         }
+
+        changed |= Checkbox(
+            "Focus: hide with game UI",
+            configuration.FocusHideWithGameUi,
+            value => configuration.FocusHideWithGameUi = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Focus: foreground",
+            configuration.FocusDrawInForeground,
+            value => configuration.FocusDrawInForeground = value);
+        if (ImGui.TreeNode("Focus appearance"))
+        {
+            changed |= DrawFocusAppearance();
+            ImGui.TreePop();
+        }
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Current hard target");
+        changed |= Checkbox(
+            "Highlight current hard target",
+            configuration.EnableCurrentTargetHighlight,
+            value => configuration.EnableCurrentTargetHighlight = value);
+        ImGui.SameLine();
+        if (ImGui.Button("Restore target preset"))
+        {
+            configuration.ApplyCurrentTargetHighlightPreset();
+            changed = true;
+        }
+
+        changed |= Checkbox(
+            "Current target: PvP only",
+            configuration.CurrentTargetPvPOnly,
+            value => configuration.CurrentTargetPvPOnly = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Current target: foreground",
+            configuration.CurrentTargetDrawInForeground,
+            value => configuration.CurrentTargetDrawInForeground = value);
+        changed |= Checkbox(
+            "Separate fixed target-information HUD",
+            configuration.ShowCurrentTargetInfoHud,
+            value => configuration.ShowCurrentTargetInfoHud = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "The target-information HUD is a separate fixed card. Nothing from this module is attached to " +
+            "nameplates, native job icons, native health bars, or Seiton's indicator slots.");
+        ImGui.PopTextWrapPos();
+        changed |= Slider(
+            "Target HUD horizontal position",
+            configuration.CurrentTargetInfoScreenX,
+            0.02f,
+            0.98f,
+            value => configuration.CurrentTargetInfoScreenX = value,
+            "%.2f");
+        changed |= Slider(
+            "Target HUD vertical position",
+            configuration.CurrentTargetInfoScreenY,
+            0.02f,
+            0.98f,
+            value => configuration.CurrentTargetInfoScreenY = value,
+            "%.2f");
+        changed |= Slider(
+            "Target HUD scale",
+            configuration.CurrentTargetInfoScale,
+            0.55f,
+            1.8f,
+            value => configuration.CurrentTargetInfoScale = value,
+            "%.2f x");
+        if (ImGui.TreeNode("Current-target appearance"))
+        {
+            changed |= DrawCurrentTargetAppearance();
+            ImGui.TreePop();
+        }
+
+        return changed;
+    }
+
+    private bool DrawFocusAppearance()
+    {
+        var changed = false;
+        changed |= Checkbox("Focus ground ring", configuration.FocusShowGroundRing, value => configuration.FocusShowGroundRing = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Focus halo", configuration.FocusShowTargetHalo, value => configuration.FocusShowTargetHalo = value);
+        changed |= Checkbox("Focus rotating rays", configuration.FocusShowRays, value => configuration.FocusShowRays = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Focus chevrons", configuration.FocusShowChevron, value => configuration.FocusShowChevron = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Focus label", configuration.FocusShowLabel, value => configuration.FocusShowLabel = value);
+        changed |= Checkbox("Focus rainbow", configuration.FocusRainbowMode, value => configuration.FocusRainbowMode = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Focus reduced motion", configuration.FocusReducedMotion, value => configuration.FocusReducedMotion = value);
+        var focusColor = configuration.FocusGlowColor;
+        if (ImGui.ColorEdit4("Focus color", ref focusColor))
+        {
+            configuration.FocusGlowColor = focusColor;
+            changed = true;
+        }
+
+        changed |= Slider("Focus intensity", configuration.FocusIntensity, 0.25f, 2.5f, value => configuration.FocusIntensity = value, "%.2f");
+        changed |= Slider("Focus size", configuration.FocusSizeScale, 0.6f, 2f, value => configuration.FocusSizeScale = value, "%.2f x");
+        changed |= Slider("Focus halo radius", configuration.FocusAuraRadius, 24f, 120f, value => configuration.FocusAuraRadius = value, "%.0f px");
+        changed |= Slider("Focus pulse speed", configuration.FocusPulseSpeed, 0.1f, 2f, value => configuration.FocusPulseSpeed = value, "%.2f Hz");
+        changed |= Slider("Focus pulse strength", configuration.FocusPulseAmount, 0f, 0.45f, value => configuration.FocusPulseAmount = value, "%.2f");
+        changed |= Slider("Focus hitbox padding", configuration.FocusGroundPadding, 0f, 4f, value => configuration.FocusGroundPadding = value, "%.2f yalm");
+        changed |= Slider("Focus vertical offset", configuration.FocusVerticalOffset, -1f, 5f, value => configuration.FocusVerticalOffset = value, "%.2f yalm");
+        return changed;
+    }
+
+    private bool DrawCurrentTargetAppearance()
+    {
+        var changed = false;
+        changed |= Checkbox("Target ground ring", configuration.CurrentTargetShowGroundRing, value => configuration.CurrentTargetShowGroundRing = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Target halo", configuration.CurrentTargetShowTargetHalo, value => configuration.CurrentTargetShowTargetHalo = value);
+        changed |= Checkbox("Target rotating rays", configuration.CurrentTargetShowRays, value => configuration.CurrentTargetShowRays = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Target chevrons", configuration.CurrentTargetShowChevron, value => configuration.CurrentTargetShowChevron = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Target label", configuration.CurrentTargetShowLabel, value => configuration.CurrentTargetShowLabel = value);
+        changed |= Checkbox("Target rainbow", configuration.CurrentTargetRainbowMode, value => configuration.CurrentTargetRainbowMode = value);
+        ImGui.SameLine();
+        changed |= Checkbox("Target reduced motion", configuration.CurrentTargetReducedMotion, value => configuration.CurrentTargetReducedMotion = value);
+        var targetColor = configuration.CurrentTargetGlowColor;
+        if (ImGui.ColorEdit4("Target color", ref targetColor))
+        {
+            configuration.CurrentTargetGlowColor = targetColor;
+            changed = true;
+        }
+
+        changed |= Slider("Target intensity", configuration.CurrentTargetIntensity, 0.25f, 2.5f, value => configuration.CurrentTargetIntensity = value, "%.2f");
+        changed |= Slider("Target size", configuration.CurrentTargetSizeScale, 0.6f, 2f, value => configuration.CurrentTargetSizeScale = value, "%.2f x");
+        changed |= Slider("Target halo radius", configuration.CurrentTargetAuraRadius, 24f, 120f, value => configuration.CurrentTargetAuraRadius = value, "%.0f px");
+        changed |= Slider("Target pulse speed", configuration.CurrentTargetPulseSpeed, 0.1f, 2f, value => configuration.CurrentTargetPulseSpeed = value, "%.2f Hz");
+        changed |= Slider("Target pulse strength", configuration.CurrentTargetPulseAmount, 0f, 0.45f, value => configuration.CurrentTargetPulseAmount = value, "%.2f");
+        changed |= Slider("Target hitbox padding", configuration.CurrentTargetGroundPadding, 0f, 4f, value => configuration.CurrentTargetGroundPadding = value, "%.2f yalm");
+        changed |= Slider("Target vertical offset", configuration.CurrentTargetVerticalOffset, -1f, 5f, value => configuration.CurrentTargetVerticalOffset = value, "%.2f yalm");
+        return changed;
+    }
+
+    private bool DrawAdvancedTab()
+    {
+        var changed = false;
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Shared native-nameplate appearance");
+        changed |= Slider(
+            "Extra icon size",
+            configuration.NameplateIconScale,
+            0.55f,
+            1.5f,
+            value => configuration.NameplateIconScale = value,
+            "%.2f x native");
+        changed |= Slider(
+            "Extra icon spacing",
+            configuration.NameplateIconSpacing,
+            0f,
+            12f,
+            value => configuration.NameplateIconSpacing = value,
+            "%.1f px");
+        changed |= Slider(
+            "Extra icon background",
+            configuration.NameplateBackgroundOpacity,
+            0f,
+            1f,
+            value => configuration.NameplateBackgroundOpacity = value,
+            "%.2f");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Live diagnostics");
@@ -362,7 +746,7 @@ internal sealed class SettingsWindow : Window
             $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
             $"errors={mchLimitBreak.CaptureErrors}, drops={mchLimitBreak.DroppedWarnings}");
 
-        ImGui.Spacing();
+        ImGui.Separator();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
@@ -372,11 +756,8 @@ internal sealed class SettingsWindow : Window
             "that can initiate an action. Both are disabled by default. Like all third-party modifications, use " +
             "it at your own risk.");
         ImGui.PopTextWrapPos();
-
-        if (changed) configuration.Save();
+        return changed;
     }
-
-    public override void OnClose() => overlay.PreviewEnabled = false;
 
     private static bool Checkbox(string label, bool current, Action<bool> apply)
     {
