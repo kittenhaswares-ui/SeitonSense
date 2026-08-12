@@ -135,6 +135,37 @@ internal static class NearAssistOneShotSelfTests
             "missing candidate carrier guard");
     }
 
+    public static void CarrierIdentityDoesNotDependOnMacroLineTiming()
+    {
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(OwnTargetA, OwnTargetA, EnemyA, (uint)EnemyA),
+            "normal current-target line is not a carrier");
+        True(
+            NearAssistCarrierRules.IsFallbackCarrier(OwnTargetA, EnemyA, EnemyA, (uint)EnemyA),
+            "a concrete enemy-slot carrier differs from the current target");
+        True(
+            NearAssistCarrierRules.IsFallbackCarrier(0, EnemyA, EnemyA, (uint)EnemyA),
+            "enemy-slot carrier works without an own target");
+        True(
+            NearAssistCarrierRules.IsFallbackCarrier(0xE0000000UL, EnemyA, 0xABCDEFUL, (uint)EnemyA),
+            "network entity identity also recognizes the exact e1 carrier");
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(OwnTargetA, 0, EnemyA, (uint)EnemyA),
+            "invalid incoming target is not reclassified");
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(OwnTargetA, 0xE0000000UL, EnemyA, (uint)EnemyA),
+            "native invalid sentinel is not reclassified");
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(OwnTargetA, EnemyB, EnemyA, (uint)EnemyA),
+            "an unrelated changed target is never mistaken for the e1 carrier");
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(EnemyA, EnemyA, EnemyA, (uint)EnemyA),
+            "e1 already selected is ordinary current-target fallback");
+        False(
+            NearAssistCarrierRules.IsFallbackCarrier(0xABCDEFUL, EnemyA, 0xABCDEFUL, (uint)EnemyA),
+            "dual game-object and entity representations still describe the same selected e1 actor");
+    }
+
     public static void ReplacementUsesOnlyTheNewestToken()
     {
         var first = Arm(slot: 2, enemy: EnemyA);

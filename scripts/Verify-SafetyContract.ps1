@@ -287,29 +287,18 @@ Assert-Literals $nearAssist @(
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
     'SupportedPvPContext.CrystallineConflict',
     'TokenLifetimeMilliseconds = 750',
-    'TryGetImmediatePvPActionMacroLine',
-    '"/pvpac"',
-    '"/pvpaction"',
-    '"<t>"',
-    '"<target>"',
-    '"<me>"',
-    '"<self>"',
+    'NearAssistCarrierRules.IsFallbackCarrier',
+    'IsEligibleRedirectAction',
+    'CarrierEnemyEntityId',
+    'CarrierEnemyGameObjectId',
     'mode != ActionManager.UseActionMode.Queue',
     'mode == ActionManager.UseActionMode.None',
-    '!TryGetImmediatePvPActionMacroLine(candidate.ArmMacroLine, out selfCarrier)',
-    'RaptureShellModule.Instance()',
-    'shell->MacroLocked',
-    'shell->MacroCurrentLine <= 0',
-    'currentLine < armMacroLine',
-    'currentLine > armMacroLine + 2',
-    'lineText.TrimStart()',
-    'char.IsWhiteSpace(line[command.Length])',
     'oneShotState = NearAssistOneShotState.Initial',
     'oneShotState = decision.NextState',
     'token.HasRedirectCandidate',
     'InvalidCarrierTargetId = 0',
-    'consumedSelfCarrier ? InvalidCarrierTargetId : targetId',
-    'if (!rewritten && consumedSelfCarrier)',
+    'consumedFallbackCarrier ? InvalidCarrierTargetId : targetId',
+    'if (!rewritten && consumedFallbackCarrier)',
     'forwardedTargetId = InvalidCarrierTargetId'
 ) 'Near Assist redirector'
 $nearAssistSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistSelectionRules.cs') 'Near Assist smart selection rules'
@@ -347,15 +336,26 @@ if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.N
     [regex]::Matches($nearAssist, '\bmode\s*!=\s*ActionManager\.UseActionMode\.Queue').Count -lt 2) {
     throw 'Near Assist may recognize normal-mode Turbo calls only in its two reviewed mode gates, and Queue must remain rejected.'
 }
-if ($normalizedNearAssist -notmatch '!IsPotentialMacroAction\s*\(\s*actionType\s*,\s*mode\s*\)\s*\|\|\s*!TryGetImmediatePvPActionMacroLine\s*\(\s*candidate\.ArmMacroLine\s*,\s*out selfCarrier\s*\)') {
-    throw 'Near Assist Mode.None support must remain gated by the exact immediate PvP macro-line proof before token consumption.'
+if ($nearAssist -match 'RaptureShellModule|MacroLocked|MacroCurrentLine|MacroLineText') {
+    throw 'Near Assist must not restore the live macro-line timing dependency that caused valid Turbo calls to be missed.'
 }
-if ($normalizedNearAssist -notmatch 'var isPvPActionCommand = StartsWithCommand\s*\(\s*line\s*,\s*"/pvpac"\s*\)\s*\|\|\s*StartsWithCommand\s*\(\s*line\s*,\s*"/pvpaction"\s*\)\s*;[\s\S]*?var hasCurrentTargetPlaceholder =[\s\S]*?"<t>"[\s\S]*?"<target>"[\s\S]*?var hasSelfCarrierPlaceholder =[\s\S]*?"<me>"[\s\S]*?"<self>"[\s\S]*?selfCarrier = isPvPActionCommand && hasSelfCarrierPlaceholder && !hasCurrentTargetPlaceholder; return isPvPActionCommand && \(hasCurrentTargetPlaceholder \|\| selfCarrier\)') {
-    throw 'Near Assist macro provenance must be an immediate /pvpac or /pvpaction line with an explicit current-target or self-carrier placeholder.'
+if ($normalizedNearAssist -notmatch 'if \(!rewritten && consumedFallbackCarrier\) forwardedTargetId = InvalidCarrierTargetId;' -or
+    $normalizedNearAssist -notmatch 'forwardedTargetId = consumedFallbackCarrier \? InvalidCarrierTargetId : targetId;') {
+    throw 'A failed or exceptional fallback carrier must be made invalid so the authored <t> fallback can run.'
 }
-if ($normalizedNearAssist -notmatch 'if \(!rewritten && consumedSelfCarrier\) forwardedTargetId = InvalidCarrierTargetId;' -or
-    $normalizedNearAssist -notmatch 'forwardedTargetId = consumedSelfCarrier \? InvalidCarrierTargetId : targetId;') {
-    throw 'A failed or exceptional self-carrier redirect must be made invalid so the authored <t> fallback can run.'
+$nearAssistCarrier = Read-RequiredSource (Join-Path $coreRoot 'NearAssistCarrierRules.cs') 'Near Assist carrier rules'
+Assert-Literals $nearAssistCarrier @(
+    'objectId is not 0 and not InvalidObjectId',
+    'incomingTargetId == carrierEnemyGameObjectId',
+    'incomingTargetId == carrierEnemyEntityId',
+    'currentHardTargetId == carrierEnemyGameObjectId',
+    'currentHardTargetId == carrierEnemyEntityId'
+) 'Near Assist carrier rules'
+if ($normalizedNearAssist -notmatch 'IsEligibleRedirectAction\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*mode\s*\)\s*&&\s*TryConsumeEligibleToken') {
+    throw 'Near Assist must prove a hostile PvP action shape before the one-shot token can be consumed.'
+}
+if ($normalizedNearAssist -notmatch 'action\.IsPvP\s*&&\s*action\.CanTargetHostile\s*&&\s*!action\.TargetArea\s*&&\s*action\.Range > 0') {
+    throw 'Near Assist pre-consumption filtering must reject defensives, non-PvP actions, ground targeting, and zero-range actions.'
 }
 
 $slotResolver = Read-RequiredSource $slotResolverPath 'Enemy slot resolver'
@@ -843,4 +843,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.6.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one immediate-macro-proven target-only detour, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.6.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one bounded target-only detour without live macro-line timing dependence, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."

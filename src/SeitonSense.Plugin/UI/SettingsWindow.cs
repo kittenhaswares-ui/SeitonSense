@@ -521,9 +521,9 @@ internal sealed class SettingsWindow : Window
             "normal smart/nearest selection and then your original <t> target remain the fallback.");
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Reliable targetless macro with vanilla <t> fallback:");
+        ImGui.TextUnformatted("Assist-first macro with vanilla <t> fallback:");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearassist");
-        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <me>");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
@@ -531,10 +531,10 @@ internal sealed class SettingsWindow : Window
             "macro action. Smart preference considers only allies whose distance from you is at most the nearest " +
             "valid candidate's distance plus 8 yalms, then favors ranged/caster DPS, melee DPS, and finally support; " +
             "disabling it uses strict nearest distance. Only that ally's exact native <e1>-<e5> hard target is " +
-            "considered. The chosen enemy and native range/line-of-sight are checked for the actual action. Your own " +
-            "selected target is not required: the hostile <me> line is a deliberate carrier which Seiton may redirect; " +
-            "if no redirect is possible Seiton invalidates only that carrier attempt, then the following vanilla <t> " +
-            "line remains your fallback. This also prevents self-targetable hostile skills from firing on you. " +
+            "considered. The chosen enemy and native range/line-of-sight are checked for the actual action. The <e1> " +
+            "line is only a reliable carrier: Seiton replaces its target with the selected ally's exact e-slot. If no " +
+            "redirect is possible, only that carrier attempt is invalidated and the following vanilla <t> line remains " +
+            "your fallback. This also works when you started without an own target. " +
             "The compact two-line /nearassist + <t> form remains supported when you already have a target. Turbo Hotbar " +
             "may repeat the authored macro, but Seiton adds no repeat or retry " +
             "of its own. It never visibly changes your selected target or sends an action by itself. Disable the " +

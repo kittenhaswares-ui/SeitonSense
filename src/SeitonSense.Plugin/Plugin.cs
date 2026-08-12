@@ -148,7 +148,7 @@ public sealed class Plugin : IDalamudPlugin
             AliasCommand,
             new CommandInfo(OnCommand) { AllowedInMacros = true, HelpMessage = help });
         const string nearAssistHelp =
-            "CC-only one-shot macro assist. For targetless fallback use /nearassist, then the same /pvpac with <me>, then <t>. Turbo is supported.";
+            "CC-only one-shot assist. Macro: /nearassist, then /pvpac with <e1>, then the same action with <t>. Turbo is supported.";
         nearAssistCommandRegistered = commandManager.AddHandler(
             NearAssistCommand,
             new CommandInfo(OnNearAssistCommand)

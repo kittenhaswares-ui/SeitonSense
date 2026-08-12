@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0.1
+
+- Simplified Near Assist after live testing showed that FFXIV and Turbo Hotbar
+  can advance or hide the macro-line text before the native action call reaches
+  Seiton Sense. The command now arms the bounded one-shot directly; the next
+  supported hostile PvP action consumes it without a second fragile macro-line
+  proof.
+- Changed the recommended targetless macro to an intuitive `<e1>` carrier
+  followed by the normal `<t>` line. The carrier is redirected to the selected
+  nearby ally's actual S1-S5 target, not necessarily S1. Failed carriers are
+  invalidated so the authored `<t>` fallback can run.
+- Added exact native hard-target matching through both game-object and network
+  entity identity. Only a verified hostile PvP action can consume the token, so
+  Guard, Purify, Recuperate, and other defensive calls cannot steal or be
+  invalidated by Near Assist. The E1 carrier is recognized through exact E1
+  identity rather than treating every changed target as a carrier. Near Assist
+  still performs one target-ID substitution at most, calls the original game
+  action once, rejects generic Queue mode, never visibly changes target, and
+  never retries.
+
 ## 0.6.0.0
 
 - Integrated the useful HOWMANY pressure view into Seiton Sense. The movable

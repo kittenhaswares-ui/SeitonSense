@@ -65,17 +65,19 @@ Near Assist is disabled by default and runs only in Crystalline Conflict. When
 explicitly enabled and armed, it transiently reads nearby party/alliance
 membership, ally positions, jobs and hard targets, exact native enemy slots,
 current team-pressure counts when that preference is enabled, and the
-immediately following hostile macro action. It also verifies the running macro
-line and its explicit `<t>`, `<target>`, `<me>`, or `<self>` placeholder.
+next supported hostile PvP action inside the bounded token window. It does not
+read or retain the authored macro text.
 
 These values validate one token lasting at most 750 ms. On success, Seiton
 Sense may replace only the target ID of that one already incoming action. The
-`<me>`/`<self>` form is a carrier that permits a redirect attempt without a
-selected target. If it is not redirected, Seiton substitutes an invalid target
-only for that carrier attempt so a following `<t>` line can remain the macro's
-ordinary fallback; this includes the no-candidate case and prevents a
-self-targetable hostile skill from consuming the carrier on you. Other failed
-checks forward the incoming action without a Seiton-selected alternate target.
+recommended `<e1>` line is a carrier that permits a redirect attempt without a
+selected target; it does not choose S1. Carrier identity requires the concrete
+incoming target to match the exact canonical E1 identity while differing from
+your current hard target; it does not inspect macro text. If the action is not
+redirected, Seiton substitutes an invalid
+target only for that carrier attempt so a following `<t>` line remains the
+ordinary fallback. The compact `<t>` form otherwise preserves its incoming
+target.
 
 The token is consumed before the original game call. The plugin does not
 persist ally/enemy identity, visibly change a hard/soft/focus target, initiate

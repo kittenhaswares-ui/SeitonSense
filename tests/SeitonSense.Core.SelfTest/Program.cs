@@ -68,6 +68,7 @@ var tests = new (string Name, Action Run)[]
     ("Near Assist ignores unrelated non-macro calls", NearAssistOneShotSelfTests.NonMacroCallsDoNotStealTheToken),
     ("Near Assist works without a stable own target", NearAssistOneShotSelfTests.OwnTargetDriftPreservesTheActualCallTarget),
     ("Near Assist missing candidate arms a fallback guard", NearAssistOneShotSelfTests.MissingCandidateArmsOneFallbackGuard),
+    ("Near Assist carrier identity ignores macro-line timing", NearAssistOneShotSelfTests.CarrierIdentityDoesNotDependOnMacroLineTiming),
     ("Near Assist replacement keeps only the newest token", NearAssistOneShotSelfTests.ReplacementUsesOnlyTheNewestToken),
     ("Near Assist invalid state and resets fail closed", NearAssistOneShotSelfTests.InvalidStateAndResetsPreserveOriginalBits),
     ("Near Assist nearest mode stays predictable", NearAssistSelectionSelfTests.NearestModeIsPredictable),
