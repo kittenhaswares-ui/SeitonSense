@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 9;
+    public int Version { get; set; } = 10;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -34,6 +34,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float PersonalWarningScreenX { get; set; } = 0.5f;
     public float PersonalWarningScreenY { get; set; } = 0.34f;
     public float PersonalWarningScale { get; set; } = 1f;
+    public float PersonalWarningBackgroundOpacity { get; set; } = 0.92f;
+    public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
+    public bool MchLimitBreakSoundEnabled { get; set; } = true;
+    public int MchLimitBreakSoundId { get; set; } = 6;
     public bool ExperimentalPurifyOnNextKey { get; set; }
     public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
     public bool PurifyOnHeldGameplayKey { get; set; }
@@ -87,6 +91,25 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableNearAssistMacro { get; set; }
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
     public bool NearAssistPreferDamageRoles { get; set; } = true;
+    public bool NearAssistPreferTeamPressure { get; set; }
+    public bool ShowPressureCounter { get; set; } = true;
+    public bool PressureLocked { get; set; }
+    public bool PressureClickThroughWhenLocked { get; set; } = true;
+    public bool PressureShowBackground { get; set; } = true;
+    public bool PressureShowJobIcons { get; set; } = true;
+    public bool PressureShowEnemySlots { get; set; } = true;
+    public bool PressureUseThreatColors { get; set; } = true;
+    public bool PressureIncludeWolvesDen { get; set; }
+    public float PressureNumberPixelSize { get; set; } = 80f;
+    public float PressureIconSize { get; set; } = 38f;
+    public float PressureIconSpacing { get; set; } = 4f;
+    public float PressureBackgroundOpacity { get; set; } = 0.62f;
+    public int PressureIconsPerRow { get; set; } = 5;
+    public float PressureWindowSeconds { get; set; } = 3f;
+    public bool ShowIncomingPressureOnNameplates { get; set; } = true;
+    public bool ShowTeamPressureOnNameplates { get; set; } = true;
+    public bool ShowCcProtection { get; set; } = true;
+    public bool ShowCcProtectionCountdown { get; set; } = true;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -94,10 +117,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface value)
     {
         pluginInterface = value;
-        var repairedNearAssistDistance = ClampNearAssistDistance();
-        if (Version >= 9)
+        var repaired = ClampSettings();
+        if (Version >= 10)
         {
-            if (repairedNearAssistDistance) Save();
+            if (repaired) Save();
             return;
         }
 
@@ -155,8 +178,39 @@ public sealed class PluginConfiguration : IPluginConfiguration
             WarnMarksmanSpite = true;
         }
 
-        Version = 9;
-        ClampNearAssistDistance();
+        if (Version < 10)
+        {
+            // Early test builds preserved 10-14y values that excluded ordinary ranged
+            // teammates. The user explicitly requested the smarter 25y default.
+            if (!float.IsFinite(NearAssistMaxAllyDistance) || NearAssistMaxAllyDistance <= 15f)
+                NearAssistMaxAllyDistance = 25f;
+            ShowPressureCounter = true;
+            PressureLocked = false;
+            PressureClickThroughWhenLocked = true;
+            PressureShowBackground = true;
+            PressureShowJobIcons = true;
+            PressureShowEnemySlots = true;
+            PressureUseThreatColors = true;
+            PressureIncludeWolvesDen = false;
+            PressureNumberPixelSize = 80f;
+            PressureIconSize = 38f;
+            PressureIconSpacing = 4f;
+            PressureBackgroundOpacity = 0.62f;
+            PressureIconsPerRow = 5;
+            PressureWindowSeconds = 3f;
+            ShowIncomingPressureOnNameplates = true;
+            ShowTeamPressureOnNameplates = true;
+            NearAssistPreferTeamPressure = false;
+            ShowCcProtection = true;
+            ShowCcProtectionCountdown = true;
+            PersonalWarningBackgroundOpacity = 0.92f;
+            MarksmanSpiteWarningScale = 1.45f;
+            MchLimitBreakSoundEnabled = true;
+            MchLimitBreakSoundId = 6;
+        }
+
+        Version = 10;
+        ClampSettings();
         Save();
     }
 
@@ -164,7 +218,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 9;
+        Version = 10;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -192,6 +246,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PersonalWarningScreenX = 0.5f;
         PersonalWarningScreenY = 0.34f;
         PersonalWarningScale = 1f;
+        PersonalWarningBackgroundOpacity = 0.92f;
+        MarksmanSpiteWarningScale = 1.45f;
+        MchLimitBreakSoundEnabled = true;
+        MchLimitBreakSoundId = 6;
         ExperimentalPurifyOnNextKey = false;
         ExperimentalPurifyBufferMilliseconds = 750;
         PurifyOnHeldGameplayKey = false;
@@ -206,6 +264,26 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNearAssistMacro = false;
         NearAssistMaxAllyDistance = 25f;
         NearAssistPreferDamageRoles = true;
+        NearAssistPreferTeamPressure = false;
+        ShowPressureCounter = true;
+        PressureLocked = false;
+        PressureClickThroughWhenLocked = true;
+        PressureShowBackground = true;
+        PressureShowJobIcons = true;
+        PressureShowEnemySlots = true;
+        PressureUseThreatColors = true;
+        PressureIncludeWolvesDen = false;
+        PressureNumberPixelSize = 80f;
+        PressureIconSize = 38f;
+        PressureIconSpacing = 4f;
+        PressureBackgroundOpacity = 0.62f;
+        PressureIconsPerRow = 5;
+        PressureWindowSeconds = 3f;
+        ShowIncomingPressureOnNameplates = true;
+        ShowTeamPressureOnNameplates = true;
+        ShowCcProtection = true;
+        ShowCcProtectionCountdown = true;
+        ClampSettings();
     }
 
     public void ApplyFocusGlowPreset() => ApplyFocusGlowDefaults(true);
@@ -275,13 +353,53 @@ public sealed class PluginConfiguration : IPluginConfiguration
         CurrentTargetInfoScale = 1f;
     }
 
-    private bool ClampNearAssistDistance()
+    private bool ClampSettings()
     {
+        var changed = false;
         var clamped = float.IsFinite(NearAssistMaxAllyDistance)
             ? Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)
             : 25f;
-        if (Math.Abs(clamped - NearAssistMaxAllyDistance) < 0.001f) return false;
-        NearAssistMaxAllyDistance = clamped;
+        changed |= AssignIfChanged(NearAssistMaxAllyDistance, clamped, value => NearAssistMaxAllyDistance = value);
+        changed |= Clamp(PressureNumberPixelSize, 36f, 128f, 80f, value => PressureNumberPixelSize = value);
+        changed |= Clamp(PressureIconSize, 16f, 72f, 38f, value => PressureIconSize = value);
+        changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
+        changed |= Clamp(PressureBackgroundOpacity, 0f, 1f, 0.62f, value => PressureBackgroundOpacity = value);
+        changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
+        changed |= Clamp(PersonalWarningBackgroundOpacity, 0f, 1f, 0.92f, value => PersonalWarningBackgroundOpacity = value);
+        changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
+
+        var iconsPerRow = Math.Clamp(PressureIconsPerRow, 1, 16);
+        if (iconsPerRow != PressureIconsPerRow)
+        {
+            PressureIconsPerRow = iconsPerRow;
+            changed = true;
+        }
+
+        var soundId = Math.Clamp(MchLimitBreakSoundId, 1, 16);
+        if (soundId != MchLimitBreakSoundId)
+        {
+            MchLimitBreakSoundId = soundId;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool Clamp(
+        float value,
+        float minimum,
+        float maximum,
+        float fallback,
+        Action<float> apply)
+    {
+        var clamped = float.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
+        return AssignIfChanged(value, clamped, apply);
+    }
+
+    private static bool AssignIfChanged(float value, float replacement, Action<float> apply)
+    {
+        if (Math.Abs(replacement - value) < 0.001f) return false;
+        apply(replacement);
         return true;
     }
 }

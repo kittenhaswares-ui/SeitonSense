@@ -90,7 +90,8 @@ internal sealed class NamePlateAnchorTracker : IDisposable
     {
         var now = Environment.TickCount64;
         var snapshots = new List<NamePlateAnchorSnapshot>(handlers.Count);
-        var seen = new HashSet<ulong>();
+        var seen = new HashSet<(ulong GameObjectId, uint EntityId)>();
+        var handlerIdentities = new HashSet<(ulong GameObjectId, uint EntityId)>();
         var handlerObjectIds = new HashSet<ulong>();
         var addon = gameGui.GetAddonByName<AddonNamePlate>("NamePlate");
         if (addon == null ||
@@ -107,12 +108,18 @@ internal sealed class NamePlateAnchorTracker : IDisposable
         {
             var player = handler.PlayerCharacter;
             if (handler.GameObjectId != 0) handlerObjectIds.Add(handler.GameObjectId);
+            if (player is not null && handler.GameObjectId != 0)
+                handlerIdentities.Add((handler.GameObjectId, player.EntityId));
+            (ulong GameObjectId, uint EntityId) identity = player is null
+                ? default
+                : (handler.GameObjectId, player.EntityId);
             if (player is null ||
                 handler.GameObjectId == 0 ||
+                player.EntityId is 0 or 0xE0000000u ||
                 player.GameObjectId != handler.GameObjectId ||
                 handler.NamePlateIndex < 0 ||
                 handler.NamePlateIndex >= maximumPlateIndex ||
-                !seen.Add(handler.GameObjectId))
+                !seen.Add(identity))
             {
                 continue;
             }
@@ -136,6 +143,7 @@ internal sealed class NamePlateAnchorTracker : IDisposable
 
             snapshots.Add(new NamePlateAnchorSnapshot(
                 handler.GameObjectId,
+                player.EntityId,
                 new Vector2(left, top),
                 new Vector2(right, bottom),
                 now));
@@ -146,7 +154,9 @@ internal sealed class NamePlateAnchorTracker : IDisposable
         // invalid handler is never retained, so native visibility still fails closed immediately.
         foreach (var previous in Anchors)
         {
-            if (seen.Contains(previous.GameObjectId) ||
+            var identity = (previous.GameObjectId, previous.EntityId);
+            if (seen.Contains(identity) ||
+                handlerIdentities.Contains(identity) ||
                 handlerObjectIds.Contains(previous.GameObjectId) ||
                 now - previous.CapturedAtMilliseconds is < 0 or > MissingHandlerGraceMilliseconds)
             {

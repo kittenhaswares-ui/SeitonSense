@@ -4,6 +4,7 @@ namespace SeitonSense.Plugin.Services;
 
 internal sealed record NamePlateAnchorSnapshot(
     ulong GameObjectId,
+    uint EntityId,
     Vector2 JobIconTopLeft,
     Vector2 JobIconBottomRight,
     long CapturedAtMilliseconds)

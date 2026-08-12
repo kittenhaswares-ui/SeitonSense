@@ -15,6 +15,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
     private const string NearAssistAliasCommand = "/ssassist";
+    private const string PressureCommand = "/howmany";
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly ICommandManager commandManager;
@@ -24,6 +25,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windowSystem = new("SeitonSense");
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
+    private readonly TargetPressureTracker pressureTracker;
+    private readonly PressureCounterWindow pressureCounter;
     private readonly NearAssistRedirector nearAssist;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
@@ -31,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
+    private readonly bool pressureCommandRegistered;
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
@@ -79,6 +83,17 @@ public sealed class Plugin : IDalamudPlugin
             log,
             configuration,
             metadata);
+        pressureTracker = new TargetPressureTracker(
+            clientState,
+            objectTable,
+            framework,
+            partyList,
+            dutyState,
+            dataManager,
+            log,
+            configuration,
+            machinistLimitBreakCapture,
+            tracker);
         nearAssist = new NearAssistRedirector(
             configuration,
             clientState,
@@ -88,6 +103,7 @@ public sealed class Plugin : IDalamudPlugin
             dataManager,
             interop,
             framework,
+            pressureTracker,
             log);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         targetHighlights = new TargetHighlightRenderer(
@@ -98,15 +114,30 @@ public sealed class Plugin : IDalamudPlugin
             targetManager,
             gameGui,
             textureProvider,
-            tracker);
+            tracker,
+            pressureTracker);
         overlay = new OverlayRenderer(
             configuration,
             tracker,
             personalStatus,
+            pressureTracker,
             namePlateAnchors,
             gameGui,
             textureProvider);
-        settingsWindow = new SettingsWindow(configuration, tracker, personalStatus, overlay);
+        pressureCounter = new PressureCounterWindow(
+            configuration,
+            pressureTracker,
+            textureProvider,
+            gameGui,
+            pluginInterface);
+        settingsWindow = new SettingsWindow(
+            configuration,
+            tracker,
+            personalStatus,
+            overlay,
+            pressureTracker,
+            pressureCounter);
+        windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(settingsWindow);
 
         const string help = "Open Seiton Sense. Subcommands: show, hide, preview, flash, debug, assist, reset, help.";
@@ -117,7 +148,7 @@ public sealed class Plugin : IDalamudPlugin
             AliasCommand,
             new CommandInfo(OnCommand) { AllowedInMacros = true, HelpMessage = help });
         const string nearAssistHelp =
-            "CC-only one-shot macro assist. Put this directly above /pvpac \"Ability\" <t>.";
+            "CC-only one-shot macro assist. For targetless fallback use /nearassist, then the same /pvpac with <me>, then <t>. Turbo is supported.";
         nearAssistCommandRegistered = commandManager.AddHandler(
             NearAssistCommand,
             new CommandInfo(OnNearAssistCommand)
@@ -144,12 +175,27 @@ public sealed class Plugin : IDalamudPlugin
                     : "Disable it and reload before using the integrated helper."));
         }
 
+        pressureCommandRegistered = commandManager.AddHandler(
+            PressureCommand,
+            new CommandInfo(OnPressureCommand)
+            {
+                HelpMessage = "Open integrated pressure settings. Subcommands: show, hide, lock, unlock, preview, debug, reset.",
+            });
+        if (!pressureCommandRegistered)
+        {
+            log.Warning("/howmany is still owned by the standalone HOWMANY plugin; integrated pressure remains available through /seiton.");
+            chatGui.PrintError(
+                "[Seiton Sense] The standalone HOWMANY plugin is still loaded. " +
+                "Disable it and reload Seiton Sense to avoid duplicate pressure overlays; integrated settings remain under /seiton.");
+        }
+
         pluginInterface.UiBuilder.Draw += Draw;
         pluginInterface.UiBuilder.OpenMainUi += OpenSettings;
         pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
         namePlateAnchors.Start();
         tracker.Start();
         personalStatus.Start();
+        pressureTracker.Start();
         nearAssist.Start();
     }
 
@@ -160,12 +206,15 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
         if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
+        if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
         nearAssist.Dispose();
+        pressureTracker.Dispose();
         personalStatus.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
+        pressureCounter.Dispose();
         windowSystem.RemoveAllWindows();
     }
 
@@ -191,6 +240,59 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private void OnPressureCommand(string _, string arguments)
+    {
+        try
+        {
+            HandlePressureCommand(arguments.Trim().ToLowerInvariant());
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense pressure command failed.");
+            chatGui.PrintError("[Seiton Sense] Pressure command failed. See the Dalamud log.");
+        }
+    }
+
+    private void HandlePressureCommand(string arguments)
+    {
+        switch (arguments)
+        {
+            case "":
+            case "open":
+            case "config":
+                settingsWindow.IsOpen = true;
+                return;
+            case "show":
+                configuration.ShowPressureCounter = true;
+                break;
+            case "hide":
+                configuration.ShowPressureCounter = false;
+                break;
+            case "lock":
+                configuration.PressureLocked = true;
+                break;
+            case "unlock":
+                configuration.PressureLocked = false;
+                break;
+            case "preview":
+                pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
+                chatGui.Print($"[Seiton Sense] Pressure preview {(pressureCounter.PreviewEnabled ? "enabled" : "disabled")}.");
+                return;
+            case "debug":
+                chatGui.Print($"[Seiton Sense] {pressureTracker.Diagnostics.ToChatLine()}");
+                return;
+            case "reset":
+                pressureCounter.PreviewEnabled = false;
+                pressureCounter.ResetWindowPosition();
+                break;
+            default:
+                chatGui.PrintError("[Seiton Sense] /howmany [show|hide|lock|unlock|preview|debug|reset].");
+                return;
+        }
+
+        configuration.Save();
+    }
+
     private void HandleCommand(string arguments)
     {
         switch (arguments)
@@ -206,6 +308,7 @@ public sealed class Plugin : IDalamudPlugin
             case "hide":
                 configuration.Enabled = false;
                 overlay.PreviewEnabled = false;
+                pressureCounter.PreviewEnabled = false;
                 break;
             case "preview":
                 overlay.PreviewEnabled = !overlay.PreviewEnabled;
@@ -230,7 +333,10 @@ public sealed class Plugin : IDalamudPlugin
                     $"errors={mchLimitBreak.CaptureErrors},drops={mchLimitBreak.DroppedWarnings}], " +
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
-                    $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}]");
+                    $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
+                    $"pressure[{pressureTracker.Diagnostics.ToChatLine()}]");
+                if (!string.IsNullOrEmpty(assist.RecentTrace))
+                    chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
             case "assist":
                 nearAssist.Arm();
@@ -238,6 +344,8 @@ public sealed class Plugin : IDalamudPlugin
             case "reset":
                 configuration.ResetToDefaults();
                 overlay.PreviewEnabled = false;
+                pressureCounter.PreviewEnabled = false;
+                pressureCounter.ResetWindowPosition();
                 break;
             case "help":
                 PrintHelp();
@@ -255,7 +363,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         const string text =
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
-            "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist.";
+            "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
+            "Integrated pressure uses /howmany.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
     }

@@ -2,16 +2,18 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "PvP decisions, MCH LB warnings, Near Assist, Purify, and highlights.",
-    "Description": "A local Crystalline Conflict and Wolves' Den reaction-cue HUD. It includes Ninja Seiton decisions, selected PvP warnings including an incoming Marksman's Spite target alert, an opt-in CC-only one-shot Near Assist macro target, an opt-in one-attempt Purify helper, and optional focus/current-target highlights.",
+    "Punchline": "PvP pressure, CC immunity, Seiton, warnings, assists, and target clarity.",
+    "Description": "A local PvP HUD integrating a sharp HOWMANY-style pressure counter, stable native-nameplate pressure and CC-protection cues, Ninja Seiton decisions, configurable personal and MCH LB warnings with sound, opt-in CC-only one-shot Near Assist and Purify helpers, plus target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.5.0.0",
-    "Changelog": "Added a warning-only incoming Marksman's Spite alert from the exact early MCH-LB target-marker event; the later damage event is rejected and no Guard/action is automated. Also integrated the default-off CC-only one-shot Near Assist macro helper with a 25-yalm smart ranged/caster-DPS preference, exact e1-e5 identity, native range/line-of-sight checks, unchanged <t> fallback, and no visible target change or retry. Disable the retired standalone NearAssist plugin first.",
+    "AssemblyVersion": "0.6.0.0",
+    "Changelog": "Integrated a sharp HOWMANY-style pressure counter, enemy P#/incoming badges, stable nameplate CC-protection icons and countdowns, a larger MCH LB warning with built-in sound, warning opacity, and a seven-tab UI. Near Assist is now a 750 ms CC-only, Turbo-compatible one-shot with optional team-pressure preference and a targetless <me> carrier plus <t> fallback. Configuration schema 10.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
     "Tags": [
       "pvp",
+      "pressure",
+      "cc-immunity",
       "ninja",
       "nameplate",
       "hud",
@@ -24,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786488747"
+    "LastUpdate": "1786493944"
   }
 ]

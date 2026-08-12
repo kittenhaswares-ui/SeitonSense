@@ -24,12 +24,12 @@ internal static class NearAssistOneShotSelfTests
 
     public static void TimeoutFailsClosedAtBoundary()
     {
-        var state = Arm(lifetime: 500);
-        var inside = NearAssistOneShotRules.Observe(state, ValidAttempt(now: 1_499));
+        var state = Arm(lifetime: 750);
+        var inside = NearAssistOneShotRules.Observe(state, ValidAttempt(now: 1_749));
         True(inside.ShouldRewrite, "token remains valid one millisecond before expiry");
 
-        state = Arm(lifetime: 500);
-        var boundary = NearAssistOneShotRules.Observe(state, ValidAttempt(now: 1_500));
+        state = Arm(lifetime: 750);
+        var boundary = NearAssistOneShotRules.Observe(state, ValidAttempt(now: 1_750));
         Equal(NearAssistOneShotDecisionKind.Cleared, boundary.Kind, "deadline itself is expired");
         Equal(NearAssistOneShotReason.Expired, boundary.Reason, "timeout reason");
         Equal(OwnTargetA, boundary.ForwardTargetId, "timeout preserves target bit-for-bit");
@@ -53,7 +53,7 @@ internal static class NearAssistOneShotSelfTests
     {
         var nativeReject = NearAssistOneShotRules.Observe(
             Arm(),
-            ValidAttempt() with { CanUseActionOnTarget = false });
+            ValidAttempt() with { HasValidActionTarget = false });
         ConsumedFallback(nativeReject, NearAssistOneShotReason.ActionRejectedForTarget, "native target rejection");
 
         var rangeOrLos = NearAssistOneShotRules.Observe(
@@ -107,11 +107,32 @@ internal static class NearAssistOneShotSelfTests
             Arm(),
             ValidAttempt() with { OriginalTargetId = OwnTargetB });
 
+        True(decision.ShouldRewrite, "a changed own target does not invalidate the snapshotted assist intent");
+        Equal(EnemyA, decision.ForwardTargetId, "assist target wins when a candidate is valid");
+        False(decision.NextState.IsArmed, "changed-target attempt still consumes once");
+
+        var noOwnTargetState = NearAssistOneShotRules.Arm(
+            3,
+            EnemyA,
+            1_000,
+            500);
+        var noOwnTarget = NearAssistOneShotRules.Observe(
+            noOwnTargetState,
+            ValidAttempt() with { OriginalTargetId = 0xE0000000UL });
+        True(noOwnTarget.ShouldRewrite, "missing own target can still use the proven ally target");
+        Equal(EnemyA, noOwnTarget.ForwardTargetId, "missing own target rewrites to enemy");
+    }
+
+    public static void MissingCandidateArmsOneFallbackGuard()
+    {
+        var state = NearAssistOneShotRules.ArmFallback(1_000, 750);
+        True(state.IsArmed, "missing candidate still arms a bounded carrier guard");
+
+        var decision = NearAssistOneShotRules.Observe(state, ValidAttempt());
         ConsumedFallback(
             decision,
-            NearAssistOneShotReason.OriginalTargetChanged,
-            "own target drift",
-            expectedOriginalTarget: OwnTargetB);
+            NearAssistOneShotReason.NoRedirectCandidate,
+            "missing candidate carrier guard");
     }
 
     public static void ReplacementUsesOnlyTheNewestToken()
@@ -122,7 +143,6 @@ internal static class NearAssistOneShotSelfTests
         var replacement = NearAssistOneShotRules.Arm(
             enemySlot: 5,
             enemyGameObjectId: EnemyB,
-            originalTargetId: OwnTargetA,
             nowMilliseconds: 1_100);
 
         var staleAttempt = NearAssistOneShotRules.Observe(
@@ -134,7 +154,7 @@ internal static class NearAssistOneShotSelfTests
             });
         ConsumedFallback(staleAttempt, NearAssistOneShotReason.EnemySlotChanged, "replaced token ignores stale slot");
 
-        replacement = NearAssistOneShotRules.Arm(5, EnemyB, OwnTargetA, 1_100);
+        replacement = NearAssistOneShotRules.Arm(5, EnemyB, 1_100);
         var currentAttempt = NearAssistOneShotRules.Observe(
             replacement,
             ValidAttempt(now: 1_101) with
@@ -150,12 +170,12 @@ internal static class NearAssistOneShotSelfTests
     {
         var invalidArms = new[]
         {
-            NearAssistOneShotRules.Arm(0, EnemyA, OwnTargetA, 1_000),
-            NearAssistOneShotRules.Arm(6, EnemyA, OwnTargetA, 1_000),
-            NearAssistOneShotRules.Arm(3, 0, OwnTargetA, 1_000),
-            NearAssistOneShotRules.Arm(3, 0xE0000000, OwnTargetA, 1_000),
-            NearAssistOneShotRules.Arm(3, EnemyA, OwnTargetA, -1),
-            NearAssistOneShotRules.Arm(3, EnemyA, OwnTargetA, 1_000, 0),
+            NearAssistOneShotRules.Arm(0, EnemyA, 1_000),
+            NearAssistOneShotRules.Arm(6, EnemyA, 1_000),
+            NearAssistOneShotRules.Arm(3, 0, 1_000),
+            NearAssistOneShotRules.Arm(3, 0xE0000000, 1_000),
+            NearAssistOneShotRules.Arm(3, EnemyA, -1),
+            NearAssistOneShotRules.Arm(3, EnemyA, 1_000, 0),
         };
 
         True(invalidArms.All(state => !state.IsArmed), "invalid arm input always clears");
@@ -179,7 +199,6 @@ internal static class NearAssistOneShotSelfTests
         NearAssistOneShotRules.Arm(
             slot,
             enemy,
-            OwnTargetA,
             nowMilliseconds: 1_000,
             lifetimeMilliseconds: lifetime);
 
@@ -196,8 +215,7 @@ internal static class NearAssistOneShotSelfTests
             ResolvedEnemySlot: 3,
             ResolvedEnemyGameObjectId: EnemyA,
             IsResolvedEnemyValid: true,
-            AllyStillTargetsResolvedEnemy: true,
-            CanUseActionOnTarget: true,
+            HasValidActionTarget: true,
             HasRangeAndLineOfSight: true);
 
     private static void ConsumedFallback(

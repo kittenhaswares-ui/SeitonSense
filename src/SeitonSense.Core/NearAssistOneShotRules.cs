@@ -1,17 +1,19 @@
 namespace SeitonSense.Core;
 
 public readonly record struct NearAssistOneShotToken(
+    bool HasRedirectCandidate,
     int EnemySlot,
     ulong EnemyGameObjectId,
-    ulong OriginalTargetId,
     long ArmedAtMilliseconds,
     long ExpiresAtMilliseconds)
 {
     public bool IsValid =>
-        EnemySlotRules.IsValidSlot(EnemySlot) &&
-        TargetHighlightRules.IsValidGameObjectId(EnemyGameObjectId) &&
         ArmedAtMilliseconds >= 0 &&
-        ExpiresAtMilliseconds > ArmedAtMilliseconds;
+        ExpiresAtMilliseconds > ArmedAtMilliseconds &&
+        (HasRedirectCandidate
+            ? EnemySlotRules.IsValidSlot(EnemySlot) &&
+              TargetHighlightRules.IsValidGameObjectId(EnemyGameObjectId)
+            : EnemySlot == 0 && EnemyGameObjectId == 0);
 }
 
 public readonly record struct NearAssistOneShotState(NearAssistOneShotToken? Token)
@@ -33,8 +35,7 @@ public readonly record struct NearAssistActionAttempt(
     int ResolvedEnemySlot,
     ulong ResolvedEnemyGameObjectId,
     bool IsResolvedEnemyValid,
-    bool AllyStillTargetsResolvedEnemy,
-    bool CanUseActionOnTarget,
+    bool HasValidActionTarget,
     bool HasRangeAndLineOfSight,
     bool HardReset = false);
 
@@ -57,18 +58,17 @@ public enum NearAssistOneShotReason
     ClockMovedBackwards = 5,
     Expired = 6,
     OutsideSupportedContext = 7,
-    OriginalTargetChanged = 8,
-    UnsupportedAction = 9,
-    UnsupportedActionMode = 10,
-    NonHostileAction = 11,
-    AreaTargetedAction = 12,
-    EnemySlotChanged = 13,
-    EnemyIdentityChanged = 14,
-    InvalidResolvedEnemy = 15,
-    AllyTargetChanged = 16,
-    ActionRejectedForTarget = 17,
-    OutOfRangeOrLineOfSight = 18,
-    Rewritten = 19,
+    UnsupportedAction = 8,
+    UnsupportedActionMode = 9,
+    NonHostileAction = 10,
+    AreaTargetedAction = 11,
+    EnemySlotChanged = 12,
+    EnemyIdentityChanged = 13,
+    InvalidResolvedEnemy = 14,
+    ActionRejectedForTarget = 15,
+    OutOfRangeOrLineOfSight = 16,
+    Rewritten = 17,
+    NoRedirectCandidate = 18,
 }
 
 public readonly record struct NearAssistOneShotDecision(
@@ -86,12 +86,11 @@ public readonly record struct NearAssistOneShotDecision(
 
 public static class NearAssistOneShotRules
 {
-    public const long DefaultLifetimeMilliseconds = 500;
+    public const long DefaultLifetimeMilliseconds = 750;
 
     public static NearAssistOneShotState Arm(
         int enemySlot,
         ulong enemyGameObjectId,
-        ulong originalTargetId,
         long nowMilliseconds,
         long lifetimeMilliseconds = DefaultLifetimeMilliseconds)
     {
@@ -105,12 +104,31 @@ public static class NearAssistOneShotRules
 
         var expiresAt = SaturatingAdd(nowMilliseconds, lifetimeMilliseconds);
         var token = new NearAssistOneShotToken(
+            true,
             enemySlot,
             enemyGameObjectId,
-            originalTargetId,
             nowMilliseconds,
             expiresAt);
 
+        return token.IsValid
+            ? new NearAssistOneShotState(token)
+            : NearAssistOneShotState.Initial;
+    }
+
+    public static NearAssistOneShotState ArmFallback(
+        long nowMilliseconds,
+        long lifetimeMilliseconds = DefaultLifetimeMilliseconds)
+    {
+        if (nowMilliseconds < 0 || lifetimeMilliseconds <= 0)
+            return NearAssistOneShotState.Initial;
+
+        var expiresAt = SaturatingAdd(nowMilliseconds, lifetimeMilliseconds);
+        var token = new NearAssistOneShotToken(
+            false,
+            0,
+            0,
+            nowMilliseconds,
+            expiresAt);
         return token.IsValid
             ? new NearAssistOneShotState(token)
             : NearAssistOneShotState.Initial;
@@ -168,10 +186,10 @@ public static class NearAssistOneShotRules
         NearAssistOneShotToken token,
         NearAssistActionAttempt attempt)
     {
+        if (!token.HasRedirectCandidate)
+            return NearAssistOneShotReason.NoRedirectCandidate;
         if (!attempt.IsSupportedContext)
             return NearAssistOneShotReason.OutsideSupportedContext;
-        if (attempt.OriginalTargetId != token.OriginalTargetId)
-            return NearAssistOneShotReason.OriginalTargetChanged;
         if (!attempt.IsSupportedAction)
             return NearAssistOneShotReason.UnsupportedAction;
         if (!attempt.IsSupportedActionMode)
@@ -190,9 +208,7 @@ public static class NearAssistOneShotRules
             return NearAssistOneShotReason.InvalidResolvedEnemy;
         }
 
-        if (!attempt.AllyStillTargetsResolvedEnemy)
-            return NearAssistOneShotReason.AllyTargetChanged;
-        if (!attempt.CanUseActionOnTarget)
+        if (!attempt.HasValidActionTarget)
             return NearAssistOneShotReason.ActionRejectedForTarget;
         if (!attempt.HasRangeAndLineOfSight)
             return NearAssistOneShotReason.OutOfRangeOrLineOfSight;

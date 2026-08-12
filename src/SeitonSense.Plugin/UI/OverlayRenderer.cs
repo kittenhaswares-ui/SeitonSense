@@ -21,12 +21,17 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 LethalWarningColor = new(1f, 0.08f, 0.22f, 1f);
     private static readonly Vector4 CleanseColor = new(0.34f, 0.82f, 1f, 1f);
     private static readonly Vector4 CrossColor = new(1f, 0.12f, 0.12f, 1f);
+    private static readonly Vector4 ImmunityColor = new(0.66f, 0.28f, 1f, 1f);
+    private static readonly Vector4 TeamPressureColor = new(0.12f, 0.9f, 1f, 1f);
+    private static readonly Vector4 IncomingPressureColor = new(1f, 0.18f, 0.12f, 1f);
+    private static readonly Vector4 RecentPressureColor = new(1f, 0.68f, 0.12f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.96f);
 
     private readonly PluginConfiguration configuration;
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
+    private readonly TargetPressureTracker pressureTracker;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
@@ -36,6 +41,7 @@ internal sealed class OverlayRenderer
         PluginConfiguration configuration,
         ExecuteTracker tracker,
         PersonalStatusService personalStatus,
+        TargetPressureTracker pressureTracker,
         NamePlateAnchorTracker namePlateAnchors,
         IGameGui gameGui,
         ITextureProvider textureProvider)
@@ -43,6 +49,7 @@ internal sealed class OverlayRenderer
         this.configuration = configuration;
         this.tracker = tracker;
         this.personalStatus = personalStatus;
+        this.pressureTracker = pressureTracker;
         this.namePlateAnchors = namePlateAnchors;
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
@@ -70,9 +77,11 @@ internal sealed class OverlayRenderer
         var now = Environment.TickCount64;
         if (tracker.IsActive)
         {
-            DrawLiveNameplateIndicators(now);
             DrawLiveSeitonDecisionStack(now);
         }
+
+        if (tracker.IsActive || pressureTracker.IsActive)
+            DrawLiveNameplateIndicators(now);
 
         if (configuration.ShowPersonalWarnings)
             DrawPersonalWarnings(now);
@@ -91,15 +100,37 @@ internal sealed class OverlayRenderer
             .ThenBy(static status => status.ExpiresAtMilliseconds)
             .Take(4)
             .ToArray();
+        if (statuses.Length == 0) return;
+
+        var heights = statuses
+            .Select(status => PersonalWarningCardHeight(status, now))
+            .ToArray();
+        var offsets = BuildCenteredOffsets(heights, 7f * ImGuiHelpers.GlobalScale);
+        var stackCenterY = ImGui.GetIO().DisplaySize.Y *
+                           Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
         for (var index = 0; index < statuses.Length; index++)
-            DrawPersonalWarningCard(statuses[index], personal.Purify, index, statuses.Length, now);
+            DrawPersonalWarningCard(statuses[index], personal.Purify, stackCenterY + offsets[index], now);
+    }
+
+    private float PersonalWarningCardHeight(PersonalStatusSnapshot status, long now)
+    {
+        var configuredScale = Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f);
+        if (status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId)
+            configuredScale *= Math.Clamp(configuration.MarksmanSpiteWarningScale, 1f, 2f);
+        var pulseAge = status.PulseStartedAtMilliseconds < 0
+            ? long.MaxValue
+            : Math.Max(0, now - status.PulseStartedAtMilliseconds);
+        var pulse = status.IsEntryPulseActive(now)
+            ? 1f - (pulseAge / (float)PersonalStatusSnapshot.EntryPulseDurationMilliseconds)
+            : 0f;
+        var baseHeight = status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId ? 76f : 64f;
+        return baseHeight * configuredScale * ImGuiHelpers.GlobalScale * (1f + (pulse * 0.1f));
     }
 
     private void DrawPersonalWarningCard(
         PersonalStatusSnapshot status,
         EmergencyPurifyProbeSnapshot purify,
-        int index,
-        int count,
+        float centerY,
         long now)
     {
         var remaining = Math.Max(0, status.ExpiresAtMilliseconds - now);
@@ -107,6 +138,9 @@ internal sealed class OverlayRenderer
 
         var uiScale = ImGuiHelpers.GlobalScale;
         var configuredScale = Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f);
+        var isMachinistLimitBreak = status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId;
+        if (isMachinistLimitBreak)
+            configuredScale *= Math.Clamp(configuration.MarksmanSpiteWarningScale, 1f, 2f);
         var pulseAge = status.PulseStartedAtMilliseconds < 0
             ? long.MaxValue
             : Math.Max(0, now - status.PulseStartedAtMilliseconds);
@@ -115,16 +149,17 @@ internal sealed class OverlayRenderer
             : 0f;
         var scale = configuredScale * uiScale;
         var pulseScale = 1f + (pulse * 0.1f);
-        var cardSize = new Vector2(286f, 64f) * scale * pulseScale;
+        var cardSize = (isMachinistLimitBreak
+            ? new Vector2(326f, 76f)
+            : new Vector2(286f, 64f)) * scale * pulseScale;
         var screen = ImGui.GetIO().DisplaySize;
         var center = new Vector2(
             screen.X * Math.Clamp(configuration.PersonalWarningScreenX, 0.05f, 0.95f),
-            screen.Y * Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f));
-        center.Y += (index - ((count - 1) * 0.5f)) * (70f * scale);
+            centerY);
 
         var topLeft = center - (cardSize * 0.5f);
         var bottomRight = center + (cardSize * 0.5f);
-        var accent = status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId
+        var accent = isMachinistLimitBreak
             ? LethalWarningColor
             : status.AlertKind == PersonalDebuffAlertKind.CleanseUrgent
                 ? CleanseColor
@@ -134,7 +169,11 @@ internal sealed class OverlayRenderer
         draw.AddRectFilled(
             topLeft,
             bottomRight,
-            Pack(new Vector4(0.018f, 0.012f, 0.026f, 0.92f)),
+            Pack(new Vector4(
+                0.018f,
+                0.012f,
+                0.026f,
+                Math.Clamp(configuration.PersonalWarningBackgroundOpacity, 0f, 1f))),
             rounding);
         draw.AddRect(
             topLeft,
@@ -143,8 +182,18 @@ internal sealed class OverlayRenderer
             rounding,
             ImDrawFlags.None,
             Math.Max(2f, (2.4f + (pulse * 2.5f)) * scale));
+        if (isMachinistLimitBreak)
+        {
+            draw.AddRect(
+                topLeft + new Vector2(4f * scale),
+                bottomRight - new Vector2(4f * scale),
+                Pack(new Vector4(1f, 0.92f, 0.96f, 0.92f)),
+                Math.Max(2f, rounding - (3f * scale)),
+                ImDrawFlags.None,
+                Math.Max(1f, 1.2f * scale));
+        }
 
-        var iconSize = 44f * scale;
+        var iconSize = (isMachinistLimitBreak ? 52f : 44f) * scale;
         var iconMin = new Vector2(topLeft.X + (11f * scale), center.Y - (iconSize * 0.5f));
         var iconMax = iconMin + new Vector2(iconSize);
         if (!TryDrawGameIcon(draw, status.IconId, iconMin, iconMax, 1f))
@@ -398,34 +447,73 @@ internal sealed class OverlayRenderer
         var anchors = namePlateAnchors.Anchors;
         if (anchors.Count == 0) return;
 
-        var byObjectId = new Dictionary<ulong, NamePlateAnchorSnapshot>(anchors.Count);
+        var byIdentity = new Dictionary<(ulong GameObjectId, uint EntityId), NamePlateAnchorSnapshot>(anchors.Count);
         foreach (var anchor in anchors)
         {
             if (now - anchor.CapturedAtMilliseconds is < 0 or > MaximumAnchorAgeMilliseconds) continue;
-            byObjectId[anchor.GameObjectId] = anchor;
+            byIdentity[(anchor.GameObjectId, anchor.EntityId)] = anchor;
         }
 
+        var pressureByIdentity = pressureTracker.Snapshot.Opponents
+            .GroupBy(static enemy => (enemy.GameObjectId, enemy.EntityId))
+            .Where(static group => group.Count() == 1)
+            .ToDictionary(static group => group.Key, static group => group.Single());
+        var drawn = new HashSet<(ulong GameObjectId, uint EntityId)>();
         foreach (var enemy in tracker.Enemies)
         {
-            if (!byObjectId.TryGetValue(enemy.GameObjectId, out var anchor)) continue;
-            DrawIndicatorSlots(anchor, enemy);
+            var identity = (enemy.GameObjectId, enemy.EntityId);
+            if (!byIdentity.TryGetValue(identity, out var anchor)) continue;
+            pressureByIdentity.TryGetValue(identity, out var pressure);
+            DrawIndicatorSlots(anchor, enemy, pressure, now);
+            drawn.Add(identity);
+        }
+
+        foreach (var pressure in pressureByIdentity.Values)
+        {
+            var identity = (pressure.GameObjectId, pressure.EntityId);
+            if (drawn.Contains(identity) ||
+                !byIdentity.TryGetValue(identity, out var anchor))
+            {
+                continue;
+            }
+
+            DrawIndicatorSlots(anchor, null, pressure, now);
         }
     }
 
-    private void DrawIndicatorSlots(NamePlateAnchorSnapshot anchor, EnemyHudSnapshot enemy)
+    private void DrawIndicatorSlots(
+        NamePlateAnchorSnapshot anchor,
+        EnemyHudSnapshot? enemy,
+        TargetPressureOpponentSnapshot? pressure,
+        long now)
     {
         var nativeHeight = Math.Max(1f, anchor.Height);
         var size = Math.Clamp(nativeHeight * configuration.NameplateIconScale, 12f, 48f);
         var gap = Math.Max(1f, configuration.NameplateIconSpacing * ImGuiHelpers.GlobalScale);
         var centerY = (anchor.JobIconTopLeft.Y + anchor.JobIconBottomRight.Y) * 0.5f;
 
-        if (configuration.ShowNameplateSeiton && enemy.SeitonEligible)
+        if (configuration.ShowNameplateSeiton && enemy?.SeitonEligible == true)
         {
             var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 2);
             DrawIconBadge(rect.Min, rect.Max, EnemyCombatConstants.SeitonIconId, SeitonColor, false, enemy.SlotLabel, null);
         }
 
-        if (configuration.ShowGuardUnavailable && enemy.GuardUnavailable)
+        var activeProtections = pressure?.Protections
+            .Where(protection => protection.ExpiresAtMilliseconds > now)
+            .OrderBy(static protection => protection.Kind)
+            .ThenBy(static protection => protection.ExpiresAtMilliseconds)
+            .ToArray() ?? [];
+        var activeGuard = activeProtections.FirstOrDefault(static protection => protection.Kind == CcProtectionKind.Guard);
+        var hasActiveGuard = activeGuard.StatusId != 0;
+        if (configuration.ShowCcProtection && hasActiveGuard)
+        {
+            var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 0);
+            var countdown = configuration.ShowCcProtectionCountdown
+                ? CcProtectionCountdownFormatter.Format((activeGuard.ExpiresAtMilliseconds - now) / 1000f)
+                : null;
+            DrawIconBadge(rect.Min, rect.Max, activeGuard.IconId, GuardColor, false, "G", countdown);
+        }
+        else if (configuration.ShowGuardUnavailable && enemy?.GuardUnavailable == true)
         {
             var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 0);
             var countdown = configuration.ShowGuardCountdown
@@ -434,7 +522,7 @@ internal sealed class OverlayRenderer
             DrawIconBadge(rect.Min, rect.Max, EnemyCombatConstants.GuardIconId, GuardColor, true, null, countdown);
         }
 
-        if (configuration.ShowLowMp && enemy.LowMp)
+        if (configuration.ShowLowMp && enemy?.LowMp == true)
         {
             var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 1);
             DrawIconBadge(
@@ -445,6 +533,52 @@ internal sealed class OverlayRenderer
                 true,
                 null,
                 null);
+        }
+
+        if (configuration.ShowCcProtection)
+        {
+            var immunitySlot = 3;
+            foreach (var protection in activeProtections
+                         .Where(static protection => protection.Kind == CcProtectionKind.FullImmunity)
+                         .Take(1))
+            {
+                var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, immunitySlot++);
+                var countdown = configuration.ShowCcProtectionCountdown
+                    ? CcProtectionCountdownFormatter.Format((protection.ExpiresAtMilliseconds - now) / 1000f)
+                    : null;
+                DrawIconBadge(
+                    rect.Min,
+                    rect.Max,
+                    protection.IconId,
+                    ImmunityColor,
+                    false,
+                    "CC",
+                    countdown,
+                    emphasized: true);
+            }
+        }
+
+        const int TeamPressureSlot = 4;
+        const int IncomingPressureSlot = 5;
+        if (configuration.ShowTeamPressureOnNameplates && pressure is { TeamTargetCount: > 0 })
+        {
+            var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, TeamPressureSlot);
+            DrawTextBadge(rect.Min, rect.Max, $"P{pressure.TeamTargetCount}", TeamPressureColor);
+        }
+
+        if (configuration.ShowIncomingPressureOnNameplates && pressure?.IsIncoming == true)
+        {
+            var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, IncomingPressureSlot);
+            var label = (pressure.IncomingEvidence & TargetPressureEvidence.MachinistLimitBreakMarker) != 0
+                ? "LB"
+                : pressure.HasDirectIncomingIntent
+                    ? "YOU"
+                    : "HIT";
+            DrawTextBadge(
+                rect.Min,
+                rect.Max,
+                label,
+                pressure.HasDirectIncomingIntent ? IncomingPressureColor : RecentPressureColor);
         }
     }
 
@@ -467,7 +601,8 @@ internal sealed class OverlayRenderer
         Vector4 borderColor,
         bool crossed,
         string? cornerLabel,
-        string? countdown)
+        string? countdown,
+        bool emphasized = false)
     {
         var draw = ImGui.GetForegroundDrawList();
         var scale = ImGuiHelpers.GlobalScale;
@@ -494,13 +629,28 @@ internal sealed class OverlayRenderer
             ImDrawFlags.None,
             border);
 
+        if (emphasized)
+        {
+            var inset = Math.Max(1f, border * 1.5f);
+            draw.AddRect(
+                topLeft + new Vector2(inset),
+                bottomRight - new Vector2(inset),
+                Pack(new Vector4(borderColor.X, borderColor.Y, borderColor.Z, 0.72f)),
+                Math.Max(1f, rounding - inset),
+                ImDrawFlags.None,
+                Math.Max(1.5f, border));
+        }
+
         if (crossed) DrawCross(draw, topLeft, bottomRight);
         if (!string.IsNullOrEmpty(cornerLabel))
         {
-            var labelScale = Math.Clamp(size / 24f, 0.65f, 1.35f);
+            var labelScale = FitTextScale(
+                cornerLabel,
+                Math.Clamp(size / 24f, 0.65f, 1.35f),
+                size - (4f * scale));
             DrawOutlinedText(
                 draw,
-                new Vector2((topLeft.X + bottomRight.X) * 0.5f, bottomRight.Y - (ImGui.GetFontSize() * labelScale)),
+                new Vector2((topLeft.X + bottomRight.X) * 0.5f, topLeft.Y + (1f * scale)),
                 cornerLabel,
                 labelScale,
                 true);
@@ -508,7 +658,10 @@ internal sealed class OverlayRenderer
 
         if (!string.IsNullOrEmpty(countdown))
         {
-            var labelScale = Math.Clamp(size / 28f, 0.58f, 1.05f);
+            var labelScale = FitTextScale(
+                countdown,
+                Math.Clamp(size / 28f, 0.58f, 1.05f),
+                size - (4f * scale));
             DrawOutlinedText(
                 draw,
                 new Vector2((topLeft.X + bottomRight.X) * 0.5f, bottomRight.Y - (ImGui.GetFontSize() * labelScale)),
@@ -516,6 +669,44 @@ internal sealed class OverlayRenderer
                 labelScale,
                 true);
         }
+    }
+
+    private void DrawTextBadge(Vector2 topLeft, Vector2 bottomRight, string label, Vector4 accent)
+    {
+        var draw = ImGui.GetForegroundDrawList();
+        var size = bottomRight.X - topLeft.X;
+        var rounding = Math.Max(3f, size * 0.16f);
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(0.01f, 0.015f, 0.03f, configuration.NameplateBackgroundOpacity)),
+            rounding);
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(accent),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2f, size * 0.075f));
+        var labelScale = FitTextScale(
+            label,
+            Math.Clamp(size / 24f, 0.7f, 1.4f),
+            size - (5f * ImGuiHelpers.GlobalScale));
+        var center = (topLeft + bottomRight) * 0.5f;
+        DrawOutlinedText(
+            draw,
+            new Vector2(center.X, center.Y - (ImGui.GetFontSize() * labelScale * 0.5f)),
+            label,
+            labelScale,
+            true);
+    }
+
+    private static float FitTextScale(string text, float desiredScale, float maximumWidth)
+    {
+        var width = ImGui.CalcTextSize(text).X;
+        return width <= 0f
+            ? desiredScale
+            : Math.Max(0.35f, Math.Min(desiredScale, maximumWidth / width));
     }
 
     private void DrawPopup(SeitonPopupSnapshot? popup, int index = 0, int count = 1)
@@ -649,7 +840,7 @@ internal sealed class OverlayRenderer
         var nativeSize = 28f * ImGuiHelpers.GlobalScale;
         var nativeMin = new Vector2(screen.X * 0.54f, screen.Y * 0.38f);
         var nativeMax = nativeMin + new Vector2(nativeSize);
-        var anchor = new NamePlateAnchorSnapshot(0, nativeMin, nativeMax, Environment.TickCount64);
+        var anchor = new NamePlateAnchorSnapshot(0, 1, nativeMin, nativeMax, Environment.TickCount64);
         var enemy = new EnemyHudSnapshot(
             3,
             0,
@@ -669,9 +860,22 @@ internal sealed class OverlayRenderer
             nativeMin,
             nativeMax,
             1f);
-        DrawIndicatorSlots(anchor, enemy);
-
         var now = Environment.TickCount64;
+        var pressurePreview = new TargetPressureOpponentSnapshot(
+            0,
+            1,
+            30,
+            3,
+            TargetPressureEvidence.HardTarget,
+            3,
+            [new CcProtectionDisplay(
+                EnemyCombatConstants.ResilienceStatusId,
+                "Resilience",
+                214891,
+                CcProtectionKind.FullImmunity,
+                now + 1_900)]);
+        DrawIndicatorSlots(anchor, enemy, pressurePreview, now);
+
         var mchWarning = new PersonalStatusSnapshot(
             EnemyCombatConstants.MarksmanSpiteActionId,
             "Marksman's Spite",
@@ -694,11 +898,15 @@ internal sealed class OverlayRenderer
             now + 6_000,
             now,
             true);
+        var previewStatuses = new[] { mchWarning, purifyWarning };
+        var previewHeights = previewStatuses.Select(status => PersonalWarningCardHeight(status, now)).ToArray();
+        var previewOffsets = BuildCenteredOffsets(previewHeights, 7f * ImGuiHelpers.GlobalScale);
+        var warningCenter = ImGui.GetIO().DisplaySize.Y *
+                            Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
         DrawPersonalWarningCard(
             mchWarning,
             EmergencyPurifyProbeSnapshot.Initial,
-            0,
-            2,
+            warningCenter + previewOffsets[0],
             now);
         DrawPersonalWarningCard(
             purifyWarning,
@@ -709,8 +917,7 @@ internal sealed class OverlayRenderer
                     EnemyCombatConstants.MiracleOfNatureStatusId,
                     1),
             },
-            1,
-            2,
+            warningCenter + previewOffsets[1],
             now);
     }
 

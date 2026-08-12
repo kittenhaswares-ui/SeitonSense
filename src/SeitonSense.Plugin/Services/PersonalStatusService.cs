@@ -24,6 +24,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly PvPMetadataValidation metadata;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
+    private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
     private readonly Dictionary<uint, ObservedPersonalStatus> lastPresentations = [];
     private readonly Dictionary<StatusPulseKey, long> pulseStartedAt = [];
@@ -61,6 +62,7 @@ internal sealed class PersonalStatusService : IDisposable
         this.metadata = metadata;
         emergencyPurify = new EmergencyPurifyProbe(new GameInputContextProbe(keyState), log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
+        machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -72,6 +74,11 @@ internal sealed class PersonalStatusService : IDisposable
         machinistLimitBreakCapture.DroppedWarnings,
         machinistLimitBreakThreat is { ExpiresAtMilliseconds: var expiresAt } &&
         expiresAt > Environment.TickCount64);
+
+    internal bool PlayMachinistLimitBreakSoundPreview() =>
+        machinistLimitBreakWarningSound.TryPlayPreview(
+            Math.Clamp(configuration.MchLimitBreakSoundId, 1, 16),
+            Environment.TickCount64);
 
     internal void Start()
     {
@@ -114,7 +121,7 @@ internal sealed class PersonalStatusService : IDisposable
             alertStates = [];
             lastPresentations.Clear();
             pulseStartedAt.Clear();
-            machinistLimitBreakCapture.SetLocalEntityId(0);
+            machinistLimitBreakCapture.SetMachinistLocalEntityId(0);
             machinistLimitBreakCapture.ClearWarnings();
             machinistLimitBreakThreat = null;
             var purify = emergencyPurify.FailClosed(now);
@@ -172,10 +179,16 @@ internal sealed class PersonalStatusService : IDisposable
                                                isSupportedPvPContext &&
                                                alive &&
                                                localPlayer is not null;
-        machinistLimitBreakCapture.SetLocalEntityId(
+        machinistLimitBreakCapture.SetMachinistLocalEntityId(
             shouldCaptureMachinistLimitBreak ? localPlayer!.EntityId : 0);
         if (shouldCaptureMachinistLimitBreak && localPlayer is not null)
+        {
+            // The hook can enqueue while this framework scan is in progress. Refresh
+            // the clock immediately before draining so a new event is never mistaken
+            // for a future timestamp and discarded.
+            now = Environment.TickCount64;
             AppendMachinistLimitBreakThreat(observed, localPlayer, context, now);
+        }
         else
             ClearMachinistLimitBreakThreat();
         if (!shouldScanStatuses) instanceTokens.Clear();
@@ -390,9 +403,10 @@ internal sealed class PersonalStatusService : IDisposable
     {
         while (machinistLimitBreakCapture.TryDequeue(out var warning))
         {
+            var eventNow = Environment.TickCount64;
             if (warning.TargetEntityId != localPlayer.EntityId ||
-                warning.ObservedAtMilliseconds > nowMilliseconds ||
-                nowMilliseconds - warning.ObservedAtMilliseconds > 1_000 ||
+                warning.ObservedAtMilliseconds > eventNow ||
+                eventNow - warning.ObservedAtMilliseconds > 1_000 ||
                 !MachinistLimitBreakThreatResolver.IsVerifiedOpponent(
                     objectTable,
                     warning.CasterEntityId,
@@ -418,8 +432,16 @@ internal sealed class PersonalStatusService : IDisposable
                     warning.ObservedAtMilliseconds,
                     EnemyCombatConstants.MarksmanSpiteWarningDurationMilliseconds));
             Interlocked.Increment(ref acceptedMachinistLimitBreakWarnings);
+            if (configuration.MchLimitBreakSoundEnabled)
+            {
+                machinistLimitBreakWarningSound.TryPlayThreat(
+                    machinistLimitBreakThreat.Value.InstanceToken,
+                    Math.Clamp(configuration.MchLimitBreakSoundId, 1, 16),
+                    eventNow);
+            }
         }
 
+        nowMilliseconds = Environment.TickCount64;
         if (machinistLimitBreakThreat is not { } threat ||
             threat.ExpiresAtMilliseconds <= nowMilliseconds)
         {
@@ -540,6 +562,7 @@ internal sealed class PersonalStatusService : IDisposable
         instanceTokens.Clear();
         lastPresentations.Clear();
         pulseStartedAt.Clear();
+        machinistLimitBreakWarningSound.Reset();
         ClearMachinistLimitBreakThreat();
         purifyMissingObservedAt = -1;
         resiliencePresence = DebouncedVisibilityState.Initial;
