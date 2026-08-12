@@ -22,7 +22,9 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
+    private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
+    private readonly AllyRescueProbe allyRescue;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
@@ -48,6 +50,9 @@ internal sealed class PersonalStatusService : IDisposable
         IFramework framework,
         IDutyState dutyState,
         IKeyState keyState,
+        IDataManager dataManager,
+        TargetPressureTracker pressureTracker,
+        NearAssistRedirector nearAssist,
         MachinistLimitBreakCapture machinistLimitBreakCapture,
         IPluginLog log,
         PluginConfiguration configuration,
@@ -60,12 +65,20 @@ internal sealed class PersonalStatusService : IDisposable
         this.log = log;
         this.configuration = configuration;
         this.metadata = metadata;
-        emergencyPurify = new EmergencyPurifyProbe(new GameInputContextProbe(keyState), log);
+        emergencyInput = new EmergencyActionInputCoordinator(keyState);
+        emergencyPurify = new EmergencyPurifyProbe(log);
+        allyRescue = new AllyRescueProbe(
+            objectTable,
+            dataManager,
+            pressureTracker,
+            nearAssist,
+            log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
+    internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
         machinistLimitBreakCapture.QueueDepth,
@@ -124,7 +137,9 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture.SetMachinistLocalEntityId(0);
             machinistLimitBreakCapture.ClearWarnings();
             machinistLimitBreakThreat = null;
+            emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
+            allyRescue.FailClosed(now, exception);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
                 SupportedPvPContext.None,
@@ -152,7 +167,9 @@ internal sealed class PersonalStatusService : IDisposable
             activeLocalPlayerId = localPlayerId;
             activeContext = context;
             ClearStatusTracking();
+            emergencyInput.Reset();
             emergencyPurify.Reset();
+            allyRescue.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
@@ -217,6 +234,17 @@ internal sealed class PersonalStatusService : IDisposable
                                          configuration.ExperimentalPurifyOnNextKey &&
                                          anyPurifyAutomationEnabled &&
                                          metadata.PurifyVerified;
+        var allyRescueConfigurationEnabled = configuration.Enabled &&
+                                             configuration.ExperimentalAllyRescueOnNextKey &&
+                                             metadata.AllyRescueStatusesVerified &&
+                                             context == SupportedPvPContext.CrystallineConflict;
+        var emergencyInputFrame = emergencyInput.Observe(
+            !hardReset &&
+            alive &&
+            isSupportedPvPContext &&
+            (purifyConfigurationEnabled || allyRescueConfigurationEnabled),
+            purifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey,
+            allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -227,6 +255,24 @@ internal sealed class PersonalStatusService : IDisposable
             resilienceActive,
             now,
             configuration.ExperimentalPurifyBufferMilliseconds,
+            emergencyInputFrame,
+            hardReset);
+        // Self-Purify always observes and claims the shared physical generation
+        // first. If it arms or dispatches, Ally Rescue is cancelled for this frame
+        // as well; this prevents an older rescue buffer and a new self-Purify from
+        // ever producing two helper actions together.
+        var purifyClaimedPriority =
+            EmergencyActionPriorityRules.SelfPurifyClaimsPriority(
+                purify.Decision,
+                purify.InputTrigger);
+        allyRescue.Observe(
+            localPlayer,
+            context == SupportedPvPContext.CrystallineConflict,
+            allyRescueConfigurationEnabled && !purifyClaimedPriority,
+            configuration.AllyRescueOnHeldGameplayKey,
+            emergencyInputFrame,
+            now,
+            AllyRescueBufferRules.DefaultBufferMilliseconds,
             hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
@@ -553,7 +599,9 @@ internal sealed class PersonalStatusService : IDisposable
     private void ResetRuntime()
     {
         ClearStatusTracking();
+        emergencyInput.Reset();
         emergencyPurify.Reset();
+        allyRescue.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }
 

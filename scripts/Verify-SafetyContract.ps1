@@ -52,7 +52,10 @@ $readinessPath = Join-Path $pluginServicesRoot 'SeitonReadinessProbe.cs'
 $namePlateAnchorPath = Join-Path $pluginServicesRoot 'NamePlateAnchorTracker.cs'
 $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
+$emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionInputCoordinator.cs'
+$allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
+$partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
 $machinistLimitBreakWarningSoundPath = Join-Path $pluginServicesRoot 'MachinistLimitBreakWarningSound.cs'
 $targetPressureTrackerPath = Join-Path $pluginServicesRoot 'TargetPressureTracker.cs'
@@ -69,7 +72,9 @@ $allowedUnsafe = @(
     $namePlateAnchorPath,
     $inputContextPath,
     $purifyProbePath,
+    $allyRescueProbePath,
     $nearAssistPath,
+    $partySlotResolverPath,
     $machinistLimitBreakCapturePath,
     $machinistLimitBreakWarningSoundPath,
     $targetPressureTrackerPath
@@ -79,7 +84,7 @@ $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b
 $unexpectedUnsafe = @($unsafeMatches | Where-Object { $allowedUnsafe -notcontains $_.Path })
 if ($unexpectedUnsafe.Count -gt 0) {
     $locations = $unexpectedUnsafe | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Unsafe code is allowed only in the nine reviewed native boundaries: $($locations -join ', ')"
+    throw "Unsafe code is allowed only in the eleven reviewed native boundaries: $($locations -join ', ')"
 }
 
 # Near Assist owns one target-only action detour. The MCH/pressure capture owns one
@@ -100,13 +105,17 @@ if ([regex]::Matches($pluginSource, '\bIGameInteropProvider\b').Count -ne 1 -or
 Assert-Literals $pluginSource @(
     'NearAssistCommand = "/nearassist"',
     'NearAssistAliasCommand = "/ssassist"',
+    'NearHelpCommand = "/nearhelp"',
+    'NearHelpAliasCommand = "/sshelp"',
     'new NearAssistRedirector(',
     'AllowedInMacros = true',
     'nearAssistCommandRegistered = commandManager.AddHandler(',
     'if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand)',
     'if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand)',
+    'if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand)',
+    'if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand)',
     'nearAssist.Dispose()'
-) 'Near Assist command ownership and lifecycle'
+) 'Near Assist and Near Help command ownership and lifecycle'
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
         throw "Expected narrow probe is missing: $allowed"
@@ -146,15 +155,16 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
     throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
-# Action initiation remains globally forbidden except for one exact Purify call.
-# Near Assist may only forward an already incoming action through one Original call.
+# Action initiation remains globally forbidden except for one exact self-Purify
+# call and one exact job-gated ally-rescue call. Near Assist/Near Help may only
+# forward an already incoming action through their shared sole Original call.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
-    $_.Path -notin @($purifyProbePath, $nearAssistPath) -or $_.Line -notmatch '\bUseAction\b'
+    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $nearAssistPath) -or $_.Line -notmatch '\bUseAction\b'
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe and the bounded Near Assist detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, AllyRescueProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
 # Warning audio is restricted to one bounded client-owned chat sound. External audio
@@ -243,23 +253,17 @@ if ($normalizedPurifyProbe -notmatch 'UseAction\s*\(\s*ActionType\.Action\s*,\s*
 Assert-Literals $purifyProbe @(
     'EmergencyPurifyBufferRules.Observe',
     'ActionManager.Instance',
-    'shouldObserveInput',
     'configurationEnabled',
-    'inputContext.Reset()',
     'localPlayerIdentityValid',
     'statusCurrentlyObserved',
     'resilienceActive',
     'allowHeldKeyAtStatusEntry',
-    'heldKeyOptionJustEnabled',
-    '!allowHeldKeyAtStatusEntry || heldKeyOptionJustEnabled',
     'decision.ShouldConsumeInputGeneration',
-    'inputContext.ConsumeHeldGameplayKeys()'
+    'inputFrame.Consume()',
+    'state = decision.NextState'
 ) 'Emergency Purify probe'
 if ($purifyProbe -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMp|PurifyMpCost|CurrentMount|IsTargetable|GetGameObjectId)\b') {
     throw 'Emergency Purify must not restore the fragile local readiness filters removed by the reliability hotfix.'
-}
-if ($normalizedPurifyProbe -match 'shouldObserveInput\s*=\s*[^;]*statusCurrentlyObserved') {
-    throw 'The opted-in PvP key baseline must be primed before a Purify-removable status appears.'
 }
 if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3) {
     throw 'Emergency Purify must require a currently observed exact status for edge authorization and dispatch readiness.'
@@ -269,6 +273,139 @@ if ($purifyProbe -match '\b(for|foreach|while)\s*\(|\bdo\s*\{' -or
     $purifyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget)\b') {
     throw 'Emergency Purify probe must not loop, retry, queue, hook, scan signatures, or access target mutation APIs.'
 }
+
+$emergencyInputCoordinator = Read-RequiredSource $emergencyInputCoordinatorPath 'Shared emergency-action input coordinator'
+Assert-Literals $emergencyInputCoordinator @(
+    'new GameInputContextProbe(keyState)',
+    'probe.Observe()',
+    'probe.ConsumeHeldGameplayKeys()',
+    'FreshGameplayKeyPressed',
+    'HeldGameplayKeyEligible',
+    'IsConsumed',
+    'if (IsConsumed) return',
+    'purifyHeldEnabled',
+    'allyRescueHeldEnabled',
+    'heldOptionJustEnabled',
+    'probe.Reset()'
+) 'Shared Purify and Ally Rescue input ownership'
+if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
+    throw 'The shared emergency input coordinator may only observe and consume physical generations.'
+}
+
+$personalStatus = Read-RequiredSource $personalStatusPath 'Personal status coordinator'
+$normalizedPersonalStatus = $personalStatus -replace '\s+', ' '
+$purifyObserve = [regex]::Match($personalStatus, '\bemergencyPurify\.Observe\s*\(')
+$rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
+if (-not $purifyObserve.Success -or -not $rescueObserve.Success -or
+    $purifyObserve.Index -gt $rescueObserve.Index -or
+    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 3) {
+    throw 'Personal status coordination must give self-Purify first claim on the one shared input frame before Ally Rescue.'
+}
+Assert-Literals $personalStatus @(
+    'purifyClaimedPriority',
+    'allyRescueConfigurationEnabled && !purifyClaimedPriority',
+    'metadata.AllyRescueStatusesVerified',
+    'context == SupportedPvPContext.CrystallineConflict'
+) 'Self-Purify priority over Ally Rescue'
+
+$allyRescue = Read-RequiredSource $allyRescueProbePath 'Ally Rescue probe'
+$normalizedAllyRescue = $allyRescue -replace '\s+', ' '
+if ([regex]::Matches($allyRescue, '\bUseAction\s*\(').Count -ne 1) {
+    throw 'Ally Rescue must contain exactly one native UseAction call.'
+}
+Assert-Literals $allyRescue @(
+    'WardensPaeanActionId = 29400',
+    'AquaveilActionId = 29227',
+    'WardensPaeanIconId = 9628',
+    'AquaveilIconId = 9607',
+    'BardJobId = 23',
+    'WhiteMageJobId = 24',
+    'ExpectedRange = 30',
+    'WardensPaeanRecast100ms = 240',
+    'AquaveilRecast100ms = 180',
+    'ValidateRescueActionMetadata',
+    "The Warden's Paean",
+    'Aquaveil',
+    'Removes one status affliction',
+    'Nullifies one status affliction',
+    'status affliction that can be removed by Purify',
+    'AllyRescueBufferRules.Observe',
+    'AllyRescueStatusRules.IsTriggerStatus',
+    'PartySlotResolver.Resolve',
+    'pressureTracker.TryGetIncomingAllyPressure',
+    'GetActionInRangeOrLoS',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'state = decision.NextState',
+    'if (decision.ShouldConsumeInputGeneration) inputFrame.Consume()',
+    'TryRevalidateCandidate',
+    'actionManager->IsActionOffCooldown(ActionType.Action, actionId)',
+    'nearAssist.RunWithoutRedirect',
+    'ActionType.Action',
+    'ActionManager.UseActionMode.None'
+) 'Bounded Ally Rescue runtime'
+if ([regex]::Matches($allyRescue, 'ValidateRescueActionMetadata\s*\(').Count -lt 3 -or
+    $allyRescue -notmatch 'catch\s*\(Exception exception\)' -or
+    $allyRescue -notmatch 'metadata lookup failed closed') {
+    throw 'Each Ally Rescue action must validate current English metadata independently and fail closed on lookup errors.'
+}
+
+$metadataGuard = Read-RequiredSource (Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'PvP metadata guard'
+Assert-Literals $metadataGuard @(
+    'AllyRescueStatusesVerified',
+    'ValidateFeature("Ally Rescue statuses"',
+    'EnemyCombatConstants.PvPStunStatusId',
+    'EnemyCombatConstants.PvPSilenceStatusId',
+    'EnemyCombatConstants.DeepFreezeStatusId',
+    'EnemyCombatConstants.MiracleOfNatureStatusId'
+) 'Independent Ally Rescue status metadata'
+if ($normalizedAllyRescue -notmatch 'actionManager->UseAction\s*\(\s*ActionType\.Action\s*,\s*actionId\s*,\s*targetGameObjectId\s*,\s*0\s*,\s*ActionManager\.UseActionMode\.None\s*,\s*0\s*\)') {
+    throw 'Ally Rescue must issue only the selected verified action to the exact selected ally via ActionType.Action and UseActionMode.None.'
+}
+$rescueCommit = [regex]::Match($allyRescue, 'state\s*=\s*decision\.NextState\s*;')
+$rescueCall = [regex]::Match($allyRescue, 'actionManager->UseAction\s*\(')
+if (-not $rescueCommit.Success -or -not $rescueCall.Success -or $rescueCommit.Index -gt $rescueCall.Index) {
+    throw 'Ally Rescue must commit its spent state before the sole native action attempt.'
+}
+if ($allyRescue -match '\b(for|while|do)\s*\([^)]*UseAction' -or
+    $allyRescue -match '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|ITargetManager|TargetManager|SetTarget)\b') {
+    throw 'Ally Rescue must never retry, queue, loop action calls, or mutate visible targets.'
+}
+
+$allyRescueSelection = Read-RequiredSource (Join-Path $coreRoot 'AllyRescueSelectionRules.cs') 'Ally Rescue selection rules'
+Assert-Literals $allyRescueSelection @(
+    'StunStatusId = 1343',
+    'SilenceStatusId = 1347',
+    'MiracleOfNatureStatusId = 3085',
+    'DeepFreezeStatusId = 3219',
+    'candidate.CurrentHp * current.MaximumHp',
+    'ComparePressure',
+    'CompareMp',
+    'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
+    'candidate.IsExactPartyMember',
+    '!candidate.IsSelf',
+    'candidate.IsAlive',
+    'candidate.IsTargetable',
+    'candidate.HasNativeRangeAndLineOfSight'
+) 'Exact Ally Rescue trigger and priority rules'
+if ($allyRescueSelection -match '\b(HeavyStatusId|BindStatusId)\b|\b1344\b|\b1345\b') {
+    throw 'Heavy and Bind must remain excluded from Ally Rescue triggers.'
+}
+
+$targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
+$normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
+if ($normalizedTargetPressureTracker -notmatch 'configuration\.ExperimentalAllyRescueOnNextKey\s*&&\s*metadata\.AllyRescueStatusesVerified\s*&&\s*supportedContext\s*==\s*SupportedPvPContext\.CrystallineConflict') {
+    throw 'Incoming Ally Rescue pressure tracking must require verified statuses and remain CC-only.'
+}
+$allyRescueBuffer = Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Ally Rescue one-generation rules'
+Assert-Literals $allyRescueBuffer @(
+    'DefaultBufferMilliseconds = 750',
+    'MaximumBufferMilliseconds = 750',
+    'SpentIntents',
+    'ResolveCandidateEntryTrigger',
+    'AllowHeldKeyAtCandidateEntry',
+    'current.SpentIntents.Add(intent)',
+    'Kind is AllyRescueBufferDecisionKind.Armed or AllyRescueBufferDecisionKind.Dispatch'
+) 'Ally Rescue one-generation no-retry rules'
 
 $nearAssist = Read-RequiredSource $nearAssistPath 'Near Assist redirector'
 $normalizedNearAssist = $nearAssist -replace '\s+', ' '
@@ -356,6 +493,78 @@ if ($normalizedNearAssist -notmatch 'IsEligibleRedirectAction\s*\(\s*thisPtr\s*,
 }
 if ($normalizedNearAssist -notmatch 'action\.IsPvP\s*&&\s*action\.CanTargetHostile\s*&&\s*!action\.TargetArea\s*&&\s*action\.Range > 0') {
     throw 'Near Assist pre-consumption filtering must reject defensives, non-PvP actions, ground targeting, and zero-range actions.'
+}
+
+Assert-Literals $nearAssist @(
+    'NearHelpOneShotRules.Arm',
+    'NearHelpOneShotRules.Observe',
+    'NearHelpCarrierRules.IsFallbackCarrier',
+    'PartySlotResolver.Resolve(objectTable, 2)',
+    'GetPartySlots()',
+    'IsEligibleHelpAction',
+    'action.CanTargetParty || action.CanTargetAlly || action.CanTargetAlliance',
+    'nearHelpState = NearHelpOneShotState.Initial',
+    'nearHelpState = decision.NextState',
+    'mode != ActionManager.UseActionMode.Queue',
+    'GetActionInRangeOrLoS',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'RunWithoutRedirect<T>',
+    '[ThreadStatic]',
+    'internalRedirectBypassDepth++',
+    'internalRedirectBypassDepth--',
+    'finally',
+    'var bypassRedirect = internalRedirectBypassDepth > 0',
+    'if (!bypassRedirect &&'
+) 'Near Help shared redirector'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 2) {
+    throw 'Plugin-owned Ally Rescue calls must bypass both Near Assist and Near Help branches without consuming either token.'
+}
+$nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
+Assert-Literals $nearHelpSelection @(
+    'candidate.CurrentHp * current.MaximumHp',
+    'current.CurrentHp * candidate.MaximumHp',
+    'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
+    'candidate.IsExactFriendly',
+    '!candidate.IsSelf',
+    'candidate.HasValidActionTarget',
+    'candidate.HasRangeAndLineOfSight'
+) 'Near Help selection rules'
+$nearHelpOneShot = Read-RequiredSource (Join-Path $coreRoot 'NearHelpOneShotRules.cs') 'Near Help one-shot rules'
+Assert-Literals $nearHelpOneShot @(
+    'DefaultLifetimeMilliseconds = 750',
+    'NearHelpOneShotState.Initial',
+    'NearHelpSelectionRules.SelectBestIndex',
+    'attempt.IsFallbackCarrier',
+    'InvalidFallbackCarrierTargetId'
+) 'Near Help one-shot rules'
+$nearHelpCarrier = Read-RequiredSource (Join-Path $coreRoot 'NearHelpCarrierRules.cs') 'Near Help carrier rules'
+Assert-Literals $nearHelpCarrier @(
+    'incomingTargetId == carrierGameObjectId',
+    'incomingTargetId == carrierEntityId',
+    'currentHardTargetId == carrierGameObjectId',
+    'currentHardTargetId == carrierEntityId'
+) 'Near Help carrier rules'
+if ($normalizedNearAssist -notmatch 'IsEligibleHelpAction\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*mode\s*\)\s*&&\s*TryConsumeEligibleHelpToken') {
+    throw 'Near Help must prove a friendly PvP action shape before its one-shot token can be consumed.'
+}
+if ($normalizedNearAssist -notmatch 'action\.IsPvP\s*&&\s*\(action\.CanTargetParty \|\| action\.CanTargetAlly \|\| action\.CanTargetAlliance\)\s*&&\s*!action\.TargetArea\s*&&\s*action\.Range > 0') {
+    throw 'Near Help pre-consumption filtering must require a friendly-capable PvP action with native range and no ground targeting.'
+}
+$helpConsumeState = [regex]::Match($nearAssist, 'nearHelpState\s*=\s*NearHelpOneShotState\.Initial\s*;')
+if (-not $helpConsumeState.Success -or $helpConsumeState.Index -gt $originalCall.Index) {
+    throw 'Near Help must consume its one-shot state before the sole Original call.'
+}
+
+$partySlotResolver = Read-RequiredSource $partySlotResolverPath 'Party slot resolver'
+Assert-Literals $partySlotResolver @(
+    'slot is < 1 or > 8',
+    'ResolvePlaceholder($"<{slot}>", 1, 0)',
+    'objectTable.SearchByEntityId(entityId) as IPlayerCharacter',
+    'player.EntityId == entityId',
+    'player.Address == (nint)nativeObject'
+) 'Exact native party-slot resolver'
+if ($partySlotResolver -match '\b(SetTarget|UseAction|UseActionLocation|TargetManager|ITargetManager)\b') {
+    throw 'Party slot resolution must remain read-only and may not mutate targets or actions.'
 }
 
 $slotResolver = Read-RequiredSource $slotResolverPath 'Enemy slot resolver'
@@ -712,8 +921,11 @@ Assert-Literals $personalStatus @(
     'PersonalStatusDefinitions.Find',
     'PersonalStatusDefinitions.IsMetadataVerified',
     'CanTriggerPurifyBuffer',
-    'new EmergencyPurifyProbe(new GameInputContextProbe(keyState), log)',
+    'new EmergencyActionInputCoordinator(keyState)',
+    'new EmergencyPurifyProbe(log)',
+    'new AllyRescueProbe(',
     'emergencyPurify.Observe',
+    'allyRescue.Observe',
     'shouldScanStatuses',
     'configuration.ExperimentalPurifyOnNextKey',
     'configuration.PurifyOnStun',
@@ -723,6 +935,8 @@ Assert-Literals $personalStatus @(
     'configuration.PurifyOnDeepFreeze',
     'configuration.PurifyOnMiracleOfNature',
     'configuration.PurifyOnHeldGameplayKey',
+    'configuration.ExperimentalAllyRescueOnNextKey',
+    'configuration.AllyRescueOnHeldGameplayKey',
     'IsPurifyAutomationEnabled',
     'EnemyCombatConstants.ResilienceStatusId',
     'purifyStatusCurrentlyObserved',
@@ -746,7 +960,7 @@ if (-not $stateAssignment.Success -or -not $tryUsePurify.Success -or $stateAssig
 }
 $consumeHeldInput = [regex]::Match(
     $purifyProbe.Substring($stateAssignment.Index),
-    '\binputContext\.ConsumeHeldGameplayKeys\s*\(')
+    '\binputFrame\.Consume\s*\(')
 $consumeHeldInputIndex = if ($consumeHeldInput.Success) {
     $stateAssignment.Index + $consumeHeldInput.Index
 } else {
@@ -810,7 +1024,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 11',
+    'public int Version { get; set; } = 12',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -834,10 +1048,13 @@ Assert-Literals $configuration @(
     'MchLimitBreakSoundId = 6',
     'if (Version < 11)',
     'CcProtectionEmblemScale = 1f',
+    'if (Version < 12)',
+    'ExperimentalAllyRescueOnNextKey = false',
+    'AllyRescueOnHeldGameplayKey = false',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
     'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
     'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f'
-) 'Held-key, target-highlight, Near Assist, pressure, immunity, and warning configuration migration'
+) 'Held-key, target-highlight, macro helpers, Ally Rescue, pressure, immunity, and warning configuration migration'
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -856,4 +1073,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.6.0.2 safety contract verified across $($sourceFiles.Count) source files; Near Assist owns one bounded target-only detour without live macro-line timing dependence, MCH/pressure observation remains read-only, CC protection is an exact full-immunity allowlist rendered in a static crossed-CC native-nameplate emblem, warning audio uses one bounded client sound, and one physical input generation still permits at most one native Purify attempt."
+Write-Host "Seiton Sense v0.7.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, MCH/pressure observation remains read-only, CC protection remains an exact full-immunity allowlist, warning audio uses one bounded client sound, and one shared physical input generation permits at most one self-Purify or exact BRD/WHM Ally Rescue attempt."

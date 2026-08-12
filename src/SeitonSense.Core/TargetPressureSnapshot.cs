@@ -63,6 +63,21 @@ public readonly record struct TargetPressureAllyTargetCount(
     TargetPressureActorIdentity Enemy,
     int AllyTargetCount);
 
+public readonly record struct TargetPressurePartyAllyObservation(
+    TargetPressureActorIdentity Actor,
+    bool IsPartyMember,
+    bool IsDead,
+    bool IsTargetable);
+
+/// <summary>
+/// The number of unique, live enemies whose current exact hard target or cast
+/// target is one exact party ally. Hard and cast intent from the same enemy is
+/// deliberately counted once.
+/// </summary>
+public readonly record struct TargetPressureIncomingAllyPressure(
+    TargetPressureActorIdentity Ally,
+    int UniqueEnemyCount);
+
 /// <summary>
 /// Produces a read-only, deterministic union of enemies currently pressuring
 /// the local player. It does not acquire targets or retain time-based state;
@@ -78,19 +93,26 @@ public sealed class TargetPressureSnapshot
         TargetPressureSources.MachinistLimitBreakEarlyMarker;
 
     private readonly IReadOnlyDictionary<TargetPressureActorIdentity, int> allyTargetCountByEnemy;
+    private readonly IReadOnlyDictionary<TargetPressureActorIdentity, int> incomingPressureByAlly;
 
     private TargetPressureSnapshot(
         TargetPressureOpponent[] opponents,
         TargetPressureAllyTargetCount[] allyTargetCounts,
-        IReadOnlyDictionary<TargetPressureActorIdentity, int> allyTargetCountByEnemy)
+        IReadOnlyDictionary<TargetPressureActorIdentity, int> allyTargetCountByEnemy,
+        TargetPressureIncomingAllyPressure[] incomingAllyPressure,
+        IReadOnlyDictionary<TargetPressureActorIdentity, int> incomingPressureByAlly)
     {
         Opponents = opponents;
         AllyTargetCounts = allyTargetCounts;
         this.allyTargetCountByEnemy = allyTargetCountByEnemy;
+        IncomingAllyPressure = incomingAllyPressure;
+        this.incomingPressureByAlly = incomingPressureByAlly;
     }
 
     public static TargetPressureSnapshot Empty { get; } = new(
         [],
+        [],
+        new Dictionary<TargetPressureActorIdentity, int>(),
         [],
         new Dictionary<TargetPressureActorIdentity, int>());
 
@@ -102,6 +124,12 @@ public sealed class TargetPressureSnapshot
     /// player, allowing Near Assist to reuse the same team-pressure view.
     /// </summary>
     public IReadOnlyList<TargetPressureAllyTargetCount> AllyTargetCounts { get; }
+
+    /// <summary>
+    /// Every exact, live party ally known to this snapshot, including allies
+    /// with zero current incoming enemies. Absence means unknown, not zero.
+    /// </summary>
+    public IReadOnlyList<TargetPressureIncomingAllyPressure> IncomingAllyPressure { get; }
 
     public int Count => Opponents.Count;
 
@@ -117,6 +145,17 @@ public sealed class TargetPressureSnapshot
         enemy.IsValid && allyTargetCountByEnemy.TryGetValue(enemy, out var count)
             ? count
             : 0;
+
+    public bool TryGetIncomingAllyPressure(
+        TargetPressureActorIdentity ally,
+        out int uniqueEnemyCount)
+    {
+        if (ally.IsValid && incomingPressureByAlly.TryGetValue(ally, out uniqueEnemyCount))
+            return true;
+
+        uniqueEnemyCount = 0;
+        return false;
+    }
 
     public bool TryGetOpponent(
         TargetPressureActorIdentity actor,
@@ -140,7 +179,8 @@ public sealed class TargetPressureSnapshot
         TargetPressureActorIdentity localPlayer,
         IEnumerable<TargetPressureEnemyObservation> enemies,
         IEnumerable<TargetPressureSignal>? recentSignals = null,
-        IEnumerable<TargetPressureAllyObservation>? allies = null)
+        IEnumerable<TargetPressureAllyObservation>? allies = null,
+        IEnumerable<TargetPressurePartyAllyObservation>? partyAllies = null)
     {
         ArgumentNullException.ThrowIfNull(enemies);
         if (!localPlayer.IsValid) return Empty;
@@ -148,7 +188,6 @@ public sealed class TargetPressureSnapshot
         var eligibleEnemies = enemies
             .Where(enemy => IsEligibleEnemy(localPlayer, enemy))
             .ToArray();
-        if (eligibleEnemies.Length == 0) return Empty;
 
         var ambiguousEnemyIdentities = FindAmbiguousIdentities(
             eligibleEnemies.Select(enemy => enemy.Actor));
@@ -164,13 +203,13 @@ public sealed class TargetPressureSnapshot
             }
 
             aggregate.MergeMetadata(observation.JobId, observation.CcEnemySlot);
+            aggregate.AddExactIntentTarget(observation.HardTarget);
+            aggregate.AddExactIntentTarget(observation.CastTarget);
             if (observation.HardTarget == localPlayer)
                 aggregate.Sources |= TargetPressureSources.HardTarget;
             if (observation.CastTarget == localPlayer)
                 aggregate.Sources |= TargetPressureSources.CastTarget;
         }
-
-        if (aggregates.Count == 0) return Empty;
 
         MergeRecentSignals(aggregates, recentSignals);
         ClearAmbiguousCcSlots(aggregates.Values);
@@ -179,6 +218,10 @@ public sealed class TargetPressureSnapshot
             localPlayer,
             aggregates,
             allies);
+        var incomingPressureByAlly = CountIncomingAllyPressure(
+            localPlayer,
+            aggregates,
+            partyAllies);
         var orderedEnemies = OrderDeterministically(aggregates.Values).ToArray();
 
         var opponents = orderedEnemies
@@ -196,13 +239,24 @@ public sealed class TargetPressureSnapshot
                 enemy.Actor,
                 allyTargetCounts[enemy.Actor]))
             .ToArray();
+        var orderedIncomingAllyPressure = incomingPressureByAlly
+            .OrderBy(static pair => pair.Key.EntityId)
+            .ThenBy(static pair => pair.Key.GameObjectId)
+            .Select(static pair => new TargetPressureIncomingAllyPressure(
+                pair.Key,
+                pair.Value))
+            .ToArray();
 
-        return opponents.Length == 0 && orderedAllyTargetCounts.Length == 0
+        return opponents.Length == 0 &&
+               orderedAllyTargetCounts.Length == 0 &&
+               orderedIncomingAllyPressure.Length == 0
             ? Empty
             : new TargetPressureSnapshot(
                 opponents,
                 orderedAllyTargetCounts,
-                new Dictionary<TargetPressureActorIdentity, int>(allyTargetCounts));
+                new Dictionary<TargetPressureActorIdentity, int>(allyTargetCounts),
+                orderedIncomingAllyPressure,
+                new Dictionary<TargetPressureActorIdentity, int>(incomingPressureByAlly));
     }
 
     public static bool IsValidIdentity(TargetPressureActorIdentity identity) =>
@@ -333,6 +387,54 @@ public sealed class TargetPressureSnapshot
         return counts;
     }
 
+    private static Dictionary<TargetPressureActorIdentity, int> CountIncomingAllyPressure(
+        TargetPressureActorIdentity localPlayer,
+        IReadOnlyDictionary<TargetPressureActorIdentity, EnemyAggregate> enemies,
+        IEnumerable<TargetPressurePartyAllyObservation>? partyAllies)
+    {
+        var counts = new Dictionary<TargetPressureActorIdentity, int>();
+        if (partyAllies is null) return counts;
+
+        var observations = partyAllies.ToArray();
+        var ambiguousAllyIdentities = FindAmbiguousIdentities(
+            observations
+                .Select(static ally => ally.Actor)
+                .Where(static actor => actor.IsValid));
+
+        foreach (var actor in observations
+                     .Where(ally => IsEligiblePartyAlly(localPlayer, ally))
+                     .Select(static ally => ally.Actor)
+                     .Distinct())
+        {
+            if (ambiguousAllyIdentities.Contains(actor) ||
+                enemies.Keys.Any(enemy => SharesEitherId(actor, enemy)))
+            {
+                continue;
+            }
+
+            counts.Add(actor, 0);
+        }
+
+        foreach (var enemy in enemies.Values)
+        {
+            foreach (var target in enemy.ExactIntentTargets)
+            {
+                if (counts.ContainsKey(target)) counts[target]++;
+            }
+        }
+
+        return counts;
+    }
+
+    private static bool IsEligiblePartyAlly(
+        TargetPressureActorIdentity localPlayer,
+        TargetPressurePartyAllyObservation ally) =>
+        ally.Actor.IsValid &&
+        !SharesEitherId(ally.Actor, localPlayer) &&
+        ally.IsPartyMember &&
+        !ally.IsDead &&
+        ally.IsTargetable;
+
     private static void ClearAmbiguousCcSlots(IEnumerable<EnemyAggregate> enemies)
     {
         foreach (var group in enemies
@@ -363,6 +465,7 @@ public sealed class TargetPressureSnapshot
         }
 
         internal TargetPressureActorIdentity Actor { get; }
+        internal HashSet<TargetPressureActorIdentity> ExactIntentTargets { get; } = [];
         internal uint JobId { get; private set; }
         internal int? CcEnemySlot { get; private set; }
         internal TargetPressureSources Sources { get; set; }
@@ -382,6 +485,12 @@ public sealed class TargetPressureSnapshot
             if (ccEnemySlotConflicted || !EnemySlotRules.IsValidSlot(ccEnemySlot)) return;
             if (!CcEnemySlot.HasValue) CcEnemySlot = ccEnemySlot;
             else if (CcEnemySlot.Value != ccEnemySlot) ClearCcEnemySlot();
+        }
+
+        internal void AddExactIntentTarget(TargetPressureActorIdentity? target)
+        {
+            if (target is { IsValid: true } exactTarget)
+                ExactIntentTargets.Add(exactTarget);
         }
 
         internal void ClearCcEnemySlot()

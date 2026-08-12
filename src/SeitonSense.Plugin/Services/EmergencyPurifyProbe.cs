@@ -39,15 +39,12 @@ internal sealed record EmergencyPurifyProbeSnapshot(
 
 internal sealed class EmergencyPurifyProbe
 {
-    private readonly GameInputContextProbe inputContext;
     private readonly IPluginLog log;
     private EmergencyPurifyBufferState state = EmergencyPurifyBufferState.Initial;
-    private bool heldKeyOptionWasEnabled;
     private long nextErrorLogAt;
 
-    internal EmergencyPurifyProbe(GameInputContextProbe inputContext, IPluginLog log)
+    internal EmergencyPurifyProbe(IPluginLog log)
     {
-        this.inputContext = inputContext;
         this.log = log;
     }
 
@@ -63,34 +60,12 @@ internal sealed class EmergencyPurifyProbe
         bool resilienceActive,
         long nowMilliseconds,
         long bufferMilliseconds,
+        EmergencyActionInputFrame inputFrame,
         bool hardReset = false)
     {
         var alive = IsAlive(localPlayer);
         var localPlayerIdentityValid = alive && HasValidLocalPlayer(localPlayer!);
-        var heldKeyOptionJustEnabled = allowHeldKeyAtStatusEntry && !heldKeyOptionWasEnabled;
-        heldKeyOptionWasEnabled = allowHeldKeyAtStatusEntry;
-        // Keep a baseline throughout the opted-in PvP context. Starting the key
-        // probe only after CC appeared discarded the most important first press.
-        var shouldObserveInput = !hardReset &&
-                                 configurationEnabled &&
-                                 isSupportedPvPContext &&
-                                 localPlayerIdentityValid;
-        var input = shouldObserveInput
-            ? inputContext.Observe()
-            : GameInputContextSnapshot.NotObserved;
-        if (!shouldObserveInput) inputContext.Reset();
-        if (shouldObserveInput && (!allowHeldKeyAtStatusEntry || heldKeyOptionJustEnabled))
-        {
-            // A key pressed while held-mode is disabled may still be a valid fresh
-            // edge, but it must not become stale held intent if the option is
-            // enabled later without a release.
-            inputContext.ConsumeHeldGameplayKeys();
-            input = input with
-            {
-                HeldGameplayKeyEligible = false,
-                HeldGameplayKey = VirtualKey.NO_KEY,
-            };
-        }
+        var input = inputFrame.Snapshot;
 
         var locallyReady = !hardReset &&
                            configurationEnabled &&
@@ -113,10 +88,10 @@ internal sealed class EmergencyPurifyProbe
                 statusInstance,
                 statusCurrentlyObserved &&
                 input.ProbeSucceeded &&
-                input.FreshGameplayKeyPressed,
+                inputFrame.FreshGameplayKeyPressed,
                 statusCurrentlyObserved &&
                 input.ProbeSucceeded &&
-                input.HeldGameplayKeyEligible,
+                inputFrame.HeldGameplayKeyEligible,
                 allowHeldKeyAtStatusEntry,
                 locallyReady,
                 nowMilliseconds,
@@ -127,7 +102,7 @@ internal sealed class EmergencyPurifyProbe
         // remains a single terminal attempt for this continuous status instance.
         state = decision.NextState;
         if (decision.ShouldConsumeInputGeneration)
-            inputContext.ConsumeHeldGameplayKeys();
+            inputFrame.Consume();
 
         var attempted = false;
         var accepted = false;
@@ -165,14 +140,10 @@ internal sealed class EmergencyPurifyProbe
     internal void Reset()
     {
         state = EmergencyPurifyBufferState.Initial;
-        heldKeyOptionWasEnabled = false;
-        inputContext.Reset();
     }
 
     internal EmergencyPurifyProbeSnapshot FailClosed(long nowMilliseconds)
     {
-        heldKeyOptionWasEnabled = false;
-        inputContext.Reset();
         var decision = EmergencyPurifyBufferRules.Observe(
             state,
             new EmergencyPurifyBufferObservation(

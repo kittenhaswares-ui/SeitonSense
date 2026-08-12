@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.0.0
+
+- Added an opt-in, CC-only Ally Rescue experiment for BRD and WHM. One fresh or
+  explicitly eligible held physical key can attempt The Warden's Paean or
+  Aquaveil on an exact non-self party member with Stun, Silence, Deep Freeze, or
+  Miracle of Nature; Heavy and Bind deliberately do not trigger it.
+- Ally Rescue filters through the exact action's live native range and line of
+  sight, then ranks candidates by lowest exact HP percentage, highest known
+  unique incoming enemy pressure, lowest trusted MP percentage, distance, and
+  stable party identity. Current metadata is validated per job and selection is
+  independent of the client's display language.
+- Self-Purify and Ally Rescue now share one physical-key generation coordinator,
+  with self-Purify first. State and input are consumed before the sole action
+  attempt, rejection or exceptions never retry, and internal calls bypass the
+  Near Assist/Near Help target redirect without consuming their token.
+- Added opt-in `/nearhelp` with collision-safe `/sshelp`. It arms one 750 ms
+  token for the next supported friendly PvP macro action and selects only an
+  exact, live, non-self party member inside that action's native range and line
+  of sight.
+- Near Help ranks candidates by the lowest exact HP percentage, then shorter
+  distance, native party order, and stable actor identity. Dual-purpose
+  friendly/hostile actions remain supported when their metadata explicitly
+  allows party or ally targets.
+- Added a target-safe macro carrier: `/mlock`, `/nearhelp`, the friendly action
+  with `<2>`, then the same action with `<t>`. Only the exact native party-slot-2
+  carrier can be invalidated when no redirect is possible; a compact `<t>` call
+  keeps its actual target unchanged.
+- Near Help and Near Assist share the existing single action boundary and
+  replace each other's pending token. Neither helper selects a visible target,
+  sends an action, loops, or retries; the already incoming call reaches the
+  game exactly once.
+- Updated the recommended Near Assist macro to begin with `/mlock`, preventing
+  ReAction Turbo Hotbar from restarting a held macro before its fallback line.
+
 ## 0.6.0.2
 
 - Replaced the tiny distant active-CC icon with one large static crossed-`CC`

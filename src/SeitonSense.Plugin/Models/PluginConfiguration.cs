@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 11;
+    public int Version { get; set; } = 12;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -47,6 +47,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PurifyOnSilence { get; set; } = true;
     public bool PurifyOnDeepFreeze { get; set; } = true;
     public bool PurifyOnMiracleOfNature { get; set; } = true;
+    public bool ExperimentalAllyRescueOnNextKey { get; set; }
+    public bool AllyRescueOnHeldGameplayKey { get; set; }
     public bool EnableFocusGlow { get; set; }
     public bool FocusHideWithGameUi { get; set; } = true;
     public bool FocusDrawInForeground { get; set; } = true;
@@ -119,7 +121,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 11)
+        if (Version >= 12)
         {
             if (repaired) Save();
             return;
@@ -217,7 +219,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             CcProtectionEmblemScale = 1f;
         }
 
-        Version = 11;
+        if (Version < 12)
+        {
+            // Ally Rescue can issue one friendly action attempt. Existing users
+            // must explicitly opt in to both the helper and held-key behavior.
+            ExperimentalAllyRescueOnNextKey = false;
+            AllyRescueOnHeldGameplayKey = false;
+        }
+
+        Version = 12;
         ClampSettings();
         Save();
     }
@@ -226,7 +236,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 11;
+        Version = 12;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -267,6 +277,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PurifyOnSilence = true;
         PurifyOnDeepFreeze = true;
         PurifyOnMiracleOfNature = true;
+        ExperimentalAllyRescueOnNextKey = false;
+        AllyRescueOnHeldGameplayKey = false;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
         EnableNearAssistMacro = false;

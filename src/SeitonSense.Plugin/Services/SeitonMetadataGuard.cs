@@ -13,9 +13,10 @@ internal sealed record PvPMetadataValidation(
     bool WildfireVerified,
     bool DeathWarrantVerified,
     bool MarksmanSpiteVerified,
-    bool PurifyVerified)
+    bool PurifyVerified,
+    bool AllyRescueStatusesVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -240,6 +241,43 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var allyRescueStatusesVerified = ValidateFeature("Ally Rescue statuses", log, () =>
+        {
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            return statuses.TryGetRow(EnemyCombatConstants.PvPStunStatusId, out var stun) &&
+                   ValidatePurifiableStatus(
+                       stun,
+                       "Stun",
+                       EnemyCombatConstants.StunStatusIconId,
+                       expectMovementLock: true,
+                       expectActionLock: true,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.PvPSilenceStatusId, out var silence) &&
+                   ValidatePurifiableStatus(
+                       silence,
+                       "Silence",
+                       EnemyCombatConstants.SilenceStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: true,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.DeepFreezeStatusId, out var deepFreeze) &&
+                   ValidatePurifiableStatus(
+                       deepFreeze,
+                       "Deep Freeze",
+                       EnemyCombatConstants.DeepFreezeStatusIconId,
+                       expectMovementLock: true,
+                       expectActionLock: true,
+                       expectTransfiguration: false) &&
+                   statuses.TryGetRow(EnemyCombatConstants.MiracleOfNatureStatusId, out var miracle) &&
+                   ValidatePurifiableStatus(
+                       miracle,
+                       "Miracle of Nature",
+                       EnemyCombatConstants.MiracleOfNatureStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: false,
+                       expectTransfiguration: true);
+        });
+
         var validation = new PvPMetadataValidation(
             seitonVerified,
             guardVerified,
@@ -247,18 +285,21 @@ internal static class PvPMetadataGuard
             wildfireVerified,
             deathWarrantVerified,
             marksmanSpiteVerified,
-            purifyVerified);
+            purifyVerified,
+            allyRescueStatusesVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}, " +
-            "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, Purify={Purify}.",
+            "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
+            "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.RecuperateVerified,
             validation.WildfireVerified,
             validation.DeathWarrantVerified,
             validation.MarksmanSpiteVerified,
-            validation.PurifyVerified);
+            validation.PurifyVerified,
+            validation.AllyRescueStatusesVerified);
 
         return validation;
     }
