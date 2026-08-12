@@ -7,7 +7,6 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using Lumina.Excel.Sheets;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -20,7 +19,6 @@ internal enum NearAssistArmOutcome
     Armed,
     Disabled,
     HookUnavailable,
-    NotMacro,
     NotCrystallineConflict,
     LocalPlayerUnavailable,
     NoCanonicalEnemySlots,
@@ -51,9 +49,9 @@ internal readonly record struct NearAssistDiagnostics(
 /// <summary>
 /// Owns a single, short-lived target redirect selected by the /nearassist macro line.
 /// It never mutates the game's hard, soft, or focus target and never dispatches an action.
-/// The next certified macro action is forwarded to the native function exactly once, with
+/// The next bounded supported action is forwarded to the native function exactly once, with
 /// either the revalidated canonical enemy ID, the caller's original target ID unchanged,
-/// or an invalid ID for a failed deliberate self-carrier so the authored fallback can run.
+/// or an invalid ID for a failed deliberate carrier so the authored fallback can run.
 /// </summary>
 internal sealed unsafe class NearAssistRedirector : IDisposable
 {
@@ -177,23 +175,38 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return ArmFailure(NearAssistArmOutcome.Disabled, "Arm ignored: feature disabled");
         if (useActionHook is null || !useActionHook.IsEnabled)
             return ArmFailure(NearAssistArmOutcome.HookUnavailable, "Arm ignored: hook unavailable");
-        if (!TryGetActiveMacroLine(out var armMacroLine, out _))
-            return ArmFailure(NearAssistArmOutcome.NotMacro, "Arm ignored: command was not run by a macro");
         var context = ResolveContext();
         if (context != SupportedPvPContext.CrystallineConflict)
             return ArmFailure(NearAssistArmOutcome.NotCrystallineConflict, "Arm ignored: not in Crystalline Conflict");
 
+        var localPlayer = objectTable.LocalPlayer;
+        if (!IsLivePlayer(localPlayer))
+            return ArmFailure(NearAssistArmOutcome.LocalPlayerUnavailable, "Arm ignored: local player unavailable");
+        var local = localPlayer!;
+        uint carrierEnemyEntityId = 0;
+        ulong carrierEnemyGameObjectId = 0;
+
         try
         {
-            var localPlayer = objectTable.LocalPlayer;
-            if (!IsLivePlayer(localPlayer))
-                return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: local player unavailable");
-            var local = localPlayer!;
 
             var partyEntityIds = GetPartyEntityIds();
             var canonicalEnemies = ResolveCanonicalEnemies(local, partyEntityIds);
             if (canonicalEnemies.Count == 0)
-                return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: no canonical enemy slots resolved");
+                return ArmFallbackCarrier(
+                    context,
+                    local.EntityId,
+                    local.GameObjectId,
+                    carrierEnemyEntityId,
+                    carrierEnemyGameObjectId,
+                    "Armed fallback: no canonical enemy slots resolved");
+
+            foreach (var canonicalEnemy in canonicalEnemies.Values)
+            {
+                if (canonicalEnemy.Slot != EnemySlotRules.FirstSlot) continue;
+                carrierEnemyEntityId = canonicalEnemy.Player.EntityId;
+                carrierEnemyGameObjectId = canonicalEnemy.Player.GameObjectId;
+                break;
+            }
 
             var maximumDistance = Math.Clamp(
                 configuration.NearAssistMaxAllyDistance,
@@ -226,7 +239,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             if (candidates.Count == 0)
-                return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: no nearby ally targets a canonical enemy");
+                return ArmFallbackCarrier(
+                    context,
+                    local.EntityId,
+                    local.GameObjectId,
+                    carrierEnemyEntityId,
+                    carrierEnemyGameObjectId,
+                    "Armed fallback: no nearby ally targets a canonical enemy");
 
             var selectionIndex = NearAssistPressureSelectionRules.SelectBestIndex(
                 candidates
@@ -245,7 +264,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 configuration.NearAssistPreferDamageRoles,
                 configuration.NearAssistPreferTeamPressure);
             if (selectionIndex < 0)
-                return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: no stable ally selection");
+                return ArmFallbackCarrier(
+                    context,
+                    local.EntityId,
+                    local.GameObjectId,
+                    carrierEnemyEntityId,
+                    carrierEnemyGameObjectId,
+                    "Armed fallback: no stable ally selection");
             var selected = candidates[selectionIndex];
             var now = Environment.TickCount64;
             var nextOneShotState = NearAssistOneShotRules.Arm(
@@ -254,7 +279,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 now,
                 TokenLifetimeMilliseconds);
             if (!nextOneShotState.IsArmed)
-                return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: invalid redirect state");
+                return ArmFallbackCarrier(
+                    context,
+                    local.EntityId,
+                    local.GameObjectId,
+                    carrierEnemyEntityId,
+                    carrierEnemyGameObjectId,
+                    "Armed fallback: invalid redirect state");
 
             var token = new ArmedNearAssistTarget(
                 clientState.TerritoryType,
@@ -266,7 +297,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 selected.Enemy.Slot,
                 selected.Enemy.Player.EntityId,
                 selected.Enemy.Player.GameObjectId,
-                armMacroLine,
+                carrierEnemyEntityId,
+                carrierEnemyGameObjectId,
                 now + TokenLifetimeMilliseconds);
             lock (tokenGate)
             {
@@ -275,7 +307,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 armedCount++;
                 lastEvent = $"Armed S{token.EnemySlot}";
                 RecordTraceLocked(
-                    $"arm ctx={context} line={armMacroLine} candidates={candidates.Count} " +
+                    $"arm ctx={context} candidates={candidates.Count} " +
                     $"max={maximumDistance:0.#}y chosen={MathF.Sqrt(selected.DistanceSquared):0.0}y " +
                     $"slot={token.EnemySlot}");
             }
@@ -288,13 +320,22 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         catch (Exception exception)
         {
             LogFailure(exception, "Seiton Sense Near Assist arm failed closed.");
-            return ArmFallbackCarrier(armMacroLine, context, "Armed fallback: candidate scan failed closed");
+            return ArmFallbackCarrier(
+                context,
+                local.EntityId,
+                local.GameObjectId,
+                carrierEnemyEntityId,
+                carrierEnemyGameObjectId,
+                "Armed fallback: candidate scan failed closed");
         }
     }
 
     private NearAssistArmResult ArmFallbackCarrier(
-        int armMacroLine,
         SupportedPvPContext context,
+        uint localEntityId,
+        ulong localGameObjectId,
+        uint carrierEnemyEntityId,
+        ulong carrierEnemyGameObjectId,
         string reason)
     {
         var now = Environment.TickCount64;
@@ -304,15 +345,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var token = new ArmedNearAssistTarget(
             clientState.TerritoryType,
-            0,
-            0,
+            localEntityId,
+            localGameObjectId,
             false,
             0,
             0,
             0,
             0,
             0,
-            armMacroLine,
+            carrierEnemyEntityId,
+            carrierEnemyGameObjectId,
             now + TokenLifetimeMilliseconds);
         lock (tokenGate)
         {
@@ -320,7 +362,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             oneShotState = nextOneShotState;
             armedCount++;
             lastEvent = reason;
-            RecordTraceLocked($"arm-fallback ctx={context} line={armMacroLine}: {reason}");
+            RecordTraceLocked($"arm-fallback ctx={context}: {reason}");
         }
 
         return new NearAssistArmResult(NearAssistArmOutcome.Armed, 0, 0f);
@@ -349,15 +391,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         bool* outOptAreaTargeted)
     {
         var forwardedTargetId = targetId;
-        var consumedSelfCarrier = false;
+        var consumedFallbackCarrier = false;
         try
         {
-            if (TryConsumeEligibleToken(
+            if (IsEligibleRedirectAction(thisPtr, actionType, actionId, mode) &&
+                TryConsumeEligibleToken(
                     actionType,
                     mode,
+                    targetId,
                     out var token,
                     out var previousOneShotState,
-                    out consumedSelfCarrier))
+                    out consumedFallbackCarrier))
             {
                 forwardedTargetId = TryResolveRedirect(
                     thisPtr,
@@ -369,7 +413,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     previousOneShotState,
                     out var rewritten,
                     out var reason);
-                if (!rewritten && consumedSelfCarrier)
+                if (!rewritten && consumedFallbackCarrier)
                     forwardedTargetId = InvalidCarrierTargetId;
                 lock (tokenGate)
                 {
@@ -393,13 +437,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
         catch (Exception exception)
         {
-            forwardedTargetId = consumedSelfCarrier ? InvalidCarrierTargetId : targetId;
+            forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
             lock (tokenGate)
             {
                 armedTarget = null;
                 oneShotState = NearAssistOneShotState.Initial;
                 fallbackCount++;
-                lastEvent = consumedSelfCarrier
+                lastEvent = consumedFallbackCarrier
                     ? "Redirect failed closed; carrier invalidated for <t> fallback"
                     : "Redirect failed closed; original target preserved";
             }
@@ -547,12 +591,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             if (armedTarget is { } token)
             {
                 shouldClear |= token.ExpiresAtMilliseconds <= Environment.TickCount64;
-                if (!shouldClear &&
-                    (!TryGetActiveMacroLine(out var currentLine, out var ignoredLineText) ||
-                     currentLine > token.ArmMacroLine + 2))
-                {
-                    shouldClear = true;
-                }
             }
         }
 
@@ -576,6 +614,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             {
                 continue;
             }
+
+            // Character.GetTargetId() is a native actor identity. Depending on the
+            // client path, Dalamud may expose the same player through the 64-bit
+            // GameObjectId or its 32-bit network EntityId. Both exact identities point
+            // at the already revalidated canonical <eN> player; never use object order.
+            if (enemy.EntityId != enemy.GameObjectId)
+                result.TryAdd(enemy.EntityId, new CanonicalEnemy(slot, enemy));
         }
 
         return result;
@@ -659,25 +704,34 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private bool TryConsumeEligibleToken(
         ActionType actionType,
         ActionManager.UseActionMode mode,
+        ulong incomingTargetId,
         out ArmedNearAssistTarget token,
         out NearAssistOneShotState previousOneShotState,
-        out bool selfCarrier)
+        out bool fallbackCarrier)
     {
         lock (tokenGate)
         {
             if (armedTarget is not { } candidate ||
                 !oneShotState.IsArmed ||
-                !IsPotentialMacroAction(actionType, mode) ||
-                !TryGetImmediatePvPActionMacroLine(candidate.ArmMacroLine, out selfCarrier))
+                !IsPotentialMacroAction(actionType, mode))
             {
                 token = default;
                 previousOneShotState = NearAssistOneShotState.Initial;
-                selfCarrier = false;
+                fallbackCarrier = false;
                 return false;
             }
 
             token = candidate;
             previousOneShotState = oneShotState;
+            var currentPlayer = objectTable.LocalPlayer;
+            var currentHardTargetId = IsLivePlayer(currentPlayer)
+                ? GetNativeHardTargetId(currentPlayer!)
+                : 0;
+            fallbackCarrier = NearAssistCarrierRules.IsFallbackCarrier(
+                currentHardTargetId,
+                incomingTargetId,
+                candidate.CarrierEnemyGameObjectId,
+                candidate.CarrierEnemyEntityId);
             armedTarget = null;
             oneShotState = NearAssistOneShotState.Initial;
             lastEvent = $"Consumed S{token.EnemySlot}; validating";
@@ -748,53 +802,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private static bool IsSupportedActionType(ActionType actionType) =>
         actionType is ActionType.Action or ActionType.PvPAction;
 
-    private static bool TryGetImmediatePvPActionMacroLine(
-        int armMacroLine,
-        out bool selfCarrier)
+    private bool IsEligibleRedirectAction(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode)
     {
-        if (armMacroLine == int.MaxValue ||
-            !TryGetActiveMacroLine(out var currentLine, out var lineText) ||
-            currentLine < armMacroLine ||
-            currentLine > armMacroLine + 2)
-        {
-            selfCarrier = false;
-            return false;
-        }
+        if (!IsPotentialMacroAction(actionType, mode)) return false;
 
-        var line = lineText.TrimStart();
-        var isPvPActionCommand = StartsWithCommand(line, "/pvpac") ||
-                                 StartsWithCommand(line, "/pvpaction");
-        var hasCurrentTargetPlaceholder =
-            line.Contains("<t>", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("<target>", StringComparison.OrdinalIgnoreCase);
-        var hasSelfCarrierPlaceholder =
-            line.Contains("<me>", StringComparison.OrdinalIgnoreCase) ||
-            line.Contains("<self>", StringComparison.OrdinalIgnoreCase);
-        selfCarrier = isPvPActionCommand &&
-                      hasSelfCarrierPlaceholder &&
-                      !hasCurrentTargetPlaceholder;
-        return isPvPActionCommand &&
-               (hasCurrentTargetPlaceholder || selfCarrier);
-    }
-
-    private static bool StartsWithCommand(string line, string command) =>
-        line.StartsWith(command, StringComparison.OrdinalIgnoreCase) &&
-        line.Length > command.Length &&
-        char.IsWhiteSpace(line[command.Length]);
-
-    private static bool TryGetActiveMacroLine(out int currentLine, out string lineText)
-    {
-        var shell = RaptureShellModule.Instance();
-        if (shell == null || !shell->MacroLocked || shell->MacroCurrentLine <= 0)
-        {
-            currentLine = -1;
-            lineText = string.Empty;
-            return false;
-        }
-
-        currentLine = shell->MacroCurrentLine;
-        lineText = shell->MacroLineText.ToString();
-        return true;
+        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        return resolvedActionId != 0 &&
+               TryGetActionMetadata(actionType, actionId, resolvedActionId, out var action) &&
+               action.IsPvP &&
+               action.CanTargetHostile &&
+               !action.TargetArea &&
+               action.Range > 0;
     }
 
     private static bool IsAlly(IPlayerCharacter player, HashSet<uint> partyEntityIds) =>
@@ -863,6 +885,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         int EnemySlot,
         uint EnemyEntityId,
         ulong EnemyGameObjectId,
-        int ArmMacroLine,
+        uint CarrierEnemyEntityId,
+        ulong CarrierEnemyGameObjectId,
         long ExpiresAtMilliseconds);
 }

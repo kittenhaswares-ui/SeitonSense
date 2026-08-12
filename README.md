@@ -132,12 +132,12 @@ still decides whether the action can queue or execute.
 ## One-shot Near Assist macro
 
 Near Assist is disabled by default and intentionally supports Crystalline
-Conflict only. The recommended targetless-safe macro uses the first action line
-as a carrier and keeps normal `<t>` behavior as the final fallback:
+Conflict only. The recommended macro first offers one enemy-slot carrier to
+Seiton Sense and keeps normal `<t>` behavior as the final fallback:
 
 ```text
 /nearassist
-/pvpac "Ability" <me>
+/pvpac "Ability" <e1>
 /pvpac "Ability" <t>
 ```
 
@@ -157,21 +157,22 @@ preference can first favor allies attacking the enemy with the highest current
 ally target count inside that same nearby window.
 
 The ally must hard-target one exact opponent from FFXIV's native CC
-`<e1>`-`<e5>` list. For the immediately following hostile macro action, Seiton
-Sense snapshots that ally target and verifies the enemy identity plus the
-actual action's native range and line of sight. A selected target is not
-required for the `<me>`/`<self>` carrier attempt: on a valid redirect, only that
-incoming action's target ID is replaced. If it cannot redirect, the carrier
-is deliberately forwarded with an invalid target and the following `<t>` line
-remains the macro's normal fallback. Seiton also arms this fallback guard when
-no nearby ally candidate exists, so self-targetable hostile skills cannot spend
-the carrier on you.
+`<e1>`-`<e5>` list. Seiton snapshots that ally target when `/nearassist` runs.
+The next supported hostile PvP action inside the 750 ms window is checked
+against that exact enemy identity plus the action's native range and line of
+sight. It no longer depends on FFXIV still exposing the same macro-line text
+inside the later action call.
 
-Only an exact `/pvpac` or `/pvpaction` line with `<t>`, `<target>`, `<me>`, or
-`<self>` and exact running-macro provenance is accepted. Turbo Hotbar may repeat
-the authored macro, but Seiton Sense creates no repeat, alternate action, or
-retry; generic queued-action mode is rejected. The token is consumed on the
-one attempt before the original game call. Near Assist never changes your hard,
+The authored `<e1>` line is only a reliable concrete carrier; it does not force
+the assist destination to S1. On a valid redirect, Seiton replaces that one
+incoming target ID with the selected ally's actual S1-S5 target. If it cannot
+redirect, the carrier is deliberately made invalid and the following `<t>` line
+remains the ordinary fallback. This works even when no own target was selected.
+The compact two-line form forwards its current `<t>` unchanged on failure.
+
+Turbo Hotbar may repeat the authored macro, but Seiton Sense creates no repeat,
+alternate action, or retry; generic queued-action mode is rejected. The token is
+consumed before the one original game call. Near Assist never changes your hard,
 soft, or focus target and never sends an action by itself.
 
 Wolves' Den, Frontline, and Rival Wings are excluded from Near Assist because
