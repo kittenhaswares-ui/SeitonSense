@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, CC immunity, Seiton, warnings, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating a sharp HOWMANY-style pressure counter, stable native-nameplate pressure and CC-protection cues, Ninja Seiton decisions, configurable personal and MCH LB warnings with sound, opt-in CC-only one-shot Near Assist and Purify helpers, plus target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, Ninja Seiton decisions, personal and MCH LB warnings, opt-in CC macro assist/help, self-Purify and BRD/WHM ally rescue, plus target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.6.0.2",
-    "Changelog": "CC protection visibility fix: active Guard and verified full immunity now use one large static crossed-CC emblem above the native job icon, with red prohibition stroke, bright side chevrons and separate countdown. Overlaps use the farthest expiry; no pulse, label clutter or world-position jitter.",
+    "AssemblyVersion": "0.7.0.0",
+    "Changelog": "Adds opt-in /nearhelp and /sshelp plus CC-only BRD/WHM Ally Rescue. Paean/Aquaveil can make one attempt for Stun, Silence, Deep Freeze, or Miracle on the exact reachable party member chosen by HP, incoming pressure, trusted MP, and distance. Self-Purify wins shared input; no helper retries. Near Help keeps the /mlock + <2> then <t> fallback without a visible target switch.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786501461"
+    "LastUpdate": "1786578867"
   }
 ]

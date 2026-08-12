@@ -2,7 +2,8 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.6 integrates the
+one-shot macro assistance, and target highlights. Version 0.7 adds action-aware
+lowest-health party help on top of the integrated v0.6 awareness suite, which combines the
 useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow into
 one configurable plugin. It remains a custom-repository plugin.
 
@@ -19,10 +20,9 @@ one configurable plugin. It remains a custom-repository plugin.
   the enemy is directly targeting/casting at you, recently hit you, or placed
   the verified MCH limit-break marker on you. These are read-only cues and never
   change your target.
-- **Visible CC protection:** a bright, static icon and remaining-time label are
-  anchored beside each enemy's native job icon. Guard uses the Guard slot while
-  active; the full-immunity cue has its own emphasized `CC` slot. The verified
-  catalog is listed below.
+- **Visible CC protection:** one large, static crossed-`CC` emblem and countdown
+  are anchored above each enemy's native job icon. Guard and full immunity share
+  the same unmistakable symbol without competing with the small utility slots.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
   and Marksman's Spite receive stable warnings. The MCH LB card is larger by
   default and can play one selectable built-in FFXIV sound per verified threat.
@@ -34,12 +34,20 @@ one configurable plugin. It remains a custom-repository plugin.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
+- **One-shot Near Help:** `/nearhelp` redirects one already incoming friendly
+  PvP macro action to the reachable non-self party member with the lowest exact
+  HP percentage. Ability-specific range and line of sight are checked before
+  distance is used as the tie-breaker.
+- **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
+  held gameplay-key generation can attempt Paean or Aquaveil on an exact party
+  member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
+  uses HP, incoming pressure, trusted MP, and distance in that order.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
 - **Cleaner settings:** features are separated into Overview, Pressure,
-  Warnings, Seiton, Assist, Targets, and Advanced tabs. Configuration schema 10
-  preserves existing settings and initializes the new v0.6 controls.
+  Warnings, Seiton, Assist, Targets, and Advanced tabs. Configuration schema 12
+  preserves existing settings; both action-attempt experiments remain opt-in.
 
 ## Pressure and team focus
 
@@ -112,7 +120,7 @@ In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
 
-## Personal warnings and Purify
+## Personal warnings, Purify, and Ally Rescue
 
 Wildfire and Death Warrant receive danger warnings. Marksman's Spite uses its
 exact early target-marker event to show the larger `MCH LIMIT BREAK ON YOU`
@@ -132,6 +140,21 @@ consumed before dispatch. ReAction Turbo repeat pulses do not create new
 physical key generations. A failed or rejected attempt is never retried; FFXIV
 still decides whether the action can queue or execute.
 
+The separate **Ally Rescue on next gameplay key** experiment is also disabled
+by default and runs only in Crystalline Conflict. It is available on BRD with
+The Warden's Paean and on WHM with Aquaveil, using current action IDs rather
+than localized names. Only Stun, Silence, Deep Freeze, and Miracle of Nature on
+an exact non-self party member are triggers; Heavy and Bind are intentionally
+excluded.
+
+At action time, candidates must be alive, targetable, and inside the chosen
+action's native range and line of sight. The selector orders them by lowest
+exact HP percentage, then most unique enemies currently hard-targeting or
+casting at that ally, then lowest trusted MP percentage, distance, and stable
+party identity. Self-Purify observes the shared physical key first. One input
+generation can therefore produce at most one helper attempt, and Ally Rescue
+stores its spent state before the exact Paean/Aquaveil call with no retry.
+
 ## One-shot Near Assist macro
 
 Near Assist is disabled by default and intentionally supports Crystalline
@@ -139,6 +162,7 @@ Conflict only. The recommended macro first offers one enemy-slot carrier to
 Seiton Sense and keeps normal `<t>` behavior as the final fallback:
 
 ```text
+/mlock
 /nearassist
 /pvpac "Ability" <e1>
 /pvpac "Ability" <t>
@@ -178,8 +202,47 @@ alternate action, or retry; generic queued-action mode is rejected. The token is
 consumed before the one original game call. Near Assist never changes your hard,
 soft, or focus target and never sends an action by itself.
 
+`/mlock` is recommended as the first line when Turbo Hotbar is enabled. It
+prevents a held macro slot from restarting the short macro before the authored
+fallback line is reached.
+
 Wolves' Den, Frontline, and Rival Wings are excluded from Near Assist because
 they do not provide the same canonical CC enemy-slot contract.
+
+## One-shot Near Help macro
+
+Near Help shares the same default-off macro-helper switch and is intentionally
+Crystalline Conflict only. Use one concrete friendly carrier followed by your
+ordinary target fallback:
+
+```text
+/mlock
+/nearhelp
+/pvpac "Ability" <2>
+/pvpac "Ability" <t>
+```
+
+`/nearhelp` arms one token for at most 750 ms. When the next supported friendly
+PvP macro action arrives, Seiton resolves the current native party list and
+checks every exact, live, targetable, non-self party member against that
+action's native range and line of sight. It selects the lowest exact HP
+percentage first. Equal health uses shorter distance, then native party order
+and stable actor identity.
+
+The `<2>` line is only a reliable concrete friendly carrier; it does not make
+party member 2 the preferred destination. When a valid candidate exists,
+Seiton replaces that one incoming target ID with the selected ally. If no
+candidate or validation is available, only an exact authored `<2>` carrier is
+made invalid so the following `<t>` line remains vanilla. If your actual
+selected target already is party member 2, exact identity handling preserves
+the compact `<t>` form instead of mistaking it for a carrier.
+
+Dual-purpose skills are supported when current game metadata explicitly allows
+party or ally targets. Self is deliberately excluded from automatic selection;
+use the normal authored fallback if self-casting is desired. Near Help and Near
+Assist replace each other's pending token. Near Help never visibly switches a
+target, sends an action by itself, changes the action ID, accepts generic Queue
+mode, or retries.
 
 ## Focus and current-target modules
 
@@ -200,9 +263,11 @@ focus module to avoid drawing both over the same actor.
 | --- | --- | --- | --- |
 | Pressure counter and pressure badges | Yes | Separate opt-in | Yes, without CC slot labels |
 | Verified CC-protection icons | Yes | Yes, for the strict duel opponent | Yes, including large-scale-only Swift |
-| Personal warnings and optional Purify | Yes | Yes | No |
+| Personal warnings and optional self-Purify | Yes | Yes | No |
+| Optional BRD/WHM Ally Rescue | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Near Assist | Yes | No | No |
+| Near Help | Yes | No | No |
 
 Wolves' Den support is explicitly a test option. Its enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
@@ -227,6 +292,9 @@ update through the same repository.
   following supported PvP macro action
 - `/ssassist` - collision-free alias for `/nearassist`; `/seiton assist` is an
   additional fallback
+- `/nearhelp` - arm one CC-only lowest-health party redirect for the next
+  supported friendly PvP macro action
+- `/sshelp` - collision-free alias for `/nearhelp`
 - `/seiton show` / `/seiton hide` - enable or disable the HUD
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -250,11 +318,11 @@ read character names or Home Worlds and stores no combat, target, or key
 history. Transient observations and the exact one-shot action boundary are
 documented in [PRIVACY.md](PRIVACY.md).
 
-Display features never target or press actions. Near Assist can replace only
-the target ID of one explicitly armed, already incoming macro action. The
-Purify experiment is the only feature that may initiate an action, under its
-one-physical-generation/one-attempt rule. No displayed cue or assisted request
-is guaranteed to succeed.
+Display features never target or press actions. Near Assist and Near Help can
+each replace only the target ID of one explicitly armed, already incoming macro
+action. The optional self-Purify and Ally Rescue experiments may each initiate
+one exact action attempt, but share one physical-generation ownership path with
+self-Purify first. No displayed cue or assisted request is guaranteed to succeed.
 
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
@@ -270,6 +338,7 @@ the Dalamud plugin SDK depends on assemblies from a local XIVLauncher install.
 
 Those checks validate source, contracts, and packaging; they are not a claim of
 fresh live in-game confirmation. Exact nameplate placement, pressure evidence,
-MCH marker/sound timing, optional Purify behavior, and Near Assist with both
-normal macros and Turbo Hotbar should be rechecked in the relevant live PvP
-context after FFXIV, Dalamud, macro, network-event, or input-handling changes.
+MCH marker/sound timing, optional Purify/Ally Rescue behavior, and Near Assist
+with both normal macros and Turbo Hotbar should be rechecked in the relevant
+live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
+changes.

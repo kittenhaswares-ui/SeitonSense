@@ -24,12 +24,14 @@ internal sealed class TargetPressureTracker : IDisposable
     private readonly IDutyState dutyState;
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
+    private readonly PvPMetadataValidation metadata;
     private readonly MachinistLimitBreakCapture capture;
     private readonly ExecuteTracker executeTracker;
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
     private readonly Dictionary<TargetPressureActorIdentity, RecentPressureState> recentPressure = [];
     private readonly Dictionary<TargetPressureActorIdentity, ProtectionActorState> protectionStates = [];
     private TargetPressureRuntimeSnapshot snapshot = TargetPressureRuntimeSnapshot.Inactive;
+    private IncomingAllyPressureRuntimeState incomingAllyPressure = IncomingAllyPressureRuntimeState.Inactive;
     private TargetPressureDiagnostics diagnostics = TargetPressureDiagnostics.Inactive;
     private long nextUpdateAt;
     private long nextErrorLogAt;
@@ -47,6 +49,7 @@ internal sealed class TargetPressureTracker : IDisposable
         IDataManager dataManager,
         IPluginLog log,
         PluginConfiguration configuration,
+        PvPMetadataValidation metadata,
         MachinistLimitBreakCapture capture,
         ExecuteTracker executeTracker)
     {
@@ -57,6 +60,7 @@ internal sealed class TargetPressureTracker : IDisposable
         this.dutyState = dutyState;
         this.log = log;
         this.configuration = configuration;
+        this.metadata = metadata;
         this.capture = capture;
         this.executeTracker = executeTracker;
         verifiedProtectionStatusIds = CcProtectionMetadataGuard.Validate(dataManager, log);
@@ -91,6 +95,29 @@ internal sealed class TargetPressureTracker : IDisposable
         return opponent is not null
             ? opponent.TeamTargetCount
             : 0;
+    }
+
+    /// <summary>
+    /// Returns current incoming intent for one exact party ally. False means
+    /// pressure tracking is inactive or that exact identity is absent; it must
+    /// not be treated as a synthetic zero-pressure observation.
+    /// </summary>
+    internal bool TryGetIncomingAllyPressure(
+        ulong gameObjectId,
+        uint entityId,
+        out int uniqueEnemyCount)
+    {
+        var identity = new TargetPressureActorIdentity(gameObjectId, entityId);
+        var current = Volatile.Read(ref incomingAllyPressure);
+        if (current.Active &&
+            identity.IsValid &&
+            current.Counts.TryGetValue(identity, out uniqueEnemyCount))
+        {
+            return true;
+        }
+
+        uniqueEnemyCount = 0;
+        return false;
     }
 
     private void OnFrameworkUpdate(IFramework _)
@@ -138,10 +165,20 @@ internal sealed class TargetPressureTracker : IDisposable
                                       configuration.ShowCurrentTargetInfoHud;
         var pressureEnabledForContext = pressureFeaturesEnabled &&
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);
+        var incomingAllyPressureEnabledForContext =
+            configuration.ExperimentalAllyRescueOnNextKey &&
+            metadata.AllyRescueStatusesVerified &&
+            supportedContext == SupportedPvPContext.CrystallineConflict;
+        var pressureStateTrackingEnabled =
+            pressureEnabledForContext || incomingAllyPressureEnabledForContext;
         var wolvesTrackingEnabled = isWolvesDen &&
-                                    (configuration.ShowCcProtection || pressureEnabledForContext);
+                                    (configuration.ShowCcProtection ||
+                                     pressureEnabledForContext ||
+                                     incomingAllyPressureEnabledForContext);
         var normalPvPTrackingEnabled = clientState.IsPvPExcludingDen &&
-                                       (configuration.ShowCcProtection || pressureEnabledForContext);
+                                       (configuration.ShowCcProtection ||
+                                        pressureEnabledForContext ||
+                                        incomingAllyPressureEnabledForContext);
         var supported = configuration.Enabled &&
                         local is not null &&
                         localIdentity.IsValid &&
@@ -205,6 +242,7 @@ internal sealed class TargetPressureTracker : IDisposable
 
         var enemies = new List<(IPlayerCharacter Player, TargetPressureEnemyObservation Observation)>();
         var allies = new List<TargetPressureAllyObservation>();
+        var partyAllies = new List<TargetPressurePartyAllyObservation>();
         foreach (var player in players)
         {
             var identity = CreateIdentity(player);
@@ -216,13 +254,13 @@ internal sealed class TargetPressureTracker : IDisposable
                   exactTrackedEnemies.Contains(player.GameObjectId);
             var ally = partyEntityIds.Contains(player.EntityId) ||
                        (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
-            var hardTarget = pressureEnabledForContext
+            var hardTarget = pressureStateTrackingEnabled
                 ? ResolveNativeHardTarget(player, playerByEntityId)
                 : null;
 
             if (hostile)
             {
-                var castTarget = pressureEnabledForContext && player.IsCasting
+                var castTarget = pressureStateTrackingEnabled && player.IsCasting
                     ? ResolveIdentity(player.CastTargetObjectId, playerByEntityId)
                     : null;
                 var slot = exactEnemySlots.GetValueOrDefault(player.GameObjectId);
@@ -247,6 +285,15 @@ internal sealed class TargetPressureTracker : IDisposable
                     player.IsDead || player.CurrentHp == 0,
                     player.IsTargetable));
             }
+
+            if (pressureStateTrackingEnabled && partyEntityIds.Contains(player.EntityId))
+            {
+                partyAllies.Add(new TargetPressurePartyAllyObservation(
+                    identity,
+                    true,
+                    player.IsDead || player.CurrentHp == 0,
+                    player.IsTargetable));
+            }
         }
 
         var drainNow = Environment.TickCount64;
@@ -260,7 +307,8 @@ internal sealed class TargetPressureTracker : IDisposable
             localIdentity,
             enemies.Select(static pair => pair.Observation),
             recentSignals,
-            allies);
+            allies,
+            partyAllies);
 
         var result = new List<TargetPressureOpponentSnapshot>(enemies.Count);
         var protectionCount = 0;
@@ -268,7 +316,8 @@ internal sealed class TargetPressureTracker : IDisposable
         foreach (var (player, observation) in enemies)
         {
             liveIdentities.Add(observation.Actor);
-            var sources = core.TryGetOpponent(observation.Actor, out var opponent)
+            var sources = pressureEnabledForContext &&
+                          core.TryGetOpponent(observation.Actor, out var opponent)
                 ? opponent.Sources
                 : TargetPressureSources.None;
             var displays = UpdateProtections(player, observation.Actor, now, isLargeScalePvP);
@@ -279,7 +328,9 @@ internal sealed class TargetPressureTracker : IDisposable
                 observation.JobId,
                 observation.CcEnemySlot,
                 ToRuntimeEvidence(sources),
-                core.GetAllyTargetCount(observation.Actor),
+                pressureEnabledForContext
+                    ? core.GetAllyTargetCount(observation.Actor)
+                    : 0,
                 displays));
         }
 
@@ -296,6 +347,13 @@ internal sealed class TargetPressureTracker : IDisposable
             var entity = left.EntityId.CompareTo(right.EntityId);
             return entity != 0 ? entity : left.GameObjectId.CompareTo(right.GameObjectId);
         });
+
+        var publishedIncomingAllyPressure = new IncomingAllyPressureRuntimeState(
+            pressureStateTrackingEnabled,
+            core.IncomingAllyPressure.ToDictionary(
+                static pressure => pressure.Ally,
+                static pressure => pressure.UniqueEnemyCount));
+        Interlocked.Exchange(ref incomingAllyPressure, publishedIncomingAllyPressure);
 
         var published = new TargetPressureRuntimeSnapshot(true, pressureEnabledForContext, result.ToArray());
         Interlocked.Exchange(ref snapshot, published);
@@ -536,6 +594,7 @@ internal sealed class TargetPressureTracker : IDisposable
     {
         recentPressure.Clear();
         protectionStates.Clear();
+        Interlocked.Exchange(ref incomingAllyPressure, IncomingAllyPressureRuntimeState.Inactive);
         Interlocked.Exchange(ref snapshot, TargetPressureRuntimeSnapshot.Inactive);
         Volatile.Write(ref diagnostics, TargetPressureDiagnostics.Inactive);
     }
@@ -561,4 +620,13 @@ internal sealed class TargetPressureTracker : IDisposable
     private readonly record struct RecentPressureState(
         long ExpiresAtMilliseconds,
         TargetPressureSources Evidence);
+
+    private sealed record IncomingAllyPressureRuntimeState(
+        bool Active,
+        IReadOnlyDictionary<TargetPressureActorIdentity, int> Counts)
+    {
+        internal static IncomingAllyPressureRuntimeState Inactive { get; } = new(
+            false,
+            new Dictionary<TargetPressureActorIdentity, int>());
+    }
 }

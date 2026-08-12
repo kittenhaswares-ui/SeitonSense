@@ -16,6 +16,8 @@ public sealed class Plugin : IDalamudPlugin
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
     private const string NearAssistAliasCommand = "/ssassist";
+    private const string NearHelpCommand = "/nearhelp";
+    private const string NearHelpAliasCommand = "/sshelp";
     private const string PressureCommand = "/howmany";
 
     private readonly IDalamudPluginInterface pluginInterface;
@@ -35,6 +37,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
+    private readonly bool nearHelpCommandRegistered;
+    private readonly bool nearHelpAliasRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -74,16 +78,6 @@ public sealed class Plugin : IDalamudPlugin
             log,
             configuration,
             metadata);
-        personalStatus = new PersonalStatusService(
-            clientState,
-            objectTable,
-            framework,
-            dutyState,
-            keyState,
-            machinistLimitBreakCapture,
-            log,
-            configuration,
-            metadata);
         pressureTracker = new TargetPressureTracker(
             clientState,
             objectTable,
@@ -93,6 +87,7 @@ public sealed class Plugin : IDalamudPlugin
             dataManager,
             log,
             configuration,
+            metadata,
             machinistLimitBreakCapture,
             tracker);
         nearAssist = new NearAssistRedirector(
@@ -106,6 +101,19 @@ public sealed class Plugin : IDalamudPlugin
             framework,
             pressureTracker,
             log);
+        personalStatus = new PersonalStatusService(
+            clientState,
+            objectTable,
+            framework,
+            dutyState,
+            keyState,
+            dataManager,
+            pressureTracker,
+            nearAssist,
+            machinistLimitBreakCapture,
+            log,
+            configuration,
+            metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         targetHighlights = new TargetHighlightRenderer(
             configuration,
@@ -176,6 +184,32 @@ public sealed class Plugin : IDalamudPlugin
                     : "Disable it and reload before using the integrated helper."));
         }
 
+        const string nearHelpHelp =
+            "CC-only lowest-health ally helper. Macro: /mlock, /nearhelp, friendly PvP action with <2>, then the same action with <t>.";
+        nearHelpCommandRegistered = commandManager.AddHandler(
+            NearHelpCommand,
+            new CommandInfo(OnNearHelpCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = nearHelpHelp,
+            });
+        nearHelpAliasRegistered = commandManager.AddHandler(
+            NearHelpAliasCommand,
+            new CommandInfo(OnNearHelpCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = nearHelpHelp,
+            });
+        if (!nearHelpCommandRegistered)
+        {
+            log.Warning(
+                "/nearhelp is already owned by another plugin; /sshelp registered={Registered}.",
+                nearHelpAliasRegistered);
+            chatGui.PrintError(
+                "[Seiton Sense] /nearhelp is owned by another plugin. " +
+                (nearHelpAliasRegistered ? "Use /sshelp meanwhile." : "Disable the conflicting plugin and reload."));
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -195,9 +229,9 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
         namePlateAnchors.Start();
         tracker.Start();
-        personalStatus.Start();
         pressureTracker.Start();
         nearAssist.Start();
+        personalStatus.Start();
     }
 
     public void Dispose()
@@ -207,12 +241,14 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
         if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
+        if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
+        if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        personalStatus.Dispose();
         nearAssist.Dispose();
         pressureTracker.Dispose();
-        personalStatus.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
         pressureCounter.Dispose();
@@ -322,7 +358,9 @@ public sealed class Plugin : IDalamudPlugin
             case "debug":
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
+                var rescue = personalStatus.AllyRescueDiagnostics;
                 var assist = nearAssist.Diagnostics;
+                var help = nearAssist.HelpDiagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
@@ -336,9 +374,19 @@ public sealed class Plugin : IDalamudPlugin
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
+                    $"help[cmd={nearHelpCommandRegistered},armed={help.Armed},ttl={help.RemainingMilliseconds}," +
+                    $"arm={help.ArmedCount},redirect={help.RedirectedCount},fallback={help.FallbackCount}," +
+                    $"last={help.LastEvent}], " +
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
+                chatGui.Print(
+                    $"[Seiton Sense] rescue[phase={rescue.Phase},decision={rescue.Decision}," +
+                    $"cancel={rescue.CancelReason},trigger={rescue.InputTrigger},candidates={rescue.CandidateCount}," +
+                    $"action={rescue.ActionId},target={rescue.TargetGameObjectId:X},status={rescue.TargetStatusId}," +
+                    $"ready={rescue.LocallyReady},fresh={rescue.FreshGameplayKey},held={rescue.HeldGameplayKey}," +
+                    $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}," +
+                    $"count={rescue.AttemptCount}/{rescue.AcceptedCount},last={rescue.LastEvent}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -369,6 +417,7 @@ public sealed class Plugin : IDalamudPlugin
         const string text =
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
+            "/nearhelp and /sshelp arm the one-shot lowest-health ally helper. " +
             "Integrated pressure uses /howmany.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
@@ -385,6 +434,20 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Near Assist command failed closed.");
+        }
+    }
+
+    private void OnNearHelpCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.ArmHelp();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Near Help command failed closed.");
         }
     }
 }

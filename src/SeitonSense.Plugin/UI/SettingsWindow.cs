@@ -374,7 +374,33 @@ internal sealed class SettingsWindow : Window
         ImGui.Spacing();
         if (ImGui.CollapsingHeader("Advanced: experimental Purify on next key"))
             changed |= DrawPurifyControls();
+        if (ImGui.CollapsingHeader("Advanced: experimental ally rescue on next key"))
+            changed |= DrawAllyRescueControls();
 
+        return changed;
+    }
+
+    private bool DrawAllyRescueControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Use Paean/Aquaveil once on the next fresh gameplay key",
+            configuration.ExperimentalAllyRescueOnNextKey,
+            value => configuration.ExperimentalAllyRescueOnNextKey = value);
+        changed |= Checkbox(
+            "A held gameplay key may trigger when an ally is crowd-controlled (includes WASD)",
+            configuration.AllyRescueOnHeldGameplayKey,
+            value => configuration.AllyRescueOnHeldGameplayKey = value);
+        ImGui.TextUnformatted("Exact ally triggers: Stun, Silence, Deep Freeze, Miracle of Nature");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "CC-only and self-excluding. BRD uses The Warden's Paean; WHM uses Aquaveil, independent of client " +
+            "language. The target must be an exact party member in the action's native range and line of sight. " +
+            "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
+            "distance and stable party order. Self Purify wins if both helpers could claim the same physical input. " +
+            "One input generation makes at most one attempt; it is consumed before the call and is never retried. " +
+            "Heavy and Bind intentionally do not trigger this experiment.");
+        ImGui.PopTextWrapPos();
         return changed;
     }
 
@@ -513,9 +539,9 @@ internal sealed class SettingsWindow : Window
     {
         var changed = false;
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC NEAR ASSIST MACRO (OPT-IN)");
+        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC MACRO TARGET HELPERS (OPT-IN)");
         changed |= Checkbox(
-            "Enable one-shot /nearassist macro targeting",
+            "Enable one-shot /nearassist and /nearhelp targeting",
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
         changed |= Slider(
@@ -539,6 +565,7 @@ internal sealed class SettingsWindow : Window
 
         ImGui.Separator();
         ImGui.TextUnformatted("Assist-first macro with vanilla <t> fallback:");
+        ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearassist");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
@@ -552,10 +579,27 @@ internal sealed class SettingsWindow : Window
             "line is only a reliable carrier: Seiton replaces its target with the selected ally's exact e-slot. If no " +
             "redirect is possible, only that carrier attempt is invalidated and the following vanilla <t> line remains " +
             "your fallback. This also works when you started without an own target. " +
-            "The compact two-line /nearassist + <t> form remains supported when you already have a target. Turbo Hotbar " +
+            "The compact two-line /nearassist + <t> form remains supported when you already have a target. /mlock " +
+            "prevents Turbo Hotbar from restarting this macro before its fallback line. Turbo Hotbar " +
             "may repeat the authored macro, but Seiton adds no repeat or retry " +
             "of its own. It never visibly changes your selected target or sends an action by itself. Disable the " +
             "standalone NearAssist plugin before using this command; /ssassist remains the collision-free alias.");
+        ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Lowest-health ally first, with vanilla <t> fallback:");
+        ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearhelp");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <2>");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Near Help considers live non-self party members only after it sees the actual friendly PvP action. " +
+            "It keeps only targets inside that action's native range and line of sight, then chooses the lowest " +
+            "HP percentage; equal health uses shorter distance and stable actor identity. The <2> line is only a " +
+            "carrier. If no valid ally exists, Seiton invalidates that carrier so the authored <t> line remains " +
+            "the normal fallback. /mlock prevents Turbo Hotbar from restarting the macro before its fallback line. " +
+            "No visible target change, direct action, retry, or automatic self-heal is performed.");
         ImGui.PopTextWrapPos();
 
         return changed;
@@ -751,6 +795,7 @@ internal sealed class SettingsWindow : Window
         ImGui.TextWrapped($"{tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}");
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
+        var rescue = personalStatus.AllyRescueDiagnostics;
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
@@ -762,15 +807,22 @@ internal sealed class SettingsWindow : Window
             $"MCH LB capture: hook={mchLimitBreak.CaptureRunning}, queue={mchLimitBreak.QueueDepth}, " +
             $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
             $"errors={mchLimitBreak.CaptureErrors}, drops={mchLimitBreak.DroppedWarnings}");
+        ImGui.TextWrapped(
+            $"Ally Rescue: {rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
+            $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
+            $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
+            $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}, " +
+            $"count={rescue.AttemptCount}/{rescue.AcceptedCount}");
 
         ImGui.Separator();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
-            "and uploads no gameplay data to an external service. The optional Near Assist module may replace " +
-            "only the target ID on one armed macro action; the optional Purify experiment is the only feature " +
-            "that can initiate an action. Both are disabled by default. Like all third-party modifications, use " +
+            "and uploads no gameplay data to an external service. Near Assist and Near Help may replace only " +
+            "the target ID on one armed macro action. The optional Purify and Ally Rescue experiments can each " +
+            "initiate at most one exact action attempt from one shared physical input generation. All helpers are " +
+            "disabled by default. Like all third-party modifications, use " +
             "it at your own risk.");
         ImGui.PopTextWrapPos();
         return changed;

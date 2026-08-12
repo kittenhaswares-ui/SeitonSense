@@ -201,6 +201,96 @@ internal static class TargetPressureSnapshotSelfTests
         Equal(1, snapshot.GetAllyTargetCount(enemyB), "independent exact ally remains");
     }
 
+    public static void IncomingHardAndCastIntentFromOneEnemyCountsOnce()
+    {
+        var ally = Identity(201);
+        var enemy = Identity(10);
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [Enemy(enemy, hardTarget: ally, castTarget: ally)],
+            partyAllies: [PartyAlly(ally)]);
+
+        True(
+            snapshot.TryGetIncomingAllyPressure(ally, out var count),
+            "exact party ally has a known pressure observation");
+        Equal(1, count, "one enemy hard-targeting and casting on the ally counts once");
+        Equal(1, snapshot.IncomingAllyPressure.Count, "one exact ally is published");
+        Equal(ally, snapshot.IncomingAllyPressure[0].Ally, "published exact ally identity");
+    }
+
+    public static void IncomingIntentCountsUniqueLiveEnemies()
+    {
+        var ally = Identity(201);
+        var enemyA = Identity(10);
+        var enemyB = Identity(20);
+        var deadEnemy = Identity(30);
+        var untargetableEnemy = Identity(40);
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [
+                Enemy(enemyA, hardTarget: ally),
+                Enemy(enemyA, hardTarget: ally),
+                Enemy(enemyB, castTarget: ally),
+                Enemy(deadEnemy, hardTarget: ally) with { IsDead = true },
+                Enemy(untargetableEnemy, castTarget: ally) with { IsTargetable = false },
+            ],
+            partyAllies: [PartyAlly(ally)]);
+
+        True(snapshot.TryGetIncomingAllyPressure(ally, out var count), "ally pressure is known");
+        Equal(2, count, "two unique live enemies pressure the ally");
+    }
+
+    public static void IncomingIntentRejectsAmbiguousAndPartialIdentities()
+    {
+        var ambiguousAllyA = Identity(201);
+        var ambiguousAllyB = ambiguousAllyA with { EntityId = 202 };
+        var validAlly = Identity(203);
+        var ambiguousEnemyA = Identity(10);
+        var ambiguousEnemyB = ambiguousEnemyA with { EntityId = 11 };
+        var validEnemy = Identity(20);
+        var partialValidAlly = validAlly with { EntityId = 999 };
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [
+                Enemy(ambiguousEnemyA, hardTarget: validAlly),
+                Enemy(ambiguousEnemyB, castTarget: validAlly),
+                Enemy(validEnemy, hardTarget: partialValidAlly, castTarget: validAlly),
+            ],
+            partyAllies:
+            [
+                PartyAlly(ambiguousAllyA),
+                PartyAlly(ambiguousAllyB),
+                PartyAlly(validAlly),
+                PartyAlly(new TargetPressureActorIdentity(0, 204)),
+            ]);
+
+        False(
+            snapshot.TryGetIncomingAllyPressure(ambiguousAllyA, out _),
+            "ambiguous party identity is unknown");
+        False(
+            snapshot.TryGetIncomingAllyPressure(ambiguousAllyB, out _),
+            "both aliases are excluded");
+        True(
+            snapshot.TryGetIncomingAllyPressure(validAlly, out var count),
+            "independent exact ally remains known");
+        Equal(1, count, "ambiguous enemy and partial target identity cannot add pressure");
+    }
+
+    public static void IncomingPressureDistinguishesKnownZeroFromUnknown()
+    {
+        var ally = Identity(201);
+        var absent = Identity(202);
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [Enemy(Identity(10), hardTarget: Local)],
+            partyAllies: [PartyAlly(ally)]);
+
+        True(snapshot.TryGetIncomingAllyPressure(ally, out var count), "present ally has known pressure");
+        Equal(0, count, "present unpressured ally has a real zero");
+        False(snapshot.TryGetIncomingAllyPressure(absent, out _), "absent ally remains unknown");
+        False(TargetPressureSnapshot.Empty.TryGetIncomingAllyPressure(ally, out _), "inactive empty snapshot remains unknown");
+    }
+
     public static void OrderingIsDeterministic()
     {
         TargetPressureEnemyObservation[] enemies =
@@ -355,6 +445,14 @@ internal static class TargetPressureSnapshotSelfTests
             actor,
             hardTarget,
             IsAlly: true,
+            IsDead: false,
+            IsTargetable: true);
+
+    private static TargetPressurePartyAllyObservation PartyAlly(
+        TargetPressureActorIdentity actor) =>
+        new(
+            actor,
+            IsPartyMember: true,
             IsDead: false,
             IsTargetable: true);
 
