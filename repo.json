@@ -5,8 +5,8 @@
     "Punchline": "PvP pressure, CC immunity, Seiton, warnings, assists, and target clarity.",
     "Description": "A local PvP HUD integrating a sharp HOWMANY-style pressure counter, stable native-nameplate pressure and CC-protection cues, Ninja Seiton decisions, configurable personal and MCH LB warnings with sound, opt-in CC-only one-shot Near Assist and Purify helpers, plus target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.6.0.1",
-    "Changelog": "Near Assist live-test fix: removed the fragile second macro-line-text proof, accepts the next bounded Macro/100/converted-None hostile PvP action, prevents defensives from consuming the token, matches exact enemy and E1-carrier identities through GameObjectId or EntityId, and recommends <e1> followed by vanilla <t>. No visible target switch, retry, or extra action.",
+    "AssemblyVersion": "0.6.0.2",
+    "Changelog": "CC protection visibility fix: active Guard and verified full immunity now use one large static crossed-CC emblem above the native job icon, with red prohibition stroke, bright side chevrons and separate countdown. Overlaps use the farthest expiry; no pulse, label clutter or world-position jitter.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786495631"
+    "LastUpdate": "1786501461"
   }
 ]

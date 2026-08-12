@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0.2
+
+- Replaced the tiny distant active-CC icon with one large static crossed-`CC`
+  emblem anchored directly above FFXIV's native nameplate job icon. It uses a
+  red prohibition stroke, bright side chevrons, and a separate high-contrast
+  countdown without competing source text inside the symbol.
+- Overlapping Guard and full immunity now resolve to the farthest verified
+  expiry in one stable emblem instead of duplicating or swapping shorter
+  warnings. Crossed Guard cooldown, MP, Seiton, and pressure indicators retain
+  fixed positions.
+- Added a dedicated isolated emblem preview and size setting. The display uses static
+  contrast instead of pulse, fade, resizing, or world projection; the existing
+  status/anchor grace and absolute expiry remain unchanged.
+- Added the verified CC-protection metadata count to `/seiton debug` so live
+  testing can distinguish detection from presentation failures.
+
 ## 0.6.0.1
 
 - Simplified Near Assist after live testing showed that FFXIV and Turbo Hotbar

@@ -56,6 +56,7 @@ internal sealed class OverlayRenderer
     }
 
     public bool PreviewEnabled { get; set; }
+    public bool CcProtectionPreviewEnabled { get; set; }
     public int NativeAnchorCount => namePlateAnchors.Anchors.Count;
 
     public void TriggerPreviewPopup()
@@ -70,6 +71,7 @@ internal sealed class OverlayRenderer
         if (gameGui.GameUiHidden) return;
 
         if (PreviewEnabled) DrawPreview();
+        if (CcProtectionPreviewEnabled) DrawCcProtectionPreview();
         DrawPopup(previewPopup);
 
         if (!configuration.Enabled) return;
@@ -505,15 +507,7 @@ internal sealed class OverlayRenderer
             .ToArray() ?? [];
         var activeGuard = activeProtections.FirstOrDefault(static protection => protection.Kind == CcProtectionKind.Guard);
         var hasActiveGuard = activeGuard.StatusId != 0;
-        if (configuration.ShowCcProtection && hasActiveGuard)
-        {
-            var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 0);
-            var countdown = configuration.ShowCcProtectionCountdown
-                ? CcProtectionCountdownFormatter.Format((activeGuard.ExpiresAtMilliseconds - now) / 1000f)
-                : null;
-            DrawIconBadge(rect.Min, rect.Max, activeGuard.IconId, GuardColor, false, "G", countdown);
-        }
-        else if (configuration.ShowGuardUnavailable && enemy?.GuardUnavailable == true)
+        if (!hasActiveGuard && configuration.ShowGuardUnavailable && enemy?.GuardUnavailable == true)
         {
             var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, 0);
             var countdown = configuration.ShowGuardCountdown
@@ -533,29 +527,6 @@ internal sealed class OverlayRenderer
                 true,
                 null,
                 null);
-        }
-
-        if (configuration.ShowCcProtection)
-        {
-            var immunitySlot = 3;
-            foreach (var protection in activeProtections
-                         .Where(static protection => protection.Kind == CcProtectionKind.FullImmunity)
-                         .Take(1))
-            {
-                var rect = IndicatorRect(anchor.JobIconTopLeft.X, centerY, size, gap, immunitySlot++);
-                var countdown = configuration.ShowCcProtectionCountdown
-                    ? CcProtectionCountdownFormatter.Format((protection.ExpiresAtMilliseconds - now) / 1000f)
-                    : null;
-                DrawIconBadge(
-                    rect.Min,
-                    rect.Max,
-                    protection.IconId,
-                    ImmunityColor,
-                    false,
-                    "CC",
-                    countdown,
-                    emphasized: true);
-            }
         }
 
         const int TeamPressureSlot = 4;
@@ -580,7 +551,169 @@ internal sealed class OverlayRenderer
                 label,
                 pressure.HasDirectIncomingIntent ? IncomingPressureColor : RecentPressureColor);
         }
+
+        if (configuration.ShowCcProtection && activeProtections.Length > 0)
+            DrawCcProtectionEmblem(anchor, activeProtections, now);
     }
+
+    private void DrawCcProtectionEmblem(
+        NamePlateAnchorSnapshot anchor,
+        IReadOnlyList<CcProtectionDisplay> activeProtections,
+        long now)
+    {
+        // The farthest verified expiry represents the complete remaining protected
+        // window when Guard and another immunity overlap. One static emblem avoids
+        // duplicate visual noise and cannot swap to a shorter timer mid-window.
+        var protection = activeProtections
+            .OrderByDescending(static candidate => candidate.ExpiresAtMilliseconds)
+            .ThenByDescending(static candidate => candidate.Kind)
+            .ThenBy(static candidate => candidate.StatusId)
+            .FirstOrDefault();
+        if (protection.StatusId == 0) return;
+
+        var uiScale = ImGuiHelpers.GlobalScale;
+        var nativeHeight = Math.Max(1f, anchor.Height);
+        var desiredEmblemSize = Math.Clamp(
+            nativeHeight * 2.15f * configuration.CcProtectionEmblemScale,
+            52f * uiScale,
+            88f * uiScale);
+        var availableHeight = anchor.JobIconTopLeft.Y - (11f * uiScale);
+        if (availableHeight <= 0f) return;
+        var emblemSize = desiredEmblemSize;
+        var timerHeight = Math.Clamp(emblemSize * 0.36f, 21f * uiScale, 31f * uiScale);
+        var timerGap = Math.Max(3f * uiScale, emblemSize * 0.05f);
+        var anchorGap = Math.Max(7f * uiScale, configuration.NameplateIconSpacing * uiScale);
+        var requiredHeight = emblemSize + timerGap + timerHeight + anchorGap;
+        if (requiredHeight > availableHeight)
+        {
+            var ratio = availableHeight / requiredHeight;
+            emblemSize *= ratio;
+            if (emblemSize < 34f * uiScale) return;
+            timerHeight = Math.Clamp(emblemSize * 0.36f, 16f * uiScale, 31f * uiScale);
+            timerGap = Math.Max(2f * uiScale, emblemSize * 0.05f);
+            anchorGap = Math.Max(4f * uiScale, configuration.NameplateIconSpacing * uiScale);
+        }
+
+        var finalRequiredHeight = emblemSize + timerGap + timerHeight + anchorGap;
+        if (finalRequiredHeight > availableHeight) return;
+
+        var glowMargin = Math.Max(12f * uiScale, emblemSize * 0.36f);
+        var screen = ImGui.GetIO().DisplaySize;
+        var centerX = Math.Clamp(
+            (anchor.JobIconTopLeft.X + anchor.JobIconBottomRight.X) * 0.5f,
+            (emblemSize * 0.5f) + glowMargin,
+            Math.Max((emblemSize * 0.5f) + glowMargin, screen.X - (emblemSize * 0.5f) - glowMargin));
+        var emblemBottom = anchor.JobIconTopLeft.Y - anchorGap;
+        var emblemMin = PixelSnap(new Vector2(centerX - (emblemSize * 0.5f), emblemBottom - emblemSize));
+        var emblemMax = PixelSnap(emblemMin + new Vector2(emblemSize));
+        var timerMin = PixelSnap(new Vector2(emblemMin.X, emblemMin.Y - timerGap - timerHeight));
+        var timerMax = PixelSnap(new Vector2(emblemMax.X, emblemMin.Y - timerGap));
+        DrawCcProtectionEmblem(emblemMin, emblemMax, timerMin, timerMax, protection, now);
+    }
+
+    private void DrawCcProtectionEmblem(
+        Vector2 emblemMin,
+        Vector2 emblemMax,
+        Vector2 timerMin,
+        Vector2 timerMax,
+        CcProtectionDisplay protection,
+        long now)
+    {
+        var draw = ImGui.GetForegroundDrawList();
+        var accent = protection.Kind == CcProtectionKind.Guard ? GuardColor : ImmunityColor;
+        var size = emblemMax.X - emblemMin.X;
+        var outer = Math.Max(3f, size * 0.07f);
+        var rounding = Math.Max(7f, size * 0.18f);
+        var fillAlpha = Math.Max(0.9f, configuration.NameplateBackgroundOpacity);
+
+        // Visibility comes from static contrast. There is no pulse, fade, scale
+        // animation, or world projection to produce apparent flicker.
+        draw.AddRectFilled(
+            emblemMin - new Vector2(outer),
+            emblemMax + new Vector2(outer),
+            Pack(new Vector4(0f, 0f, 0f, 0.94f)),
+            rounding + outer);
+        draw.AddRectFilled(
+            emblemMin,
+            emblemMax,
+            Pack(new Vector4(0.012f, 0.015f, 0.035f, fillAlpha)),
+            rounding);
+        draw.AddRect(
+            emblemMin,
+            emblemMax,
+            Pack(accent),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(3f, size * 0.065f));
+
+        DrawStaticCcChevrons(draw, emblemMin, emblemMax, accent);
+
+        var center = (emblemMin + emblemMax) * 0.5f;
+        var ccScale = FitTextScale("CC", Math.Clamp(size / 29f, 1.45f, 2.75f), size * 0.72f);
+        var ccY = center.Y - (ImGui.GetFontSize() * ccScale * 0.62f);
+        DrawOutlinedText(
+            draw,
+            new Vector2(center.X, ccY),
+            "CC",
+            ccScale,
+            true,
+            1f,
+            new Vector4(1f, 0.18f, 0.22f, 1f));
+
+        // Thick red strokes make the state legible even when the small source
+        // icon or the Guard/immunity accent color is hard to distinguish.
+        var slashInset = size * 0.17f;
+        var slashStart = emblemMin + new Vector2(slashInset);
+        var slashEnd = emblemMax - new Vector2(slashInset);
+        draw.AddLine(slashStart, slashEnd, Pack(new Vector4(0f, 0f, 0f, 0.98f)), Math.Max(8f, size * 0.16f));
+        draw.AddLine(slashStart, slashEnd, Pack(new Vector4(1f, 0.07f, 0.1f, 1f)), Math.Max(4f, size * 0.085f));
+
+        var countdown = configuration.ShowCcProtectionCountdown
+            ? CcProtectionCountdownFormatter.Format((protection.ExpiresAtMilliseconds - now) / 1000f)
+            : string.Empty;
+        var timerText = string.IsNullOrEmpty(countdown) ? "IMMUNE" : $"{countdown}s";
+        var timerRounding = Math.Max(5f, (timerMax.Y - timerMin.Y) * 0.3f);
+        draw.AddRectFilled(timerMin - new Vector2(2f), timerMax + new Vector2(2f), Pack(new Vector4(0f, 0f, 0f, 0.94f)), timerRounding + 2f);
+        draw.AddRectFilled(timerMin, timerMax, Pack(new Vector4(0.36f, 0.005f, 0.018f, 0.96f)), timerRounding);
+        draw.AddRect(timerMin, timerMax, Pack(new Vector4(1f, 0.1f, 0.14f, 1f)), timerRounding, ImDrawFlags.None, Math.Max(2f, size * 0.045f));
+        var timerScale = FitTextScale(timerText, Math.Clamp(size / 48f, 0.9f, 1.65f), (timerMax.X - timerMin.X) - 8f);
+        var timerY = ((timerMin.Y + timerMax.Y) * 0.5f) - (ImGui.GetFontSize() * timerScale * 0.5f);
+        DrawOutlinedText(draw, new Vector2(center.X, timerY), timerText, timerScale, true);
+    }
+
+    private static void DrawStaticCcChevrons(
+        ImDrawListPtr draw,
+        Vector2 emblemMin,
+        Vector2 emblemMax,
+        Vector4 accent)
+    {
+        var size = emblemMax.X - emblemMin.X;
+        var centerY = (emblemMin.Y + emblemMax.Y) * 0.5f;
+        var reach = Math.Max(8f, size * 0.18f);
+        var halfHeight = Math.Max(10f, size * 0.23f);
+        var core = Math.Max(2.5f, size * 0.05f);
+        var glow = new Vector4(accent.X, accent.Y, accent.Z, 0.24f);
+
+        var leftTip = new Vector2(emblemMin.X - (size * 0.06f), centerY);
+        var leftOuterX = leftTip.X - reach;
+        var rightTip = new Vector2(emblemMax.X + (size * 0.06f), centerY);
+        var rightOuterX = rightTip.X + reach;
+        var segments = new (Vector2 Start, Vector2 End)[]
+        {
+            (new Vector2(leftOuterX, centerY - halfHeight), leftTip),
+            (leftTip, new Vector2(leftOuterX, centerY + halfHeight)),
+            (new Vector2(rightOuterX, centerY - halfHeight), rightTip),
+            (rightTip, new Vector2(rightOuterX, centerY + halfHeight)),
+        };
+
+        foreach (var segment in segments)
+        {
+            draw.AddLine(segment.Start, segment.End, Pack(glow), core + Math.Max(6f, size * 0.14f));
+            draw.AddLine(segment.Start, segment.End, Pack(accent), core);
+        }
+    }
+
+    private static Vector2 PixelSnap(Vector2 value) => new(MathF.Round(value.X), MathF.Round(value.Y));
 
     private static (Vector2 Min, Vector2 Max) IndicatorRect(
         float nativeIconLeft,
@@ -838,7 +971,7 @@ internal sealed class OverlayRenderer
     {
         var screen = ImGui.GetIO().DisplaySize;
         var nativeSize = 28f * ImGuiHelpers.GlobalScale;
-        var nativeMin = new Vector2(screen.X * 0.54f, screen.Y * 0.38f);
+        var nativeMin = new Vector2(screen.X * 0.72f, screen.Y * 0.62f);
         var nativeMax = nativeMin + new Vector2(nativeSize);
         var anchor = new NamePlateAnchorSnapshot(0, 1, nativeMin, nativeMax, Environment.TickCount64);
         var enemy = new EnemyHudSnapshot(
@@ -921,6 +1054,39 @@ internal sealed class OverlayRenderer
             now);
     }
 
+    private void DrawCcProtectionPreview()
+    {
+        var screen = ImGui.GetIO().DisplaySize;
+        var nativeSize = 28f * ImGuiHelpers.GlobalScale;
+        var nativeMin = new Vector2(
+            (screen.X * 0.5f) - (nativeSize * 0.5f),
+            screen.Y * 0.62f);
+        var nativeMax = nativeMin + new Vector2(nativeSize);
+        var anchor = new NamePlateAnchorSnapshot(
+            0,
+            1,
+            nativeMin,
+            nativeMax,
+            Environment.TickCount64);
+        TryDrawGameIcon(
+            ImGui.GetForegroundDrawList(),
+            EnemyCombatConstants.JobIconBaseId + 30,
+            nativeMin,
+            nativeMax,
+            1f);
+
+        var now = Environment.TickCount64;
+        DrawCcProtectionEmblem(
+            anchor,
+            [new CcProtectionDisplay(
+                EnemyCombatConstants.ResilienceStatusId,
+                "Resilience",
+                214891,
+                CcProtectionKind.FullImmunity,
+                now + 1_900)],
+            now);
+    }
+
     private bool TryDrawGameIcon(
         ImDrawListPtr draw,
         uint iconId,
@@ -960,7 +1126,8 @@ internal sealed class OverlayRenderer
         string text,
         float textScale,
         bool centered,
-        float alpha = 1f)
+        float alpha = 1f,
+        Vector4? foregroundColor = null)
     {
         var size = ImGui.CalcTextSize(text) * textScale;
         var origin = centered ? new Vector2(position.X - (size.X * 0.5f), position.Y) : position;
@@ -968,7 +1135,8 @@ internal sealed class OverlayRenderer
         var font = ImGui.GetFont();
         var fontSize = ImGui.GetFontSize() * textScale;
         var shadow = new Vector4(ShadowColor.X, ShadowColor.Y, ShadowColor.Z, ShadowColor.W * alpha);
-        var textColor = new Vector4(TextColor.X, TextColor.Y, TextColor.Z, TextColor.W * alpha);
+        var foreground = foregroundColor ?? TextColor;
+        var textColor = new Vector4(foreground.X, foreground.Y, foreground.Z, foreground.W * alpha);
         draw.AddText(font, fontSize, origin + new Vector2(-offset, 0f), Pack(shadow), text);
         draw.AddText(font, fontSize, origin + new Vector2(offset, 0f), Pack(shadow), text);
         draw.AddText(font, fontSize, origin + new Vector2(0f, -offset), Pack(shadow), text);

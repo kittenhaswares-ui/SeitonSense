@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 10;
+    public int Version { get; set; } = 11;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -110,6 +110,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowTeamPressureOnNameplates { get; set; } = true;
     public bool ShowCcProtection { get; set; } = true;
     public bool ShowCcProtectionCountdown { get; set; } = true;
+    public float CcProtectionEmblemScale { get; set; } = 1f;
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -118,7 +119,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 10)
+        if (Version >= 11)
         {
             if (repaired) Save();
             return;
@@ -209,7 +210,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             MchLimitBreakSoundId = 6;
         }
 
-        Version = 10;
+        if (Version < 11)
+        {
+            // Active protection used to share the tiny auxiliary-icon row. The
+            // dedicated native-nameplate emblem is deliberately larger.
+            CcProtectionEmblemScale = 1f;
+        }
+
+        Version = 11;
         ClampSettings();
         Save();
     }
@@ -218,7 +226,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 10;
+        Version = 11;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -283,6 +291,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowTeamPressureOnNameplates = true;
         ShowCcProtection = true;
         ShowCcProtectionCountdown = true;
+        CcProtectionEmblemScale = 1f;
         ClampSettings();
     }
 
@@ -367,6 +376,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
         changed |= Clamp(PersonalWarningBackgroundOpacity, 0f, 1f, 0.92f, value => PersonalWarningBackgroundOpacity = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
+        changed |= Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f, value => CcProtectionEmblemScale = value);
 
         var iconsPerRow = Math.Clamp(PressureIconsPerRow, 1, 16);
         if (iconsPerRow != PressureIconsPerRow)

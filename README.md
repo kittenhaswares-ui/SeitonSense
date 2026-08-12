@@ -59,16 +59,19 @@ outside Near Assist's normal nearby-candidate window.
 ## Stable nameplates and CC protection
 
 Seiton Sense copies the visible rectangle of FFXIV's native nameplate job icon
-after a nameplate update and draws six reserved slots beside it:
+after a nameplate update. Small utility indicators keep fixed reserved positions
+beside it for observed Guard cooldown, low MP, Seiton readiness, team pressure
+(`P#`), and incoming pressure (`YOU`, `HIT`, or `LB`). Active protection no
+longer competes for one of those tiny slots: v0.6.0.2 draws one large, static
+crossed-`CC` emblem directly above the native job icon. A red prohibition
+stroke, bright side chevrons, and a separate countdown make the no-CC window
+readable at a glance without internal label/icon clutter. If Guard and another
+immunity overlap, the emblem shows the farthest verified expiry instead of
+duplicating or swapping shorter warnings. It has no pulse, fade, scale
+animation, or world-position projection, and its size is configurable.
 
-1. active Guard or observed Guard cooldown;
-2. low MP;
-3. Seiton readiness;
-4. active full CC immunity;
-5. team pressure (`P#`);
-6. incoming pressure (`YOU`, `HIT`, or `LB`).
-
-Slots stay reserved even when empty, so neighboring indicators do not jump.
+Auxiliary slots stay reserved even when empty, so neighboring indicators do
+not jump.
 The plugin never replaces the job icon or mutates native UI nodes. Anchors and
 actors are joined by both game-object and network entity identity; stale or
 ambiguous identity fails closed. A short missing-anchor/status grace absorbs a

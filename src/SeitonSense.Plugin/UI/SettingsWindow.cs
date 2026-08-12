@@ -100,6 +100,7 @@ internal sealed class SettingsWindow : Window
     public override void OnClose()
     {
         overlay.PreviewEnabled = false;
+        overlay.CcProtectionPreviewEnabled = false;
         pressureCounter.PreviewEnabled = false;
     }
 
@@ -128,7 +129,10 @@ internal sealed class SettingsWindow : Window
         ImGui.Separator();
         ImGui.TextUnformatted("Preview and reset");
         if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
+        {
             overlay.PreviewEnabled = !overlay.PreviewEnabled;
+            if (overlay.PreviewEnabled) overlay.CcProtectionPreviewEnabled = false;
+        }
         ImGui.SameLine();
         if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop pressure preview" : "Preview pressure"))
             pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
@@ -139,6 +143,7 @@ internal sealed class SettingsWindow : Window
         {
             configuration.ResetToDefaults();
             overlay.PreviewEnabled = false;
+            overlay.CcProtectionPreviewEnabled = false;
             pressureCounter.PreviewEnabled = false;
             pressureCounter.ResetWindowPosition();
             changed = true;
@@ -349,8 +354,20 @@ internal sealed class SettingsWindow : Window
             "Countdown",
             configuration.ShowCcProtectionCountdown,
             value => configuration.ShowCcProtectionCountdown = value);
+        changed |= Slider(
+            "CC immunity emblem size",
+            configuration.CcProtectionEmblemScale,
+            0.75f,
+            1.75f,
+            value => configuration.CcProtectionEmblemScale = value,
+            "%.2f x");
+        if (ImGui.Button(overlay.CcProtectionPreviewEnabled ? "Stop CC emblem preview" : "Preview CC emblem"))
+        {
+            overlay.CcProtectionPreviewEnabled = !overlay.CcProtectionPreviewEnabled;
+            if (overlay.CcProtectionPreviewEnabled) overlay.PreviewEnabled = false;
+        }
         ImGui.TextDisabled(
-            "Uses stable native-nameplate anchors and verified status metadata for Guard, Resilience, " +
+            "A large static crossed-CC emblem is anchored above the native job icon for Guard, Resilience, " +
             "SAM, WAR, VPR and large-scale PvP immunity.");
         ImGui.TextDisabled("Ambiguous one-hit wards are intentionally not labelled as full immunity.");
 
