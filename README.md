@@ -2,12 +2,11 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.7 adds action-aware
-lowest-health party help on top of the integrated v0.6 awareness suite, which combines the
-useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow into
-one configurable plugin. Hotfix 0.7.0.1 makes Ally Rescue less fragile and
-adds exact cleanse confirmation and local feedback. It remains a
-custom-repository plugin.
+one-shot macro assistance, and target highlights. Version 0.8 adds an
+experimental WHM Miracle intercept on top of the integrated awareness suite,
+which combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and
+Super Focus Glow into one configurable plugin. It remains a custom-repository
+plugin.
 
 ## Highlights
 
@@ -46,12 +45,18 @@ custom-repository plugin.
   uses HP, incoming pressure, trusted MP, and distance in that order. A matching
   successful status-removal effect produces a blue `CLEANSED` popup and feeds
   resettable, in-memory match/session counters.
+- **Experimental Miracle intercept:** on WHM, one eligible physical held or
+  freshly pressed key generation can make one Miracle of Nature attempt against
+  the exact enemy starting Marksman's Spite, Zantetsuken, or Furious Backlash /
+  Nest der Blutschuppen. MCH/SAM opportunities last 500 ms, VPR lasts 250 ms,
+  and the VPR path waits for Hardened Scales to be genuinely absent; no visible
+  target change, fallback action, or retry is added.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
 - **Cleaner settings:** features are separated into Overview, Pressure,
-  Warnings, Seiton, Assist, Targets, and Advanced tabs. Configuration schema 12
-  preserves existing settings; both action-attempt experiments remain opt-in.
+  Warnings, Seiton, Assist, Targets, and Advanced tabs. Configuration schema 13
+  preserves existing settings; every action-attempt experiment remains opt-in.
 
 ## Pressure and team focus
 
@@ -124,7 +129,7 @@ In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
 
-## Personal warnings, Purify, and Ally Rescue
+## Personal warnings, Purify, Ally Rescue, and Miracle intercept
 
 Wildfire and Death Warrant receive danger warnings. Marksman's Spite uses its
 exact early target-marker event to show the larger `MCH LIMIT BREAK ON YOU`
@@ -180,6 +185,31 @@ confirmed removals, with confirmed totals for the current match and plugin
 session plus per-action/per-status details. These aggregates live only in
 memory. The provided reset clears the displayed statistics and does not create
 another action or confirmation.
+
+The WHM-only **Miracle intercept** is a separate, default-off Crystalline
+Conflict experiment. It watches only three exact server start signals:
+Marksman's Spite `29415`, Zantetsuken `29537`, and the VPR Furious Backlash /
+Nest der Blutschuppen action `39188`. If an eligible physical key generation is
+held or freshly pressed during the bounded opportunity, the exact canonical
+enemy remains alive and targetable, and Miracle's native 10-yalm range and
+line-of-sight check passes, Seiton Sense may make one Miracle of Nature `29228`
+attempt on that enemy.
+
+MCH and SAM opportunities expire after 500 ms; the VPR opportunity expires
+after 250 ms. For VPR, the start signal only arms that short-lived opportunity.
+The helper waits for live Hardened Scales `4096` to disappear and never predicts
+its end from a countdown. Other verified full CC protection also prevents deliberately
+spending Miracle into immunity. Self-Purify has first claim on the shared
+physical input, Ally Rescue second, and Miracle third. State and input are
+consumed before the one native request; there is no selected-target change,
+alternate target, fallback, or retry. Turbo-generated logical repeats do not
+create new physical intent.
+
+The MCH and SAM signals occur before their later damage presentation in the
+current captured event shape, but FFXIV remains authoritative. A locally
+accepted Miracle request is not proof that the already-started action was
+interrupted. This path is intentionally marked experimental until it has been
+rechecked live on the current patch.
 
 ## One-shot Near Assist macro
 
@@ -291,6 +321,7 @@ focus module to avoid drawing both over the same actor.
 | Verified CC-protection icons | Yes | Yes, for the strict duel opponent | Yes, including large-scale-only Swift |
 | Personal warnings and optional self-Purify | Yes | Yes | No |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
+| Optional WHM Miracle intercept | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
@@ -346,9 +377,10 @@ documented in [PRIVACY.md](PRIVACY.md).
 
 Display features never target or press actions. Near Assist and Near Help can
 each replace only the target ID of one explicitly armed, already incoming macro
-action. The optional self-Purify and Ally Rescue experiments may each initiate
-one exact action attempt, but share one physical-generation ownership path with
-self-Purify first. Ally Rescue labels a removal `CLEANSED` only after the exact
+action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
+initiate one exact action attempt, but share one physical-generation ownership
+path with self-Purify first, Ally Rescue second, and Miracle third. Ally Rescue
+labels a removal `CLEANSED` only after the exact
 successful status-removal ActionEffect is observed; attempts and client-accepted
 requests alone are not success claims.
 
@@ -366,8 +398,10 @@ the Dalamud plugin SDK depends on assemblies from a local XIVLauncher install.
 
 Those checks validate source, contracts, and packaging; they are not a claim of
 fresh live in-game confirmation. Exact nameplate placement, pressure evidence,
-MCH marker/sound timing, optional Purify/Ally Rescue behavior, and Near Assist
+MCH marker/sound timing, optional Purify/Ally Rescue/Miracle behavior, and Near Assist
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
 changes. The 0.7.0.1 ActionEffect confirmation and blue popup also still require
-current-patch live validation.
+current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
+actual Miracle interruption likewise require a live CC A/B test; source and
+package checks cannot prove that server outcome.

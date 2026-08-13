@@ -14,9 +14,12 @@ internal sealed record PvPMetadataValidation(
     bool DeathWarrantVerified,
     bool MarksmanSpiteVerified,
     bool PurifyVerified,
-    bool AllyRescueStatusesVerified)
+    bool AllyRescueStatusesVerified,
+    bool MiracleOfNatureActionVerified,
+    bool ZantetsukenVerified,
+    bool FuriousBacklashVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -278,6 +281,104 @@ internal static class PvPMetadataGuard
                        expectTransfiguration: true);
         });
 
+        var miracleOfNatureActionVerified = ValidateFeature("Miracle of Nature action", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.MiracleOfNatureActionId, out var action) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.MiracleOfNatureActionId, out var transient) ||
+                !statuses.TryGetRow(EnemyCombatConstants.MiracleOfNatureStatusId, out var status))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return string.Equals(action.Name.ToString(), "Miracle of Nature", StringComparison.OrdinalIgnoreCase) &&
+                   action.Icon == EnemyCombatConstants.MiracleOfNatureActionIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.WhiteMageJobId &&
+                   action.Range == EnemyCombatConstants.MiracleOfNatureRange &&
+                   action.EffectRange == 0 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.MiracleOfNatureRecast100ms &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetAlliance &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   !action.AffectsPosition &&
+                   description.Contains("Forcibly transforms target", StringComparison.OrdinalIgnoreCase) &&
+                   description.Contains(
+                       "preventing them from using actions other than Purify",
+                       StringComparison.OrdinalIgnoreCase) &&
+                   description.Contains(
+                       "nullifies status afflictions that can be removed by Purify",
+                       StringComparison.OrdinalIgnoreCase) &&
+                   ValidatePurifiableStatus(
+                       status,
+                       "Miracle of Nature",
+                       EnemyCombatConstants.MiracleOfNatureStatusIconId,
+                       expectMovementLock: false,
+                       expectActionLock: false,
+                       expectTransfiguration: true);
+        });
+
+        var zantetsukenVerified = ValidateFeature("Zantetsuken", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            return actions.TryGetRow(EnemyCombatConstants.ZantetsukenActionId, out var action) &&
+                   string.Equals(action.Name.ToString(), "Zantetsuken", StringComparison.OrdinalIgnoreCase) &&
+                   action.Icon == EnemyCombatConstants.ZantetsukenIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.SamuraiJobId &&
+                   action.Range == 20 &&
+                   action.EffectRange == 5 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.ZantetsukenRecast100ms &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.AffectsPosition;
+        });
+
+        var furiousBacklashVerified = ValidateFeature("Furious Backlash", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            return actions.TryGetRow(EnemyCombatConstants.FuriousBacklashActionId, out var action) &&
+                   string.Equals(action.Name.ToString(), "Furious Backlash", StringComparison.OrdinalIgnoreCase) &&
+                   action.Icon == EnemyCombatConstants.FuriousBacklashIconId &&
+                   action.IsPvP &&
+                   !action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.ViperJobId &&
+                   action.Range == 0 &&
+                   action.EffectRange == 15 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.FuriousBacklashRecast100ms &&
+                   action.CanTargetSelf &&
+                   !action.CanTargetHostile &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   !action.AffectsPosition &&
+                   statuses.TryGetRow(EnemyCombatConstants.HardenedScalesStatusId, out var status) &&
+                   string.Equals(status.Name.ToString(), "Hardened Scales", StringComparison.OrdinalIgnoreCase) &&
+                   status.Icon == 214992 &&
+                   status.StatusCategory == 1 &&
+                   !status.CanDispel &&
+                   !status.IsPermanent;
+        });
+
         var validation = new PvPMetadataValidation(
             seitonVerified,
             guardVerified,
@@ -286,12 +387,16 @@ internal static class PvPMetadataGuard
             deathWarrantVerified,
             marksmanSpiteVerified,
             purifyVerified,
-            allyRescueStatusesVerified);
+            allyRescueStatusesVerified,
+            miracleOfNatureActionVerified,
+            zantetsukenVerified,
+            furiousBacklashVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
-            "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}.",
+            "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
+            "Zantetsuken={Zantetsuken}, FuriousBacklash={FuriousBacklash}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.RecuperateVerified,
@@ -299,7 +404,10 @@ internal static class PvPMetadataGuard
             validation.DeathWarrantVerified,
             validation.MarksmanSpiteVerified,
             validation.PurifyVerified,
-            validation.AllyRescueStatusesVerified);
+            validation.AllyRescueStatusesVerified,
+            validation.MiracleOfNatureActionVerified,
+            validation.ZantetsukenVerified,
+            validation.FuriousBacklashVerified);
 
         return validation;
     }

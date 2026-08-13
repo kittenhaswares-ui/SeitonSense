@@ -32,11 +32,21 @@ internal readonly record struct AllyRescueCleanseEffect(
     uint GlobalSequence,
     ushort SourceSequence);
 
+internal readonly record struct MiracleInterceptThreatEvent(
+    long ObservedAtMilliseconds,
+    uint LocalEntityId,
+    uint CasterEntityId,
+    uint EventTargetEntityId,
+    uint ActionId,
+    uint GlobalSequence,
+    ushort SourceSequence);
+
 internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 {
     private const int EffectSlotsPerTarget = 8;
     private const int MaximumQueuedWarnings = 64;
     private const int MaximumQueuedAllyRescueCleanses = 64;
+    private const int MaximumQueuedMiracleInterceptThreats = 64;
     private const int MaximumQueuedPressureEvents = 128;
     private const int MaximumTargetsPerAction = 32;
     private const uint WardensPaeanActionId = 29400;
@@ -47,20 +57,25 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private readonly IPluginLog log;
     private readonly ConcurrentQueue<MachinistLimitBreakWarning> pendingWarnings = new();
     private readonly ConcurrentQueue<AllyRescueCleanseEffect> pendingAllyRescueCleanses = new();
+    private readonly ConcurrentQueue<MiracleInterceptThreatEvent> pendingMiracleInterceptThreats = new();
     private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
 
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private int machinistLocalEntityIdBits;
     private int allyRescueLocalEntityIdBits;
+    private int miracleInterceptLocalEntityIdBits;
     private int pressureLocalEntityIdBits;
     private int queuedWarningCount;
     private int queuedAllyRescueCleanseCount;
+    private int queuedMiracleInterceptThreatCount;
     private int queuedPressureEventCount;
     private int captureBlocked = 1;
     private long captureErrors;
     private long droppedWarnings;
     private long capturedAllyRescueCleanses;
     private long droppedAllyRescueCleanses;
+    private long capturedMiracleInterceptThreats;
+    private long droppedMiracleInterceptThreats;
     private long droppedPressureEvents;
     private bool disposed;
 
@@ -73,14 +88,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public bool IsRunning { get; private set; }
     public uint CurrentMachinistLocalEntityId => unchecked((uint)Volatile.Read(ref machinistLocalEntityIdBits));
     public uint CurrentAllyRescueLocalEntityId => unchecked((uint)Volatile.Read(ref allyRescueLocalEntityIdBits));
+    public uint CurrentMiracleInterceptLocalEntityId => unchecked((uint)Volatile.Read(ref miracleInterceptLocalEntityIdBits));
     public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
     public int QueueDepth => Math.Max(0, Volatile.Read(ref queuedWarningCount));
     public int AllyRescueCleanseQueueDepth => Math.Max(0, Volatile.Read(ref queuedAllyRescueCleanseCount));
+    public int MiracleInterceptQueueDepth => Math.Max(0, Volatile.Read(ref queuedMiracleInterceptThreatCount));
     public int PressureQueueDepth => Math.Max(0, Volatile.Read(ref queuedPressureEventCount));
     public long CaptureErrors => Interlocked.Read(ref captureErrors);
     public long DroppedWarnings => Interlocked.Read(ref droppedWarnings);
     public long CapturedAllyRescueCleanses => Interlocked.Read(ref capturedAllyRescueCleanses);
     public long DroppedAllyRescueCleanses => Interlocked.Read(ref droppedAllyRescueCleanses);
+    public long CapturedMiracleInterceptThreats => Interlocked.Read(ref capturedMiracleInterceptThreats);
+    public long DroppedMiracleInterceptThreats => Interlocked.Read(ref droppedMiracleInterceptThreats);
     public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
 
     public void Start()
@@ -124,6 +143,15 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (previous != normalized) ClearAllyRescueCleanses();
     }
 
+    public void SetMiracleInterceptLocalEntityId(uint entityId)
+    {
+        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
+        var previous = unchecked((uint)Interlocked.Exchange(
+            ref miracleInterceptLocalEntityIdBits,
+            unchecked((int)normalized)));
+        if (previous != normalized) ClearMiracleInterceptThreats();
+    }
+
     public void SetPressureLocalEntityId(uint entityId)
     {
         var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
@@ -147,6 +175,13 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return true;
     }
 
+    public bool TryDequeueMiracleInterceptThreat(out MiracleInterceptThreatEvent threat)
+    {
+        if (!pendingMiracleInterceptThreats.TryDequeue(out threat)) return false;
+        Interlocked.Decrement(ref queuedMiracleInterceptThreatCount);
+        return true;
+    }
+
     public bool TryDequeuePressure(out TargetPressureCaptureEvent pressureEvent)
     {
         if (!pendingPressureEvents.TryDequeue(out pressureEvent)) return false;
@@ -166,6 +201,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             Interlocked.Decrement(ref queuedAllyRescueCleanseCount);
     }
 
+    public void ClearMiracleInterceptThreats()
+    {
+        while (pendingMiracleInterceptThreats.TryDequeue(out _))
+            Interlocked.Decrement(ref queuedMiracleInterceptThreatCount);
+    }
+
     public void ClearPressureEvents()
     {
         while (pendingPressureEvents.TryDequeue(out _))
@@ -179,11 +220,13 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Volatile.Write(ref captureBlocked, 1);
         Interlocked.Exchange(ref machinistLocalEntityIdBits, 0);
         Interlocked.Exchange(ref allyRescueLocalEntityIdBits, 0);
+        Interlocked.Exchange(ref miracleInterceptLocalEntityIdBits, 0);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
         actionEffectHook?.Dispose();
         IsRunning = false;
         ClearWarnings();
         ClearAllyRescueCleanses();
+        ClearMiracleInterceptThreats();
         ClearPressureEvents();
     }
 
@@ -197,6 +240,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     {
         MachinistLimitBreakWarning? capturedWarning = null;
         AllyRescueCleanseEffect? capturedAllyRescueCleanse = null;
+        MiracleInterceptThreatEvent? capturedMiracleInterceptThreat = null;
         TargetPressureCaptureEvent? capturedPressure = null;
         try
         {
@@ -204,6 +248,11 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             {
                 capturedWarning = TryCaptureMachinistWarning(casterEntityId, header, effects, targetEntityIds);
                 capturedAllyRescueCleanse = TryCaptureAllyRescueCleanse(
+                    casterEntityId,
+                    header,
+                    effects,
+                    targetEntityIds);
+                capturedMiracleInterceptThreat = TryCaptureMiracleInterceptThreat(
                     casterEntityId,
                     header,
                     effects,
@@ -230,6 +279,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
         if (capturedWarning is { } warning) Enqueue(warning);
         if (capturedAllyRescueCleanse is { } cleanse) EnqueueAllyRescueCleanse(cleanse);
+        if (capturedMiracleInterceptThreat is { } miracleThreat)
+            EnqueueMiracleInterceptThreat(miracleThreat);
         if (capturedPressure is { } pressure) EnqueuePressure(pressure);
     }
 
@@ -330,6 +381,57 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return null;
     }
 
+    private MiracleInterceptThreatEvent? TryCaptureMiracleInterceptThreat(
+        uint casterEntityId,
+        ActionEffectHandler.Header* header,
+        ActionEffectHandler.TargetEffects* effects,
+        GameObjectId* targetEntityIds)
+    {
+        var localEntityId = CurrentMiracleInterceptLocalEntityId;
+        if (!IsNetworkEntityId(localEntityId) ||
+            !IsNetworkEntityId(casterEntityId) ||
+            casterEntityId == localEntityId ||
+            header == null ||
+            effects == null ||
+            targetEntityIds == null ||
+            header->NumTargets != 1)
+        {
+            return null;
+        }
+
+        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
+        if (actionId is not (
+                EnemyCombatConstants.MarksmanSpiteActionId or
+                EnemyCombatConstants.ZantetsukenActionId or
+                EnemyCombatConstants.FuriousBacklashActionId))
+        {
+            return null;
+        }
+
+        var targetEntityId = targetEntityIds[0].ObjectId;
+        if (!IsNetworkEntityId(targetEntityId)) return null;
+
+        var targetEffects = effects[0].Effects;
+        var kind = MiracleInterceptRules.ClassifyExactStartSignal(
+            actionId,
+            casterEntityId,
+            targetEntityId,
+            header->NumTargets,
+            targetEffects[0].Type,
+            IsEmpty(targetEffects[0]),
+            HasOnlyEmptyAdditionalEffects(targetEffects));
+        if (kind == SeitonSense.Core.MiracleInterceptThreatKind.None) return null;
+
+        return new MiracleInterceptThreatEvent(
+            Environment.TickCount64,
+            localEntityId,
+            casterEntityId,
+            targetEntityId,
+            actionId,
+            header->GlobalSequence,
+            header->SourceSequence);
+    }
+
     private TargetPressureCaptureEvent? TryCapturePressure(
         uint casterEntityId,
         ActionEffectHandler.Header* header,
@@ -416,6 +518,30 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
         pendingAllyRescueCleanses.Enqueue(cleanse);
         Interlocked.Increment(ref capturedAllyRescueCleanses);
+    }
+
+    private void EnqueueMiracleInterceptThreat(MiracleInterceptThreatEvent threat)
+    {
+        if (disposed ||
+            Volatile.Read(ref captureBlocked) != 0 ||
+            threat.LocalEntityId != CurrentMiracleInterceptLocalEntityId ||
+            !IsNetworkEntityId(threat.CasterEntityId) ||
+            !IsNetworkEntityId(CurrentMiracleInterceptLocalEntityId) ||
+            threat.CasterEntityId == CurrentMiracleInterceptLocalEntityId)
+        {
+            return;
+        }
+
+        var depth = Interlocked.Increment(ref queuedMiracleInterceptThreatCount);
+        if (depth > MaximumQueuedMiracleInterceptThreats)
+        {
+            Interlocked.Decrement(ref queuedMiracleInterceptThreatCount);
+            Interlocked.Increment(ref droppedMiracleInterceptThreats);
+            return;
+        }
+
+        pendingMiracleInterceptThreats.Enqueue(threat);
+        Interlocked.Increment(ref capturedMiracleInterceptThreats);
     }
 
     private void EnqueuePressure(TargetPressureCaptureEvent pressureEvent)

@@ -173,14 +173,45 @@ statistics. No ActionEffect payload, actor identity, counter, or popup history
 is written to disk, logged as combat history, sent over the network, or
 uploaded.
 
+## Experimental WHM Miracle intercept
+
+If explicitly enabled in Crystalline Conflict, the plugin extends its existing
+bounded local action-effect observer to recognize only the reviewed early event
+shapes for Marksman's Spite `29415`, Zantetsuken `29537`, and VPR Furious
+Backlash / Nest der Blutschuppen `39188`. It reads the source and target network
+identity, action identity, bounded event sequence/time, and the small fixed
+effect-slot shape needed to reject later hit packets. The queue is bounded and
+exists only in memory. MCH and SAM opportunities expire after 500 ms; the VPR
+opportunity expires after 250 ms.
+
+On the framework thread, the source must resolve to the exact canonical CC
+opponent with the expected job. The helper transiently reads that actor's
+life/targetable state and verified full-CC-protection statuses, including VPR
+Hardened Scales `4096`. For the VPR trigger it waits for `4096` to be actually
+absent rather than predicting status expiry. The exact target must also pass
+Miracle of Nature's native 10-yalm range and line-of-sight result.
+
+The helper shares the existing physical key-generation observer and receives
+priority only after self-Purify and Ally Rescue. If all gates remain valid, it
+consumes its state and that input generation before at most one normal native
+Miracle of Nature `29228` request to the exact enemy. It never changes the
+visible target, chooses an alternate enemy, falls back to another action, or
+retries a rejected/failed request. A client-accepted request is not recorded as
+proof that the enemy startup was interrupted.
+
+No observed threat, actor identity, key state, status, or action result is
+written to disk, uploaded, or retained as combat history. Aggregate bounded
+diagnostic counters, if displayed, remain memory-only.
+
 ## Saved settings
 
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
-opt-in/held-key/per-debuff controls, and the Ally Rescue master/held-key opt-ins.
-Configuration schema 12 does not save observed actors, targets, combat events,
+opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
+and the WHM Miracle master/per-trigger opt-ins. Configuration schema 13 does
+not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone

@@ -135,6 +135,15 @@ var tests = new (string Name, Action Run)[]
     ("Near Assist pressure cannot pull across the arena", TargetPressureSnapshotSelfTests.NearAssistPressureCannotPullAcrossArena),
     ("Near Assist pressure ties use existing stable order", TargetPressureSnapshotSelfTests.NearAssistPressureTiesUseExistingOrder),
     ("Near Assist pressure invalid candidates fail closed", TargetPressureSnapshotSelfTests.NearAssistPressureInvalidCandidatesFailClosed),
+    ("Miracle exact start signatures are narrow", MiracleInterceptSelfTests.ExactStartSignaturesAreNarrow),
+    ("Miracle held input dispatches once", MiracleInterceptSelfTests.HeldInputDispatchesAndSignalCannotRearm),
+    ("Miracle Viper accepts first-frame protection absence", MiracleInterceptSelfTests.ViperMayAlreadyBeUnprotectedOnFirstFrame),
+    ("Miracle Viper waits for actual protection absence", MiracleInterceptSelfTests.ViperWaitsForActualProtectionAbsence),
+    ("Miracle protection and range waits are bounded", MiracleInterceptSelfTests.OtherProtectionAndRangeWaitOnlyInsideDeadline),
+    ("Miracle priority and identity fail closed", MiracleInterceptSelfTests.HigherPriorityAndIdentityFailClosed),
+    ("Miracle follows Purify and Rescue priority", MiracleInterceptSelfTests.SharedPriorityIsPurifyThenRescueThenMiracle),
+    ("Miracle fresh input wins and typing is ignored", MiracleInterceptSelfTests.FreshPressWinsAndTypingNeverTriggers),
+    ("Miracle jobs and action identities are exact", MiracleInterceptSelfTests.ThreatJobsAndActionsMustMatch),
 };
 
 var failures = new List<string>();

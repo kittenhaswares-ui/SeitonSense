@@ -109,6 +109,7 @@ public sealed class Plugin : IDalamudPlugin
             keyState,
             dataManager,
             pressureTracker,
+            tracker,
             nearAssist,
             machinistLimitBreakCapture,
             log,
@@ -359,6 +360,7 @@ public sealed class Plugin : IDalamudPlugin
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
+                var miracle = personalStatus.MiracleInterceptDiagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 chatGui.Print(
@@ -391,6 +393,15 @@ public sealed class Plugin : IDalamudPlugin
                     $"session={rescue.SessionConfirmations.TotalConfirmed}," +
                     $"capture={rescue.ConfirmationCaptureCount},drop={rescue.ConfirmationDropCount}," +
                     $"last={rescue.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] miracle[phase={miracle.Phase},threat={miracle.Threat}," +
+                    $"target={miracle.TargetGameObjectId:X}/{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
+                    $"ttl={miracle.ThreatRemainingMilliseconds},scales={miracle.HardenedScalesPresent}," +
+                    $"protection={miracle.OtherCcProtectionPresent},range={miracle.HasNativeRangeAndLineOfSight}," +
+                    $"key={miracle.InputKey},attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
+                    $"count={miracle.AttemptCount}/{miracle.AcceptedCount},q={miracle.CaptureQueueDepth}," +
+                    $"capture={miracle.CapturedThreatCount},drop={miracle.DroppedThreatCount}," +
+                    $"last={miracle.LastEvent}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;

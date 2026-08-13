@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.8.0.0
+
+- Added a default-off, Crystalline-Conflict-only WHM Miracle intercept. One
+  eligible held or freshly pressed physical key generation can make one exact
+  Miracle of Nature attempt against the canonical MCH, SAM, or VPR opponent
+  that produced the reviewed early Marksman's Spite, Zantetsuken, or Furious
+  Backlash / Nest der Blutschuppen signal.
+- Added independent MCH, SAM, and VPR trigger toggles. The exact action IDs are
+  `29415`, `29537`, and `39188`; runtime selection additionally verifies the
+  expected job, exact enemy identity, life/targetable state, and Miracle's
+  native 10-yalm range and line of sight.
+- VPR timing is transition-based rather than predicted: the exact Nest signal
+  may arm a 250-ms opportunity, but dispatch waits until live Hardened Scales
+  `4096` is truly absent. Verified full CC protection blocks deliberate casts
+  into immunity.
+- MCH and SAM start opportunities expire after 500 ms so a late key cannot
+  spend Miracle after the relevant startup window.
+- Self-Purify, Ally Rescue, and Miracle now share one physical-input priority
+  path in that order. State and input are consumed before the sole Miracle
+  request; no selected-target mutation, alternate target, fallback action,
+  logical-Turbo repeat, or retry is added.
+- Extended the existing single bounded ActionEffect observer for the three
+  exact start signatures without adding another action hook. Local acceptance
+  is diagnostic only and is not presented as proof that an enemy startup was
+  interrupted. Current-patch live CC validation remains required.
+- Bumped the configuration schema to 13 and the plugin version to 0.8.0.0.
+  Existing users retain all prior settings and must explicitly enable the new
+  action-attempt feature.
+
 ## 0.7.0.1
 
 - Relaxed two fragile Ally Rescue prefilters: valid statuses no longer require

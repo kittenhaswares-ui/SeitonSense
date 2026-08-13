@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, CC immunity, Seiton, warnings, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating pressure and CC-protection cues, Ninja Seiton decisions, personal and MCH LB warnings, opt-in CC macro assist/help, self-Purify, confirmed BRD/WHM ally-rescue feedback, and target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, Ninja Seiton decisions, personal and MCH LB warnings, opt-in CC macro utilities, emergency cleanses, experimental WHM Miracle intercepts, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.7.0.1",
-    "Changelog": "Makes Ally Rescue less fragile by removing status-slot-address and cooldown-ready prechecks while keeping exact party, trigger, range/LoS, one-request, and no-retry boundaries. Fixes current lowercase Paean metadata. Exact ActionEffect 0x10 removals now show a blue CLEANSED popup and feed resettable in-memory attempt, client-accepted, match/session, action, and status statistics. Current-patch live validation remains required.",
+    "AssemblyVersion": "0.8.0.0",
+    "Changelog": "Adds an opt-in experimental CC-only WHM Miracle intercept for exact early MCH Marksman's Spite, SAM Zantetsuken, and VPR Furious Backlash / Nest der Blutschuppen signals. One eligible physical key generation can make one exact 10y/LoS Miracle attempt with Purify and Ally Rescue priority, no target switch, fallback, or retry. MCH/SAM opportunities last 500ms; VPR lasts 250ms and waits for Hardened Scales to be truly absent. Live validation remains required.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786582547"
+    "LastUpdate": "1786592060"
   }
 ]

@@ -411,7 +411,43 @@ internal sealed class SettingsWindow : Window
             changed |= DrawPurifyControls();
         if (ImGui.CollapsingHeader("Advanced: experimental ally rescue on next key"))
             changed |= DrawAllyRescueControls();
+        if (ImGui.CollapsingHeader("Advanced: experimental WHM Miracle intercept"))
+            changed |= DrawMiracleInterceptControls();
 
+        return changed;
+    }
+
+    private bool DrawMiracleInterceptControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Use Miracle of Nature once from a held gameplay key",
+            configuration.ExperimentalMiracleInterceptOnHeldKey,
+            value => configuration.ExperimentalMiracleInterceptOnHeldKey = value);
+        ImGui.TextUnformatted("Trigger separately for:");
+        changed |= Checkbox(
+            "MCH Marksman's Spite startup",
+            configuration.MiracleInterceptMchLimitBreak,
+            value => configuration.MiracleInterceptMchLimitBreak = value);
+        changed |= Checkbox(
+            "SAM Zantetsuken startup",
+            configuration.MiracleInterceptSamZantetsuken,
+            value => configuration.MiracleInterceptSamZantetsuken = value);
+        changed |= Checkbox(
+            "VPR Furious Backlash / Nest der Blutschuppen",
+            configuration.MiracleInterceptViperNest,
+            value => configuration.MiracleInterceptViperNest = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Experimental and CC-only. WHM uses the exact early action marker and one already-eligible physical " +
+            "gameplay-key generation; Turbo repeats do not create extra intent. The enemy must still be the exact " +
+            "canonical opponent, alive, targetable, within Miracle's native 10-yalm range and line of sight. " +
+            "The MCH/SAM opportunity lasts 500 ms and the VPR opportunity 250 ms. " +
+            "Nest waits until Hardened Scales is actually absent, so Miracle is never deliberately spent into " +
+            "Viper's CC immunity. Self Purify wins first, then Ally Rescue, then this helper. State and input are " +
+            "consumed before one native Miracle attempt; there is no selected-target change, fallback, or retry. " +
+            "Client acceptance does not prove the startup was interrupted; live validation is still required.");
+        ImGui.PopTextWrapPos();
         return changed;
     }
 
@@ -834,6 +870,7 @@ internal sealed class SettingsWindow : Window
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
+        var miracle = personalStatus.MiracleInterceptDiagnostics;
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
@@ -853,6 +890,15 @@ internal sealed class SettingsWindow : Window
             $"count={rescue.AttemptCount}/{rescue.AcceptedCount}, confirm-pending={rescue.ConfirmationPending}, " +
             $"confirmed={rescue.MatchConfirmations.TotalConfirmed}/{rescue.SessionConfirmations.TotalConfirmed}, " +
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
+        ImGui.TextWrapped(
+            $"Miracle intercept: {miracle.Phase}/{miracle.Threat}, target={miracle.TargetGameObjectId:X}/" +
+            $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
+            $"protection={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
+            $"range/LoS={miracle.HasNativeRangeAndLineOfSight}, key={miracle.InputKey}, " +
+            $"attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}, " +
+            $"count={miracle.AttemptCount}/{miracle.AcceptedCount}, " +
+            $"capture/queue/drop={miracle.CapturedThreatCount}/{miracle.CaptureQueueDepth}/{miracle.DroppedThreatCount}, " +
+            $"last={miracle.LastEvent}");
 
         ImGui.Separator();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
@@ -860,8 +906,9 @@ internal sealed class SettingsWindow : Window
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
             "and uploads no gameplay data to an external service. Near Assist and Near Help may replace only " +
-            "the target ID on one armed macro action. The optional Purify and Ally Rescue experiments can each " +
-            "initiate at most one exact action attempt from one shared physical input generation. All helpers are " +
+            "the target ID on one armed macro action. The optional Purify, Ally Rescue, and Miracle experiments " +
+            "can each initiate at most one exact action attempt from one shared physical input generation, in " +
+            "that priority order. All helpers are " +
             "disabled by default. Like all third-party modifications, use " +
             "it at your own risk.");
         ImGui.PopTextWrapPos();

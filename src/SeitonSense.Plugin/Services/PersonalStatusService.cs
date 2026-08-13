@@ -25,6 +25,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly AllyRescueProbe allyRescue;
+    private readonly MiracleInterceptProbe miracleIntercept;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
@@ -52,6 +53,7 @@ internal sealed class PersonalStatusService : IDisposable
         IKeyState keyState,
         IDataManager dataManager,
         TargetPressureTracker pressureTracker,
+        ExecuteTracker executeTracker,
         NearAssistRedirector nearAssist,
         MachinistLimitBreakCapture machinistLimitBreakCapture,
         IPluginLog log,
@@ -74,12 +76,20 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             machinistLimitBreakCapture,
             log);
+        miracleIntercept = new MiracleInterceptProbe(
+            objectTable,
+            dataManager,
+            executeTracker,
+            nearAssist,
+            machinistLimitBreakCapture,
+            log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
+    internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
@@ -142,6 +152,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
             allyRescue.FailClosed(now, exception);
+            miracleIntercept.FailClosed(now, exception);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
                 SupportedPvPContext.None,
@@ -172,6 +183,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             emergencyPurify.Reset();
             allyRescue.Reset();
+            miracleIntercept.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
@@ -240,13 +252,20 @@ internal sealed class PersonalStatusService : IDisposable
                                              configuration.ExperimentalAllyRescueOnNextKey &&
                                              metadata.AllyRescueStatusesVerified &&
                                              context == SupportedPvPContext.CrystallineConflict;
+        var miracleInterceptConfigurationEnabled = configuration.Enabled &&
+                                                    configuration.ExperimentalMiracleInterceptOnHeldKey &&
+                                                    metadata.MiracleOfNatureActionVerified &&
+                                                    context == SupportedPvPContext.CrystallineConflict;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
             isSupportedPvPContext &&
-            (purifyConfigurationEnabled || allyRescueConfigurationEnabled),
+            (purifyConfigurationEnabled ||
+             allyRescueConfigurationEnabled ||
+             miracleInterceptConfigurationEnabled),
             purifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey,
-            allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey);
+            allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
+            miracleInterceptConfigurationEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -267,7 +286,7 @@ internal sealed class PersonalStatusService : IDisposable
             EmergencyActionPriorityRules.SelfPurifyClaimsPriority(
                 purify.Decision,
                 purify.InputTrigger);
-        allyRescue.Observe(
+        var rescue = allyRescue.Observe(
             localPlayer,
             context == SupportedPvPContext.CrystallineConflict,
             allyRescueConfigurationEnabled && !purifyClaimedPriority,
@@ -275,6 +294,29 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             AllyRescueBufferRules.DefaultBufferMilliseconds,
+            hardReset);
+        var allyRescueClaimedPriority =
+            EmergencyActionPriorityRules.AllyRescueClaimsPriority(
+                rescue.Decision,
+                rescue.InputTrigger);
+        // The native hook may enqueue after this framework scan began. Refresh
+        // the monotonic clock immediately before draining so a same-frame start
+        // marker is never rejected as if it came from the future.
+        now = Environment.TickCount64;
+        miracleIntercept.Observe(
+            localPlayer,
+            context == SupportedPvPContext.CrystallineConflict,
+            miracleInterceptConfigurationEnabled &&
+            !purifyClaimedPriority &&
+            !allyRescueClaimedPriority,
+            configuration.MiracleInterceptMchLimitBreak,
+            configuration.MiracleInterceptSamZantetsuken,
+            configuration.MiracleInterceptViperNest,
+            metadata.MarksmanSpiteVerified,
+            metadata.ZantetsukenVerified,
+            metadata.FuriousBacklashVerified,
+            emergencyInputFrame,
+            now,
             hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
@@ -604,6 +646,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput.Reset();
         emergencyPurify.Reset();
         allyRescue.Reset();
+        miracleIntercept.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }
 
