@@ -684,11 +684,10 @@ internal sealed class SettingsWindow : Window
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Farthest mobility ally first, with vanilla <t> fallback:");
+        ImGui.TextUnformatted("Farthest reachable mobility ally (no target fallback):");
         ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/farhelp");
-        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <2>");
-        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <t>");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <me>");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Far Help accepts only the reviewed PvP movement actions Guardian, Icarus, Thunderclap, " +
@@ -696,9 +695,12 @@ internal sealed class SettingsWindow : Window
             "native range and line of sight against exact live non-self party members, prefers healers and " +
             "physical/magical ranged jobs, then all other jobs, and chooses the farthest reachable ally inside " +
             "that tier. Guardian additionally requires a strict distance below 10 yalms. " +
-            "The <2> line is only a carrier; if no valid ally exists, the following <t> line remains the normal " +
-            "fallback. /mlock protects the fallback from Turbo macro restarts. No visible target change, direct " +
-            "action, or retry is added. /ssfar is the collision-free alias.");
+            "Use exactly the three lines shown: there is deliberately no <t> fallback. All five actions cannot " +
+            "target self, so <me> stays intrinsically invalid without a valid redirect, even if no token or hook is " +
+            "available. No valid ally therefore means no movement; Far Help never uses your selected target or self " +
+            "instead. One immediately following legacy same-action <t> call is suppressed for migration; remove that " +
+            "old fourth line. /mlock prevents Turbo Hotbar from restarting the held macro. No visible target change, " +
+            "direct action, or retry is added. /ssfar is the collision-free alias.");
         ImGui.PopTextWrapPos();
 
         return changed;

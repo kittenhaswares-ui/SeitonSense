@@ -30,14 +30,14 @@ internal static class FarHelpOneShotSelfTests
         Equal(OwnTarget, following.ForwardTargetId, "following action stays unchanged");
     }
 
-    public static void MissingCandidateUsesExactCarrierFallbackPolicy()
+    public static void MissingCandidateNeverFallsBackToOwnTarget()
     {
         var compact = FarHelpOneShotRules.Observe(Arm(), ValidAttempt(), []);
         ConsumedFallback(
             compact,
             FarHelpOneShotReason.NoEligibleFriendlyCandidate,
-            OwnTarget,
-            "compact authored target stays exact");
+            FarHelpOneShotRules.InvalidSuppressedTargetId,
+            "compact authored target is suppressed");
 
         var carrier = FarHelpOneShotRules.Observe(
             Arm(),
@@ -46,8 +46,8 @@ internal static class FarHelpOneShotSelfTests
         ConsumedFallback(
             carrier,
             FarHelpOneShotReason.NoEligibleFriendlyCandidate,
-            FarHelpOneShotRules.InvalidFallbackCarrierTargetId,
-            "exact carrier is invalidated for authored target fallback");
+            FarHelpOneShotRules.InvalidSuppressedTargetId,
+            "exact carrier is suppressed");
     }
 
     public static void CarrierIdentityDistinguishesAuthoredSlotFromOwnTarget()
@@ -121,7 +121,11 @@ internal static class FarHelpOneShotSelfTests
                 Arm(),
                 attempt,
                 [Candidate(FriendlyA, 10f, 24, 2)]);
-            ConsumedFallback(decision, expectedReason, OwnTarget, expectedReason.ToString());
+            ConsumedFallback(
+                decision,
+                expectedReason,
+                FarHelpOneShotRules.InvalidSuppressedTargetId,
+                expectedReason.ToString());
         }
     }
 

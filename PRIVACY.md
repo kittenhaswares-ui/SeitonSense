@@ -127,13 +127,21 @@ farthest reachable actor in that tier is selected with stable party/actor
 identity as the final tie-breaker. Guardian also uses a strict under-10-yalm
 limit.
 
-The recommended `<2>` line is only a concrete carrier. If no candidate is
-valid, an invalid target is substituted only for that exact carrier so the
-following authored `<t>` line remains vanilla. A compact `<t>` form preserves
-its incoming target. The token is consumed before the one original game call.
-Far Help does not initiate, repeat, queue, or retry an action; change its ID;
-or visibly change a hard, soft, or focus target. No observed party/action data
-is persisted or uploaded.
+The recommended macro has exactly three lines: `/mlock`, `/farhelp`, and one
+supported mobility action using `<me>`. There is deliberately no selected-target
+fallback line. All five reviewed actions cannot target self, so `<me>` remains
+intrinsically invalid when the hook is unavailable, no token was armed, or no
+candidate is valid. In each case no movement occurs. Far Help never substitutes
+your current target, self, or another fallback actor. The token is consumed
+before the one original game call.
+
+For migration from the former macro shape, the bounded action observer
+suppresses matching calls of the same movement action for the remainder of its
+750-ms quarantine, including the former `<t>` line and Turbo duplicates. That
+legacy line is not part of the recommended macro and should be removed. Far
+Help does not initiate, repeat, queue, or retry an action; change
+its ID; or visibly change a hard, soft, or focus target. No observed
+party/action data is persisted or uploaded.
 
 ## Experimental Purify helper
 
