@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
+using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 using SeitonSense.Plugin.Services;
 
@@ -127,6 +128,9 @@ internal sealed class SettingsWindow : Window
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
+        DrawAllyRescueOverview();
+
+        ImGui.Separator();
         ImGui.TextUnformatted("Preview and reset");
         if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
         {
@@ -150,6 +154,37 @@ internal sealed class SettingsWindow : Window
         }
 
         return changed;
+    }
+
+    private void DrawAllyRescueOverview()
+    {
+        var rescue = personalStatus.AllyRescueDiagnostics;
+        var session = rescue.SessionConfirmations;
+        var match = rescue.MatchConfirmations;
+
+        ImGui.TextColored(new Vector4(0.34f, 0.82f, 1f, 1f), "ALLY RESCUE RESULTS");
+        ImGui.TextUnformatted(
+            $"Session: {rescue.AttemptCount} attempts  •  {rescue.AcceptedCount} client accepted  •  " +
+            $"{session.TotalConfirmed} confirmed");
+        ImGui.TextUnformatted($"This CC: {match.TotalConfirmed} confirmed");
+        ImGui.TextDisabled(
+            $"Actions: Paean {session.CountForAction(AllyRescueConfirmationRules.WardensPaeanActionId)}  •  " +
+            $"Aquaveil {session.CountForAction(AllyRescueConfirmationRules.AquaveilActionId)}");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            $"Removed: Stun {session.CountForStatus(AllyRescueConfirmationRules.StunStatusId)}  •  " +
+            $"Heavy {session.CountForStatus(AllyRescueConfirmationRules.HeavyStatusId)}  •  " +
+            $"Bind {session.CountForStatus(AllyRescueConfirmationRules.BindStatusId)}  •  " +
+            $"Silence {session.CountForStatus(AllyRescueConfirmationRules.SilenceStatusId)}  •  " +
+            $"Miracle {session.CountForStatus(AllyRescueConfirmationRules.MiracleOfNatureStatusId)}  •  " +
+            $"Deep Freeze {session.CountForStatus(AllyRescueConfirmationRules.DeepFreezeStatusId)}");
+        ImGui.PopTextWrapPos();
+        if (ImGui.Button("Reset Ally Rescue statistics"))
+            personalStatus.ResetAllyRescueStatistics();
+        ImGui.SameLine();
+        if (ImGui.Button("Preview CLEANSED popup"))
+            overlay.TriggerAllyRescueConfirmationPreview();
+        ImGui.TextDisabled("Confirmed means the exact server 0x10 status-removal result was captured.");
     }
 
     private bool DrawPressureTab()
@@ -398,8 +433,11 @@ internal sealed class SettingsWindow : Window
             "language. The target must be an exact party member in the action's native range and line of sight. " +
             "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
             "distance and stable party order. Self Purify wins if both helpers could claim the same physical input. " +
-            "One input generation makes at most one attempt; it is consumed before the call and is never retried. " +
-            "Heavy and Bind intentionally do not trigger this experiment.");
+            "There is no extra local cooldown gate: after these checks, FFXIV's native action call decides whether " +
+            "the attempt can queue or execute. One input generation makes at most one attempt; it is consumed before " +
+            "the call and is never retried. A blue CLEANSED card and the counters advance only for the exact server " +
+            "RecoveredFromStatusEffect result (effect type 0x10). Heavy and Bind intentionally do not trigger this " +
+            "experiment.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -812,7 +850,9 @@ internal sealed class SettingsWindow : Window
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
             $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
             $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}, " +
-            $"count={rescue.AttemptCount}/{rescue.AcceptedCount}");
+            $"count={rescue.AttemptCount}/{rescue.AcceptedCount}, confirm-pending={rescue.ConfirmationPending}, " +
+            $"confirmed={rescue.MatchConfirmations.TotalConfirmed}/{rescue.SessionConfirmations.TotalConfirmed}, " +
+            $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
 
         ImGui.Separator();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);

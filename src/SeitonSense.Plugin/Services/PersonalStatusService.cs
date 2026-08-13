@@ -72,6 +72,7 @@ internal sealed class PersonalStatusService : IDisposable
             dataManager,
             pressureTracker,
             nearAssist,
+            machinistLimitBreakCapture,
             log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
@@ -79,6 +80,7 @@ internal sealed class PersonalStatusService : IDisposable
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
+    internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
         machinistLimitBreakCapture.QueueDepth,

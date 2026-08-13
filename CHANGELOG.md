@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.0.1
+
+- Relaxed two fragile Ally Rescue prefilters: valid statuses no longer require
+  an internal status-slot address, and a local cooldown-ready sample is no
+  longer required before dispatch. Exact party identity, the four activation
+  statuses, live/targetable state, current action, native range/line of sight,
+  one consumed physical generation, one normal action request, and no retry
+  remain unchanged; FFXIV decides whether the request can queue or execute.
+- Fixed BRD metadata validation for the current lowercase leading article in
+  `the Warden's Paean` while retaining the exact action ID and all other
+  fail-closed metadata checks.
+- Added exact Ally Rescue success confirmation. A cleanse is confirmed only by
+  a correlated local-caster Paean/Aquaveil ActionEffect `0x10` result on the
+  exact attempted ally for Stun, Heavy, Bind, Silence, Deep Freeze, or Miracle
+  of Nature. Heavy and Bind are confirmation-only and remain excluded from
+  activation.
+- Added a 1.5-second blue `CLEANSED` popup plus an Overview breakdown of
+  attempts, client-accepted requests, and confirmed removals. Confirmed totals
+  are tracked for the current match and plugin session, with per-action and
+  per-status details and a reset control; none of these aggregates persist.
+- Expanded the existing bounded local ActionEffect observation only for the
+  exact Ally Rescue confirmation path. No names, combat history, raw-payload
+  persistence, telemetry, external network traffic, or uploads are added; the
+  new aggregate counters remain memory-only. Current-patch live validation of
+  the action result and popup is still required.
+
 ## 0.7.0.0
 
 - Added an opt-in, CC-only Ally Rescue experiment for BRD and WHM. One fresh or

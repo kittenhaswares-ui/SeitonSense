@@ -5,7 +5,9 @@ stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
 one-shot macro assistance, and target highlights. Version 0.7 adds action-aware
 lowest-health party help on top of the integrated v0.6 awareness suite, which combines the
 useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow into
-one configurable plugin. It remains a custom-repository plugin.
+one configurable plugin. Hotfix 0.7.0.1 makes Ally Rescue less fragile and
+adds exact cleanse confirmation and local feedback. It remains a
+custom-repository plugin.
 
 ## Highlights
 
@@ -41,7 +43,9 @@ one configurable plugin. It remains a custom-repository plugin.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
-  uses HP, incoming pressure, trusted MP, and distance in that order.
+  uses HP, incoming pressure, trusted MP, and distance in that order. A matching
+  successful status-removal effect produces a blue `CLEANSED` popup and feeds
+  resettable, in-memory match/session counters.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
@@ -151,9 +155,31 @@ At action time, candidates must be alive, targetable, and inside the chosen
 action's native range and line of sight. The selector orders them by lowest
 exact HP percentage, then most unique enemies currently hard-targeting or
 casting at that ally, then lowest trusted MP percentage, distance, and stable
-party identity. Self-Purify observes the shared physical key first. One input
-generation can therefore produce at most one helper attempt, and Ally Rescue
-stores its spent state before the exact Paean/Aquaveil call with no retry.
+party identity. Hotfix 0.7.0.1 no longer rejects a valid status because an
+internal status-slot address is unavailable and no longer requires an early
+local cooldown-ready sample. After the exact ally, status, action, native range,
+and line of sight are revalidated, FFXIV receives one normal action request and
+decides whether it can queue or execute.
+
+Self-Purify observes the shared physical key first. One input generation can
+therefore produce at most one helper attempt, and Ally Rescue stores its spent
+state before the exact Paean/Aquaveil call with no retry. The BRD metadata check
+also accepts the current lowercase leading article in `the Warden's Paean`;
+numeric action identity still drives runtime behavior.
+
+A client-accepted action request is not presented as a successful cleanse.
+For up to 2.5 seconds after the one attempt, Seiton Sense instead correlates an
+exact local-caster, action, and ally-target ActionEffect result of type `0x10`
+(`RecoveredFromStatusEffect`). Only the six known Purify-removable PvP statuses
+can confirm it: Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature.
+Heavy and Bind remain confirmation-only here and still never activate Ally
+Rescue. One exact confirmation shows a blue `CLEANSED` popup for 1.5 seconds.
+
+The Overview tab separates attempts, client-accepted requests, and exact
+confirmed removals, with confirmed totals for the current match and plugin
+session plus per-action/per-status details. These aggregates live only in
+memory. The provided reset clears the displayed statistics and does not create
+another action or confirmation.
 
 ## One-shot Near Assist macro
 
@@ -322,7 +348,9 @@ Display features never target or press actions. Near Assist and Near Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify and Ally Rescue experiments may each initiate
 one exact action attempt, but share one physical-generation ownership path with
-self-Purify first. No displayed cue or assisted request is guaranteed to succeed.
+self-Purify first. Ally Rescue labels a removal `CLEANSED` only after the exact
+successful status-removal ActionEffect is observed; attempts and client-accepted
+requests alone are not success claims.
 
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
@@ -341,4 +369,5 @@ fresh live in-game confirmation. Exact nameplate placement, pressure evidence,
 MCH marker/sound timing, optional Purify/Ally Rescue behavior, and Near Assist
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
-changes.
+changes. The 0.7.0.1 ActionEffect confirmation and blue popup also still require
+current-patch live validation.

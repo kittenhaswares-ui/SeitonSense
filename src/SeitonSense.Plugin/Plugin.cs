@@ -386,7 +386,11 @@ public sealed class Plugin : IDalamudPlugin
                     $"action={rescue.ActionId},target={rescue.TargetGameObjectId:X},status={rescue.TargetStatusId}," +
                     $"ready={rescue.LocallyReady},fresh={rescue.FreshGameplayKey},held={rescue.HeldGameplayKey}," +
                     $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}," +
-                    $"count={rescue.AttemptCount}/{rescue.AcceptedCount},last={rescue.LastEvent}]");
+                    $"count={rescue.AttemptCount}/{rescue.AcceptedCount},pending={rescue.ConfirmationPending}," +
+                    $"match={rescue.MatchConfirmations.TotalConfirmed}," +
+                    $"session={rescue.SessionConfirmations.TotalConfirmed}," +
+                    $"capture={rescue.ConfirmationCaptureCount},drop={rescue.ConfirmationDropCount}," +
+                    $"last={rescue.LastEvent}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
