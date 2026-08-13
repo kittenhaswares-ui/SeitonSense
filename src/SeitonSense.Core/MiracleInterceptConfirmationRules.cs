@@ -1,0 +1,291 @@
+using System.Collections.Immutable;
+
+namespace SeitonSense.Core;
+
+public readonly record struct MiracleInterceptPendingAttempt(
+    uint LocalCasterEntityId,
+    uint ActionId,
+    ulong TargetGameObjectId,
+    uint TargetEntityId,
+    MiracleInterceptThreatKind Threat,
+    bool UseActionAccepted,
+    long AttemptedAtMilliseconds)
+{
+    public bool IsValid =>
+        MiracleInterceptConfirmationRules.IsValidEntityId(LocalCasterEntityId) &&
+        ActionId == MiracleInterceptConfirmationRules.MiracleOfNatureActionId &&
+        TargetHighlightRules.IsValidGameObjectId(TargetGameObjectId) &&
+        MiracleInterceptConfirmationRules.IsValidEntityId(TargetEntityId) &&
+        (Threat is
+            MiracleInterceptThreatKind.MarksmanSpite or
+            MiracleInterceptThreatKind.Zantetsuken or
+            MiracleInterceptThreatKind.FuriousBacklash) &&
+        AttemptedAtMilliseconds >= 0;
+}
+
+public readonly record struct MiracleInterceptLandedObservation(
+    uint CasterEntityId,
+    uint ActionId,
+    uint TargetEntityId,
+    byte EffectType,
+    ushort EffectValue,
+    uint GlobalSequence,
+    ushort SourceSequence,
+    long ObservedAtMilliseconds);
+
+public readonly record struct MiracleInterceptConfirmationKey(
+    uint CasterEntityId,
+    uint TargetEntityId,
+    uint GlobalSequence,
+    ushort SourceSequence);
+
+public readonly record struct MiracleInterceptConfirmationPopup(
+    ulong TargetGameObjectId,
+    uint TargetEntityId,
+    MiracleInterceptThreatKind Threat,
+    long StartedAtMilliseconds,
+    long EndsAtMilliseconds)
+{
+    public bool IsVisible(long nowMilliseconds) =>
+        StartedAtMilliseconds >= 0 &&
+        EndsAtMilliseconds > StartedAtMilliseconds &&
+        nowMilliseconds >= StartedAtMilliseconds &&
+        nowMilliseconds < EndsAtMilliseconds;
+}
+
+public readonly record struct MiracleInterceptConfirmationState(
+    MiracleInterceptPendingAttempt? Pending,
+    ImmutableArray<MiracleInterceptConfirmationKey> ConfirmedKeys,
+    MiracleInterceptConfirmationPopup? Popup,
+    long TotalConfirmed,
+    long LastObservedAtMilliseconds)
+{
+    public static MiracleInterceptConfirmationState Initial => new(
+        null,
+        ImmutableArray<MiracleInterceptConfirmationKey>.Empty,
+        null,
+        0,
+        -1);
+}
+
+public readonly record struct MiracleInterceptConfirmationDecision(
+    MiracleInterceptConfirmationState NextState,
+    bool PendingRegistered,
+    bool Confirmed,
+    bool Duplicate,
+    MiracleInterceptConfirmationPopup? TriggeredPopup);
+
+/// <summary>
+/// Correlates the sole native Miracle attempt made by the intercept helper with
+/// the server ActionEffect that applies Miracle of Nature to that exact target.
+/// This proves that Miracle landed; it does not prove that the hostile action's
+/// damage was cancelled.
+/// </summary>
+public static class MiracleInterceptConfirmationRules
+{
+    public const uint MiracleOfNatureActionId = 29_228;
+    public const ushort MiracleOfNatureStatusId = 3_085;
+    public const byte AddStatusEffectType = 0x0E;
+    public const long CorrelationMilliseconds = 1_500;
+    public const long PopupDurationMilliseconds = 1_500;
+    public const int MaximumConfirmedKeys = 128;
+
+    public static MiracleInterceptConfirmationDecision RegisterAttempt(
+        MiracleInterceptConfirmationState previous,
+        MiracleInterceptPendingAttempt attempt,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        previous = Normalize(previous);
+        if (hardReset)
+            return None(Reset(previous, nowMilliseconds));
+        if (!IsMonotonic(previous, nowMilliseconds) ||
+            !attempt.IsValid ||
+            attempt.AttemptedAtMilliseconds != nowMilliseconds)
+        {
+            return None(ClearPending(previous, nowMilliseconds));
+        }
+
+        return new MiracleInterceptConfirmationDecision(
+            previous with
+            {
+                Pending = attempt,
+                Popup = ActivePopup(previous.Popup, nowMilliseconds),
+                LastObservedAtMilliseconds = nowMilliseconds,
+            },
+            PendingRegistered: true,
+            Confirmed: false,
+            Duplicate: false,
+            TriggeredPopup: null);
+    }
+
+    public static MiracleInterceptConfirmationDecision ObserveActionEffect(
+        MiracleInterceptConfirmationState previous,
+        MiracleInterceptLandedObservation observation,
+        bool hardReset = false)
+    {
+        previous = Normalize(previous);
+        if (hardReset)
+            return None(Reset(previous, observation.ObservedAtMilliseconds));
+        if (!IsMonotonic(previous, observation.ObservedAtMilliseconds))
+            return None(ClearPending(previous, observation.ObservedAtMilliseconds));
+
+        var now = observation.ObservedAtMilliseconds;
+        var popup = ActivePopup(previous.Popup, now);
+        if (previous.Pending is not { } pending || !Matches(pending, observation))
+        {
+            return None(previous with
+            {
+                Pending = PendingInsideWindow(previous.Pending, now),
+                Popup = popup,
+                LastObservedAtMilliseconds = now,
+            });
+        }
+
+        var key = new MiracleInterceptConfirmationKey(
+            observation.CasterEntityId,
+            observation.TargetEntityId,
+            observation.GlobalSequence,
+            observation.SourceSequence);
+        if (previous.ConfirmedKeys.Contains(key))
+        {
+            return new MiracleInterceptConfirmationDecision(
+                previous with
+                {
+                    Pending = null,
+                    Popup = popup,
+                    LastObservedAtMilliseconds = now,
+                },
+                PendingRegistered: false,
+                Confirmed: false,
+                Duplicate: true,
+                TriggeredPopup: null);
+        }
+
+        var triggeredPopup = new MiracleInterceptConfirmationPopup(
+            pending.TargetGameObjectId,
+            pending.TargetEntityId,
+            pending.Threat,
+            now,
+            SaturatingAdd(now, PopupDurationMilliseconds));
+        var next = previous with
+        {
+            Pending = null,
+            ConfirmedKeys = AppendBounded(previous.ConfirmedKeys, key),
+            Popup = triggeredPopup,
+            TotalConfirmed = SaturatingIncrement(previous.TotalConfirmed),
+            LastObservedAtMilliseconds = now,
+        };
+        return new MiracleInterceptConfirmationDecision(
+            next,
+            PendingRegistered: false,
+            Confirmed: true,
+            Duplicate: false,
+            TriggeredPopup: triggeredPopup);
+    }
+
+    public static MiracleInterceptConfirmationState ObserveTime(
+        MiracleInterceptConfirmationState previous,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        previous = Normalize(previous);
+        if (hardReset || !IsMonotonic(previous, nowMilliseconds))
+            return Reset(previous, nowMilliseconds);
+
+        return previous with
+        {
+            Pending = PendingInsideWindow(previous.Pending, nowMilliseconds),
+            Popup = ActivePopup(previous.Popup, nowMilliseconds),
+            LastObservedAtMilliseconds = nowMilliseconds,
+        };
+    }
+
+    public static bool IsValidEntityId(uint entityId) =>
+        entityId is not 0 and not 0xE0000000 and not uint.MaxValue;
+
+    private static bool Matches(
+        MiracleInterceptPendingAttempt pending,
+        MiracleInterceptLandedObservation observation)
+    {
+        if (observation.ObservedAtMilliseconds < pending.AttemptedAtMilliseconds ||
+            observation.ObservedAtMilliseconds - pending.AttemptedAtMilliseconds > CorrelationMilliseconds)
+        {
+            return false;
+        }
+
+        return observation.CasterEntityId == pending.LocalCasterEntityId &&
+               observation.ActionId == pending.ActionId &&
+               observation.TargetEntityId == pending.TargetEntityId &&
+               observation.EffectType == AddStatusEffectType &&
+               observation.EffectValue == MiracleOfNatureStatusId &&
+               (observation.GlobalSequence != 0 || observation.SourceSequence != 0);
+    }
+
+    private static MiracleInterceptPendingAttempt? PendingInsideWindow(
+        MiracleInterceptPendingAttempt? pending,
+        long nowMilliseconds) =>
+        pending is { } value &&
+        nowMilliseconds >= value.AttemptedAtMilliseconds &&
+        nowMilliseconds - value.AttemptedAtMilliseconds <= CorrelationMilliseconds
+            ? value
+            : null;
+
+    private static MiracleInterceptConfirmationPopup? ActivePopup(
+        MiracleInterceptConfirmationPopup? popup,
+        long nowMilliseconds) =>
+        popup is { } value && value.IsVisible(nowMilliseconds) ? value : null;
+
+    private static ImmutableArray<MiracleInterceptConfirmationKey> AppendBounded(
+        ImmutableArray<MiracleInterceptConfirmationKey> previous,
+        MiracleInterceptConfirmationKey key)
+    {
+        if (previous.IsDefault) previous = ImmutableArray<MiracleInterceptConfirmationKey>.Empty;
+        var skip = Math.Max(0, previous.Length - MaximumConfirmedKeys + 1);
+        return previous.Skip(skip).Append(key).ToImmutableArray();
+    }
+
+    private static MiracleInterceptConfirmationState Normalize(
+        MiracleInterceptConfirmationState state) =>
+        state with
+        {
+            ConfirmedKeys = state.ConfirmedKeys.IsDefault
+                ? ImmutableArray<MiracleInterceptConfirmationKey>.Empty
+                : state.ConfirmedKeys,
+        };
+
+    private static MiracleInterceptConfirmationState Reset(
+        MiracleInterceptConfirmationState previous,
+        long nowMilliseconds) =>
+        MiracleInterceptConfirmationState.Initial with
+        {
+            TotalConfirmed = previous.TotalConfirmed,
+            LastObservedAtMilliseconds = Math.Max(-1, nowMilliseconds),
+        };
+
+    private static bool IsMonotonic(
+        MiracleInterceptConfirmationState state,
+        long nowMilliseconds) =>
+        nowMilliseconds >= 0 &&
+        (state.LastObservedAtMilliseconds < 0 || nowMilliseconds >= state.LastObservedAtMilliseconds);
+
+    private static MiracleInterceptConfirmationState ClearPending(
+        MiracleInterceptConfirmationState previous,
+        long nowMilliseconds) =>
+        previous with
+        {
+            Pending = null,
+            Popup = null,
+            LastObservedAtMilliseconds = Math.Max(-1, nowMilliseconds),
+        };
+
+    private static MiracleInterceptConfirmationDecision None(
+        MiracleInterceptConfirmationState state) =>
+        new(state, false, false, false, null);
+
+    private static long SaturatingIncrement(long value) =>
+        value >= long.MaxValue ? long.MaxValue : value + 1;
+
+    private static long SaturatingAdd(long left, long right) =>
+        left > long.MaxValue - right ? long.MaxValue : left + right;
+}

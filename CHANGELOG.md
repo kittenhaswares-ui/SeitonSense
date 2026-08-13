@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.11.0.0
+
+- Added a default-off, Crystalline-Conflict-only CC-immunity brake that works
+  directly from incoming hotbar action attempts without requiring a macro.
+- Added a master switch plus separate per-job and per-action controls for a
+  conservative reviewed list: PLD Intervene; WAR Blota; BRD Silent Nocturne and
+  Repelling Shot; WHM Miracle of Nature; BLM Lethargy; NIN Forked/Fleeting
+  Raiju; MCH Air Anchor; AST Gravity II including its Double Cast form behind
+  one setting; and SAM Mineuchi.
+- When the exact target has a verified blocker from the selected action's
+  action-specific protection matrix, only that one incoming attempt receives
+  an invalid target. Standard Purify-removable CC and Miracle of Nature have
+  separate blocker sets. Seiton Sense does not switch targets,
+  select an alternative action or actor, store or replay the press, dispatch an
+  action, or retry. Every later real press or Turbo pulse is checked again, so
+  the first repeat after immunity disappears can pass normally; vanilla holding
+  alone does not generate repeats.
+- Excluded broad cone, ground, self-centered, and ambiguous multi-target CC from
+  this first list. Blocking an enabled action also blocks any damage or movement
+  attached to it, which is why every action can be disabled independently.
+  Downstream target-rewrite plugins can still change the call after Seiton
+  Sense and must be tested separately.
+- Added a blue 1.5-second `MIRACLE LANDED` news flash for the existing WHM
+  Miracle intercept. It appears only when the shared bounded action-effect
+  capture reports the exact local caster, Miracle action `29228`, pending threat
+  target, status-add effect `0x0E`, and Miracle status `3085` within 1500 ms of
+  the one helper attempt. The subtitle identifies MCH LB, SAM LB, or VPR Nest.
+  This confirms that Miracle landed; it does not claim that hostile damage was
+  conclusively cancelled. A settings preview and live counters were added.
+- Fixed live self-hotbar resource auras that could inherit a displaced oversized
+  rectangle from a native hotbar container. Each bar now unions only its exact
+  currently visible action-slot nodes, with no container fallback; preview and
+  live drawing share those same anchors.
+- Bumped the plugin version to 0.11.0.0 and configuration schema to 15. Existing
+  settings migrate forward with the new master switch off; reviewed job/action
+  selections default on behind that explicit opt-in.
+
 ## 0.10.0.1
 
 - Fixed the low-resource preview appearing as a detached purple `430 x 58`

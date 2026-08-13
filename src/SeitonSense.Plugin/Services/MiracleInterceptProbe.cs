@@ -25,6 +25,11 @@ internal sealed record MiracleInterceptProbeSnapshot(
     int CaptureQueueDepth,
     long CapturedThreatCount,
     long DroppedThreatCount,
+    MiracleInterceptConfirmationPopup? ConfirmationPopup,
+    long ConfirmedLandingCount,
+    int ConfirmationQueueDepth,
+    long CapturedConfirmationCount,
+    long DroppedConfirmationCount,
     string LastEvent)
 {
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
@@ -45,6 +50,11 @@ internal sealed record MiracleInterceptProbeSnapshot(
         0,
         0,
         0,
+        null,
+        0,
+        0,
+        0,
+        0,
         "Not started");
 }
 
@@ -57,14 +67,11 @@ internal sealed class MiracleInterceptProbe
 {
     private const int MaximumRememberedSignals = 128;
     private static readonly uint[] RequiredCcProtectionStatusIds =
-    [
-        EnemyCombatConstants.GuardStatusId,
-        EnemyCombatConstants.GuardStatusAlternateId,
-        EnemyCombatConstants.ResilienceStatusId,
-        EnemyCombatConstants.InnerReleaseStatusId,
-        EnemyCombatConstants.MeikyoShisuiStatusId,
-        EnemyCombatConstants.HardenedScalesStatusId,
-    ];
+        CcImmunityBrakeActionCatalog
+            .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle)
+            .Append(EnemyCombatConstants.HardenedScalesStatusId)
+            .Distinct()
+            .ToArray();
 
     private readonly IObjectTable objectTable;
     private readonly ExecuteTracker executeTracker;
@@ -75,6 +82,8 @@ internal sealed class MiracleInterceptProbe
     private readonly HashSet<MiracleSignalIdentity> rememberedSignals = [];
     private readonly Queue<MiracleSignalIdentity> rememberedSignalOrder = [];
     private MiracleThreatState? activeThreat;
+    private MiracleInterceptConfirmationState confirmationState =
+        MiracleInterceptConfirmationState.Initial;
     private MiracleInterceptProbeSnapshot snapshot = MiracleInterceptProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
@@ -82,7 +91,7 @@ internal sealed class MiracleInterceptProbe
 
     internal MiracleInterceptProbe(
         IObjectTable objectTable,
-        IDataManager dataManager,
+        IReadOnlySet<uint> verifiedCcBrakeStatusIds,
         ExecuteTracker executeTracker,
         NearAssistRedirector nearAssist,
         MachinistLimitBreakCapture capture,
@@ -93,9 +102,12 @@ internal sealed class MiracleInterceptProbe
         this.nearAssist = nearAssist;
         this.capture = capture;
         this.log = log;
-        // This allowlist is metadata-verified independently of the nameplate
-        // visibility option. A raw catalog ID alone is never trusted here.
-        verifiedProtectionStatusIds = CcProtectionMetadataGuard.Validate(dataManager, log);
+        // Miracle has a narrower blocker matrix than ordinary Purify-removable
+        // CC. Hardened Scales remains a separate VPR-release timing gate: it is
+        // not treated as a general Miracle blocker for unrelated threats.
+        verifiedProtectionStatusIds = verifiedCcBrakeStatusIds
+            .Where(RequiredCcProtectionStatusIds.Contains)
+            .ToHashSet();
     }
 
     internal MiracleInterceptProbeSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -104,6 +116,7 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter? localPlayer,
         bool isCrystallineConflict,
         bool configurationEnabled,
+        bool dispatchAllowed,
         bool enableMarksmanSpite,
         bool enableZantetsuken,
         bool enableFuriousBacklash,
@@ -117,10 +130,10 @@ internal sealed class MiracleInterceptProbe
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
         if (hardReset) ResetRuntime();
 
-        var localAlive = IsLivePlayer(localPlayer);
-        var localIdentityValid = localAlive && HasValidNativeIdentity(localPlayer!);
+        var localIdentityValid = localPlayer is not null && HasValidNativeIdentity(localPlayer);
+        var localAlive = localIdentityValid && IsLivePlayer(localPlayer);
         var isWhiteMage = localIdentityValid &&
-                          localPlayer!.ClassJob.IsValid &&
+                           localPlayer!.ClassJob.IsValid &&
                           localPlayer.ClassJob.RowId == EnemyCombatConstants.WhiteMageJobId;
         var protectionMetadataReady = RequiredCcProtectionStatusIds.All(
             verifiedProtectionStatusIds.Contains);
@@ -129,17 +142,50 @@ internal sealed class MiracleInterceptProbe
                       localIdentityValid &&
                       isWhiteMage &&
                       protectionMetadataReady;
-        capture.SetMiracleInterceptLocalEntityId(enabled ? localPlayer!.EntityId : 0);
+        var confirmationPendingForLocalCaster = enabled &&
+            confirmationState.Pending is { } pending &&
+            pending.LocalCasterEntityId == localPlayer!.EntityId;
+        capture.SetMiracleInterceptLocalEntityId(
+            enabled && (localAlive || confirmationPendingForLocalCaster)
+                ? localPlayer!.EntityId
+                : 0);
 
         if (!enabled)
         {
             capture.ClearMiracleInterceptThreats();
+            capture.ClearMiracleInterceptConfirmations();
             activeThreat = null;
+            confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
+                confirmationState,
+                nowMilliseconds,
+                hardReset: true);
             return Publish(
                 "Disabled",
                 protectionMetadataReady
                     ? "Feature gate closed"
                     : "Required CC-protection metadata unavailable",
+                nowMilliseconds);
+        }
+
+        if (!localAlive)
+        {
+            capture.ClearMiracleInterceptThreats();
+            activeThreat = null;
+            if (confirmationPendingForLocalCaster)
+                DrainConfirmations(nowMilliseconds);
+            else
+            {
+                capture.ClearMiracleInterceptConfirmations();
+                confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
+                    confirmationState,
+                    nowMilliseconds);
+            }
+
+            return Publish(
+                "Confirmation",
+                confirmationPendingForLocalCaster
+                    ? "Waiting for exact Miracle landing evidence"
+                    : "Local player cannot dispatch",
                 nowMilliseconds);
         }
 
@@ -151,9 +197,19 @@ internal sealed class MiracleInterceptProbe
             furiousBacklashMetadataVerified &&
             verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId),
             nowMilliseconds);
+        DrainConfirmations(nowMilliseconds);
         // The native hook can enqueue after the framework-frame clock was read.
         // Refresh before comparing the newly captured event against its deadline.
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
+
+        // A transient higher-priority Purify/Rescue claim cancels only the new
+        // threat opportunity. Capture stays enabled so a server status-add for
+        // an earlier Miracle attempt can still confirm and finish its popup.
+        if (!dispatchAllowed)
+        {
+            activeThreat = null;
+            return Publish("Cancelled", "Higher-priority helper claimed input", nowMilliseconds);
+        }
 
         if (activeThreat is not { } threat ||
             nowMilliseconds < threat.ObservedAtMilliseconds ||
@@ -170,11 +226,12 @@ internal sealed class MiracleInterceptProbe
             return Publish("Cancelled", "Exact enemy identity changed", nowMilliseconds);
         }
 
-        var hardenedScales = HasVerifiedActiveStatus(
-            candidate,
-            EnemyCombatConstants.HardenedScalesStatusId);
         var anyProtection = HasAnyVerifiedCcProtection(candidate);
-        var otherProtection = anyProtection && !hardenedScales;
+        var hardenedScales = threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
+                             HasVerifiedActiveStatus(
+                                 candidate,
+                                 EnemyCombatConstants.HardenedScalesStatusId);
+        var otherProtection = anyProtection;
         var rangeAndLineOfSight = HasMiracleRangeAndLineOfSight(localPlayer!, candidate);
         var locallyReady = !hardenedScales &&
                            !otherProtection &&
@@ -212,10 +269,10 @@ internal sealed class MiracleInterceptProbe
                 candidate,
                 "Armed",
                 hardenedScales
-                    ? "Waiting for Hardened Scales to be absent"
+                    ? "Waiting: Hardened Scales still active"
                     : otherProtection
-                        ? "Waiting: verified CC protection active"
-                        : "Waiting: outside native 10y/LoS",
+                        ? "Waiting: verified Miracle blocker active"
+                    : "Waiting: outside native 10y/LoS",
                 triggerKey,
                 false,
                 false,
@@ -231,10 +288,13 @@ internal sealed class MiracleInterceptProbe
         inputFrame.Consume();
         var attempted = false;
         var accepted = false;
+        var attemptedAtMilliseconds = -1L;
         var revalidated = ResolveCandidate(localPlayer!, threat);
-        var revalidatedHardened = revalidated is not null && HasVerifiedActiveStatus(
-            revalidated,
-            EnemyCombatConstants.HardenedScalesStatusId);
+        var revalidatedHardened = revalidated is not null &&
+                                  threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
+                                  HasVerifiedActiveStatus(
+                                      revalidated,
+                                      EnemyCombatConstants.HardenedScalesStatusId);
         var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection(revalidated);
         var revalidatedRange = revalidated is not null &&
                                HasMiracleRangeAndLineOfSight(localPlayer!, revalidated);
@@ -245,6 +305,7 @@ internal sealed class MiracleInterceptProbe
         {
             try
             {
+                attemptedAtMilliseconds = Environment.TickCount64;
                 accepted = TryUseMiracleOnce(revalidated.GameObjectId, out attempted);
                 if (attempted) Interlocked.Increment(ref attemptCount);
                 if (accepted) Interlocked.Increment(ref acceptedCount);
@@ -254,6 +315,22 @@ internal sealed class MiracleInterceptProbe
                 if (attempted) Interlocked.Increment(ref attemptCount);
                 LogAttemptFailure(exception, nowMilliseconds);
             }
+        }
+
+        if (attempted && revalidated is not null && attemptedAtMilliseconds >= 0)
+        {
+            var registered = MiracleInterceptConfirmationRules.RegisterAttempt(
+                confirmationState,
+                new MiracleInterceptPendingAttempt(
+                    localPlayer!.EntityId,
+                    MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+                    revalidated.GameObjectId,
+                    revalidated.EntityId,
+                    threat.Kind,
+                    accepted,
+                    attemptedAtMilliseconds),
+                attemptedAtMilliseconds);
+            confirmationState = registered.NextState;
         }
 
         return PublishCandidate(
@@ -275,7 +352,13 @@ internal sealed class MiracleInterceptProbe
     internal void Reset()
     {
         ResetRuntime();
-        Volatile.Write(ref snapshot, MiracleInterceptProbeSnapshot.Initial with { LastEvent = "Reset" });
+        Volatile.Write(ref snapshot, MiracleInterceptProbeSnapshot.Initial with
+        {
+            ConfirmedLandingCount = confirmationState.TotalConfirmed,
+            CapturedConfirmationCount = capture.CapturedMiracleInterceptConfirmations,
+            DroppedConfirmationCount = capture.DroppedMiracleInterceptConfirmations,
+            LastEvent = "Reset",
+        });
     }
 
     internal MiracleInterceptProbeSnapshot FailClosed(long nowMilliseconds, Exception? exception = null)
@@ -341,6 +424,37 @@ internal sealed class MiracleInterceptProbe
         }
     }
 
+    private void DrainConfirmations(long nowMilliseconds)
+    {
+        while (capture.TryDequeueMiracleInterceptConfirmation(out var effect))
+        {
+            var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
+            if (effect.ObservedAtMilliseconds > eventNow ||
+                eventNow - effect.ObservedAtMilliseconds >
+                MiracleInterceptConfirmationRules.CorrelationMilliseconds)
+            {
+                continue;
+            }
+
+            var decision = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                confirmationState,
+                new MiracleInterceptLandedObservation(
+                    effect.CasterEntityId,
+                    effect.ActionId,
+                    effect.TargetEntityId,
+                    effect.EffectType,
+                    effect.EffectValue,
+                    effect.GlobalSequence,
+                    effect.SourceSequence,
+                    effect.ObservedAtMilliseconds));
+            confirmationState = decision.NextState;
+        }
+
+        confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
+            confirmationState,
+            Math.Max(nowMilliseconds, Environment.TickCount64));
+    }
+
     private EnemyHudSnapshot? ResolveCanonicalEnemy(
         uint casterEntityId,
         MiracleInterceptThreatKind kind)
@@ -393,11 +507,16 @@ internal sealed class MiracleInterceptProbe
 
     private bool HasAnyVerifiedCcProtection(IPlayerCharacter player)
     {
+        var targetJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
         foreach (var status in player.StatusList)
         {
             // Actor status-list membership is the authoritative live presence
             // gate. Never predict immunity expiry from RemainingTime.
-            if (verifiedProtectionStatusIds.Contains(status.StatusId))
+            if (verifiedProtectionStatusIds.Contains(status.StatusId) &&
+                CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                    CcImmunityBrakeBlockerFamily.Miracle,
+                    status.StatusId,
+                    targetJobId))
             {
                 return true;
             }
@@ -411,10 +530,9 @@ internal sealed class MiracleInterceptProbe
         if (!verifiedProtectionStatusIds.Contains(statusId)) return false;
         foreach (var status in player.StatusList)
         {
-            if (status.StatusId == statusId)
-            {
-                return true;
-            }
+            // Membership is authoritative; never predict the release from the
+            // displayed remaining time because Furious Backlash can end it early.
+            if (status.StatusId == statusId) return true;
         }
 
         return false;
@@ -483,6 +601,11 @@ internal sealed class MiracleInterceptProbe
             CaptureQueueDepth = capture.MiracleInterceptQueueDepth,
             CapturedThreatCount = capture.CapturedMiracleInterceptThreats,
             DroppedThreatCount = capture.DroppedMiracleInterceptThreats,
+            ConfirmationPopup = confirmationState.Popup,
+            ConfirmedLandingCount = confirmationState.TotalConfirmed,
+            ConfirmationQueueDepth = capture.MiracleInterceptConfirmationQueueDepth,
+            CapturedConfirmationCount = capture.CapturedMiracleInterceptConfirmations,
+            DroppedConfirmationCount = capture.DroppedMiracleInterceptConfirmations,
             LastEvent = lastEvent,
         };
         Volatile.Write(ref snapshot, result);
@@ -521,6 +644,11 @@ internal sealed class MiracleInterceptProbe
             capture.MiracleInterceptQueueDepth,
             capture.CapturedMiracleInterceptThreats,
             capture.DroppedMiracleInterceptThreats,
+            confirmationState.Popup,
+            confirmationState.TotalConfirmed,
+            capture.MiracleInterceptConfirmationQueueDepth,
+            capture.CapturedMiracleInterceptConfirmations,
+            capture.DroppedMiracleInterceptConfirmations,
             lastEvent);
         Volatile.Write(ref snapshot, result);
         return result;
@@ -533,6 +661,11 @@ internal sealed class MiracleInterceptProbe
         rememberedSignalOrder.Clear();
         capture.SetMiracleInterceptLocalEntityId(0);
         capture.ClearMiracleInterceptThreats();
+        capture.ClearMiracleInterceptConfirmations();
+        confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
+            confirmationState,
+            Environment.TickCount64,
+            hardReset: true);
     }
 
     private static long ThreatLifetime(MiracleInterceptThreatKind kind) =>

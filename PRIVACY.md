@@ -39,10 +39,11 @@ with a 300-MP exit margin. The latch is keyed by both game-object and network
 entity identity and is discarded when that actor leaves the current observation
 set or the feature/context becomes inactive.
 
-For the local player, the plugin copies the bounds of currently visible native
-standard, cross, and double-cross action-bar containers. Party-list rows require
-the native party agent's row index, entity ID, and object pointer to agree with
-the resolved actor. Crystalline Conflict ally/enemy rows require exact party or
+For the local player, the plugin unions only the visible native action-slot
+bounds of each standard, cross, and double-cross bar. It does not use the
+broader hotbar-container rectangle or retain slot pointers. Party-list rows
+require the native party agent's row index, entity ID, and object pointer to
+agree with the resolved actor. Crystalline Conflict ally/enemy rows require exact party or
 `<e1>`-`<e5>` resolution, unique actor identity, the reviewed addon/row node, and
 equality with the currently visible row name. Invalid, hidden, stale, duplicate,
 or ambiguous observations return no aura.
@@ -94,6 +95,37 @@ remaining time, actor job, and PvP context. Its catalog is limited to Guard
 `1320`, VPR Hardened Scales `4096`, and large-scale-only Swift `4477` after
 metadata validation. One-hit, partial, or ambiguous wards are not classified as
 full immunity. The short status grace and absolute expiry are in-memory only.
+
+## Optional CC-immunity brake
+
+The brake is disabled by default and runs only in Crystalline Conflict. When
+enabled, it transiently examines the local player's exact job, one already
+incoming action ID and target ID, the exact canonical opponent identity, and
+that opponent's action-specific verified CC-protection snapshot. Standard
+Purify-removable CC and Miracle of Nature use separate blocker matrices, which
+include only verified relevant status IDs. The standard matrix contains
+`3054`, `3673`, `3248`, `1303`, `1320`, `4096`, and `3143`; Miracle's matrix
+contains `3248`, `1320`, `3143`, `3052`, and `3162`. Its reviewed action
+list is limited to Intervene `29065`, Blota `29081`, Silent Nocturne `29395`,
+Repelling Shot `29399`, Miracle of Nature `29228`, Lethargy `41510`, Forked
+Raiju `29510`, Fleeting Raiju `29707`, Air Anchor `29407`, Gravity II `29244`,
+its Double Cast form `29248`, and Mineuchi `29535`.
+
+If the master, exact job, and exact action are enabled and the exact hostile
+target has verified protection against that action's CC, the plugin substitutes
+an invalid target only for that one incoming call. It does not swallow, store,
+log, synthesize, or replay input; initiate or queue an action; choose another
+action or target; change the visible hard, soft, or focus target; or retry
+later. Every later physical press or third-party Turbo pulse is an independent
+incoming call and is checked from current state again. Vanilla key holding does
+not create a repeat through this feature.
+
+Unsupported actions, jobs, contexts, missing or ambiguous actor identity, and
+unverified protection pass through unchanged. Broad cone, ground-targeted,
+self-centered, and ambiguous multi-target actions are excluded. Another plugin
+downstream can still alter the call after Seiton Sense; no claim is made about
+such rewritten output. Incoming identities and protection state are not
+persisted or transmitted.
 
 ## One-shot Near Assist
 
@@ -270,6 +302,14 @@ visible target, chooses an alternate enemy, falls back to another action, or
 retries a rejected/failed request. A client-accepted request is not recorded as
 proof that the enemy startup was interrupted.
 
+The existing action-effect hook also places exact local Miracle status-add
+observations into a separate bounded in-memory queue. A 1.5-second visual
+confirmation is created only when local caster, action `29228`, pending threat
+target, effect type `0x0E`, status `3085`, and a non-empty event sequence match
+within 1500 ms of the one helper attempt. This is labelled `MIRACLE LANDED` and
+is not stored as proof that the hostile action's damage was cancelled. Bounded
+capture/drop and confirmed-landing counters remain memory-only diagnostics.
+
 No observed threat, actor identity, key state, status, or action result is
 written to disk, uploaded, or retained as combat history. Aggregate bounded
 diagnostic counters, if displayed, remain memory-only.
@@ -303,8 +343,9 @@ MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 the WHM Miracle master/per-trigger opt-ins, resource-aura surfaces/thresholds/
-appearance, and the Monk Earth's Reply master/triggers/thresholds. Configuration
-schema 14 does
+appearance, the Monk Earth's Reply master/triggers/thresholds, and the
+CC-immunity-brake master plus exact per-job/per-action selections. Configuration
+schema 15 does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

@@ -95,6 +95,14 @@ public sealed class Plugin : IDalamudPlugin
             metadata,
             machinistLimitBreakCapture,
             tracker);
+        var ccImmunityBrake = new CcImmunityBrakeService(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            dataManager,
+            log);
         nearAssist = new NearAssistRedirector(
             configuration,
             clientState,
@@ -105,6 +113,7 @@ public sealed class Plugin : IDalamudPlugin
             interop,
             framework,
             pressureTracker,
+            ccImmunityBrake,
             log);
         personalStatus = new PersonalStatusService(
             clientState,
@@ -406,6 +415,7 @@ public sealed class Plugin : IDalamudPlugin
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
+                var ccBrake = nearAssist.CcBrakeDiagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -428,6 +438,11 @@ public sealed class Plugin : IDalamudPlugin
                     $"ttl={farHelp.RemainingMilliseconds},arm={farHelp.ArmedCount}," +
                     $"redirect={farHelp.RedirectedCount},fallback={farHelp.FallbackCount}," +
                     $"party={farHelp.LastPartySlot},distance={farHelp.LastDistance:0.0},last={farHelp.LastEvent}], " +
+                    $"cc-brake[enabled={ccBrake.Enabled},meta={ccBrake.VerifiedActions}/" +
+                    $"{CcImmunityBrakeActionCatalog.Definitions.Count},statuses={ccBrake.VerifiedStatuses}," +
+                    $"eval={ccBrake.EvaluatedAttempts},blocked={ccBrake.BlockedAttempts}," +
+                    $"fail-open={ccBrake.FailedOpenAttempts},action={ccBrake.LastActionId}," +
+                    $"status={ccBrake.LastBlockerStatusId},e={ccBrake.LastEnemySlot},last={ccBrake.LastEvent}], " +
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
@@ -450,6 +465,9 @@ public sealed class Plugin : IDalamudPlugin
                     $"key={miracle.InputKey},attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
                     $"count={miracle.AttemptCount}/{miracle.AcceptedCount},q={miracle.CaptureQueueDepth}," +
                     $"capture={miracle.CapturedThreatCount},drop={miracle.DroppedThreatCount}," +
+                    $"landed={miracle.ConfirmedLandingCount},confirm-q={miracle.ConfirmationQueueDepth}," +
+                    $"confirm-capture={miracle.CapturedConfirmationCount}," +
+                    $"confirm-drop={miracle.DroppedConfirmationCount}," +
                     $"last={miracle.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +

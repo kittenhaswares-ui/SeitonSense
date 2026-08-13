@@ -2,9 +2,9 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.10 adds visual-only
-low-resource auras around FFXIV's own action bars and team rows, a default-off
-Monk Earth's Reply helper, and a dedicated Jobs quality-of-life tab. The suite
+one-shot macro assistance, and target highlights. Version 0.11 adds a
+default-off, per-job and per-action CC-immunity brake for a conservative set of
+targeted PvP actions. The suite
 combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
 Focus Glow into one configurable custom-repository plugin.
 
@@ -24,6 +24,11 @@ Focus Glow into one configurable custom-repository plugin.
 - **Visible CC protection:** one large, static crossed-`CC` emblem and countdown
   are anchored above each enemy's native job icon. Guard and full immunity share
   the same unmistakable symbol without competing with the small utility slots.
+- **Optional CC-immunity brake:** selected targeted CC actions can be held back
+  while their exact enemy target has verified protection against that CC. It
+  works from the normal hotbar without a macro and checks every real press or
+  Turbo pulse independently; Seiton Sense never stores, replays, redirects, or
+  retries it.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
   and Marksman's Spite receive stable warnings. The MCH LB card is larger by
   default and can play one selectable built-in FFXIV sound per verified threat.
@@ -73,11 +78,11 @@ Focus Glow into one configurable custom-repository plugin.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
-- **Cleaner settings:** general resource readability and the Ninja, Monk,
-  BRD/WHM, and WHM helpers are grouped under a dedicated Jobs tab. Overview,
-  Pressure, Warnings, Assist, Targets, and Advanced remain focused on their own
-  feature families. Configuration schema 14 preserves existing settings; every
-  action-attempt experiment remains opt-in.
+- **Cleaner settings:** the CC-immunity brake, general resource readability and
+  the Ninja, Monk, BRD/WHM, and WHM helpers are grouped under a dedicated Jobs
+  tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
+  focused on their own feature families. Configuration schema 15 preserves
+  existing settings; every action-attempt feature remains opt-in.
 
 ## Pressure and team focus
 
@@ -135,10 +140,13 @@ only current visible rectangles and draws a foreground ImGui outline/fill. It
 does not recolor, pulse, write to, or otherwise mutate a native action slot or UI
 node.
 
-The settings preview uses those same exact currently visible self-hotbar
-rectangles. It does not place a separate fixed-size sample rectangle over the
-screen, and the ordinary live aura is suppressed while the preview is active so
-the two render paths cannot overlap.
+Each self-hotbar rectangle is now built only from that bar's currently visible
+native action-slot nodes. Seiton Sense no longer trusts the broader hotbar
+container, whose hidden layout area could extend far beyond the buttons and
+produce a displaced aura. The settings preview uses the same slot-union anchors,
+does not place a separate fixed-size sample rectangle over the screen, and
+suppresses the ordinary live aura while previewing so the two paths cannot
+overlap.
 
 Party rows require exact agent row index, entity identity, and native object
 pointer agreement. CC rows additionally require exact native party/enemy-slot
@@ -164,6 +172,56 @@ Active Guard replaces the crossed Guard-cooldown icon instead of creating a
 duplicate. Guard cooldown remains an estimate based only on a Guard status
 observed by this client; unknown cooldowns are never guessed. Guard does not
 block the Seiton cue because Seiton Tenchu ignores Guard.
+
+## Optional CC-immunity brake
+
+The default-off Crystalline Conflict brake uses an exact, action-specific
+verified protection matrix. Standard Purify-removable CC and Miracle of Nature
+have separate blocker sets, including exact relevant ward statuses rather than
+assuming every visible protection blocks every action. It works directly on
+incoming hotbar action attempts; no macro is required. When the current job,
+action, and exact hostile target are all enabled and that target has verified
+protection against that action's CC, Seiton Sense gives only that one incoming
+attempt an invalid target. It does not change the visible selected
+target, choose another enemy or action, store the press, dispatch an action,
+replay it later, or add a retry.
+
+For the standard CC family, the verified blockers are Guard `3054`/`3673`,
+Resilience `3248`, Inner Release `1303`, Meikyo Shisui `1320`, Hardened Scales
+`4096`, and the Warden's Paean ward `3143`. Miracle's separate matrix uses
+Resilience `3248`, Meikyo Shisui `1320`, the Warden's Paean `3143`, Relentless
+Rush `3052`, and Honing Dance `3162`. Unsupported or unverified statuses do not
+become blockers from their display text alone.
+
+The Jobs tab provides one master switch plus separate job and action switches.
+The conservative current list is:
+
+- PLD: Intervene `29065`;
+- WAR: Blota `29081`;
+- BRD: Silent Nocturne `29395` and Repelling Shot `29399`;
+- WHM: Miracle of Nature `29228`;
+- BLM: Lethargy `41510`;
+- NIN: Forked Raiju `29510` and Fleeting Raiju `29707`;
+- MCH: Air Anchor `29407`;
+- AST: Gravity II `29244`, including its Double Cast form `29248` behind the
+  same visible setting;
+- SAM: Mineuchi `29535`.
+
+This list is intentionally limited to reviewed single- or primary-target CC.
+Broad cone, ground-targeted, self-centered, and ambiguous multi-target actions
+are excluded because one protected actor does not prove that every affected
+enemy is protected. The brake suppresses the entire selected action attempt,
+including any damage or movement attached to it; individual actions can be
+disabled to taste.
+
+Every later physical press or Turbo Hotbar pulse is a new incoming attempt and
+is evaluated again, so the first real repeat after protection disappears can
+pass normally. Vanilla FFXIV key holding does not create those repeats by
+itself. A plugin later in the hook chain can still rewrite the target after
+Seiton Sense, so downstream target rewrites should be disabled or their order
+tested before relying on the brake. Unknown, missing, stale, unsupported, or
+ambiguous job/action/target/protection state passes through unchanged rather
+than inventing a decision.
 
 ## Ninja Seiton cues
 
@@ -253,6 +311,14 @@ physical input, Ally Rescue second, and Miracle third. State and input are
 consumed before the one native request; there is no selected-target change,
 alternate target, fallback, or retry. Turbo-generated logical repeats do not
 create new physical intent.
+
+After that sole helper attempt, the same bounded action-effect capture can show
+a blue `MIRACLE LANDED` news flash for 1.5 seconds. It requires the exact local
+caster, Miracle action `29228`, pending threat target, server status-add effect
+`0x0E`, and Miracle status `3085` within 1500 ms. The subtitle distinguishes
+`MCH LB`, `SAM LB`, and `VPR NEST`. This confirms that Miracle landed on the
+intended enemy; it does not conclusively prove that the hostile damage was
+cancelled. A preview button is available beside the Miracle settings.
 
 The MCH and SAM signals occur before their later damage presentation in the
 current captured event shape, but FFXIV remains authoritative. A locally
@@ -434,6 +500,7 @@ focus module to avoid drawing both over the same actor.
 | --- | --- | --- | --- |
 | Pressure counter and pressure badges | Yes | Separate opt-in | Yes, without CC slot labels |
 | Verified CC-protection icons | Yes | Yes, for the strict duel opponent | Yes, including large-scale-only Swift |
+| Optional per-action CC-immunity brake | Yes | No | No |
 | Personal warnings and optional self-Purify | Yes | Yes | No |
 | Native-HUD low-resource aura | Yes | Yes | Yes, without CC team rows |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
@@ -497,7 +564,10 @@ history. Transient observations and the exact one-shot action boundary are
 documented in [PRIVACY.md](PRIVACY.md).
 
 Display features, including the resource aura, never target or press actions or
-mutate native UI. Near Assist, Near Help, and Far Help can
+mutate native UI. The optional brake can substitute an invalid target only for
+one already incoming, enabled CC action attempt against an exact protected
+enemy; it never stores or replays input and never chooses another target or
+action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -527,7 +597,10 @@ party-row / current CC-row aura anchoring, pressure evidence, MCH marker/sound
 timing, optional Purify/Ally Rescue/Miracle/Earth's Reply behavior, and the macro helpers
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
-changes. The 0.7.0.1 ActionEffect confirmation and blue popup also still require
+changes. The CC-immunity brake's direct-hotbar and Turbo pulse behavior, target
+invalidity, expiry edge, and interaction with downstream target rewrites also
+require a current-patch live A/B test. The 0.7.0.1 ActionEffect confirmation and
+blue popup still require
 current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
 actual Miracle interruption likewise require a live CC A/B test; source and
 package checks cannot prove that server outcome.

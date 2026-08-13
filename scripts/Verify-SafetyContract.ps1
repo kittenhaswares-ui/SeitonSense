@@ -65,6 +65,8 @@ $machinistLimitBreakWarningSoundPath = Join-Path $pluginServicesRoot 'MachinistL
 $targetPressureTrackerPath = Join-Path $pluginServicesRoot 'TargetPressureTracker.cs'
 $targetPressureSnapshotPath = Join-Path $pluginServicesRoot 'TargetPressureSnapshot.cs'
 $ccProtectionMetadataGuardPath = Join-Path $pluginServicesRoot 'CcProtectionMetadataGuard.cs'
+$ccImmunityBrakeServicePath = Join-Path $pluginServicesRoot 'CcImmunityBrakeService.cs'
+$ccImmunityBrakeMetadataGuardPath = Join-Path $pluginServicesRoot 'CcImmunityBrakeMetadataGuard.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
@@ -84,7 +86,8 @@ $allowedUnsafe = @(
     $partySlotResolverPath,
     $machinistLimitBreakCapturePath,
     $machinistLimitBreakWarningSoundPath,
-    $targetPressureTrackerPath
+    $targetPressureTrackerPath,
+    $ccImmunityBrakeServicePath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
@@ -243,6 +246,8 @@ Assert-Literals $mchCapture @(
     'MaximumQueuedAllyRescueCleanses = 64',
     'ConcurrentQueue<MiracleInterceptThreatEvent>',
     'MaximumQueuedMiracleInterceptThreats = 64',
+    'ConcurrentQueue<MiracleInterceptLandedEffect>',
+    'MaximumQueuedMiracleInterceptConfirmations = 64',
     'SetAllyRescueLocalEntityId',
     'CurrentAllyRescueLocalEntityId',
     'TryCaptureAllyRescueCleanse',
@@ -263,6 +268,12 @@ Assert-Literals $mchCapture @(
     'HasOnlyEmptyAdditionalEffects(targetEffects)',
     'if (depth > MaximumQueuedMiracleInterceptThreats)',
     'DroppedMiracleInterceptThreats',
+    'TryCaptureMiracleInterceptConfirmation',
+    'MiracleInterceptConfirmationRules.MiracleOfNatureActionId',
+    'MiracleInterceptConfirmationRules.AddStatusEffectType',
+    'MiracleInterceptConfirmationRules.MiracleOfNatureStatusId',
+    'if (depth > MaximumQueuedMiracleInterceptConfirmations)',
+    'DroppedMiracleInterceptConfirmations',
     'SetPressureLocalEntityId',
     'TryCapturePressure',
     'HasHarmfulPressureEffect',
@@ -289,6 +300,17 @@ if ([regex]::Matches($mchCapture, '\bConcurrentQueue<MiracleInterceptThreatEvent
     [regex]::Matches($mchCapture, '\bMaximumQueuedMiracleInterceptThreats\s*=\s*64\b').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bTryDequeueMiracleInterceptThreat\s*\(').Count -ne 1) {
     throw 'Miracle threat capture must use exactly one bounded 64-item queue and one public dequeue boundary.'
+}
+if ([regex]::Matches($mchCapture, '\bConcurrentQueue<MiracleInterceptLandedEffect>').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bMaximumQueuedMiracleInterceptConfirmations\s*=\s*64\b').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bTryDequeueMiracleInterceptConfirmation\s*\(').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bClearMiracleInterceptConfirmations\s*\(').Count -ne 3) {
+    throw 'Miracle landing confirmation must use exactly one bounded 64-item queue, one dequeue boundary, and reviewed identity/reset clearing.'
+}
+$normalizedMiracleConfirmationCapture = $normalizedMchCapture
+if ($normalizedMiracleConfirmationCapture -notmatch 'casterEntityId != localEntityId.*?header->NumTargets != 1.*?actionId != MiracleInterceptConfirmationRules\.MiracleOfNatureActionId.*?targetEntityId == localEntityId.*?for \(var slot = 0; slot < EffectSlotsPerTarget; slot\+\+\).*?effect\.Type != MiracleInterceptConfirmationRules\.AddStatusEffectType \|\| effect\.Value != MiracleInterceptConfirmationRules\.MiracleOfNatureStatusId.*?return new MiracleInterceptLandedEffect' -or
+    $normalizedMiracleConfirmationCapture -notmatch 'confirmation\.CasterEntityId != CurrentMiracleInterceptLocalEntityId.*?!IsNetworkEntityId\(confirmation\.TargetEntityId\).*?if \(depth > MaximumQueuedMiracleInterceptConfirmations\).*?pendingMiracleInterceptConfirmations\.Enqueue\(confirmation\)') {
+    throw 'Miracle landing capture must require the exact local caster, one non-self network target, action 29228, and AddStatus 0x0E/value 3085 before bounded enqueue.'
 }
 if ($normalizedMchCapture -notmatch 'MiracleInterceptRules\.ClassifyExactStartSignal\( actionId, casterEntityId, targetEntityId, header->NumTargets, targetEffects\[0\]\.Type, IsEmpty\(targetEffects\[0\]\), HasOnlyEmptyAdditionalEffects\(targetEffects\)\)' -or
     $normalizedMchCapture -notmatch 'for \(var index = 1; index < effects\.Length; index\+\+\).*?!IsEmpty\(effects\[index\]\)') {
@@ -395,7 +417,7 @@ Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
     'allyRescueConfigurationEnabled && !purifyClaimedPriority',
     'EmergencyActionPriorityRules.AllyRescueClaimsPriority(',
-    'miracleInterceptConfigurationEnabled &&',
+    'miracleInterceptConfigurationEnabled,',
     '!purifyClaimedPriority &&',
     '!allyRescueClaimedPriority',
     'metadata.AllyRescueStatusesVerified',
@@ -405,6 +427,9 @@ Assert-Literals $personalStatus @(
     'metadata.FuriousBacklashVerified',
     'context == SupportedPvPContext.CrystallineConflict'
 ) 'Shared self-Purify, Ally Rescue, and Miracle priority'
+if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, context == SupportedPvPContext\.CrystallineConflict, miracleInterceptConfigurationEnabled, !purifyClaimedPriority && !allyRescueClaimedPriority,') {
+    throw 'Miracle must receive persistent feature/capture enablement separately from its transient Purify/Rescue dispatch permission.'
+}
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
 if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
     throw 'Core emergency-action priority must permit Miracle only after both self-Purify and Ally Rescue decline the generation.'
@@ -538,13 +563,11 @@ if ([regex]::Matches($miracleIntercept, '(?:->|\.)UseAction\s*\(').Count -ne 1) 
 Assert-Literals $miracleIntercept @(
     'MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind)',
     'RequiredCcProtectionStatusIds',
-    'EnemyCombatConstants.GuardStatusId',
-    'EnemyCombatConstants.GuardStatusAlternateId',
-    'EnemyCombatConstants.ResilienceStatusId',
-    'EnemyCombatConstants.InnerReleaseStatusId',
-    'EnemyCombatConstants.MeikyoShisuiStatusId',
+    'CcImmunityBrakeActionCatalog',
+    'GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle)',
+    '.Append(EnemyCombatConstants.HardenedScalesStatusId)',
+    '.Distinct()',
     'EnemyCombatConstants.HardenedScalesStatusId',
-    'CcProtectionMetadataGuard.Validate(dataManager, log)',
     'RequiredCcProtectionStatusIds.All(',
     'verifiedProtectionStatusIds.Contains',
     'isCrystallineConflict',
@@ -556,6 +579,8 @@ Assert-Literals $miracleIntercept @(
     'executeTracker.Enemies',
     'HasAnyVerifiedCcProtection',
     'HasVerifiedActiveStatus',
+    'CcImmunityBrakeActionCatalog.IsBlockerStatus(',
+    'CcImmunityBrakeBlockerFamily.Miracle',
     'Actor status-list membership is the authoritative live presence',
     'GetActionInRangeOrLoS',
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
@@ -568,13 +593,13 @@ Assert-Literals $miracleIntercept @(
     'the action will not be retried'
 ) 'Bounded exact-target WHM Miracle runtime'
 if ($normalizedMiracleIntercept -notmatch 'var protectionMetadataReady = RequiredCcProtectionStatusIds\.All\( verifiedProtectionStatusIds\.Contains\); var enabled = configurationEnabled && isCrystallineConflict && localIdentityValid && isWhiteMage && protectionMetadataReady;' -or
-    $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\)' -or
+    $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\), nowMilliseconds\)' -or
     $miracleIntercept -match '\bShowCcProtection\b') {
-    throw 'Miracle must require complete independent protection metadata plus each independently verified threat before arming.'
+    throw 'Miracle must require its complete independent blocker metadata, VPR Hardened Scales metadata, and each independently verified threat before arming.'
 }
-if ($normalizedMiracleIntercept -notmatch 'var hardenedScales = HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate\);.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
-    $normalizedMiracleIntercept -notmatch 'var revalidatedHardened = revalidated is not null && HasVerifiedActiveStatus\( revalidated, EnemyCombatConstants\.HardenedScalesStatusId\); var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated\);.*?if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedRange\)') {
-    throw 'Miracle must prove live Hardened Scales absence and no other verified protection both before spending input and immediately before UseAction.'
+if ($normalizedMiracleIntercept -notmatch 'var anyProtection = HasAnyVerifiedCcProtection\(candidate\); var hardenedScales = threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var otherProtection = anyProtection;.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
+    $normalizedMiracleIntercept -notmatch 'var revalidatedHardened = revalidated is not null && threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( revalidated, EnemyCombatConstants\.HardenedScalesStatusId\); var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated\);.*?if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedRange\)') {
+    throw 'Miracle must prove the narrow live blocker matrix for every threat and live Hardened Scales absence for VPR both before spending input and immediately before UseAction.'
 }
 if ($normalizedMiracleIntercept -notmatch 'actionManager->UseAction\s*\(\s*ActionType\.Action\s*,\s*EnemyCombatConstants\.MiracleOfNatureActionId\s*,\s*targetGameObjectId\s*,\s*0\s*,\s*ActionManager\.UseActionMode\.None\s*,\s*0\s*\)') {
     throw 'Miracle intercept must issue only ActionType.Action 29228 to the exact revalidated enemy with UseActionMode.None.'
@@ -593,9 +618,90 @@ if ($miracleIntercept -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOff
     throw 'Miracle intercept must never cooldown-prefilter, retry, queue, or mutate a visible target.'
 }
 if ($miracleIntercept -match '\bstatus\.RemainingTime\b' -or
-    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\).*?return true' -or
+    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\) && CcImmunityBrakeActionCatalog\.IsBlockerStatus\( CcImmunityBrakeBlockerFamily\.Miracle, status\.StatusId, targetJobId\).*?return true' -or
     $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?status\.StatusId == statusId.*?return true') {
     throw 'Miracle protection gates must use live StatusList membership, never RemainingTime prediction.'
+}
+
+# The news flash is confirmation of the exact Miracle status application, not a
+# claim that the hostile startup or damage was definitely cancelled.
+$miracleConfirmationRules = Read-RequiredSource (Join-Path $coreRoot 'MiracleInterceptConfirmationRules.cs') 'Miracle intercept landing confirmation rules'
+$normalizedMiracleConfirmationRules = $miracleConfirmationRules -replace '\s+', ' '
+Assert-Literals $miracleConfirmationRules @(
+    'MiracleOfNatureActionId = 29_228',
+    'MiracleOfNatureStatusId = 3_085',
+    'AddStatusEffectType = 0x0E',
+    'CorrelationMilliseconds = 1_500',
+    'PopupDurationMilliseconds = 1_500',
+    'MaximumConfirmedKeys = 128',
+    'MiracleInterceptThreatKind.MarksmanSpite',
+    'MiracleInterceptThreatKind.Zantetsuken',
+    'MiracleInterceptThreatKind.FuriousBacklash',
+    'observation.CasterEntityId == pending.LocalCasterEntityId',
+    'observation.ActionId == pending.ActionId',
+    'observation.TargetEntityId == pending.TargetEntityId',
+    'observation.EffectType == AddStatusEffectType',
+    'observation.EffectValue == MiracleOfNatureStatusId',
+    'observation.GlobalSequence != 0 || observation.SourceSequence != 0',
+    'previous.ConfirmedKeys.Contains(key)',
+    'AppendBounded(previous.ConfirmedKeys, key)',
+    'TotalConfirmed = SaturatingIncrement(previous.TotalConfirmed)',
+    'This proves that Miracle landed; it does not prove that the hostile action',
+    'damage was cancelled.'
+) 'Exact bounded Miracle landing correlation and popup truth claim'
+if ($normalizedMiracleConfirmationRules -notmatch 'observation\.ObservedAtMilliseconds < pending\.AttemptedAtMilliseconds \|\| observation\.ObservedAtMilliseconds - pending\.AttemptedAtMilliseconds > CorrelationMilliseconds' -or
+    $normalizedMiracleConfirmationRules -notmatch 'var skip = Math\.Max\(0, previous\.Length - MaximumConfirmedKeys \+ 1\); return previous\.Skip\(skip\)\.Append\(key\)\.ToImmutableArray\(\)') {
+    throw 'Miracle landing correlation must be forward-only within 1500 ms and deduplicate through a bounded 128-key history.'
+}
+if ($miracleConfirmationRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
+    throw 'Miracle landing confirmation rules must remain observational and never initiate actions, input, or target changes.'
+}
+Assert-Literals $miracleIntercept @(
+    'MiracleInterceptConfirmationState.Initial',
+    'MiracleInterceptConfirmationRules.ObserveTime(',
+    'capture.TryDequeueMiracleInterceptConfirmation(out var effect)',
+    'MiracleInterceptConfirmationRules.CorrelationMilliseconds',
+    'MiracleInterceptConfirmationRules.ObserveActionEffect(',
+    'new MiracleInterceptLandedObservation(',
+    'MiracleInterceptConfirmationRules.RegisterAttempt(',
+    'new MiracleInterceptPendingAttempt(',
+    'attempted && revalidated is not null && attemptedAtMilliseconds >= 0',
+    'ConfirmationPopup = confirmationState.Popup',
+    'ConfirmedLandingCount = confirmationState.TotalConfirmed',
+    'ConfirmationQueueDepth = capture.MiracleInterceptConfirmationQueueDepth',
+    'CapturedConfirmationCount = capture.CapturedMiracleInterceptConfirmations',
+    'DroppedConfirmationCount = capture.DroppedMiracleInterceptConfirmations',
+    'bool dispatchAllowed',
+    'confirmationPendingForLocalCaster',
+    'enabled && (localAlive || confirmationPendingForLocalCaster)',
+    'Waiting for exact Miracle landing evidence'
+) 'Miracle landing runtime correlation and diagnostics'
+$miracleRegisterIndex = $normalizedMiracleIntercept.IndexOf('MiracleInterceptConfirmationRules.RegisterAttempt(')
+$miracleTryUseIndex = $normalizedMiracleIntercept.IndexOf('TryUseMiracleOnce(revalidated.GameObjectId')
+if ($miracleTryUseIndex -lt 0 -or $miracleRegisterIndex -le $miracleTryUseIndex -or
+    $normalizedMiracleIntercept -notmatch 'if \(attempted && revalidated is not null && attemptedAtMilliseconds >= 0\) \{ var registered = MiracleInterceptConfirmationRules\.RegisterAttempt') {
+    throw 'Miracle confirmation may register only after this helper actually made its sole native attempt against the revalidated exact target.'
+}
+$miracleDrainConfirmationIndex = $normalizedMiracleIntercept.IndexOf('DrainConfirmations(nowMilliseconds)')
+$miracleDispatchGateIndex = $normalizedMiracleIntercept.IndexOf('if (!dispatchAllowed)')
+if ($miracleDrainConfirmationIndex -lt 0 -or
+    $miracleDispatchGateIndex -le $miracleDrainConfirmationIndex -or
+    $normalizedMiracleIntercept -notmatch 'if \(!dispatchAllowed\) \{ activeThreat = null; return Publish\("Cancelled", "Higher-priority helper claimed input", nowMilliseconds\); \}' -or
+    $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?if \(confirmationPendingForLocalCaster\) DrainConfirmations\(nowMilliseconds\);.*?"Waiting for exact Miracle landing evidence"') {
+    throw 'Transient Purify/Rescue priority or local death must not erase an exact pending Miracle landing correlation or visible popup.'
+}
+$overlaySource = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
+Assert-Literals $overlaySource @(
+    'miracle.ConfirmationPopup is { } miraclePopup && miraclePopup.IsVisible(now)',
+    'DrawMiracleInterceptConfirmationCard(',
+    '"MIRACLE LANDED"',
+    '"INTERRUPT ATTEMPT  •  MCH LB"',
+    '"INTERRUPT ATTEMPT  •  SAM LB"',
+    '"INTERRUPT ATTEMPT  •  VPR NEST"',
+    'MiracleInterceptConfirmationRules.PopupDurationMilliseconds'
+) 'Visible, bounded, non-overclaiming Miracle news flash'
+if ($overlaySource -match '(?i)interrupt(?:ed| successful| confirmed)|cancelled hostile|stopped (?:mch|sam|vpr|lb|nest)') {
+    throw 'Miracle news flash may say Miracle landed/interrupt attempt, but may not claim the hostile action was proven interrupted.'
 }
 
 # Monk Earth's Reply is a separate default-off direct self-action boundary. It
@@ -755,6 +861,132 @@ if ($nearAssist -match '(?:->|\.)UseAction\s*\(' -or
 }
 if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*forwardedTargetId\s*,\s*extraParam\s*,\s*mode\s*,\s*comboRouteId\s*,\s*outOptAreaTargeted\s*\)') {
     throw 'Near Assist Original must preserve every native action argument except the bounded forwardedTargetId.'
+}
+
+# The optional CC-immunity brake is a final-target filter inside the already
+# reviewed UseAction detour. It may invalidate only the target of this one
+# incoming call; it owns no hook, action call, target setter, delayed work, or
+# cached protection timer of its own.
+$ccImmunityBrake = Read-RequiredSource $ccImmunityBrakeServicePath 'CC-immunity brake service'
+$normalizedCcImmunityBrake = $ccImmunityBrake -replace '\s+', ' '
+$ccImmunityBrakeRules = Read-RequiredSource (Join-Path $coreRoot 'CcImmunityBrakeRules.cs') 'CC-immunity brake rules'
+$normalizedCcImmunityBrakeRules = $ccImmunityBrakeRules -replace '\s+', ' '
+$ccImmunityBrakeMetadata = Read-RequiredSource $ccImmunityBrakeMetadataGuardPath 'CC-immunity brake metadata guard'
+
+$ccBrakeTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bCcImmunityBrakeService\b')
+$unexpectedCcBrakeReferences = @($ccBrakeTypeReferences | Where-Object {
+    $_.Path -notin @($pluginPath, $nearAssistPath, $ccImmunityBrakeServicePath)
+})
+if ($unexpectedCcBrakeReferences.Count -gt 0) {
+    $locations = $unexpectedCcBrakeReferences | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "The CC brake may be constructed once and consulted only by the shared action detour: $($locations -join ', ')"
+}
+if ([regex]::Matches($pluginSource, '\bnew\s+CcImmunityBrakeService\s*\(').Count -ne 1 -or
+    [regex]::Matches($nearAssist, '\bccImmunityBrake\.ShouldBlock\s*\(').Count -ne 1 -or
+    [regex]::Matches($nearAssist, '\bccImmunityBrake\.RecordFailedOpen\s*\(').Count -ne 1) {
+    throw 'The CC brake must have one service instance, one final-target decision site, and one exception pass-through recorder.'
+}
+
+$useActionDetourMatch = [regex]::Match(
+    $nearAssist,
+    '(?s)private bool UseActionDetour\(.*?\r?\n    \}\r?\n\r?\n    private ulong TryResolveRedirect')
+if (-not $useActionDetourMatch.Success) {
+    throw 'The shared UseAction detour could not be isolated for CC-brake ordering review.'
+}
+$useActionDetour = $useActionDetourMatch.Value
+$normalizedUseActionDetour = $useActionDetour -replace '\s+', ' '
+$brakeDecisionIndex = $normalizedUseActionDetour.IndexOf('ccImmunityBrake.ShouldBlock(')
+$brakeFailureIndex = $normalizedUseActionDetour.IndexOf('ccImmunityBrake.RecordFailedOpen(exception)')
+$detourOriginalIndex = $normalizedUseActionDetour.IndexOf('useActionHook!.Original(')
+$lastRedirectCatchLogIndex = $normalizedUseActionDetour.LastIndexOf('LogFailure(', $brakeDecisionIndex)
+if ($brakeDecisionIndex -lt 0 -or
+    $brakeFailureIndex -le $brakeDecisionIndex -or
+    $detourOriginalIndex -le $brakeFailureIndex -or
+    $lastRedirectCatchLogIndex -lt 0 -or
+    $lastRedirectCatchLogIndex -ge $brakeDecisionIndex) {
+    throw 'The CC brake must run after redirect resolution and its catch, then before the detour''s sole Original call.'
+}
+if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, forwardedTargetId, mode\)\) \{ forwardedTargetId = InvalidCarrierTargetId; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
+    throw 'The brake must inspect the final forwarded target, bypass plugin-owned helpers, set target zero only on an exact Block decision, and pass exceptions through unchanged.'
+}
+$brakeDetourSection = [regex]::Match(
+    $normalizedUseActionDetour,
+    'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId.*?ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}').Value
+if ([regex]::Matches($brakeDetourSection, 'forwardedTargetId\s*=\s*InvalidCarrierTargetId').Count -ne 1 -or
+    $brakeDetourSection -match 'catch \(Exception exception\) \{[^}]*forwardedTargetId\s*=') {
+    throw 'Only a successful exact CC-brake decision may invalidate this call; the brake exception path must preserve the final target.'
+}
+
+Assert-Literals $ccImmunityBrake @(
+    'CcImmunityBrakeMetadataGuard.Validate(dataManager, log)',
+    'verifiedActionIds = metadata.VerifiedActionIds',
+    'verifiedStatusIds = metadata.VerifiedStatusIds',
+    'configuration.Enabled',
+    'configuration.EnableCcImmunityBrake',
+    'verifiedActionIds.Contains(resolvedActionId)',
+    'ResolveContext() != SupportedPvPContext.CrystallineConflict',
+    'TryResolveExactCanonicalEnemy(',
+    'EnemySlotRules.FirstSlot',
+    'EnemySlotRules.LastSlot',
+    'EnemySlotResolver.Resolve(objectTable, slot)',
+    'seenIdentities.Add(identity)',
+    'matches.Count != 1',
+    'objectTable.SearchByEntityId(match.Player.EntityId) as IPlayerCharacter',
+    'tableCandidate.Address != match.Player.Address',
+    'tableCandidate.GameObjectId != match.Player.GameObjectId',
+    'tableCandidate.EntityId != match.Player.EntityId',
+    'target?.StatusList',
+    '.Where(verifiedStatusIds.Contains)',
+    'CcImmunityBrakeRules.Evaluate(',
+    'configuration.IsCcBrakeJobEnabled(localJobId)',
+    'configuration.IsCcBrakeActionEnabled(resolvedActionId)',
+    'forwardedTargetId,',
+    'includeWolvesDenTesting: false',
+    'actionType is ActionType.Action or ActionType.PvPAction',
+    'ActionManager.UseActionMode.None',
+    'ActionManager.UseActionMode.Macro',
+    'ActionManager.UseActionMode.Queue',
+    '(uint)mode == 100'
+) 'Exact, live, canonical CC-immunity brake runtime'
+if ($normalizedCcImmunityBrake -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\)' -or
+    $normalizedCcImmunityBrake -notmatch 'targetId == candidate\.GameObjectId \|\| targetId == candidate\.EntityId' -or
+    $normalizedCcImmunityBrake -notmatch 'var liveStatuses = target\?\.StatusList \.Select\(static status => status\.StatusId\) \.Where\(verifiedStatusIds\.Contains\) \.ToArray\(\)') {
+    throw 'CC-brake target resolution must scan exact e1-e5 identities and sample the resolved actor''s live StatusList at action time.'
+}
+$shouldBlockMethod = [regex]::Match(
+    $normalizedCcImmunityBrake,
+    'internal bool ShouldBlock\(.*?\) \{(?<Body>.*?)\} internal void RecordFailedOpen')
+if (-not $shouldBlockMethod.Success) {
+    throw 'The one-attempt CC-brake decision method could not be isolated.'
+}
+$ccBrakeDecisionBody = $shouldBlockMethod.Groups['Body'].Value
+if ($ccBrakeDecisionBody -cmatch '\b(Environment\.TickCount64|DateTime|Stopwatch|RemainingTime|ProtectionMissingGrace|Snapshot|TargetPressureTracker|Task|Timer|Thread|ConcurrentQueue|Queue<|Replay|Retry|Dispatch)\b' -or
+    $ccImmunityBrake -match '(?:->|\.)UseAction\s*\(' -or
+    $ccImmunityBrake -cmatch '\b(Hook<|HookFromAddress|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b' -or
+    $ccImmunityBrake -match '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'The CC brake must remain a live one-attempt filter with no tracker grace, expiry prediction, replay, native action call, extra hook, input injection, or target setter.'
+}
+Assert-Literals $ccImmunityBrakeRules @(
+    'MasterDisabled',
+    'JobDisabled',
+    'ActionDisabled',
+    'ActionNotCataloged',
+    'JobMismatch',
+    'TargetNotResolvedExactly',
+    'InvalidTargetIdentity',
+    'IncomingTargetMismatch',
+    'NoVerifiedBlocker',
+    'VerifiedBlocker',
+    'CcImmunityBrakeActionCatalog.TryGet(actionId, out var action)',
+    'localJobId != action.JobId',
+    '!targetIdentityResolvedExactly',
+    '!resolvedTarget.IsValid',
+    '!IsExactIncomingTarget(incomingTargetId, resolvedTarget)',
+    'CcImmunityBrakeActionCatalog.IsBlockerStatus(',
+    'incomingTargetId == target.GameObjectId || incomingTargetId == target.EntityId'
+) 'Stateless exact-target CC-immunity brake decision'
+if ($ccImmunityBrakeRules -cmatch '\b(Environment\.TickCount64|DateTime|Stopwatch|RemainingTime|Task|Timer|Thread|ConcurrentQueue|Queue<|UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
+    throw 'Pure CC-brake rules must own no clock, queue, retry, replay, action call, or target service.'
 }
 $consumeState = [regex]::Match($nearAssist, 'oneShotState\s*=\s*NearAssistOneShotState\.Initial\s*;')
 $originalCall = [regex]::Match($nearAssist, '\buseActionHook!\.Original\s*\(')
@@ -1322,6 +1554,142 @@ if ($ambiguousWardNames.Count -gt 0 -or $ccProtectionKind -match '\b(SingleHitWa
     throw 'Aquaveil, Warden''s Paean, Seraph Flight, and other one-hit wards must remain outside the full-immunity catalog.'
 }
 
+# The action brake deliberately uses its own per-action blocker matrix. Ordinary
+# Purify-removable CC and Miracle of Nature do not share the same immunities.
+$ccBrakeCatalog = Read-RequiredSource (Join-Path $coreRoot 'CcImmunityBrakeActionCatalog.cs') 'CC-immunity brake action catalog'
+$normalizedCcBrakeCatalog = $ccBrakeCatalog -replace '\s+', ' '
+$ccBrakeDefinitions = [regex]::Matches(
+    $ccBrakeCatalog,
+    '(?m)^\s*new\(\s*(?<Job>[\d_]+)\s*,\s*(?<Action>[\d_]+)\s*,\s*"(?<Name>[^"]+)"\s*,\s*CcImmunityBrakeBlockerFamily\.(?<Family>\w+)\s*\),')
+$actualCcBrakeDefinitions = @($ccBrakeDefinitions | ForEach-Object {
+    $job = [uint32](($_.Groups['Job'].Value) -replace '_', '')
+    $action = [uint32](($_.Groups['Action'].Value) -replace '_', '')
+    "$job`:$action`:$($_.Groups['Name'].Value)`:$($_.Groups['Family'].Value)"
+})
+$expectedCcBrakeDefinitions = @(
+    '19:29065:Intervene:StandardPurifyCc',
+    '21:29081:Blota:StandardPurifyCc',
+    '23:29395:Silent Nocturne:StandardPurifyCc',
+    '23:29399:Repelling Shot:StandardPurifyCc',
+    '24:29228:Miracle of Nature:Miracle',
+    '25:41510:Lethargy:StandardPurifyCc',
+    '30:29510:Forked Raiju:StandardPurifyCc',
+    '30:29707:Fleeting Raiju:StandardPurifyCc',
+    '31:29407:Air Anchor:StandardPurifyCc',
+    '33:29244:Gravity II:StandardPurifyCc',
+    '33:29248:Gravity II (Double Cast):StandardPurifyCc',
+    '34:29535:Mineuchi:StandardPurifyCc'
+)
+if ($actualCcBrakeDefinitions.Count -ne 12 -or
+    ($actualCcBrakeDefinitions -join '|') -ne ($expectedCcBrakeDefinitions -join '|')) {
+    throw "CC brake must retain exactly the reviewed 12 action/job/family entries; found $($actualCcBrakeDefinitions -join ', ')."
+}
+$actualCcBrakeJobs = @($ccBrakeDefinitions | ForEach-Object {
+    [uint32](($_.Groups['Job'].Value) -replace '_', '')
+} | Sort-Object -Unique)
+$expectedCcBrakeJobs = @([uint32]19, [uint32]21, [uint32]23, [uint32]24, [uint32]25, [uint32]30, [uint32]31, [uint32]33, [uint32]34)
+if ($actualCcBrakeJobs.Count -ne 9 -or
+    ($actualCcBrakeJobs -join ',') -ne ($expectedCcBrakeJobs -join ',')) {
+    throw "CC brake must expose exactly the reviewed nine jobs; found $($actualCcBrakeJobs -join ',')."
+}
+
+$standardBlockerArray = [regex]::Match(
+    $ccBrakeCatalog,
+    '(?s)StandardPurifyCcBlockerArray\s*=\s*\[(?<Body>.*?)\];')
+$miracleBlockerArray = [regex]::Match(
+    $ccBrakeCatalog,
+    '(?s)MiracleBlockerArray\s*=\s*\[(?<Body>.*?)\];')
+if (-not $standardBlockerArray.Success -or -not $miracleBlockerArray.Success) {
+    throw 'CC brake blocker matrices could not be isolated.'
+}
+$standardBlockerIds = @([regex]::Matches($standardBlockerArray.Groups['Body'].Value, '(?m)^\s*(?<Id>[\d_]+)\s*,') | ForEach-Object {
+    [uint32](($_.Groups['Id'].Value) -replace '_', '')
+})
+$miracleBlockerIds = @([regex]::Matches($miracleBlockerArray.Groups['Body'].Value, '(?m)^\s*(?<Id>[\d_]+)\s*,') | ForEach-Object {
+    [uint32](($_.Groups['Id'].Value) -replace '_', '')
+})
+$expectedStandardBlockers = @([uint32]3054, [uint32]3673, [uint32]3248, [uint32]1303, [uint32]1320, [uint32]4096, [uint32]3143)
+$expectedMiracleBlockers = @([uint32]3248, [uint32]1320, [uint32]3143, [uint32]3052, [uint32]3162)
+if (($standardBlockerIds -join ',') -ne ($expectedStandardBlockers -join ',') -or
+    ($miracleBlockerIds -join ',') -ne ($expectedMiracleBlockers -join ',')) {
+    throw "CC brake blocker matrices drifted: standard=$($standardBlockerIds -join ','), Miracle=$($miracleBlockerIds -join ',')."
+}
+foreach ($constraint in @(
+    '1_303 => targetJobId == 21',
+    '1_320 => targetJobId == 34',
+    '4_096 => targetJobId == 41',
+    '3_052 => targetJobId == 37',
+    '3_162 => targetJobId == 38')) {
+    if ($ccBrakeCatalog -notmatch [regex]::Escape($constraint)) {
+        throw "CC brake job-scoped blocker constraint drifted: $constraint"
+    }
+}
+$standardConstraintMethod = [regex]::Match(
+    $ccBrakeCatalog,
+    '(?s)private static bool StandardBlockerMatchesTargetJob.*?\{(?<Body>.*?)\};')
+$miracleConstraintMethod = [regex]::Match(
+    $ccBrakeCatalog,
+    '(?s)private static bool MiracleBlockerMatchesTargetJob.*?\{(?<Body>.*?)\};')
+$standardConstraintCases = [regex]::Matches($standardConstraintMethod.Groups['Body'].Value, '(?m)^\s*[\d_]+\s*=>\s*targetJobId\s*==\s*\d+')
+$miracleConstraintCases = [regex]::Matches($miracleConstraintMethod.Groups['Body'].Value, '(?m)^\s*[\d_]+\s*=>\s*targetJobId\s*==\s*\d+')
+if (-not $standardConstraintMethod.Success -or -not $miracleConstraintMethod.Success -or
+    $standardConstraintCases.Count -ne 3 -or $miracleConstraintCases.Count -ne 3 -or
+    $normalizedCcBrakeCatalog -notmatch 'StandardPurifyCc => ReadOnlyStandardPurifyCcBlockers.*?Miracle => ReadOnlyMiracleBlockers' -or
+    $normalizedCcBrakeCatalog -notmatch 'StandardPurifyCc => StandardPurifyCcBlockers\.Contains\(statusId\) && StandardBlockerMatchesTargetJob\(statusId, targetJobId\).*?Miracle => MiracleBlockers\.Contains\(statusId\) && MiracleBlockerMatchesTargetJob\(statusId, targetJobId\)') {
+    throw 'CC brake must retain the exact two blocker families and their three job-scoped status constraints each.'
+}
+
+Assert-Literals $ccImmunityBrakeMetadata @(
+    'ClientLanguage.English',
+    'CcImmunityBrakeActionCatalog.Definitions',
+    'expected.JobId == definition.JobId',
+    'actions.TryGetRow(definition.ActionId, out var action)',
+    'descriptions.TryGetRow(definition.ActionId, out var transient)',
+    'action.RowId == expected.ActionId',
+    'action.Icon == expected.IconId',
+    'action.ClassJob.RowId == expected.JobId',
+    'action.IsPvP',
+    'action.CanTargetHostile',
+    '!action.CanTargetSelf',
+    '!action.TargetArea',
+    'action.Range == expected.Range',
+    'action.EffectRange == expected.EffectRange',
+    'action.CastType == expected.CastType',
+    'action.Recast100ms == expected.Recast100ms',
+    'expected.DescriptionFragment',
+    'status.Icon == expected.IconId',
+    'status.StatusCategory == 1',
+    '!status.CanDispel',
+    '!status.IsPermanent',
+    'verifiedActions.Clear()',
+    'verifiedStatuses.Clear()'
+) 'Fail-open English metadata verification for every CC-brake action and blocker'
+$metadataActionExpectations = [regex]::Matches(
+    $ccImmunityBrakeMetadata,
+    '(?m)^\s*new\(\s*(?<Action>[\d_]+)\s*,\s*(?<Job>[\d_]+)\s*,\s*"(?<Name>[^"]+)"\s*,\s*[\d_]+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*"[^"]+"\s*\),')
+$metadataStatusExpectations = [regex]::Matches(
+    $ccImmunityBrakeMetadata,
+    '(?m)^\s*new\(\s*(?<Status>[\d_]+)\s*,\s*"(?<Name>[^"]+)"\s*,\s*[\d_]+\s*,\s*"[^"]+"\s*\),')
+if ($metadataActionExpectations.Count -ne 12 -or $metadataStatusExpectations.Count -ne 9) {
+    throw 'CC brake metadata must pin exactly 12 actions and the union of nine blocker statuses.'
+}
+$metadataActionPairs = @($metadataActionExpectations | ForEach-Object {
+    "$([uint32](($_.Groups['Job'].Value) -replace '_', '')):$([uint32](($_.Groups['Action'].Value) -replace '_', '')):$($_.Groups['Name'].Value)"
+})
+$catalogActionPairs = @($ccBrakeDefinitions | ForEach-Object {
+    "$([uint32](($_.Groups['Job'].Value) -replace '_', '')):$([uint32](($_.Groups['Action'].Value) -replace '_', '')):$($_.Groups['Name'].Value -replace ' \(Double Cast\)$', '')"
+})
+if (($metadataActionPairs -join '|') -ne ($catalogActionPairs -join '|')) {
+    throw 'CC brake metadata expectations must map one-to-one to the exact action catalog.'
+}
+$metadataStatusIds = @($metadataStatusExpectations | ForEach-Object {
+    [uint32](($_.Groups['Status'].Value) -replace '_', '')
+} | Sort-Object)
+$matrixStatusIds = @(($expectedStandardBlockers + $expectedMiracleBlockers) | Sort-Object -Unique)
+if (($metadataStatusIds -join ',') -ne ($matrixStatusIds -join ',')) {
+    throw 'CC brake metadata expectations must cover exactly the union of both blocker matrices.'
+}
+
 $overlay = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
 Assert-Literals $overlay @(
     'DrawCcProtectionEmblem(anchor, activeProtections, now)',
@@ -1381,10 +1749,23 @@ Assert-Literals $resourceAuraAnchor @(
     '"_ActionBar06", "_ActionBar07", "_ActionBar08", "_ActionBar09"',
     'GetAddonByName<AddonActionCross>("_ActionCross")',
     '"_ActionDoubleCrossL", "_ActionDoubleCrossR"',
-    'primary->ContainerNode',
-    'bar->ContainerNode',
-    'cross->ContainerNode',
-    'doubleCross->ContainerNode',
+    'AddHotbarAnchor(localPlayer, (AddonActionBarBase*)primary, kind, results)',
+    'AddHotbarAnchor(localPlayer, (AddonActionBarBase*)bar, kind, results)',
+    'AddHotbarAnchor(localPlayer, (AddonActionBarBase*)cross, kind, results)',
+    'AddHotbarAnchor(localPlayer, (AddonActionBarBase*)doubleCross, kind, results)',
+    'TryGetVisibleActionSlotUnion(actionBar, out var minimum, out var maximum)',
+    'MaximumActionBarSlotCount = 32',
+    'actionBar->ActionBarSlotVector.First',
+    'actionBar->ActionBarSlotVector.Last',
+    'sizeof(ActionBarSlot)',
+    'vectorCount < slotCount || vectorCount > MaximumActionBarSlotCount',
+    'first[index].ComponentDragDrop',
+    'dragDrop->AtkComponentBase.OwnerNode',
+    'new HashSet<nint>()',
+    'TryGetActionSlotBounds(node, addonRoot, out var slotMinimum, out var slotMaximum)',
+    'minimum = Vector2.Min(minimum, slotMinimum)',
+    'maximum = Vector2.Max(maximum, slotMaximum)',
+    'IsVisibleDescendant(node, addonRoot)',
     'GetAddonByName<AddonPartyList>("_PartyList")',
     'AgentHUD.Instance()',
     'agent->PartyMemberCount is < 1 or > 8',
@@ -1405,6 +1786,24 @@ Assert-Literals $resourceAuraAnchor @(
     'while (node != null && depth++ < 64)',
     'return depth is > 0 and < 64'
 ) 'Exact read-only hotbar, party-row, and CC-row resource anchors'
+$captureHotbarsMethod = [regex]::Match(
+    $resourceAuraAnchor,
+    '(?s)private unsafe void CaptureHotbars\(.*?\r?\n    \}\r?\n\r?\n    private static unsafe void AddHotbarAnchor')
+$hotbarAnchorMethods = [regex]::Match(
+    $resourceAuraAnchor,
+    '(?s)private static unsafe void AddHotbarAnchor\(.*?\r?\n    \}\r?\n\r?\n    private unsafe void CapturePartyRows')
+if (-not $captureHotbarsMethod.Success -or -not $hotbarAnchorMethods.Success -or
+    $captureHotbarsMethod.Value -match '\bContainerNode\b' -or
+    $hotbarAnchorMethods.Value -match '\bContainerNode\b' -or
+    $hotbarAnchorMethods.Value -match '\b(RootNode->GetBounds|AtkUnitBase\.RootNode->GetBounds)\b') {
+    throw 'Self-hotbar auras must use only the visible ActionBarSlotVector OwnerNode union; ContainerNode/root-bounds fallback is forbidden.'
+}
+$normalizedHotbarAnchorMethods = $hotbarAnchorMethods.Value -replace '\s+', ' '
+if ($normalizedHotbarAnchorMethods -notmatch 'var slotCount = actionBar->SlotCount; var first = actionBar->ActionBarSlotVector\.First; var last = actionBar->ActionBarSlotVector\.Last;' -or
+    $normalizedHotbarAnchorMethods -notmatch 'for \(var index = 0; index < slotCount; index\+\+\).*?first\[index\]\.ComponentDragDrop.*?AtkComponentBase\.OwnerNode.*?TryGetActionSlotBounds' -or
+    $normalizedHotbarAnchorMethods -notmatch 'return found;') {
+    throw 'Self-hotbar anchoring must validate the slot vector and union only visible per-slot OwnerNode bounds.'
+}
 if ($normalizedResourceAuraAnchor -notmatch 'foreach \(var identity in manaStates\.Keys\.Where\(identity => !seen\.Contains\(identity\)\)\.ToArray\(\)\) manaStates\.Remove\(identity\)' -or
     $resourceAuraAnchor -match '->\w+\s*=(?!=)' -or
     $resourceAuraAnchor -match '\b(SetRawValue|ClearAll|FireCallback|SendEvent|SetPosition|SetScale|SetAlpha|SetAdditive|SetMultiply|SetColor|PulseActionBarSlot|UseAction|UseActionLocation)\s*\(') {
@@ -1664,7 +2063,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 14',
+    'public int Version { get; set; } = 15',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -1710,7 +2109,16 @@ Assert-Literals $configuration @(
     'MonkEarthReplyBeforeExpiry = true',
     'MonkEarthReplyHpPercent = 30',
     'MonkEarthReplyExpirySeconds = 1.25f',
-    'Version = 14',
+    'if (Version < 15)',
+    'EnableCcImmunityBrake = false',
+    'CcBrakeJobs = CreateDefaultCcBrakeJobs()',
+    'CcBrakeActions = CreateDefaultCcBrakeActions()',
+    'Version = 15',
+    'NormalizeCcBrakeSelections()',
+    'IsCcBrakeJobEnabled(uint jobId)',
+    'IsCcBrakeActionEnabled(uint actionId)',
+    'if (actionId is 29244 or 29248)',
+    'normalizedActions[29248] = gravityEnabled',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
     'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
     'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f',
@@ -1722,7 +2130,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-14 held-key, target, resource-aura, job-helper, pressure, immunity, and warning configuration migration'
+) 'Schema-15 held-key, target, resource-aura, job-helper, pressure, immunity-brake, and warning configuration migration'
 if ($configuration -notmatch '(?m)^\s*public bool ExperimentalMiracleInterceptOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptMchLimitBreak \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptSamZantetsuken \{ get; set; \} = true;\s*$' -or
@@ -1734,6 +2142,32 @@ if ([regex]::Matches($configuration, '\bExperimentalMiracleInterceptOnHeldKey\s*
     [regex]::Matches($configuration, '\bMiracleInterceptSamZantetsuken\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bMiracleInterceptViperNest\s*=\s*true\s*;').Count -lt 2) {
     throw 'Miracle intercept must stay master-default-off with all three exact trigger toggles default-on in migration and reset.'
+}
+if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bCcBrakeJobs\s*=\s*CreateDefaultCcBrakeJobs\(\)\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bCcBrakeActions\s*=\s*CreateDefaultCcBrakeActions\(\)\s*;').Count -lt 2) {
+    throw 'Schema 15 must keep the CC-immunity brake master default-off while job/action selections default on for explicit opt-in.'
+}
+$configuredBrakeJobs = [regex]::Match(
+    $configuration,
+    '(?s)SupportedCcBrakeJobIds\s*=\s*\[(?<Body>.*?)\];')
+$configuredBrakeActions = [regex]::Match(
+    $configuration,
+    '(?s)SupportedCcBrakeActionIds\s*=\s*\[(?<Body>.*?)\];')
+$configuredBrakeJobIds = @([regex]::Matches($configuredBrakeJobs.Groups['Body'].Value, '(?m)^\s*(?<Id>\d+)\s*,') | ForEach-Object { [uint32]$_.Groups['Id'].Value })
+$configuredBrakeActionIds = @([regex]::Matches($configuredBrakeActions.Groups['Body'].Value, '(?m)^\s*(?<Id>\d+)\s*,') | ForEach-Object { [uint32]$_.Groups['Id'].Value })
+$catalogBrakeActionIds = @($ccBrakeDefinitions | ForEach-Object { [uint32](($_.Groups['Action'].Value) -replace '_', '') })
+if (-not $configuredBrakeJobs.Success -or -not $configuredBrakeActions.Success -or
+    ($configuredBrakeJobIds -join ',') -ne ($expectedCcBrakeJobs -join ',') -or
+    ($configuredBrakeActionIds -join ',') -ne ($catalogBrakeActionIds -join ',')) {
+    throw 'Schema 15 job/action toggle allowlists must exactly match the reviewed nine-job, twelve-action brake catalog.'
+}
+if ($configuration -notmatch '(?s)CreateDefaultCcBrakeJobs\(\).*?SupportedCcBrakeJobIds\.ToDictionary\(static id => id, static _ => true\)' -or
+    $configuration -notmatch '(?s)CreateDefaultCcBrakeActions\(\).*?SupportedCcBrakeActionIds\.ToDictionary\(static id => id, static _ => true\)' -or
+    $configuration -notmatch '(?s)if \(actionId is 29244 or 29248\).*?CcBrakeActions\[29244\] = enabled;.*?CcBrakeActions\[29248\] = enabled;' -or
+    $configuration -notmatch '(?s)var gravityEnabled = normalizedActions\[29244\];.*?normalizedActions\[29248\] = gravityEnabled;') {
+    throw 'Brake selections must default every reviewed leaf on and keep both adjusted AST Gravity II forms behind one setting.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableResourceAura \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ResourceAuraOnSelfHotbars \{ get; set; \} = true;\s*$' -or
@@ -1771,4 +2205,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.10.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed Far Help share one bounded target-only detour, with strict no-selected-target Far Help quarantine plus safe-backline preference and farthest reachable fallback; the native-hotbar/party/CC-row resource aura is read-only, exact-identity, trusted-MP, and fail closed, and its preview uses exact current hotbar anchors with live-pass suppression; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while default-off Monk Earth's Reply yields to prior attempts and spends one exact 29483 self action before its sole no-retry request."
+Write-Host "Seiton Sense v0.11.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour whose brake samples the final exact e1-e5 actor and live status list before the sole Original call; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while VPR Miracle waits for live Hardened Scales absence and the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
