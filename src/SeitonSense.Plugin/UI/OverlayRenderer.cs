@@ -25,6 +25,9 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 TeamPressureColor = new(0.12f, 0.9f, 1f, 1f);
     private static readonly Vector4 IncomingPressureColor = new(1f, 0.18f, 0.12f, 1f);
     private static readonly Vector4 RecentPressureColor = new(1f, 0.68f, 0.12f, 1f);
+    private static readonly Vector4 LowHealthAuraColor = new(1f, 0.08f, 0.16f, 1f);
+    private static readonly Vector4 LowManaAuraColor = new(0.12f, 0.48f, 1f, 1f);
+    private static readonly Vector4 CombinedResourceAuraColor = new(0.72f, 0.16f, 1f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.96f);
     private const uint WardensPaeanIconId = 9628;
@@ -35,6 +38,7 @@ internal sealed class OverlayRenderer
     private readonly PersonalStatusService personalStatus;
     private readonly TargetPressureTracker pressureTracker;
     private readonly NamePlateAnchorTracker namePlateAnchors;
+    private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
     private SeitonPopupSnapshot? previewPopup;
@@ -47,6 +51,7 @@ internal sealed class OverlayRenderer
         PersonalStatusService personalStatus,
         TargetPressureTracker pressureTracker,
         NamePlateAnchorTracker namePlateAnchors,
+        ResourceAuraAnchorTracker resourceAuraAnchors,
         IGameGui gameGui,
         ITextureProvider textureProvider)
     {
@@ -55,6 +60,7 @@ internal sealed class OverlayRenderer
         this.personalStatus = personalStatus;
         this.pressureTracker = pressureTracker;
         this.namePlateAnchors = namePlateAnchors;
+        this.resourceAuraAnchors = resourceAuraAnchors;
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
     }
@@ -69,7 +75,12 @@ internal sealed class OverlayRenderer
         }
     }
     public bool CcProtectionPreviewEnabled { get; set; }
+    public bool ResourceAuraPreviewEnabled { get; set; }
     public int NativeAnchorCount => namePlateAnchors.Anchors.Count;
+    public int ResourceAuraAnchorCount => resourceAuraAnchors.LastAnchorCount;
+    public int ResourceAuraSelfHotbarCount => resourceAuraAnchors.LastSelfHotbarCount;
+    public int ResourceAuraPartyRowCount => resourceAuraAnchors.LastPartyRowCount;
+    public int ResourceAuraCcRowCount => resourceAuraAnchors.LastCcRowCount;
 
     public void TriggerPreviewPopup()
     {
@@ -97,9 +108,11 @@ internal sealed class OverlayRenderer
 
         if (PreviewEnabled) DrawPreview();
         if (CcProtectionPreviewEnabled) DrawCcProtectionPreview();
+        if (ResourceAuraPreviewEnabled) DrawResourceAuraPreview();
         DrawPopup(previewPopup);
 
         var now = Environment.TickCount64;
+        DrawResourceAuras(now);
         if (!configuration.Enabled)
         {
             DrawAllyRescueConfirmationPreview(now);
@@ -119,6 +132,93 @@ internal sealed class OverlayRenderer
         // filters those cards itself, so a confirmed cleanse stays visible even
         // when ordinary personal warnings are hidden.
         DrawPersonalWarnings(now);
+    }
+
+    private void DrawResourceAuras(long now)
+    {
+        var anchors = resourceAuraAnchors.Capture();
+        if (anchors.Count == 0) return;
+
+        var draw = ImGui.GetForegroundDrawList();
+        foreach (var anchor in anchors)
+        {
+            var strength = anchor.Surface == ResourceAuraSurface.SelfHotbar ? 1f : 0.38f;
+            DrawResourceAura(draw, anchor.Minimum, anchor.Maximum, anchor.Kind, strength, now);
+        }
+    }
+
+    private void DrawResourceAuraPreview()
+    {
+        var screen = ImGui.GetIO().DisplaySize;
+        var scale = ImGuiHelpers.GlobalScale;
+        var size = new Vector2(430f, 58f) * scale;
+        var minimum = new Vector2((screen.X - size.X) * 0.5f, screen.Y * 0.78f);
+        DrawResourceAura(
+            ImGui.GetForegroundDrawList(),
+            minimum,
+            minimum + size,
+            ResourceAuraKind.LowHpAndMp,
+            1f,
+            Environment.TickCount64);
+    }
+
+    private void DrawResourceAura(
+        ImDrawListPtr draw,
+        Vector2 minimum,
+        Vector2 maximum,
+        ResourceAuraKind kind,
+        float surfaceStrength,
+        long now)
+    {
+        if (kind == ResourceAuraKind.None ||
+            maximum.X <= minimum.X || maximum.Y <= minimum.Y)
+        {
+            return;
+        }
+
+        var color = kind switch
+        {
+            ResourceAuraKind.LowHp => LowHealthAuraColor,
+            ResourceAuraKind.LowMp => LowManaAuraColor,
+            ResourceAuraKind.LowHpAndMp => CombinedResourceAuraColor,
+            _ => default,
+        };
+        if (color.W <= 0f) return;
+
+        var speed = Math.Clamp(configuration.ResourceAuraPulseSpeed, 0.2f, 2f);
+        var cycle = ((now % 60_000L) / 1000d) * Math.Tau * speed;
+        var pulse = 0.64f + (0.36f * (float)((Math.Sin(cycle) + 1d) * 0.5d));
+        var intensity = Math.Clamp(configuration.ResourceAuraIntensity, 0.1f, 1.5f);
+        var alpha = Math.Clamp(intensity * surfaceStrength * pulse, 0f, 1f);
+        var scale = ImGuiHelpers.GlobalScale;
+        var rounding = Math.Min(10f * scale, Math.Min(maximum.X - minimum.X, maximum.Y - minimum.Y) * 0.18f);
+
+        // Separate overlay strokes preserve every native button animation and never mutate the HUD.
+        for (var layer = 3; layer >= 1; layer--)
+        {
+            var expansion = layer * 4f * scale;
+            var layerAlpha = alpha * (0.055f + ((4 - layer) * 0.045f));
+            draw.AddRect(
+                minimum - new Vector2(expansion),
+                maximum + new Vector2(expansion),
+                Pack(new Vector4(color.X, color.Y, color.Z, layerAlpha)),
+                rounding + expansion,
+                ImDrawFlags.None,
+                Math.Max(2f, (5 - layer) * 1.5f * scale));
+        }
+
+        draw.AddRectFilled(
+            minimum,
+            maximum,
+            Pack(new Vector4(color.X, color.Y, color.Z, alpha * 0.045f)),
+            rounding);
+        draw.AddRect(
+            minimum - new Vector2(1.5f * scale),
+            maximum + new Vector2(1.5f * scale),
+            Pack(new Vector4(color.X, color.Y, color.Z, alpha * 0.78f)),
+            rounding + (1.5f * scale),
+            ImDrawFlags.None,
+            Math.Max(1.5f, 2.25f * scale));
     }
 
     private void DrawAllyRescueConfirmationPreview(long now)

@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 13;
+    public int Version { get; set; } = 14;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -47,12 +47,25 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PurifyOnSilence { get; set; } = true;
     public bool PurifyOnDeepFreeze { get; set; } = true;
     public bool PurifyOnMiracleOfNature { get; set; } = true;
+    public bool EnableResourceAura { get; set; } = true;
+    public bool ResourceAuraOnSelfHotbars { get; set; } = true;
+    public bool ResourceAuraOnPartyRows { get; set; } = true;
+    public bool ResourceAuraOnCcTeamRows { get; set; } = true;
+    public int ResourceAuraHpPercent { get; set; } = 30;
+    public int ResourceAuraMpThreshold { get; set; } = 2000;
+    public float ResourceAuraIntensity { get; set; } = 0.8f;
+    public float ResourceAuraPulseSpeed { get; set; } = 0.75f;
     public bool ExperimentalAllyRescueOnNextKey { get; set; }
     public bool AllyRescueOnHeldGameplayKey { get; set; }
     public bool ExperimentalMiracleInterceptOnHeldKey { get; set; }
     public bool MiracleInterceptMchLimitBreak { get; set; } = true;
     public bool MiracleInterceptSamZantetsuken { get; set; } = true;
     public bool MiracleInterceptViperNest { get; set; } = true;
+    public bool EnableMonkEarthReplyHelper { get; set; }
+    public bool MonkEarthReplyOnLowHp { get; set; } = true;
+    public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
+    public int MonkEarthReplyHpPercent { get; set; } = 30;
+    public float MonkEarthReplyExpirySeconds { get; set; } = 1.25f;
     public bool EnableFocusGlow { get; set; }
     public bool FocusHideWithGameUi { get; set; } = true;
     public bool FocusDrawInForeground { get; set; } = true;
@@ -125,7 +138,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 13)
+        if (Version >= 14)
         {
             if (repaired) Save();
             return;
@@ -241,7 +254,29 @@ public sealed class PluginConfiguration : IPluginConfiguration
             MiracleInterceptViperNest = true;
         }
 
-        Version = 13;
+        if (Version < 14)
+        {
+            // Visual-only resource auras are enabled for existing users so the new
+            // low-resource readability upgrade is immediately visible.
+            EnableResourceAura = true;
+            ResourceAuraOnSelfHotbars = true;
+            ResourceAuraOnPartyRows = true;
+            ResourceAuraOnCcTeamRows = true;
+            ResourceAuraHpPercent = 30;
+            ResourceAuraMpThreshold = 2000;
+            ResourceAuraIntensity = 0.8f;
+            ResourceAuraPulseSpeed = 0.75f;
+
+            // Earth's Reply can issue one exact self action attempt. Existing users
+            // must opt in explicitly, while both trigger types retain useful defaults.
+            EnableMonkEarthReplyHelper = false;
+            MonkEarthReplyOnLowHp = true;
+            MonkEarthReplyBeforeExpiry = true;
+            MonkEarthReplyHpPercent = 30;
+            MonkEarthReplyExpirySeconds = 1.25f;
+        }
+
+        Version = 14;
         ClampSettings();
         Save();
     }
@@ -250,7 +285,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 13;
+        Version = 14;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -291,12 +326,25 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PurifyOnSilence = true;
         PurifyOnDeepFreeze = true;
         PurifyOnMiracleOfNature = true;
+        EnableResourceAura = true;
+        ResourceAuraOnSelfHotbars = true;
+        ResourceAuraOnPartyRows = true;
+        ResourceAuraOnCcTeamRows = true;
+        ResourceAuraHpPercent = 30;
+        ResourceAuraMpThreshold = 2000;
+        ResourceAuraIntensity = 0.8f;
+        ResourceAuraPulseSpeed = 0.75f;
         ExperimentalAllyRescueOnNextKey = false;
         AllyRescueOnHeldGameplayKey = false;
         ExperimentalMiracleInterceptOnHeldKey = false;
         MiracleInterceptMchLimitBreak = true;
         MiracleInterceptSamZantetsuken = true;
         MiracleInterceptViperNest = true;
+        EnableMonkEarthReplyHelper = false;
+        MonkEarthReplyOnLowHp = true;
+        MonkEarthReplyBeforeExpiry = true;
+        MonkEarthReplyHpPercent = 30;
+        MonkEarthReplyExpirySeconds = 1.25f;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
         EnableNearAssistMacro = false;
@@ -407,6 +455,35 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PersonalWarningBackgroundOpacity, 0f, 1f, 0.92f, value => PersonalWarningBackgroundOpacity = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
         changed |= Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f, value => CcProtectionEmblemScale = value);
+        changed |= Clamp(ResourceAuraIntensity, 0.1f, 1.5f, 0.8f, value => ResourceAuraIntensity = value);
+        changed |= Clamp(ResourceAuraPulseSpeed, 0.2f, 2f, 0.75f, value => ResourceAuraPulseSpeed = value);
+        changed |= Clamp(
+            MonkEarthReplyExpirySeconds,
+            0.5f,
+            2.5f,
+            1.25f,
+            value => MonkEarthReplyExpirySeconds = value);
+
+        var monkEarthReplyHpPercent = Math.Clamp(MonkEarthReplyHpPercent, 10, 80);
+        if (monkEarthReplyHpPercent != MonkEarthReplyHpPercent)
+        {
+            MonkEarthReplyHpPercent = monkEarthReplyHpPercent;
+            changed = true;
+        }
+
+        var resourceAuraHpPercent = Math.Clamp(ResourceAuraHpPercent, 10, 80);
+        if (resourceAuraHpPercent != ResourceAuraHpPercent)
+        {
+            ResourceAuraHpPercent = resourceAuraHpPercent;
+            changed = true;
+        }
+
+        var resourceAuraMpThreshold = Math.Clamp(ResourceAuraMpThreshold, 0, 10_000);
+        if (resourceAuraMpThreshold != ResourceAuraMpThreshold)
+        {
+            ResourceAuraMpThreshold = resourceAuraMpThreshold;
+            changed = true;
+        }
 
         var iconsPerRow = Math.Clamp(PressureIconsPerRow, 1, 16);
         if (iconsPerRow != PressureIconsPerRow)

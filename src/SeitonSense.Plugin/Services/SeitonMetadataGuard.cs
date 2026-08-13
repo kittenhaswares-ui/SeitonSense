@@ -2,6 +2,7 @@ using Dalamud.Game;
 using Dalamud.Plugin.Services;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
+using SeitonSense.Core;
 using ActionSheet = Lumina.Excel.Sheets.Action;
 
 namespace SeitonSense.Plugin.Services;
@@ -17,9 +18,10 @@ internal sealed record PvPMetadataValidation(
     bool AllyRescueStatusesVerified,
     bool MiracleOfNatureActionVerified,
     bool ZantetsukenVerified,
-    bool FuriousBacklashVerified)
+    bool FuriousBacklashVerified,
+    bool MonkEarthReplyVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -379,6 +381,78 @@ internal static class PvPMetadataGuard
                    !status.IsPermanent;
         });
 
+        var monkEarthReplyVerified = ValidateFeature("Monk Earth's Reply", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            if (!actions.TryGetRow(MonkEarthReplyRules.RiddleOfEarthActionId, out var baseAction) ||
+                !actions.TryGetRow(MonkEarthReplyRules.EarthsReplyActionId, out var followUp) ||
+                !descriptions.TryGetRow(MonkEarthReplyRules.RiddleOfEarthActionId, out var baseTransient) ||
+                !descriptions.TryGetRow(MonkEarthReplyRules.EarthsReplyActionId, out var followUpTransient) ||
+                !procStatuses.TryGetRow(MonkEarthReplyRules.EarthsReplyProcStatusRowId, out var procStatus) ||
+                !statuses.TryGetRow(MonkEarthReplyRules.EarthResonanceStatusId, out var resonance))
+            {
+                return false;
+            }
+
+            return string.Equals(baseAction.Name.ToString(), "Riddle of Earth", StringComparison.Ordinal) &&
+                   baseAction.Icon == MonkEarthReplyRules.RiddleOfEarthIconId &&
+                   baseAction.IsPvP &&
+                   baseAction.IsPlayerAction &&
+                   baseAction.ClassJob.IsValid &&
+                   baseAction.ClassJob.RowId == MonkEarthReplyRules.MonkJobId &&
+                   baseAction.Range == 0 &&
+                   baseAction.EffectRange == 0 &&
+                   baseAction.Cast100ms == 0 &&
+                   baseAction.Recast100ms == 240 &&
+                   baseAction.CanTargetSelf &&
+                   !baseAction.CanTargetHostile &&
+                   !baseAction.CanTargetParty &&
+                   !baseAction.CanTargetAlly &&
+                   !baseAction.CanTargetAlliance &&
+                   !baseAction.TargetArea &&
+                   !baseAction.AffectsPosition &&
+                   baseTransient.Description.ToString().Contains(
+                       "Grants Earth Resonance, changing Riddle of Earth to Earth's Reply",
+                       StringComparison.Ordinal) &&
+                   baseTransient.Description.ToString().Contains("Duration: 8s", StringComparison.Ordinal) &&
+                   string.Equals(followUp.Name.ToString(), "Earth's Reply", StringComparison.Ordinal) &&
+                   followUp.Icon == MonkEarthReplyRules.EarthsReplyIconId &&
+                   followUp.IsPvP &&
+                   !followUp.IsPlayerAction &&
+                   followUp.ClassJob.IsValid &&
+                   followUp.ClassJob.RowId == MonkEarthReplyRules.MonkJobId &&
+                   followUp.Range == 0 &&
+                   followUp.EffectRange == 6 &&
+                   followUp.Cast100ms == 0 &&
+                   followUp.Recast100ms == 10 &&
+                   followUp.CanTargetSelf &&
+                   !followUp.CanTargetHostile &&
+                   !followUp.CanTargetParty &&
+                   !followUp.CanTargetAlly &&
+                   !followUp.CanTargetAlliance &&
+                   !followUp.TargetArea &&
+                   !followUp.AffectsPosition &&
+                   followUp.ActionProcStatus.RowId == MonkEarthReplyRules.EarthsReplyProcStatusRowId &&
+                   procStatus.Status.RowId == MonkEarthReplyRules.EarthResonanceStatusId &&
+                   followUpTransient.Description.ToString().Contains(
+                       "Can only be executed while under the effect of Earth Resonance.",
+                       StringComparison.Ordinal) &&
+                   followUpTransient.Description.ToString().Contains(
+                       "This action cannot be assigned to a hotbar.",
+                       StringComparison.Ordinal) &&
+                   string.Equals(resonance.Name.ToString(), "Earth Resonance", StringComparison.Ordinal) &&
+                   resonance.Icon == MonkEarthReplyRules.EarthResonanceIconId &&
+                   resonance.StatusCategory == 1 &&
+                   !resonance.CanDispel &&
+                   !resonance.IsPermanent &&
+                   resonance.Description.ToString().Contains(
+                       "healing potency of Earth's Reply",
+                       StringComparison.Ordinal);
+        });
+
         var validation = new PvPMetadataValidation(
             seitonVerified,
             guardVerified,
@@ -390,13 +464,14 @@ internal static class PvPMetadataGuard
             allyRescueStatusesVerified,
             miracleOfNatureActionVerified,
             zantetsukenVerified,
-            furiousBacklashVerified);
+            furiousBacklashVerified,
+            monkEarthReplyVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
-            "Zantetsuken={Zantetsuken}, FuriousBacklash={FuriousBacklash}.",
+            "Zantetsuken={Zantetsuken}, FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.RecuperateVerified,
@@ -407,7 +482,8 @@ internal static class PvPMetadataGuard
             validation.AllyRescueStatusesVerified,
             validation.MiracleOfNatureActionVerified,
             validation.ZantetsukenVerified,
-            validation.FuriousBacklashVerified);
+            validation.FuriousBacklashVerified,
+            validation.MonkEarthReplyVerified);
 
         return validation;
     }

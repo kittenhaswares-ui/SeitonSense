@@ -36,7 +36,7 @@ $forbiddenChecks = [ordered]@{
     'target mutation services' = '(?-i:\bTargetManager\b)|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*='
     'native UI or input injection' = '\b(SendInput|keybd_event|mouse_event|ExecuteCommand|SetRawValue|ClearAll|FireCallback|SendEvent)\b'
     'gameplay file writes' = '\b(File\.Write|FileStream|StreamWriter|Directory\.CreateDirectory)\b'
-    'native UI mutation' = '\b(LoadIconTexture|UnloadTexture|ToggleVisibility|SetPosition|SetScale|Destroy)\s*\('
+    'native UI mutation' = '\b(LoadIconTexture|UnloadTexture|ToggleVisibility|SetPosition|SetScale|SetAlpha|SetAdditive|SetMultiply|SetColor|Destroy|PulseActionBarSlot)\s*\('
 }
 
 foreach ($check in $forbiddenChecks.GetEnumerator()) {
@@ -55,6 +55,8 @@ $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionInputCoordinator.cs'
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
+$monkEarthReplyProbePath = Join-Path $pluginServicesRoot 'MonkEarthReplyProbe.cs'
+$resourceAuraAnchorPath = Join-Path $pluginServicesRoot 'ResourceAuraAnchorTracker.cs'
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
@@ -76,6 +78,8 @@ $allowedUnsafe = @(
     $purifyProbePath,
     $allyRescueProbePath,
     $miracleInterceptProbePath,
+    $monkEarthReplyProbePath,
+    $resourceAuraAnchorPath,
     $nearAssistPath,
     $partySlotResolverPath,
     $machinistLimitBreakCapturePath,
@@ -167,16 +171,17 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
 }
 
 # Action initiation remains globally forbidden except for one exact self-Purify,
-# one exact job-gated ally-rescue, and one exact WHM Miracle intercept call. Near
+# one exact job-gated ally-rescue, one exact WHM Miracle intercept, and one exact
+# default-off Monk Earth's Reply call. Near
 # Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
-    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $nearAssistPath) -or
+    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $monkEarthReplyProbePath, $nearAssistPath) -or
     $_.Line -notmatch '\bUseAction\b'
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, AllyRescueProbe, MiracleInterceptProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, AllyRescueProbe, MiracleInterceptProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
 # Warning audio is restricted to one bounded client-owned chat sound. External audio
@@ -593,6 +598,94 @@ if ($miracleIntercept -match '\bstatus\.RemainingTime\b' -or
     throw 'Miracle protection gates must use live StatusList membership, never RemainingTime prediction.'
 }
 
+# Monk Earth's Reply is a separate default-off direct self-action boundary. It
+# may dispatch only exact adjusted 29483, after self-Purify declines priority,
+# and must spend the continuous resonance before its sole native attempt.
+$monkEarthReplyRules = Read-RequiredSource (Join-Path $coreRoot 'MonkEarthReplyRules.cs') 'Monk Earth Reply rules'
+$monkEarthReply = Read-RequiredSource $monkEarthReplyProbePath 'Monk Earth Reply probe'
+$normalizedMonkEarthReplyRules = $monkEarthReplyRules -replace '\s+', ' '
+$normalizedMonkEarthReply = $monkEarthReply -replace '\s+', ' '
+Assert-Literals $monkEarthReplyRules @(
+    'MonkJobId = 20',
+    'RiddleOfEarthActionId = 29_482',
+    'EarthsReplyActionId = 29_483',
+    'EarthResonanceStatusId = 3_171',
+    'EarthsReplyProcStatusRowId = 94',
+    'ResonanceMissingGraceMilliseconds = 150',
+    'SpentUntilResonanceGone',
+    'observation.AdjustedActionId != EarthsReplyActionId',
+    'observation.HigherPriorityClaimed',
+    'Phase = MonkEarthReplyPhase.SpentUntilResonanceGone',
+    '(ulong)currentHp * 100UL <= (ulong)maximumHp * (uint)thresholdPercent',
+    'remainingSeconds <= thresholdSeconds'
+) 'Exact one-resonance Monk Earth Reply policy'
+if ($normalizedMonkEarthReplyRules -notmatch 'if \(observation\.HigherPriorityClaimed\) return Waiting\(current, MonkEarthReplyDecisionReason\.HigherPriorityClaimed\); var spent = current with \{ Phase = MonkEarthReplyPhase\.SpentUntilResonanceGone' -or
+    $normalizedMonkEarthReplyRules -notmatch 'var trigger = lowHpTriggered \? MonkEarthReplyTrigger\.LowHp : expiryTriggered \? MonkEarthReplyTrigger\.Expiry : MonkEarthReplyTrigger\.None') {
+    throw 'Monk Earth Reply must check low-HP then expiry, yield to higher-priority Purify, and spend before dispatch.'
+}
+if ($monkEarthReplyRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|RetryAction|RetryDispatch)\b') {
+    throw 'Pure Monk Earth Reply rules must never call actions, mutate targets, or retry.'
+}
+
+if ([regex]::Matches($monkEarthReply, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
+    throw 'Monk Earth Reply probe must contain exactly one native UseAction call.'
+}
+Assert-Literals $monkEarthReply @(
+    'TryGetExactEarthResonance(localPlayer!, out remainingSeconds)',
+    'actionManager->GetAdjustedActionId(MonkEarthReplyRules.RiddleOfEarthActionId)',
+    'MonkEarthReplyRules.EarthsReplyActionId',
+    'MonkEarthReplyRules.EarthResonanceStatusId',
+    'matches > 1',
+    'localPlayer.ClassJob.RowId == MonkEarthReplyRules.MonkJobId',
+    'native->EntityId == localPlayer.EntityId',
+    'state = decision.NextState',
+    'TryUseEarthsReplyOnce(localPlayer!, out attempted)',
+    'nearAssist.RunWithoutRedirect',
+    'ActionType.Action',
+    'ActionManager.UseActionMode.None',
+    'will not be retried for this Earth Resonance'
+) 'Exact local Monk Earth Reply runtime'
+if ($monkEarthReply -match '\bstatus\.Address\b') {
+    throw 'Monk Earth Resonance must not depend on a fragile managed status-slot address.'
+}
+if ($normalizedMonkEarthReply -notmatch 'actionManager->UseAction\s*\(\s*ActionType\.Action\s*,\s*MonkEarthReplyRules\.EarthsReplyActionId\s*,\s*localPlayer\.GameObjectId\s*,\s*0\s*,\s*ActionManager\.UseActionMode\.None\s*,\s*0\s*\)' -or
+    $normalizedMonkEarthReply -match 'UseAction\s*\([^)]*RiddleOfEarthActionId') {
+    throw 'Monk helper must issue only ActionType.Action 29483 to the exact local player and must never fall back to 29482.'
+}
+$monkCommit = [regex]::Match($monkEarthReply, 'state\s*=\s*decision\.NextState\s*;')
+$monkTryUse = [regex]::Match($monkEarthReply, '\bTryUseEarthsReplyOnce\s*\(\s*localPlayer!')
+$monkNativeCall = [regex]::Match($monkEarthReply, 'actionManager->UseAction\s*\(')
+if (-not $monkCommit.Success -or -not $monkTryUse.Success -or -not $monkNativeCall.Success -or
+    $monkCommit.Index -gt $monkTryUse.Index -or $monkTryUse.Index -gt $monkNativeCall.Index) {
+    throw 'Monk Earth Reply must store its spent decision before its one native action attempt.'
+}
+if ($monkEarthReply -match '(?-i:\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction)\b)' -or
+    $monkEarthReply -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Monk Earth Reply must never retry, custom-queue, or mutate a visible target.'
+}
+
+Assert-Literals $metadataGuard @(
+    'MonkEarthReplyVerified',
+    'ValidateFeature("Monk Earth''s Reply"',
+    'MonkEarthReplyRules.RiddleOfEarthActionId',
+    'MonkEarthReplyRules.EarthsReplyActionId',
+    'MonkEarthReplyRules.EarthResonanceStatusId',
+    'MonkEarthReplyRules.EarthsReplyProcStatusRowId',
+    'baseAction.ClassJob.RowId == MonkEarthReplyRules.MonkJobId',
+    'followUp.ClassJob.RowId == MonkEarthReplyRules.MonkJobId',
+    'followUp.ActionProcStatus.RowId == MonkEarthReplyRules.EarthsReplyProcStatusRowId',
+    'procStatus.Status.RowId == MonkEarthReplyRules.EarthResonanceStatusId',
+    'Can only be executed while under the effect of Earth Resonance.',
+    'This action cannot be assigned to a hotbar.'
+) 'Independent Monk Earth Reply metadata gate'
+
+$monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
+if (-not $monkObserve.Success -or $monkObserve.Index -lt $miracleObserve.Index -or
+    $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
+    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted') {
+    throw 'Monk Earth Reply must run after Purify/Rescue/Miracle, use CC or opted Wolves Den plus verified metadata, and yield whenever an earlier helper attempted an action.'
+}
+
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.ExperimentalAllyRescueOnNextKey\s*&&\s*metadata\.AllyRescueStatusesVerified\s*&&\s*supportedContext\s*==\s*SupportedPvPContext\.CrystallineConflict') {
@@ -816,7 +909,12 @@ $farHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'FarHelpSelectionRu
 Assert-Literals $farHelpSelection @(
     '24 or 28 or 33 or 40',
     '23 or 31 or 38 or 25 or 27 or 35 or 42',
-    'FarHelpAllyRole.PreferredHealerOrRanged',
+    'Other = 0',
+    'RangedOrCaster = 1',
+    'Healer = 2',
+    'FarHelpAllyRole.Healer',
+    'FarHelpAllyRole.RangedOrCaster',
+    'FarHelpAllyRole.Other',
     'candidate.Role > current.Role',
     'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
     'return distance > 0',
@@ -824,8 +922,82 @@ Assert-Literals $farHelpSelection @(
     '!candidate.IsSelf',
     'candidate.IsTargetable',
     'candidate.HasValidActionTarget',
-    'candidate.HasRangeAndLineOfSight'
-) 'Far Help preferred-tier farthest selection rules'
+    'candidate.HasRangeAndLineOfSight',
+    'MaximumCanonicalEnemyCount = 5',
+    'MinimumBacklineEnemyEdgeClearance = 10f',
+    'candidate.HasCompleteCanonicalEnemySnapshot',
+    'candidate.CanonicalLiveEnemyCount is >= 1 and <= MaximumCanonicalEnemyCount',
+    'candidate.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance',
+    'var candidateBacklineSafe = IsBacklineSafe(candidate)',
+    'var currentBacklineSafe = IsBacklineSafe(current)'
+) 'Far Help safe-backline preference, distance, and exact-tie role selection rules'
+$normalizedFarHelpSelection = $farHelpSelection -replace '\s+', ' '
+if ($normalizedFarHelpSelection -notmatch 'candidate\.HasRangeAndLineOfSight;.*?public static bool IsBacklineSafe' -or
+    $normalizedFarHelpSelection -match 'candidate\.HasRangeAndLineOfSight\s*&&\s*IsBacklineSafe') {
+    throw 'Far Help action eligibility must remain independent of the optional backline heuristic so unknown/frontline candidates remain valid fallbacks.'
+}
+if ($normalizedFarHelpSelection -notmatch 'var candidateBacklineSafe = IsBacklineSafe\(candidate\); var currentBacklineSafe = IsBacklineSafe\(current\); if \(candidateBacklineSafe != currentBacklineSafe\) return candidateBacklineSafe; var distance = candidate\.DistanceSquared\.CompareTo\(current\.DistanceSquared\); if \(distance != 0\) return distance > 0; if \(candidate\.Role != current\.Role\) return candidate\.Role > current\.Role;') {
+    throw 'Far Help must prefer a safe backline candidate, then compare distance, then use healer/ranged/other only as an exact-distance tie-break.'
+}
+if ($normalizedFarHelpSelection -notmatch 'candidate\.MinimumCanonicalEnemyEdgeDistance >= 0f && candidate\.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance') {
+    throw 'Far Help backline safety must require finite nonnegative hitbox-edge clearance strictly greater than 10 yalms.'
+}
+
+$farHelpEnemySnapshotMatch = [regex]::Match(
+    $nearAssist,
+    '(?s)private FarHelpEnemySnapshot ResolveFarHelpEnemySnapshot\(.*?\n    \}\r?\n\r?\n    private static bool TryGetMinimumEnemyEdgeDistance')
+if (-not $farHelpEnemySnapshotMatch.Success) {
+    throw 'Far Help exact canonical enemy snapshot runtime method is missing.'
+}
+$farHelpEnemySnapshot = $farHelpEnemySnapshotMatch.Value
+$normalizedFarHelpEnemySnapshot = $farHelpEnemySnapshot -replace '\s+', ' '
+Assert-Literals $farHelpEnemySnapshot @(
+    'EnemySlotRules.FirstSlot',
+    'EnemySlotRules.LastSlot',
+    'EnemySlotResolver.Resolve(objectTable, slot)',
+    'seenEntityIds.Add(enemy.EntityId)',
+    'seenGameObjectIds.Add(enemy.GameObjectId)',
+    'enemy.IsDead',
+    'liveEnemies.Add(new FarHelpEnemyThreat(position.X, position.Z, hitboxRadius))',
+    'seenEntityIds.Count == FarHelpSelectionRules.MaximumCanonicalEnemyCount',
+    'seenGameObjectIds.Count == FarHelpSelectionRules.MaximumCanonicalEnemyCount'
+) 'Far Help exact five-slot canonical enemy snapshot'
+if ($farHelpEnemySnapshot -match '\bIsLivePlayer\s*\(|\.IsTargetable\b') {
+    throw 'Far Help enemy snapshots must not discard alive untargetable enemies through IsLivePlayer or targetability gates.'
+}
+if ($normalizedFarHelpEnemySnapshot -notmatch 'if \(enemy\.IsDead\) continue;.*?if \(enemy\.CurrentHp == 0 \|\| enemy\.MaxHp < enemy\.CurrentHp\).*?liveEnemies\.Add') {
+    throw 'Far Help must require every exact enemy identity, ignore only confirmed dead enemies for threat distance, and count every unambiguous living enemy including untargetable actors.'
+}
+
+$farHelpEdgeDistanceMatch = [regex]::Match(
+    $nearAssist,
+    '(?s)private static bool TryGetMinimumEnemyEdgeDistance\(.*?\n    \}\r?\n\r?\n    private bool TryGetActionMetadata')
+if (-not $farHelpEdgeDistanceMatch.Success) {
+    throw 'Far Help horizontal enemy hitbox-edge clearance runtime method is missing.'
+}
+$farHelpEdgeDistance = $farHelpEdgeDistanceMatch.Value
+Assert-Literals $farHelpEdgeDistance @(
+    'allyPosition.X - enemy.X',
+    'allyPosition.Z - enemy.Z',
+    'centerDistance - allyHitboxRadius - enemy.HitboxRadius',
+    'MathF.Max(',
+    'MathF.Min(minimum, edgeDistance)',
+    'float.IsFinite(allyHitboxRadius)',
+    'allyHitboxRadius < 0f'
+) 'Far Help horizontal XZ hitbox-edge clearance'
+if ($farHelpEdgeDistance -match 'allyPosition\.Y|enemy\.Y') {
+    throw 'Far Help backline clearance must remain horizontal XZ distance and may not include vertical Y separation.'
+}
+Assert-Literals $nearAssist @(
+    'HasCompleteCanonicalEnemySnapshot: hasCompleteEnemySnapshot',
+    'CanonicalLiveEnemyCount: enemySnapshot.LiveEnemies.Length',
+    'MinimumCanonicalEnemyEdgeDistance: minimumEnemyEdgeDistance',
+    'safe-backline(clearance>10y)',
+    'reachable-fallback(snapshot-incomplete)',
+    'reachable-fallback(clearance<=',
+    'action-valid=',
+    'safe-backline='
+) 'Far Help action-time backline diagnostics and fallback'
 
 $farHelpOneShot = Read-RequiredSource (Join-Path $coreRoot 'FarHelpOneShotRules.cs') 'Far Help one-shot rules'
 Assert-Literals $farHelpOneShot @(
@@ -835,11 +1007,15 @@ Assert-Literals $farHelpOneShot @(
     'InvalidSuppressedTargetId',
     'NonMovementAction',
     'ConsumedWithoutRewrite',
+    'ClearedSuppressed(FarHelpOneShotReason.Expired)',
     'RewriteTarget'
 ) 'Far Help bounded one-shot and fallback rules'
 if ($normalizedNearAssist -notmatch 'handlingFarHelp = true; ArmFarHelpFallbackSuppression\(actionType, actionId, resolvedFarHelpActionId\); forwardedTargetId = TryResolveFarHelpRedirect' -or
     $farHelpOneShot -notmatch 'InvalidSuppressedTargetId') {
     throw 'Far Help must arm legacy same-action suppression before resolving/forwarding and every failed Far Help decision must target zero.'
+}
+if ($normalizedNearAssist -notmatch 'forwardedTargetId = TryResolveFarHelpRedirect.*?if \(!rewritten\) forwardedTargetId = InvalidCarrierTargetId;') {
+    throw 'Every claimed Far Help movement call must suppress its target when no redirect was produced, including the exact token-expiry boundary.'
 }
 
 $farHelpSuppression = Read-RequiredSource (Join-Path $coreRoot 'FarHelpFallbackSuppressionRules.cs') 'Far Help legacy fallback suppression rules'
@@ -1168,6 +1344,100 @@ if ($overlay -match '\bDrawPersistentSeitonCues\b') {
     throw 'Entry popups and persistent Seiton cues must not return to separate centered stacks.'
 }
 
+# Low-resource auras are presentation-only. They may copy exact current native
+# bounds but must never pulse/mutate an action slot or any other native UI node.
+$resourceAuraRules = Read-RequiredSource (Join-Path $coreRoot 'ResourceAuraRules.cs') 'Resource aura rules'
+$resourceAuraAnchor = Read-RequiredSource $resourceAuraAnchorPath 'Resource aura native anchor tracker'
+$normalizedResourceAuraAnchor = $resourceAuraAnchor -replace '\s+', ' '
+Assert-Literals $resourceAuraRules @(
+    'LowHp = 1',
+    'LowMp = 2',
+    'LowHpAndMp = LowHp | LowMp',
+    '!observation.Alive',
+    'observation.CurrentHp > observation.MaximumHp',
+    'observation.CurrentMp > observation.MaximumMp',
+    '(ulong)observation.CurrentHp * 100UL <=',
+    'observation.MpTrusted && observation.LowMpLatched',
+    '(true, true) => ResourceAuraKind.LowHpAndMp'
+) 'Fail-closed red, blue, and purple resource classification'
+if ($resourceAuraRules -match '\b(UseAction|IGameGui|AtkResNode|SetRawValue|PulseActionBarSlot|ITargetManager|TargetManager)\b') {
+    throw 'Pure resource-aura rules must contain no action, native UI, input, or target boundary.'
+}
+
+Assert-Literals $resourceAuraAnchor @(
+    'Dictionary<(ulong GameObjectId, uint EntityId), LowMpState>',
+    'new HashSet<(ulong GameObjectId, uint EntityId)>()',
+    'var identity = (player.GameObjectId, player.EntityId)',
+    '!configuration.Enabled || !configuration.EnableResourceAura || !clientState.IsPvP',
+    'manaStates.Clear()',
+    'LowMpRules.Observe',
+    'var exitThreshold = Math.Clamp(threshold + 300, threshold, 10_000)',
+    'manaState.HasTrustedSample',
+    'LowMpRules.ShouldShowCrossedIcon(manaState)',
+    'GetAddonByName<AddonActionBar>("_ActionBar")',
+    '"_ActionBar01", "_ActionBar02", "_ActionBar03", "_ActionBar04", "_ActionBar05"',
+    '"_ActionBar06", "_ActionBar07", "_ActionBar08", "_ActionBar09"',
+    'GetAddonByName<AddonActionCross>("_ActionCross")',
+    '"_ActionDoubleCrossL", "_ActionDoubleCrossR"',
+    'primary->ContainerNode',
+    'bar->ContainerNode',
+    'cross->ContainerNode',
+    'doubleCross->ContainerNode',
+    'GetAddonByName<AddonPartyList>("_PartyList")',
+    'AgentHUD.Instance()',
+    'agent->PartyMemberCount is < 1 or > 8',
+    'nativeMember.Index >= 8',
+    'player!.Address != (nint)nativeMember.Object',
+    'player.EntityId != nativeMember.EntityId',
+    'CaptureCcRows("PvPMKSPartyList1", friendly: true',
+    'CaptureCcRows("PvPMKSPartyList3", friendly: false',
+    'for (var slot = 1; slot <= 5; slot++)',
+    'PartySlotResolver.Resolve(objectTable, slot)',
+    'EnemySlotResolver.Resolve(objectTable, slot)',
+    'addon->GetComponentByNodeId((uint)(5 + slot))',
+    'row->GetTextNodeById(21)',
+    'string.Equals(name->GetText().ToString(), player.Name.TextValue, StringComparison.Ordinal)',
+    'node->GetBounds(&bounds)',
+    'size.X is > 2f and < 10_000f',
+    'size.Y is > 2f and < 10_000f',
+    'while (node != null && depth++ < 64)',
+    'return depth is > 0 and < 64'
+) 'Exact read-only hotbar, party-row, and CC-row resource anchors'
+if ($normalizedResourceAuraAnchor -notmatch 'foreach \(var identity in manaStates\.Keys\.Where\(identity => !seen\.Contains\(identity\)\)\.ToArray\(\)\) manaStates\.Remove\(identity\)' -or
+    $resourceAuraAnchor -match '->\w+\s*=(?!=)' -or
+    $resourceAuraAnchor -match '\b(SetRawValue|ClearAll|FireCallback|SendEvent|SetPosition|SetScale|SetAlpha|SetAdditive|SetMultiply|SetColor|PulseActionBarSlot|UseAction|UseActionLocation)\s*\(') {
+    throw 'Resource aura anchoring must discard stale exact identities and remain a strictly read-only native boundary.'
+}
+
+Assert-Literals $overlay @(
+    'DrawResourceAuras(now)',
+    'resourceAuraAnchors.Capture()',
+    'ImGui.GetForegroundDrawList()',
+    'ResourceAuraKind.LowHp => LowHealthAuraColor',
+    'ResourceAuraKind.LowMp => LowManaAuraColor',
+    'ResourceAuraKind.LowHpAndMp => CombinedResourceAuraColor',
+    'anchor.Surface == ResourceAuraSurface.SelfHotbar ? 1f : 0.38f',
+    'draw.AddRectFilled(',
+    'draw.AddRect('
+) 'Visual-only native-surface resource aura renderer'
+
+$settingsWindow = Read-RequiredSource (Join-Path $pluginUiRoot 'SettingsWindow.cs') 'Settings window'
+$normalizedSettingsWindow = $settingsWindow -replace '\s+', ' '
+Assert-Literals $settingsWindow @(
+    'ImGui.BeginTabItem("Jobs")',
+    'DrawJobsTab()',
+    'ALL JOBS / GENERAL QUALITY OF LIFE',
+    'DrawResourceAuraControls()',
+    '"NINJA"',
+    '"MONK"',
+    'DrawMonkEarthReplyControls()',
+    '"BARD / WHITE MAGE"',
+    '"WHITE MAGE"'
+) 'Jobs quality-of-life settings organization'
+if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?"NINJA".*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?"WHITE MAGE"') {
+    throw 'Jobs tab must keep general, Ninja, Monk, BRD/WHM, then WHM sections in reviewable order.'
+}
+
 $rangeRules = Read-RequiredSource (Join-Path $coreRoot 'SeitonRangeRules.cs') 'Seiton range rules'
 Assert-Literals $rangeRules @('Ready = 0', 'NotFacingTarget = 565', 'HasNativeRangeAndLineOfSight') 'Seiton range allowlist'
 if ($readiness -notmatch [regex]::Escape('SeitonRangeRules.HasNativeRangeAndLineOfSight')) {
@@ -1382,7 +1652,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 13',
+    'public int Version { get; set; } = 14',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -1414,11 +1684,33 @@ Assert-Literals $configuration @(
     'MiracleInterceptMchLimitBreak = true',
     'MiracleInterceptSamZantetsuken = true',
     'MiracleInterceptViperNest = true',
-    'Version = 13',
+    'if (Version < 14)',
+    'EnableResourceAura = true',
+    'ResourceAuraOnSelfHotbars = true',
+    'ResourceAuraOnPartyRows = true',
+    'ResourceAuraOnCcTeamRows = true',
+    'ResourceAuraHpPercent = 30',
+    'ResourceAuraMpThreshold = 2000',
+    'ResourceAuraIntensity = 0.8f',
+    'ResourceAuraPulseSpeed = 0.75f',
+    'EnableMonkEarthReplyHelper = false',
+    'MonkEarthReplyOnLowHp = true',
+    'MonkEarthReplyBeforeExpiry = true',
+    'MonkEarthReplyHpPercent = 30',
+    'MonkEarthReplyExpirySeconds = 1.25f',
+    'Version = 14',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
     'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
-    'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f'
-) 'Held-key, target-highlight, macro helpers, Ally Rescue, Miracle, pressure, immunity, and warning configuration migration'
+    'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f',
+    'Clamp(ResourceAuraIntensity, 0.1f, 1.5f, 0.8f',
+    'Clamp(ResourceAuraPulseSpeed, 0.2f, 2f, 0.75f',
+    'Math.Clamp(ResourceAuraHpPercent, 10, 80)',
+    'Math.Clamp(ResourceAuraMpThreshold, 0, 10_000)',
+    'Math.Clamp(MonkEarthReplyHpPercent, 10, 80)',
+    'MonkEarthReplyExpirySeconds,',
+    '0.5f,',
+    '2.5f,'
+) 'Schema-14 held-key, target, resource-aura, job-helper, pressure, immunity, and warning configuration migration'
 if ($configuration -notmatch '(?m)^\s*public bool ExperimentalMiracleInterceptOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptMchLimitBreak \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptSamZantetsuken \{ get; set; \} = true;\s*$' -or
@@ -1430,6 +1722,24 @@ if ([regex]::Matches($configuration, '\bExperimentalMiracleInterceptOnHeldKey\s*
     [regex]::Matches($configuration, '\bMiracleInterceptSamZantetsuken\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bMiracleInterceptViperNest\s*=\s*true\s*;').Count -lt 2) {
     throw 'Miracle intercept must stay master-default-off with all three exact trigger toggles default-on in migration and reset.'
+}
+if ($configuration -notmatch '(?m)^\s*public bool EnableResourceAura \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool ResourceAuraOnSelfHotbars \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool ResourceAuraOnPartyRows \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool ResourceAuraOnCcTeamRows \{ get; set; \} = true;\s*$' -or
+    [regex]::Matches($configuration, '\bEnableResourceAura\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bResourceAuraOnSelfHotbars\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bResourceAuraOnPartyRows\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bResourceAuraOnCcTeamRows\s*=\s*true\s*;').Count -lt 2) {
+    throw 'Resource aura and its three surfaces must be visible-by-default for new, migrated, and reset schema-14 configurations.'
+}
+if ($configuration -notmatch '(?m)^\s*public bool EnableMonkEarthReplyHelper \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MonkEarthReplyOnLowHp \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MonkEarthReplyBeforeExpiry \{ get; set; \} = true;\s*$' -or
+    [regex]::Matches($configuration, '\bEnableMonkEarthReplyHelper\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMonkEarthReplyHpPercent\s*=\s*30\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMonkEarthReplyExpirySeconds\s*=\s*1\.25f\s*;').Count -lt 2) {
+    throw 'Monk Earth Reply must stay master-default-off with low-HP and expiry trigger defaults set to 30 percent and 1.25 seconds.'
 }
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
@@ -1449,4 +1759,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.9.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed exact-action Far Help share one bounded target-only detour, Far Help never falls back to the selected target and quarantines legacy same-action fallbacks, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."
+Write-Host "Seiton Sense v0.10.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed Far Help share one bounded target-only detour, with strict no-selected-target Far Help quarantine plus safe-backline preference and farthest reachable fallback; the native-hotbar/party/CC-row resource aura is read-only, exact-identity, trusted-MP, and fail closed; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while default-off Monk Earth's Reply yields to prior attempts and spends one exact 29483 self action before its sole no-retry request."

@@ -45,7 +45,15 @@ internal sealed class SettingsWindow : Window
         var changed = Checkbox(
             "Enable Seiton Sense",
             configuration.Enabled,
-            value => configuration.Enabled = value);
+            value =>
+            {
+                configuration.Enabled = value;
+                if (value) return;
+                overlay.PreviewEnabled = false;
+                overlay.CcProtectionPreviewEnabled = false;
+                overlay.ResourceAuraPreviewEnabled = false;
+                pressureCounter.PreviewEnabled = false;
+            });
 
         ImGui.Separator();
         if (ImGui.BeginTabBar("SeitonSenseSettingsTabs"))
@@ -68,9 +76,9 @@ internal sealed class SettingsWindow : Window
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem("Seiton"))
+            if (ImGui.BeginTabItem("Jobs"))
             {
-                changed |= DrawSeitonTab();
+                changed |= DrawJobsTab();
                 ImGui.EndTabItem();
             }
 
@@ -102,6 +110,7 @@ internal sealed class SettingsWindow : Window
     {
         overlay.PreviewEnabled = false;
         overlay.CcProtectionPreviewEnabled = false;
+        overlay.ResourceAuraPreviewEnabled = false;
         pressureCounter.PreviewEnabled = false;
     }
 
@@ -128,14 +137,15 @@ internal sealed class SettingsWindow : Window
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
-        DrawAllyRescueOverview();
-
-        ImGui.Separator();
         ImGui.TextUnformatted("Preview and reset");
         if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview HUD + warnings"))
         {
             overlay.PreviewEnabled = !overlay.PreviewEnabled;
-            if (overlay.PreviewEnabled) overlay.CcProtectionPreviewEnabled = false;
+            if (overlay.PreviewEnabled)
+            {
+                overlay.CcProtectionPreviewEnabled = false;
+                overlay.ResourceAuraPreviewEnabled = false;
+            }
         }
         ImGui.SameLine();
         if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop pressure preview" : "Preview pressure"))
@@ -148,6 +158,7 @@ internal sealed class SettingsWindow : Window
             configuration.ResetToDefaults();
             overlay.PreviewEnabled = false;
             overlay.CcProtectionPreviewEnabled = false;
+            overlay.ResourceAuraPreviewEnabled = false;
             pressureCounter.PreviewEnabled = false;
             pressureCounter.ResetWindowPosition();
             changed = true;
@@ -399,20 +410,20 @@ internal sealed class SettingsWindow : Window
         if (ImGui.Button(overlay.CcProtectionPreviewEnabled ? "Stop CC emblem preview" : "Preview CC emblem"))
         {
             overlay.CcProtectionPreviewEnabled = !overlay.CcProtectionPreviewEnabled;
-            if (overlay.CcProtectionPreviewEnabled) overlay.PreviewEnabled = false;
+            if (overlay.CcProtectionPreviewEnabled)
+            {
+                overlay.PreviewEnabled = false;
+                overlay.ResourceAuraPreviewEnabled = false;
+            }
         }
         ImGui.TextDisabled(
             "A large static crossed-CC emblem is anchored above the native job icon for Guard, Resilience, " +
             "SAM, WAR, VPR and large-scale PvP immunity.");
         ImGui.TextDisabled("Ambiguous one-hit wards are intentionally not labelled as full immunity.");
 
-        ImGui.Spacing();
-        if (ImGui.CollapsingHeader("Advanced: experimental Purify on next key"))
-            changed |= DrawPurifyControls();
-        if (ImGui.CollapsingHeader("Advanced: experimental ally rescue on next key"))
-            changed |= DrawAllyRescueControls();
-        if (ImGui.CollapsingHeader("Advanced: experimental WHM Miracle intercept"))
-            changed |= DrawMiracleInterceptControls();
+        ImGui.Separator();
+        ImGui.TextUnformatted("General native-nameplate resource cues");
+        changed |= DrawGeneralResourceNameplateControls();
 
         return changed;
     }
@@ -525,30 +536,24 @@ internal sealed class SettingsWindow : Window
         return changed;
     }
 
-    private bool DrawSeitonTab()
+    private bool DrawJobsTab()
     {
         var changed = false;
         ImGui.Spacing();
-        ImGui.TextUnformatted("Native nameplate indicators");
+        ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "ALL JOBS / GENERAL QUALITY OF LIFE");
+        changed |= DrawResourceAuraControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("All jobs: Purify helper", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawPurifyControls();
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.8f, 0.65f, 1f, 1f), "NINJA");
         changed |= Checkbox(
             "Seiton-ready icon + S-slot (NIN)",
             configuration.ShowNameplateSeiton,
             value => configuration.ShowNameplateSeiton = value);
-        changed |= Checkbox(
-            "Crossed Guard while observed on cooldown",
-            configuration.ShowGuardUnavailable,
-            value => configuration.ShowGuardUnavailable = value);
-        ImGui.SameLine();
-        changed |= Checkbox(
-            "Countdown",
-            configuration.ShowGuardCountdown,
-            value => configuration.ShowGuardCountdown = value);
-        changed |= Checkbox(
-            "Crossed blue elixir below 2,000 MP",
-            configuration.ShowLowMp,
-            value => configuration.ShowLowMp = value);
 
-        ImGui.Separator();
         ImGui.TextUnformatted("Seiton decision cue (NIN)");
         changed |= Checkbox(
             "Persistent SHIFT + slot cue",
@@ -613,6 +618,151 @@ internal sealed class SettingsWindow : Window
             value => configuration.PopupBackgroundOpacity = value,
             "%.2f");
 
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.92f, 0.7f, 0.35f, 1f), "MONK");
+        changed |= DrawMonkEarthReplyControls();
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.4f, 0.85f, 1f, 1f), "BARD / WHITE MAGE");
+        if (ImGui.CollapsingHeader("Ally Rescue: Paean / Aquaveil", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= DrawAllyRescueControls();
+            ImGui.Spacing();
+            DrawAllyRescueOverview();
+        }
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(1f, 0.92f, 0.92f, 1f), "WHITE MAGE");
+        if (ImGui.CollapsingHeader("Miracle of Nature intercept", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawMiracleInterceptControls();
+
+        return changed;
+    }
+
+    private bool DrawResourceAuraControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Show low-resource aura",
+            configuration.EnableResourceAura,
+            value => configuration.EnableResourceAura = value);
+        changed |= Checkbox(
+            "Native action-hotbar aura",
+            configuration.ResourceAuraOnSelfHotbars,
+            value => configuration.ResourceAuraOnSelfHotbars = value);
+        changed |= Checkbox(
+            "Party-list row aura",
+            configuration.ResourceAuraOnPartyRows,
+            value => configuration.ResourceAuraOnPartyRows = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "CC team-list row aura",
+            configuration.ResourceAuraOnCcTeamRows,
+            value => configuration.ResourceAuraOnCcTeamRows = value);
+        changed |= SliderInt(
+            "Low HP threshold",
+            configuration.ResourceAuraHpPercent,
+            10,
+            80,
+            value => configuration.ResourceAuraHpPercent = value,
+            "%d%%");
+        changed |= SliderInt(
+            "Low MP threshold",
+            configuration.ResourceAuraMpThreshold,
+            0,
+            10_000,
+            value => configuration.ResourceAuraMpThreshold = value,
+            "%d MP");
+        changed |= Slider(
+            "Resource aura intensity",
+            configuration.ResourceAuraIntensity,
+            0.1f,
+            1.5f,
+            value => configuration.ResourceAuraIntensity = value,
+            "%.2f x");
+        changed |= Slider(
+            "Resource aura pulse speed",
+            configuration.ResourceAuraPulseSpeed,
+            0.2f,
+            2f,
+            value => configuration.ResourceAuraPulseSpeed = value,
+            "%.2f Hz");
+        if (ImGui.Button(overlay.ResourceAuraPreviewEnabled ? "Stop resource-aura preview" : "Preview resource aura"))
+        {
+            overlay.ResourceAuraPreviewEnabled = !overlay.ResourceAuraPreviewEnabled;
+            if (overlay.ResourceAuraPreviewEnabled)
+            {
+                overlay.PreviewEnabled = false;
+                overlay.CcProtectionPreviewEnabled = false;
+            }
+        }
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Red means low HP, blue means trusted low MP, and purple means both. The module draws a read-only " +
+            "aura around native action hotbars and the selected team-list rows; it never changes a bar, target, or action. " +
+            "Each surface can be disabled independently. Unknown MP never produces a blue warning.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawMonkEarthReplyControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Use Earth's Reply automatically while Earth Resonance is active",
+            configuration.EnableMonkEarthReplyHelper,
+            value => configuration.EnableMonkEarthReplyHelper = value);
+        changed |= Checkbox(
+            "Reply at low HP",
+            configuration.MonkEarthReplyOnLowHp,
+            value => configuration.MonkEarthReplyOnLowHp = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Reply shortly before the effect expires",
+            configuration.MonkEarthReplyBeforeExpiry,
+            value => configuration.MonkEarthReplyBeforeExpiry = value);
+        changed |= SliderInt(
+            "Earth's Reply HP threshold",
+            configuration.MonkEarthReplyHpPercent,
+            10,
+            80,
+            value => configuration.MonkEarthReplyHpPercent = value,
+            "%d%%");
+        changed |= Slider(
+            "Reply before expiry",
+            configuration.MonkEarthReplyExpirySeconds,
+            0.5f,
+            2.5f,
+            value => configuration.MonkEarthReplyExpirySeconds = value,
+            "%.2f s");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "PvP MNK only and disabled by default. This detonates the already-active Earth's Reply / Echo der Erde " +
+            "at the enabled low-HP threshold or before the 8-second Earth Resonance timer is lost. It never starts " +
+            "Riddle of Earth / Steinernes Enigma, changes your target, or retries a rejected action.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawGeneralResourceNameplateControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Crossed Guard while observed on cooldown",
+            configuration.ShowGuardUnavailable,
+            value => configuration.ShowGuardUnavailable = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Guard countdown",
+            configuration.ShowGuardCountdown,
+            value => configuration.ShowGuardCountdown = value);
+        changed |= Checkbox(
+            "Crossed blue elixir below 2,000 trusted MP",
+            configuration.ShowLowMp,
+            value => configuration.ShowLowMp = value);
+        ImGui.TextDisabled(
+            "Guard appears only after this client observed the enemy use it; low MP requires a trusted value. " +
+            "Unknown cooldowns or resources are never guessed.");
         return changed;
     }
 
@@ -691,13 +841,18 @@ internal sealed class SettingsWindow : Window
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Far Help accepts only the reviewed PvP movement actions Guardian, Icarus, Thunderclap, " +
-            "Aetherial Manipulation, and Slither. It checks the actual action's " +
-            "native range and line of sight against exact live non-self party members, prefers healers and " +
-            "physical/magical ranged jobs, then all other jobs, and chooses the farthest reachable ally inside " +
-            "that tier. Guardian additionally requires a strict distance below 10 yalms. " +
+            "Aetherial Manipulation, and Slither. It checks the actual action's native range and line of sight. " +
+            "At action time all five exact native <e1>-<e5> enemy slots must be valid and unique. Confirmed dead " +
+            "enemies are ignored for clearance; live enemies count even while untargetable. A destination must have " +
+            "strictly more than 10 yalms of horizontal hitbox-edge clearance from every live enemy to enter the preferred " +
+            "backline group. The farthest member of that group wins. If none can be certified, or enemy data is missing, " +
+            "ambiguous, invalid, or has no live enemy, Far Help instead uses the farthest otherwise valid reachable ally. " +
+            "Only an exact distance tie prefers healer, then physical/magical ranged or caster, then every other job. " +
+            "This map-agnostic preference cannot guarantee tactical safety. " +
+            "Guardian additionally requires a strict distance below 10 yalms from you. " +
             "Use exactly the three lines shown: there is deliberately no <t> fallback. All five actions cannot " +
             "target self, so <me> stays intrinsically invalid without a valid redirect, even if no token or hook is " +
-            "available. No valid ally therefore means no movement; Far Help never uses your selected target or self " +
+            "available. Only no valid reachable ally means no movement; Far Help never uses your selected target or self " +
             "instead. One immediately following legacy same-action <t> call is suppressed for migration; remove that " +
             "old fourth line. /mlock prevents Turbo Hotbar from restarting the held macro. No visible target change, " +
             "direct action, or retry is added. /ssfar is the collision-free alias.");
@@ -893,11 +1048,16 @@ internal sealed class SettingsWindow : Window
 
         ImGui.Separator();
         ImGui.TextUnformatted("Live diagnostics");
-        ImGui.TextWrapped($"{tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}");
+        ImGui.TextWrapped(
+            $"{tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
+            $"resource-anchors={overlay.ResourceAuraAnchorCount} " +
+            $"(hotbar {overlay.ResourceAuraSelfHotbarCount}, party {overlay.ResourceAuraPartyRowCount}, " +
+            $"CC rows {overlay.ResourceAuraCcRowCount})");
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var monk = personalStatus.MonkEarthReplyDiagnostics;
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
@@ -926,6 +1086,12 @@ internal sealed class SettingsWindow : Window
             $"count={miracle.AttemptCount}/{miracle.AcceptedCount}, " +
             $"capture/queue/drop={miracle.CapturedThreatCount}/{miracle.CaptureQueueDepth}/{miracle.DroppedThreatCount}, " +
             $"last={miracle.LastEvent}");
+        ImGui.TextWrapped(
+            $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
+            $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +
+            $"HP={monk.CurrentHp}/{monk.MaximumHp}, adjusted={monk.AdjustedActionId}, " +
+            $"priority={monk.HigherPriorityClaimed}, attempt={monk.UseActionAttempted}/{monk.UseActionAccepted}, " +
+            $"count={monk.AttemptCount}/{monk.AcceptedCount}");
 
         ImGui.Separator();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
@@ -933,9 +1099,10 @@ internal sealed class SettingsWindow : Window
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
             "and uploads no gameplay data to an external service. Near Assist, Near Help, and Far Help may replace only " +
-            "the target ID on one armed macro action. The optional Purify, Ally Rescue, and Miracle experiments " +
-            "can each initiate at most one exact action attempt from one shared physical input generation, in " +
-            "that priority order. All helpers are " +
+            "the target ID on one armed macro action. The optional Purify, Ally Rescue, and Miracle helpers " +
+            "share one physical input generation and can each initiate at most one exact action attempt, in that priority " +
+            "order. Monk Earth's Reply is a separate automatic follow-up that yields whenever an earlier helper already " +
+            "attempted an action in the same update. All helpers are " +
             "disabled by default. Like all third-party modifications, use " +
             "it at your own risk.");
         ImGui.PopTextWrapPos();

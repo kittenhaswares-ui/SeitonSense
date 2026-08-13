@@ -1,8 +1,8 @@
 # Privacy
 
 Seiton Sense is local-only. It does not create accounts, contact a server,
-upload gameplay data, or include telemetry. It does not read character names or
-Home Worlds, and it does not persist combat, target, status, or key history.
+upload gameplay data, or include telemetry. It does not persist or transmit
+character names, Home Worlds, combat, target, status, or key history.
 Ally Rescue attempt, client-accepted, and confirmed-cleanse counters exist only
 in memory for the current match/plugin session and are never uploaded.
 
@@ -18,6 +18,9 @@ following data already available in the local FFXIV client:
 - FFXIV's native Crystalline Conflict `<e1>`-`<e5>` identities or the single
   native Wolves' Den duel-opponent identity;
 - the copied screen rectangle of a visible native nameplate job icon;
+- the copied rectangles of visible native self action bars, party-list rows,
+  and Crystalline Conflict ally/enemy rows; a visible CC row name is compared
+  transiently for equality with the resolved actor and is not retained;
 - when its optional module is enabled, your manually selected current/focus
   target and locally available job, HP, distance, CC slot, and pressure state.
 
@@ -25,6 +28,30 @@ Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
 protection timers are held only in bounded in-memory state needed to smooth
 short client/UI sampling gaps.
+
+## Native-HUD resource aura
+
+When enabled in PvP, the visual-only resource aura reads current HP/maximum HP
+and current/maximum MP for the exact actor associated with each enabled surface.
+Low HP is evaluated against the configured percentage. Low MP is displayed only
+after a plausible MP sample has established trust and uses an in-memory latch
+with a 300-MP exit margin. The latch is keyed by both game-object and network
+entity identity and is discarded when that actor leaves the current observation
+set or the feature/context becomes inactive.
+
+For the local player, the plugin copies the bounds of currently visible native
+standard, cross, and double-cross action-bar containers. Party-list rows require
+the native party agent's row index, entity ID, and object pointer to agree with
+the resolved actor. Crystalline Conflict ally/enemy rows require exact party or
+`<e1>`-`<e5>` resolution, unique actor identity, the reviewed addon/row node, and
+equality with the currently visible row name. Invalid, hidden, stale, duplicate,
+or ambiguous observations return no aura.
+
+All colors, fills, and pulses are drawn in a separate foreground overlay. The
+plugin never writes to, recolors, pulses, or otherwise mutates a native action
+slot or UI node. Actor identities, row names, bounds, and resource samples are
+not logged, persisted, transmitted, or uploaded. Exact current-patch native row
+placement remains a live-validation boundary.
 
 ## Pressure tracking
 
@@ -121,11 +148,23 @@ movement action. Only Guardian `29066`, Thunderclap `29484`, Aetherial
 Manipulation `29660`, Icarus `29261`, and Slither `39184` are accepted.
 
 Candidates must be live, targetable, non-self exact party members and pass the
-actual action's native range and line-of-sight result. Healers and ranged or
-caster jobs form the preferred tier; otherwise all jobs are eligible. The
-farthest reachable actor in that tier is selected with stable party/actor
-identity as the final tie-breaker. Guardian also uses a strict under-10-yalm
-limit.
+actual action's native range and line-of-sight result. At action time, all five
+native `<e1>`-`<e5>` slots must resolve to exact, unique, valid opponent
+identities. Confirmed dead opponents are ignored for clearance; every live
+opponent counts even while temporarily untargetable. Each candidate must have
+strictly more than 10 yalms of horizontal hitbox-edge clearance from every live
+opponent to enter the preferred backline group. Missing, ambiguous, invalid, or
+no-live-enemy observations make that preference unavailable instead of being
+treated as proof that a destination is clear.
+
+If any candidates pass this conservative, map-agnostic backline heuristic, the
+farthest of those actors from the local player wins. If none pass or the enemy
+snapshot cannot certify them, the farthest otherwise valid reachable ally wins
+instead. Only at exactly equal measured distance does role break the tie, in
+healer, ranged/caster, then other-job order. Native party order and stable actor
+identity resolve any remaining tie. Guardian also uses a strict under-10-yalm
+local-player limit. This is a preference and does not guarantee tactical safety.
+Only having no valid reachable ally produces no movement.
 
 The recommended macro has exactly three lines: `/mlock`, `/farhelp`, and one
 supported mobility action using `<me>`. There is deliberately no selected-target
@@ -235,6 +274,27 @@ No observed threat, actor identity, key state, status, or action result is
 written to disk, uploaded, or retained as combat history. Aggregate bounded
 diagnostic counters, if displayed, remain memory-only.
 
+## Experimental Monk Earth's Reply helper
+
+If explicitly enabled on PvP Monk, the helper transiently reads the local job,
+exact local actor identity, HP, one exact Earth Resonance status `3171` and its
+remaining time, and the adjusted result of Riddle of Earth action `29482`.
+Current English action/status/proc metadata must independently validate before
+the helper can act. It runs in Crystalline Conflict and in explicitly enabled
+Wolves' Den test mode; other PvP contexts fail closed.
+
+At the configured low-HP or expiry threshold, and only after a same-frame
+self-Purify opportunity declines priority, the continuous resonance state is
+marked spent before at most one normal self-targeted Earth's Reply `29483`
+request. The helper never activates Riddle of Earth `29482`, substitutes an
+alternate action or target, changes a visible target, queues a custom retry, or
+tries again after a false return or exception. The local request return is only
+diagnostic and does not prove that the server executed or accepted the effect.
+
+The resonance state, attempt/accepted counters, local actor identity, HP/timer,
+and action result remain in memory only. Nothing from this helper is logged as
+combat history, written to disk, transmitted, or uploaded.
+
 ## Saved settings
 
 Only local configuration is saved through Dalamud. This includes display and
@@ -242,7 +302,9 @@ layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
-and the WHM Miracle master/per-trigger opt-ins. Configuration schema 13 does
+the WHM Miracle master/per-trigger opt-ins, resource-aura surfaces/thresholds/
+appearance, and the Monk Earth's Reply master/triggers/thresholds. Configuration
+schema 14 does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

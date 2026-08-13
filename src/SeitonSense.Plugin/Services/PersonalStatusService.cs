@@ -26,6 +26,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
+    private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
@@ -83,6 +84,7 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             machinistLimitBreakCapture,
             log);
+        monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
@@ -90,6 +92,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
+    internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
@@ -153,6 +156,7 @@ internal sealed class PersonalStatusService : IDisposable
             var purify = emergencyPurify.FailClosed(now);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
+            monkEarthReply.FailClosed(now);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
                 SupportedPvPContext.None,
@@ -184,6 +188,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyPurify.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
+            monkEarthReply.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
@@ -303,7 +308,7 @@ internal sealed class PersonalStatusService : IDisposable
         // the monotonic clock immediately before draining so a same-frame start
         // marker is never rejected as if it came from the future.
         now = Environment.TickCount64;
-        miracleIntercept.Observe(
+        var miracle = miracleIntercept.Observe(
             localPlayer,
             context == SupportedPvPContext.CrystallineConflict,
             miracleInterceptConfigurationEnabled &&
@@ -316,6 +321,18 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ZantetsukenVerified,
             metadata.FuriousBacklashVerified,
             emergencyInputFrame,
+            now,
+            hardReset);
+        monkEarthReply.Observe(
+            localPlayer,
+            isSupportedPvPContext,
+            configuration.Enabled && configuration.EnableMonkEarthReplyHelper,
+            metadata.MonkEarthReplyVerified,
+            configuration.MonkEarthReplyOnLowHp,
+            configuration.MonkEarthReplyBeforeExpiry,
+            configuration.MonkEarthReplyHpPercent,
+            configuration.MonkEarthReplyExpirySeconds,
+            purifyClaimedPriority || rescue.UseActionAttempted || miracle.UseActionAttempted,
             now,
             hardReset);
 
@@ -647,6 +664,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyPurify.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
+        monkEarthReply.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }
 

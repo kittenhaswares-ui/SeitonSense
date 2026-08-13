@@ -762,6 +762,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     out var selectedPartySlot,
                     out var selectedDistance,
                     out var reason);
+                // This exact reviewed movement action has already consumed the
+                // Far Help intent and armed the legacy-call quarantine. Any
+                // non-rewrite outcome, including the exact expiry boundary,
+                // must stay inert instead of forwarding an authored carrier or
+                // selected target.
+                if (!rewritten) forwardedTargetId = InvalidCarrierTargetId;
                 lock (tokenGate)
                 {
                     if (rewritten)
@@ -1100,6 +1106,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                               action.ClassJob.RowId == expectedJobId;
 
         var candidates = new List<FarHelpSelectionCandidate>(8);
+        var enemySnapshot = FarHelpEnemySnapshot.Incomplete;
         if (supportedContext &&
             supportedAction &&
             movementAction &&
@@ -1110,8 +1117,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             var sourceObject = GetNativeObject(localPlayer!);
             var seenEntityIds = new HashSet<uint>();
+            var partyEntityIds = GetPartyEntityIds();
+            enemySnapshot = ResolveFarHelpEnemySnapshot(localPlayer!, partyEntityIds);
             if (sourceObject != null)
             {
+                var localPosition = localPlayer!.Position;
                 for (var slot = FarHelpSelectionRules.FirstPartySlot;
                      slot <= FarHelpSelectionRules.LastPartySlot;
                      slot++)
@@ -1125,7 +1135,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     }
 
                     var targetObject = GetNativeObject(ally);
-                    var distanceSquared = Vector3.DistanceSquared(localPlayer.Position, ally.Position);
+                    var allyPosition = ally.Position;
+                    var distanceSquared = Vector3.DistanceSquared(localPosition, allyPosition);
                     var hasValidActionTarget = targetObject != null;
                     var rangeResult = hasValidActionTarget
                         ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, targetObject)
@@ -1135,6 +1146,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         (float.IsFinite(distanceSquared) &&
                          distanceSquared < maximumDistance * maximumDistance);
                     var jobId = ally.ClassJob.IsValid ? ally.ClassJob.RowId : 0;
+                    var hasCompleteEnemySnapshot =
+                        TryGetMinimumEnemyEdgeDistance(
+                            allyPosition,
+                            ally.HitboxRadius,
+                            enemySnapshot,
+                            out var minimumEnemyEdgeDistance);
                     candidates.Add(new FarHelpSelectionCandidate(
                         ally.GameObjectId,
                         ally.EntityId,
@@ -1148,7 +1165,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         ally.IsTargetable,
                         hasValidActionTarget,
                         insideActionSpecificLimit &&
-                        SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult)));
+                        SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
+                        HasCompleteCanonicalEnemySnapshot: hasCompleteEnemySnapshot,
+                        CanonicalLiveEnemyCount: enemySnapshot.LiveEnemies.Length,
+                        MinimumCanonicalEnemyEdgeDistance: minimumEnemyEdgeDistance));
                 }
             }
         }
@@ -1177,15 +1197,45 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var selected = candidates[decision.SelectedCandidateIndex];
             selectedPartySlot = selected.PartySlot;
             selectedDistance = MathF.Sqrt(selected.DistanceSquared);
-            reason = $"Redirected farthest preferred ally P{selected.PartySlot}, " +
-                     $"distance={selectedDistance:0.0}y, role={selected.Role}";
+            var backlineSafe = FarHelpSelectionRules.IsBacklineSafe(selected);
+            var clearance = float.IsFinite(selected.MinimumCanonicalEnemyEdgeDistance)
+                ? $"{selected.MinimumCanonicalEnemyEdgeDistance:0.0}y"
+                : "unknown";
+            var selectionTier = GetFarHelpSelectionTier(selected, backlineSafe);
+            reason = $"Redirected farthest reachable ally P{selected.PartySlot}, " +
+                     $"distance={selectedDistance:0.0}y, enemy-clearance={clearance}, " +
+                     $"live-enemies={selected.CanonicalLiveEnemyCount}, " +
+                     $"snapshot={(selected.HasCompleteCanonicalEnemySnapshot ? "complete" : "incomplete")}, " +
+                     $"tier={selectionTier}, role={selected.Role}";
         }
         else
         {
-            reason = $"Suppressed: {decision.Reason}, candidates={candidates.Count}, resolved={resolvedActionId}";
+            var actionValidCandidates = candidates.Count(FarHelpSelectionRules.IsEligible);
+            var safeCandidates = candidates.Count(candidate =>
+                FarHelpSelectionRules.IsEligible(candidate) &&
+                FarHelpSelectionRules.IsBacklineSafe(candidate));
+            reason = $"Suppressed: {decision.Reason}, candidates={candidates.Count}, " +
+                     $"action-valid={actionValidCandidates}, safe-backline={safeCandidates}, " +
+                     $"enemy-snapshot={(enemySnapshot.IsComplete ? "complete" : "incomplete")}, " +
+                     $"live-enemies={enemySnapshot.LiveEnemies.Length}, resolved={resolvedActionId}";
         }
 
         return decision.ForwardTargetId;
+    }
+
+    private static string GetFarHelpSelectionTier(
+        FarHelpSelectionCandidate selected,
+        bool backlineSafe)
+    {
+        if (backlineSafe) return "safe-backline(clearance>10y)";
+        if (!selected.HasCompleteCanonicalEnemySnapshot)
+            return "reachable-fallback(snapshot-incomplete)";
+        if (selected.CanonicalLiveEnemyCount == 0)
+            return "reachable-fallback(no-live-enemy-clearance)";
+        if (!float.IsFinite(selected.MinimumCanonicalEnemyEdgeDistance))
+            return "reachable-fallback(clearance-unknown)";
+
+        return $"reachable-fallback(clearance<={FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance:0.#}y)";
     }
 
     private void OnFrameworkUpdate(IFramework _)
@@ -1270,6 +1320,99 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         return result;
+    }
+
+    private FarHelpEnemySnapshot ResolveFarHelpEnemySnapshot(
+        IPlayerCharacter localPlayer,
+        HashSet<uint> partyEntityIds)
+    {
+        var seenEntityIds = new HashSet<uint>();
+        var seenGameObjectIds = new HashSet<ulong>();
+        var liveEnemies = new List<FarHelpEnemyThreat>(FarHelpSelectionRules.MaximumCanonicalEnemyCount);
+
+        for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
+        {
+            var enemy = EnemySlotResolver.Resolve(objectTable, slot);
+            if (enemy is null ||
+                enemy.Address == 0 ||
+                !IsNetworkEntityId(enemy.EntityId) ||
+                !IsNetworkObjectId(enemy.GameObjectId) ||
+                enemy.EntityId == localPlayer.EntityId ||
+                enemy.GameObjectId == localPlayer.GameObjectId ||
+                IsAlly(enemy, partyEntityIds) ||
+                !seenEntityIds.Add(enemy.EntityId) ||
+                !seenGameObjectIds.Add(enemy.GameObjectId))
+            {
+                return FarHelpEnemySnapshot.Incomplete;
+            }
+
+            var position = enemy.Position;
+            var hitboxRadius = enemy.HitboxRadius;
+            if (!float.IsFinite(position.X) ||
+                !float.IsFinite(position.Z) ||
+                !float.IsFinite(hitboxRadius) ||
+                hitboxRadius < 0f)
+            {
+                return FarHelpEnemySnapshot.Incomplete;
+            }
+
+            // A confirmed dead enemy is still required for the exact e1-e5
+            // identity snapshot, but cannot presently threaten either edge.
+            if (enemy.IsDead) continue;
+
+            // Untargetable living enemies still occupy the arena and therefore
+            // count. Ambiguous zero-HP/non-dead observations make the whole
+            // heuristic unknown instead of being silently treated as safe.
+            if (enemy.CurrentHp == 0 || enemy.MaxHp < enemy.CurrentHp)
+                return FarHelpEnemySnapshot.Incomplete;
+
+            liveEnemies.Add(new FarHelpEnemyThreat(position.X, position.Z, hitboxRadius));
+        }
+
+        return seenEntityIds.Count == FarHelpSelectionRules.MaximumCanonicalEnemyCount &&
+               seenGameObjectIds.Count == FarHelpSelectionRules.MaximumCanonicalEnemyCount
+            ? new FarHelpEnemySnapshot(true, liveEnemies.ToArray())
+            : FarHelpEnemySnapshot.Incomplete;
+    }
+
+    private static bool TryGetMinimumEnemyEdgeDistance(
+        Vector3 allyPosition,
+        float allyHitboxRadius,
+        FarHelpEnemySnapshot snapshot,
+        out float minimumEnemyEdgeDistance)
+    {
+        minimumEnemyEdgeDistance = float.NaN;
+        if (!snapshot.IsComplete ||
+            !float.IsFinite(allyPosition.X) ||
+            !float.IsFinite(allyPosition.Z) ||
+            !float.IsFinite(allyHitboxRadius) ||
+            allyHitboxRadius < 0f)
+        {
+            return false;
+        }
+
+        if (snapshot.LiveEnemies.Length == 0) return true;
+
+        var minimum = float.PositiveInfinity;
+        foreach (var enemy in snapshot.LiveEnemies)
+        {
+            var deltaX = allyPosition.X - enemy.X;
+            var deltaZ = allyPosition.Z - enemy.Z;
+            var centerDistanceSquared = (deltaX * deltaX) + (deltaZ * deltaZ);
+            if (!float.IsFinite(centerDistanceSquared) || centerDistanceSquared < 0f)
+                return false;
+
+            var centerDistance = MathF.Sqrt(centerDistanceSquared);
+            var edgeDistance = MathF.Max(
+                0f,
+                centerDistance - allyHitboxRadius - enemy.HitboxRadius);
+            if (!float.IsFinite(edgeDistance)) return false;
+            minimum = MathF.Min(minimum, edgeDistance);
+        }
+
+        if (!float.IsFinite(minimum)) return false;
+        minimumEnemyEdgeDistance = minimum;
+        return true;
     }
 
     private bool TryGetActionMetadata(
@@ -1786,6 +1929,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     private readonly record struct CanonicalEnemy(int Slot, IPlayerCharacter Player);
+
+    private readonly record struct FarHelpEnemyThreat(float X, float Z, float HitboxRadius);
+
+    private readonly record struct FarHelpEnemySnapshot(
+        bool IsComplete,
+        FarHelpEnemyThreat[] LiveEnemies)
+    {
+        internal static FarHelpEnemySnapshot Incomplete => new(false, []);
+    }
 
     private readonly record struct AllyCandidate(
         IPlayerCharacter Ally,

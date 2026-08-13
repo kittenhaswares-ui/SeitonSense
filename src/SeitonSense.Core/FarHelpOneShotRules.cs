@@ -114,7 +114,7 @@ public static class FarHelpOneShotRules
             return Cleared(attempt.OriginalTargetId, FarHelpOneShotReason.ClockMovedBackwards);
 
         if (attempt.NowMilliseconds >= token.ExpiresAtMilliseconds)
-            return Cleared(attempt.OriginalTargetId, FarHelpOneShotReason.Expired);
+            return ClearedSuppressed(FarHelpOneShotReason.Expired);
 
         if (!attempt.IsEligibleMacroActionAttempt)
         {
@@ -192,6 +192,15 @@ public static class FarHelpOneShotRules
         new(
             FarHelpOneShotState.Initial,
             originalTargetId,
+            -1,
+            FarHelpOneShotDecisionKind.Cleared,
+            reason);
+
+    private static FarHelpOneShotDecision ClearedSuppressed(
+        FarHelpOneShotReason reason) =>
+        new(
+            FarHelpOneShotState.Initial,
+            InvalidSuppressedTargetId,
             -1,
             FarHelpOneShotDecisionKind.Cleared,
             reason);

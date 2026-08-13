@@ -18,8 +18,8 @@ internal static class FarHelpOneShotSelfTests
 
         True(decision.ShouldRewrite, "eligible friendly movement action rewrites");
         True(decision.ConsumedActionIntent, "one action owns the token");
-        Equal(FriendlyB, decision.ForwardTargetId, "action-time preferred candidate");
-        Equal(1, decision.SelectedCandidateIndex, "selected observation index");
+        Equal(FriendlyA, decision.ForwardTargetId, "action-time farthest candidate");
+        Equal(0, decision.SelectedCandidateIndex, "selected observation index");
         False(decision.NextState.IsArmed, "token is consumed before dispatch");
 
         var following = FarHelpOneShotRules.Observe(
@@ -145,7 +145,10 @@ internal static class FarHelpOneShotSelfTests
             [Candidate(FriendlyA, 10f, 24, 2)]);
         Equal(FarHelpOneShotDecisionKind.Cleared, boundary.Kind, "deadline is expired");
         Equal(FarHelpOneShotReason.Expired, boundary.Reason, "timeout reason");
-        Equal(OwnTarget, boundary.ForwardTargetId, "expiry never changes target");
+        Equal(
+            FarHelpOneShotRules.InvalidSuppressedTargetId,
+            boundary.ForwardTargetId,
+            "claimed movement at expiry cannot reach its original target");
     }
 
     public static void InvalidArmsAndHardResetFailClosed()
@@ -203,7 +206,11 @@ internal static class FarHelpOneShotSelfTests
             IsSelf: false,
             IsTargetable: true,
             HasValidActionTarget: true,
-            HasRangeAndLineOfSight: true);
+            HasRangeAndLineOfSight: true,
+            HasCompleteCanonicalEnemySnapshot: true,
+            CanonicalLiveEnemyCount: FarHelpSelectionRules.MaximumCanonicalEnemyCount,
+            MinimumCanonicalEnemyEdgeDistance:
+                FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance + 1f);
 
     private static void ConsumedFallback(
         FarHelpOneShotDecision decision,
