@@ -3,7 +3,8 @@ namespace SeitonSense.Core;
 public enum FarHelpAllyRole
 {
     Other = 0,
-    PreferredHealerOrRanged = 1,
+    RangedOrCaster = 1,
+    Healer = 2,
 }
 
 /// <summary>
@@ -22,28 +23,33 @@ public readonly record struct FarHelpSelectionCandidate(
     bool IsSelf,
     bool IsTargetable,
     bool HasValidActionTarget,
-    bool HasRangeAndLineOfSight);
+    bool HasRangeAndLineOfSight,
+    bool HasCompleteCanonicalEnemySnapshot,
+    int CanonicalLiveEnemyCount,
+    float MinimumCanonicalEnemyEdgeDistance);
 
 /// <summary>
-/// Selects the farthest action-valid party member. Healers, physical ranged,
-/// and casters form a strict preferred tier; only when that tier has no valid
-/// candidate are tanks, melee, or unknown jobs considered. Ties are independent
-/// of object-table enumeration order.
+/// Prefers backline-safe action-valid party members when at least one exists;
+/// otherwise every otherwise eligible reachable member remains available.
+/// Within that chosen tier the farthest candidate wins. Only at exactly equal
+/// distance does role break the tie: healer, then ranged/caster, then other.
 /// </summary>
 public static class FarHelpSelectionRules
 {
     public const int FirstPartySlot = 1;
     public const int LastPartySlot = 8;
+    public const int MaximumCanonicalEnemyCount = 5;
+    public const float MinimumBacklineEnemyEdgeClearance = 10f;
 
     public static FarHelpAllyRole ClassifyPlayableJob(uint jobId) => jobId switch
     {
         // Healers: WHM, SCH, AST, SGE.
-        24 or 28 or 33 or 40 => FarHelpAllyRole.PreferredHealerOrRanged,
+        24 or 28 or 33 or 40 => FarHelpAllyRole.Healer,
         // Physical ranged: BRD, MCH, DNC. Casters: BLM, SMN, RDM, PCT.
         23 or 31 or 38 or 25 or 27 or 35 or 42 =>
-            FarHelpAllyRole.PreferredHealerOrRanged,
-        // Tanks, melee, classes, limited jobs, and unknown future rows stay in
-        // the fallback tier until explicitly reviewed.
+            FarHelpAllyRole.RangedOrCaster,
+        // Tanks, melee, classes, limited jobs, and unknown future rows remain
+        // the final exact-distance tie-break tier until explicitly reviewed.
         _ => FarHelpAllyRole.Other,
     };
 
@@ -79,15 +85,35 @@ public static class FarHelpSelectionRules
         candidate.HasValidActionTarget &&
         candidate.HasRangeAndLineOfSight;
 
+    /// <summary>
+    /// The runtime snapshot must contain every unambiguously identified live
+    /// canonical CC enemy. The supplied value is the minimum horizontal
+    /// hitbox-edge clearance across that complete set; an empty, oversized,
+    /// missing, negative, or non-finite snapshot is not considered safe. This
+    /// is a preference signal only; unknown/frontline candidates remain valid
+    /// when no safe backline candidate exists.
+    /// </summary>
+    public static bool IsBacklineSafe(FarHelpSelectionCandidate candidate) =>
+        candidate.HasCompleteCanonicalEnemySnapshot &&
+        candidate.CanonicalLiveEnemyCount is >= 1 and <= MaximumCanonicalEnemyCount &&
+        float.IsFinite(candidate.MinimumCanonicalEnemyEdgeDistance) &&
+        candidate.MinimumCanonicalEnemyEdgeDistance >= 0f &&
+        candidate.MinimumCanonicalEnemyEdgeDistance > MinimumBacklineEnemyEdgeClearance;
+
     private static bool IsBetter(
         FarHelpSelectionCandidate candidate,
         FarHelpSelectionCandidate current)
     {
-        if (candidate.Role != current.Role)
-            return candidate.Role > current.Role;
+        var candidateBacklineSafe = IsBacklineSafe(candidate);
+        var currentBacklineSafe = IsBacklineSafe(current);
+        if (candidateBacklineSafe != currentBacklineSafe)
+            return candidateBacklineSafe;
 
         var distance = candidate.DistanceSquared.CompareTo(current.DistanceSquared);
         if (distance != 0) return distance > 0;
+
+        if (candidate.Role != current.Role)
+            return candidate.Role > current.Role;
 
         if (candidate.PartySlot != current.PartySlot)
             return candidate.PartySlot < current.PartySlot;

@@ -2,7 +2,7 @@ using SeitonSense.Core;
 
 internal static class FarHelpSelectionSelfTests
 {
-    public static void PreferredTierWinsBeforeDistance()
+    public static void DistanceAlwaysWinsBeforeRole()
     {
         var candidates = new[]
         {
@@ -11,27 +11,44 @@ internal static class FarHelpSelectionSelfTests
             Candidate(30, distance: 15f, jobId: 22, partySlot: 4),
         };
 
-        Equal(1, FarHelpSelectionRules.SelectBestIndex(candidates), "WHM preferred over farther melee");
+        Equal(0, FarHelpSelectionRules.SelectBestIndex(candidates), "farther melee beats nearer healer");
     }
 
-    public static void FarthestWinsInsideEachTier()
+    public static void FarthestWinsAcrossAllRoles()
     {
-        var preferred = new[]
+        var candidates = new[]
         {
             Candidate(10, distance: 8f, jobId: 24, partySlot: 2),
             Candidate(20, distance: 19f, jobId: 23, partySlot: 3),
             Candidate(30, distance: 14f, jobId: 25, partySlot: 4),
             Candidate(40, distance: 20f, jobId: 20, partySlot: 5),
         };
-        Equal(1, FarHelpSelectionRules.SelectBestIndex(preferred), "farthest preferred role");
+        Equal(3, FarHelpSelectionRules.SelectBestIndex(candidates), "globally farthest valid ally");
+    }
 
-        var fallback = new[]
+    public static void EqualDistanceUsesExactRoleOrder()
+    {
+        var healerWins = new[]
         {
-            Candidate(10, distance: 8f, jobId: 19, partySlot: 2),
-            Candidate(20, distance: 19f, jobId: 20, partySlot: 3),
-            Candidate(30, distance: 14f, jobId: 0, partySlot: 4),
+            Candidate(10, distance: 10f, jobId: 20, partySlot: 2),
+            Candidate(20, distance: 10f, jobId: 23, partySlot: 3),
+            Candidate(30, distance: 10f, jobId: 24, partySlot: 4),
         };
-        Equal(1, FarHelpSelectionRules.SelectBestIndex(fallback), "farthest fallback role");
+        Equal(2, FarHelpSelectionRules.SelectBestIndex(healerWins), "healer wins exact-distance tie");
+
+        var rangedWins = new[]
+        {
+            Candidate(10, distance: 10f, jobId: 20, partySlot: 2),
+            Candidate(20, distance: 10f, jobId: 25, partySlot: 3),
+        };
+        Equal(1, FarHelpSelectionRules.SelectBestIndex(rangedWins), "ranged/caster beats other on exact tie");
+
+        var barelyFartherOther = new[]
+        {
+            Candidate(10, distance: 10.0001f, jobId: 20, partySlot: 2),
+            Candidate(20, distance: 10f, jobId: 24, partySlot: 3),
+        };
+        Equal(0, FarHelpSelectionRules.SelectBestIndex(barelyFartherOther), "role applies only to exact distance");
     }
 
     public static void EqualDistanceUsesStablePartyAndActorIdentity()
@@ -72,21 +89,86 @@ internal static class FarHelpSelectionSelfTests
             valid with { HasRangeAndLineOfSight = false },
         };
 
-        Equal(-1, FarHelpSelectionRules.SelectBestIndex(candidates), "every unsafe candidate is rejected");
+        Equal(-1, FarHelpSelectionRules.SelectBestIndex(candidates), "every action-unsafe candidate is rejected");
         Equal(-1, FarHelpSelectionRules.SelectBestIndex(null), "missing snapshot fails closed");
         Equal(-1, FarHelpSelectionRules.SelectBestIndex([]), "empty snapshot fails closed");
     }
 
+    public static void BacklineSafetyIsPreferredButNeverRequired()
+    {
+        var exactBoundary = Candidate(
+            10,
+            distance: 28f,
+            jobId: 20,
+            partySlot: 2,
+            minimumEnemyEdgeDistance: FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance);
+        True(!FarHelpSelectionRules.IsBacklineSafe(exactBoundary), "exactly 10y edge clearance is rejected");
+
+        var justSafe = Candidate(
+            20,
+            distance: 24f,
+            jobId: 24,
+            partySlot: 3,
+            minimumEnemyEdgeDistance: 10.001f);
+        True(FarHelpSelectionRules.IsBacklineSafe(justSafe), "10.001y edge clearance is safe");
+
+        var shorterSafe = Candidate(
+            30,
+            distance: 18f,
+            jobId: 23,
+            partySlot: 4,
+            minimumEnemyEdgeDistance: 12f);
+        var candidates = new[] { exactBoundary, justSafe, shorterSafe };
+        Equal(1, FarHelpSelectionRules.SelectBestIndex(candidates), "safe backline beats a farther frontline candidate");
+
+        Equal(
+            0,
+            FarHelpSelectionRules.SelectBestIndex(
+                [
+                    exactBoundary,
+                    shorterSafe with { HasCompleteCanonicalEnemySnapshot = false },
+                ]),
+            "without a safe candidate the farthest reachable ally still wins");
+
+        var unknownSnapshot = new[]
+        {
+            Candidate(40, distance: 12f, jobId: 24, partySlot: 2) with
+            {
+                HasCompleteCanonicalEnemySnapshot = false,
+                MinimumCanonicalEnemyEdgeDistance = float.NaN,
+            },
+            Candidate(50, distance: 21f, jobId: 20, partySlot: 3) with
+            {
+                HasCompleteCanonicalEnemySnapshot = false,
+                CanonicalLiveEnemyCount = 0,
+            },
+        };
+        Equal(1, FarHelpSelectionRules.SelectBestIndex(unknownSnapshot), "unknown snapshot falls back to farthest ally");
+
+        True(
+            !FarHelpSelectionRules.IsBacklineSafe(
+                exactBoundary with { CanonicalLiveEnemyCount = 0 }),
+            "missing live-enemy set fails closed");
+        True(
+            !FarHelpSelectionRules.IsBacklineSafe(
+                exactBoundary with { CanonicalLiveEnemyCount = 6 }),
+            "ambiguous oversized enemy set fails closed");
+    }
+
     public static void CurrentPvpJobsUseExactRoleTiers()
     {
-        uint[] preferred = [23, 24, 25, 27, 28, 31, 33, 35, 38, 40, 42];
+        uint[] healers = [24, 28, 33, 40];
+        uint[] rangedOrCasters = [23, 25, 27, 31, 35, 38, 42];
         uint[] other = [0, 1, 5, 6, 7, 19, 20, 21, 22, 26, 29, 30, 32, 34, 36, 37, 39, 41, 43];
 
         True(
-            preferred.All(job =>
-                FarHelpSelectionRules.ClassifyPlayableJob(job) ==
-                FarHelpAllyRole.PreferredHealerOrRanged),
-            "all current healers, physical ranged, and casters");
+            healers.All(job =>
+                FarHelpSelectionRules.ClassifyPlayableJob(job) == FarHelpAllyRole.Healer),
+            "all current healers");
+        True(
+            rangedOrCasters.All(job =>
+                FarHelpSelectionRules.ClassifyPlayableJob(job) == FarHelpAllyRole.RangedOrCaster),
+            "all current physical ranged and casters");
         True(
             other.All(job =>
                 FarHelpSelectionRules.ClassifyPlayableJob(job) == FarHelpAllyRole.Other),
@@ -98,7 +180,10 @@ internal static class FarHelpSelectionSelfTests
         float distance,
         uint jobId,
         int partySlot,
-        ulong? gameObjectId = null) =>
+        ulong? gameObjectId = null,
+        float minimumEnemyEdgeDistance = FarHelpSelectionRules.MinimumBacklineEnemyEdgeClearance + 1f,
+        int canonicalLiveEnemyCount = FarHelpSelectionRules.MaximumCanonicalEnemyCount,
+        bool hasCompleteCanonicalEnemySnapshot = true) =>
         new(
             gameObjectId ?? entityId,
             entityId,
@@ -111,7 +196,10 @@ internal static class FarHelpSelectionSelfTests
             IsSelf: false,
             IsTargetable: true,
             HasValidActionTarget: true,
-            HasRangeAndLineOfSight: true);
+            HasRangeAndLineOfSight: true,
+            HasCompleteCanonicalEnemySnapshot: hasCompleteCanonicalEnemySnapshot,
+            CanonicalLiveEnemyCount: canonicalLiveEnemyCount,
+            MinimumCanonicalEnemyEdgeDistance: minimumEnemyEdgeDistance);
 
     private static void True(bool condition, string label)
     {

@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PressureCounterWindow pressureCounter;
     private readonly NearAssistRedirector nearAssist;
     private readonly NamePlateAnchorTracker namePlateAnchors;
+    private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly SettingsWindow settingsWindow;
@@ -120,6 +121,12 @@ public sealed class Plugin : IDalamudPlugin
             configuration,
             metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
+        resourceAuraAnchors = new ResourceAuraAnchorTracker(
+            configuration,
+            clientState,
+            objectTable,
+            gameGui,
+            log);
         targetHighlights = new TargetHighlightRenderer(
             configuration,
             pluginInterface,
@@ -136,6 +143,7 @@ public sealed class Plugin : IDalamudPlugin
             personalStatus,
             pressureTracker,
             namePlateAnchors,
+            resourceAuraAnchors,
             gameGui,
             textureProvider);
         pressureCounter = new PressureCounterWindow(
@@ -379,6 +387,7 @@ public sealed class Plugin : IDalamudPlugin
                 configuration.Enabled = false;
                 overlay.PreviewEnabled = false;
                 overlay.CcProtectionPreviewEnabled = false;
+                overlay.ResourceAuraPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 break;
             case "preview":
@@ -393,11 +402,14 @@ public sealed class Plugin : IDalamudPlugin
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
+                var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
+                    $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
+                    $"({overlay.ResourceAuraSelfHotbarCount}/{overlay.ResourceAuraPartyRowCount}/{overlay.ResourceAuraCcRowCount}), " +
                     $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
                     $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
                     $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
@@ -439,6 +451,13 @@ public sealed class Plugin : IDalamudPlugin
                     $"count={miracle.AttemptCount}/{miracle.AcceptedCount},q={miracle.CaptureQueueDepth}," +
                     $"capture={miracle.CapturedThreatCount},drop={miracle.DroppedThreatCount}," +
                     $"last={miracle.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
+                    $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +
+                    $"ttl={monk.ResonanceRemainingMilliseconds},hp={monk.CurrentHp}/{monk.MaximumHp}," +
+                    $"adjusted={monk.AdjustedActionId},priority={monk.HigherPriorityClaimed}," +
+                    $"attempt={monk.UseActionAttempted}/{monk.UseActionAccepted}," +
+                    $"count={monk.AttemptCount}/{monk.AcceptedCount}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -449,6 +468,7 @@ public sealed class Plugin : IDalamudPlugin
                 configuration.ResetToDefaults();
                 overlay.PreviewEnabled = false;
                 overlay.CcProtectionPreviewEnabled = false;
+                overlay.ResourceAuraPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;

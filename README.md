@@ -2,12 +2,11 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.9 adds a farthest-
-ally mobility helper and makes the Miracle master state unmistakable in the UI
-on top of the integrated awareness suite,
-which combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and
-Super Focus Glow into one configurable plugin. It remains a custom-repository
-plugin.
+one-shot macro assistance, and target highlights. Version 0.10 adds visual-only
+low-resource auras around FFXIV's own action bars and team rows, a default-off
+Monk Earth's Reply helper, and a dedicated Jobs quality-of-life tab. The suite
+combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
+Focus Glow into one configurable custom-repository plugin.
 
 ## Highlights
 
@@ -30,6 +29,11 @@ plugin.
   default and can play one selectable built-in FFXIV sound per verified threat.
   Warning-card background opacity is independent from its icon, text, and
   border, so the fill can be fully transparent without hiding the warning.
+- **Native-HUD resource aura:** low HP softly pulses red around your visible
+  native action bars, trusted low MP pulses blue, and both together pulse
+  purple. The same state can be drawn more subtly around exact party-list and
+  Crystalline Conflict ally/enemy rows. This is a separate foreground overlay;
+  native HUD nodes, action slots, animations, and input are never changed.
 - **Ninja Seiton decisions:** persistent job-icon cards, `S1`-`S5`, preparation
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
@@ -41,11 +45,14 @@ plugin.
   HP percentage. Ability-specific range and line of sight are checked before
   distance is used as the tie-breaker.
 - **One-shot Far Help:** `/farhelp` redirects one already incoming, reviewed
-  friendly movement action to the farthest reachable non-self party member.
-  Healers and ranged/caster jobs form the preferred tier; all other jobs are
-  considered only when no preferred ally is valid. It supports Guardian,
-  Thunderclap, Aetherial Manipulation, Icarus, and Slither. With no valid ally,
-  the single attempt performs no movement; it never falls back to your target.
+  friendly movement action to a reachable non-self party member. It first
+  prefers destinations with strictly more than 10 yalms of horizontal
+  hitbox-edge clearance from every live enemy, then chooses the farthest one.
+  If none can be certified, it still chooses the farthest valid reachable ally.
+  Only an exact distance tie prefers healer, then ranged/caster, then another
+  job. It supports Guardian, Thunderclap, Aetherial Manipulation, Icarus, and
+  Slither. Only no valid reachable ally means no movement; it never falls back
+  to your target.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -58,12 +65,19 @@ plugin.
   Nest der Blutschuppen. MCH/SAM opportunities last 500 ms, VPR lasts 250 ms,
   and the VPR path waits for Hardened Scales to be genuinely absent; no visible
   target change, fallback action, or retry is added.
+- **Experimental Monk Earth's Reply:** while exact Earth Resonance is active on
+  PvP Monk, a separate default-off helper can make one exact Earth's Reply
+  attempt at or below 30% HP or at 1.25 seconds remaining by default. It never
+  starts Riddle of Earth, never falls back to it, and never retries the same
+  continuous resonance.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
-- **Cleaner settings:** features are separated into Overview, Pressure,
-  Warnings, Seiton, Assist, Targets, and Advanced tabs. Configuration schema 13
-  preserves existing settings; every action-attempt experiment remains opt-in.
+- **Cleaner settings:** general resource readability and the Ninja, Monk,
+  BRD/WHM, and WHM helpers are grouped under a dedicated Jobs tab. Overview,
+  Pressure, Warnings, Assist, Targets, and Advanced remain focused on their own
+  feature families. Configuration schema 14 preserves existing settings; every
+  action-attempt experiment remains opt-in.
 
 ## Pressure and team focus
 
@@ -105,6 +119,29 @@ The low-MP slot shows a crossed blue Standard-issue Elixir below 2,000 MP, the
 current Recuperate cost. Initial zero samples remain untrusted, and state
 changes are debounced to avoid flicker.
 
+## Native-HUD low-resource aura
+
+The optional resource aura uses the UI surfaces players already watch. At the
+default thresholds, HP at or below 30% produces a soft red pulse around every
+currently visible native self action bar; trusted MP below 2,000 produces
+blue; both conditions produce purple. MP must first become a plausible trusted
+sample and uses a 300-MP exit margin, so an unknown initial zero or a threshold
+edge does not create a misleading flicker.
+
+Party-list rows and the five native Crystalline Conflict ally and enemy rows can
+receive a subtler version of the same aura. Each surface is independently
+switchable, and pulse speed and intensity are configurable. The plugin copies
+only current visible rectangles and draws a foreground ImGui outline/fill. It
+does not recolor, pulse, write to, or otherwise mutate a native action slot or UI
+node.
+
+Party rows require exact agent row index, entity identity, and native object
+pointer agreement. CC rows additionally require exact native party/enemy-slot
+resolution and equality with the visible row name. Hidden, invalid, stale,
+duplicated, or ambiguous actors/rows produce no aura. The current CC addon names,
+row node mapping, and exact placement still require live current-patch validation;
+source tests cannot prove a native HUD layout.
+
 The exact, metadata-validated protection catalog in v0.6 is:
 
 - Guard `3054` and Guard `3673`, folded into one Guard family;
@@ -136,7 +173,7 @@ In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
 
-## Personal warnings, Purify, Ally Rescue, and Miracle intercept
+## Personal warnings and job quality-of-life helpers
 
 Wildfire and Death Warrant receive danger warnings. Marksman's Spite uses its
 exact early target-marker event to show the larger `MCH LIMIT BREAK ON YOU`
@@ -217,6 +254,20 @@ current captured event shape, but FFXIV remains authoritative. A locally
 accepted Miracle request is not proof that the already-started action was
 interrupted. This path is intentionally marked experimental until it has been
 rechecked live on the current patch.
+
+The Monk section contains a separate default-off Earth's Reply helper for PvP
+job 20. It requires one exact Earth Resonance `3171`, current metadata
+validation, and the adjusted Riddle of Earth `29482` slot to resolve to Earth's
+Reply `29483`. The enabled trigger fires at or below the configured HP threshold
+(30% by default) or inside the configured expiry window (1.25 seconds by
+default).
+
+The continuous resonance is marked spent before one self-targeted normal
+`29483` request. A rejected or throwing request is not retried, and `29482` is
+never used as an alternate action. A same-frame self-Purify opportunity has
+priority, so the Monk helper waits rather than competing with it. The helper
+runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
+the native direct-call result and exact timer behavior still need a live test.
 
 ## One-shot Near Assist macro
 
@@ -322,11 +373,24 @@ Manipulation `29660`, Icarus `29261`, and Slither `39184`.
 
 `/farhelp` arms one token for at most 750 ms. The immediately following
 supported movement action resolves exact, live, targetable non-self party
-members and checks that action's native range and line of sight. Healers plus
-physical-ranged and magical-ranged jobs are the strict preferred tier. Within
-the available tier, the farthest reachable ally wins; stable party and actor
-identity break exact ties. Guardian additionally uses a strict distance below
-10 yalms matching its execution condition.
+members and checks that action's native range and line of sight. At that action,
+all five native `<e1>`-`<e5>` slots must resolve to exact, unique, valid opponent
+identities. Confirmed dead opponents are ignored for clearance, while every
+live opponent counts even when temporarily untargetable. Each candidate must
+have strictly more than 10 yalms of horizontal hitbox-edge clearance from every
+live opponent to enter the preferred backline group. Missing, ambiguous,
+invalid, or no-live-enemy observations make that preference unavailable; they
+do not cancel an otherwise valid movement destination.
+
+If one or more candidates pass that conservative backline heuristic, the
+farthest of those candidates from you wins. If none pass or the snapshot cannot
+certify them, Far Help falls back to the farthest otherwise valid reachable
+ally. Only at exactly equal measured distance does role break the tie: healer,
+then physical/magical ranged or caster, then every other job. Native party order
+and stable actor identity break any remaining tie. Guardian additionally uses a
+strict distance below 10 yalms from you matching its execution condition. The
+enemy-clearance test is a map-agnostic preference, not a guarantee that a
+destination is tactically safe.
 
 Use exactly those three lines; Far Help deliberately has no selected-target
 fallback. `<me>` is an intrinsically invalid carrier because none of the five
@@ -366,8 +430,10 @@ focus module to avoid drawing both over the same actor.
 | Pressure counter and pressure badges | Yes | Separate opt-in | Yes, without CC slot labels |
 | Verified CC-protection icons | Yes | Yes, for the strict duel opponent | Yes, including large-scale-only Swift |
 | Personal warnings and optional self-Purify | Yes | Yes | No |
+| Native-HUD low-resource aura | Yes | Yes | Yes, without CC team rows |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
 | Optional WHM Miracle intercept | Yes | No | No |
+| Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
@@ -399,8 +465,8 @@ update through the same repository.
 - `/nearhelp` - arm one CC-only lowest-health party redirect for the next
   supported friendly PvP macro action
 - `/sshelp` - collision-free alias for `/nearhelp`
-- `/farhelp` - arm one CC-only farthest-reachable mobility redirect for the
-  next reviewed friendly movement action; without a valid ally, do not move
+- `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
+  the next reviewed friendly movement action; no valid reachable ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
 - `/seiton show` / `/seiton hide` - enable or disable the HUD
 - `/seiton preview` - preview nameplate indicators
@@ -425,7 +491,8 @@ read character names or Home Worlds and stores no combat, target, or key
 history. Transient observations and the exact one-shot action boundary are
 documented in [PRIVACY.md](PRIVACY.md).
 
-Display features never target or press actions. Near Assist, Near Help, and Far Help can
+Display features, including the resource aura, never target or press actions or
+mutate native UI. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -433,6 +500,9 @@ path with self-Purify first, Ally Rescue second, and Miracle third. Ally Rescue
 labels a removal `CLEANSED` only after the exact
 successful status-removal ActionEffect is observed; attempts and client-accepted
 requests alone are not success claims.
+The separate default-off Monk helper may initiate at most one exact Earth's
+Reply attempt per continuously observed Earth Resonance after self-Purify
+declines priority; it has no alternate action or retry.
 
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
@@ -447,8 +517,9 @@ rebuilds the dependency-free core and verifies the committed package because
 the Dalamud plugin SDK depends on assemblies from a local XIVLauncher install.
 
 Those checks validate source, contracts, and packaging; they are not a claim of
-fresh live in-game confirmation. Exact nameplate placement, pressure evidence,
-MCH marker/sound timing, optional Purify/Ally Rescue/Miracle behavior, and the macro helpers
+fresh live in-game confirmation. Exact nameplate placement, native action-bar /
+party-row / current CC-row aura anchoring, pressure evidence, MCH marker/sound
+timing, optional Purify/Ally Rescue/Miracle/Earth's Reply behavior, and the macro helpers
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
 changes. The 0.7.0.1 ActionEffect confirmation and blue popup also still require

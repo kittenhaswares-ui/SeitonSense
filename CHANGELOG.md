@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.10.0.0
+
+- Added a visual-only low-resource aura on the native HUD. At configurable
+  thresholds (30% HP and 2,000 MP by default), visible self action bars softly
+  pulse red for low HP, blue for trusted low MP, or purple for both. Party-list
+  rows and exact Crystalline Conflict ally/enemy rows can show a subtler aura.
+- Kept the aura read-only: it copies current visible native rectangles and draws
+  a separate foreground overlay without writing to action slots or UI nodes.
+  Initial/unknown MP does not warn, MP has a 300-point exit margin, and invalid,
+  hidden, stale, duplicate, or ambiguous actor/row identity fails closed. Exact
+  current-patch CC addon/node anchoring still needs live validation.
+- Added a default-off PvP Monk Earth's Reply helper. It requires job `20`, exact
+  Earth Resonance `3171`, verified current metadata, and adjusted Riddle of
+  Earth `29482` -> Earth's Reply `29483`. It can attempt the reply at or below
+  30% HP or with at most 1.25 seconds remaining by default.
+- The Monk helper marks a continuous resonance spent before one exact self
+  `29483` request. Self-Purify has priority; a false/throwing request is never
+  retried, and Riddle of Earth `29482` is never used as a fallback. It supports
+  Crystalline Conflict and explicitly enabled Wolves' Den testing. Native
+  direct-call acceptance and exact live timing remain an in-game validation
+  boundary.
+- Reorganized quality-of-life settings under a Jobs tab with All jobs / General,
+  Ninja, Monk, Bard / White Mage, and White Mage sections.
+- Included the Far Help action-time backline preference from 0.9.0.2: a complete
+  exact `<e1>`-`<e5>` snapshot prefers destinations with strictly more than 10
+  yalms of horizontal hitbox-edge enemy clearance, while an unavailable or empty
+  safe tier still selects the farthest otherwise valid reachable ally. Exact
+  distance ties prefer healer, ranged/caster, then other.
+- Preserved Far Help's strict three-line `<me>` carrier, no-selected-target
+  fallback, 750-ms legacy same-action quarantine, and no-retry behavior. Only no
+  valid reachable ally produces no movement.
+- Bumped the plugin version to 0.10.0.0 and configuration schema to 14. Existing
+  settings migrate forward; the new visual aura is enabled by default and every
+  new action-attempt helper remains opt-in.
+
+## 0.9.0.2
+
+- Added a conservative Far Help backline preference evaluated at action time.
+  All five native `<e1>`-`<e5>` slots must resolve to exact, unique, valid
+  opponent identities. Confirmed dead opponents are ignored for clearance;
+  live opponents count even while untargetable.
+- A candidate must have strictly more than 10 yalms of horizontal hitbox-edge
+  clearance from every live enemy to join the preferred backline group. The
+  farthest member of that group wins. If no candidate can be certified, or the
+  enemy snapshot is missing, ambiguous, invalid, or has no live enemy, Far Help
+  instead chooses the farthest otherwise valid reachable ally. This
+  map-agnostic preference cannot guarantee tactical safety.
+- Role is now only an exact-distance tie-breaker: healer first, then
+  physical/magical ranged or caster, then every other job. Native party order
+  and stable actor identity resolve the remaining ties.
+- Kept the fail-closed three-line `<me>` macro, native range/line-of-sight
+  checks, strict Guardian distance, legacy same-action quarantine, and all
+  no-selected-target/no-retry guarantees unchanged. Only having no valid
+  reachable ally produces no movement.
+- Bumped the plugin version to 0.9.0.2. Configuration schema 13 remains current;
+  the backline/comparator hotfix changes no saved setting.
+
 ## 0.9.0.1
 
 - Changed Far Help to a deliberately fail-closed three-line macro: `/mlock`,
