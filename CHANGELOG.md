@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0.1
+
+- Fixed the low-resource preview appearing as a detached purple `430 x 58`
+  rectangle that could overlap only one action-bar row instead of following the
+  native HUD.
+- The preview now copies the exact current rectangles of every visible native
+  self hotbar, matching the live aura. The ordinary live resource-aura pass is
+  suppressed while previewing, preventing duplicate or overlapping outlines.
+- Configuration schema 14 is unchanged. This is a presentation-only hotfix and
+  does not alter resource thresholds, targeting, actions, or native HUD nodes.
+
 ## 0.10.0.0
 
 - Added a visual-only low-resource aura on the native HUD. At configurable

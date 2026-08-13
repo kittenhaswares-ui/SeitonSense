@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, resource auras, job helpers, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating pressure and CC-protection cues, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in emergency and job helpers, and target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, native-HUD resource auras with exact-hotbar previews, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in emergency and job helpers, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.10.0.0",
-    "Changelog": "Adds visual-only red/blue/purple low-HP/MP auras around native self hotbars and exact team rows, plus a default-off one-attempt Monk Earth's Reply helper and a Jobs QoL tab. Includes Far Help's strict backline preference with farthest reachable fallback while preserving its fail-closed <me> carrier and no-selected-target quarantine. Resource row placement and Monk direct-call timing still require live validation.",
+    "AssemblyVersion": "0.10.0.1",
+    "Changelog": "Fixes the resource-aura preview so it follows the exact rectangles of all currently visible native self hotbars instead of drawing a fixed floating sample rectangle. Live resource auras are suppressed during preview to prevent overlap. Configuration schema 14 is unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786635801"
+    "LastUpdate": "1786657510"
   }
 ]

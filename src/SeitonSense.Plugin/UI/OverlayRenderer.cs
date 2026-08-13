@@ -137,7 +137,7 @@ internal sealed class OverlayRenderer
     private void DrawResourceAuras(long now)
     {
         var anchors = resourceAuraAnchors.Capture();
-        if (anchors.Count == 0) return;
+        if (anchors.Count == 0 || ResourceAuraPreviewEnabled) return;
 
         var draw = ImGui.GetForegroundDrawList();
         foreach (var anchor in anchors)
@@ -149,17 +149,13 @@ internal sealed class OverlayRenderer
 
     private void DrawResourceAuraPreview()
     {
-        var screen = ImGui.GetIO().DisplaySize;
-        var scale = ImGuiHelpers.GlobalScale;
-        var size = new Vector2(430f, 58f) * scale;
-        var minimum = new Vector2((screen.X - size.X) * 0.5f, screen.Y * 0.78f);
-        DrawResourceAura(
-            ImGui.GetForegroundDrawList(),
-            minimum,
-            minimum + size,
-            ResourceAuraKind.LowHpAndMp,
-            1f,
-            Environment.TickCount64);
+        var anchors = resourceAuraAnchors.CaptureSelfHotbarsForPreview();
+        if (anchors.Count == 0) return;
+
+        var draw = ImGui.GetForegroundDrawList();
+        var now = Environment.TickCount64;
+        foreach (var anchor in anchors)
+            DrawResourceAura(draw, anchor.Minimum, anchor.Maximum, anchor.Kind, 1f, now);
     }
 
     private void DrawResourceAura(
