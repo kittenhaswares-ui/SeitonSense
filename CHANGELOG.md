@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.11.0.1
+
+- Changed a confirmed CC-immunity-brake decision into a hard stop: the detour
+  now returns `false` immediately without calling the downstream/original
+  action function. This removes the former invalid-`targetId = 0` handoff,
+  where later game processing could restore or resolve a default target and
+  still let the action through.
+- Kept the action-attempt boundary unchanged: there is no stored press, delayed
+  dispatch, target change, fallback, replay, or retry. Every later physical
+  press or Turbo pulse is still a fresh check against the current exact target
+  status.
+- Documented the unavoidable simultaneous-activation boundary. An action the
+  server already accepted roughly 295-355 ms before immunity became locally
+  visible cannot be recalled by a client-side pre-dispatch brake. FFXIV may
+  still present that action's animation and damage while rejecting its status
+  effect on the protected target.
+- Miracle landing correlation now preserves the first still-unexpired pending
+  helper attempt instead of allowing a later registration to overwrite it.
+- Bumped the plugin version to 0.11.0.1. Configuration schema 15 is unchanged.
+
 ## 0.11.0.0
 
 - Added a default-off, Crystalline-Conflict-only CC-immunity brake that works

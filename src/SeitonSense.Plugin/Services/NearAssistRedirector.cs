@@ -857,9 +857,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         // The optional CC brake evaluates the final target after every redirect
         // decision. It never dispatches or stores work: a protected exact e1-e5
-        // target is replaced only for this one already incoming call. ReAction or
-        // the game may supply a later independent attempt after protection ends.
-        // Any uncertainty or exception preserves the fully resolved target.
+        // target stops only this one already incoming call before any downstream
+        // hook or the game can restore a default/current target. ReAction or the
+        // game may supply a later independent attempt after protection ends. Any
+        // uncertainty or exception preserves the fully resolved target.
         if (!bypassRedirect)
         {
             try
@@ -871,7 +872,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         forwardedTargetId,
                         mode))
                 {
-                    forwardedTargetId = InvalidCarrierTargetId;
+                    return false;
                 }
             }
             catch (Exception exception)
@@ -880,8 +881,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
         }
 
-        // This is the only native call made by the detour. It is always executed once,
-        // with every action argument other than the optional target substitution intact.
+        // This is the only native call made by the detour. Pass and fail-open paths
+        // execute it exactly once with every argument other than an optional helper
+        // target substitution intact. A confirmed immunity block returns above and
+        // deliberately executes no downstream/original call.
         return useActionHook!.Original(
             thisPtr,
             actionType,

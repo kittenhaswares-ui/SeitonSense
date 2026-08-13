@@ -112,13 +112,22 @@ Raiju `29510`, Fleeting Raiju `29707`, Air Anchor `29407`, Gravity II `29244`,
 its Double Cast form `29248`, and Mineuchi `29535`.
 
 If the master, exact job, and exact action are enabled and the exact hostile
-target has verified protection against that action's CC, the plugin substitutes
-an invalid target only for that one incoming call. It does not swallow, store,
-log, synthesize, or replay input; initiate or queue an action; choose another
-action or target; change the visible hard, soft, or focus target; or retry
-later. Every later physical press or third-party Turbo pulse is an independent
-incoming call and is checked from current state again. Vanilla key holding does
-not create a repeat through this feature.
+target has verified protection against that action's CC, the plugin returns
+`false` for that one incoming call without invoking the downstream/original
+action function. This replaces the former invalid-`targetId = 0` handoff and
+prevents later game processing from restoring or resolving a default target.
+It does not store, log, synthesize, or replay input; initiate or queue an
+action; choose another action or target; change the visible hard, soft, or
+focus target; or retry later. Every later physical press or third-party Turbo
+pulse is an independent incoming call and is checked from current state again.
+Vanilla key holding does not create a repeat through this feature.
+
+This is a client-side pre-dispatch check, not a server rollback. Near a
+simultaneous activation, an action already accepted by the server roughly
+295-355 ms before immunity became locally visible cannot be recalled. FFXIV
+may still present its animation and damage while the server rejects the status
+effect on the protected target. No additional history is retained to try to
+undo or compensate for that result.
 
 Unsupported actions, jobs, contexts, missing or ambiguous actor identity, and
 unverified protection pass through unchanged. Broad cone, ground-targeted,
@@ -309,6 +318,8 @@ target, effect type `0x0E`, status `3085`, and a non-empty event sequence match
 within 1500 ms of the one helper attempt. This is labelled `MIRACLE LANDED` and
 is not stored as proof that the hostile action's damage was cancelled. Bounded
 capture/drop and confirmed-landing counters remain memory-only diagnostics.
+The first still-unexpired pending helper attempt is preserved; a later attempt
+registration does not replace that correlation before it expires.
 
 No observed threat, actor identity, key state, status, or action result is
 written to disk, uploaded, or retained as combat history. Aggregate bounded
@@ -345,7 +356,7 @@ opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 the WHM Miracle master/per-trigger opt-ins, resource-aura surfaces/thresholds/
 appearance, the Monk Earth's Reply master/triggers/thresholds, and the
 CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 15 does
+schema 15 remains unchanged in v0.11.0.1 and does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

@@ -165,6 +165,7 @@ var tests = new (string Name, Action Run)[]
     ("Miracle exact status add confirms and labels threat", MiracleInterceptConfirmationSelfTests.ExactStatusAddConfirmsAndLabelsThreat),
     ("Miracle landing correlation requires exact evidence", MiracleInterceptConfirmationSelfTests.CorrelationRequiresExactIdentityShapeAndWindow),
     ("Miracle landing packet is counted once", MiracleInterceptConfirmationSelfTests.DuplicateCannotIncrementTwice),
+    ("Miracle landing pending cannot be overwritten", MiracleInterceptConfirmationSelfTests.NewAttemptCannotOverwriteActivePending),
     ("Miracle landing popup and pending expire", MiracleInterceptConfirmationSelfTests.PopupAndPendingExpireWithoutReplay),
     ("Miracle Viper accepts first-frame protection absence", MiracleInterceptSelfTests.ViperMayAlreadyBeUnprotectedOnFirstFrame),
     ("Miracle Viper waits for actual protection absence", MiracleInterceptSelfTests.ViperWaitsForActualProtectionAbsence),

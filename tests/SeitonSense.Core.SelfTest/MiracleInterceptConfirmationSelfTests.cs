@@ -79,6 +79,33 @@ internal static class MiracleInterceptConfirmationSelfTests
         Equal(1L, duplicate.NextState.TotalConfirmed, "count remains one");
     }
 
+    public static void NewAttemptCannotOverwriteActivePending()
+    {
+        var first = Register(
+            MiracleInterceptThreatKind.MarksmanSpite,
+            accepted: true,
+            now: 1_000).NextState;
+        var second = MiracleInterceptConfirmationRules.RegisterAttempt(
+            first,
+            Attempt(MiracleInterceptThreatKind.Zantetsuken, accepted: true, now: 1_200),
+            1_200);
+
+        False(second.PendingRegistered, "second attempt does not replace a live pending correlation");
+        Equal(
+            MiracleInterceptThreatKind.MarksmanSpite,
+            second.NextState.Pending!.Value.Threat,
+            "first pending threat remains exact");
+
+        var confirmed = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            second.NextState,
+            Effect(now: 1_250));
+        True(confirmed.Confirmed, "first attempt can still receive its exact confirmation");
+        Equal(
+            MiracleInterceptThreatKind.MarksmanSpite,
+            confirmed.TriggeredPopup!.Value.Threat,
+            "popup cannot be mislabeled as the second threat");
+    }
+
     public static void PopupAndPendingExpireWithoutReplay()
     {
         var confirmed = MiracleInterceptConfirmationRules.ObserveActionEffect(
