@@ -718,8 +718,8 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 3) {
-    throw 'Plugin-owned direct helper calls must bypass the Near Assist, Near Help, and Far Help branches without consuming any macro token.'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 4) {
+    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression plus the Near Assist, Near Help, and Far Help branches without consuming any macro token.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 Assert-Literals $nearHelpSelection @(
@@ -761,7 +761,6 @@ Assert-Literals $nearAssist @(
     'FarHelpOneShotRules.Arm',
     'FarHelpOneShotRules.Observe',
     'FarHelpCarrierRules.IsFallbackCarrier',
-    'PartySlotResolver.Resolve(objectTable, 2)',
     'FarHelpSelectionRules.FirstPartySlot',
     'FarHelpSelectionRules.LastPartySlot',
     'FarHelpSelectionRules.ClassifyPlayableJob(jobId)',
@@ -779,10 +778,13 @@ Assert-Literals $nearAssist @(
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
     'farHelpState = FarHelpOneShotState.Initial',
     'farHelpState = decision.NextState',
-    'mode != ActionManager.UseActionMode.Queue'
+    'mode != ActionManager.UseActionMode.Queue',
+    'carrier=<me>',
+    'local.EntityId,',
+    'local.GameObjectId,'
 ) 'Far Help shared redirector'
 
-if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*mode\s*\)\s*&&\s*TryConsumeEligibleFarHelpToken') {
+if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*mode\s*,\s*out var resolvedFarHelpActionId\s*\)\s*&&\s*TryConsumeEligibleFarHelpToken') {
     throw 'Far Help must exact-ID preclassify the movement action before its one-shot token can be consumed.'
 }
 if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction.*?return resolvedActionId != 0 && TryGetFarHelpMovementDefinition\(resolvedActionId, out _, out _\);') {
@@ -830,12 +832,42 @@ Assert-Literals $farHelpOneShot @(
     'DefaultLifetimeMilliseconds = 750',
     'FarHelpOneShotState.Initial',
     'FarHelpSelectionRules.SelectBestIndex',
-    'attempt.IsFallbackCarrier',
-    'InvalidFallbackCarrierTargetId',
+    'InvalidSuppressedTargetId',
     'NonMovementAction',
     'ConsumedWithoutRewrite',
     'RewriteTarget'
 ) 'Far Help bounded one-shot and fallback rules'
+if ($normalizedNearAssist -notmatch 'handlingFarHelp = true; ArmFarHelpFallbackSuppression\(actionType, actionId, resolvedFarHelpActionId\); forwardedTargetId = TryResolveFarHelpRedirect' -or
+    $farHelpOneShot -notmatch 'InvalidSuppressedTargetId') {
+    throw 'Far Help must arm legacy same-action suppression before resolving/forwarding and every failed Far Help decision must target zero.'
+}
+
+$farHelpSuppression = Read-RequiredSource (Join-Path $coreRoot 'FarHelpFallbackSuppressionRules.cs') 'Far Help legacy fallback suppression rules'
+Assert-Literals $farHelpSuppression @(
+    'DefaultLifetimeMilliseconds = 750',
+    'RawActionId',
+    'ResolvedActionId',
+    'attempt.ResolvedActionId != token.ResolvedActionId',
+    'FarHelpFallbackSuppressionDecisionKind.Suppress',
+    'previous,'
+) 'Far Help bounded legacy same-action suppression rules'
+Assert-Literals $nearAssist @(
+    'TrySuppressLegacyFarHelpFallback(thisPtr, actionType, actionId, mode)',
+    'forwardedTargetId = InvalidCarrierTargetId',
+    'ArmFarHelpFallbackSuppression(actionType, actionId, resolvedFarHelpActionId)',
+    'farHelpFallbackSuppressionState = decision.NextState',
+    'ActionManager.UseActionMode.Queue',
+    'Redirect failed closed; movement target suppressed',
+    'farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState.Initial'
+) 'Far Help no-hostile-fallback runtime quarantine'
+$suppressionBranch = $normalizedNearAssist.IndexOf('TrySuppressLegacyFarHelpFallback(thisPtr, actionType, actionId, mode)')
+$nearAssistBranch = $normalizedNearAssist.IndexOf('IsEligibleRedirectAction(thisPtr, actionType, actionId, mode)')
+if ($suppressionBranch -lt 0 -or $nearAssistBranch -lt 0 -or $suppressionBranch -gt $nearAssistBranch) {
+    throw 'Legacy Far Help fallback suppression must run before every ordinary redirect branch.'
+}
+if ($normalizedNearAssist -notmatch 'if \(failedFarHelp\) \{ forwardedTargetId = InvalidCarrierTargetId;') {
+    throw 'Far Help exceptions must suppress the movement target instead of preserving the selected target.'
+}
 
 $farHelpCarrier = Read-RequiredSource (Join-Path $coreRoot 'FarHelpCarrierRules.cs') 'Far Help carrier rules'
 Assert-Literals $farHelpCarrier @(
@@ -849,7 +881,7 @@ $farHelpConsumeState = [regex]::Match($nearAssist, 'farHelpState\s*=\s*FarHelpOn
 if (-not $farHelpConsumeState.Success -or $farHelpConsumeState.Index -gt $originalCall.Index) {
     throw 'Far Help must consume its one-shot state before the sole Original call.'
 }
-if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed;.*?armedTarget = null;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;') {
+if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed \|\| farHelpFallbackSuppressionState\.IsArmed;.*?armedTarget = null;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;.*?farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState\.Initial;') {
     throw 'Near Assist, Near Help, and Far Help tokens must be mutually exclusive and cleared together.'
 }
 
@@ -1417,4 +1449,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.9.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and exact-action Far Help share one bounded target-only detour, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, CC protection remains metadata-verified and live-presence-gated, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."
+Write-Host "Seiton Sense v0.9.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed exact-action Far Help share one bounded target-only detour, Far Help never falls back to the selected target and quarantines legacy same-action fallbacks, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."

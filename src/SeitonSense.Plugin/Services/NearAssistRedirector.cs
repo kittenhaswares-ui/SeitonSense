@@ -100,7 +100,8 @@ internal readonly record struct FarHelpDiagnostics(
 /// It never mutates the game's hard, soft, or focus target and never dispatches an action.
 /// The next bounded supported action is forwarded to the native function exactly once, with
 /// either the revalidated canonical enemy ID, the caller's original target ID unchanged,
-/// or an invalid ID for a failed deliberate carrier so the authored fallback can run.
+/// or an invalid ID for a failed deliberate carrier. Near Assist/Near Help may
+/// then reach their authored fallback; Far Help deliberately never does.
 /// </summary>
 internal sealed unsafe class NearAssistRedirector : IDisposable
 {
@@ -132,6 +133,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private NearHelpOneShotState nearHelpState = NearHelpOneShotState.Initial;
     private ArmedFarHelpTarget? armedFarHelpTarget;
     private FarHelpOneShotState farHelpState = FarHelpOneShotState.Initial;
+    private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
+        FarHelpFallbackSuppressionState.Initial;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
@@ -537,11 +540,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         try
         {
-            // The authored first action line uses <2>. Snapshot that exact native
-            // carrier now so a later no-candidate result can invalidate only that
-            // deliberate line, allowing the following authored <t> line to run.
-            var carrier = PartySlotResolver.Resolve(objectTable, 2);
-            var carrierValid = IsLivePlayer(carrier) && carrier!.GameObjectId != local.GameObjectId;
             var now = Environment.TickCount64;
             var nextState = FarHelpOneShotRules.Arm(now, TokenLifetimeMilliseconds);
             if (!nextState.IsArmed)
@@ -551,8 +549,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 clientState.TerritoryType,
                 local.EntityId,
                 local.GameObjectId,
-                carrierValid ? carrier!.EntityId : 0,
-                carrierValid ? carrier!.GameObjectId : 0,
+                local.EntityId,
+                local.GameObjectId,
                 now + TokenLifetimeMilliseconds);
             lock (tokenGate)
             {
@@ -560,7 +558,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 farHelpState = nextState;
                 farHelpArmedCount++;
                 farHelpLastEvent = "Armed";
-                RecordTraceLocked($"far-arm ctx={context} carrier={(carrierValid ? "<2>" : "none")}");
+                RecordTraceLocked($"far-arm ctx={context} carrier=<me>");
             }
 
             return new FarHelpArmResult(FarHelpArmOutcome.Armed);
@@ -636,10 +634,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var consumedFallbackCarrier = false;
         var handlingNearHelp = false;
         var handlingFarHelp = false;
+        var suppressingLegacyFarHelpFallback = false;
         var bypassRedirect = internalRedirectBypassDepth > 0;
         try
         {
             if (!bypassRedirect &&
+                TrySuppressLegacyFarHelpFallback(thisPtr, actionType, actionId, mode))
+            {
+                suppressingLegacyFarHelpFallback = true;
+                forwardedTargetId = InvalidCarrierTargetId;
+                lock (tokenGate)
+                {
+                    farHelpFallbackCount++;
+                    farHelpLastPartySlot = 0;
+                    farHelpLastDistance = 0f;
+                    farHelpLastEvent = "Suppressed legacy selected-target mobility fallback";
+                    RecordTraceLocked(
+                        $"far-legacy-suppress type={(uint)actionType} id={actionId} mode={(uint)mode}");
+                }
+            }
+            else if (!bypassRedirect &&
                 IsEligibleRedirectAction(thisPtr, actionType, actionId, mode) &&
                 TryConsumeEligibleToken(
                     actionType,
@@ -724,7 +738,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 }
             }
             else if (!bypassRedirect &&
-                     IsEligibleFarHelpAction(thisPtr, actionType, actionId, mode) &&
+                     IsEligibleFarHelpAction(thisPtr, actionType, actionId, mode, out var resolvedFarHelpActionId) &&
                      TryConsumeEligibleFarHelpToken(
                          actionType,
                          mode,
@@ -734,6 +748,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                          out consumedFallbackCarrier))
             {
                 handlingFarHelp = true;
+                ArmFarHelpFallbackSuppression(actionType, actionId, resolvedFarHelpActionId);
                 forwardedTargetId = TryResolveFarHelpRedirect(
                     thisPtr,
                     actionType,
@@ -773,35 +788,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         catch (Exception exception)
         {
             var failedNearHelp = handlingNearHelp;
-            var failedFarHelp = handlingFarHelp;
-            ArmedFarHelpTarget? pendingFarHelpToken;
-            lock (tokenGate) pendingFarHelpToken = armedFarHelpTarget;
-            if (!consumedFallbackCarrier && pendingFarHelpToken is { } pendingFar)
-            {
-                try
-                {
-                    var currentPlayer = objectTable.LocalPlayer;
-                    var currentHardTargetId = IsLivePlayer(currentPlayer)
-                        ? GetNativeHardTargetId(currentPlayer!)
-                        : 0;
-                    consumedFallbackCarrier = FarHelpCarrierRules.IsFallbackCarrier(
-                        currentHardTargetId,
-                        targetId,
-                        pendingFar.CarrierGameObjectId,
-                        pendingFar.CarrierEntityId);
-                }
-                catch
-                {
-                    // The recovery probe is best effort. Never let it prevent the
-                    // detour's one mandatory Original call.
-                }
-            }
-
-            forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
+            var failedFarHelp = handlingFarHelp || suppressingLegacyFarHelpFallback;
             lock (tokenGate)
             {
                 failedNearHelp |= armedHelpTarget is not null || nearHelpState.IsArmed;
-                failedFarHelp |= armedFarHelpTarget is not null || farHelpState.IsArmed;
+                failedFarHelp |= armedFarHelpTarget is not null ||
+                                 farHelpState.IsArmed ||
+                                 farHelpFallbackSuppressionState.IsArmed;
+            }
+
+            if (failedFarHelp)
+                EnsureFarHelpFallbackSuppressionAfterFailure(thisPtr, actionType, actionId);
+
+            lock (tokenGate)
+            {
                 armedTarget = null;
                 oneShotState = NearAssistOneShotState.Initial;
                 armedHelpTarget = null;
@@ -810,15 +810,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 farHelpState = FarHelpOneShotState.Initial;
                 if (failedFarHelp)
                 {
+                    forwardedTargetId = InvalidCarrierTargetId;
                     farHelpFallbackCount++;
                     farHelpLastPartySlot = 0;
                     farHelpLastDistance = 0f;
-                    farHelpLastEvent = consumedFallbackCarrier
-                        ? "Redirect failed closed; carrier invalidated for <t> fallback"
-                        : "Redirect failed closed; original target preserved";
+                    farHelpLastEvent = "Redirect failed closed; movement target suppressed";
                 }
                 else if (failedNearHelp)
                 {
+                    forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
                     helpFallbackCount++;
                     helpLastEvent = consumedFallbackCarrier
                         ? "Redirect failed closed; carrier invalidated for <t> fallback"
@@ -826,6 +826,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 }
                 else
                 {
+                    forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
                     fallbackCount++;
                     lastEvent = consumedFallbackCarrier
                         ? "Redirect failed closed; carrier invalidated for <t> fallback"
@@ -836,7 +837,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             LogFailure(
                 exception,
                 failedFarHelp
-                    ? "Seiton Sense Far Help redirect failed closed with its authored fallback policy."
+                    ? "Seiton Sense Far Help redirect failed closed without a selected-target fallback."
                     : failedNearHelp
                         ? "Seiton Sense Near Help redirect failed closed with its authored fallback policy."
                         : "Seiton Sense Near Assist redirect failed closed with its authored fallback policy.");
@@ -1181,7 +1182,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
         else
         {
-            reason = $"Fallback: {decision.Reason}, candidates={candidates.Count}, resolved={resolvedActionId}";
+            reason = $"Suppressed: {decision.Reason}, candidates={candidates.Count}, resolved={resolvedActionId}";
         }
 
         return decision.ForwardTargetId;
@@ -1231,6 +1232,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             if (armedFarHelpTarget is { } farHelpToken)
             {
                 shouldClear |= farHelpToken.ExpiresAtMilliseconds <= Environment.TickCount64;
+            }
+            if (farHelpFallbackSuppressionState.Token is { } suppressionToken &&
+                suppressionToken.ExpiresAtMilliseconds <= Environment.TickCount64)
+            {
+                farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState.Initial;
             }
         }
 
@@ -1475,13 +1481,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             var hadToken = armedTarget is not null || oneShotState.IsArmed ||
                            armedHelpTarget is not null || nearHelpState.IsArmed ||
-                           armedFarHelpTarget is not null || farHelpState.IsArmed;
+                           armedFarHelpTarget is not null || farHelpState.IsArmed ||
+                           farHelpFallbackSuppressionState.IsArmed;
             armedTarget = null;
             oneShotState = NearAssistOneShotState.Initial;
             armedHelpTarget = null;
             nearHelpState = NearHelpOneShotState.Initial;
             armedFarHelpTarget = null;
             farHelpState = FarHelpOneShotState.Initial;
+            farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState.Initial;
             lastEvent = reason;
             helpLastEvent = reason;
             farHelpLastEvent = reason;
@@ -1600,16 +1608,96 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ActionManager* actionManager,
         ActionType actionType,
         uint actionId,
-        ActionManager.UseActionMode mode)
+        ActionManager.UseActionMode mode,
+        out uint resolvedActionId)
     {
+        resolvedActionId = 0;
         if (!IsPotentialMacroAction(actionType, mode)) return false;
 
-        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
         // Consume only an exact known movement-action intent. Its complete current
         // metadata is deliberately revalidated after consumption so metadata drift
-        // fails the deliberate <2> carrier closed instead of executing it vanilla.
+        // leaves the intrinsically invalid <me> carrier suppressed.
         return resolvedActionId != 0 &&
                TryGetFarHelpMovementDefinition(resolvedActionId, out _, out _);
+    }
+
+    private void ArmFarHelpFallbackSuppression(
+        ActionType actionType,
+        uint rawActionId,
+        uint resolvedActionId)
+    {
+        var now = Environment.TickCount64;
+        var next = FarHelpFallbackSuppressionRules.Arm(
+            (uint)actionType,
+            rawActionId,
+            resolvedActionId,
+            now,
+            TokenLifetimeMilliseconds);
+        lock (tokenGate) farHelpFallbackSuppressionState = next;
+    }
+
+    private void EnsureFarHelpFallbackSuppressionAfterFailure(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint rawActionId)
+    {
+        lock (tokenGate)
+        {
+            if (farHelpFallbackSuppressionState.IsArmed) return;
+        }
+
+        try
+        {
+            var resolvedActionId = ResolveActionId(actionManager, actionType, rawActionId);
+            if (!TryGetFarHelpMovementDefinition(resolvedActionId, out _, out _) &&
+                TryGetFarHelpMovementDefinition(rawActionId, out _, out _))
+            {
+                resolvedActionId = rawActionId;
+            }
+
+            if (TryGetFarHelpMovementDefinition(resolvedActionId, out _, out _))
+                ArmFarHelpFallbackSuppression(actionType, rawActionId, resolvedActionId);
+        }
+        catch
+        {
+            // The current action is still suppressed to target zero below. A
+            // failure to establish the optional migration quarantine must never
+            // prevent the detour's sole Original call.
+        }
+    }
+
+    private bool TrySuppressLegacyFarHelpFallback(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode)
+    {
+        // A legacy fallback can arrive as Macro, raw 100, ReAction-converted
+        // None, or Queue. Only an already armed exact adjusted-action quarantine
+        // can suppress it; unrelated actions always pass through unchanged.
+        if (!IsSupportedActionType(actionType)) return false;
+        var recognizedMode = mode is ActionManager.UseActionMode.Macro or
+                             ActionManager.UseActionMode.None or
+                             ActionManager.UseActionMode.Queue ||
+                             (uint)mode == 100;
+        if (!recognizedMode) return false;
+
+        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        if (resolvedActionId == 0) return false;
+
+        lock (tokenGate)
+        {
+            var decision = FarHelpFallbackSuppressionRules.Observe(
+                farHelpFallbackSuppressionState,
+                new FarHelpFallbackSuppressionAttempt(
+                    (uint)actionType,
+                    actionId,
+                    resolvedActionId,
+                    Environment.TickCount64));
+            farHelpFallbackSuppressionState = decision.NextState;
+            return decision.ShouldSuppress;
+        }
     }
 
     private static bool TryGetFarHelpMovementDefinition(

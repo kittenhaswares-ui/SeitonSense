@@ -216,7 +216,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         const string farHelpHelp =
-            "CC-only farthest ally movement helper. Macro: /mlock, /farhelp, supported friendly movement action with <2>, then the same action with <t>.";
+            "CC-only farthest ally movement helper. Safe macro: /mlock, /farhelp, then one supported friendly movement action with <me>. No <t> fallback.";
         farHelpCommandRegistered = commandManager.AddHandler(
             FarHelpCommand,
             new CommandInfo(OnFarHelpCommand)

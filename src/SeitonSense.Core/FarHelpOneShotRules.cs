@@ -79,7 +79,7 @@ public readonly record struct FarHelpOneShotDecision(
 public static class FarHelpOneShotRules
 {
     public const long DefaultLifetimeMilliseconds = 750;
-    public const ulong InvalidFallbackCarrierTargetId = 0;
+    public const ulong InvalidSuppressedTargetId = 0;
 
     public static FarHelpOneShotState Arm(
         long nowMilliseconds,
@@ -168,9 +168,10 @@ public static class FarHelpOneShotRules
         FarHelpOneShotReason reason) =>
         new(
             FarHelpOneShotState.Initial,
-            attempt.IsFallbackCarrier
-                ? InvalidFallbackCarrierTargetId
-                : attempt.OriginalTargetId,
+            // Far Help is a rescue-only intent. A missing/invalid ally must never
+            // degrade into the caller's current target because several supported
+            // mobility actions can also target a hostile player.
+            InvalidSuppressedTargetId,
             -1,
             FarHelpOneShotDecisionKind.ConsumedWithoutRewrite,
             reason);

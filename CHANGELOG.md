@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0.1
+
+- Changed Far Help to a deliberately fail-closed three-line macro: `/mlock`,
+  `/farhelp`, then exactly one reviewed mobility action using `<me>`. The former
+  selected-target fallback is not part of the Far Help macro.
+- All five reviewed actions cannot target self, making `<me>` intrinsically
+  invalid even when the hook is unavailable or no token is armed. When no exact
+  live, targetable, action-valid ally is reachable, no movement occurs. Far Help
+  never substitutes the player's selected target, self, or another fallback
+  actor.
+- Added a migration guard that suppresses matching legacy calls of the same
+  movement action for the remainder of the 750-ms window, including the old
+  `<t>` fourth line and Turbo duplicates. That line should be removed and is
+  not part of the supported macro.
+- Kept the 750-ms one-shot token, healer/ranged preference, farthest-in-tier
+  ranking, native range/line-of-sight checks, one original native call, and the
+  exclusions for direct dispatch, Queue mode, visible target mutation, repeat,
+  and retry.
+- Bumped the plugin version to 0.9.0.1. Configuration schema 13 remains current;
+  the hotfix changes no saved setting.
+
 ## 0.9.0.0
 
 - Added default-off, Crystalline-Conflict-only `/farhelp` with collision-safe
@@ -11,10 +32,9 @@
   and Slither `39184`. The action's native range and line of sight remain
   authoritative; Guardian additionally requires a strict under-10-yalm
   distance.
-- Added the target-safe `/mlock`, `/farhelp`, action `<2>`, action `<t>` macro
-  pattern. The exact `<2>` carrier is invalidated only when redirect validation
-  fails so the authored vanilla target fallback can run. Compact `<t>` keeps
-  its original target.
+- Added the original `/mlock`, `/farhelp`, action `<2>`, then action `<t>`
+  macro pattern. Version 0.9.0.1 replaces this selected-target fallback with
+  the intrinsically fail-closed `<me>` carrier.
 - Near Assist, Near Help, and Far Help replace one another's pending token and
   share the existing single target-only detour. Unrelated actions do not
   consume Far Help; Queue mode, visible target mutation, direct dispatch,

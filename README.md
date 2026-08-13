@@ -44,7 +44,8 @@ plugin.
   friendly movement action to the farthest reachable non-self party member.
   Healers and ranged/caster jobs form the preferred tier; all other jobs are
   considered only when no preferred ally is valid. It supports Guardian,
-  Thunderclap, Aetherial Manipulation, Icarus, and Slither.
+  Thunderclap, Aetherial Manipulation, Icarus, and Slither. With no valid ally,
+  the single attempt performs no movement; it never falls back to your target.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -316,8 +317,7 @@ Manipulation `29660`, Icarus `29261`, and Slither `39184`.
 ```text
 /mlock
 /farhelp
-/pvpac "Mobility Ability" <2>
-/pvpac "Mobility Ability" <t>
+/pvpac "Mobility Ability" <me>
 ```
 
 `/farhelp` arms one token for at most 750 ms. The immediately following
@@ -328,15 +328,23 @@ the available tier, the farthest reachable ally wins; stable party and actor
 identity break exact ties. Guardian additionally uses a strict distance below
 10 yalms matching its execution condition.
 
-The `<2>` line is only a concrete carrier. On a valid redirect, Seiton changes
-only that already incoming action's target ID. If no eligible ally exists, the
-exact carrier is made invalid and the following authored `<t>` line remains
-the vanilla fallback. A compact `<t>` form preserves its incoming target.
+Use exactly those three lines; Far Help deliberately has no selected-target
+fallback. `<me>` is an intrinsically invalid carrier because none of the five
+reviewed actions can target self. This remains harmless even when the hook is
+unavailable or no token was armed. On a valid redirect, Seiton changes only
+that already incoming action's target ID. If no eligible ally exists, the
+self-target attempt stays invalid and no movement occurs. It is never forwarded
+to your current target, self, or a different fallback actor.
 Unrelated actions do not consume the token. Near Assist, Near Help, and Far
 Help replace one another's pending token and share one action detour with one
 original game call. Far Help never switches a visible target, initiates or
 repeats an action, changes an action ID, accepts generic Queue mode, or retries.
-Use `/mlock` so Turbo Hotbar cannot restart the macro before the fallback line.
+Use `/mlock` so Turbo Hotbar cannot restart the held macro.
+
+For migration only, Seiton suppresses matching legacy calls of the same
+movement action for the rest of the bounded 750-ms window, including a former
+fourth `<t>` line and Turbo duplicates. Remove that old line; it is not part of
+the supported Far Help macro.
 
 ## Focus and current-target modules
 
@@ -392,7 +400,7 @@ update through the same repository.
   supported friendly PvP macro action
 - `/sshelp` - collision-free alias for `/nearhelp`
 - `/farhelp` - arm one CC-only farthest-reachable mobility redirect for the
-  next reviewed friendly movement action
+  next reviewed friendly movement action; without a valid ally, do not move
 - `/ssfar` - collision-free alias for `/farhelp`
 - `/seiton show` / `/seiton hide` - enable or disable the HUD
 - `/seiton preview` - preview nameplate indicators
