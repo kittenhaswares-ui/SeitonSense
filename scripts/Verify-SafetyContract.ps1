@@ -646,12 +646,15 @@ Assert-Literals $miracleConfirmationRules @(
     'previous.ConfirmedKeys.Contains(key)',
     'AppendBounded(previous.ConfirmedKeys, key)',
     'TotalConfirmed = SaturatingIncrement(previous.TotalConfirmed)',
+    'PendingInsideWindow(previous.Pending, nowMilliseconds) is { } activePending',
+    'Pending = activePending',
     'This proves that Miracle landed; it does not prove that the hostile action',
     'damage was cancelled.'
 ) 'Exact bounded Miracle landing correlation and popup truth claim'
 if ($normalizedMiracleConfirmationRules -notmatch 'observation\.ObservedAtMilliseconds < pending\.AttemptedAtMilliseconds \|\| observation\.ObservedAtMilliseconds - pending\.AttemptedAtMilliseconds > CorrelationMilliseconds' -or
-    $normalizedMiracleConfirmationRules -notmatch 'var skip = Math\.Max\(0, previous\.Length - MaximumConfirmedKeys \+ 1\); return previous\.Skip\(skip\)\.Append\(key\)\.ToImmutableArray\(\)') {
-    throw 'Miracle landing correlation must be forward-only within 1500 ms and deduplicate through a bounded 128-key history.'
+    $normalizedMiracleConfirmationRules -notmatch 'var skip = Math\.Max\(0, previous\.Length - MaximumConfirmedKeys \+ 1\); return previous\.Skip\(skip\)\.Append\(key\)\.ToImmutableArray\(\)' -or
+    $normalizedMiracleConfirmationRules -notmatch 'if \(PendingInsideWindow\(previous\.Pending, nowMilliseconds\) is \{ \} activePending\) \{ return None\(previous with \{ Pending = activePending, Popup = ActivePopup\(previous\.Popup, nowMilliseconds\), LastObservedAtMilliseconds = nowMilliseconds, \}\); \} if \(!attempt\.IsValid \|\| attempt\.AttemptedAtMilliseconds != nowMilliseconds\).*?Pending = attempt') {
+    throw 'Miracle landing correlation must be forward-only within 1500 ms, preserve the first active pending attempt before accepting another, and deduplicate through a bounded 128-key history.'
 }
 if ($miracleConfirmationRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
     throw 'Miracle landing confirmation rules must remain observational and never initiate actions, input, or target changes.'
@@ -864,9 +867,9 @@ if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,
 }
 
 # The optional CC-immunity brake is a final-target filter inside the already
-# reviewed UseAction detour. It may invalidate only the target of this one
-# incoming call; it owns no hook, action call, target setter, delayed work, or
-# cached protection timer of its own.
+# reviewed UseAction detour. An exact confirmed block returns false immediately,
+# before the sole downstream Original. It never substitutes target zero: that
+# policy remains exclusive to the reviewed Near/Far carrier failure paths.
 $ccImmunityBrake = Read-RequiredSource $ccImmunityBrakeServicePath 'CC-immunity brake service'
 $normalizedCcImmunityBrake = $ccImmunityBrake -replace '\s+', ' '
 $ccImmunityBrakeRules = Read-RequiredSource (Join-Path $coreRoot 'CcImmunityBrakeRules.cs') 'CC-immunity brake rules'
@@ -906,15 +909,16 @@ if ($brakeDecisionIndex -lt 0 -or
     $lastRedirectCatchLogIndex -ge $brakeDecisionIndex) {
     throw 'The CC brake must run after redirect resolution and its catch, then before the detour''s sole Original call.'
 }
-if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, forwardedTargetId, mode\)\) \{ forwardedTargetId = InvalidCarrierTargetId; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
-    throw 'The brake must inspect the final forwarded target, bypass plugin-owned helpers, set target zero only on an exact Block decision, and pass exceptions through unchanged.'
+if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, forwardedTargetId, mode\)\) \{ return false; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
+    throw 'The brake must inspect the final forwarded target, return false before Original only on an exact Block decision, and let pass/fail-open paths reach the sole Original.'
 }
 $brakeDetourSection = [regex]::Match(
     $normalizedUseActionDetour,
     'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId.*?ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}').Value
-if ([regex]::Matches($brakeDetourSection, 'forwardedTargetId\s*=\s*InvalidCarrierTargetId').Count -ne 1 -or
-    $brakeDetourSection -match 'catch \(Exception exception\) \{[^}]*forwardedTargetId\s*=') {
-    throw 'Only a successful exact CC-brake decision may invalidate this call; the brake exception path must preserve the final target.'
+if ([regex]::Matches($brakeDetourSection, '\breturn false;').Count -ne 1 -or
+    $brakeDetourSection -match 'forwardedTargetId\s*=\s*InvalidCarrierTargetId|useActionHook!\.Original\s*\(' -or
+    $brakeDetourSection -notmatch 'catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \}') {
+    throw 'A confirmed brake block must make zero Original calls via one direct false return; it must never use target-zero suppression, while exceptions must fail open without changing the final target.'
 }
 
 Assert-Literals $ccImmunityBrake @(
@@ -2205,4 +2209,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.11.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour whose brake samples the final exact e1-e5 actor and live status list before the sole Original call; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while VPR Miracle waits for live Hardened Scales absence and the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
+Write-Host "Seiton Sense v0.11.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once and target-zero suppression remains limited to reviewed Near/Far carrier policies; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while VPR Miracle waits for live Hardened Scales absence and the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."

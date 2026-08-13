@@ -99,12 +99,26 @@ public static class MiracleInterceptConfirmationRules
         previous = Normalize(previous);
         if (hardReset)
             return None(Reset(previous, nowMilliseconds));
-        if (!IsMonotonic(previous, nowMilliseconds) ||
-            !attempt.IsValid ||
-            attempt.AttemptedAtMilliseconds != nowMilliseconds)
+        if (!IsMonotonic(previous, nowMilliseconds))
         {
             return None(ClearPending(previous, nowMilliseconds));
         }
+
+        // Preserve the first still-correlatable native attempt. A second helper
+        // attempt can occur before its ActionEffect reaches the client; replacing
+        // it here could lose or mislabel the exact landing confirmation.
+        if (PendingInsideWindow(previous.Pending, nowMilliseconds) is { } activePending)
+        {
+            return None(previous with
+            {
+                Pending = activePending,
+                Popup = ActivePopup(previous.Popup, nowMilliseconds),
+                LastObservedAtMilliseconds = nowMilliseconds,
+            });
+        }
+
+        if (!attempt.IsValid || attempt.AttemptedAtMilliseconds != nowMilliseconds)
+            return None(ClearPending(previous, nowMilliseconds));
 
         return new MiracleInterceptConfirmationDecision(
             previous with

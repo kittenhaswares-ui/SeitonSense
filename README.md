@@ -2,7 +2,7 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.11 adds a
+one-shot macro assistance, and target highlights. Version 0.11.0.1 hardens the
 default-off, per-job and per-action CC-immunity brake for a conservative set of
 targeted PvP actions. The suite
 combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
@@ -27,8 +27,9 @@ Focus Glow into one configurable custom-repository plugin.
 - **Optional CC-immunity brake:** selected targeted CC actions can be held back
   while their exact enemy target has verified protection against that CC. It
   works from the normal hotbar without a macro and checks every real press or
-  Turbo pulse independently; Seiton Sense never stores, replays, redirects, or
-  retries it.
+  Turbo pulse independently. A confirmed block returns immediately without
+  invoking the downstream/original action call; Seiton Sense never stores,
+  replays, redirects, or retries it.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
   and Marksman's Spite receive stable warnings. The MCH LB card is larger by
   default and can play one selectable built-in FFXIV sound per verified threat.
@@ -181,10 +182,12 @@ have separate blocker sets, including exact relevant ward statuses rather than
 assuming every visible protection blocks every action. It works directly on
 incoming hotbar action attempts; no macro is required. When the current job,
 action, and exact hostile target are all enabled and that target has verified
-protection against that action's CC, Seiton Sense gives only that one incoming
-attempt an invalid target. It does not change the visible selected
-target, choose another enemy or action, store the press, dispatch an action,
-replay it later, or add a retry.
+protection against that action's CC, Seiton Sense returns `false` for only that
+one incoming attempt without calling the downstream/original action function.
+This hard stop replaces the former invalid-`targetId = 0` handoff, which later
+game processing could resolve back to a default target. It does not change the
+visible selected target, choose another enemy or action, store the press,
+dispatch an action, replay it later, or add a retry.
 
 For the standard CC family, the verified blockers are Guard `3054`/`3673`,
 Resilience `3248`, Inner Release `1303`, Meikyo Shisui `1320`, Hardened Scales
@@ -217,11 +220,13 @@ disabled to taste.
 Every later physical press or Turbo Hotbar pulse is a new incoming attempt and
 is evaluated again, so the first real repeat after protection disappears can
 pass normally. Vanilla FFXIV key holding does not create those repeats by
-itself. A plugin later in the hook chain can still rewrite the target after
-Seiton Sense, so downstream target rewrites should be disabled or their order
-tested before relying on the brake. Unknown, missing, stale, unsupported, or
-ambiguous job/action/target/protection state passes through unchanged rather
-than inventing a decision.
+itself. The brake is prevention at the client dispatch boundary, not rollback:
+at a near-simultaneous activation edge, an action the server already accepted
+roughly 295-355 ms before immunity became locally visible cannot be recalled.
+FFXIV may still show that action's animation and damage while the server blocks
+its status effect on the protected target. Unknown, missing, stale,
+unsupported, or ambiguous job/action/target/protection state passes through
+unchanged rather than inventing a decision.
 
 ## Ninja Seiton cues
 
@@ -318,7 +323,9 @@ caster, Miracle action `29228`, pending threat target, server status-add effect
 `0x0E`, and Miracle status `3085` within 1500 ms. The subtitle distinguishes
 `MCH LB`, `SAM LB`, and `VPR NEST`. This confirms that Miracle landed on the
 intended enemy; it does not conclusively prove that the hostile damage was
-cancelled. A preview button is available beside the Miracle settings.
+cancelled. Correlation preserves the first still-unexpired pending helper
+attempt; a later registration cannot overwrite it before it expires. A preview
+button is available beside the Miracle settings.
 
 The MCH and SAM signals occur before their later damage presentation in the
 current captured event shape, but FFXIV remains authoritative. A locally
@@ -564,10 +571,10 @@ history. Transient observations and the exact one-shot action boundary are
 documented in [PRIVACY.md](PRIVACY.md).
 
 Display features, including the resource aura, never target or press actions or
-mutate native UI. The optional brake can substitute an invalid target only for
-one already incoming, enabled CC action attempt against an exact protected
-enemy; it never stores or replays input and never chooses another target or
-action. Near Assist, Near Help, and Far Help can
+mutate native UI. For one already incoming, enabled CC action attempt against
+an exact protected enemy, the optional brake can return `false` without calling
+the downstream/original action function; it never stores or replays input and
+never chooses another target or action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -597,8 +604,8 @@ party-row / current CC-row aura anchoring, pressure evidence, MCH marker/sound
 timing, optional Purify/Ally Rescue/Miracle/Earth's Reply behavior, and the macro helpers
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
-changes. The CC-immunity brake's direct-hotbar and Turbo pulse behavior, target
-invalidity, expiry edge, and interaction with downstream target rewrites also
+changes. The CC-immunity brake's direct-hotbar and Turbo pulse behavior,
+hard-return boundary, expiry edge, and simultaneous server-acceptance race also
 require a current-patch live A/B test. The 0.7.0.1 ActionEffect confirmation and
 blue popup still require
 current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
