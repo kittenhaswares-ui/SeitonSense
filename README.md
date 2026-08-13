@@ -2,8 +2,9 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.8 adds an
-experimental WHM Miracle intercept on top of the integrated awareness suite,
+one-shot macro assistance, and target highlights. Version 0.9 adds a farthest-
+ally mobility helper and makes the Miracle master state unmistakable in the UI
+on top of the integrated awareness suite,
 which combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and
 Super Focus Glow into one configurable plugin. It remains a custom-repository
 plugin.
@@ -39,6 +40,11 @@ plugin.
   PvP macro action to the reachable non-self party member with the lowest exact
   HP percentage. Ability-specific range and line of sight are checked before
   distance is used as the tie-breaker.
+- **One-shot Far Help:** `/farhelp` redirects one already incoming, reviewed
+  friendly movement action to the farthest reachable non-self party member.
+  Healers and ranged/caster jobs form the preferred tier; all other jobs are
+  considered only when no preferred ally is valid. It supports Guardian,
+  Thunderclap, Aetherial Manipulation, Icarus, and Slither.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -300,6 +306,38 @@ Assist replace each other's pending token. Near Help never visibly switches a
 target, sends an action by itself, changes the action ID, accepts generic Queue
 mode, or retries.
 
+## One-shot Far Help mobility macro
+
+Far Help shares the same default-off macro-helper switch and remains
+Crystalline Conflict only. It supports exactly five reviewed friendly-target
+PvP movement actions: Guardian `29066`, Thunderclap `29484`, Aetherial
+Manipulation `29660`, Icarus `29261`, and Slither `39184`.
+
+```text
+/mlock
+/farhelp
+/pvpac "Mobility Ability" <2>
+/pvpac "Mobility Ability" <t>
+```
+
+`/farhelp` arms one token for at most 750 ms. The immediately following
+supported movement action resolves exact, live, targetable non-self party
+members and checks that action's native range and line of sight. Healers plus
+physical-ranged and magical-ranged jobs are the strict preferred tier. Within
+the available tier, the farthest reachable ally wins; stable party and actor
+identity break exact ties. Guardian additionally uses a strict distance below
+10 yalms matching its execution condition.
+
+The `<2>` line is only a concrete carrier. On a valid redirect, Seiton changes
+only that already incoming action's target ID. If no eligible ally exists, the
+exact carrier is made invalid and the following authored `<t>` line remains
+the vanilla fallback. A compact `<t>` form preserves its incoming target.
+Unrelated actions do not consume the token. Near Assist, Near Help, and Far
+Help replace one another's pending token and share one action detour with one
+original game call. Far Help never switches a visible target, initiates or
+repeats an action, changes an action ID, accepts generic Queue mode, or retries.
+Use `/mlock` so Turbo Hotbar cannot restart the macro before the fallback line.
+
 ## Focus and current-target modules
 
 The focus glow contains the former Super Focus Glow visual controls: projected
@@ -325,6 +363,7 @@ focus module to avoid drawing both over the same actor.
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
+| Far Help | Yes | No | No |
 
 Wolves' Den support is explicitly a test option. Its enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
@@ -352,6 +391,9 @@ update through the same repository.
 - `/nearhelp` - arm one CC-only lowest-health party redirect for the next
   supported friendly PvP macro action
 - `/sshelp` - collision-free alias for `/nearhelp`
+- `/farhelp` - arm one CC-only farthest-reachable mobility redirect for the
+  next reviewed friendly movement action
+- `/ssfar` - collision-free alias for `/farhelp`
 - `/seiton show` / `/seiton hide` - enable or disable the HUD
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -375,7 +417,7 @@ read character names or Home Worlds and stores no combat, target, or key
 history. Transient observations and the exact one-shot action boundary are
 documented in [PRIVACY.md](PRIVACY.md).
 
-Display features never target or press actions. Near Assist and Near Help can
+Display features never target or press actions. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -398,7 +440,7 @@ the Dalamud plugin SDK depends on assemblies from a local XIVLauncher install.
 
 Those checks validate source, contracts, and packaging; they are not a claim of
 fresh live in-game confirmation. Exact nameplate placement, pressure evidence,
-MCH marker/sound timing, optional Purify/Ally Rescue/Miracle behavior, and Near Assist
+MCH marker/sound timing, optional Purify/Ally Rescue/Miracle behavior, and the macro helpers
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
 changes. The 0.7.0.1 ActionEffect confirmation and blue popup also still require

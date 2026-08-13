@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.0.0
+
+- Added default-off, Crystalline-Conflict-only `/farhelp` with collision-safe
+  `/ssfar`. It redirects one already incoming reviewed friendly movement action
+  to the farthest reachable exact non-self party member while preferring
+  healers and physical/magical ranged jobs over all other jobs.
+- Limited Far Help to the current reviewed PvP movement actions Guardian
+  `29066`, Thunderclap `29484`, Aetherial Manipulation `29660`, Icarus `29261`,
+  and Slither `39184`. The action's native range and line of sight remain
+  authoritative; Guardian additionally requires a strict under-10-yalm
+  distance.
+- Added the target-safe `/mlock`, `/farhelp`, action `<2>`, action `<t>` macro
+  pattern. The exact `<2>` carrier is invalidated only when redirect validation
+  fails so the authored vanilla target fallback can run. Compact `<t>` keeps
+  its original target.
+- Near Assist, Near Help, and Far Help replace one another's pending token and
+  share the existing single target-only detour. Unrelated actions do not
+  consume Far Help; Queue mode, visible target mutation, direct dispatch,
+  alternate actions, repeats, and retries remain excluded.
+- Added a prominent live ON/OFF line under the experimental WHM Miracle master
+  toggle. This makes it clear when all sub-triggers are selected but threat
+  capture itself is still disabled.
+- Bumped the plugin version to 0.9.0.0. Configuration schema 13 remains current
+  because Far Help reuses the existing shared macro-helper opt-in and adds no
+  persisted setting.
+
 ## 0.8.0.0
 
 - Added a default-off, Crystalline-Conflict-only WHM Miracle intercept. One

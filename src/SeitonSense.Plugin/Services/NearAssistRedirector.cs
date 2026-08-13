@@ -69,9 +69,34 @@ internal readonly record struct NearHelpDiagnostics(
     long FallbackCount,
     string LastEvent);
 
+internal enum FarHelpArmOutcome
+{
+    Armed,
+    Disabled,
+    HookUnavailable,
+    NotCrystallineConflict,
+    LocalPlayerUnavailable,
+    FailedClosed,
+}
+
+internal readonly record struct FarHelpArmResult(FarHelpArmOutcome Outcome)
+{
+    internal bool Success => Outcome == FarHelpArmOutcome.Armed;
+}
+
+internal readonly record struct FarHelpDiagnostics(
+    bool Armed,
+    long RemainingMilliseconds,
+    long ArmedCount,
+    long RedirectedCount,
+    long FallbackCount,
+    int LastPartySlot,
+    float LastDistance,
+    string LastEvent);
+
 /// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist
-/// and /nearhelp macro lines.
+/// /nearhelp, and /farhelp macro lines.
 /// It never mutates the game's hard, soft, or focus target and never dispatches an action.
 /// The next bounded supported action is forwarded to the native function exactly once, with
 /// either the revalidated canonical enemy ID, the caller's original target ID unchanged,
@@ -105,6 +130,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private NearAssistOneShotState oneShotState = NearAssistOneShotState.Initial;
     private ArmedNearHelpTarget? armedHelpTarget;
     private NearHelpOneShotState nearHelpState = NearHelpOneShotState.Initial;
+    private ArmedFarHelpTarget? armedFarHelpTarget;
+    private FarHelpOneShotState farHelpState = FarHelpOneShotState.Initial;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
@@ -113,6 +140,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private long helpRedirectedCount;
     private long helpFallbackCount;
     private string helpLastEvent = "Not started";
+    private long farHelpArmedCount;
+    private long farHelpRedirectedCount;
+    private long farHelpFallbackCount;
+    private int farHelpLastPartySlot;
+    private float farHelpLastDistance;
+    private string farHelpLastEvent = "Not started";
     private long nextErrorLogAt;
     private string lastEvent = "Not started";
     private bool started;
@@ -203,6 +236,30 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    internal FarHelpDiagnostics FarHelpDiagnostics
+    {
+        get
+        {
+            lock (tokenGate)
+            {
+                var now = Environment.TickCount64;
+                var token = armedFarHelpTarget;
+                var remaining = token is null
+                    ? 0
+                    : Math.Max(0, token.Value.ExpiresAtMilliseconds - now);
+                return new FarHelpDiagnostics(
+                    token is not null && farHelpState.IsArmed && remaining > 0,
+                    remaining,
+                    farHelpArmedCount,
+                    farHelpRedirectedCount,
+                    farHelpFallbackCount,
+                    farHelpLastPartySlot,
+                    farHelpLastDistance,
+                    farHelpLastEvent);
+            }
+        }
+    }
+
     /// <summary>
     /// Runs one plugin-owned exact-target action through the existing hook without
     /// consuming or rewriting an armed macro token. The detour still reaches its
@@ -238,7 +295,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         started = true;
-        SetLastEvent(useActionHook?.IsEnabled == true ? "Ready" : "Hook unavailable");
+        var readyState = useActionHook?.IsEnabled == true ? "Ready" : "Hook unavailable";
+        SetLastEvent(readyState);
+        lock (tokenGate)
+        {
+            helpLastEvent = readyState;
+            farHelpLastEvent = readyState;
+        }
     }
 
     internal NearAssistArmResult Arm()
@@ -455,6 +518,60 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    internal FarHelpArmResult ArmFarHelp()
+    {
+        ClearToken("Replaced or cleared by a new Far Help arm request");
+
+        if (disposed || !started || !configuration.Enabled || !configuration.EnableNearAssistMacro)
+            return FarHelpArmFailure(FarHelpArmOutcome.Disabled, "Far Help arm ignored: feature disabled");
+        if (useActionHook is null || !useActionHook.IsEnabled)
+            return FarHelpArmFailure(FarHelpArmOutcome.HookUnavailable, "Far Help arm ignored: hook unavailable");
+        var context = ResolveContext();
+        if (context != SupportedPvPContext.CrystallineConflict)
+            return FarHelpArmFailure(FarHelpArmOutcome.NotCrystallineConflict, "Far Help arm ignored: not in Crystalline Conflict");
+
+        var localPlayer = objectTable.LocalPlayer;
+        if (!IsLivePlayer(localPlayer))
+            return FarHelpArmFailure(FarHelpArmOutcome.LocalPlayerUnavailable, "Far Help arm ignored: local player unavailable");
+        var local = localPlayer!;
+
+        try
+        {
+            // The authored first action line uses <2>. Snapshot that exact native
+            // carrier now so a later no-candidate result can invalidate only that
+            // deliberate line, allowing the following authored <t> line to run.
+            var carrier = PartySlotResolver.Resolve(objectTable, 2);
+            var carrierValid = IsLivePlayer(carrier) && carrier!.GameObjectId != local.GameObjectId;
+            var now = Environment.TickCount64;
+            var nextState = FarHelpOneShotRules.Arm(now, TokenLifetimeMilliseconds);
+            if (!nextState.IsArmed)
+                return FarHelpArmFailure(FarHelpArmOutcome.FailedClosed, "Far Help arm failed closed: invalid state");
+
+            var token = new ArmedFarHelpTarget(
+                clientState.TerritoryType,
+                local.EntityId,
+                local.GameObjectId,
+                carrierValid ? carrier!.EntityId : 0,
+                carrierValid ? carrier!.GameObjectId : 0,
+                now + TokenLifetimeMilliseconds);
+            lock (tokenGate)
+            {
+                armedFarHelpTarget = token;
+                farHelpState = nextState;
+                farHelpArmedCount++;
+                farHelpLastEvent = "Armed";
+                RecordTraceLocked($"far-arm ctx={context} carrier={(carrierValid ? "<2>" : "none")}");
+            }
+
+            return new FarHelpArmResult(FarHelpArmOutcome.Armed);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(exception, "Seiton Sense Far Help arm failed closed.");
+            return FarHelpArmFailure(FarHelpArmOutcome.FailedClosed, "Far Help arm failed closed: setup failed");
+        }
+    }
+
     private NearAssistArmResult ArmFallbackCarrier(
         SupportedPvPContext context,
         uint localEntityId,
@@ -518,6 +635,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var forwardedTargetId = targetId;
         var consumedFallbackCarrier = false;
         var handlingNearHelp = false;
+        var handlingFarHelp = false;
         var bypassRedirect = internalRedirectBypassDepth > 0;
         try
         {
@@ -605,19 +723,101 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         $"result={(rewritten ? "redirect" : reason)}");
                 }
             }
+            else if (!bypassRedirect &&
+                     IsEligibleFarHelpAction(thisPtr, actionType, actionId, mode) &&
+                     TryConsumeEligibleFarHelpToken(
+                         actionType,
+                         mode,
+                         targetId,
+                         out var farHelpToken,
+                         out var previousFarHelpState,
+                         out consumedFallbackCarrier))
+            {
+                handlingFarHelp = true;
+                forwardedTargetId = TryResolveFarHelpRedirect(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    mode,
+                    targetId,
+                    farHelpToken,
+                    previousFarHelpState,
+                    consumedFallbackCarrier,
+                    out var rewritten,
+                    out var selectedPartySlot,
+                    out var selectedDistance,
+                    out var reason);
+                lock (tokenGate)
+                {
+                    if (rewritten)
+                    {
+                        farHelpRedirectedCount++;
+                        farHelpLastPartySlot = selectedPartySlot;
+                        farHelpLastDistance = selectedDistance;
+                    }
+                    else
+                    {
+                        farHelpFallbackCount++;
+                        farHelpLastPartySlot = 0;
+                        farHelpLastDistance = 0f;
+                    }
+
+                    farHelpLastEvent = reason;
+                    RecordTraceLocked(
+                        $"far-action type={(uint)actionType} id={actionId} mode={(uint)mode} " +
+                        $"age={Math.Max(0, Environment.TickCount64 - (farHelpToken.ExpiresAtMilliseconds - TokenLifetimeMilliseconds))}ms " +
+                        $"result={(rewritten ? "redirect" : reason)}");
+                }
+            }
         }
         catch (Exception exception)
         {
-            forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
             var failedNearHelp = handlingNearHelp;
+            var failedFarHelp = handlingFarHelp;
+            ArmedFarHelpTarget? pendingFarHelpToken;
+            lock (tokenGate) pendingFarHelpToken = armedFarHelpTarget;
+            if (!consumedFallbackCarrier && pendingFarHelpToken is { } pendingFar)
+            {
+                try
+                {
+                    var currentPlayer = objectTable.LocalPlayer;
+                    var currentHardTargetId = IsLivePlayer(currentPlayer)
+                        ? GetNativeHardTargetId(currentPlayer!)
+                        : 0;
+                    consumedFallbackCarrier = FarHelpCarrierRules.IsFallbackCarrier(
+                        currentHardTargetId,
+                        targetId,
+                        pendingFar.CarrierGameObjectId,
+                        pendingFar.CarrierEntityId);
+                }
+                catch
+                {
+                    // The recovery probe is best effort. Never let it prevent the
+                    // detour's one mandatory Original call.
+                }
+            }
+
+            forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
             lock (tokenGate)
             {
                 failedNearHelp |= armedHelpTarget is not null || nearHelpState.IsArmed;
+                failedFarHelp |= armedFarHelpTarget is not null || farHelpState.IsArmed;
                 armedTarget = null;
                 oneShotState = NearAssistOneShotState.Initial;
                 armedHelpTarget = null;
                 nearHelpState = NearHelpOneShotState.Initial;
-                if (failedNearHelp)
+                armedFarHelpTarget = null;
+                farHelpState = FarHelpOneShotState.Initial;
+                if (failedFarHelp)
+                {
+                    farHelpFallbackCount++;
+                    farHelpLastPartySlot = 0;
+                    farHelpLastDistance = 0f;
+                    farHelpLastEvent = consumedFallbackCarrier
+                        ? "Redirect failed closed; carrier invalidated for <t> fallback"
+                        : "Redirect failed closed; original target preserved";
+                }
+                else if (failedNearHelp)
                 {
                     helpFallbackCount++;
                     helpLastEvent = consumedFallbackCarrier
@@ -635,9 +835,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
             LogFailure(
                 exception,
-                failedNearHelp
-                    ? "Seiton Sense Near Help redirect failed closed with its authored fallback policy."
-                    : "Seiton Sense Near Assist redirect failed closed with its authored fallback policy.");
+                failedFarHelp
+                    ? "Seiton Sense Far Help redirect failed closed with its authored fallback policy."
+                    : failedNearHelp
+                        ? "Seiton Sense Near Help redirect failed closed with its authored fallback policy."
+                        : "Seiton Sense Near Assist redirect failed closed with its authored fallback policy.");
         }
 
         // This is the only native call made by the detour. It is always executed once,
@@ -849,6 +1051,142 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return decision.ForwardTargetId;
     }
 
+    private ulong TryResolveFarHelpRedirect(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode,
+        ulong originalTargetId,
+        ArmedFarHelpTarget token,
+        FarHelpOneShotState previousState,
+        bool isFallbackCarrier,
+        out bool rewritten,
+        out int selectedPartySlot,
+        out float selectedDistance,
+        out string reason)
+    {
+        var now = Environment.TickCount64;
+        var localPlayer = objectTable.LocalPlayer;
+        var localIdentityValid = IsLivePlayer(localPlayer) &&
+                                 localPlayer!.EntityId == token.LocalEntityId &&
+                                 localPlayer.GameObjectId == token.LocalGameObjectId;
+        var supportedContext = configuration.Enabled &&
+                               configuration.EnableNearAssistMacro &&
+                               token.ExpiresAtMilliseconds >= now &&
+                               clientState.TerritoryType == token.TerritoryId &&
+                               ResolveContext() == SupportedPvPContext.CrystallineConflict &&
+                               localIdentityValid;
+        var supportedMode = IsCertifiedMacroInvocationMode(mode) &&
+                            mode != ActionManager.UseActionMode.Queue;
+
+        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        GameAction action = default;
+        var hasActionMetadata = resolvedActionId != 0 &&
+                                TryGetActionMetadata(actionType, actionId, resolvedActionId, out action);
+        var hasExactMovementDefinition =
+            TryGetFarHelpMovementDefinition(resolvedActionId, out var expectedJobId, out var maximumDistance);
+        var friendlyAction = hasActionMetadata &&
+                             (action.CanTargetParty || action.CanTargetAlly || action.CanTargetAlliance);
+        var movementAction = hasActionMetadata && action.AffectsPosition;
+        var areaTargetedAction = hasActionMetadata && action.TargetArea;
+        var supportedAction = IsSupportedActionType(actionType) &&
+                              hasActionMetadata &&
+                              hasExactMovementDefinition &&
+                              action.IsPvP &&
+                              !action.CanTargetSelf &&
+                              action.Range > 0 &&
+                              action.RequiresLineOfSight &&
+                              action.ClassJob.RowId == expectedJobId;
+
+        var candidates = new List<FarHelpSelectionCandidate>(8);
+        if (supportedContext &&
+            supportedAction &&
+            movementAction &&
+            friendlyAction &&
+            !areaTargetedAction &&
+            actionManager != null &&
+            localIdentityValid)
+        {
+            var sourceObject = GetNativeObject(localPlayer!);
+            var seenEntityIds = new HashSet<uint>();
+            if (sourceObject != null)
+            {
+                for (var slot = FarHelpSelectionRules.FirstPartySlot;
+                     slot <= FarHelpSelectionRules.LastPartySlot;
+                     slot++)
+                {
+                    var ally = PartySlotResolver.Resolve(objectTable, slot);
+                    if (!IsLivePlayer(ally) ||
+                        ally!.GameObjectId == localPlayer!.GameObjectId ||
+                        !seenEntityIds.Add(ally.EntityId))
+                    {
+                        continue;
+                    }
+
+                    var targetObject = GetNativeObject(ally);
+                    var distanceSquared = Vector3.DistanceSquared(localPlayer.Position, ally.Position);
+                    var hasValidActionTarget = targetObject != null;
+                    var rangeResult = hasValidActionTarget
+                        ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, targetObject)
+                        : uint.MaxValue;
+                    var insideActionSpecificLimit =
+                        !float.IsFinite(maximumDistance) ||
+                        (float.IsFinite(distanceSquared) &&
+                         distanceSquared < maximumDistance * maximumDistance);
+                    var jobId = ally.ClassJob.IsValid ? ally.ClassJob.RowId : 0;
+                    candidates.Add(new FarHelpSelectionCandidate(
+                        ally.GameObjectId,
+                        ally.EntityId,
+                        slot,
+                        ally.CurrentHp,
+                        ally.MaxHp,
+                        distanceSquared,
+                        FarHelpSelectionRules.ClassifyPlayableJob(jobId),
+                        IsExactPartyMember: true,
+                        IsSelf: false,
+                        ally.IsTargetable,
+                        hasValidActionTarget,
+                        insideActionSpecificLimit &&
+                        SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult)));
+                }
+            }
+        }
+
+        var attempt = new FarHelpActionAttempt(
+            originalTargetId,
+            now,
+            IsEligibleMacroActionAttempt: true,
+            supportedContext,
+            supportedAction,
+            movementAction,
+            supportedMode,
+            friendlyAction,
+            areaTargetedAction,
+            IsFallbackCarrier: isFallbackCarrier);
+        var decision = FarHelpOneShotRules.Observe(previousState, attempt, candidates);
+
+        // Commit consumption before Original: a rejection or exception cannot move
+        // this single intent to a later action or macro press.
+        lock (tokenGate) farHelpState = decision.NextState;
+        rewritten = decision.ShouldRewrite;
+        selectedPartySlot = 0;
+        selectedDistance = 0f;
+        if (rewritten && decision.SelectedCandidateIndex >= 0)
+        {
+            var selected = candidates[decision.SelectedCandidateIndex];
+            selectedPartySlot = selected.PartySlot;
+            selectedDistance = MathF.Sqrt(selected.DistanceSquared);
+            reason = $"Redirected farthest preferred ally P{selected.PartySlot}, " +
+                     $"distance={selectedDistance:0.0}y, role={selected.Role}";
+        }
+        else
+        {
+            reason = $"Fallback: {decision.Reason}, candidates={candidates.Count}, resolved={resolvedActionId}";
+        }
+
+        return decision.ForwardTargetId;
+    }
+
     private void OnFrameworkUpdate(IFramework _)
     {
         if (disposed || !started) return;
@@ -889,6 +1227,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             if (armedHelpTarget is { } helpToken)
             {
                 shouldClear |= helpToken.ExpiresAtMilliseconds <= Environment.TickCount64;
+            }
+            if (armedFarHelpTarget is { } farHelpToken)
+            {
+                shouldClear |= farHelpToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
         }
 
@@ -1089,18 +1431,60 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private bool TryConsumeEligibleFarHelpToken(
+        ActionType actionType,
+        ActionManager.UseActionMode mode,
+        ulong incomingTargetId,
+        out ArmedFarHelpTarget token,
+        out FarHelpOneShotState previousState,
+        out bool fallbackCarrier)
+    {
+        lock (tokenGate)
+        {
+            if (armedFarHelpTarget is not { } candidate ||
+                !farHelpState.IsArmed ||
+                !IsPotentialMacroAction(actionType, mode))
+            {
+                token = default;
+                previousState = FarHelpOneShotState.Initial;
+                fallbackCarrier = false;
+                return false;
+            }
+
+            token = candidate;
+            previousState = farHelpState;
+            var currentPlayer = objectTable.LocalPlayer;
+            var currentHardTargetId = IsLivePlayer(currentPlayer)
+                ? GetNativeHardTargetId(currentPlayer!)
+                : 0;
+            fallbackCarrier = FarHelpCarrierRules.IsFallbackCarrier(
+                currentHardTargetId,
+                incomingTargetId,
+                candidate.CarrierGameObjectId,
+                candidate.CarrierEntityId);
+            armedFarHelpTarget = null;
+            farHelpState = FarHelpOneShotState.Initial;
+            farHelpLastEvent = $"Consumed target={incomingTargetId:X}; validating";
+            return true;
+        }
+    }
+
     private void ClearToken(string reason)
     {
         lock (tokenGate)
         {
             var hadToken = armedTarget is not null || oneShotState.IsArmed ||
-                           armedHelpTarget is not null || nearHelpState.IsArmed;
+                           armedHelpTarget is not null || nearHelpState.IsArmed ||
+                           armedFarHelpTarget is not null || farHelpState.IsArmed;
             armedTarget = null;
             oneShotState = NearAssistOneShotState.Initial;
             armedHelpTarget = null;
             nearHelpState = NearHelpOneShotState.Initial;
+            armedFarHelpTarget = null;
+            farHelpState = FarHelpOneShotState.Initial;
             lastEvent = reason;
             helpLastEvent = reason;
+            farHelpLastEvent = reason;
             if (hadToken) RecordTraceLocked(reason);
         }
     }
@@ -1124,6 +1508,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         return new NearHelpArmResult(outcome);
+    }
+
+    private FarHelpArmResult FarHelpArmFailure(FarHelpArmOutcome outcome, string reason)
+    {
+        lock (tokenGate)
+        {
+            farHelpLastEvent = reason;
+            RecordTraceLocked($"far-arm-fail {outcome}: {reason}");
+        }
+
+        return new FarHelpArmResult(outcome);
     }
 
     private void SetLastEvent(string value)
@@ -1201,6 +1596,58 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                action.Range > 0;
     }
 
+    private bool IsEligibleFarHelpAction(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode)
+    {
+        if (!IsPotentialMacroAction(actionType, mode)) return false;
+
+        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        // Consume only an exact known movement-action intent. Its complete current
+        // metadata is deliberately revalidated after consumption so metadata drift
+        // fails the deliberate <2> carrier closed instead of executing it vanilla.
+        return resolvedActionId != 0 &&
+               TryGetFarHelpMovementDefinition(resolvedActionId, out _, out _);
+    }
+
+    private static bool TryGetFarHelpMovementDefinition(
+        uint actionId,
+        out uint expectedJobId,
+        out float maximumDistance)
+    {
+        // Exact current PvP movement-to-target family. Unknown future or
+        // transformed actions wait without consuming the armed token.
+        switch (actionId)
+        {
+            case 29066: // PLD Guardian. Official execution condition is within 10y.
+                expectedJobId = 19;
+                maximumDistance = 10f;
+                return true;
+            case 29261: // SGE Icarus
+                expectedJobId = 40;
+                maximumDistance = float.PositiveInfinity;
+                return true;
+            case 29484: // MNK Thunderclap
+                expectedJobId = 20;
+                maximumDistance = float.PositiveInfinity;
+                return true;
+            case 29660: // BLM Aetherial Manipulation
+                expectedJobId = 25;
+                maximumDistance = float.PositiveInfinity;
+                return true;
+            case 39184: // VPR Slither
+                expectedJobId = 41;
+                maximumDistance = float.PositiveInfinity;
+                return true;
+            default:
+                expectedJobId = 0;
+                maximumDistance = 0f;
+                return false;
+        }
+    }
+
     private static bool IsAlly(IPlayerCharacter player, HashSet<uint> partyEntityIds) =>
         partyEntityIds.Contains(player.EntityId) ||
         (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
@@ -1272,6 +1719,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         long ExpiresAtMilliseconds);
 
     private readonly record struct ArmedNearHelpTarget(
+        uint TerritoryId,
+        uint LocalEntityId,
+        ulong LocalGameObjectId,
+        uint CarrierEntityId,
+        ulong CarrierGameObjectId,
+        long ExpiresAtMilliseconds);
+
+    private readonly record struct ArmedFarHelpTarget(
         uint TerritoryId,
         uint LocalEntityId,
         ulong LocalGameObjectId,

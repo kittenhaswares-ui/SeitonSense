@@ -90,7 +90,7 @@ if ($unexpectedUnsafe.Count -gt 0) {
     throw "Unsafe code is allowed only in the reviewed native boundaries: $($locations -join ', ')"
 }
 
-# Near Assist owns one target-only action detour. The MCH/pressure capture owns one
+# Near Assist, Near Help, and Far Help share one target-only action detour. The MCH/pressure capture owns one
 # read-only ActionEffect receive hook. Plugin.cs only constructor-injects interop.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
@@ -110,6 +110,8 @@ Assert-Literals $pluginSource @(
     'NearAssistAliasCommand = "/ssassist"',
     'NearHelpCommand = "/nearhelp"',
     'NearHelpAliasCommand = "/sshelp"',
+    'FarHelpCommand = "/farhelp"',
+    'FarHelpAliasCommand = "/ssfar"',
     'new NearAssistRedirector(',
     'AllowedInMacros = true',
     'nearAssistCommandRegistered = commandManager.AddHandler(',
@@ -117,8 +119,14 @@ Assert-Literals $pluginSource @(
     'if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand)',
     'if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand)',
     'if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand)',
+    'farHelpCommandRegistered = commandManager.AddHandler(',
+    'farHelpAliasRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnFarHelpCommand)',
+    'nearAssist.ArmFarHelp()',
+    'if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand)',
+    'if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand)',
     'nearAssist.Dispose()'
-) 'Near Assist and Near Help command ownership and lifecycle'
+) 'Near Assist, Near Help, and Far Help command ownership and lifecycle'
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
         throw "Expected narrow probe is missing: $allowed"
@@ -160,7 +168,7 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
 
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, and one exact WHM Miracle intercept call. Near
-# Assist/Near Help may only forward an incoming action through their sole Original.
+# Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
     $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $nearAssistPath) -or
@@ -710,8 +718,8 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 2) {
-    throw 'Plugin-owned Ally Rescue calls must bypass both Near Assist and Near Help branches without consuming either token.'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 3) {
+    throw 'Plugin-owned direct helper calls must bypass the Near Assist, Near Help, and Far Help branches without consuming any macro token.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 Assert-Literals $nearHelpSelection @(
@@ -747,6 +755,102 @@ if ($normalizedNearAssist -notmatch 'action\.IsPvP\s*&&\s*\(action\.CanTargetPar
 $helpConsumeState = [regex]::Match($nearAssist, 'nearHelpState\s*=\s*NearHelpOneShotState\.Initial\s*;')
 if (-not $helpConsumeState.Success -or $helpConsumeState.Index -gt $originalCall.Index) {
     throw 'Near Help must consume its one-shot state before the sole Original call.'
+}
+
+Assert-Literals $nearAssist @(
+    'FarHelpOneShotRules.Arm',
+    'FarHelpOneShotRules.Observe',
+    'FarHelpCarrierRules.IsFallbackCarrier',
+    'PartySlotResolver.Resolve(objectTable, 2)',
+    'FarHelpSelectionRules.FirstPartySlot',
+    'FarHelpSelectionRules.LastPartySlot',
+    'FarHelpSelectionRules.ClassifyPlayableJob(jobId)',
+    'IsEligibleFarHelpAction',
+    'TryGetFarHelpMovementDefinition',
+    'action.AffectsPosition',
+    'action.CanTargetParty || action.CanTargetAlly || action.CanTargetAlliance',
+    '!action.CanTargetSelf',
+    '!areaTargetedAction',
+    'action.Range > 0',
+    'action.RequiresLineOfSight',
+    'action.ClassJob.RowId == expectedJobId',
+    'distanceSquared < maximumDistance * maximumDistance',
+    'GetActionInRangeOrLoS',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'farHelpState = FarHelpOneShotState.Initial',
+    'farHelpState = decision.NextState',
+    'mode != ActionManager.UseActionMode.Queue'
+) 'Far Help shared redirector'
+
+if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*mode\s*\)\s*&&\s*TryConsumeEligibleFarHelpToken') {
+    throw 'Far Help must exact-ID preclassify the movement action before its one-shot token can be consumed.'
+}
+if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction.*?return resolvedActionId != 0 && TryGetFarHelpMovementDefinition\(resolvedActionId, out _, out _\);') {
+    throw 'Far Help pre-consumption filtering must use only the exact reviewed resolved-action allowlist, not generic metadata.'
+}
+foreach ($mapping in @(
+    'case 29066:.*?expectedJobId = 19;.*?maximumDistance = 10f;',
+    'case 29261:.*?expectedJobId = 40;.*?maximumDistance = float.PositiveInfinity;',
+    'case 29484:.*?expectedJobId = 20;.*?maximumDistance = float.PositiveInfinity;',
+    'case 29660:.*?expectedJobId = 25;.*?maximumDistance = float.PositiveInfinity;',
+    'case 39184:.*?expectedJobId = 41;.*?maximumDistance = float.PositiveInfinity;')) {
+    if ($normalizedNearAssist -notmatch $mapping) {
+        throw "Far Help exact movement action/job mapping drifted: $mapping"
+    }
+}
+if ([regex]::Matches($nearAssist, '(?m)^\s*case\s+(?:29066|29261|29484|29660|39184)\s*:').Count -ne 5 -or
+    [regex]::Matches($nearAssist, '(?m)^\s*case\s+\d+\s*:').Count -ne 5) {
+    throw 'Far Help must retain exactly the five reviewed movement-action cases and no additional action allowlist entry.'
+}
+if ($normalizedNearAssist -notmatch 'hasActionMetadata && hasExactMovementDefinition && action\.IsPvP && !action\.CanTargetSelf && action\.Range > 0 && action\.RequiresLineOfSight && action\.ClassJob\.RowId == expectedJobId' -or
+    $normalizedNearAssist -notmatch 'if \(supportedContext && supportedAction && movementAction && friendlyAction && !areaTargetedAction && actionManager != null && localIdentityValid\)') {
+    throw 'Far Help must revalidate complete PvP movement, friendly-target, job, non-self, non-area, positive-range, and LoS metadata after consuming the exact intent.'
+}
+if ($normalizedNearAssist -notmatch 'distanceSquared < maximumDistance \* maximumDistance') {
+    throw 'Guardian must retain the strict under-10-yalm candidate limit; equality is not accepted.'
+}
+
+$farHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'FarHelpSelectionRules.cs') 'Far Help selection rules'
+Assert-Literals $farHelpSelection @(
+    '24 or 28 or 33 or 40',
+    '23 or 31 or 38 or 25 or 27 or 35 or 42',
+    'FarHelpAllyRole.PreferredHealerOrRanged',
+    'candidate.Role > current.Role',
+    'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
+    'return distance > 0',
+    'candidate.IsExactPartyMember',
+    '!candidate.IsSelf',
+    'candidate.IsTargetable',
+    'candidate.HasValidActionTarget',
+    'candidate.HasRangeAndLineOfSight'
+) 'Far Help preferred-tier farthest selection rules'
+
+$farHelpOneShot = Read-RequiredSource (Join-Path $coreRoot 'FarHelpOneShotRules.cs') 'Far Help one-shot rules'
+Assert-Literals $farHelpOneShot @(
+    'DefaultLifetimeMilliseconds = 750',
+    'FarHelpOneShotState.Initial',
+    'FarHelpSelectionRules.SelectBestIndex',
+    'attempt.IsFallbackCarrier',
+    'InvalidFallbackCarrierTargetId',
+    'NonMovementAction',
+    'ConsumedWithoutRewrite',
+    'RewriteTarget'
+) 'Far Help bounded one-shot and fallback rules'
+
+$farHelpCarrier = Read-RequiredSource (Join-Path $coreRoot 'FarHelpCarrierRules.cs') 'Far Help carrier rules'
+Assert-Literals $farHelpCarrier @(
+    'incomingTargetId == carrierGameObjectId',
+    'incomingTargetId == carrierEntityId',
+    'currentHardTargetId == carrierGameObjectId',
+    'currentHardTargetId == carrierEntityId'
+) 'Far Help exact carrier rules'
+
+$farHelpConsumeState = [regex]::Match($nearAssist, 'farHelpState\s*=\s*FarHelpOneShotState\.Initial\s*;')
+if (-not $farHelpConsumeState.Success -or $farHelpConsumeState.Index -gt $originalCall.Index) {
+    throw 'Far Help must consume its one-shot state before the sole Original call.'
+}
+if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed;.*?armedTarget = null;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;') {
+    throw 'Near Assist, Near Help, and Far Help tokens must be mutually exclusive and cleared together.'
 }
 
 $partySlotResolver = Read-RequiredSource $partySlotResolverPath 'Party slot resolver'
@@ -1313,4 +1417,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.8.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, CC protection remains metadata-verified and live-presence-gated, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."
+Write-Host "Seiton Sense v0.9.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and exact-action Far Help share one bounded target-only detour, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, CC protection remains metadata-verified and live-presence-gated, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."
