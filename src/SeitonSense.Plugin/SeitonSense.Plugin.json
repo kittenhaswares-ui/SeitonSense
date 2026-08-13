@@ -2,7 +2,7 @@
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
   "Punchline": "PvP pressure, CC immunity, Seiton, warnings, assists, and target clarity.",
-  "Description": "A local PvP HUD integrating pressure and CC-protection cues, Ninja Seiton decisions, personal and MCH LB warnings, opt-in CC macro assist/help, self-Purify and BRD/WHM ally rescue, plus target highlights.",
+  "Description": "A local PvP HUD integrating pressure and CC-protection cues, Ninja Seiton decisions, personal and MCH LB warnings, opt-in CC macro assist/help, self-Purify, confirmed BRD/WHM ally-rescue feedback, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

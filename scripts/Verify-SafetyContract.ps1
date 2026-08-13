@@ -54,6 +54,7 @@ $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionInputCoordinator.cs'
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
+$allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
@@ -221,16 +222,38 @@ Assert-Literals $mchCapture @(
     'MaximumQueuedWarnings = 64',
     'ConcurrentQueue<TargetPressureCaptureEvent>',
     'MaximumQueuedPressureEvents = 128',
+    'ConcurrentQueue<AllyRescueCleanseEffect>',
+    'MaximumQueuedAllyRescueCleanses = 64',
+    'SetAllyRescueLocalEntityId',
+    'CurrentAllyRescueLocalEntityId',
+    'TryCaptureAllyRescueCleanse',
+    'RemoveStatusEffectType = 0x10',
+    'casterEntityId != localEntityId',
+    'actionId is not (WardensPaeanActionId or AquaveilActionId)',
+    'IsPurifyRemovableStatus(effect.Value)',
+    'if (depth > MaximumQueuedAllyRescueCleanses)',
+    'DroppedAllyRescueCleanses',
     'SetPressureLocalEntityId',
     'TryCapturePressure',
     'HasHarmfulPressureEffect',
     'pressureEvent.TargetEntityId != CurrentPressureLocalEntityId'
-) 'Read-only MCH LB and pressure ActionEffect capture'
+) 'Read-only shared MCH LB, Ally Rescue confirmation, and pressure ActionEffect capture'
 if ([regex]::Matches($mchCapture, '\bHookFromAddress\s*\(').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bHook<ActionEffectHandler\.Delegates\.Receive>').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bOriginalDisposeSafe\s*\(').Count -ne 1 -or
     $mchCapture -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|SetTarget|TargetManager|SendInput|keybd_event|mouse_event)\b') {
-    throw 'MCH/pressure capture must own exactly one ActionEffect hook, call its original exactly once, and never initiate an action or change input/targets.'
+    throw 'The shared capture must own exactly one ActionEffect hook, call its original exactly once, and never initiate an action or change input/targets.'
+}
+$normalizedMchCapture = $mchCapture -replace '\s+', ' '
+if ($normalizedMchCapture -notmatch 'actionId is not \(WardensPaeanActionId or AquaveilActionId\)' -or
+    $normalizedMchCapture -notmatch 'effect\.Type != RemoveStatusEffectType \|\| !IsPurifyRemovableStatus\(effect\.Value\)' -or
+    $normalizedMchCapture -notmatch 'statusId is 1343 or 1344 or 1345 or 1347 or 3085 or 3219;') {
+    throw 'Ally Rescue confirmation capture must keep the exact two-action, 0x10 effect, and six-status allowlists.'
+}
+if ([regex]::Matches($mchCapture, '\bConcurrentQueue<AllyRescueCleanseEffect>').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bMaximumQueuedAllyRescueCleanses\s*=\s*64\b').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bTryDequeueAllyRescueCleanse\s*\(').Count -ne 1) {
+    throw 'Ally Rescue confirmation must use exactly one bounded 64-item queue and one dequeue boundary.'
 }
 
 $mchMarkerRules = Read-RequiredSource (Join-Path $coreRoot 'MachinistLimitBreakMarkerRules.cs') 'MCH LB marker rules'
@@ -326,9 +349,12 @@ Assert-Literals $allyRescue @(
     'ValidateRescueActionMetadata',
     "The Warden's Paean",
     'Aquaveil',
-    'Removes one status affliction',
-    'Nullifies one status affliction',
-    'status affliction that can be removed by Purify',
+    '"Removes"',
+    '"Nullifies"',
+    'StringComparison.OrdinalIgnoreCase',
+    'description.Contains(expectedCleanseVerb, StringComparison.OrdinalIgnoreCase)',
+    'description.Contains("status affliction", StringComparison.OrdinalIgnoreCase)',
+    'description.Contains("Purify", StringComparison.OrdinalIgnoreCase)',
     'AllyRescueBufferRules.Observe',
     'AllyRescueStatusRules.IsTriggerStatus',
     'PartySlotResolver.Resolve',
@@ -338,15 +364,47 @@ Assert-Literals $allyRescue @(
     'state = decision.NextState',
     'if (decision.ShouldConsumeInputGeneration) inputFrame.Consume()',
     'TryRevalidateCandidate',
-    'actionManager->IsActionOffCooldown(ActionType.Action, actionId)',
     'nearAssist.RunWithoutRedirect',
     'ActionType.Action',
     'ActionManager.UseActionMode.None'
 ) 'Bounded Ally Rescue runtime'
+if ($allyRescue -match '\bstatus\.Address\b|\bIsActionOffCooldown\b') {
+    throw 'Ally Rescue must not restore the fragile status-address or local cooldown prefilters removed by the reliability hotfix.'
+}
 if ([regex]::Matches($allyRescue, 'ValidateRescueActionMetadata\s*\(').Count -lt 3 -or
     $allyRescue -notmatch 'catch\s*\(Exception exception\)' -or
     $allyRescue -notmatch 'metadata lookup failed closed') {
     throw 'Each Ally Rescue action must validate current English metadata independently and fail closed on lookup errors.'
+}
+if ($normalizedAllyRescue -notmatch 'string\.Equals\( action\.Name\.ToString\(\), expectedName, StringComparison\.OrdinalIgnoreCase\)' -or
+    $normalizedAllyRescue -notmatch 'description\.Contains\(expectedCleanseVerb, StringComparison\.OrdinalIgnoreCase\)' -or
+    $normalizedAllyRescue -notmatch 'description\.Contains\("status affliction", StringComparison\.OrdinalIgnoreCase\)' -or
+    $normalizedAllyRescue -notmatch 'description\.Contains\("Purify", StringComparison\.OrdinalIgnoreCase\)') {
+    throw 'Ally Rescue action metadata must use case-insensitive names and stable cleanse-description tokens.'
+}
+
+$allyRescueConfirmationRules = Read-RequiredSource $allyRescueConfirmationRulesPath 'Ally Rescue confirmation rules'
+$normalizedAllyRescueConfirmationRules = $allyRescueConfirmationRules -replace '\s+', ' '
+Assert-Literals $allyRescueConfirmationRules @(
+    'WardensPaeanActionId = 29400',
+    'AquaveilActionId = 29227',
+    'RecoveredFromStatusEffectType = 0x10',
+    'StunStatusId = 1343',
+    'HeavyStatusId = 1344',
+    'BindStatusId = 1345',
+    'SilenceStatusId = 1347',
+    'MiracleOfNatureStatusId = 3085',
+    'DeepFreezeStatusId = 3219',
+    'actionId is WardensPaeanActionId or AquaveilActionId',
+    'observation.EffectType == RecoveredFromStatusEffectType',
+    'MaximumConfirmedKeys = 128'
+) 'Exact Ally Rescue confirmation correlation'
+if ($normalizedAllyRescueConfirmationRules -notmatch 'IsConfirmableRemovedStatus\(uint statusId\) => statusId is StunStatusId or HeavyStatusId or BindStatusId or SilenceStatusId or MiracleOfNatureStatusId or DeepFreezeStatusId;' -or
+    $normalizedAllyRescueConfirmationRules -match 'IsConfirmableRemovedStatus\(uint statusId\) =>[^;]*(?:134[0-9]|30[0-9]{2}|32[0-9]{2})') {
+    throw 'Ally Rescue confirmation must accept exactly the six reviewed removable-status constants.'
+}
+if ($allyRescueConfirmationRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|RetryAction|RetryDispatch|ITargetManager|TargetManager|SetTarget)\b') {
+    throw 'Pure Ally Rescue confirmation rules must never initiate actions, retry, or access target mutation APIs.'
 }
 
 $metadataGuard = Read-RequiredSource (Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'PvP metadata guard'
@@ -1073,4 +1131,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.7.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, MCH/pressure observation remains read-only, CC protection remains an exact full-immunity allowlist, warning audio uses one bounded client sound, and one shared physical input generation permits at most one self-Purify or exact BRD/WHM Ally Rescue attempt."
+Write-Host "Seiton Sense v0.7.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, shared MCH/pressure/rescue observation remains read-only, Ally Rescue confirmation requires an exact bounded server effect, CC protection remains an exact full-immunity allowlist, warning audio uses one bounded client sound, and one shared physical input generation permits at most one self-Purify or exact BRD/WHM Ally Rescue attempt."

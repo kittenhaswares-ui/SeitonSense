@@ -27,6 +27,8 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 RecentPressureColor = new(1f, 0.68f, 0.12f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.96f);
+    private const uint WardensPaeanIconId = 9628;
+    private const uint AquaveilIconId = 9607;
 
     private readonly PluginConfiguration configuration;
     private readonly ExecuteTracker tracker;
@@ -36,6 +38,8 @@ internal sealed class OverlayRenderer
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
     private SeitonPopupSnapshot? previewPopup;
+    private AllyRescueConfirmationPopup? previewAllyRescueConfirmation;
+    private bool previewEnabled;
 
     public OverlayRenderer(
         PluginConfiguration configuration,
@@ -55,7 +59,15 @@ internal sealed class OverlayRenderer
         this.textureProvider = textureProvider;
     }
 
-    public bool PreviewEnabled { get; set; }
+    public bool PreviewEnabled
+    {
+        get => previewEnabled;
+        set
+        {
+            previewEnabled = value;
+            if (value) previewAllyRescueConfirmation = null;
+        }
+    }
     public bool CcProtectionPreviewEnabled { get; set; }
     public int NativeAnchorCount => namePlateAnchors.Anchors.Count;
 
@@ -66,6 +78,19 @@ internal sealed class OverlayRenderer
         previewPopup = new SeitonPopupSnapshot(0, 3, 30, now, now + duration);
     }
 
+    public void TriggerAllyRescueConfirmationPreview()
+    {
+        PreviewEnabled = false;
+        var now = Environment.TickCount64;
+        previewAllyRescueConfirmation = new AllyRescueConfirmationPopup(
+            AllyRescueConfirmationRules.AquaveilActionId,
+            1,
+            1,
+            AllyRescueConfirmationRules.StunStatusId,
+            now,
+            now + AllyRescueConfirmationRules.PopupDurationMilliseconds);
+    }
+
     public void Draw()
     {
         if (gameGui.GameUiHidden) return;
@@ -74,9 +99,13 @@ internal sealed class OverlayRenderer
         if (CcProtectionPreviewEnabled) DrawCcProtectionPreview();
         DrawPopup(previewPopup);
 
-        if (!configuration.Enabled) return;
-
         var now = Environment.TickCount64;
+        if (!configuration.Enabled)
+        {
+            DrawAllyRescueConfirmationPreview(now);
+            return;
+        }
+
         if (tracker.IsActive)
         {
             DrawLiveSeitonDecisionStack(now);
@@ -85,34 +114,161 @@ internal sealed class OverlayRenderer
         if (tracker.IsActive || pressureTracker.IsActive)
             DrawLiveNameplateIndicators(now);
 
-        if (configuration.ShowPersonalWarnings)
-            DrawPersonalWarnings(now);
+        // The confirmation popup belongs to the explicitly enabled Ally Rescue
+        // helper, not to the optional incoming-debuff warning cards. The method
+        // filters those cards itself, so a confirmed cleanse stays visible even
+        // when ordinary personal warnings are hidden.
+        DrawPersonalWarnings(now);
+    }
+
+    private void DrawAllyRescueConfirmationPreview(long now)
+    {
+        if (previewAllyRescueConfirmation is not { } preview || !preview.IsVisible(now)) return;
+
+        var stackCenterY = ImGui.GetIO().DisplaySize.Y *
+                           Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
+        DrawAllyRescueConfirmationCard(preview, 1, stackCenterY);
     }
 
     private void DrawPersonalWarnings(long now)
     {
         var personal = personalStatus.Snapshot;
-        if (!personal.Active) return;
+        var rescue = personalStatus.AllyRescueDiagnostics;
+        var liveConfirmation = rescue.ConfirmationPopup is { } popup && popup.IsVisible(now)
+            ? popup
+            : (AllyRescueConfirmationPopup?)null;
+        var confirmation = liveConfirmation ??
+            (previewAllyRescueConfirmation is { } preview && preview.IsVisible(now)
+                ? preview
+                : (AllyRescueConfirmationPopup?)null);
 
-        var statuses = personal.Statuses
-            .Where(status => status.ExpiresAtMilliseconds > now)
-            .OrderByDescending(static status =>
-                status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId)
-            .ThenByDescending(static status => status.AlertKind)
-            .ThenBy(static status => status.ExpiresAtMilliseconds)
-            .Take(4)
-            .ToArray();
-        if (statuses.Length == 0) return;
+        var statuses = personal.Active
+            ? personal.Statuses
+                .Where(status => status.ExpiresAtMilliseconds > now)
+                .OrderByDescending(static status =>
+                    status.StatusId == EnemyCombatConstants.MarksmanSpiteActionId)
+                .ThenByDescending(static status => status.AlertKind)
+                .ThenBy(static status => status.ExpiresAtMilliseconds)
+                .Take(4)
+                .ToArray()
+            : [];
+        if (statuses.Length == 0 && confirmation is null) return;
 
-        var heights = statuses
-            .Select(status => PersonalWarningCardHeight(status, now))
-            .ToArray();
+        var heights = new List<float>(statuses.Length + (confirmation is null ? 0 : 1));
+        if (confirmation is not null)
+            heights.Add(AllyRescueConfirmationCardHeight());
+        heights.AddRange(statuses.Select(status => PersonalWarningCardHeight(status, now)));
         var offsets = BuildCenteredOffsets(heights, 7f * ImGuiHelpers.GlobalScale);
         var stackCenterY = ImGui.GetIO().DisplaySize.Y *
                            Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
+        var offsetIndex = 0;
+        if (confirmation is { } visibleConfirmation)
+        {
+            DrawAllyRescueConfirmationCard(
+                visibleConfirmation,
+                liveConfirmation is not null
+                    ? rescue.MatchConfirmations.TotalConfirmed
+                    : 1,
+                stackCenterY + offsets[offsetIndex]);
+            offsetIndex++;
+        }
+
         for (var index = 0; index < statuses.Length; index++)
-            DrawPersonalWarningCard(statuses[index], personal.Purify, stackCenterY + offsets[index], now);
+        {
+            DrawPersonalWarningCard(
+                statuses[index],
+                personal.Purify,
+                stackCenterY + offsets[offsetIndex + index],
+                now);
+        }
     }
+
+    private float AllyRescueConfirmationCardHeight() =>
+        64f * Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f) *
+        ImGuiHelpers.GlobalScale;
+
+    private void DrawAllyRescueConfirmationCard(
+        AllyRescueConfirmationPopup popup,
+        long matchConfirmationCount,
+        float centerY)
+    {
+        var configuredScale = Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f);
+        var scale = configuredScale * ImGuiHelpers.GlobalScale;
+        var cardSize = new Vector2(286f, 64f) * scale;
+        var screen = ImGui.GetIO().DisplaySize;
+        var center = new Vector2(
+            screen.X * Math.Clamp(configuration.PersonalWarningScreenX, 0.05f, 0.95f),
+            centerY);
+        var topLeft = center - (cardSize * 0.5f);
+        var bottomRight = center + (cardSize * 0.5f);
+        var draw = ImGui.GetForegroundDrawList();
+        var rounding = 10f * scale;
+
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(
+                0.018f,
+                0.035f,
+                0.055f,
+                Math.Clamp(configuration.PersonalWarningBackgroundOpacity, 0f, 1f))),
+            rounding);
+        draw.AddRectFilled(
+            topLeft,
+            new Vector2(topLeft.X + (6f * scale), bottomRight.Y),
+            Pack(CleanseColor),
+            rounding);
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(CleanseColor),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2f, 3f * scale));
+
+        var iconId = popup.ActionId switch
+        {
+            AllyRescueConfirmationRules.WardensPaeanActionId => WardensPaeanIconId,
+            AllyRescueConfirmationRules.AquaveilActionId => AquaveilIconId,
+            _ => 0u,
+        };
+        var iconSize = 44f * scale;
+        var iconMin = new Vector2(topLeft.X + (11f * scale), center.Y - (iconSize * 0.5f));
+        var iconMax = iconMin + new Vector2(iconSize);
+        if (iconId == 0 || !TryDrawGameIcon(draw, iconId, iconMin, iconMax, 1f))
+        {
+            draw.AddRectFilled(
+                iconMin,
+                iconMax,
+                Pack(new Vector4(CleanseColor.X * 0.22f, CleanseColor.Y * 0.22f, CleanseColor.Z * 0.22f, 1f)),
+                5f * scale);
+        }
+
+        var textCenterX = iconMax.X + ((bottomRight.X - iconMax.X) * 0.5f) - (4f * scale);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y - (19f * scale)),
+            "CLEANSED",
+            0.98f * configuredScale,
+            true);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y + (10f * scale)),
+            $"{AllyRescueStatusName(popup.RemovedStatusId)}  •  THIS CC {Math.Max(0, matchConfirmationCount)}",
+            0.76f * configuredScale,
+            true);
+    }
+
+    private static string AllyRescueStatusName(uint statusId) => statusId switch
+    {
+        AllyRescueConfirmationRules.StunStatusId => "STUN",
+        AllyRescueConfirmationRules.HeavyStatusId => "HEAVY",
+        AllyRescueConfirmationRules.BindStatusId => "BIND",
+        AllyRescueConfirmationRules.SilenceStatusId => "SILENCE",
+        AllyRescueConfirmationRules.MiracleOfNatureStatusId => "MIRACLE",
+        AllyRescueConfirmationRules.DeepFreezeStatusId => "DEEP FREEZE",
+        _ => $"STATUS {statusId}",
+    };
 
     private float PersonalWarningCardHeight(PersonalStatusSnapshot status, long now)
     {

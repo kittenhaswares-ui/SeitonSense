@@ -23,26 +23,44 @@ internal readonly record struct TargetPressureCaptureEvent(
     uint GlobalSequence,
     ushort SourceSequence);
 
+internal readonly record struct AllyRescueCleanseEffect(
+    long ObservedAtMilliseconds,
+    uint CasterEntityId,
+    uint TargetEntityId,
+    uint ActionId,
+    uint RemovedStatusId,
+    uint GlobalSequence,
+    ushort SourceSequence);
+
 internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 {
     private const int EffectSlotsPerTarget = 8;
     private const int MaximumQueuedWarnings = 64;
+    private const int MaximumQueuedAllyRescueCleanses = 64;
     private const int MaximumQueuedPressureEvents = 128;
     private const int MaximumTargetsPerAction = 32;
+    private const uint WardensPaeanActionId = 29400;
+    private const uint AquaveilActionId = 29227;
+    private const byte RemoveStatusEffectType = 0x10;
 
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
     private readonly ConcurrentQueue<MachinistLimitBreakWarning> pendingWarnings = new();
+    private readonly ConcurrentQueue<AllyRescueCleanseEffect> pendingAllyRescueCleanses = new();
     private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
 
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private int machinistLocalEntityIdBits;
+    private int allyRescueLocalEntityIdBits;
     private int pressureLocalEntityIdBits;
     private int queuedWarningCount;
+    private int queuedAllyRescueCleanseCount;
     private int queuedPressureEventCount;
     private int captureBlocked = 1;
     private long captureErrors;
     private long droppedWarnings;
+    private long capturedAllyRescueCleanses;
+    private long droppedAllyRescueCleanses;
     private long droppedPressureEvents;
     private bool disposed;
 
@@ -54,11 +72,15 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
     public bool IsRunning { get; private set; }
     public uint CurrentMachinistLocalEntityId => unchecked((uint)Volatile.Read(ref machinistLocalEntityIdBits));
+    public uint CurrentAllyRescueLocalEntityId => unchecked((uint)Volatile.Read(ref allyRescueLocalEntityIdBits));
     public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
     public int QueueDepth => Math.Max(0, Volatile.Read(ref queuedWarningCount));
+    public int AllyRescueCleanseQueueDepth => Math.Max(0, Volatile.Read(ref queuedAllyRescueCleanseCount));
     public int PressureQueueDepth => Math.Max(0, Volatile.Read(ref queuedPressureEventCount));
     public long CaptureErrors => Interlocked.Read(ref captureErrors);
     public long DroppedWarnings => Interlocked.Read(ref droppedWarnings);
+    public long CapturedAllyRescueCleanses => Interlocked.Read(ref capturedAllyRescueCleanses);
+    public long DroppedAllyRescueCleanses => Interlocked.Read(ref droppedAllyRescueCleanses);
     public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
 
     public void Start()
@@ -93,6 +115,15 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (previous != normalized) ClearWarnings();
     }
 
+    public void SetAllyRescueLocalEntityId(uint entityId)
+    {
+        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
+        var previous = unchecked((uint)Interlocked.Exchange(
+            ref allyRescueLocalEntityIdBits,
+            unchecked((int)normalized)));
+        if (previous != normalized) ClearAllyRescueCleanses();
+    }
+
     public void SetPressureLocalEntityId(uint entityId)
     {
         var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
@@ -109,6 +140,13 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return true;
     }
 
+    public bool TryDequeueAllyRescueCleanse(out AllyRescueCleanseEffect cleanse)
+    {
+        if (!pendingAllyRescueCleanses.TryDequeue(out cleanse)) return false;
+        Interlocked.Decrement(ref queuedAllyRescueCleanseCount);
+        return true;
+    }
+
     public bool TryDequeuePressure(out TargetPressureCaptureEvent pressureEvent)
     {
         if (!pendingPressureEvents.TryDequeue(out pressureEvent)) return false;
@@ -120,6 +158,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     {
         while (pendingWarnings.TryDequeue(out _))
             Interlocked.Decrement(ref queuedWarningCount);
+    }
+
+    public void ClearAllyRescueCleanses()
+    {
+        while (pendingAllyRescueCleanses.TryDequeue(out _))
+            Interlocked.Decrement(ref queuedAllyRescueCleanseCount);
     }
 
     public void ClearPressureEvents()
@@ -134,10 +178,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         disposed = true;
         Volatile.Write(ref captureBlocked, 1);
         Interlocked.Exchange(ref machinistLocalEntityIdBits, 0);
+        Interlocked.Exchange(ref allyRescueLocalEntityIdBits, 0);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
         actionEffectHook?.Dispose();
         IsRunning = false;
         ClearWarnings();
+        ClearAllyRescueCleanses();
         ClearPressureEvents();
     }
 
@@ -150,12 +196,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         GameObjectId* targetEntityIds)
     {
         MachinistLimitBreakWarning? capturedWarning = null;
+        AllyRescueCleanseEffect? capturedAllyRescueCleanse = null;
         TargetPressureCaptureEvent? capturedPressure = null;
         try
         {
             if (Volatile.Read(ref captureBlocked) == 0)
             {
                 capturedWarning = TryCaptureMachinistWarning(casterEntityId, header, effects, targetEntityIds);
+                capturedAllyRescueCleanse = TryCaptureAllyRescueCleanse(
+                    casterEntityId,
+                    header,
+                    effects,
+                    targetEntityIds);
                 capturedPressure = TryCapturePressure(casterEntityId, header, effects, targetEntityIds);
             }
         }
@@ -163,7 +215,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         {
             var errorCount = Interlocked.Increment(ref captureErrors);
             if (errorCount <= 3 || errorCount % 100 == 0)
-                log.Error(exception, "Seiton Sense failed closed while reading a Machinist limit-break marker; error #{Count}.", errorCount);
+                log.Error(exception, "Seiton Sense failed closed while reading a bounded action-effect signal; error #{Count}.", errorCount);
         }
         finally
         {
@@ -177,6 +229,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         }
 
         if (capturedWarning is { } warning) Enqueue(warning);
+        if (capturedAllyRescueCleanse is { } cleanse) EnqueueAllyRescueCleanse(cleanse);
         if (capturedPressure is { } pressure) EnqueuePressure(pressure);
     }
 
@@ -226,6 +279,55 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             localEntityId,
             header->GlobalSequence,
             header->SourceSequence);
+    }
+
+    private AllyRescueCleanseEffect? TryCaptureAllyRescueCleanse(
+        uint casterEntityId,
+        ActionEffectHandler.Header* header,
+        ActionEffectHandler.TargetEffects* effects,
+        GameObjectId* targetEntityIds)
+    {
+        var localEntityId = CurrentAllyRescueLocalEntityId;
+        if (!IsNetworkEntityId(localEntityId) ||
+            casterEntityId != localEntityId ||
+            header == null ||
+            effects == null ||
+            targetEntityIds == null ||
+            header->NumTargets is 0 or > MaximumTargetsPerAction)
+        {
+            return null;
+        }
+
+        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
+        if (actionId is not (WardensPaeanActionId or AquaveilActionId)) return null;
+
+        for (var targetIndex = 0; targetIndex < header->NumTargets; targetIndex++)
+        {
+            var targetEntityId = targetEntityIds[targetIndex].ObjectId;
+            if (!IsNetworkEntityId(targetEntityId) || targetEntityId == localEntityId) continue;
+
+            var targetEffects = effects[targetIndex].Effects;
+            for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
+            {
+                var effect = targetEffects[slot];
+                if (effect.Type != RemoveStatusEffectType ||
+                    !IsPurifyRemovableStatus(effect.Value))
+                {
+                    continue;
+                }
+
+                return new AllyRescueCleanseEffect(
+                    Environment.TickCount64,
+                    casterEntityId,
+                    targetEntityId,
+                    actionId,
+                    effect.Value,
+                    header->GlobalSequence,
+                    header->SourceSequence);
+            }
+        }
+
+        return null;
     }
 
     private TargetPressureCaptureEvent? TryCapturePressure(
@@ -295,6 +397,27 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         pendingWarnings.Enqueue(warning);
     }
 
+    private void EnqueueAllyRescueCleanse(AllyRescueCleanseEffect cleanse)
+    {
+        if (disposed ||
+            Volatile.Read(ref captureBlocked) != 0 ||
+            cleanse.CasterEntityId != CurrentAllyRescueLocalEntityId)
+        {
+            return;
+        }
+
+        var depth = Interlocked.Increment(ref queuedAllyRescueCleanseCount);
+        if (depth > MaximumQueuedAllyRescueCleanses)
+        {
+            Interlocked.Decrement(ref queuedAllyRescueCleanseCount);
+            Interlocked.Increment(ref droppedAllyRescueCleanses);
+            return;
+        }
+
+        pendingAllyRescueCleanses.Enqueue(cleanse);
+        Interlocked.Increment(ref capturedAllyRescueCleanses);
+    }
+
     private void EnqueuePressure(TargetPressureCaptureEvent pressureEvent)
     {
         if (disposed ||
@@ -344,6 +467,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         effect.Param3 == 0 &&
         effect.Param4 == 0 &&
         effect.Value == 0;
+
+    private static bool IsPurifyRemovableStatus(uint statusId) =>
+        statusId is 1343 or 1344 or 1345 or 1347 or 3085 or 3219;
 
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000u;

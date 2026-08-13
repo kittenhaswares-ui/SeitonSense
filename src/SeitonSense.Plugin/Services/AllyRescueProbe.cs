@@ -29,6 +29,12 @@ internal sealed record AllyRescueProbeSnapshot(
     bool UseActionAccepted,
     long AttemptCount,
     long AcceptedCount,
+    AllyRescueConfirmationPopup? ConfirmationPopup,
+    AllyRescueConfirmationStatistics MatchConfirmations,
+    AllyRescueConfirmationStatistics SessionConfirmations,
+    bool ConfirmationPending,
+    long ConfirmationCaptureCount,
+    long ConfirmationDropCount,
     string LastEvent)
 {
     internal static AllyRescueProbeSnapshot Initial { get; } = new(
@@ -46,6 +52,12 @@ internal sealed record AllyRescueProbeSnapshot(
         VirtualKey.NO_KEY,
         false,
         false,
+        false,
+        0,
+        0,
+        null,
+        AllyRescueConfirmationStatistics.Empty,
+        AllyRescueConfirmationStatistics.Empty,
         false,
         0,
         0,
@@ -74,28 +86,33 @@ internal sealed class AllyRescueProbe
     private readonly IObjectTable objectTable;
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
+    private readonly MachinistLimitBreakCapture actionEffectCapture;
     private readonly IPluginLog log;
     private readonly bool wardensPaeanMetadataVerified;
     private readonly bool aquaveilMetadataVerified;
     private readonly Dictionary<ObservedAllyStatusKey, AllyStatusIdentityState> statusInstances = [];
     private readonly HashSet<AllyActorIdentity> trustedMpActors = [];
     private AllyRescueBufferState state = AllyRescueBufferState.Initial;
+    private AllyRescueConfirmationState confirmationState = AllyRescueConfirmationState.Initial;
     private AllyRescueProbeSnapshot snapshot = AllyRescueProbeSnapshot.Initial;
     private ulong nextInstanceToken = 1;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
+    private int resetConfirmationStatisticsRequested;
 
     internal AllyRescueProbe(
         IObjectTable objectTable,
         IDataManager dataManager,
         TargetPressureTracker pressureTracker,
         NearAssistRedirector nearAssist,
+        MachinistLimitBreakCapture actionEffectCapture,
         IPluginLog log)
     {
         this.objectTable = objectTable;
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
+        this.actionEffectCapture = actionEffectCapture;
         this.log = log;
 
         wardensPaeanMetadataVerified = ValidateRescueActionMetadata(
@@ -105,7 +122,7 @@ internal sealed class AllyRescueProbe
             WardensPaeanIconId,
             BardJobId,
             WardensPaeanRecast100ms,
-            "Removes one status affliction");
+            "Removes");
         aquaveilMetadataVerified = ValidateRescueActionMetadata(
             dataManager,
             AquaveilActionId,
@@ -113,7 +130,7 @@ internal sealed class AllyRescueProbe
             AquaveilIconId,
             WhiteMageJobId,
             AquaveilRecast100ms,
-            "Nullifies one status affliction");
+            "Nullifies");
 
         if (!wardensPaeanMetadataVerified || !aquaveilMetadataVerified)
         {
@@ -137,7 +154,14 @@ internal sealed class AllyRescueProbe
         long bufferMilliseconds,
         bool hardReset = false)
     {
-        if (hardReset) ResetRuntime();
+        if (hardReset) ResetRuntime(nowMilliseconds);
+
+        if (Interlocked.Exchange(ref resetConfirmationStatisticsRequested, 0) != 0)
+        {
+            confirmationState = AllyRescueConfirmationRules.ResetStatistics(confirmationState);
+            Interlocked.Exchange(ref attemptCount, 0);
+            Interlocked.Exchange(ref acceptedCount, 0);
+        }
 
         var localAlive = IsLivePlayer(localPlayer);
         var localIdentityValid = localAlive && HasValidNativeIdentity(localPlayer!);
@@ -147,8 +171,20 @@ internal sealed class AllyRescueProbe
                            isCrystallineConflict &&
                            localIdentityValid &&
                            actionId != 0 &&
-                           actionManager != null &&
-                           actionManager->IsActionOffCooldown(ActionType.Action, actionId);
+                           actionManager != null;
+
+        actionEffectCapture.SetAllyRescueLocalEntityId(
+            configurationEnabled &&
+            isCrystallineConflict &&
+            localIdentityValid &&
+            actionId != 0
+                ? localPlayer!.EntityId
+                : 0);
+        DrainConfirmedCleanses();
+        var confirmationNow = Math.Max(nowMilliseconds, Environment.TickCount64);
+        confirmationState = AllyRescueConfirmationRules.ObserveTime(
+            confirmationState,
+            confirmationNow);
         var candidates = configurationEnabled &&
                          isCrystallineConflict &&
                          localIdentityValid &&
@@ -220,6 +256,22 @@ internal sealed class AllyRescueProbe
                     lastEvent = $"Attempt threw action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}";
                     LogAttemptFailure(exception, nowMilliseconds);
                 }
+
+                if (attempted)
+                {
+                    var attemptedAt = Math.Max(confirmationNow, Environment.TickCount64);
+                    confirmationState = AllyRescueConfirmationRules.RegisterAttempt(
+                        confirmationState,
+                        new AllyRescuePendingAttempt(
+                            localPlayer!.EntityId,
+                            actionId,
+                            revalidated.GameObjectId,
+                            revalidated.EntityId,
+                            dispatchIntent,
+                            accepted,
+                            attemptedAt),
+                        attemptedAt).NextState;
+                }
             }
             else
             {
@@ -249,6 +301,12 @@ internal sealed class AllyRescueProbe
             accepted,
             Interlocked.Read(ref attemptCount),
             Interlocked.Read(ref acceptedCount),
+            confirmationState.Popup,
+            confirmationState.MatchStatistics,
+            confirmationState.SessionStatistics,
+            confirmationState.Pending is not null,
+            actionEffectCapture.CapturedAllyRescueCleanses,
+            actionEffectCapture.DroppedAllyRescueCleanses,
             lastEvent);
         Volatile.Write(ref snapshot, result);
         return result;
@@ -256,13 +314,17 @@ internal sealed class AllyRescueProbe
 
     internal void Reset()
     {
-        ResetRuntime();
-        Volatile.Write(ref snapshot, AllyRescueProbeSnapshot.Initial);
+        var now = Environment.TickCount64;
+        ResetRuntime(now);
+        Volatile.Write(ref snapshot, SnapshotAfterReset("Reset"));
     }
+
+    internal void RequestStatisticsReset() =>
+        Interlocked.Exchange(ref resetConfirmationStatisticsRequested, 1);
 
     internal AllyRescueProbeSnapshot FailClosed(long nowMilliseconds, Exception? exception = null)
     {
-        ResetRuntime();
+        ResetRuntime(nowMilliseconds);
         if (exception is not null) LogAttemptFailure(exception, nowMilliseconds);
         var failed = AllyRescueProbeSnapshot.Initial with
         {
@@ -270,10 +332,40 @@ internal sealed class AllyRescueProbe
             CancelReason = AllyRescueBufferCancelReason.HardReset,
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
+            MatchConfirmations = confirmationState.MatchStatistics,
+            SessionConfirmations = confirmationState.SessionStatistics,
+            ConfirmationCaptureCount = actionEffectCapture.CapturedAllyRescueCleanses,
+            ConfirmationDropCount = actionEffectCapture.DroppedAllyRescueCleanses,
             LastEvent = "Failed closed",
         };
         Volatile.Write(ref snapshot, failed);
         return failed;
+    }
+
+    private void DrainConfirmedCleanses()
+    {
+        while (actionEffectCapture.TryDequeueAllyRescueCleanse(out var cleanse))
+        {
+            // The native hook may enqueue between two framework samples. Use a
+            // monotonic presentation/correlation timestamp so a packet captured
+            // just before the previous snapshot was published cannot look like
+            // a backwards clock on the next drain.
+            var observedAt = Math.Max(
+                cleanse.ObservedAtMilliseconds,
+                confirmationState.LastObservedAtMilliseconds);
+            var decision = AllyRescueConfirmationRules.ObserveActionEffect(
+                confirmationState,
+                new AllyRescueActionEffectObservation(
+                    cleanse.CasterEntityId,
+                    cleanse.ActionId,
+                    cleanse.TargetEntityId,
+                    AllyRescueConfirmationRules.RecoveredFromStatusEffectType,
+                    checked((ushort)cleanse.RemovedStatusId),
+                    cleanse.GlobalSequence,
+                    cleanse.SourceSequence,
+                    observedAt));
+            confirmationState = decision.NextState;
+        }
     }
 
     private unsafe List<AllyRescueSelectionCandidate> BuildCandidates(
@@ -292,7 +384,6 @@ internal sealed class AllyRescueProbe
             foreach (var status in ally.StatusList)
             {
                 if (!AllyRescueStatusRules.IsTriggerStatus(status.StatusId) ||
-                    status.Address == 0 ||
                     !float.IsFinite(status.RemainingTime) ||
                     status.RemainingTime <= 0f)
                 {
@@ -370,11 +461,8 @@ internal sealed class AllyRescueProbe
         out AllyRescueSelectionCandidate candidate)
     {
         candidate = default;
-        var actionManager = ActionManager.Instance();
         if (!IsLivePlayer(localPlayer) ||
-            ResolveActionId(localPlayer) != actionId ||
-            actionManager == null ||
-            !actionManager->IsActionOffCooldown(ActionType.Action, actionId))
+            ResolveActionId(localPlayer) != actionId)
         {
             return false;
         }
@@ -392,7 +480,6 @@ internal sealed class AllyRescueProbe
             foreach (var status in ally.StatusList)
             {
                 if (status.StatusId != intent.Status.StatusId ||
-                    status.Address == 0 ||
                     !float.IsFinite(status.RemainingTime) ||
                     status.RemainingTime <= 0f)
                 {
@@ -589,8 +676,13 @@ internal sealed class AllyRescueProbe
         uint expectedIconId,
         uint expectedJobId,
         ushort expectedRecast100ms,
-        string expectedCleanseVerb) =>
-        action.Name.ToString() == expectedName &&
+        string expectedCleanseVerb)
+    {
+        var description = transient.Description.ToString();
+        return string.Equals(
+                   action.Name.ToString(),
+                   expectedName,
+                   StringComparison.OrdinalIgnoreCase) &&
         action.Icon == expectedIconId &&
         action.IsPvP &&
         action.IsPlayerAction &&
@@ -607,10 +699,10 @@ internal sealed class AllyRescueProbe
         !action.CanTargetHostile &&
         !action.TargetArea &&
         action.RequiresLineOfSight &&
-        transient.Description.ToString().Contains(expectedCleanseVerb, StringComparison.Ordinal) &&
-        transient.Description.ToString().Contains(
-            "status affliction that can be removed by Purify",
-            StringComparison.Ordinal);
+        description.Contains(expectedCleanseVerb, StringComparison.OrdinalIgnoreCase) &&
+        description.Contains("status affliction", StringComparison.OrdinalIgnoreCase) &&
+        description.Contains("Purify", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsLivePlayer(IPlayerCharacter? player) =>
         HasValidNativeIdentity(player) &&
@@ -655,12 +747,29 @@ internal sealed class AllyRescueProbe
         return token == 0 ? 1 : token;
     }
 
-    private void ResetRuntime()
+    private void ResetRuntime(long nowMilliseconds)
     {
         state = AllyRescueBufferState.Initial;
         statusInstances.Clear();
         trustedMpActors.Clear();
+        actionEffectCapture.SetAllyRescueLocalEntityId(0);
+        confirmationState = AllyRescueConfirmationRules.ObserveTime(
+            confirmationState,
+            Math.Max(0, nowMilliseconds),
+            hardReset: true);
     }
+
+    private AllyRescueProbeSnapshot SnapshotAfterReset(string lastEvent) =>
+        AllyRescueProbeSnapshot.Initial with
+        {
+            AttemptCount = Interlocked.Read(ref attemptCount),
+            AcceptedCount = Interlocked.Read(ref acceptedCount),
+            MatchConfirmations = confirmationState.MatchStatistics,
+            SessionConfirmations = confirmationState.SessionStatistics,
+            ConfirmationCaptureCount = actionEffectCapture.CapturedAllyRescueCleanses,
+            ConfirmationDropCount = actionEffectCapture.DroppedAllyRescueCleanses,
+            LastEvent = lastEvent,
+        };
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {

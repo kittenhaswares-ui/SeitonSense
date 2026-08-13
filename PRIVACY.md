@@ -3,6 +3,8 @@
 Seiton Sense is local-only. It does not create accounts, contact a server,
 upload gameplay data, or include telemetry. It does not read character names or
 Home Worlds, and it does not persist combat, target, status, or key history.
+Ally Rescue attempt, client-accepted, and confirmed-cleanse counters exist only
+in memory for the current match/plugin session and are never uploaded.
 
 ## Transient display data
 
@@ -31,7 +33,9 @@ plus party/alliance hard targets used to compute the team `P#` count. A
 read-only action-effect observer examines bounded records directed at your
 local entity. For pressure it uses only source/target identity, action identity,
 effect-type categories needed to recognize a harmful event, and event sequence
-and time. It does not read, display, or store damage amounts.
+and time. While an Ally Rescue confirmation is pending, the same local observer
+can also examine the exact local-caster action result directed at the attempted
+party member. It does not read, display, or store damage amounts.
 
 Recent harmful-action evidence remains only in memory for the configured
 0.5-8 second window (3 seconds by default) and is then discarded. Queues are
@@ -137,12 +141,37 @@ therefore does not depend on the client's display language. The exact ally must
 still pass the action's native range and line-of-sight check immediately before
 the attempt.
 
+The candidate and dispatch checks do not depend on an internal status-slot
+address or an early local cooldown-ready sample. The exact party identity,
+live/targetable state, one of the four trigger statuses, current action identity,
+and native range/line-of-sight result are still revalidated. FFXIV receives one
+normal native request and remains the authority on whether it queues or
+executes.
+
 Self-Purify and Ally Rescue share one physical input-generation observer, with
 self-Purify receiving first claim. Ally Rescue consumes its state and that
 generation before at most one exact native action attempt. A false return,
 exception, vanished status, or changed target is not retried. The original key
 is still neither swallowed nor replayed, and no observed ally/status/input data
 is logged, persisted, or transmitted.
+
+The local return from the action request is counted separately as
+`client-accepted`; it is not proof of a cleanse. A confirmed removal requires a
+matching ActionEffect from the local caster, the exact Paean/Aquaveil action,
+the exact attempted party target, effect type `0x10`
+(`RecoveredFromStatusEffect`), and one of Stun `1343`, Heavy `1344`, Bind `1345`,
+Silence `1347`, Miracle of Nature `3085`, or Deep Freeze `3219` within the
+bounded correlation window. Heavy and Bind can confirm what the action actually
+removed but remain excluded from activation.
+
+An exact confirmation can show a short blue `CLEANSED` popup and increment
+aggregate current-match and plugin-session counts, including per-action and
+per-status totals. Attempts and client-accepted requests remain visibly
+separate. These counters, the bounded pending correlation, and duplicate-event
+keys exist only in memory; the settings reset can clear the displayed
+statistics. No ActionEffect payload, actor identity, counter, or popup history
+is written to disk, logged as combat history, sent over the network, or
+uploaded.
 
 ## Saved settings
 
@@ -152,7 +181,7 @@ MCH warning size/sound selection, the shared Near Assist/Near Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, and the Ally Rescue master/held-key opt-ins.
 Configuration schema 12 does not save observed actors, targets, combat events,
-status timers, or key state.
+status timers, key state, Ally Rescue confirmation state, or its counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the
