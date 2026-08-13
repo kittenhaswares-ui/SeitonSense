@@ -54,6 +54,7 @@ $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionInputCoordinator.cs'
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
+$miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
@@ -74,6 +75,7 @@ $allowedUnsafe = @(
     $inputContextPath,
     $purifyProbePath,
     $allyRescueProbePath,
+    $miracleInterceptProbePath,
     $nearAssistPath,
     $partySlotResolverPath,
     $machinistLimitBreakCapturePath,
@@ -85,7 +87,7 @@ $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b
 $unexpectedUnsafe = @($unsafeMatches | Where-Object { $allowedUnsafe -notcontains $_.Path })
 if ($unexpectedUnsafe.Count -gt 0) {
     $locations = $unexpectedUnsafe | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Unsafe code is allowed only in the eleven reviewed native boundaries: $($locations -join ', ')"
+    throw "Unsafe code is allowed only in the reviewed native boundaries: $($locations -join ', ')"
 }
 
 # Near Assist owns one target-only action detour. The MCH/pressure capture owns one
@@ -156,16 +158,17 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
     throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
-# Action initiation remains globally forbidden except for one exact self-Purify
-# call and one exact job-gated ally-rescue call. Near Assist/Near Help may only
-# forward an already incoming action through their shared sole Original call.
+# Action initiation remains globally forbidden except for one exact self-Purify,
+# one exact job-gated ally-rescue, and one exact WHM Miracle intercept call. Near
+# Assist/Near Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
-    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $nearAssistPath) -or $_.Line -notmatch '\bUseAction\b'
+    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $nearAssistPath) -or
+    $_.Line -notmatch '\bUseAction\b'
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, AllyRescueProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, AllyRescueProbe, MiracleInterceptProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
 # Warning audio is restricted to one bounded client-owned chat sound. External audio
@@ -213,6 +216,7 @@ $mchCapture = Read-RequiredSource $machinistLimitBreakCapturePath 'Machinist lim
 Assert-Literals $mchCapture @(
     'Hook<ActionEffectHandler.Delegates.Receive>',
     'ActionEffectHandler.MemberFunctionPointers.Receive',
+    'EffectSlotsPerTarget = 8',
     'MachinistLimitBreakMarkerRules.IsExactEarlyTargetMarker',
     'header->NumTargets != 1',
     'targetEntityIds[0].ObjectId == localEntityId',
@@ -224,6 +228,8 @@ Assert-Literals $mchCapture @(
     'MaximumQueuedPressureEvents = 128',
     'ConcurrentQueue<AllyRescueCleanseEffect>',
     'MaximumQueuedAllyRescueCleanses = 64',
+    'ConcurrentQueue<MiracleInterceptThreatEvent>',
+    'MaximumQueuedMiracleInterceptThreats = 64',
     'SetAllyRescueLocalEntityId',
     'CurrentAllyRescueLocalEntityId',
     'TryCaptureAllyRescueCleanse',
@@ -233,11 +239,22 @@ Assert-Literals $mchCapture @(
     'IsPurifyRemovableStatus(effect.Value)',
     'if (depth > MaximumQueuedAllyRescueCleanses)',
     'DroppedAllyRescueCleanses',
+    'SetMiracleInterceptLocalEntityId',
+    'CurrentMiracleInterceptLocalEntityId',
+    'TryCaptureMiracleInterceptThreat',
+    'EnemyCombatConstants.MarksmanSpiteActionId',
+    'EnemyCombatConstants.ZantetsukenActionId',
+    'EnemyCombatConstants.FuriousBacklashActionId',
+    'MiracleInterceptRules.ClassifyExactStartSignal(',
+    'IsEmpty(targetEffects[0])',
+    'HasOnlyEmptyAdditionalEffects(targetEffects)',
+    'if (depth > MaximumQueuedMiracleInterceptThreats)',
+    'DroppedMiracleInterceptThreats',
     'SetPressureLocalEntityId',
     'TryCapturePressure',
     'HasHarmfulPressureEffect',
     'pressureEvent.TargetEntityId != CurrentPressureLocalEntityId'
-) 'Read-only shared MCH LB, Ally Rescue confirmation, and pressure ActionEffect capture'
+) 'Read-only shared MCH LB, Ally Rescue confirmation, Miracle threat, and pressure ActionEffect capture'
 if ([regex]::Matches($mchCapture, '\bHookFromAddress\s*\(').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bHook<ActionEffectHandler\.Delegates\.Receive>').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bOriginalDisposeSafe\s*\(').Count -ne 1 -or
@@ -254,6 +271,39 @@ if ([regex]::Matches($mchCapture, '\bConcurrentQueue<AllyRescueCleanseEffect>').
     [regex]::Matches($mchCapture, '\bMaximumQueuedAllyRescueCleanses\s*=\s*64\b').Count -ne 1 -or
     [regex]::Matches($mchCapture, '\bTryDequeueAllyRescueCleanse\s*\(').Count -ne 1) {
     throw 'Ally Rescue confirmation must use exactly one bounded 64-item queue and one dequeue boundary.'
+}
+if ([regex]::Matches($mchCapture, '\bConcurrentQueue<MiracleInterceptThreatEvent>').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bMaximumQueuedMiracleInterceptThreats\s*=\s*64\b').Count -ne 1 -or
+    [regex]::Matches($mchCapture, '\bTryDequeueMiracleInterceptThreat\s*\(').Count -ne 1) {
+    throw 'Miracle threat capture must use exactly one bounded 64-item queue and one public dequeue boundary.'
+}
+if ($normalizedMchCapture -notmatch 'MiracleInterceptRules\.ClassifyExactStartSignal\( actionId, casterEntityId, targetEntityId, header->NumTargets, targetEffects\[0\]\.Type, IsEmpty\(targetEffects\[0\]\), HasOnlyEmptyAdditionalEffects\(targetEffects\)\)' -or
+    $normalizedMchCapture -notmatch 'for \(var index = 1; index < effects\.Length; index\+\+\).*?!IsEmpty\(effects\[index\]\)') {
+    throw 'Miracle threat capture must pass the exact single-target identity and all eight effect-slot facts to the pure classifier.'
+}
+
+$miracleInterceptRules = Read-RequiredSource (Join-Path $coreRoot 'MiracleInterceptRules.cs') 'Miracle intercept rules'
+$normalizedMiracleInterceptRules = $miracleInterceptRules -replace '\s+', ' '
+Assert-Literals $miracleInterceptRules @(
+    'MarksmanSpiteActionId = 29_415',
+    'ZantetsukenActionId = 29_537',
+    'FuriousBacklashActionId = 39_188',
+    'HardenedScalesStatusId = 4_096',
+    'MarksmanSpiteThreatLifetimeMilliseconds = 500',
+    'ZantetsukenThreatLifetimeMilliseconds = 500',
+    'FuriousBacklashThreatLifetimeMilliseconds = 250',
+    'MaximumObservedSignals = 128',
+    'targetCount != 1',
+    '!additionalEffectsAreCompletelyEmpty',
+    'firstEffectType == 0x1B',
+    'firstEffectIsCompletelyEmpty',
+    'targetEntityId != casterEntityId',
+    'targetEntityId == casterEntityId'
+) 'Exact Miracle start-marker classifier and bounded one-shot policy'
+if ($normalizedMiracleInterceptRules -notmatch 'MarksmanSpiteActionId when targetEntityId != casterEntityId && firstEffectType == 0x1B\s*=>\s*MiracleInterceptThreatKind\.MarksmanSpite' -or
+    $normalizedMiracleInterceptRules -notmatch 'ZantetsukenActionId when targetEntityId != casterEntityId && firstEffectIsCompletelyEmpty\s*=>\s*MiracleInterceptThreatKind\.Zantetsuken' -or
+    $normalizedMiracleInterceptRules -notmatch 'FuriousBacklashActionId when targetEntityId == casterEntityId && firstEffectIsCompletelyEmpty\s*=>\s*MiracleInterceptThreatKind\.FuriousBacklash') {
+    throw 'Pure Miracle classification must retain exact MCH 0x1B, SAM all-empty non-self, and VPR all-empty self signatures.'
 }
 
 $mchMarkerRules = Read-RequiredSource (Join-Path $coreRoot 'MachinistLimitBreakMarkerRules.cs') 'MCH LB marker rules'
@@ -308,9 +358,11 @@ Assert-Literals $emergencyInputCoordinator @(
     'if (IsConsumed) return',
     'purifyHeldEnabled',
     'allyRescueHeldEnabled',
+    'miracleInterceptHeldEnabled',
+    'miracleInterceptHeldWasEnabled',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared Purify and Ally Rescue input ownership'
+) 'Shared Purify, Ally Rescue, and Miracle input ownership'
 if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
     throw 'The shared emergency input coordinator may only observe and consume physical generations.'
 }
@@ -319,17 +371,31 @@ $personalStatus = Read-RequiredSource $personalStatusPath 'Personal status coord
 $normalizedPersonalStatus = $personalStatus -replace '\s+', ' '
 $purifyObserve = [regex]::Match($personalStatus, '\bemergencyPurify\.Observe\s*\(')
 $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
-if (-not $purifyObserve.Success -or -not $rescueObserve.Success -or
+$miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
+if (-not $purifyObserve.Success -or -not $rescueObserve.Success -or -not $miracleObserve.Success -or
     $purifyObserve.Index -gt $rescueObserve.Index -or
-    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 3) {
-    throw 'Personal status coordination must give self-Purify first claim on the one shared input frame before Ally Rescue.'
+    $rescueObserve.Index -gt $miracleObserve.Index -or
+    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 4) {
+    throw 'Personal status coordination must give self-Purify, Ally Rescue, then Miracle first-to-last claim on one shared input frame.'
 }
 Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
     'allyRescueConfigurationEnabled && !purifyClaimedPriority',
+    'EmergencyActionPriorityRules.AllyRescueClaimsPriority(',
+    'miracleInterceptConfigurationEnabled &&',
+    '!purifyClaimedPriority &&',
+    '!allyRescueClaimedPriority',
     'metadata.AllyRescueStatusesVerified',
+    'metadata.MiracleOfNatureActionVerified',
+    'metadata.MarksmanSpiteVerified',
+    'metadata.ZantetsukenVerified',
+    'metadata.FuriousBacklashVerified',
     'context == SupportedPvPContext.CrystallineConflict'
-) 'Self-Purify priority over Ally Rescue'
+) 'Shared self-Purify, Ally Rescue, and Miracle priority'
+$normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
+if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
+    throw 'Core emergency-action priority must permit Miracle only after both self-Purify and Ally Rescue decline the generation.'
+}
 
 $allyRescue = Read-RequiredSource $allyRescueProbePath 'Ally Rescue probe'
 $normalizedAllyRescue = $allyRescue -replace '\s+', ' '
@@ -447,6 +513,76 @@ Assert-Literals $allyRescueSelection @(
 ) 'Exact Ally Rescue trigger and priority rules'
 if ($allyRescueSelection -match '\b(HeavyStatusId|BindStatusId)\b|\b1344\b|\b1345\b') {
     throw 'Heavy and Bind must remain excluded from Ally Rescue triggers.'
+}
+
+# Miracle is the third and final direct action boundary. It must remain CC-only,
+# WHM-only, exact-enemy, metadata/protection-gated, and strictly one-shot.
+$miracleIntercept = Read-RequiredSource $miracleInterceptProbePath 'Miracle intercept probe'
+$normalizedMiracleIntercept = $miracleIntercept -replace '\s+', ' '
+if ([regex]::Matches($miracleIntercept, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
+    throw 'Miracle intercept must contain exactly one native UseAction call.'
+}
+Assert-Literals $miracleIntercept @(
+    'MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind)',
+    'RequiredCcProtectionStatusIds',
+    'EnemyCombatConstants.GuardStatusId',
+    'EnemyCombatConstants.GuardStatusAlternateId',
+    'EnemyCombatConstants.ResilienceStatusId',
+    'EnemyCombatConstants.InnerReleaseStatusId',
+    'EnemyCombatConstants.MeikyoShisuiStatusId',
+    'EnemyCombatConstants.HardenedScalesStatusId',
+    'CcProtectionMetadataGuard.Validate(dataManager, log)',
+    'RequiredCcProtectionStatusIds.All(',
+    'verifiedProtectionStatusIds.Contains',
+    'isCrystallineConflict',
+    'EnemyCombatConstants.WhiteMageJobId',
+    'signal.LocalEntityId != localPlayer.EntityId',
+    'EnemyCombatConstants.MachinistJobId',
+    'EnemyCombatConstants.SamuraiJobId',
+    'EnemyCombatConstants.ViperJobId',
+    'executeTracker.Enemies',
+    'HasAnyVerifiedCcProtection',
+    'HasVerifiedActiveStatus',
+    'Actor status-list membership is the authoritative live presence',
+    'GetActionInRangeOrLoS',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'activeThreat = null',
+    'inputFrame.Consume()',
+    'TryUseMiracleOnce(revalidated.GameObjectId, out attempted)',
+    'nearAssist.RunWithoutRedirect',
+    'ActionType.Action',
+    'ActionManager.UseActionMode.None',
+    'the action will not be retried'
+) 'Bounded exact-target WHM Miracle runtime'
+if ($normalizedMiracleIntercept -notmatch 'var protectionMetadataReady = RequiredCcProtectionStatusIds\.All\( verifiedProtectionStatusIds\.Contains\); var enabled = configurationEnabled && isCrystallineConflict && localIdentityValid && isWhiteMage && protectionMetadataReady;' -or
+    $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\)' -or
+    $miracleIntercept -match '\bShowCcProtection\b') {
+    throw 'Miracle must require complete independent protection metadata plus each independently verified threat before arming.'
+}
+if ($normalizedMiracleIntercept -notmatch 'var hardenedScales = HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate\);.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
+    $normalizedMiracleIntercept -notmatch 'var revalidatedHardened = revalidated is not null && HasVerifiedActiveStatus\( revalidated, EnemyCombatConstants\.HardenedScalesStatusId\); var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated\);.*?if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedRange\)') {
+    throw 'Miracle must prove live Hardened Scales absence and no other verified protection both before spending input and immediately before UseAction.'
+}
+if ($normalizedMiracleIntercept -notmatch 'actionManager->UseAction\s*\(\s*ActionType\.Action\s*,\s*EnemyCombatConstants\.MiracleOfNatureActionId\s*,\s*targetGameObjectId\s*,\s*0\s*,\s*ActionManager\.UseActionMode\.None\s*,\s*0\s*\)') {
+    throw 'Miracle intercept must issue only ActionType.Action 29228 to the exact revalidated enemy with UseActionMode.None.'
+}
+$miracleConsumeState = [regex]::Match($miracleIntercept, 'activeThreat\s*=\s*null\s*;\s*\r?\n\s*inputFrame\.Consume\s*\(\s*\)\s*;')
+$miracleTryUse = [regex]::Match($miracleIntercept, '\bTryUseMiracleOnce\s*\(\s*revalidated\.GameObjectId')
+$miracleNativeCall = [regex]::Match($miracleIntercept, 'actionManager->UseAction\s*\(')
+if (-not $miracleConsumeState.Success -or -not $miracleTryUse.Success -or -not $miracleNativeCall.Success -or
+    $miracleConsumeState.Index -gt $miracleTryUse.Index -or
+    $miracleTryUse.Index -gt $miracleNativeCall.Index) {
+    throw 'Miracle intercept must spend its threat and shared input before its one revalidated native action attempt.'
+}
+if ($miracleIntercept -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMp|CurrentMount|CanUseActionOnTarget)\b' -or
+    $miracleIntercept -match '(?-i:\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction)\b)' -or
+    $miracleIntercept -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Miracle intercept must never cooldown-prefilter, retry, queue, or mutate a visible target.'
+}
+if ($miracleIntercept -match '\bstatus\.RemainingTime\b' -or
+    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\).*?return true' -or
+    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?status\.StatusId == statusId.*?return true') {
+    throw 'Miracle protection gates must use live StatusList membership, never RemainingTime prediction.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
@@ -860,8 +996,8 @@ Assert-Literals $targetPressureTracker @(
 $catalogDefinitions = [regex]::Matches(
     $ccProtectionCatalog,
     '(?m)^\s*new\s*\(\s*(?<Id>\d+)\s*,\s*"(?<Name>[^"]+)"')
-$catalogIds = @($catalogDefinitions | ForEach-Object { [uint]$_.Groups['Id'].Value } | Sort-Object)
-$expectedCatalogIds = @(1303u, 1320u, 3054u, 3248u, 3673u, 4096u, 4477u)
+$catalogIds = @($catalogDefinitions | ForEach-Object { [uint32]$_.Groups['Id'].Value } | Sort-Object)
+$expectedCatalogIds = @([uint32]1303, [uint32]1320, [uint32]3054, [uint32]3248, [uint32]3673, [uint32]4096, [uint32]4477)
 if ($ccProtectionCatalog -match '\bnew\s+CcProtectionDefinition\s*\(' -or
     $catalogDefinitions.Count -ne $expectedCatalogIds.Count -or
     ($catalogIds -join ',') -ne ($expectedCatalogIds -join ',')) {
@@ -928,12 +1064,25 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.PvPSilenceStatusId',
     'EnemyCombatConstants.DeepFreezeStatusId',
     'EnemyCombatConstants.MiracleOfNatureStatusId',
+    'EnemyCombatConstants.MiracleOfNatureActionId',
+    'EnemyCombatConstants.ZantetsukenActionId',
+    'EnemyCombatConstants.FuriousBacklashActionId',
+    'EnemyCombatConstants.HardenedScalesStatusId',
     'EnemyCombatConstants.PurifyActionId',
     'EnemyCombatConstants.ResilienceStatusId',
     'ValidateFeature("Wildfire"',
     'ValidateFeature("Death Warrant"',
     'ValidateFeature("Marksman''s Spite"',
-    'ValidateFeature("Purify"'
+    'ValidateFeature("Purify"',
+    'ValidateFeature("Miracle of Nature action"',
+    'ValidateFeature("Zantetsuken"',
+    'ValidateFeature("Furious Backlash"',
+    'MiracleOfNatureActionVerified',
+    'ZantetsukenVerified',
+    'FuriousBacklashVerified',
+    'Forcibly transforms target',
+    'preventing them from using actions other than Purify',
+    'nullifies status afflictions that can be removed by Purify'
 ) 'Metadata guard'
 
 $exactCombatIds = [ordered]@{
@@ -944,6 +1093,21 @@ $exactCombatIds = [ordered]@{
     MarksmanSpiteActionId = 29415
     MarksmanSpiteIconId = 9636
     MarksmanSpiteTimelineId = 11546
+    ZantetsukenActionId = 29537
+    ZantetsukenIconId = 9666
+    ZantetsukenRecast100ms = 100
+    SamuraiJobId = 34
+    FuriousBacklashActionId = 39188
+    FuriousBacklashIconId = 9730
+    FuriousBacklashRecast100ms = 20
+    ViperJobId = 41
+    HardenedScalesStatusId = 4096
+    InnerReleaseStatusId = 1303
+    MeikyoShisuiStatusId = 1320
+    MiracleOfNatureActionId = 29228
+    MiracleOfNatureActionIconId = 9608
+    WhiteMageJobId = 24
+    MiracleOfNatureRecast100ms = 240
     PvPStunStatusId = 1343
     PvPHeavyStatusId = 1344
     PvPBindStatusId = 1345
@@ -1082,7 +1246,7 @@ Assert-Literals $physicalKeyRules @(
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 12',
+    'public int Version { get; set; } = 13',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -1109,10 +1273,28 @@ Assert-Literals $configuration @(
     'if (Version < 12)',
     'ExperimentalAllyRescueOnNextKey = false',
     'AllyRescueOnHeldGameplayKey = false',
+    'if (Version < 13)',
+    'ExperimentalMiracleInterceptOnHeldKey = false',
+    'MiracleInterceptMchLimitBreak = true',
+    'MiracleInterceptSamZantetsuken = true',
+    'MiracleInterceptViperNest = true',
+    'Version = 13',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
     'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
     'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f'
-) 'Held-key, target-highlight, macro helpers, Ally Rescue, pressure, immunity, and warning configuration migration'
+) 'Held-key, target-highlight, macro helpers, Ally Rescue, Miracle, pressure, immunity, and warning configuration migration'
+if ($configuration -notmatch '(?m)^\s*public bool ExperimentalMiracleInterceptOnHeldKey \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptMchLimitBreak \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptSamZantetsuken \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptViperNest \{ get; set; \} = true;\s*$') {
+    throw 'New installations must default Miracle master off and its three per-threat toggles on.'
+}
+if ([regex]::Matches($configuration, '\bExperimentalMiracleInterceptOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMiracleInterceptMchLimitBreak\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMiracleInterceptSamZantetsuken\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMiracleInterceptViperNest\s*=\s*true\s*;').Count -lt 2) {
+    throw 'Miracle intercept must stay master-default-off with all three exact trigger toggles default-on in migration and reset.'
+}
 
 $guardRules = Read-RequiredSource (Join-Path $coreRoot 'GuardCooldownRules.cs') 'Guard cooldown rules'
 $mpRules = Read-RequiredSource (Join-Path $coreRoot 'LowMpRules.cs') 'Low-MP rules'
@@ -1131,4 +1313,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.7.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, shared MCH/pressure/rescue observation remains read-only, Ally Rescue confirmation requires an exact bounded server effect, CC protection remains an exact full-immunity allowlist, warning audio uses one bounded client sound, and one shared physical input generation permits at most one self-Purify or exact BRD/WHM Ally Rescue attempt."
+Write-Host "Seiton Sense v0.8.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist and Near Help share one bounded target-only detour, one shared ActionEffect hook captures exact bounded MCH/SAM/VPR markers, CC protection remains metadata-verified and live-presence-gated, and one shared physical input generation permits at most one self-Purify, Ally Rescue, or exact-target WHM Miracle attempt in that priority."

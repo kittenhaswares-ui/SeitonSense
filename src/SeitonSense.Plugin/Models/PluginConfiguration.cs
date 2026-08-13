@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 12;
+    public int Version { get; set; } = 13;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -49,6 +49,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PurifyOnMiracleOfNature { get; set; } = true;
     public bool ExperimentalAllyRescueOnNextKey { get; set; }
     public bool AllyRescueOnHeldGameplayKey { get; set; }
+    public bool ExperimentalMiracleInterceptOnHeldKey { get; set; }
+    public bool MiracleInterceptMchLimitBreak { get; set; } = true;
+    public bool MiracleInterceptSamZantetsuken { get; set; } = true;
+    public bool MiracleInterceptViperNest { get; set; } = true;
     public bool EnableFocusGlow { get; set; }
     public bool FocusHideWithGameUi { get; set; } = true;
     public bool FocusDrawInForeground { get; set; } = true;
@@ -121,7 +125,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 12)
+        if (Version >= 13)
         {
             if (repaired) Save();
             return;
@@ -227,7 +231,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
             AllyRescueOnHeldGameplayKey = false;
         }
 
-        Version = 12;
+        if (Version < 13)
+        {
+            // This helper can issue one hostile WHM action attempt in response
+            // to an enemy start marker. Existing users must opt in explicitly.
+            ExperimentalMiracleInterceptOnHeldKey = false;
+            MiracleInterceptMchLimitBreak = true;
+            MiracleInterceptSamZantetsuken = true;
+            MiracleInterceptViperNest = true;
+        }
+
+        Version = 13;
         ClampSettings();
         Save();
     }
@@ -236,7 +250,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 12;
+        Version = 13;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -279,6 +293,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PurifyOnMiracleOfNature = true;
         ExperimentalAllyRescueOnNextKey = false;
         AllyRescueOnHeldGameplayKey = false;
+        ExperimentalMiracleInterceptOnHeldKey = false;
+        MiracleInterceptMchLimitBreak = true;
+        MiracleInterceptSamZantetsuken = true;
+        MiracleInterceptViperNest = true;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
         EnableNearAssistMacro = false;

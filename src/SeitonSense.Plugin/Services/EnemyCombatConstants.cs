@@ -31,6 +31,25 @@ internal static class EnemyCombatConstants
     internal const ushort MarksmanSpiteRecast100ms = 100;
     internal const long MarksmanSpiteWarningDurationMilliseconds = 1_800;
 
+    internal const uint ZantetsukenActionId = 29537;
+    internal const uint ZantetsukenIconId = 9666;
+    internal const ushort ZantetsukenRecast100ms = 100;
+    internal const uint SamuraiJobId = 34;
+
+    internal const uint FuriousBacklashActionId = 39188;
+    internal const uint FuriousBacklashIconId = 9730;
+    internal const ushort FuriousBacklashRecast100ms = 20;
+    internal const uint ViperJobId = 41;
+    internal const uint HardenedScalesStatusId = 4096;
+    internal const uint InnerReleaseStatusId = 1303;
+    internal const uint MeikyoShisuiStatusId = 1320;
+
+    internal const uint MiracleOfNatureActionId = 29228;
+    internal const uint MiracleOfNatureActionIconId = 9608;
+    internal const uint WhiteMageJobId = 24;
+    internal const ushort MiracleOfNatureRecast100ms = 240;
+    internal const float MiracleOfNatureRange = 10f;
+
     internal const uint DeathWarrantActionId = 29549;
     internal const uint DeathWarrantActionIconId = 9669;
     internal const ushort DeathWarrantRecast100ms = 240;

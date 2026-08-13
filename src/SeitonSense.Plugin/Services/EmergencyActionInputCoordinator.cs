@@ -4,7 +4,7 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
-/// by emergency self-Purify and ally rescue. Consumption is deliberately shared:
+/// by emergency self-Purify, ally rescue, and Miracle intercept. Consumption is deliberately shared:
 /// once either helper claims a generation, every later helper sees no input.
 /// </summary>
 internal sealed class EmergencyActionInputFrame
@@ -46,6 +46,7 @@ internal sealed class EmergencyActionInputCoordinator
     private readonly GameInputContextProbe probe;
     private bool purifyHeldWasEnabled;
     private bool allyRescueHeldWasEnabled;
+    private bool miracleInterceptHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -55,7 +56,8 @@ internal sealed class EmergencyActionInputCoordinator
     internal EmergencyActionInputFrame Observe(
         bool shouldObserve,
         bool purifyHeldEnabled,
-        bool allyRescueHeldEnabled)
+        bool allyRescueHeldEnabled,
+        bool miracleInterceptHeldEnabled)
     {
         if (!shouldObserve)
         {
@@ -68,9 +70,11 @@ internal sealed class EmergencyActionInputCoordinator
         var input = probe.Observe();
         var heldOptionJustEnabled =
             (purifyHeldEnabled && !purifyHeldWasEnabled) ||
-            (allyRescueHeldEnabled && !allyRescueHeldWasEnabled);
+            (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
+            (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
+        miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -87,10 +91,21 @@ internal sealed class EmergencyActionInputCoordinator
         return new EmergencyActionInputFrame(input, probe);
     }
 
+    internal EmergencyActionInputFrame Observe(
+        bool shouldObserve,
+        bool purifyHeldEnabled,
+        bool allyRescueHeldEnabled) =>
+        Observe(
+            shouldObserve,
+            purifyHeldEnabled,
+            allyRescueHeldEnabled,
+            miracleInterceptHeldEnabled: false);
+
     internal void Reset()
     {
         probe.Reset();
         purifyHeldWasEnabled = false;
         allyRescueHeldWasEnabled = false;
+        miracleInterceptHeldWasEnabled = false;
     }
 }

@@ -58,6 +58,22 @@ public static class EmergencyActionPriorityRules
 
     public static bool AllowAllyRescue(EmergencyPurifyBufferDecision decision) =>
         !SelfPurifyClaimsPriority(decision);
+
+    public static bool AllyRescueClaimsPriority(AllyRescueBufferDecision decision) =>
+        AllyRescueClaimsPriority(decision.Kind, decision.InputTrigger);
+
+    public static bool AllyRescueClaimsPriority(
+        AllyRescueBufferDecisionKind kind,
+        AllyRescueInputTrigger inputTrigger) =>
+        kind == AllyRescueBufferDecisionKind.Dispatch ||
+        (kind == AllyRescueBufferDecisionKind.Armed &&
+         inputTrigger != AllyRescueInputTrigger.None);
+
+    public static bool AllowMiracleIntercept(
+        EmergencyPurifyBufferDecision purifyDecision,
+        AllyRescueBufferDecision rescueDecision) =>
+        !SelfPurifyClaimsPriority(purifyDecision) &&
+        !AllyRescueClaimsPriority(rescueDecision);
 }
 
 public readonly record struct AllyRescueBufferState(
