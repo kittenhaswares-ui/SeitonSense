@@ -79,7 +79,7 @@ internal sealed class PersonalStatusService : IDisposable
             log);
         miracleIntercept = new MiracleInterceptProbe(
             objectTable,
-            dataManager,
+            nearAssist.VerifiedCcBrakeStatusIds,
             executeTracker,
             nearAssist,
             machinistLimitBreakCapture,
@@ -311,9 +311,8 @@ internal sealed class PersonalStatusService : IDisposable
         var miracle = miracleIntercept.Observe(
             localPlayer,
             context == SupportedPvPContext.CrystallineConflict,
-            miracleInterceptConfigurationEnabled &&
-            !purifyClaimedPriority &&
-            !allyRescueClaimedPriority,
+            miracleInterceptConfigurationEnabled,
+            !purifyClaimedPriority && !allyRescueClaimedPriority,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
             configuration.MiracleInterceptViperNest,

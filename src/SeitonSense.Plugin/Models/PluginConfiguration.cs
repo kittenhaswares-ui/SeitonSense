@@ -6,7 +6,36 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
-    public int Version { get; set; } = 14;
+    private static readonly uint[] SupportedCcBrakeJobIds =
+    [
+        19, // PLD
+        21, // WAR
+        23, // BRD
+        24, // WHM
+        25, // BLM
+        30, // NIN
+        31, // MCH
+        33, // AST
+        34, // SAM
+    ];
+
+    private static readonly uint[] SupportedCcBrakeActionIds =
+    [
+        29065, // Intervene
+        29081, // Blota
+        29395, // Silent Nocturne
+        29399, // Repelling Shot
+        29228, // Miracle of Nature
+        41510, // Lethargy
+        29510, // Forked Raiju
+        29707, // Fleeting Raiju
+        29407, // Air Anchor
+        29244, // Gravity II
+        29248, // Double Cast: Gravity II
+        29535, // Mineuchi
+    ];
+
+    public int Version { get; set; } = 15;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -130,6 +159,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowCcProtection { get; set; } = true;
     public bool ShowCcProtectionCountdown { get; set; } = true;
     public float CcProtectionEmblemScale { get; set; } = 1f;
+    public bool EnableCcImmunityBrake { get; set; }
+    public Dictionary<uint, bool> CcBrakeJobs { get; set; } = CreateDefaultCcBrakeJobs();
+    public Dictionary<uint, bool> CcBrakeActions { get; set; } = CreateDefaultCcBrakeActions();
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -138,7 +170,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 14)
+        if (Version >= 15)
         {
             if (repaired) Save();
             return;
@@ -276,7 +308,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
             MonkEarthReplyExpirySeconds = 1.25f;
         }
 
-        Version = 14;
+        if (Version < 15)
+        {
+            // The brake can suppress one incoming action attempt, so every existing
+            // installation must deliberately opt in after updating. Once enabled,
+            // the reviewed job/action selections start enabled and remain granular.
+            EnableCcImmunityBrake = false;
+            CcBrakeJobs = CreateDefaultCcBrakeJobs();
+            CcBrakeActions = CreateDefaultCcBrakeActions();
+        }
+
+        Version = 15;
         ClampSettings();
         Save();
     }
@@ -285,7 +327,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 14;
+        Version = 15;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -370,6 +412,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowCcProtection = true;
         ShowCcProtectionCountdown = true;
         CcProtectionEmblemScale = 1f;
+        EnableCcImmunityBrake = false;
+        CcBrakeJobs = CreateDefaultCcBrakeJobs();
+        CcBrakeActions = CreateDefaultCcBrakeActions();
         ClampSettings();
     }
 
@@ -443,6 +488,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     private bool ClampSettings()
     {
         var changed = false;
+        changed |= NormalizeCcBrakeSelections();
         var clamped = float.IsFinite(NearAssistMaxAllyDistance)
             ? Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)
             : 25f;
@@ -501,6 +547,83 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
         return changed;
     }
+
+    public bool IsCcBrakeJobEnabled(uint jobId) =>
+        IsSupportedCcBrakeJob(jobId) &&
+        (!CcBrakeJobs.TryGetValue(jobId, out var enabled) || enabled);
+
+    public bool IsCcBrakeActionEnabled(uint actionId) =>
+        IsSupportedCcBrakeAction(actionId) &&
+        (!CcBrakeActions.TryGetValue(actionId, out var enabled) || enabled);
+
+    public void SetCcBrakeJobEnabled(uint jobId, bool enabled)
+    {
+        if (IsSupportedCcBrakeJob(jobId)) CcBrakeJobs[jobId] = enabled;
+    }
+
+    public void SetCcBrakeActionEnabled(uint actionId, bool enabled)
+    {
+        if (!IsSupportedCcBrakeAction(actionId)) return;
+        CcBrakeActions[actionId] = enabled;
+
+        // Double Cast is the adjusted form of the same AST Gravity II choice.
+        if (actionId is 29244 or 29248)
+        {
+            CcBrakeActions[29244] = enabled;
+            CcBrakeActions[29248] = enabled;
+        }
+    }
+
+    private bool NormalizeCcBrakeSelections()
+    {
+        var normalizedJobs = NormalizeSelections(CcBrakeJobs, SupportedCcBrakeJobIds);
+        var normalizedActions = NormalizeSelections(CcBrakeActions, SupportedCcBrakeActionIds);
+
+        // Keep both runtime forms behind the one visible Gravity II setting.
+        var gravityEnabled = normalizedActions[29244];
+        normalizedActions[29248] = gravityEnabled;
+
+        var changed = !DictionaryEquals(CcBrakeJobs, normalizedJobs) ||
+                      !DictionaryEquals(CcBrakeActions, normalizedActions);
+        CcBrakeJobs = normalizedJobs;
+        CcBrakeActions = normalizedActions;
+        return changed;
+    }
+
+    private static Dictionary<uint, bool> CreateDefaultCcBrakeJobs() =>
+        SupportedCcBrakeJobIds.ToDictionary(static id => id, static _ => true);
+
+    private static Dictionary<uint, bool> CreateDefaultCcBrakeActions() =>
+        SupportedCcBrakeActionIds.ToDictionary(static id => id, static _ => true);
+
+    private static Dictionary<uint, bool> NormalizeSelections(
+        IReadOnlyDictionary<uint, bool>? selections,
+        IReadOnlyList<uint> supportedIds)
+    {
+        var normalized = new Dictionary<uint, bool>(supportedIds.Count);
+        foreach (var id in supportedIds)
+            normalized[id] = selections?.TryGetValue(id, out var enabled) == true ? enabled : true;
+        return normalized;
+    }
+
+    private static bool DictionaryEquals(
+        IReadOnlyDictionary<uint, bool>? left,
+        IReadOnlyDictionary<uint, bool> right)
+    {
+        if (left is null || left.Count != right.Count) return false;
+        foreach (var (id, enabled) in right)
+        {
+            if (!left.TryGetValue(id, out var current) || current != enabled) return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSupportedCcBrakeJob(uint jobId) =>
+        Array.IndexOf(SupportedCcBrakeJobIds, jobId) >= 0;
+
+    private static bool IsSupportedCcBrakeAction(uint actionId) =>
+        Array.IndexOf(SupportedCcBrakeActionIds, actionId) >= 0;
 
     private static bool Clamp(
         float value,

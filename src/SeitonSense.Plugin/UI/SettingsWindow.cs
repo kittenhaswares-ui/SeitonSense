@@ -455,6 +455,8 @@ internal sealed class SettingsWindow : Window
             "VPR Furious Backlash / Nest der Blutschuppen",
             configuration.MiracleInterceptViperNest,
             value => configuration.MiracleInterceptViperNest = value);
+        if (ImGui.Button("Preview MIRACLE LANDED flash"))
+            overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Experimental and CC-only. WHM uses the exact early action marker and one already-eligible physical " +
@@ -464,7 +466,9 @@ internal sealed class SettingsWindow : Window
             "Nest waits until Hardened Scales is actually absent, so Miracle is never deliberately spent into " +
             "Viper's CC immunity. Self Purify wins first, then Ally Rescue, then this helper. State and input are " +
             "consumed before one native Miracle attempt; there is no selected-target change, fallback, or retry. " +
-            "Client acceptance does not prove the startup was interrupted; live validation is still required.");
+            "A blue MIRACLE LANDED flash appears only after the server reports Miracle status 3085 on that exact " +
+            "pending threat target within 1500 ms. This confirms that Miracle landed, not conclusively that the " +
+            "hostile damage was cancelled. Client acceptance alone still proves neither result.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -542,6 +546,10 @@ internal sealed class SettingsWindow : Window
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "ALL JOBS / GENERAL QUALITY OF LIFE");
         changed |= DrawResourceAuraControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("All jobs: CC-immunity brake", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawCcImmunityBrakeControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("All jobs: Purify helper", ImGuiTreeNodeFlags.DefaultOpen))
@@ -636,6 +644,81 @@ internal sealed class SettingsWindow : Window
         if (ImGui.CollapsingHeader("Miracle of Nature intercept", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawMiracleInterceptControls();
 
+        return changed;
+    }
+
+    private bool DrawCcImmunityBrakeControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Brake selected CC actions against verified immunity",
+            configuration.EnableCcImmunityBrake,
+            value => configuration.EnableCcImmunityBrake = value);
+        ImGui.TextColored(
+            configuration.EnableCcImmunityBrake
+                ? new Vector4(0.35f, 0.9f, 1f, 1f)
+                : new Vector4(0.7f, 0.72f, 0.78f, 1f),
+            configuration.EnableCcImmunityBrake
+                ? "ON — enabled jobs and actions are checked on every real press/pulse."
+                : "OFF — all action attempts pass through unchanged.");
+
+        ImGui.Spacing();
+        changed |= DrawCcBrakeJob(19, "PALADIN", (29065, "Intervene"));
+        changed |= DrawCcBrakeJob(21, "WARRIOR", (29081, "Blota"));
+        changed |= DrawCcBrakeJob(
+            23,
+            "BARD",
+            (29395, "Silent Nocturne"),
+            (29399, "Repelling Shot"));
+        changed |= DrawCcBrakeJob(24, "WHITE MAGE", (29228, "Miracle of Nature"));
+        changed |= DrawCcBrakeJob(25, "BLACK MAGE", (41510, "Lethargy"));
+        changed |= DrawCcBrakeJob(
+            30,
+            "NINJA",
+            (29510, "Forked Raiju"),
+            (29707, "Fleeting Raiju"));
+        changed |= DrawCcBrakeJob(31, "MACHINIST", (29407, "Air Anchor"));
+        changed |= DrawCcBrakeJob(33, "ASTROLOGIAN", (29244, "Gravity II (including Double Cast)"));
+        changed |= DrawCcBrakeJob(34, "SAMURAI", (29535, "Mineuchi"));
+
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Crystalline Conflict only. This works directly from a hotbar; no macro is required. For the reviewed " +
+            "single/primary-target list above, an enabled action aimed at an exactly identified enemy with verified " +
+            "protection against that exact CC receives an invalid target for that one incoming attempt. The action, " +
+            "target and input are never stored, replayed, changed to an alternative, or retried by Seiton Sense.");
+        ImGui.TextDisabled(
+            "A later real press or Turbo Hotbar pulse is checked again and can pass as soon as protection is gone. " +
+            "Vanilla key holding does not generate repeats by itself. The brake blocks the whole selected action, " +
+            "including any damage or movement attached to it, so disable individual actions to taste. Broad cone, " +
+            "ground and ambiguous multi-target CC is deliberately excluded. A downstream plugin that rewrites the " +
+            "target after Seiton Sense can override this safety boundary; test plugin order before relying on it. " +
+            "Unknown or ambiguous state passes through unchanged.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawCcBrakeJob(
+        uint jobId,
+        string jobName,
+        params (uint ActionId, string Name)[] actions)
+    {
+        var changed = false;
+        changed |= Checkbox(
+            $"{jobName}##CcBrakeJob{jobId}",
+            configuration.IsCcBrakeJobEnabled(jobId),
+            value => configuration.SetCcBrakeJobEnabled(jobId, value));
+
+        ImGui.Indent(24f * ImGuiHelpers.GlobalScale);
+        foreach (var (actionId, name) in actions)
+        {
+            changed |= Checkbox(
+                $"{name}##CcBrakeAction{actionId}",
+                configuration.IsCcBrakeActionEnabled(actionId),
+                value => configuration.SetCcBrakeActionEnabled(actionId, value));
+        }
+
+        ImGui.Unindent(24f * ImGuiHelpers.GlobalScale);
         return changed;
     }
 
@@ -1085,6 +1168,8 @@ internal sealed class SettingsWindow : Window
             $"attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}, " +
             $"count={miracle.AttemptCount}/{miracle.AcceptedCount}, " +
             $"capture/queue/drop={miracle.CapturedThreatCount}/{miracle.CaptureQueueDepth}/{miracle.DroppedThreatCount}, " +
+            $"landed={miracle.ConfirmedLandingCount}, confirm-capture/queue/drop=" +
+            $"{miracle.CapturedConfirmationCount}/{miracle.ConfirmationQueueDepth}/{miracle.DroppedConfirmationCount}, " +
             $"last={miracle.LastEvent}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
@@ -1099,7 +1184,9 @@ internal sealed class SettingsWindow : Window
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
             "and uploads no gameplay data to an external service. Near Assist, Near Help, and Far Help may replace only " +
-            "the target ID on one armed macro action. The optional Purify, Ally Rescue, and Miracle helpers " +
+            "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
+            "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
+            "The optional Purify, Ally Rescue, and Miracle helpers " +
             "share one physical input generation and can each initiate at most one exact action attempt, in that priority " +
             "order. Monk Earth's Reply is a separate automatic follow-up that yields whenever an earlier helper already " +
             "attempted an action in the same update. All helpers are " +

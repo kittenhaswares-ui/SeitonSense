@@ -43,6 +43,7 @@ internal sealed class OverlayRenderer
     private readonly ITextureProvider textureProvider;
     private SeitonPopupSnapshot? previewPopup;
     private AllyRescueConfirmationPopup? previewAllyRescueConfirmation;
+    private MiracleInterceptConfirmationPopup? previewMiracleInterceptConfirmation;
     private bool previewEnabled;
 
     public OverlayRenderer(
@@ -71,7 +72,11 @@ internal sealed class OverlayRenderer
         set
         {
             previewEnabled = value;
-            if (value) previewAllyRescueConfirmation = null;
+            if (value)
+            {
+                previewAllyRescueConfirmation = null;
+                previewMiracleInterceptConfirmation = null;
+            }
         }
     }
     public bool CcProtectionPreviewEnabled { get; set; }
@@ -92,6 +97,7 @@ internal sealed class OverlayRenderer
     public void TriggerAllyRescueConfirmationPreview()
     {
         PreviewEnabled = false;
+        previewMiracleInterceptConfirmation = null;
         var now = Environment.TickCount64;
         previewAllyRescueConfirmation = new AllyRescueConfirmationPopup(
             AllyRescueConfirmationRules.AquaveilActionId,
@@ -100,6 +106,19 @@ internal sealed class OverlayRenderer
             AllyRescueConfirmationRules.StunStatusId,
             now,
             now + AllyRescueConfirmationRules.PopupDurationMilliseconds);
+    }
+
+    public void TriggerMiracleInterceptConfirmationPreview()
+    {
+        PreviewEnabled = false;
+        previewAllyRescueConfirmation = null;
+        var now = Environment.TickCount64;
+        previewMiracleInterceptConfirmation = new MiracleInterceptConfirmationPopup(
+            1,
+            1,
+            MiracleInterceptThreatKind.MarksmanSpite,
+            now,
+            now + MiracleInterceptConfirmationRules.PopupDurationMilliseconds);
     }
 
     public void Draw()
@@ -116,6 +135,7 @@ internal sealed class OverlayRenderer
         if (!configuration.Enabled)
         {
             DrawAllyRescueConfirmationPreview(now);
+            DrawMiracleInterceptConfirmationPreview(now);
             return;
         }
 
@@ -226,10 +246,20 @@ internal sealed class OverlayRenderer
         DrawAllyRescueConfirmationCard(preview, 1, stackCenterY);
     }
 
+    private void DrawMiracleInterceptConfirmationPreview(long now)
+    {
+        if (previewMiracleInterceptConfirmation is not { } preview || !preview.IsVisible(now)) return;
+
+        var stackCenterY = ImGui.GetIO().DisplaySize.Y *
+                           Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
+        DrawMiracleInterceptConfirmationCard(preview, stackCenterY, now);
+    }
+
     private void DrawPersonalWarnings(long now)
     {
         var personal = personalStatus.Snapshot;
         var rescue = personalStatus.AllyRescueDiagnostics;
+        var miracle = personalStatus.MiracleInterceptDiagnostics;
         var liveConfirmation = rescue.ConfirmationPopup is { } popup && popup.IsVisible(now)
             ? popup
             : (AllyRescueConfirmationPopup?)null;
@@ -237,6 +267,14 @@ internal sealed class OverlayRenderer
             (previewAllyRescueConfirmation is { } preview && preview.IsVisible(now)
                 ? preview
                 : (AllyRescueConfirmationPopup?)null);
+        var liveMiracleConfirmation =
+            miracle.ConfirmationPopup is { } miraclePopup && miraclePopup.IsVisible(now)
+                ? miraclePopup
+                : (MiracleInterceptConfirmationPopup?)null;
+        var miracleConfirmation = liveMiracleConfirmation ??
+            (previewMiracleInterceptConfirmation is { } miraclePreview && miraclePreview.IsVisible(now)
+                ? miraclePreview
+                : (MiracleInterceptConfirmationPopup?)null);
 
         var statuses = personal.Active
             ? personal.Statuses
@@ -248,9 +286,14 @@ internal sealed class OverlayRenderer
                 .Take(4)
                 .ToArray()
             : [];
-        if (statuses.Length == 0 && confirmation is null) return;
+        if (statuses.Length == 0 && confirmation is null && miracleConfirmation is null) return;
 
-        var heights = new List<float>(statuses.Length + (confirmation is null ? 0 : 1));
+        var heights = new List<float>(
+            statuses.Length +
+            (confirmation is null ? 0 : 1) +
+            (miracleConfirmation is null ? 0 : 1));
+        if (miracleConfirmation is not null)
+            heights.Add(MiracleInterceptConfirmationCardHeight());
         if (confirmation is not null)
             heights.Add(AllyRescueConfirmationCardHeight());
         heights.AddRange(statuses.Select(status => PersonalWarningCardHeight(status, now)));
@@ -258,6 +301,15 @@ internal sealed class OverlayRenderer
         var stackCenterY = ImGui.GetIO().DisplaySize.Y *
                            Math.Clamp(configuration.PersonalWarningScreenY, 0.08f, 0.9f);
         var offsetIndex = 0;
+        if (miracleConfirmation is { } visibleMiracleConfirmation)
+        {
+            DrawMiracleInterceptConfirmationCard(
+                visibleMiracleConfirmation,
+                stackCenterY + offsets[offsetIndex],
+                now);
+            offsetIndex++;
+        }
+
         if (confirmation is { } visibleConfirmation)
         {
             DrawAllyRescueConfirmationCard(
@@ -278,6 +330,94 @@ internal sealed class OverlayRenderer
                 now);
         }
     }
+
+    private float MiracleInterceptConfirmationCardHeight() =>
+        76f * Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f) *
+        ImGuiHelpers.GlobalScale;
+
+    private void DrawMiracleInterceptConfirmationCard(
+        MiracleInterceptConfirmationPopup popup,
+        float centerY,
+        long now)
+    {
+        var configuredScale = Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f);
+        var scale = configuredScale * ImGuiHelpers.GlobalScale;
+        var duration = Math.Max(1L, popup.EndsAtMilliseconds - popup.StartedAtMilliseconds);
+        var progress = Math.Clamp((now - popup.StartedAtMilliseconds) / (float)duration, 0f, 1f);
+        var pulse = MathF.Exp(-progress * 9f);
+        var pulseScale = 1f + (pulse * 0.08f);
+        var cardSize = new Vector2(350f, 76f) * scale * pulseScale;
+        var screen = ImGui.GetIO().DisplaySize;
+        var center = new Vector2(
+            screen.X * Math.Clamp(configuration.PersonalWarningScreenX, 0.05f, 0.95f),
+            centerY);
+        var topLeft = center - (cardSize * 0.5f);
+        var bottomRight = center + (cardSize * 0.5f);
+        var draw = ImGui.GetForegroundDrawList();
+        var rounding = 11f * scale;
+
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(
+                0.012f,
+                0.035f,
+                0.07f,
+                Math.Clamp(configuration.PersonalWarningBackgroundOpacity, 0f, 1f))),
+            rounding);
+        draw.AddRectFilled(
+            topLeft,
+            new Vector2(topLeft.X + (7f * scale), bottomRight.Y),
+            Pack(CleanseColor),
+            rounding);
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(CleanseColor),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2.5f, (3f + (pulse * 2f)) * scale));
+
+        var iconSize = 50f * scale;
+        var iconMin = new Vector2(topLeft.X + (13f * scale), center.Y - (iconSize * 0.5f));
+        var iconMax = iconMin + new Vector2(iconSize);
+        if (!TryDrawGameIcon(
+                draw,
+                EnemyCombatConstants.MiracleOfNatureActionIconId,
+                iconMin,
+                iconMax,
+                1f))
+        {
+            draw.AddRectFilled(
+                iconMin,
+                iconMax,
+                Pack(new Vector4(CleanseColor.X * 0.2f, CleanseColor.Y * 0.2f, CleanseColor.Z * 0.2f, 1f)),
+                6f * scale);
+        }
+
+        var textCenterX = iconMax.X + ((bottomRight.X - iconMax.X) * 0.5f) - (5f * scale);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y - (21f * scale)),
+            "MIRACLE LANDED",
+            1.08f * configuredScale,
+            true);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y + (13f * scale)),
+            MiracleInterceptConfirmationSubtitle(popup.Threat),
+            0.72f * configuredScale,
+            true);
+    }
+
+    private static string MiracleInterceptConfirmationSubtitle(MiracleInterceptThreatKind threat) =>
+        threat switch
+        {
+            MiracleInterceptThreatKind.MarksmanSpite => "INTERRUPT ATTEMPT  •  MCH LB",
+            MiracleInterceptThreatKind.Zantetsuken => "INTERRUPT ATTEMPT  •  SAM LB",
+            MiracleInterceptThreatKind.FuriousBacklash => "INTERRUPT ATTEMPT  •  VPR NEST",
+            _ => "INTERRUPT ATTEMPT",
+        };
 
     private float AllyRescueConfirmationCardHeight() =>
         64f * Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f) *

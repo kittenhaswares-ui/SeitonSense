@@ -123,6 +123,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly IFramework framework;
     private readonly IPluginLog log;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly object tokenGate = new();
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
@@ -164,6 +165,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         IGameInteropProvider interop,
         IFramework framework,
         TargetPressureTracker pressureTracker,
+        CcImmunityBrakeService ccImmunityBrake,
         IPluginLog log)
     {
         this.configuration = configuration;
@@ -174,6 +176,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.dataManager = dataManager;
         this.framework = framework;
         this.pressureTracker = pressureTracker;
+        this.ccImmunityBrake = ccImmunityBrake;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
 
@@ -262,6 +265,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
         }
     }
+
+    internal CcImmunityBrakeDiagnostics CcBrakeDiagnostics => ccImmunityBrake.Diagnostics;
+    internal IReadOnlySet<uint> VerifiedCcBrakeStatusIds => ccImmunityBrake.VerifiedStatusIds;
 
     /// <summary>
     /// Runs one plugin-owned exact-target action through the existing hook without
@@ -847,6 +853,31 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     : failedNearHelp
                         ? "Seiton Sense Near Help redirect failed closed with its authored fallback policy."
                         : "Seiton Sense Near Assist redirect failed closed with its authored fallback policy.");
+        }
+
+        // The optional CC brake evaluates the final target after every redirect
+        // decision. It never dispatches or stores work: a protected exact e1-e5
+        // target is replaced only for this one already incoming call. ReAction or
+        // the game may supply a later independent attempt after protection ends.
+        // Any uncertainty or exception preserves the fully resolved target.
+        if (!bypassRedirect)
+        {
+            try
+            {
+                var resolvedActionId = ResolveActionId(thisPtr, actionType, actionId);
+                if (ccImmunityBrake.ShouldBlock(
+                        actionType,
+                        resolvedActionId,
+                        forwardedTargetId,
+                        mode))
+                {
+                    forwardedTargetId = InvalidCarrierTargetId;
+                }
+            }
+            catch (Exception exception)
+            {
+                ccImmunityBrake.RecordFailedOpen(exception);
+            }
         }
 
         // This is the only native call made by the detour. It is always executed once,

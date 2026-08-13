@@ -32,6 +32,9 @@ internal sealed record ResourceAuraAnchorSnapshot(
 /// </summary>
 internal sealed class ResourceAuraAnchorTracker
 {
+    private const int MaximumActionBarSlotCount = 32;
+    private const float MaximumActionBarSlotExtent = 512f;
+
     private static readonly string[] StandardHotbarNames =
     [
         "_ActionBar01", "_ActionBar02", "_ActionBar03", "_ActionBar04", "_ActionBar05",
@@ -202,25 +205,131 @@ internal sealed class ResourceAuraAnchorTracker
     {
         var primary = gameGui.GetAddonByName<AddonActionBar>("_ActionBar");
         if (primary != null && IsVisible((AtkUnitBase*)primary))
-            AddAnchor(ResourceAuraSurface.SelfHotbar, localPlayer, primary->ContainerNode, kind, results);
+            AddHotbarAnchor(localPlayer, (AddonActionBarBase*)primary, kind, results);
 
         foreach (var name in StandardHotbarNames)
         {
             var bar = gameGui.GetAddonByName<AddonActionBarX>(name);
             if (bar != null && IsVisible((AtkUnitBase*)bar))
-                AddAnchor(ResourceAuraSurface.SelfHotbar, localPlayer, bar->ContainerNode, kind, results);
+                AddHotbarAnchor(localPlayer, (AddonActionBarBase*)bar, kind, results);
         }
 
         var cross = gameGui.GetAddonByName<AddonActionCross>("_ActionCross");
         if (cross != null && IsVisible((AtkUnitBase*)cross))
-            AddAnchor(ResourceAuraSurface.SelfHotbar, localPlayer, cross->ContainerNode, kind, results);
+            AddHotbarAnchor(localPlayer, (AddonActionBarBase*)cross, kind, results);
 
         foreach (var name in new[] { "_ActionDoubleCrossL", "_ActionDoubleCrossR" })
         {
             var doubleCross = gameGui.GetAddonByName<AddonActionDoubleCrossBase>(name);
             if (doubleCross != null && IsVisible((AtkUnitBase*)doubleCross))
-                AddAnchor(ResourceAuraSurface.SelfHotbar, localPlayer, doubleCross->ContainerNode, kind, results);
+                AddHotbarAnchor(localPlayer, (AddonActionBarBase*)doubleCross, kind, results);
         }
+    }
+
+    private static unsafe void AddHotbarAnchor(
+        IPlayerCharacter localPlayer,
+        AddonActionBarBase* actionBar,
+        ResourceAuraKind kind,
+        List<ResourceAuraAnchorSnapshot> results)
+    {
+        if (!TryGetVisibleActionSlotUnion(actionBar, out var minimum, out var maximum)) return;
+        results.Add(new ResourceAuraAnchorSnapshot(
+            ResourceAuraSurface.SelfHotbar,
+            localPlayer.GameObjectId,
+            localPlayer.EntityId,
+            minimum,
+            maximum,
+            kind));
+    }
+
+    private static unsafe bool TryGetVisibleActionSlotUnion(
+        AddonActionBarBase* actionBar,
+        out Vector2 minimum,
+        out Vector2 maximum)
+    {
+        minimum = default;
+        maximum = default;
+        if (actionBar == null || !IsVisible(&actionBar->AtkUnitBase)) return false;
+
+        var slotCount = actionBar->SlotCount;
+        var first = actionBar->ActionBarSlotVector.First;
+        var last = actionBar->ActionBarSlotVector.Last;
+        if (slotCount is < 1 or > MaximumActionBarSlotCount || first == null || last == null)
+            return false;
+
+        var firstAddress = (nuint)first;
+        var lastAddress = (nuint)last;
+        var slotSize = (nuint)sizeof(ActionBarSlot);
+        if (lastAddress < firstAddress || (lastAddress - firstAddress) % slotSize != 0)
+            return false;
+
+        var vectorCount = (lastAddress - firstAddress) / slotSize;
+        if (vectorCount < slotCount || vectorCount > MaximumActionBarSlotCount)
+            return false;
+
+        var addonRoot = actionBar->AtkUnitBase.RootNode;
+        var seenNodes = new HashSet<nint>();
+        var found = false;
+        for (var index = 0; index < slotCount; index++)
+        {
+            var dragDrop = first[index].ComponentDragDrop;
+            var owner = dragDrop == null ? null : dragDrop->AtkComponentBase.OwnerNode;
+            var node = owner == null ? null : &owner->AtkResNode;
+            if (node == null || !seenNodes.Add((nint)node) ||
+                !TryGetActionSlotBounds(node, addonRoot, out var slotMinimum, out var slotMaximum))
+            {
+                continue;
+            }
+
+            if (!found)
+            {
+                minimum = slotMinimum;
+                maximum = slotMaximum;
+                found = true;
+                continue;
+            }
+
+            minimum = Vector2.Min(minimum, slotMinimum);
+            maximum = Vector2.Max(maximum, slotMaximum);
+        }
+
+        return found;
+    }
+
+    private static unsafe bool TryGetActionSlotBounds(
+        AtkResNode* node,
+        AtkResNode* addonRoot,
+        out Vector2 minimum,
+        out Vector2 maximum)
+    {
+        minimum = default;
+        maximum = default;
+        if (!IsVisibleDescendant(node, addonRoot)) return false;
+
+        NativeBounds bounds;
+        node->GetBounds(&bounds);
+        minimum = new Vector2(Math.Min(bounds.Pos1.X, bounds.Pos2.X), Math.Min(bounds.Pos1.Y, bounds.Pos2.Y));
+        maximum = new Vector2(Math.Max(bounds.Pos1.X, bounds.Pos2.X), Math.Max(bounds.Pos1.Y, bounds.Pos2.Y));
+        var size = maximum - minimum;
+        return float.IsFinite(minimum.X) && float.IsFinite(minimum.Y) &&
+               float.IsFinite(maximum.X) && float.IsFinite(maximum.Y) &&
+               size.X is > 2f and <= MaximumActionBarSlotExtent &&
+               size.Y is > 2f and <= MaximumActionBarSlotExtent;
+    }
+
+    private static unsafe bool IsVisibleDescendant(AtkResNode* node, AtkResNode* ancestor)
+    {
+        if (node == null || ancestor == null) return false;
+
+        var depth = 0;
+        while (node != null && depth++ < 64)
+        {
+            if (!node->IsVisible()) return false;
+            if (node == ancestor) return true;
+            node = node->ParentNode;
+        }
+
+        return false;
     }
 
     private unsafe void CapturePartyRows(
