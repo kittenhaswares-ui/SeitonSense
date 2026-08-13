@@ -135,6 +135,11 @@ only current visible rectangles and draws a foreground ImGui outline/fill. It
 does not recolor, pulse, write to, or otherwise mutate a native action slot or UI
 node.
 
+The settings preview uses those same exact currently visible self-hotbar
+rectangles. It does not place a separate fixed-size sample rectangle over the
+screen, and the ordinary live aura is suppressed while the preview is active so
+the two render paths cannot overlap.
+
 Party rows require exact agent row index, entity identity, and native object
 pointer agreement. CC rows additionally require exact native party/enemy-slot
 resolution and equality with the visible row name. Hidden, invalid, stale,

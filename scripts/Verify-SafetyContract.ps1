@@ -1365,6 +1365,8 @@ if ($resourceAuraRules -match '\b(UseAction|IGameGui|AtkResNode|SetRawValue|Puls
 }
 
 Assert-Literals $resourceAuraAnchor @(
+    'CaptureSelfHotbarsForPreview()',
+    'CaptureHotbars(localPlayer!, ResourceAuraKind.LowHpAndMp, results)',
     'Dictionary<(ulong GameObjectId, uint EntityId), LowMpState>',
     'new HashSet<(ulong GameObjectId, uint EntityId)>()',
     'var identity = (player.GameObjectId, player.EntityId)',
@@ -1412,6 +1414,8 @@ if ($normalizedResourceAuraAnchor -notmatch 'foreach \(var identity in manaState
 Assert-Literals $overlay @(
     'DrawResourceAuras(now)',
     'resourceAuraAnchors.Capture()',
+    'resourceAuraAnchors.CaptureSelfHotbarsForPreview()',
+    'if (anchors.Count == 0 || ResourceAuraPreviewEnabled) return;',
     'ImGui.GetForegroundDrawList()',
     'ResourceAuraKind.LowHp => LowHealthAuraColor',
     'ResourceAuraKind.LowMp => LowManaAuraColor',
@@ -1420,6 +1424,14 @@ Assert-Literals $overlay @(
     'draw.AddRectFilled(',
     'draw.AddRect('
 ) 'Visual-only native-surface resource aura renderer'
+$normalizedOverlay = $overlay -replace '\s+', ' '
+$resourceAuraPreviewMethod = [regex]::Match(
+    $normalizedOverlay,
+    'private void DrawResourceAuraPreview\(\) \{(?<Body>.*?)\} private void DrawResourceAura\(')
+if (-not $resourceAuraPreviewMethod.Success -or
+    $resourceAuraPreviewMethod.Groups['Body'].Value -match '\bDisplaySize\b|new Vector2\(430f, 58f\)|screen\.Y \* 0\.78f') {
+    throw 'Resource-aura preview must use exact current self-hotbar anchors and must not restore the fixed DisplaySize 430-by-58 screen rectangle.'
+}
 
 $settingsWindow = Read-RequiredSource (Join-Path $pluginUiRoot 'SettingsWindow.cs') 'Settings window'
 $normalizedSettingsWindow = $settingsWindow -replace '\s+', ' '
@@ -1759,4 +1771,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.10.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed Far Help share one bounded target-only detour, with strict no-selected-target Far Help quarantine plus safe-backline preference and farthest reachable fallback; the native-hotbar/party/CC-row resource aura is read-only, exact-identity, trusted-MP, and fail closed; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while default-off Monk Earth's Reply yields to prior attempts and spends one exact 29483 self action before its sole no-retry request."
+Write-Host "Seiton Sense v0.10.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, and fail-closed Far Help share one bounded target-only detour, with strict no-selected-target Far Help quarantine plus safe-backline preference and farthest reachable fallback; the native-hotbar/party/CC-row resource aura is read-only, exact-identity, trusted-MP, and fail closed, and its preview uses exact current hotbar anchors with live-pass suppression; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while default-off Monk Earth's Reply yields to prior attempts and spends one exact 29483 self action before its sole no-retry request."

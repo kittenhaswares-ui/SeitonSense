@@ -68,6 +68,30 @@ internal sealed class ResourceAuraAnchorTracker
     internal int LastCcRowCount => Volatile.Read(ref lastCcRowCount);
     internal int LastAnchorCount => LastSelfHotbarCount + LastPartyRowCount + LastCcRowCount;
 
+    internal unsafe IReadOnlyList<ResourceAuraAnchorSnapshot> CaptureSelfHotbarsForPreview()
+    {
+        try
+        {
+            var localPlayer = objectTable.LocalPlayer;
+            if (!IsValidPlayer(localPlayer)) return [];
+
+            var results = new List<ResourceAuraAnchorSnapshot>(12);
+            CaptureHotbars(localPlayer!, ResourceAuraKind.LowHpAndMp, results);
+            return results;
+        }
+        catch (Exception exception)
+        {
+            var now = Environment.TickCount64;
+            if (now >= nextErrorLogAt)
+            {
+                nextErrorLogAt = now + 10_000;
+                log.Error(exception, "Seiton Sense resource-aura preview anchoring failed closed.");
+            }
+
+            return [];
+        }
+    }
+
     internal unsafe IReadOnlyList<ResourceAuraAnchorSnapshot> Capture()
     {
         if (!configuration.Enabled || !configuration.EnableResourceAura || !clientState.IsPvP)
