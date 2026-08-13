@@ -18,6 +18,8 @@ public sealed class Plugin : IDalamudPlugin
     private const string NearAssistAliasCommand = "/ssassist";
     private const string NearHelpCommand = "/nearhelp";
     private const string NearHelpAliasCommand = "/sshelp";
+    private const string FarHelpCommand = "/farhelp";
+    private const string FarHelpAliasCommand = "/ssfar";
     private const string PressureCommand = "/howmany";
 
     private readonly IDalamudPluginInterface pluginInterface;
@@ -39,6 +41,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool nearAssistAliasRegistered;
     private readonly bool nearHelpCommandRegistered;
     private readonly bool nearHelpAliasRegistered;
+    private readonly bool farHelpCommandRegistered;
+    private readonly bool farHelpAliasRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -211,6 +215,32 @@ public sealed class Plugin : IDalamudPlugin
                 (nearHelpAliasRegistered ? "Use /sshelp meanwhile." : "Disable the conflicting plugin and reload."));
         }
 
+        const string farHelpHelp =
+            "CC-only farthest ally movement helper. Macro: /mlock, /farhelp, supported friendly movement action with <2>, then the same action with <t>.";
+        farHelpCommandRegistered = commandManager.AddHandler(
+            FarHelpCommand,
+            new CommandInfo(OnFarHelpCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = farHelpHelp,
+            });
+        farHelpAliasRegistered = commandManager.AddHandler(
+            FarHelpAliasCommand,
+            new CommandInfo(OnFarHelpCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = farHelpHelp,
+            });
+        if (!farHelpCommandRegistered)
+        {
+            log.Warning(
+                "/farhelp is already owned by another plugin; /ssfar registered={Registered}.",
+                farHelpAliasRegistered);
+            chatGui.PrintError(
+                "[Seiton Sense] /farhelp is owned by another plugin. " +
+                (farHelpAliasRegistered ? "Use /ssfar meanwhile." : "Disable the conflicting plugin and reload."));
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -244,6 +274,8 @@ public sealed class Plugin : IDalamudPlugin
         if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
         if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
+        if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand);
+        if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
@@ -363,6 +395,7 @@ public sealed class Plugin : IDalamudPlugin
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
+                var farHelp = nearAssist.FarHelpDiagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"personal={personal.Statuses.Length}, purify={personal.Purify.Phase}/" +
@@ -379,6 +412,10 @@ public sealed class Plugin : IDalamudPlugin
                     $"help[cmd={nearHelpCommandRegistered},armed={help.Armed},ttl={help.RemainingMilliseconds}," +
                     $"arm={help.ArmedCount},redirect={help.RedirectedCount},fallback={help.FallbackCount}," +
                     $"last={help.LastEvent}], " +
+                    $"far[cmd={farHelpCommandRegistered},alias={farHelpAliasRegistered},armed={farHelp.Armed}," +
+                    $"ttl={farHelp.RemainingMilliseconds},arm={farHelp.ArmedCount}," +
+                    $"redirect={farHelp.RedirectedCount},fallback={farHelp.FallbackCount}," +
+                    $"party={farHelp.LastPartySlot},distance={farHelp.LastDistance:0.0},last={farHelp.LastEvent}], " +
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
@@ -433,6 +470,7 @@ public sealed class Plugin : IDalamudPlugin
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
             "/nearhelp and /sshelp arm the one-shot lowest-health ally helper. " +
+            "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "Integrated pressure uses /howmany.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
@@ -463,6 +501,20 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Near Help command failed closed.");
+        }
+    }
+
+    private void OnFarHelpCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.ArmFarHelp();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Far Help command failed closed.");
         }
     }
 }

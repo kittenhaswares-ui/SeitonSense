@@ -111,6 +111,30 @@ A compact `<t>` form otherwise preserves its incoming target. The token is
 consumed before the one original game call. Near Help does not initiate an
 action, visibly change a target, try a second party member, or retry.
 
+## One-shot Far Help
+
+Far Help is disabled by default and runs only in Crystalline Conflict. It
+shares the same bounded, mutually exclusive action boundary as Near Assist and
+Near Help. When `/farhelp` or `/ssfar` is armed, the plugin transiently reads
+exact party-slot identity, job, position, and the next supported friendly PvP
+movement action. Only Guardian `29066`, Thunderclap `29484`, Aetherial
+Manipulation `29660`, Icarus `29261`, and Slither `39184` are accepted.
+
+Candidates must be live, targetable, non-self exact party members and pass the
+actual action's native range and line-of-sight result. Healers and ranged or
+caster jobs form the preferred tier; otherwise all jobs are eligible. The
+farthest reachable actor in that tier is selected with stable party/actor
+identity as the final tie-breaker. Guardian also uses a strict under-10-yalm
+limit.
+
+The recommended `<2>` line is only a concrete carrier. If no candidate is
+valid, an invalid target is substituted only for that exact carrier so the
+following authored `<t>` line remains vanilla. A compact `<t>` form preserves
+its incoming target. The token is consumed before the one original game call.
+Far Help does not initiate, repeat, queue, or retry an action; change its ID;
+or visibly change a hard, soft, or focus target. No observed party/action data
+is persisted or uploaded.
+
 ## Experimental Purify helper
 
 If the experimental helper is explicitly enabled, the plugin reads current
@@ -207,7 +231,7 @@ diagnostic counters, if displayed, remain memory-only.
 
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
-MCH warning size/sound selection, the shared Near Assist/Near Help opt-in,
+MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 and the WHM Miracle master/per-trigger opt-ins. Configuration schema 13 does

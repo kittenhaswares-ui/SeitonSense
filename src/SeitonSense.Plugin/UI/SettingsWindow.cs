@@ -424,6 +424,13 @@ internal sealed class SettingsWindow : Window
             "Use Miracle of Nature once from a held gameplay key",
             configuration.ExperimentalMiracleInterceptOnHeldKey,
             value => configuration.ExperimentalMiracleInterceptOnHeldKey = value);
+        ImGui.TextColored(
+            configuration.ExperimentalMiracleInterceptOnHeldKey
+                ? new Vector4(0.35f, 0.9f, 1f, 1f)
+                : new Vector4(1f, 0.4f, 0.35f, 1f),
+            configuration.ExperimentalMiracleInterceptOnHeldKey
+                ? "ON — threat capture is active in CC while playing WHM."
+                : "OFF — no threat is captured and no Miracle attempt can occur.");
         ImGui.TextUnformatted("Trigger separately for:");
         changed |= Checkbox(
             "MCH Marksman's Spite startup",
@@ -615,11 +622,11 @@ internal sealed class SettingsWindow : Window
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "CC MACRO TARGET HELPERS (OPT-IN)");
         changed |= Checkbox(
-            "Enable one-shot /nearassist and /nearhelp targeting",
+            "Enable one-shot /nearassist, /nearhelp, and /farhelp targeting",
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
         changed |= Slider(
-            "Maximum distance to ally",
+            "Near Assist ally search distance",
             configuration.NearAssistMaxAllyDistance,
             5f,
             30f,
@@ -674,6 +681,24 @@ internal sealed class SettingsWindow : Window
             "carrier. If no valid ally exists, Seiton invalidates that carrier so the authored <t> line remains " +
             "the normal fallback. /mlock prevents Turbo Hotbar from restarting the macro before its fallback line. " +
             "No visible target change, direct action, retry, or automatic self-heal is performed.");
+        ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Farthest mobility ally first, with vanilla <t> fallback:");
+        ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/farhelp");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <2>");
+        ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <t>");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Far Help accepts only the reviewed PvP movement actions Guardian, Icarus, Thunderclap, " +
+            "Aetherial Manipulation, and Slither. It checks the actual action's " +
+            "native range and line of sight against exact live non-self party members, prefers healers and " +
+            "physical/magical ranged jobs, then all other jobs, and chooses the farthest reachable ally inside " +
+            "that tier. Guardian additionally requires a strict distance below 10 yalms. " +
+            "The <2> line is only a carrier; if no valid ally exists, the following <t> line remains the normal " +
+            "fallback. /mlock protects the fallback from Turbo macro restarts. No visible target change, direct " +
+            "action, or retry is added. /ssfar is the collision-free alias.");
         ImGui.PopTextWrapPos();
 
         return changed;
@@ -905,7 +930,7 @@ internal sealed class SettingsWindow : Window
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. Seiton Sense never changes your selected hard, soft, or focus target " +
-            "and uploads no gameplay data to an external service. Near Assist and Near Help may replace only " +
+            "and uploads no gameplay data to an external service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional Purify, Ally Rescue, and Miracle experiments " +
             "can each initiate at most one exact action attempt from one shared physical input generation, in " +
             "that priority order. All helpers are " +
