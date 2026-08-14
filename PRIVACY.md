@@ -105,7 +105,7 @@ that opponent's action-specific verified CC-protection snapshot. Standard
 Purify-removable CC and Miracle of Nature use separate blocker matrices, which
 include only verified relevant status IDs. The standard matrix contains
 `3054`, `3673`, `3248`, `1303`, `1320`, `4096`, and `3143`; Miracle's matrix
-contains `3248`, `1320`, `3143`, `3052`, and `3162`. Its reviewed action
+contains `3248`, `1320`, VPR-only `4096`, `3143`, `3052`, and `3162`. Its reviewed action
 list is limited to Intervene `29065`, Blota `29081`, Silent Nocturne `29395`,
 Repelling Shot `29399`, Miracle of Nature `29228`, Lethargy `41510`, Forked
 Raiju `29510`, Fleeting Raiju `29707`, Air Anchor `29407`, Gravity II `29244`,
@@ -122,6 +122,16 @@ focus target; or retry later. Every later physical press or third-party Turbo
 pulse is an independent incoming call and is checked from current state again.
 Vanilla key holding does not create a repeat through this feature.
 
+For an unchanged native selected-target carrier of either `0` or
+`0xE0000000`, the brake can transiently read the local player's native selected
+hard-target ID. It does so only when the original and final forwarded carriers
+are identical and the redirect path did not mark the target as deliberately
+suppressed. It requires the native selection to stay stable across the check
+and then requires one exact canonical `<e1>`-`<e5>` identity. It does not
+rewrite the forwarded call. A zero deliberately produced by Seiton's
+fail-closed redirect path carries explicit suppression provenance and is never
+reinterpreted as the selected target. Explicit actor IDs remain authoritative.
+
 This is a client-side pre-dispatch check, not a server rollback. Near a
 simultaneous activation, an action already accepted by the server roughly
 295-355 ms before immunity became locally visible cannot be recalled. FFXIV
@@ -131,10 +141,12 @@ undo or compensate for that result.
 
 Unsupported actions, jobs, contexts, missing or ambiguous actor identity, and
 unverified protection pass through unchanged. Broad cone, ground-targeted,
-self-centered, and ambiguous multi-target actions are excluded. Another plugin
-downstream can still alter the call after Seiton Sense; no claim is made about
-such rewritten output. Incoming identities and protection state are not
-persisted or transmitted.
+self-centered, and ambiguous multi-target actions are excluded. On a
+pass-through call, another plugin downstream can still alter it; a confirmed
+block does not invoke the downstream/original function. Aggregate resolution
+counts and the latest original, forwarded, and effective target IDs, invocation
+mode, and resolution result are retained only in memory for diagnostics.
+Incoming identities and protection state are not persisted or transmitted.
 
 ## One-shot Near Assist
 
@@ -298,17 +310,22 @@ opportunity expires after 250 ms.
 
 On the framework thread, the source must resolve to the exact canonical CC
 opponent with the expected job. The helper transiently reads that actor's
-life/targetable state and verified full-CC-protection statuses, including VPR
+life/targetable state and verified Miracle blocker statuses, including VPR-only
 Hardened Scales `4096`. For the VPR trigger it waits for `4096` to be actually
 absent rather than predicting status expiry. The exact target must also pass
 Miracle of Nature's native 10-yalm range and line-of-sight result.
 
 The helper shares the existing physical key-generation observer and receives
-priority only after self-Purify and Ally Rescue. If all gates remain valid, it
-consumes its state and that input generation before at most one normal native
-Miracle of Nature `29228` request to the exact enemy. It never changes the
-visible target, chooses an alternate enemy, falls back to another action, or
-retries a rejected/failed request. A client-accepted request is not recorded as
+priority only after self-Purify and Ally Rescue. A transient higher-priority
+claim retains the exact threat only until its original 500-ms MCH/SAM or 250-ms
+VPR deadline; it does not extend or replay the opportunity. The claimed
+physical input generation cannot be reused, so only a genuinely fresh eligible
+generation inside that original window may proceed. If all gates remain valid,
+the helper consumes its state and that input generation before at most one
+normal native Miracle of Nature `29228` request to the exact enemy. It never
+changes the visible target, chooses an alternate enemy, falls back to another
+action, or retries a rejected/failed request. The exact native 10-yalm range and
+line-of-sight gate is unchanged. A client-accepted request is not recorded as
 proof that the enemy startup was interrupted.
 
 The existing action-effect hook also places exact local Miracle status-add
@@ -323,7 +340,10 @@ registration does not replace that correlation before it expires.
 
 No observed threat, actor identity, key state, status, or action result is
 written to disk, uploaded, or retained as combat history. Aggregate bounded
-diagnostic counters, if displayed, remain memory-only.
+diagnostic counters for recognized, armed, rejected, waiting, and expired
+opportunities plus the last opportunity result remain memory-only across a
+context exit. Active threats and bounded queues are still cleared when the
+context changes.
 
 ## Experimental Monk Earth's Reply helper
 
@@ -356,7 +376,7 @@ opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 the WHM Miracle master/per-trigger opt-ins, resource-aura surfaces/thresholds/
 appearance, the Monk Earth's Reply master/triggers/thresholds, and the
 CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 15 remains unchanged in v0.11.0.1 and does
+schema 15 remains unchanged in v0.11.0.2 and does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

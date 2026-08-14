@@ -641,6 +641,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var handlingNearHelp = false;
         var handlingFarHelp = false;
         var suppressingLegacyFarHelpFallback = false;
+        var targetSuppressedByRedirect = false;
         var bypassRedirect = internalRedirectBypassDepth > 0;
         try
         {
@@ -649,6 +650,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             {
                 suppressingLegacyFarHelpFallback = true;
                 forwardedTargetId = InvalidCarrierTargetId;
+                targetSuppressedByRedirect = true;
                 lock (tokenGate)
                 {
                     farHelpFallbackCount++;
@@ -680,7 +682,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     out var rewritten,
                     out var reason);
                 if (!rewritten && consumedFallbackCarrier)
+                {
                     forwardedTargetId = InvalidCarrierTargetId;
+                    targetSuppressedByRedirect = true;
+                }
                 lock (tokenGate)
                 {
                     if (!rewritten)
@@ -723,7 +728,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     out var rewritten,
                     out var reason);
                 if (!rewritten && consumedFallbackCarrier)
+                {
                     forwardedTargetId = InvalidCarrierTargetId;
+                    targetSuppressedByRedirect = true;
+                }
                 lock (tokenGate)
                 {
                     if (rewritten)
@@ -773,7 +781,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 // non-rewrite outcome, including the exact expiry boundary,
                 // must stay inert instead of forwarding an authored carrier or
                 // selected target.
-                if (!rewritten) forwardedTargetId = InvalidCarrierTargetId;
+                if (!rewritten)
+                {
+                    forwardedTargetId = InvalidCarrierTargetId;
+                    targetSuppressedByRedirect = true;
+                }
                 lock (tokenGate)
                 {
                     if (rewritten)
@@ -823,6 +835,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 if (failedFarHelp)
                 {
                     forwardedTargetId = InvalidCarrierTargetId;
+                    targetSuppressedByRedirect = true;
                     farHelpFallbackCount++;
                     farHelpLastPartySlot = 0;
                     farHelpLastDistance = 0f;
@@ -831,6 +844,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 else if (failedNearHelp)
                 {
                     forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
+                    targetSuppressedByRedirect = consumedFallbackCarrier;
                     helpFallbackCount++;
                     helpLastEvent = consumedFallbackCarrier
                         ? "Redirect failed closed; carrier invalidated for <t> fallback"
@@ -839,6 +853,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 else
                 {
                     forwardedTargetId = consumedFallbackCarrier ? InvalidCarrierTargetId : targetId;
+                    targetSuppressedByRedirect = consumedFallbackCarrier;
                     fallbackCount++;
                     lastEvent = consumedFallbackCarrier
                         ? "Redirect failed closed; carrier invalidated for <t> fallback"
@@ -869,7 +884,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 if (ccImmunityBrake.ShouldBlock(
                         actionType,
                         resolvedActionId,
+                        targetId,
                         forwardedTargetId,
+                        targetSuppressedByRedirect,
                         mode))
                 {
                     return false;

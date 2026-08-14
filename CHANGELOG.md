@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.11.0.2
+
+- Fixed direct-hotbar and Turbo calls that represent FFXIV's selected target
+  with an unchanged native carrier of either `0` or the default-target sentinel
+  `0xE0000000` instead of a concrete actor ID. The brake now reads the local
+  player's native selected hard target, requires it to remain stable during
+  evaluation, and still resolves it to exactly one live canonical `<e1>`-`<e5>`
+  opponent before checking protection.
+- Added explicit redirect-suppression provenance so a zero deliberately created
+  by Seiton's fail-closed Near Assist, Near Help, or Far Help path can never be
+  reinterpreted as the selected target. Explicit actor IDs remain authoritative;
+  missing, changed, non-canonical, or ambiguous identity still passes through.
+- Added VPR Hardened Scales `4096` to Miracle of Nature's VPR-only blocker
+  matrix. A bounded live CC trace captured two Miracle attempts where `4096`
+  was the only relevant protection and neither applied Miracle status `3085`.
+  Manual/Turbo Miracle attempts are now held by the same verified live status
+  that already gates the VPR auto-intercept path.
+- Expanded bounded CC-brake diagnostics with configured/current-context state,
+  default/exact/failed target-resolution counts, invocation mode, original /
+  forwarded / effective target IDs, and the exact last resolution result.
+- Miracle intercept now retains an exact armed opportunity through a transient
+  same-frame self-Purify or Ally Rescue priority claim. The original 500-ms
+  MCH/SAM or 250-ms VPR deadline is never extended, the claimed physical input
+  cannot be reused, and only a genuinely fresh eligible input generation inside
+  that original window can make the one Miracle attempt.
+- Added retained, in-memory Miracle opportunity diagnostics for recognized,
+  armed, rejected, waiting, and expired threats plus the last opportunity
+  outcome. Active threat/queue state is still cleared on context exit, while
+  those aggregate diagnostics remain available afterward through
+  `/seiton debug` and the settings panel.
+- Kept Miracle's exact native 10-yalm range and line-of-sight gate. Live CC
+  evidence reached that existing gate; this hotfix does not widen the range or
+  relax identity, protection, deadline, input, one-attempt, or no-retry checks.
+- Bumped the plugin version to 0.11.0.2. Configuration schema 15 is unchanged.
+
 ## 0.11.0.1
 
 - Changed a confirmed CC-immunity-brake decision into a hard stop: the detour
@@ -29,10 +64,10 @@
   Repelling Shot; WHM Miracle of Nature; BLM Lethargy; NIN Forked/Fleeting
   Raiju; MCH Air Anchor; AST Gravity II including its Double Cast form behind
   one setting; and SAM Mineuchi.
-- When the exact target has a verified blocker from the selected action's
-  action-specific protection matrix, only that one incoming attempt receives
-  an invalid target. Standard Purify-removable CC and Miracle of Nature have
-  separate blocker sets. Seiton Sense does not switch targets,
+- The initial 0.11.0.0 implementation gave one protected attempt an invalid
+  target; 0.11.0.1 superseded that handoff with an immediate `false` return
+  before the downstream/original call. Standard Purify-removable CC and Miracle
+  of Nature have separate blocker sets. Seiton Sense does not switch targets,
   select an alternative action or actor, store or replay the press, dispatch an
   action, or retry. Every later real press or Turbo pulse is checked again, so
   the first repeat after immunity disappears can pass normally; vanilla holding

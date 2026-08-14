@@ -67,6 +67,7 @@ $targetPressureSnapshotPath = Join-Path $pluginServicesRoot 'TargetPressureSnaps
 $ccProtectionMetadataGuardPath = Join-Path $pluginServicesRoot 'CcProtectionMetadataGuard.cs'
 $ccImmunityBrakeServicePath = Join-Path $pluginServicesRoot 'CcImmunityBrakeService.cs'
 $ccImmunityBrakeMetadataGuardPath = Join-Path $pluginServicesRoot 'CcImmunityBrakeMetadataGuard.cs'
+$ccImmunityBrakeTargetRulesPath = Join-Path $coreRoot 'CcImmunityBrakeTargetRules.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
@@ -179,8 +180,13 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
 # Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
-    $_.Path -notin @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $monkEarthReplyProbePath, $nearAssistPath) -or
-    $_.Line -notmatch '\bUseAction\b'
+    $reviewedActionBoundary =
+        $_.Path -in @($purifyProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
+        $_.Line -match '\bUseAction\b'
+    $reviewedBrakeDocumentation =
+        $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
+        $_.Line -match '^\s*///.*\bUseAction\b'
+    -not ($reviewedActionBoundary -or $reviewedBrakeDocumentation)
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
@@ -590,14 +596,27 @@ Assert-Literals $miracleIntercept @(
     'nearAssist.RunWithoutRedirect',
     'ActionType.Action',
     'ActionManager.UseActionMode.None',
-    'the action will not be retried'
+    'the action will not be retried',
+    'internal long RecognizedThreatCount { get; init; }',
+    'internal long ArmedThreatCount { get; init; }',
+    'internal long RejectedThreatCount { get; init; }',
+    'internal long PriorityWaitCount { get; init; }',
+    'internal long NoInputWaitCount { get; init; }',
+    'internal long RangeWaitCount { get; init; }',
+    'internal long ProtectionWaitCount { get; init; }',
+    'internal long ExpiredThreatCount { get; init; }',
+    'internal string LastOpportunity { get; init; } = "None observed"',
+    'WithOpportunityDiagnostics(',
+    'RecordWait(threat, MiracleWaitReason.HigherPriorityHelper)',
+    'RecordExpired(threat)',
+    'ResetWaitDiagnostics()'
 ) 'Bounded exact-target WHM Miracle runtime'
 if ($normalizedMiracleIntercept -notmatch 'var protectionMetadataReady = RequiredCcProtectionStatusIds\.All\( verifiedProtectionStatusIds\.Contains\); var enabled = configurationEnabled && isCrystallineConflict && localIdentityValid && isWhiteMage && protectionMetadataReady;' -or
     $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\), nowMilliseconds\)' -or
     $miracleIntercept -match '\bShowCcProtection\b') {
     throw 'Miracle must require its complete independent blocker metadata, VPR Hardened Scales metadata, and each independently verified threat before arming.'
 }
-if ($normalizedMiracleIntercept -notmatch 'var anyProtection = HasAnyVerifiedCcProtection\(candidate\); var hardenedScales = threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var otherProtection = anyProtection;.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
+if ($normalizedMiracleIntercept -notmatch 'var anyProtection = HasAnyVerifiedCcProtection\(candidate\); var hardenedScales = threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var otherProtection = anyProtection && !hardenedScales;.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
     $normalizedMiracleIntercept -notmatch 'var revalidatedHardened = revalidated is not null && threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( revalidated, EnemyCombatConstants\.HardenedScalesStatusId\); var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated\);.*?if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedRange\)') {
     throw 'Miracle must prove the narrow live blocker matrix for every threat and live Hardened Scales absence for VPR both before spending input and immediately before UseAction.'
 }
@@ -689,10 +708,31 @@ $miracleDrainConfirmationIndex = $normalizedMiracleIntercept.IndexOf('DrainConfi
 $miracleDispatchGateIndex = $normalizedMiracleIntercept.IndexOf('if (!dispatchAllowed)')
 if ($miracleDrainConfirmationIndex -lt 0 -or
     $miracleDispatchGateIndex -le $miracleDrainConfirmationIndex -or
-    $normalizedMiracleIntercept -notmatch 'if \(!dispatchAllowed\) \{ activeThreat = null; return Publish\("Cancelled", "Higher-priority helper claimed input", nowMilliseconds\); \}' -or
+    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\); if \(nowMilliseconds < threat\.ObservedAtMilliseconds \|\| nowMilliseconds - threat\.ObservedAtMilliseconds >= ThreatLifetime\(threat\.Kind\)\) \{ RecordExpired\(threat\); activeThreat = null; return Publish\("Waiting", "No current exact threat", nowMilliseconds\); \}.*?if \(!dispatchAllowed\) \{ RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\); return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\); \}' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?if \(confirmationPendingForLocalCaster\) DrainConfirmations\(nowMilliseconds\);.*?"Waiting for exact Miracle landing evidence"') {
-    throw 'Transient Purify/Rescue priority or local death must not erase an exact pending Miracle landing correlation or visible popup.'
+    throw 'Transient Purify/Rescue priority must retain an exact Miracle threat only inside its original TTL, while local death must not erase an exact pending landing correlation or visible popup.'
 }
+$miraclePriorityBranch = [regex]::Match(
+    $normalizedMiracleIntercept,
+    'if \(!dispatchAllowed\) \{(?<Body>.*?)\} var candidate = ResolveCandidate')
+if (-not $miraclePriorityBranch.Success -or
+    $miraclePriorityBranch.Groups['Body'].Value -match 'activeThreat\s*=|inputFrame\.Consume|TryUseMiracleOnce|UseAction|ObservedAtMilliseconds\s*=') {
+    throw 'A transient higher-priority helper may wait only: it must not clear or extend the threat, consume/reuse input, or initiate/replay Miracle.'
+}
+$miracleResetRuntime = [regex]::Match(
+    $normalizedMiracleIntercept,
+    'private void ResetRuntime\(\) \{(?<Body>.*?)\} private MiracleInterceptProbeSnapshot WithOpportunityDiagnostics')
+if (-not $miracleResetRuntime.Success -or
+    $miracleResetRuntime.Groups['Body'].Value -match '\b(recognizedThreatCount|armedThreatCount|rejectedThreatCount|priorityWaitCount|noInputWaitCount|rangeWaitCount|protectionWaitCount|expiredThreatCount|lastOpportunity)\s*=') {
+    throw 'Miracle opportunity counters and the last terminal/wait reason must survive ordinary runtime resets for post-match diagnostics.'
+}
+Assert-Literals $pluginSource @(
+    'seen/armed/reject={miracle.RecognizedThreatCount}/{miracle.ArmedThreatCount}/',
+    '{miracle.RejectedThreatCount},wait[p/r/k]={miracle.ProtectionWaitCount}/',
+    '{miracle.RangeWaitCount}/{miracle.NoInputWaitCount},',
+    'priority={miracle.PriorityWaitCount},expired={miracle.ExpiredThreatCount}',
+    'last={miracle.LastEvent},last-op={miracle.LastOpportunity}'
+) 'Persistent Miracle opportunity diagnostics'
 $overlaySource = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
 Assert-Literals $overlaySource @(
     'miracle.ConfirmationPopup is { } miraclePopup && miraclePopup.IsVisible(now)',
@@ -868,12 +908,17 @@ if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,
 
 # The optional CC-immunity brake is a final-target filter inside the already
 # reviewed UseAction detour. An exact confirmed block returns false immediately,
-# before the sole downstream Original. It never substitutes target zero: that
-# policy remains exclusive to the reviewed Near/Far carrier failure paths.
+# before the sole downstream Original. An unchanged native zero/0xE0000000
+# default carrier may be inspected through the stable native hard target, but
+# the forwarded action target is never changed. Every Seiton-injected zero is
+# explicitly marked and remains unresolved; target-zero policy stays exclusive
+# to the reviewed Near/Far carrier paths.
 $ccImmunityBrake = Read-RequiredSource $ccImmunityBrakeServicePath 'CC-immunity brake service'
 $normalizedCcImmunityBrake = $ccImmunityBrake -replace '\s+', ' '
 $ccImmunityBrakeRules = Read-RequiredSource (Join-Path $coreRoot 'CcImmunityBrakeRules.cs') 'CC-immunity brake rules'
 $normalizedCcImmunityBrakeRules = $ccImmunityBrakeRules -replace '\s+', ' '
+$ccImmunityBrakeTargetRules = Read-RequiredSource $ccImmunityBrakeTargetRulesPath 'CC-immunity brake target rules'
+$normalizedCcImmunityBrakeTargetRules = $ccImmunityBrakeTargetRules -replace '\s+', ' '
 $ccImmunityBrakeMetadata = Read-RequiredSource $ccImmunityBrakeMetadataGuardPath 'CC-immunity brake metadata guard'
 
 $ccBrakeTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bCcImmunityBrakeService\b')
@@ -909,8 +954,8 @@ if ($brakeDecisionIndex -lt 0 -or
     $lastRedirectCatchLogIndex -ge $brakeDecisionIndex) {
     throw 'The CC brake must run after redirect resolution and its catch, then before the detour''s sole Original call.'
 }
-if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, forwardedTargetId, mode\)\) \{ return false; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
-    throw 'The brake must inspect the final forwarded target, return false before Original only on an exact Block decision, and let pass/fail-open paths reach the sole Original.'
+if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, targetId, forwardedTargetId, targetSuppressedByRedirect, mode\)\) \{ return false; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
+    throw 'The brake must inspect original and final target identities, return false before Original only on an exact Block decision, and let pass/fail-open paths reach the sole Original.'
 }
 $brakeDetourSection = [regex]::Match(
     $normalizedUseActionDetour,
@@ -919,6 +964,25 @@ if ([regex]::Matches($brakeDetourSection, '\breturn false;').Count -ne 1 -or
     $brakeDetourSection -match 'forwardedTargetId\s*=\s*InvalidCarrierTargetId|useActionHook!\.Original\s*\(' -or
     $brakeDetourSection -notmatch 'catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \}') {
     throw 'A confirmed brake block must make zero Original calls via one direct false return; it must never use target-zero suppression, while exceptions must fail open without changing the final target.'
+}
+$directZeroSuppressions = [regex]::Matches(
+    $normalizedUseActionDetour,
+    'forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true;')
+$conditionalZeroSuppressions = [regex]::Matches(
+    $normalizedUseActionDetour,
+    'forwardedTargetId = consumedFallbackCarrier \? InvalidCarrierTargetId : targetId; targetSuppressedByRedirect = consumedFallbackCarrier;')
+$allDirectZeroAssignments = [regex]::Matches(
+    $normalizedUseActionDetour,
+    'forwardedTargetId = InvalidCarrierTargetId;')
+$allConditionalZeroAssignments = [regex]::Matches(
+    $normalizedUseActionDetour,
+    'forwardedTargetId = consumedFallbackCarrier \? InvalidCarrierTargetId : targetId;')
+if ($normalizedUseActionDetour -notmatch 'var targetSuppressedByRedirect = false;' -or
+    $directZeroSuppressions.Count -ne $allDirectZeroAssignments.Count -or
+    $conditionalZeroSuppressions.Count -ne $allConditionalZeroAssignments.Count -or
+    $allDirectZeroAssignments.Count -ne 5 -or
+    $allConditionalZeroAssignments.Count -ne 2) {
+    throw 'Every reviewed Near/Far path that can author target zero must set explicit targetSuppressedByRedirect provenance before the CC brake inspects the call.'
 }
 
 Assert-Literals $ccImmunityBrake @(
@@ -944,7 +1008,27 @@ Assert-Literals $ccImmunityBrake @(
     'CcImmunityBrakeRules.Evaluate(',
     'configuration.IsCcBrakeJobEnabled(localJobId)',
     'configuration.IsCcBrakeActionEnabled(resolvedActionId)',
-    'forwardedTargetId,',
+    'CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(forwardedTargetId)',
+    'forwardedTargetId == originalTargetId',
+    '!targetSuppressedByRedirect',
+    'CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(',
+    'targetSuppressedByRedirect)',
+    'GetNativeHardTargetId(localPlayer)',
+    'character->GetTargetId().Id',
+    'GetNativeHardTargetId(localPlayer) == nativeHardTargetId',
+    'effectiveTargetId,',
+    'bool Configured',
+    'bool ActiveInCurrentContext',
+    'long DefaultTargetResolutions',
+    'long ExactTargetResolutions',
+    'long TargetResolutionFailures',
+    'ulong LastOriginalTargetId',
+    'ulong LastForwardedTargetId',
+    'ulong LastEffectiveTargetId',
+    'uint LastMode',
+    'bool LastTargetSuppressedByRedirect',
+    'string LastTargetResolution',
+    'string LastSampledStatuses',
     'includeWolvesDenTesting: false',
     'actionType is ActionType.Action or ActionType.PvPAction',
     'ActionManager.UseActionMode.None',
@@ -952,6 +1036,30 @@ Assert-Literals $ccImmunityBrake @(
     'ActionManager.UseActionMode.Queue',
     '(uint)mode == 100'
 ) 'Exact, live, canonical CC-immunity brake runtime'
+Assert-Literals $ccImmunityBrakeTargetRules @(
+    'DefaultTargetSentinel = 0xE0000000UL',
+    'if (IsConcreteActorId(forwardedTargetId)) return forwardedTargetId',
+    'if (targetSuppressedByRedirect) return 0',
+    'var isNativeDefaultTarget = forwardedTargetId is 0 or DefaultTargetSentinel',
+    'forwardedTargetId != originalTargetId',
+    'return IsConcreteActorId(nativeHardTargetId) ? nativeHardTargetId : 0',
+    'targetId is 0 or DefaultTargetSentinel',
+    'targetId is not 0 and not DefaultTargetSentinel and not ulong.MaxValue'
+) 'Exact default-target carrier resolution'
+if ($normalizedCcImmunityBrakeTargetRules -notmatch 'bool targetSuppressedByRedirect = false\) \{ if \(IsConcreteActorId\(forwardedTargetId\)\) return forwardedTargetId; if \(targetSuppressedByRedirect\) return 0; var isNativeDefaultTarget = forwardedTargetId is 0 or DefaultTargetSentinel; if \(!isNativeDefaultTarget \|\| forwardedTargetId != originalTargetId\) return 0; return IsConcreteActorId\(nativeHardTargetId\) \? nativeHardTargetId : 0;' -or
+    $normalizedCcImmunityBrakeTargetRules -notmatch 'public static bool IsDefaultTargetCarrier\(ulong targetId\) => targetId is 0 or DefaultTargetSentinel;') {
+    throw 'Only an unchanged native zero/0xE0000000 carrier may resolve through the native hard target; explicit redirect suppression provenance must keep every plugin-authored zero unresolved.'
+}
+$ccImmunityBrakeSelfTests = Read-RequiredSource (
+    Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest\CcImmunityBrakeSelfTests.cs') 'CC-immunity brake self-tests'
+$normalizedCcImmunityBrakeSelfTests = $ccImmunityBrakeSelfTests -replace '\s+', ' '
+$coreSelfTestProgram = Read-RequiredSource (
+    Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest\Program.cs') 'Core self-test registry'
+if ($normalizedCcImmunityBrakeSelfTests -notmatch 'Equal\( \(ulong\)ExactTarget\.EntityId, CcImmunityBrakeTargetRules\.ResolveEffectiveTargetId\(0, 0, ExactTarget\.EntityId\), "native raw-zero carrier resolves exact hard target"\)' -or
+    $normalizedCcImmunityBrakeSelfTests -notmatch 'Equal\( 0UL, CcImmunityBrakeTargetRules\.ResolveEffectiveTargetId\( 0, 0, ExactTarget\.GameObjectId, targetSuppressedByRedirect: true\), "explicit suppression provenance keeps raw zero inert"\)' -or
+    $coreSelfTestProgram -notmatch 'CcImmunityBrakeSelfTests\.DefaultTargetCarrierResolvesOnlyTheNativeHardTarget') {
+    throw 'Core self-tests must execute both raw 0-to-0 cases: unsuppressed resolves the exact native hard target, while explicit redirect suppression remains inert.'
+}
 if ($normalizedCcImmunityBrake -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\)' -or
     $normalizedCcImmunityBrake -notmatch 'targetId == candidate\.GameObjectId \|\| targetId == candidate\.EntityId' -or
     $normalizedCcImmunityBrake -notmatch 'var liveStatuses = target\?\.StatusList \.Select\(static status => status\.StatusId\) \.Where\(verifiedStatusIds\.Contains\) \.ToArray\(\)') {
@@ -964,12 +1072,37 @@ if (-not $shouldBlockMethod.Success) {
     throw 'The one-attempt CC-brake decision method could not be isolated.'
 }
 $ccBrakeDecisionBody = $shouldBlockMethod.Groups['Body'].Value
+$firstNativeHardTargetRead = $ccBrakeDecisionBody.IndexOf('GetNativeHardTargetId(localPlayer)')
+$liveStatusSample = $ccBrakeDecisionBody.IndexOf('var liveStatuses = target?.StatusList')
+$stableNativeHardTargetRead = $ccBrakeDecisionBody.IndexOf(
+    'GetNativeHardTargetId(localPlayer) == nativeHardTargetId',
+    [Math]::Max(0, $firstNativeHardTargetRead + 1))
+$ccBrakeRuleEvaluation = $ccBrakeDecisionBody.IndexOf('CcImmunityBrakeRules.Evaluate(')
+if ($firstNativeHardTargetRead -lt 0 -or
+    $liveStatusSample -le $firstNativeHardTargetRead -or
+    $stableNativeHardTargetRead -le $liveStatusSample -or
+    $ccBrakeRuleEvaluation -le $stableNativeHardTargetRead -or
+    $ccBrakeDecisionBody -notmatch 'if \(!hardTargetStable\) \{ exactTarget = false; targetResolution = "Native hard target changed during evaluation"; \}') {
+    throw 'Default-carrier braking must re-read and prove the same native hard target after live status sampling and before the pure block decision.'
+}
 if ($ccBrakeDecisionBody -cmatch '\b(Environment\.TickCount64|DateTime|Stopwatch|RemainingTime|ProtectionMissingGrace|Snapshot|TargetPressureTracker|Task|Timer|Thread|ConcurrentQueue|Queue<|Replay|Retry|Dispatch)\b' -or
     $ccImmunityBrake -match '(?:->|\.)UseAction\s*\(' -or
     $ccImmunityBrake -cmatch '\b(Hook<|HookFromAddress|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b' -or
     $ccImmunityBrake -match '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'The CC brake must remain a live one-attempt filter with no tracker grace, expiry prediction, replay, native action call, extra hook, input injection, or target setter.'
 }
+if ($ccBrakeDecisionBody -match '(?m)(?:^|;)\s*forwardedTargetId\s*=') {
+    throw 'CC-brake inspection must never change the forwarded target; only the pre-existing Near/Far redirect policy may do so.'
+}
+Assert-Literals $pluginSource @(
+    'cc-brake[configured={ccBrake.Configured},active={ccBrake.ActiveInCurrentContext}',
+    'fail-open={ccBrake.FailedOpenAttempts},default={ccBrake.DefaultTargetResolutions}',
+    'exact={ccBrake.ExactTargetResolutions},resolve-fail={ccBrake.TargetResolutionFailures}',
+    'target={ccBrake.LastOriginalTargetId:X}/{ccBrake.LastForwardedTargetId:X}/',
+    '{ccBrake.LastEffectiveTargetId:X},suppressed={ccBrake.LastTargetSuppressedByRedirect}',
+    'resolve={ccBrake.LastTargetResolution}',
+    'sample={ccBrake.LastSampledStatuses},last={ccBrake.LastEvent}'
+) 'Persistent CC-brake target-resolution diagnostics'
 Assert-Literals $ccImmunityBrakeRules @(
     'MasterDisabled',
     'JobDisabled',
@@ -1007,8 +1140,8 @@ if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.N
 if ($nearAssist -match 'RaptureShellModule|MacroLocked|MacroCurrentLine|MacroLineText') {
     throw 'Near Assist must not restore the live macro-line timing dependency that caused valid Turbo calls to be missed.'
 }
-if ($normalizedNearAssist -notmatch 'if \(!rewritten && consumedFallbackCarrier\) forwardedTargetId = InvalidCarrierTargetId;' -or
-    $normalizedNearAssist -notmatch 'forwardedTargetId = consumedFallbackCarrier \? InvalidCarrierTargetId : targetId;') {
+if ($normalizedNearAssist -notmatch 'if \(!rewritten && consumedFallbackCarrier\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; \}' -or
+    $normalizedNearAssist -notmatch 'forwardedTargetId = consumedFallbackCarrier \? InvalidCarrierTargetId : targetId; targetSuppressedByRedirect = consumedFallbackCarrier;') {
     throw 'A failed or exceptional fallback carrier must be made invalid so the authored <t> fallback can run.'
 }
 $nearAssistCarrier = Read-RequiredSource (Join-Path $coreRoot 'NearAssistCarrierRules.cs') 'Near Assist carrier rules'
@@ -1250,7 +1383,7 @@ if ($normalizedNearAssist -notmatch 'handlingFarHelp = true; ArmFarHelpFallbackS
     $farHelpOneShot -notmatch 'InvalidSuppressedTargetId') {
     throw 'Far Help must arm legacy same-action suppression before resolving/forwarding and every failed Far Help decision must target zero.'
 }
-if ($normalizedNearAssist -notmatch 'forwardedTargetId = TryResolveFarHelpRedirect.*?if \(!rewritten\) forwardedTargetId = InvalidCarrierTargetId;') {
+if ($normalizedNearAssist -notmatch 'forwardedTargetId = TryResolveFarHelpRedirect.*?if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; \}') {
     throw 'Every claimed Far Help movement call must suppress its target when no redirect was produced, including the exact token-expiry boundary.'
 }
 
@@ -1613,7 +1746,7 @@ $miracleBlockerIds = @([regex]::Matches($miracleBlockerArray.Groups['Body'].Valu
     [uint32](($_.Groups['Id'].Value) -replace '_', '')
 })
 $expectedStandardBlockers = @([uint32]3054, [uint32]3673, [uint32]3248, [uint32]1303, [uint32]1320, [uint32]4096, [uint32]3143)
-$expectedMiracleBlockers = @([uint32]3248, [uint32]1320, [uint32]3143, [uint32]3052, [uint32]3162)
+$expectedMiracleBlockers = @([uint32]3248, [uint32]1320, [uint32]4096, [uint32]3143, [uint32]3052, [uint32]3162)
 if (($standardBlockerIds -join ',') -ne ($expectedStandardBlockers -join ',') -or
     ($miracleBlockerIds -join ',') -ne ($expectedMiracleBlockers -join ',')) {
     throw "CC brake blocker matrices drifted: standard=$($standardBlockerIds -join ','), Miracle=$($miracleBlockerIds -join ',')."
@@ -1637,10 +1770,11 @@ $miracleConstraintMethod = [regex]::Match(
 $standardConstraintCases = [regex]::Matches($standardConstraintMethod.Groups['Body'].Value, '(?m)^\s*[\d_]+\s*=>\s*targetJobId\s*==\s*\d+')
 $miracleConstraintCases = [regex]::Matches($miracleConstraintMethod.Groups['Body'].Value, '(?m)^\s*[\d_]+\s*=>\s*targetJobId\s*==\s*\d+')
 if (-not $standardConstraintMethod.Success -or -not $miracleConstraintMethod.Success -or
-    $standardConstraintCases.Count -ne 3 -or $miracleConstraintCases.Count -ne 3 -or
+    $standardConstraintCases.Count -ne 3 -or $miracleConstraintCases.Count -ne 4 -or
+    $miracleConstraintMethod.Groups['Body'].Value -notmatch [regex]::Escape('4_096 => targetJobId == 41') -or
     $normalizedCcBrakeCatalog -notmatch 'StandardPurifyCc => ReadOnlyStandardPurifyCcBlockers.*?Miracle => ReadOnlyMiracleBlockers' -or
     $normalizedCcBrakeCatalog -notmatch 'StandardPurifyCc => StandardPurifyCcBlockers\.Contains\(statusId\) && StandardBlockerMatchesTargetJob\(statusId, targetJobId\).*?Miracle => MiracleBlockers\.Contains\(statusId\) && MiracleBlockerMatchesTargetJob\(statusId, targetJobId\)') {
-    throw 'CC brake must retain the exact two blocker families and their three job-scoped status constraints each.'
+    throw 'CC brake must retain the exact two blocker families plus three standard and four Miracle job-scoped status constraints.'
 }
 
 Assert-Literals $ccImmunityBrakeMetadata @(
@@ -2209,4 +2343,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.11.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once and target-zero suppression remains limited to reviewed Near/Far carrier policies; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while VPR Miracle waits for live Hardened Scales absence and the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
+Write-Host "Seiton Sense v0.11.0.2 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once; only an unchanged native zero/0xE0000000 carrier may be inspected through the same stable hard target without changing the forwarded target, while explicit redirect provenance keeps every plugin-suppressed zero unresolved and target-zero suppression stays limited to reviewed Near/Far carrier policies; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while a transient priority claim retains a VPR threat only inside its original TTL without input reuse or replay, and the persisted opportunity counters explain protection, range, input, priority, rejection, and expiry outcomes; the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."

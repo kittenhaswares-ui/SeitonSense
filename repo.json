@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, CC-immunity brake, job helpers, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating pressure and CC-protection cues, a default-off hard-stop per-job/per-action CC-immunity brake, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in job helpers, and target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, a default-off selected-target-aware hard-stop CC-immunity brake, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in job helpers, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.11.0.1",
-    "Changelog": "Hardens a confirmed CC-immunity block by returning false without calling the downstream/original action function, eliminating the former targetId=0/default-target restoration path. Already server-accepted actions in the roughly 295-355 ms simultaneous-activation window cannot be recalled and may still animate or deal damage while their status effect is blocked. Miracle landing correlation preserves the first unexpired pending attempt. Configuration schema 15 is unchanged.",
+    "AssemblyVersion": "0.11.0.2",
+    "Changelog": "Resolves unchanged native selected-target carriers 0 and 0xE0000000 to one stable hard target before the canonical e1-e5 CC-protection check, while explicit redirect-suppression provenance prevents a Seiton-generated zero from being restored. Live CC evidence adds VPR Hardened Scales 4096 as a VPR-only Miracle blocker. Retains bounded Miracle opportunity diagnostics after context exit, and a transient Purify/Rescue priority claim no longer destroys the original unextended 500/250 ms opportunity. Miracle stays at native 10y/LoS with the same one-input, one-attempt, no-retry boundary. Configuration schema 15 is unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786663563"
+    "LastUpdate": "1786668378"
   }
 ]

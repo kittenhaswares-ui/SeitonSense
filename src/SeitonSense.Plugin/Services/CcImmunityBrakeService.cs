@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -10,15 +11,26 @@ using SeitonSense.Plugin.Models;
 namespace SeitonSense.Plugin.Services;
 
 internal readonly record struct CcImmunityBrakeDiagnostics(
-    bool Enabled,
+    bool Configured,
+    bool ActiveInCurrentContext,
     int VerifiedActions,
     int VerifiedStatuses,
     long EvaluatedAttempts,
     long BlockedAttempts,
     long FailedOpenAttempts,
+    long DefaultTargetResolutions,
+    long ExactTargetResolutions,
+    long TargetResolutionFailures,
     uint LastActionId,
     uint LastBlockerStatusId,
     int LastEnemySlot,
+    ulong LastOriginalTargetId,
+    ulong LastForwardedTargetId,
+    ulong LastEffectiveTargetId,
+    uint LastMode,
+    bool LastTargetSuppressedByRedirect,
+    string LastTargetResolution,
+    string LastSampledStatuses,
     string LastEvent);
 
 /// <summary>
@@ -40,9 +52,19 @@ internal sealed unsafe class CcImmunityBrakeService
     private long evaluatedAttempts;
     private long blockedAttempts;
     private long failedOpenAttempts;
+    private long defaultTargetResolutions;
+    private long exactTargetResolutions;
+    private long targetResolutionFailures;
     private uint lastActionId;
     private uint lastBlockerStatusId;
     private int lastEnemySlot;
+    private ulong lastOriginalTargetId;
+    private ulong lastForwardedTargetId;
+    private ulong lastEffectiveTargetId;
+    private uint lastMode;
+    private bool lastTargetSuppressedByRedirect;
+    private string lastTargetResolution = "Not evaluated";
+    private string lastSampledStatuses = "none";
     private string lastEvent = "Ready";
     private long nextErrorLogAt;
 
@@ -74,14 +96,27 @@ internal sealed unsafe class CcImmunityBrakeService
             {
                 return new CcImmunityBrakeDiagnostics(
                     configuration.Enabled && configuration.EnableCcImmunityBrake,
+                    configuration.Enabled &&
+                    configuration.EnableCcImmunityBrake &&
+                    ResolveContext() == SupportedPvPContext.CrystallineConflict,
                     verifiedActionIds.Count,
                     verifiedStatusIds.Count,
                     evaluatedAttempts,
                     blockedAttempts,
                     failedOpenAttempts,
+                    defaultTargetResolutions,
+                    exactTargetResolutions,
+                    targetResolutionFailures,
                     lastActionId,
                     lastBlockerStatusId,
                     lastEnemySlot,
+                    lastOriginalTargetId,
+                    lastForwardedTargetId,
+                    lastEffectiveTargetId,
+                    lastMode,
+                    lastTargetSuppressedByRedirect,
+                    lastTargetResolution,
+                    lastSampledStatuses,
                     lastEvent);
             }
         }
@@ -92,7 +127,9 @@ internal sealed unsafe class CcImmunityBrakeService
     internal bool ShouldBlock(
         ActionType actionType,
         uint resolvedActionId,
+        ulong originalTargetId,
         ulong forwardedTargetId,
+        bool targetSuppressedByRedirect,
         ActionManager.UseActionMode mode)
     {
         if (!IsRecognizedInvocation(actionType, mode) ||
@@ -110,11 +147,23 @@ internal sealed unsafe class CcImmunityBrakeService
                          localPlayer!.ClassJob.IsValid
             ? localPlayer.ClassJob.RowId
             : 0;
+        var defaultTargetCarrier = CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(forwardedTargetId) &&
+                                   forwardedTargetId == originalTargetId &&
+                                   !targetSuppressedByRedirect;
+        var nativeHardTargetId = defaultTargetCarrier
+            ? GetNativeHardTargetId(localPlayer)
+            : 0;
+        var effectiveTargetId = CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+            originalTargetId,
+            forwardedTargetId,
+            nativeHardTargetId,
+            targetSuppressedByRedirect);
         var exactTarget = TryResolveExactCanonicalEnemy(
             localPlayer,
-            forwardedTargetId,
+            effectiveTargetId,
             out var target,
-            out var enemySlot);
+            out var enemySlot,
+            out var targetResolution);
         var targetIdentity = target is null
             ? default
             : new TargetPressureActorIdentity(target.GameObjectId, target.EntityId);
@@ -123,18 +172,36 @@ internal sealed unsafe class CcImmunityBrakeService
             .Select(static status => status.StatusId)
             .Where(verifiedStatusIds.Contains)
             .ToArray();
+        var hardTargetStable = !defaultTargetCarrier ||
+                               GetNativeHardTargetId(localPlayer) == nativeHardTargetId;
+        if (!hardTargetStable)
+        {
+            exactTarget = false;
+            targetResolution = "Native hard target changed during evaluation";
+        }
         var decision = CcImmunityBrakeRules.Evaluate(
             masterEnabled: true,
             configuration.IsCcBrakeJobEnabled(localJobId),
             configuration.IsCcBrakeActionEnabled(resolvedActionId),
             localJobId,
             resolvedActionId,
-            forwardedTargetId,
+            effectiveTargetId,
             targetIdentity,
             targetJobId,
             exactTarget,
             liveStatuses);
-        RecordDecision(decision, resolvedActionId, enemySlot);
+        RecordDecision(
+            decision,
+            resolvedActionId,
+            enemySlot,
+            originalTargetId,
+            forwardedTargetId,
+            effectiveTargetId,
+            mode,
+            defaultTargetCarrier,
+            targetSuppressedByRedirect,
+            targetResolution,
+            liveStatuses);
         return decision.ShouldBlock;
     }
 
@@ -163,14 +230,37 @@ internal sealed unsafe class CcImmunityBrakeService
     private void RecordDecision(
         CcImmunityBrakeDecision decision,
         uint actionId,
-        int enemySlot)
+        int enemySlot,
+        ulong originalTargetId,
+        ulong forwardedTargetId,
+        ulong effectiveTargetId,
+        ActionManager.UseActionMode mode,
+        bool defaultTargetCarrier,
+        bool targetSuppressedByRedirect,
+        string targetResolution,
+        IReadOnlyCollection<uint>? sampledStatuses)
     {
         if (decision.ShouldBlock) Interlocked.Increment(ref blockedAttempts);
+        if (defaultTargetCarrier && effectiveTargetId != 0)
+            Interlocked.Increment(ref defaultTargetResolutions);
+        if (targetResolution == "Exact canonical enemy")
+            Interlocked.Increment(ref exactTargetResolutions);
+        else
+            Interlocked.Increment(ref targetResolutionFailures);
         lock (diagnosticsGate)
         {
             lastActionId = actionId;
             lastBlockerStatusId = decision.BlockerStatusId;
             lastEnemySlot = enemySlot;
+            lastOriginalTargetId = originalTargetId;
+            lastForwardedTargetId = forwardedTargetId;
+            lastEffectiveTargetId = effectiveTargetId;
+            lastMode = (uint)mode;
+            lastTargetSuppressedByRedirect = targetSuppressedByRedirect;
+            lastTargetResolution = targetResolution;
+            lastSampledStatuses = sampledStatuses is { Count: > 0 }
+                ? string.Join(',', sampledStatuses.Order())
+                : "none";
             lastEvent = decision.ShouldBlock
                 ? $"Blocked {decision.Action?.DisplayName ?? actionId.ToString()} on e{enemySlot}"
                 : decision.Reason.ToString();
@@ -181,16 +271,18 @@ internal sealed unsafe class CcImmunityBrakeService
         IPlayerCharacter? localPlayer,
         ulong targetId,
         out IPlayerCharacter? target,
-        out int enemySlot)
+        out int enemySlot,
+        out string resolution)
     {
         target = null;
         enemySlot = 0;
-        if (!IsLivePlayer(localPlayer) ||
-            !HasValidNativeIdentity(localPlayer!) ||
-            !IsNetworkObjectId(targetId))
+        resolution = "Local player invalid";
+        if (!IsLivePlayer(localPlayer) || !HasValidNativeIdentity(localPlayer!))
         {
             return false;
         }
+        resolution = "Default/explicit target unresolved";
+        if (!IsNetworkObjectId(targetId)) return false;
 
         var partyEntityIds = partyList
             .Select(static member => member.EntityId)
@@ -214,12 +306,22 @@ internal sealed unsafe class CcImmunityBrakeService
             }
 
             var identity = (candidate.GameObjectId, candidate.EntityId);
-            if (!seenIdentities.Add(identity)) return false;
+            if (!seenIdentities.Add(identity))
+            {
+                resolution = "Duplicate canonical enemy identity";
+                return false;
+            }
             if (targetId == candidate.GameObjectId || targetId == candidate.EntityId)
                 matches.Add((slot, candidate));
         }
 
-        if (matches.Count != 1) return false;
+        if (matches.Count != 1)
+        {
+            resolution = matches.Count == 0
+                ? "Target is not an exact live canonical e1-e5 enemy"
+                : "Target matched multiple canonical enemies";
+            return false;
+        }
         var match = matches[0];
         var tableCandidate = objectTable.SearchByEntityId(match.Player.EntityId) as IPlayerCharacter;
         if (tableCandidate is null ||
@@ -227,12 +329,21 @@ internal sealed unsafe class CcImmunityBrakeService
             tableCandidate.GameObjectId != match.Player.GameObjectId ||
             tableCandidate.EntityId != match.Player.EntityId)
         {
+            resolution = "Object-table identity changed";
             return false;
         }
 
         target = match.Player;
         enemySlot = match.Slot;
+        resolution = "Exact canonical enemy";
         return true;
+    }
+
+    private static ulong GetNativeHardTargetId(IPlayerCharacter? localPlayer)
+    {
+        if (localPlayer is null || !HasValidNativeIdentity(localPlayer)) return 0;
+        var character = (Character*)localPlayer.Address;
+        return character == null ? 0 : character->GetTargetId().Id;
     }
 
     private SupportedPvPContext ResolveContext()

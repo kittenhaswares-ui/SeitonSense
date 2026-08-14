@@ -2,7 +2,7 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.11.0.1 hardens the
+one-shot macro assistance, and target highlights. Version 0.11.0.2 hardens the
 default-off, per-job and per-action CC-immunity brake for a conservative set of
 targeted PvP actions. The suite
 combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
@@ -27,9 +27,10 @@ Focus Glow into one configurable custom-repository plugin.
 - **Optional CC-immunity brake:** selected targeted CC actions can be held back
   while their exact enemy target has verified protection against that CC. It
   works from the normal hotbar without a macro and checks every real press or
-  Turbo pulse independently. A confirmed block returns immediately without
-  invoking the downstream/original action call; Seiton Sense never stores,
-  replays, redirects, or retries it.
+  Turbo pulse independently, including unchanged native selected-target
+  carriers `0` and `0xE0000000`. A confirmed block returns immediately without
+  invoking the downstream/original action call; Seiton Sense never stores, replays,
+  redirects, or retries it.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
   and Marksman's Spite receive stable warnings. The MCH LB card is larger by
   default and can play one selectable built-in FFXIV sound per verified threat.
@@ -189,12 +190,28 @@ game processing could resolve back to a default target. It does not change the
 visible selected target, choose another enemy or action, store the press,
 dispatch an action, replay it later, or add a retry.
 
+Some direct-hotbar and Turbo calls represent FFXIV's selected target with an
+unchanged native carrier of either `0` or the default-target sentinel
+`0xE0000000`, rather than a concrete actor ID. Seiton treats either native shape
+as the selected hard target only when the original and final forwarded carriers
+are identical and the redirect path did not deliberately suppress the target.
+It reads the native hard target, resolves it to exactly one live canonical
+`<e1>`-`<e5>` enemy, and confirms that the selection did not change during the
+protection check. The call itself is not rewritten.
+
+A zero deliberately produced by Seiton's fail-closed Near Assist, Near Help,
+Far Help, or legacy-fallback suppression carries explicit provenance and can
+never be restored to the selected target. Explicit actor IDs remain
+authoritative, and any missing, changed, non-canonical, duplicated, or
+otherwise ambiguous target still passes through unchanged.
+
 For the standard CC family, the verified blockers are Guard `3054`/`3673`,
 Resilience `3248`, Inner Release `1303`, Meikyo Shisui `1320`, Hardened Scales
 `4096`, and the Warden's Paean ward `3143`. Miracle's separate matrix uses
-Resilience `3248`, Meikyo Shisui `1320`, the Warden's Paean `3143`, Relentless
-Rush `3052`, and Honing Dance `3162`. Unsupported or unverified statuses do not
-become blockers from their display text alone.
+Resilience `3248`, Meikyo Shisui `1320`, VPR Hardened Scales `4096`, the
+Warden's Paean `3143`, Relentless Rush `3052`, and Honing Dance `3162`.
+Job-owned protections are accepted only on their exact job. Unsupported or
+unverified statuses do not become blockers from their display text alone.
 
 The Jobs tab provides one master switch plus separate job and action switches.
 The conservative current list is:
@@ -310,12 +327,16 @@ attempt on that enemy.
 MCH and SAM opportunities expire after 500 ms; the VPR opportunity expires
 after 250 ms. For VPR, the start signal only arms that short-lived opportunity.
 The helper waits for live Hardened Scales `4096` to disappear and never predicts
-its end from a countdown. Other verified full CC protection also prevents deliberately
+its end from a countdown. Other verified Miracle blockers also prevent deliberately
 spending Miracle into immunity. Self-Purify has first claim on the shared
-physical input, Ally Rescue second, and Miracle third. State and input are
-consumed before the one native request; there is no selected-target change,
-alternate target, fallback, or retry. Turbo-generated logical repeats do not
-create new physical intent.
+physical input, Ally Rescue second, and Miracle third. A transient higher-
+priority claim no longer destroys an already armed exact Miracle opportunity,
+but it does consume that physical input generation. The opportunity keeps its
+original 500-ms or 250-ms deadline and can act only from a genuinely fresh
+eligible generation that arrives before expiry. State and input are consumed
+before the one native request; there is no selected-target change, alternate
+target, fallback, or retry. Turbo-generated logical repeats do not create new
+physical intent.
 
 After that sole helper attempt, the same bounded action-effect capture can show
 a blue `MIRACLE LANDED` news flash for 1.5 seconds. It requires the exact local
@@ -332,6 +353,14 @@ current captured event shape, but FFXIV remains authoritative. A locally
 accepted Miracle request is not proof that the already-started action was
 interrupted. This path is intentionally marked experimental until it has been
 rechecked live on the current patch.
+
+`/seiton debug` and the Advanced settings diagnostics now retain aggregate
+Miracle opportunity counts and the last opportunity result after leaving CC:
+recognized, armed, rejected, protection/range/input/priority waits, and expiry.
+The active threat and bounded queues are still cleared on context exit. Live CC
+evidence reached the existing native 10-yalm range/line-of-sight gate; this
+release keeps that range and every identity, protection, deadline, input,
+one-attempt, and no-retry boundary unchanged.
 
 The Monk section contains a separate default-off Earth's Reply helper for PvP
 job 20. It requires one exact Earth Resonance `3171`, current metadata
@@ -550,8 +579,8 @@ update through the same repository.
 - `/seiton show` / `/seiton hide` - enable or disable the HUD
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
-- `/seiton debug` - print one bounded diagnostic line, including recent Near
-  Assist decisions
+- `/seiton debug` - print bounded diagnostics, including recent Near Assist,
+  selected-target CC-brake resolution, and retained Miracle opportunity results
 - `/seiton reset` - restore defaults
 
 ## Standalone plugin retirement
@@ -573,8 +602,11 @@ documented in [PRIVACY.md](PRIVACY.md).
 Display features, including the resource aura, never target or press actions or
 mutate native UI. For one already incoming, enabled CC action attempt against
 an exact protected enemy, the optional brake can return `false` without calling
-the downstream/original action function; it never stores or replays input and
-never chooses another target or action. Near Assist, Near Help, and Far Help can
+the downstream/original action function. The exact native selected target may
+be read only to resolve an unchanged native target carrier of `0` or
+`0xE0000000`; a zero marked as deliberately suppressed by Seiton's redirect
+path is never restored. The brake never stores or replays input and never
+chooses another target or action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -604,9 +636,11 @@ party-row / current CC-row aura anchoring, pressure evidence, MCH marker/sound
 timing, optional Purify/Ally Rescue/Miracle/Earth's Reply behavior, and the macro helpers
 with both normal macros and Turbo Hotbar should be rechecked in the relevant
 live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
-changes. The CC-immunity brake's direct-hotbar and Turbo pulse behavior,
-hard-return boundary, expiry edge, and simultaneous server-acceptance race also
-require a current-patch live A/B test. The 0.7.0.1 ActionEffect confirmation and
+changes. Live CC evidence reached Miracle's unchanged native 10-yalm range/LoS
+gate. The CC-immunity brake's selected-target sentinel resolution, direct-
+hotbar and Turbo pulse behavior, hard-return boundary, expiry edge, and
+simultaneous server-acceptance race still require continued current-patch A/B
+testing. The 0.7.0.1 ActionEffect confirmation and
 blue popup still require
 current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
 actual Miracle interruption likewise require a live CC A/B test; source and

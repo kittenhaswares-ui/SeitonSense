@@ -113,6 +113,69 @@ internal static class CcImmunityBrakeSelfTests
             "entity ID identifies exact target");
     }
 
+    internal static void DefaultTargetCarrierResolvesOnlyTheNativeHardTarget()
+    {
+        Equal(
+            ExactTarget.GameObjectId,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                ExactTarget.GameObjectId),
+            "default sentinel resolves exact native hard target");
+        Equal(
+            (ulong)ExactTarget.EntityId,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(0, 0, ExactTarget.EntityId),
+            "native raw-zero carrier resolves exact hard target");
+        Equal(
+            ExactTarget.GameObjectId,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                ExactTarget.GameObjectId,
+                ExactTarget.GameObjectId,
+                999),
+            "explicit final target remains authoritative");
+
+        Equal(
+            0UL,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(123, 0, ExactTarget.GameObjectId),
+            "Seiton-injected zero is never reinterpreted as selected target");
+        Equal(
+            0UL,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                0,
+                0,
+                ExactTarget.GameObjectId,
+                targetSuppressedByRedirect: true),
+            "explicit suppression provenance keeps raw zero inert");
+        Equal(
+            0UL,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                0,
+                ExactTarget.GameObjectId),
+            "default carrier rewritten to zero remains suppressed");
+        Equal(
+            ExactTarget.GameObjectId,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                ExactTarget.GameObjectId,
+                999),
+            "explicit redirect target wins over native selected target");
+        Equal(
+            0UL,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel,
+                CcImmunityBrakeTargetRules.DefaultTargetSentinel),
+            "missing native hard target remains unresolved");
+        Equal(
+            0UL,
+            CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
+                ulong.MaxValue,
+                ulong.MaxValue,
+                ExactTarget.GameObjectId),
+            "unknown carrier is never resolved");
+    }
+
     internal static void StandardBlockerMatrixIsExact()
     {
         uint[] expectedBlockers = [3_054, 3_673, 3_248, 1_303, 1_320, 4_096, 3_143];
@@ -155,7 +218,7 @@ internal static class CcImmunityBrakeSelfTests
 
     internal static void MiracleBlockerMatrixIsExact()
     {
-        uint[] expectedBlockers = [3_248, 1_320, 3_143, 3_052, 3_162];
+        uint[] expectedBlockers = [3_248, 1_320, 4_096, 3_143, 3_052, 3_162];
         EqualSequence(
             expectedBlockers,
             CcImmunityBrakeActionCatalog.GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle),
@@ -169,10 +232,17 @@ internal static class CcImmunityBrakeSelfTests
         }
 
         True(Evaluate(24, 29_228, [1_320], targetJobId: 34).ShouldBlock, "Miracle SAM Meikyo");
+        True(Evaluate(24, 29_228, [4_096], targetJobId: 41).ShouldBlock, "Miracle VPR Hardened Scales");
         True(Evaluate(24, 29_228, [3_052], targetJobId: 37).ShouldBlock, "Miracle GNB rush");
         True(Evaluate(24, 29_228, [3_162], targetJobId: 38).ShouldBlock, "Miracle DNC dance");
 
-        foreach (var (statusId, ownerJobId) in new[] { (1_320u, 34u), (3_052u, 37u), (3_162u, 38u) })
+        foreach (var (statusId, ownerJobId) in new[]
+                 {
+                     (1_320u, 34u),
+                     (4_096u, 41u),
+                     (3_052u, 37u),
+                     (3_162u, 38u),
+                 })
         {
             Pass(
                 Evaluate(24, 29_228, [statusId], targetJobId: ownerJobId + 1),
@@ -180,7 +250,7 @@ internal static class CcImmunityBrakeSelfTests
                 $"Miracle status {statusId} wrong owner job");
         }
 
-        foreach (var statusId in new uint[] { 3_054, 3_673, 1_303, 4_096, 4_477, 2_708, 3_086 })
+        foreach (var statusId in new uint[] { 3_054, 3_673, 1_303, 4_477, 2_708, 3_086 })
         {
             var decision = Evaluate(24, 29_228, [statusId]);
             Pass(decision, CcImmunityBrakeDecisionReason.NoVerifiedBlocker, $"Miracle exclusion {statusId}");

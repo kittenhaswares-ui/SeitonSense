@@ -32,6 +32,16 @@ internal sealed record MiracleInterceptProbeSnapshot(
     long DroppedConfirmationCount,
     string LastEvent)
 {
+    internal long RecognizedThreatCount { get; init; }
+    internal long ArmedThreatCount { get; init; }
+    internal long RejectedThreatCount { get; init; }
+    internal long PriorityWaitCount { get; init; }
+    internal long NoInputWaitCount { get; init; }
+    internal long RangeWaitCount { get; init; }
+    internal long ProtectionWaitCount { get; init; }
+    internal long ExpiredThreatCount { get; init; }
+    internal string LastOpportunity { get; init; } = "None observed";
+
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
         MiracleInterceptThreatKind.None,
@@ -87,6 +97,20 @@ internal sealed class MiracleInterceptProbe
     private MiracleInterceptProbeSnapshot snapshot = MiracleInterceptProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
+    private long recognizedThreatCount;
+    private long armedThreatCount;
+    private long rejectedThreatCount;
+    private long priorityWaitCount;
+    private long noInputWaitCount;
+    private long rangeWaitCount;
+    private long protectionWaitCount;
+    private long expiredThreatCount;
+    private MiracleWaitReason activeWaitReason;
+    private bool priorityWaitRecorded;
+    private bool noInputWaitRecorded;
+    private bool rangeWaitRecorded;
+    private bool protectionWaitRecorded;
+    private string lastOpportunity = "None observed";
     private long nextErrorLogAt;
 
     internal MiracleInterceptProbe(
@@ -103,8 +127,8 @@ internal sealed class MiracleInterceptProbe
         this.capture = capture;
         this.log = log;
         // Miracle has a narrower blocker matrix than ordinary Purify-removable
-        // CC. Hardened Scales remains a separate VPR-release timing gate: it is
-        // not treated as a general Miracle blocker for unrelated threats.
+        // CC. Hardened Scales is verified through that matrix for VPR and also
+        // remains the explicit Furious Backlash release-timing gate below.
         verifiedProtectionStatusIds = verifiedCcBrakeStatusIds
             .Where(RequiredCcProtectionStatusIds.Contains)
             .ToHashSet();
@@ -202,26 +226,33 @@ internal sealed class MiracleInterceptProbe
         // Refresh before comparing the newly captured event against its deadline.
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
 
-        // A transient higher-priority Purify/Rescue claim cancels only the new
-        // threat opportunity. Capture stays enabled so a server status-add for
-        // an earlier Miracle attempt can still confirm and finish its popup.
-        if (!dispatchAllowed)
-        {
-            activeThreat = null;
-            return Publish("Cancelled", "Higher-priority helper claimed input", nowMilliseconds);
-        }
+        if (activeThreat is not { } threat)
+            return Publish("Waiting", "No current exact threat", nowMilliseconds);
 
-        if (activeThreat is not { } threat ||
-            nowMilliseconds < threat.ObservedAtMilliseconds ||
+        if (nowMilliseconds < threat.ObservedAtMilliseconds ||
             nowMilliseconds - threat.ObservedAtMilliseconds >= ThreatLifetime(threat.Kind))
         {
+            RecordExpired(threat);
             activeThreat = null;
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
+        }
+
+        // A transient higher-priority Purify/Rescue claim cannot dispatch a
+        // second action from the same physical generation, but it also need not
+        // destroy the exact threat. Retain it only inside its original deadline
+        // so a genuinely fresh later generation can still act; never replay or
+        // extend the opportunity.
+        if (!dispatchAllowed)
+        {
+            RecordWait(threat, MiracleWaitReason.HigherPriorityHelper);
+            return Publish("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds);
         }
 
         var candidate = ResolveCandidate(localPlayer!, threat);
         if (candidate is null)
         {
+            Interlocked.Increment(ref rejectedThreatCount);
+            lastOpportunity = $"{threat.Kind}: exact enemy identity changed";
             activeThreat = null;
             return Publish("Cancelled", "Exact enemy identity changed", nowMilliseconds);
         }
@@ -231,7 +262,7 @@ internal sealed class MiracleInterceptProbe
                              HasVerifiedActiveStatus(
                                  candidate,
                                  EnemyCombatConstants.HardenedScalesStatusId);
-        var otherProtection = anyProtection;
+        var otherProtection = anyProtection && !hardenedScales;
         var rangeAndLineOfSight = HasMiracleRangeAndLineOfSight(localPlayer!, candidate);
         var locallyReady = !hardenedScales &&
                            !otherProtection &&
@@ -246,6 +277,11 @@ internal sealed class MiracleInterceptProbe
                 : VirtualKey.NO_KEY;
         if (input.IsTextInputActive || triggerKey == VirtualKey.NO_KEY)
         {
+            RecordWait(
+                threat,
+                input.IsTextInputActive
+                    ? MiracleWaitReason.TextInput
+                    : MiracleWaitReason.NoEligibleInput);
             return PublishCandidate(
                 threat,
                 candidate,
@@ -262,6 +298,13 @@ internal sealed class MiracleInterceptProbe
 
         if (!locallyReady)
         {
+            RecordWait(
+                threat,
+                hardenedScales
+                    ? MiracleWaitReason.HardenedScales
+                    : otherProtection
+                        ? MiracleWaitReason.OtherProtection
+                        : MiracleWaitReason.RangeOrLineOfSight);
             // Keep the generation available while VPR protection is genuinely
             // present or the exact enemy is briefly out of native 10y/LoS.
             return PublishCandidate(
@@ -333,6 +376,10 @@ internal sealed class MiracleInterceptProbe
             confirmationState = registered.NextState;
         }
 
+        lastOpportunity = attempted
+            ? $"{threat.Kind}: Miracle attempted (accepted={accepted})"
+            : $"{threat.Kind}: consumed but final identity/range/protection validation changed";
+
         return PublishCandidate(
             threat,
             candidate,
@@ -352,13 +399,13 @@ internal sealed class MiracleInterceptProbe
     internal void Reset()
     {
         ResetRuntime();
-        Volatile.Write(ref snapshot, MiracleInterceptProbeSnapshot.Initial with
+        Volatile.Write(ref snapshot, WithOpportunityDiagnostics(MiracleInterceptProbeSnapshot.Initial with
         {
             ConfirmedLandingCount = confirmationState.TotalConfirmed,
             CapturedConfirmationCount = capture.CapturedMiracleInterceptConfirmations,
             DroppedConfirmationCount = capture.DroppedMiracleInterceptConfirmations,
             LastEvent = "Reset",
-        });
+        }));
     }
 
     internal MiracleInterceptProbeSnapshot FailClosed(long nowMilliseconds, Exception? exception = null)
@@ -389,10 +436,17 @@ internal sealed class MiracleInterceptProbe
                 _ => MiracleInterceptThreatKind.None,
             };
             if (kind == MiracleInterceptThreatKind.None ||
-                signal.LocalEntityId != localPlayer.EntityId ||
-                signal.ObservedAtMilliseconds > eventNow ||
+                signal.LocalEntityId != localPlayer.EntityId)
+            {
+                continue;
+            }
+
+            if (signal.ObservedAtMilliseconds > eventNow ||
                 eventNow - signal.ObservedAtMilliseconds >= ThreatLifetime(kind))
             {
+                Interlocked.Increment(ref rejectedThreatCount);
+                Interlocked.Increment(ref expiredThreatCount);
+                lastOpportunity = $"{kind}: captured outside its {ThreatLifetime(kind)} ms window";
                 continue;
             }
 
@@ -402,18 +456,31 @@ internal sealed class MiracleInterceptProbe
                 signal.GlobalSequence,
                 signal.SourceSequence);
             if (!RememberSignal(identity)) continue;
+            Interlocked.Increment(ref recognizedThreatCount);
 
             var canonical = ResolveCanonicalEnemy(signal.CasterEntityId, kind);
-            if (canonical is null) continue;
+            if (canonical is null)
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{kind}: caster was not one exact canonical e1-e5 enemy";
+                continue;
+            }
             var expectedTarget = kind == MiracleInterceptThreatKind.FuriousBacklash
                 ? signal.CasterEntityId
                 : signal.EventTargetEntityId;
             if (kind == MiracleInterceptThreatKind.FuriousBacklash &&
                 expectedTarget != signal.CasterEntityId)
             {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{kind}: self-target marker identity mismatch";
                 continue;
             }
 
+            if (activeThreat is { } previousThreat && previousThreat.Signal != identity)
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{previousThreat.Kind}: superseded by newer exact {kind} signal";
+            }
             activeThreat = new MiracleThreatState(
                 kind,
                 canonical.GameObjectId,
@@ -421,6 +488,9 @@ internal sealed class MiracleInterceptProbe
                 canonical.JobId,
                 signal.ObservedAtMilliseconds,
                 identity);
+            Interlocked.Increment(ref armedThreatCount);
+            ResetWaitDiagnostics();
+            lastOpportunity = $"{kind}: exact threat armed";
         }
     }
 
@@ -588,7 +658,7 @@ internal sealed class MiracleInterceptProbe
             ? Math.Max(0, ThreatLifetime(threat.Kind) -
                           Math.Max(0, nowMilliseconds - threat.ObservedAtMilliseconds))
             : 0;
-        var result = MiracleInterceptProbeSnapshot.Initial with
+        var result = WithOpportunityDiagnostics(MiracleInterceptProbeSnapshot.Initial with
         {
             Phase = phase,
             Threat = activeThreat?.Kind ?? MiracleInterceptThreatKind.None,
@@ -607,7 +677,7 @@ internal sealed class MiracleInterceptProbe
             CapturedConfirmationCount = capture.CapturedMiracleInterceptConfirmations,
             DroppedConfirmationCount = capture.DroppedMiracleInterceptConfirmations,
             LastEvent = lastEvent,
-        };
+        });
         Volatile.Write(ref snapshot, result);
         return result;
     }
@@ -625,7 +695,7 @@ internal sealed class MiracleInterceptProbe
         bool rangeAndLineOfSight,
         long nowMilliseconds)
     {
-        var result = new MiracleInterceptProbeSnapshot(
+        var result = WithOpportunityDiagnostics(new MiracleInterceptProbeSnapshot(
             phase,
             threat.Kind,
             candidate.GameObjectId,
@@ -649,7 +719,7 @@ internal sealed class MiracleInterceptProbe
             capture.MiracleInterceptConfirmationQueueDepth,
             capture.CapturedMiracleInterceptConfirmations,
             capture.DroppedMiracleInterceptConfirmations,
-            lastEvent);
+            lastEvent));
         Volatile.Write(ref snapshot, result);
         return result;
     }
@@ -657,6 +727,7 @@ internal sealed class MiracleInterceptProbe
     private void ResetRuntime()
     {
         activeThreat = null;
+        ResetWaitDiagnostics();
         rememberedSignals.Clear();
         rememberedSignalOrder.Clear();
         capture.SetMiracleInterceptLocalEntityId(0);
@@ -667,6 +738,74 @@ internal sealed class MiracleInterceptProbe
             Environment.TickCount64,
             hardReset: true);
     }
+
+    private MiracleInterceptProbeSnapshot WithOpportunityDiagnostics(
+        MiracleInterceptProbeSnapshot value) =>
+        value with
+        {
+            RecognizedThreatCount = Interlocked.Read(ref recognizedThreatCount),
+            ArmedThreatCount = Interlocked.Read(ref armedThreatCount),
+            RejectedThreatCount = Interlocked.Read(ref rejectedThreatCount),
+            PriorityWaitCount = Interlocked.Read(ref priorityWaitCount),
+            NoInputWaitCount = Interlocked.Read(ref noInputWaitCount),
+            RangeWaitCount = Interlocked.Read(ref rangeWaitCount),
+            ProtectionWaitCount = Interlocked.Read(ref protectionWaitCount),
+            ExpiredThreatCount = Interlocked.Read(ref expiredThreatCount),
+            LastOpportunity = lastOpportunity,
+        };
+
+    private void RecordWait(MiracleThreatState threat, MiracleWaitReason reason)
+    {
+        activeWaitReason = reason;
+        switch (reason)
+        {
+            case MiracleWaitReason.HigherPriorityHelper when !priorityWaitRecorded:
+                priorityWaitRecorded = true;
+                Interlocked.Increment(ref priorityWaitCount);
+                break;
+            case MiracleWaitReason.NoEligibleInput or MiracleWaitReason.TextInput when !noInputWaitRecorded:
+                noInputWaitRecorded = true;
+                Interlocked.Increment(ref noInputWaitCount);
+                break;
+            case MiracleWaitReason.RangeOrLineOfSight when !rangeWaitRecorded:
+                rangeWaitRecorded = true;
+                Interlocked.Increment(ref rangeWaitCount);
+                break;
+            case MiracleWaitReason.HardenedScales or MiracleWaitReason.OtherProtection
+                when !protectionWaitRecorded:
+                protectionWaitRecorded = true;
+                Interlocked.Increment(ref protectionWaitCount);
+                break;
+        }
+
+        lastOpportunity = $"{threat.Kind}: waiting for {DescribeWaitReason(reason)}";
+    }
+
+    private void RecordExpired(MiracleThreatState threat)
+    {
+        Interlocked.Increment(ref expiredThreatCount);
+        lastOpportunity = $"{threat.Kind}: expired while waiting for {DescribeWaitReason(activeWaitReason)}";
+    }
+
+    private void ResetWaitDiagnostics()
+    {
+        activeWaitReason = MiracleWaitReason.None;
+        priorityWaitRecorded = false;
+        noInputWaitRecorded = false;
+        rangeWaitRecorded = false;
+        protectionWaitRecorded = false;
+    }
+
+    private static string DescribeWaitReason(MiracleWaitReason reason) => reason switch
+    {
+        MiracleWaitReason.HigherPriorityHelper => "Purify/Ally Rescue priority",
+        MiracleWaitReason.NoEligibleInput => "an eligible held/fresh physical key",
+        MiracleWaitReason.TextInput => "text input to close",
+        MiracleWaitReason.HardenedScales => "Hardened Scales to disappear",
+        MiracleWaitReason.OtherProtection => "a verified Miracle blocker to disappear",
+        MiracleWaitReason.RangeOrLineOfSight => "native 10y range/line of sight",
+        _ => "the next runtime evaluation",
+    };
 
     private static long ThreatLifetime(MiracleInterceptThreatKind kind) =>
         MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
@@ -717,4 +856,15 @@ internal sealed class MiracleInterceptProbe
         uint JobId,
         long ObservedAtMilliseconds,
         MiracleSignalIdentity Signal);
+
+    private enum MiracleWaitReason : byte
+    {
+        None = 0,
+        HigherPriorityHelper = 1,
+        NoEligibleInput = 2,
+        TextInput = 3,
+        HardenedScales = 4,
+        OtherProtection = 5,
+        RangeOrLineOfSight = 6,
+    }
 }
