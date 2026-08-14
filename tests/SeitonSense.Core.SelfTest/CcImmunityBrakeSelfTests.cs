@@ -257,6 +257,32 @@ internal static class CcImmunityBrakeSelfTests
         }
     }
 
+    internal static void ExactMiracleUsesTheSharedFinalDecision()
+    {
+        var resilience = Evaluate(
+            24,
+            29_228,
+            [3_248],
+            incomingTargetId: ExactTarget.GameObjectId,
+            resolvedTarget: ExactTarget,
+            targetJobId: 41,
+            exactTarget: true);
+        True(resilience.ShouldBlock, "exact plugin-owned Miracle remains eligible for the shared final brake");
+        Equal(CcImmunityBrakeDecisionReason.VerifiedBlocker, resilience.Reason, "shared decision reason");
+        Equal(3_248u, resilience.BlockerStatusId, "shared decision reports Resilience");
+
+        var hardenedScales = Evaluate(
+            24,
+            29_228,
+            [4_096],
+            incomingTargetId: ExactTarget.EntityId,
+            resolvedTarget: ExactTarget,
+            targetJobId: 41,
+            exactTarget: true);
+        True(hardenedScales.ShouldBlock, "exact internal Miracle also respects VPR Hardened Scales");
+        Equal(4_096u, hardenedScales.BlockerStatusId, "shared decision reports Hardened Scales");
+    }
+
     internal static void StatusOrderingIsStableAndRulesAreStateless()
     {
         var first = Evaluate(19, 29_065, [3_143, 1_320, 3_054]);

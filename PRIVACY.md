@@ -132,6 +132,21 @@ rewrite the forwarded call. A zero deliberately produced by Seiton's
 fail-closed redirect path carries explicit suppression provenance and is never
 reinterpreted as the selected target. Explicit actor IDs remain authoritative.
 
+If FFXIV omits an opponent's `Hostile` flag, the brake permits a narrower
+public-match fallback only in a known public Crystalline Conflict territory.
+It transiently verifies that the local party contains exactly five valid
+entities, includes the local player, and is wholly present in the visible player
+object table. The candidate must still be one exact native `<e1>`-`<e5>` actor,
+must not be self or any party/alliance member, and must retain valid native
+identity, life, HP, and targetable state. Incomplete or ambiguous evidence does
+not authorize a block.
+
+Plugin-owned exact-target Miracle calls bypass only Seiton's macro target
+redirection. They still pass through this final brake before the one downstream
+native request. If a verified blocker appears after the helper's pre-check, the
+brake can reject that single incoming request without storing it, changing its
+target, scheduling delayed work, replaying it, or retrying it.
+
 This is a client-side pre-dispatch check, not a server rollback. Near a
 simultaneous activation, an action already accepted by the server roughly
 295-355 ms before immunity became locally visible cannot be recalled. FFXIV
@@ -340,6 +355,11 @@ action, or retries a rejected/failed request. The exact native 10-yalm range and
 line-of-sight gate is unchanged. A client-accepted request is not recorded as
 proof that the enemy startup was interrupted.
 
+The helper's internal redirect bypass excludes only macro target rewriting; it
+does not bypass the final CC-immunity brake. Current exact-actor and verified
+Miracle-protection membership are therefore checked again at the shared native
+dispatch boundary, with no timer, alternate target, replay, or retry added.
+
 The urgent MCH/SAM/VPR threat paths retain priority over a waiting or released
 post-Purify Stun follow-up. That follow-up otherwise uses the same eligible held
 or fresh physical generation and the same final exact-actor, live-protection,
@@ -399,7 +419,7 @@ the WHM Miracle master/per-trigger opt-ins, including the independently
 default-off post-Purify Stun subtype, resource-aura surfaces/thresholds/
 appearance, the Monk Earth's Reply master/triggers/thresholds, and the
 CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 16 is current in v0.12.0.0 and does
+schema 16 is current in v0.12.0.1 and does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

@@ -243,7 +243,7 @@ internal sealed unsafe class CcImmunityBrakeService
         if (decision.ShouldBlock) Interlocked.Increment(ref blockedAttempts);
         if (defaultTargetCarrier && effectiveTargetId != 0)
             Interlocked.Increment(ref defaultTargetResolutions);
-        if (targetResolution == "Exact canonical enemy")
+        if (targetResolution.StartsWith("Exact canonical enemy", StringComparison.Ordinal))
             Interlocked.Increment(ref exactTargetResolutions);
         else
             Interlocked.Increment(ref targetResolutionFailures);
@@ -288,18 +288,40 @@ internal sealed unsafe class CcImmunityBrakeService
             .Select(static member => member.EntityId)
             .Where(IsNetworkEntityId)
             .ToHashSet();
+        var visibleEntityIds = objectTable.PlayerObjects
+            .OfType<IPlayerCharacter>()
+            .Select(static player => player.EntityId)
+            .Where(IsNetworkEntityId)
+            .ToHashSet();
+        var completePublicCcPartyFallback =
+            PvPMatchRules.IsPublicCrystallineConflictTerritory(clientState.TerritoryType) &&
+            partyEntityIds.Count == 5 &&
+            partyEntityIds.Contains(localPlayer!.EntityId) &&
+            partyEntityIds.IsSubsetOf(visibleEntityIds);
         var matches = new List<(int Slot, IPlayerCharacter Player)>(1);
         var seenIdentities = new HashSet<(ulong GameObjectId, uint EntityId)>();
         for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
         {
             var candidate = EnemySlotResolver.Resolve(objectTable, slot);
+            var isSelf = candidate is not null &&
+                         (candidate.GameObjectId == localPlayer!.GameObjectId ||
+                          candidate.EntityId == localPlayer.EntityId);
+            var isPartyOrAllianceMember = candidate is not null &&
+                (partyEntityIds.Contains(candidate.EntityId) ||
+                 (candidate.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0);
+            var hasHostileFlag = candidate is not null &&
+                                 (candidate.StatusFlags & StatusFlags.Hostile) != 0;
             if (!IsLivePlayer(candidate) ||
                 !HasValidNativeIdentity(candidate!) ||
-                candidate!.GameObjectId == localPlayer!.GameObjectId ||
-                candidate.EntityId == localPlayer.EntityId ||
-                partyEntityIds.Contains(candidate.EntityId) ||
-                (candidate.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0 ||
-                (candidate.StatusFlags & StatusFlags.Hostile) == 0 ||
+                !EnemySlotRules.CanUseResolvedEnemy(
+                    isSelf,
+                    isPartyOrAllianceMember,
+                    hasHostileFlag,
+                    completePublicCcPartyFallback,
+                    !candidate!.IsDead && candidate.CurrentHp > 0,
+                    candidate.IsTargetable,
+                    candidate.CurrentHp,
+                    candidate.MaxHp) ||
                 !candidate.ClassJob.IsValid)
             {
                 continue;
@@ -335,7 +357,9 @@ internal sealed unsafe class CcImmunityBrakeService
 
         target = match.Player;
         enemySlot = match.Slot;
-        resolution = "Exact canonical enemy";
+        resolution = (match.Player.StatusFlags & StatusFlags.Hostile) != 0
+            ? "Exact canonical enemy via hostile flag"
+            : "Exact canonical enemy via complete public-CC party fallback";
         return true;
     }
 

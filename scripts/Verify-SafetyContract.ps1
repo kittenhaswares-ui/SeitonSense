@@ -1059,16 +1059,17 @@ if ($brakeDecisionIndex -lt 0 -or
     $lastRedirectCatchLogIndex -ge $brakeDecisionIndex) {
     throw 'The CC brake must run after redirect resolution and its catch, then before the detour''s sole Original call.'
 }
-if ($normalizedUseActionDetour -notmatch 'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, targetId, forwardedTargetId, targetSuppressedByRedirect, mode\)\) \{ return false; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}') {
-    throw 'The brake must inspect original and final target identities, return false before Original only on an exact Block decision, and let pass/fail-open paths reach the sole Original.'
+if ($normalizedUseActionDetour -notmatch 'try \{ var resolvedActionId = ResolveActionId\(thisPtr, actionType, actionId\); if \(ccImmunityBrake\.ShouldBlock\( actionType, resolvedActionId, targetId, forwardedTargetId, targetSuppressedByRedirect, mode\)\) \{ return false; \} \} catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \}') {
+    throw 'The unconditional final brake must inspect original and final target identities, return false before Original only on an exact Block decision, and let pass/fail-open paths reach the sole Original.'
 }
 $brakeDetourSection = [regex]::Match(
     $normalizedUseActionDetour,
-    'if \(!bypassRedirect\) \{ try \{ var resolvedActionId = ResolveActionId.*?ccImmunityBrake\.RecordFailedOpen\(exception\); \} \}').Value
+    'try \{ var resolvedActionId = ResolveActionId.*?ccImmunityBrake\.RecordFailedOpen\(exception\); \}').Value
 if ([regex]::Matches($brakeDetourSection, '\breturn false;').Count -ne 1 -or
+    $brakeDetourSection -match '\bbypassRedirect\b' -or
     $brakeDetourSection -match 'forwardedTargetId\s*=\s*InvalidCarrierTargetId|useActionHook!\.Original\s*\(' -or
     $brakeDetourSection -notmatch 'catch \(Exception exception\) \{ ccImmunityBrake\.RecordFailedOpen\(exception\); \}') {
-    throw 'A confirmed brake block must make zero Original calls via one direct false return; it must never use target-zero suppression, while exceptions must fail open without changing the final target.'
+    throw 'Redirect bypass must not skip the final brake: a confirmed block must make zero Original calls via one direct false return, never use target-zero suppression, and exceptions must fail open without changing the final target.'
 }
 $directZeroSuppressions = [regex]::Matches(
     $normalizedUseActionDetour,
@@ -1099,6 +1100,17 @@ Assert-Literals $ccImmunityBrake @(
     'verifiedActionIds.Contains(resolvedActionId)',
     'ResolveContext() != SupportedPvPContext.CrystallineConflict',
     'TryResolveExactCanonicalEnemy(',
+    'PvPMatchRules.IsPublicCrystallineConflictTerritory(clientState.TerritoryType)',
+    'partyEntityIds.Count == 5',
+    'partyEntityIds.Contains(localPlayer!.EntityId)',
+    'partyEntityIds.IsSubsetOf(visibleEntityIds)',
+    'EnemySlotRules.CanUseResolvedEnemy(',
+    'HasValidNativeIdentity(candidate!)',
+    'candidate.GameObjectId == localPlayer!.GameObjectId',
+    'candidate.EntityId == localPlayer.EntityId',
+    'partyEntityIds.Contains(candidate.EntityId)',
+    'StatusFlags.PartyMember | StatusFlags.AllianceMember',
+    'candidate.ClassJob.IsValid',
     'EnemySlotRules.FirstSlot',
     'EnemySlotRules.LastSlot',
     'EnemySlotResolver.Resolve(objectTable, slot)',
@@ -1121,6 +1133,9 @@ Assert-Literals $ccImmunityBrake @(
     'GetNativeHardTargetId(localPlayer)',
     'character->GetTargetId().Id',
     'GetNativeHardTargetId(localPlayer) == nativeHardTargetId',
+    'targetResolution.StartsWith("Exact canonical enemy", StringComparison.Ordinal)',
+    'Exact canonical enemy via hostile flag',
+    'Exact canonical enemy via complete public-CC party fallback',
     'effectiveTargetId,',
     'bool Configured',
     'bool ActiveInCurrentContext',
@@ -1165,10 +1180,19 @@ if ($normalizedCcImmunityBrakeSelfTests -notmatch 'Equal\( \(ulong\)ExactTarget\
     $coreSelfTestProgram -notmatch 'CcImmunityBrakeSelfTests\.DefaultTargetCarrierResolvesOnlyTheNativeHardTarget') {
     throw 'Core self-tests must execute both raw 0-to-0 cases: unsuppressed resolves the exact native hard target, while explicit redirect suppression remains inert.'
 }
+if ($normalizedCcImmunityBrakeSelfTests -notmatch 'ExactMiracleUsesTheSharedFinalDecision\(\).*?exact plugin-owned Miracle remains eligible for the shared final brake.*?exact internal Miracle also respects VPR Hardened Scales' -or
+    $coreSelfTestProgram -notmatch 'CcImmunityBrakeSelfTests\.ExactMiracleUsesTheSharedFinalDecision') {
+    throw 'Core self-tests must keep an exact plugin-owned Miracle eligible for the same final Resilience and Hardened Scales brake decision.'
+}
 if ($normalizedCcImmunityBrake -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\)' -or
     $normalizedCcImmunityBrake -notmatch 'targetId == candidate\.GameObjectId \|\| targetId == candidate\.EntityId' -or
     $normalizedCcImmunityBrake -notmatch 'var liveStatuses = target\?\.StatusList \.Select\(static status => status\.StatusId\) \.Where\(verifiedStatusIds\.Contains\) \.ToArray\(\)') {
     throw 'CC-brake target resolution must scan exact e1-e5 identities and sample the resolved actor''s live StatusList at action time.'
+}
+if ($normalizedCcImmunityBrake -notmatch 'var partyEntityIds = partyList \.Select\(static member => member\.EntityId\) \.Where\(IsNetworkEntityId\) \.ToHashSet\(\); var visibleEntityIds = objectTable\.PlayerObjects \.OfType<IPlayerCharacter>\(\) \.Select\(static player => player\.EntityId\) \.Where\(IsNetworkEntityId\) \.ToHashSet\(\); var completePublicCcPartyFallback = PvPMatchRules\.IsPublicCrystallineConflictTerritory\(clientState\.TerritoryType\) && partyEntityIds\.Count == 5 && partyEntityIds\.Contains\(localPlayer!\.EntityId\) && partyEntityIds\.IsSubsetOf\(visibleEntityIds\);' -or
+    $normalizedCcImmunityBrake -notmatch '!EnemySlotRules\.CanUseResolvedEnemy\( isSelf, isPartyOrAllianceMember, hasHostileFlag, completePublicCcPartyFallback, !candidate!\.IsDead && candidate\.CurrentHp > 0, candidate\.IsTargetable, candidate\.CurrentHp, candidate\.MaxHp\)' -or
+    $normalizedCcImmunityBrake -match '\(candidate\.StatusFlags & StatusFlags\.Hostile\) == 0') {
+    throw 'A missing hostile flag may be replaced only by an exact five-member visible local-party proof on a public CC territory; the shared enemy rule must still enforce self, ally, liveness, targetability, and valid HP gates.'
 }
 $shouldBlockMethod = [regex]::Match(
     $normalizedCcImmunityBrake,
@@ -1287,6 +1311,9 @@ Assert-Literals $nearAssist @(
 ) 'Near Help shared redirector'
 if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 4) {
     throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression plus the Near Assist, Near Help, and Far Help branches without consuming any macro token.'
+}
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
+    throw 'The redirect bypass may guard only the four redirect branches; it must never wrap or skip the unconditional final CC brake.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 Assert-Literals $nearHelpSelection @(
@@ -2457,4 +2484,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.12.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once; only an unchanged native zero/0xE0000000 carrier may be inspected through the same stable hard target without changing the forwarded target, while explicit redirect provenance keeps every plugin-suppressed zero unresolved and target-zero suppression stays limited to reviewed Near/Far carrier policies; the independently default-off post-Purify Stun subtype reuses the single bounded ActionEffect hook/queue, accepts only an exact generation-bound enemy self-Purify 29056 / 0x10 / Stun 1343 signal, requires positive live Resilience 3248 within 750 ms, enforces the unconditional 3000-ms hard release deadline before its 150-ms absence grace, never uses a status address or RemainingTime prediction, yields to urgent threats, and promotes for only 500 ms into the existing consume-before-sole-UseAction path; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority without input reuse or replay, and persisted opportunity counters explain protection, range, input, priority, rejection, and expiry outcomes; the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
+Write-Host "Seiton Sense v0.12.0.1 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once; plugin-owned exact-target Miracle bypasses only macro redirects and still reaches the final brake; a missing Hostile flag is accepted only through the complete visible five-member public-CC party proof while self, party/alliance, native identity, liveness, targetability, and unique e1-e5 checks remain mandatory; only an unchanged native zero/0xE0000000 carrier may be inspected through the same stable hard target without changing the forwarded target, while explicit redirect provenance keeps every plugin-suppressed zero unresolved and target-zero suppression stays limited to reviewed Near/Far carrier policies; the independently default-off post-Purify Stun subtype reuses the single bounded ActionEffect hook/queue, accepts only an exact generation-bound enemy self-Purify 29056 / 0x10 / Stun 1343 signal, requires positive live Resilience 3248 within 750 ms, enforces the unconditional 3000-ms hard release deadline before its 150-ms absence grace, never uses a status address or RemainingTime prediction, yields to urgent threats, and promotes for only 500 ms into the existing consume-before-sole-UseAction path; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority without input reuse or replay, and persisted opportunity counters explain protection, range, input, priority, rejection, and expiry outcomes; the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
