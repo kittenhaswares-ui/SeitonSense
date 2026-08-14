@@ -41,6 +41,14 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal long ProtectionWaitCount { get; init; }
     internal long ExpiredThreatCount { get; init; }
     internal string LastOpportunity { get; init; } = "None observed";
+    internal MiracleCleanseFollowupPhase CleanseFollowupPhase { get; init; }
+    internal ulong CleanseFollowupTargetGameObjectId { get; init; }
+    internal uint CleanseFollowupTargetEntityId { get; init; }
+    internal bool CleanseFollowupResilienceObserved { get; init; }
+    internal long CleanseFollowupSignalCount { get; init; }
+    internal long CleanseFollowupPromotionCount { get; init; }
+    internal long CleanseFollowupCancellationCount { get; init; }
+    internal string CleanseFollowupLastEvent { get; init; } = "None observed";
 
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
@@ -94,6 +102,8 @@ internal sealed class MiracleInterceptProbe
     private MiracleThreatState? activeThreat;
     private MiracleInterceptConfirmationState confirmationState =
         MiracleInterceptConfirmationState.Initial;
+    private MiracleCleanseFollowupState cleanseFollowupState =
+        MiracleCleanseFollowupState.Initial;
     private MiracleInterceptProbeSnapshot snapshot = MiracleInterceptProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
@@ -105,12 +115,16 @@ internal sealed class MiracleInterceptProbe
     private long rangeWaitCount;
     private long protectionWaitCount;
     private long expiredThreatCount;
+    private long cleanseFollowupSignalCount;
+    private long cleanseFollowupPromotionCount;
+    private long cleanseFollowupCancellationCount;
     private MiracleWaitReason activeWaitReason;
     private bool priorityWaitRecorded;
     private bool noInputWaitRecorded;
     private bool rangeWaitRecorded;
     private bool protectionWaitRecorded;
     private string lastOpportunity = "None observed";
+    private string cleanseFollowupLastEvent = "None observed";
     private long nextErrorLogAt;
 
     internal MiracleInterceptProbe(
@@ -144,9 +158,11 @@ internal sealed class MiracleInterceptProbe
         bool enableMarksmanSpite,
         bool enableZantetsuken,
         bool enableFuriousBacklash,
+        bool enablePostPurifyStun,
         bool marksmanSpiteMetadataVerified,
         bool zantetsukenMetadataVerified,
         bool furiousBacklashMetadataVerified,
+        bool purifyMetadataVerified,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
         bool hardReset = false)
@@ -166,11 +182,18 @@ internal sealed class MiracleInterceptProbe
                       localIdentityValid &&
                       isWhiteMage &&
                       protectionMetadataReady;
+        var cleanseFollowupEnabled = enabled &&
+                                     enablePostPurifyStun &&
+                                     purifyMetadataVerified;
         var confirmationPendingForLocalCaster = enabled &&
             confirmationState.Pending is { } pending &&
             pending.LocalCasterEntityId == localPlayer!.EntityId;
         capture.SetMiracleInterceptLocalEntityId(
             enabled && (localAlive || confirmationPendingForLocalCaster)
+                ? localPlayer!.EntityId
+                : 0);
+        capture.SetMiracleCleanseFollowupLocalEntityId(
+            cleanseFollowupEnabled && localAlive
                 ? localPlayer!.EntityId
                 : 0);
 
@@ -179,6 +202,7 @@ internal sealed class MiracleInterceptProbe
             capture.ClearMiracleInterceptThreats();
             capture.ClearMiracleInterceptConfirmations();
             activeThreat = null;
+            cleanseFollowupState = MiracleCleanseFollowupState.Initial;
             confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
                 confirmationState,
                 nowMilliseconds,
@@ -195,6 +219,7 @@ internal sealed class MiracleInterceptProbe
         {
             capture.ClearMiracleInterceptThreats();
             activeThreat = null;
+            cleanseFollowupState = MiracleCleanseFollowupState.Initial;
             if (confirmationPendingForLocalCaster)
                 DrainConfirmations(nowMilliseconds);
             else
@@ -213,29 +238,53 @@ internal sealed class MiracleInterceptProbe
                 nowMilliseconds);
         }
 
-        DrainThreats(
+        var cleanseSignals = DrainThreats(
             localPlayer!,
             enableMarksmanSpite && marksmanSpiteMetadataVerified,
             enableZantetsuken && zantetsukenMetadataVerified,
             enableFuriousBacklash &&
             furiousBacklashMetadataVerified &&
             verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId),
+            cleanseFollowupEnabled,
             nowMilliseconds);
         DrainConfirmations(nowMilliseconds);
         // The native hook can enqueue after the framework-frame clock was read.
         // Refresh before comparing the newly captured event against its deadline.
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
 
+        if (activeThreat is { } expiringThreat &&
+            (nowMilliseconds < expiringThreat.ObservedAtMilliseconds ||
+             nowMilliseconds - expiringThreat.ObservedAtMilliseconds >= ThreatLifetime(expiringThreat.Kind)))
+        {
+            RecordExpired(expiringThreat);
+            activeThreat = null;
+        }
+
+        if (!cleanseFollowupEnabled &&
+            activeThreat is { Kind: MiracleInterceptThreatKind.PostPurifyStun })
+        {
+            activeThreat = null;
+        }
+
+        foreach (var cleanseSignal in cleanseSignals)
+        {
+            ObserveCleanseFollowup(
+                localPlayer!,
+                cleanseFollowupEnabled,
+                !dispatchAllowed || activeThreat is not null,
+                cleanseSignal,
+                nowMilliseconds);
+        }
+
+        ObserveCleanseFollowup(
+            localPlayer!,
+            cleanseFollowupEnabled,
+            !dispatchAllowed || activeThreat is not null,
+            null,
+            nowMilliseconds);
+
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
-
-        if (nowMilliseconds < threat.ObservedAtMilliseconds ||
-            nowMilliseconds - threat.ObservedAtMilliseconds >= ThreatLifetime(threat.Kind))
-        {
-            RecordExpired(threat);
-            activeThreat = null;
-            return Publish("Waiting", "No current exact threat", nowMilliseconds);
-        }
 
         // A transient higher-priority Purify/Rescue claim cannot dispatch a
         // second action from the same physical generation, but it also need not
@@ -415,16 +464,67 @@ internal sealed class MiracleInterceptProbe
         return Publish("Failed closed", "Runtime exception", nowMilliseconds);
     }
 
-    private void DrainThreats(
+    private List<MiracleCleanseFollowupSignal> DrainThreats(
         IPlayerCharacter localPlayer,
         bool enableMarksmanSpite,
         bool enableZantetsuken,
         bool enableFuriousBacklash,
+        bool enablePostPurifyStun,
         long nowMilliseconds)
     {
+        var cleanseSignals = new List<MiracleCleanseFollowupSignal>();
         while (capture.TryDequeueMiracleInterceptThreat(out var signal))
         {
             var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
+            if (signal.ActionId == EnemyCombatConstants.PurifyActionId)
+            {
+                if (!enablePostPurifyStun || signal.LocalEntityId != localPlayer.EntityId)
+                    continue;
+
+                if (signal.ObservedAtMilliseconds > eventNow ||
+                    eventNow - signal.ObservedAtMilliseconds >=
+                    MiracleCleanseFollowupRules.ResilienceAcquisitionMilliseconds ||
+                    signal.FeatureGeneration != capture.CurrentMiracleCleanseFollowupGeneration ||
+                    !MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+                        signal.CasterEntityId,
+                        signal.ActionId,
+                        signal.EventTargetEntityId,
+                        signal.EffectType,
+                        signal.EffectValue,
+                        signal.GlobalSequence,
+                        signal.SourceSequence))
+                {
+                    Interlocked.Increment(ref rejectedThreatCount);
+                    cleanseFollowupLastEvent = "PostPurifyStun: invalid or stale exact Purify/Stun signal";
+                    continue;
+                }
+
+                var canonicalCleanseTarget = ResolveCanonicalEnemy(signal.CasterEntityId);
+                if (canonicalCleanseTarget is null)
+                {
+                    Interlocked.Increment(ref rejectedThreatCount);
+                    cleanseFollowupLastEvent =
+                        "PostPurifyStun: Purify caster was not one exact canonical e1-e5 enemy";
+                    continue;
+                }
+
+                cleanseSignals.Add(new MiracleCleanseFollowupSignal(
+                    new MiracleCleanseFollowupSignalKey(
+                        signal.CasterEntityId,
+                        signal.ActionId,
+                        signal.EventTargetEntityId,
+                        signal.EffectType,
+                        signal.EffectValue,
+                        signal.GlobalSequence,
+                        signal.SourceSequence),
+                    new MiracleCleanseFollowupTargetIdentity(
+                        canonicalCleanseTarget.GameObjectId,
+                        canonicalCleanseTarget.EntityId,
+                        canonicalCleanseTarget.JobId),
+                    signal.ObservedAtMilliseconds));
+                continue;
+            }
+
             var kind = signal.ActionId switch
             {
                 EnemyCombatConstants.MarksmanSpiteActionId when enableMarksmanSpite =>
@@ -492,6 +592,125 @@ internal sealed class MiracleInterceptProbe
             ResetWaitDiagnostics();
             lastOpportunity = $"{kind}: exact threat armed";
         }
+
+        return cleanseSignals;
+    }
+
+    private void ObserveCleanseFollowup(
+        IPlayerCharacter localPlayer,
+        bool configurationEnabled,
+        bool higherPriorityClaimed,
+        MiracleCleanseFollowupSignal? newSignal,
+        long nowMilliseconds)
+    {
+        var previous = cleanseFollowupState;
+        var target = newSignal?.Target ?? previous.ActiveSignal?.Target;
+        MiracleCleanseFollowupCandidate? candidate = null;
+        if (target is { } targetIdentity)
+        {
+            var player = ResolveCleanseFollowupCandidate(localPlayer, targetIdentity);
+            if (player is not null)
+            {
+                candidate = new MiracleCleanseFollowupCandidate(
+                    targetIdentity,
+                    IsExactCanonicalEnemy: true,
+                    IsAliveAndTargetable: true,
+                    ActiveResilienceStatusCount: CountActiveStatuses(
+                        player,
+                        EnemyCombatConstants.ResilienceStatusId));
+            }
+        }
+
+        var signalKey = default(MiracleCleanseFollowupSignalKey);
+        var signalWasNew = false;
+        if (newSignal is { } exactSignal)
+        {
+            signalKey = exactSignal.Key;
+            signalWasNew = !previous.ObservedSignals.Contains(signalKey);
+        }
+        var decision = MiracleCleanseFollowupRules.Observe(
+            previous,
+            new MiracleCleanseFollowupObservation(
+                configurationEnabled,
+                IsCrystallineConflict: true,
+                IsLocalWhiteMageValid: true,
+                higherPriorityClaimed,
+                newSignal,
+                candidate,
+                nowMilliseconds));
+
+        // The exact signal is retired in Core before a promotion can reach the
+        // existing single Miracle action boundary.
+        cleanseFollowupState = decision.NextState;
+
+        if (signalWasNew && decision.NextState.ObservedSignals.Contains(signalKey))
+        {
+            Interlocked.Increment(ref cleanseFollowupSignalCount);
+            Interlocked.Increment(ref recognizedThreatCount);
+        }
+
+        if (signalWasNew &&
+            decision.NextState.ActiveSignal is { } activeSignal &&
+            activeSignal.Key == signalKey)
+        {
+            Interlocked.Increment(ref armedThreatCount);
+        }
+
+        if (decision.Kind == MiracleCleanseFollowupDecisionKind.Cancelled &&
+            (previous.ActiveSignal is not null || newSignal is not null))
+        {
+            Interlocked.Increment(ref cleanseFollowupCancellationCount);
+            Interlocked.Increment(ref rejectedThreatCount);
+        }
+
+        cleanseFollowupLastEvent = decision.Kind switch
+        {
+            MiracleCleanseFollowupDecisionKind.SignalObserved =>
+                "PostPurifyStun: exact enemy Purify removed Stun; waiting for Resilience",
+            MiracleCleanseFollowupDecisionKind.ResilienceObserved =>
+                "PostPurifyStun: Resilience observed live; waiting for stable absence",
+            MiracleCleanseFollowupDecisionKind.ReadyForPromotion =>
+                "PostPurifyStun: Resilience absent for 150 ms; promoted to Miracle dispatcher",
+            MiracleCleanseFollowupDecisionKind.Cancelled when
+                previous.ActiveSignal is not null || newSignal is not null =>
+                $"PostPurifyStun: cancelled ({decision.CancelReason})",
+            MiracleCleanseFollowupDecisionKind.Cancelled => cleanseFollowupLastEvent,
+            MiracleCleanseFollowupDecisionKind.Waiting when
+                decision.NextState.Phase == MiracleCleanseFollowupPhase.ReleaseOpportunity &&
+                higherPriorityClaimed =>
+                "PostPurifyStun: release ready; waiting behind higher-priority helper/threat",
+            MiracleCleanseFollowupDecisionKind.Waiting =>
+                $"PostPurifyStun: waiting ({decision.NextState.Phase})",
+            _ => cleanseFollowupLastEvent,
+        };
+
+        if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
+            return;
+
+        Interlocked.Increment(ref cleanseFollowupPromotionCount);
+        if (activeThreat is not null)
+        {
+            // Defensive only: HigherPriorityClaimed prevents Core promotion
+            // whenever another Miracle opportunity already owns this path.
+            Interlocked.Increment(ref cleanseFollowupCancellationCount);
+            cleanseFollowupLastEvent = "PostPurifyStun: promotion retired while another threat owned dispatch";
+            return;
+        }
+
+        var promotionSignal = promotion.Signal;
+        activeThreat = new MiracleThreatState(
+            MiracleInterceptThreatKind.PostPurifyStun,
+            promotion.Target.GameObjectId,
+            promotion.Target.EntityId,
+            promotion.Target.JobId,
+            promotion.ReleasedAtMilliseconds,
+            new MiracleSignalIdentity(
+                promotionSignal.Key.CasterEntityId,
+                promotionSignal.Key.ActionId,
+                promotionSignal.Key.GlobalSequence,
+                promotionSignal.Key.SourceSequence));
+        ResetWaitDiagnostics();
+        lastOpportunity = "PostPurifyStun: exact threat armed after verified Resilience absence";
     }
 
     private void DrainConfirmations(long nowMilliseconds)
@@ -538,11 +757,50 @@ internal sealed class MiracleInterceptProbe
         };
         if (expectedJob == 0) return null;
 
+        var match = ResolveCanonicalEnemy(casterEntityId);
+        return match is { } enemy && enemy.JobId == expectedJob ? enemy : null;
+    }
+
+    private EnemyHudSnapshot? ResolveCanonicalEnemy(uint casterEntityId)
+    {
         var matches = executeTracker.Enemies
-            .Where(enemy => enemy.EntityId == casterEntityId && enemy.JobId == expectedJob)
+            .Where(enemy =>
+                enemy.EntityId == casterEntityId &&
+                enemy.JobId != 0 &&
+                TargetHighlightRules.IsValidGameObjectId(enemy.GameObjectId))
             .Take(2)
             .ToArray();
         return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private IPlayerCharacter? ResolveCleanseFollowupCandidate(
+        IPlayerCharacter localPlayer,
+        MiracleCleanseFollowupTargetIdentity target)
+    {
+        var canonical = executeTracker.Enemies
+            .Where(enemy =>
+                enemy.GameObjectId == target.GameObjectId &&
+                enemy.EntityId == target.EntityId &&
+                enemy.JobId == target.JobId)
+            .Take(2)
+            .ToArray();
+        if (canonical.Length != 1) return null;
+
+        var players = objectTable.PlayerObjects
+            .OfType<IPlayerCharacter>()
+            .Where(player =>
+                player.GameObjectId == target.GameObjectId &&
+                player.EntityId == target.EntityId &&
+                player.GameObjectId != localPlayer.GameObjectId &&
+                player.ClassJob.IsValid &&
+                player.ClassJob.RowId == target.JobId)
+            .Take(2)
+            .ToArray();
+        return players.Length == 1 &&
+               IsLivePlayer(players[0]) &&
+               HasValidNativeIdentity(players[0])
+            ? players[0]
+            : null;
     }
 
     private IPlayerCharacter? ResolveCandidate(
@@ -606,6 +864,19 @@ internal sealed class MiracleInterceptProbe
         }
 
         return false;
+    }
+
+    private static int CountActiveStatuses(IPlayerCharacter player, uint statusId)
+    {
+        var count = 0;
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId != statusId) continue;
+            count++;
+            if (count > 1) return count;
+        }
+
+        return count;
     }
 
     private static unsafe bool HasMiracleRangeAndLineOfSight(
@@ -727,10 +998,12 @@ internal sealed class MiracleInterceptProbe
     private void ResetRuntime()
     {
         activeThreat = null;
+        cleanseFollowupState = MiracleCleanseFollowupState.Initial;
         ResetWaitDiagnostics();
         rememberedSignals.Clear();
         rememberedSignalOrder.Clear();
         capture.SetMiracleInterceptLocalEntityId(0);
+        capture.SetMiracleCleanseFollowupLocalEntityId(0);
         capture.ClearMiracleInterceptThreats();
         capture.ClearMiracleInterceptConfirmations();
         confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
@@ -752,6 +1025,16 @@ internal sealed class MiracleInterceptProbe
             ProtectionWaitCount = Interlocked.Read(ref protectionWaitCount),
             ExpiredThreatCount = Interlocked.Read(ref expiredThreatCount),
             LastOpportunity = lastOpportunity,
+            CleanseFollowupPhase = cleanseFollowupState.Phase,
+            CleanseFollowupTargetGameObjectId =
+                cleanseFollowupState.ActiveSignal?.Target.GameObjectId ?? 0,
+            CleanseFollowupTargetEntityId =
+                cleanseFollowupState.ActiveSignal?.Target.EntityId ?? 0,
+            CleanseFollowupResilienceObserved = cleanseFollowupState.ResiliencePresenceObserved,
+            CleanseFollowupSignalCount = Interlocked.Read(ref cleanseFollowupSignalCount),
+            CleanseFollowupPromotionCount = Interlocked.Read(ref cleanseFollowupPromotionCount),
+            CleanseFollowupCancellationCount = Interlocked.Read(ref cleanseFollowupCancellationCount),
+            CleanseFollowupLastEvent = cleanseFollowupLastEvent,
         };
 
     private void RecordWait(MiracleThreatState threat, MiracleWaitReason reason)
@@ -808,7 +1091,9 @@ internal sealed class MiracleInterceptProbe
     };
 
     private static long ThreatLifetime(MiracleInterceptThreatKind kind) =>
-        MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
+        kind == MiracleInterceptThreatKind.PostPurifyStun
+            ? MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds
+            : MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
 
     private static bool IsLivePlayer(IPlayerCharacter? player) =>
         player is not null &&

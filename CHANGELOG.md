@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.12.0.0
+
+- Added an independently default-off **post-Purify Stun** subtype beneath the
+  existing default-off WHM Miracle master. It recognizes only an exact enemy
+  self-Purify `29056` ActionEffect with one self target, a non-empty event
+  sequence, and recovered-status effect `0x10` for Stun `1343`; the source must
+  then resolve to exactly one canonical `<e1>`-`<e5>` opponent.
+- The follow-up requires Resilience `3248` to be positively observed live within
+  750 ms. It waits for 150 ms of stable live absence, abandons the release wait
+  3 seconds after positive observation, and then provides one 500-ms release
+  opportunity. It never predicts the timer or authorizes from `RemainingTime`
+  or an internal status address.
+- Existing urgent MCH/SAM/VPR Miracle threats keep priority. The new subtype
+  shares the same eligible held-or-fresh physical key generation, exact actor
+  and blocker revalidation, and native 10-yalm range/line-of-sight check. State
+  and input are consumed before the sole Miracle attempt; there is no alternate
+  target, fallback, replay, or retry. A priority wait retains the original
+  verified release timestamp and can never restart or extend the 500-ms window.
+- Extended the existing bounded single ActionEffect observer and Miracle threat
+  queue rather than adding another hook or dispatch boundary. The blue landing
+  confirmation distinguishes the post-Purify Stun follow-up, but still proves
+  only that Miracle status `3085` landed on the intended enemy, not that an
+  interrupt occurred.
+- Bumped the plugin version to 0.12.0.0 and configuration schema to 16. Existing
+  Miracle settings migrate unchanged, with the new subtype disabled until it is
+  explicitly enabled.
+
 ## 0.11.0.2
 
 - Fixed direct-hotbar and Turbo calls that represent FFXIV's selected target

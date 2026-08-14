@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 15;
+    public int Version { get; set; } = 16;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -90,6 +90,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool MiracleInterceptMchLimitBreak { get; set; } = true;
     public bool MiracleInterceptSamZantetsuken { get; set; } = true;
     public bool MiracleInterceptViperNest { get; set; } = true;
+    public bool MiracleInterceptAfterPurifiedStun { get; set; }
     public bool EnableMonkEarthReplyHelper { get; set; }
     public bool MonkEarthReplyOnLowHp { get; set; } = true;
     public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
@@ -170,7 +171,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 15)
+        if (Version >= 16)
         {
             if (repaired) Save();
             return;
@@ -318,7 +319,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             CcBrakeActions = CreateDefaultCcBrakeActions();
         }
 
-        Version = 15;
+        if (Version < 16)
+        {
+            // This follow-up can issue one hostile WHM action after an observed
+            // enemy cleanse, so every existing installation must opt in.
+            MiracleInterceptAfterPurifiedStun = false;
+        }
+
+        Version = 16;
         ClampSettings();
         Save();
     }
@@ -327,7 +335,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 15;
+        Version = 16;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -382,6 +390,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         MiracleInterceptMchLimitBreak = true;
         MiracleInterceptSamZantetsuken = true;
         MiracleInterceptViperNest = true;
+        MiracleInterceptAfterPurifiedStun = false;
         EnableMonkEarthReplyHelper = false;
         MonkEarthReplyOnLowHp = true;
         MonkEarthReplyBeforeExpiry = true;

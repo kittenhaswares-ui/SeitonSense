@@ -316,9 +316,11 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
             configuration.MiracleInterceptViperNest,
+            configuration.MiracleInterceptAfterPurifiedStun,
             metadata.MarksmanSpiteVerified,
             metadata.ZantetsukenVerified,
             metadata.FuriousBacklashVerified,
+            metadata.PurifyVerified,
             emergencyInputFrame,
             now,
             hardReset);
