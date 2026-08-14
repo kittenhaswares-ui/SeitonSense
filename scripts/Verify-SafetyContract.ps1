@@ -58,6 +58,7 @@ $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProb
 $monkEarthReplyProbePath = Join-Path $pluginServicesRoot 'MonkEarthReplyProbe.cs'
 $resourceAuraAnchorPath = Join-Path $pluginServicesRoot 'ResourceAuraAnchorTracker.cs'
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
+$miracleCleanseFollowupRulesPath = Join-Path $coreRoot 'MiracleCleanseFollowupRules.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
@@ -265,11 +266,17 @@ Assert-Literals $mchCapture @(
     'DroppedAllyRescueCleanses',
     'SetMiracleInterceptLocalEntityId',
     'CurrentMiracleInterceptLocalEntityId',
+    'SetMiracleCleanseFollowupLocalEntityId',
+    'CurrentMiracleCleanseFollowupLocalEntityId',
+    'CurrentMiracleCleanseFollowupGeneration',
+    'miracleCleanseFollowupGeneration',
     'TryCaptureMiracleInterceptThreat',
     'EnemyCombatConstants.MarksmanSpiteActionId',
     'EnemyCombatConstants.ZantetsukenActionId',
     'EnemyCombatConstants.FuriousBacklashActionId',
+    'EnemyCombatConstants.PurifyActionId',
     'MiracleInterceptRules.ClassifyExactStartSignal(',
+    'MiracleCleanseFollowupRules.IsExactStunPurifySignal(',
     'IsEmpty(targetEffects[0])',
     'HasOnlyEmptyAdditionalEffects(targetEffects)',
     'if (depth > MaximumQueuedMiracleInterceptThreats)',
@@ -323,6 +330,17 @@ if ($normalizedMchCapture -notmatch 'MiracleInterceptRules\.ClassifyExactStartSi
     throw 'Miracle threat capture must pass the exact single-target identity and all eight effect-slot facts to the pure classifier.'
 }
 
+if ($normalizedMchCapture -notmatch 'var localEntityId = actionId == EnemyCombatConstants\.PurifyActionId \? CurrentMiracleCleanseFollowupLocalEntityId : CurrentMiracleInterceptLocalEntityId; if \(!IsNetworkEntityId\(localEntityId\) \|\| casterEntityId == localEntityId\) return null;' -or
+    $normalizedMchCapture -notmatch 'public void SetMiracleCleanseFollowupLocalEntityId\(uint entityId\).*?ref miracleCleanseFollowupLocalEntityIdBits.*?if \(previous != normalized\) Interlocked\.Increment\(ref miracleCleanseFollowupGeneration\)') {
+    throw 'Post-Purify Stun capture must use its own opt-in local-identity gate and generation, independently from ordinary Miracle capture.'
+}
+if ($normalizedMchCapture -notmatch 'if \(actionId == EnemyCombatConstants\.PurifyActionId\) \{ for \(var slot = 0; slot < EffectSlotsPerTarget; slot\+\+\) \{ var effect = targetEffects\[slot\]; if \(!MiracleCleanseFollowupRules\.IsExactStunPurifySignal\( casterEntityId, actionId, targetEntityId, effect\.Type, effect\.Value, header->GlobalSequence, header->SourceSequence\)\).*?return new MiracleInterceptThreatEvent\( Environment\.TickCount64, localEntityId, casterEntityId, targetEntityId, actionId, effect\.Type, effect\.Value, CurrentMiracleCleanseFollowupGeneration, header->GlobalSequence, header->SourceSequence\)') {
+    throw 'Post-Purify Stun capture must scan the fixed eight slots and enqueue only the exact self-Purify 29056 / recovered Stun 1343 signal with non-empty sequence identity.'
+}
+if ($normalizedMchCapture -notmatch 'var isCleanseFollowup = threat\.ActionId == EnemyCombatConstants\.PurifyActionId; var currentLocalEntityId = isCleanseFollowup \? CurrentMiracleCleanseFollowupLocalEntityId : CurrentMiracleInterceptLocalEntityId;.*?isCleanseFollowup && threat\.FeatureGeneration != CurrentMiracleCleanseFollowupGeneration.*?if \(depth > MaximumQueuedMiracleInterceptThreats\).*?pendingMiracleInterceptThreats\.Enqueue\(threat\)') {
+    throw 'The shared bounded Miracle queue must reject stale post-Purify feature generations before enqueueing; it may not add a second queue.'
+}
+
 $miracleInterceptRules = Read-RequiredSource (Join-Path $coreRoot 'MiracleInterceptRules.cs') 'Miracle intercept rules'
 $normalizedMiracleInterceptRules = $miracleInterceptRules -replace '\s+', ' '
 Assert-Literals $miracleInterceptRules @(
@@ -345,6 +363,48 @@ if ($normalizedMiracleInterceptRules -notmatch 'MarksmanSpiteActionId when targe
     $normalizedMiracleInterceptRules -notmatch 'ZantetsukenActionId when targetEntityId != casterEntityId && firstEffectIsCompletelyEmpty\s*=>\s*MiracleInterceptThreatKind\.Zantetsuken' -or
     $normalizedMiracleInterceptRules -notmatch 'FuriousBacklashActionId when targetEntityId == casterEntityId && firstEffectIsCompletelyEmpty\s*=>\s*MiracleInterceptThreatKind\.FuriousBacklash') {
     throw 'Pure Miracle classification must retain exact MCH 0x1B, SAM all-empty non-self, and VPR all-empty self signatures.'
+}
+
+$miracleCleanseFollowupRules = Read-RequiredSource $miracleCleanseFollowupRulesPath 'Miracle post-Purify Stun follow-up rules'
+$normalizedMiracleCleanseFollowupRules = $miracleCleanseFollowupRules -replace '\s+', ' '
+Assert-Literals $miracleCleanseFollowupRules @(
+    'PurifyActionId = 29_056',
+    'StunStatusId = 1_343',
+    'ResilienceStatusId = 3_248',
+    'RecoveredFromStatusEffectType = 0x10',
+    'ResilienceAcquisitionMilliseconds = 750',
+    'ResilienceReleaseWaitMilliseconds = 3_000',
+    'ResilienceMissingGraceMilliseconds = 150',
+    'ReleaseOpportunityMilliseconds = 500',
+    'MaximumObservedSignals = 128',
+    'casterEntityId == targetEntityId',
+    '(globalSequence != 0 || sourceSequence != 0)',
+    'ActiveResilienceStatusCount',
+    'ResiliencePresenceObserved',
+    'ResilienceObservedAtMilliseconds',
+    'ResilienceMissingSinceMilliseconds',
+    'HigherPriorityClaimed',
+    'ReadyForPromotion',
+    'PromotionIntent',
+    'ReleasedAtMilliseconds >= Signal.ObservedAtMilliseconds',
+    'state.ReleasedAtMilliseconds',
+    'public bool ShouldPromote',
+    'RetiresSignalBeforePromotion'
+) 'Exact positive-observation Miracle post-Purify Stun policy'
+if ($normalizedMiracleCleanseFollowupRules -notmatch 'IsExactStunPurifySignal\(.*?IsValidEntityId\(casterEntityId\) && casterEntityId == targetEntityId && actionId == PurifyActionId && effectType == RecoveredFromStatusEffectType && effectValue == StunStatusId && \(globalSequence != 0 \|\| sourceSequence != 0\)' -or
+    $normalizedMiracleCleanseFollowupRules -notmatch 'ValidateCandidate\(signal\.Target, observation\.Candidate\).*?value\.Target != expected \? MiracleCleanseFollowupCancelReason\.CandidateChanged') {
+    throw 'The follow-up must bind one exact self-Purify/Stun ActionEffect sequence to one unchanged exact canonical actor.'
+}
+if ($normalizedMiracleCleanseFollowupRules -notmatch 'if \(age >= ResilienceAcquisitionMilliseconds\).*?ResilienceNotObserved.*?if \(candidate\.ActiveResilienceStatusCount == 0\).*?SignalObserved.*?Waiting.*?Phase = MiracleCleanseFollowupPhase\.WaitingForResilienceEnd, ResiliencePresenceObserved = true, ResilienceObservedAtMilliseconds = nowMilliseconds' -or
+    $normalizedMiracleCleanseFollowupRules -notmatch 'if \(!state\.ResiliencePresenceObserved \|\| state\.ResilienceObservedAtMilliseconds < 0\).*?if \(candidate\.ActiveResilienceStatusCount == 1\).*?ResilienceMissingSinceMilliseconds = -1.*?if \(state\.ResilienceMissingSinceMilliseconds < 0\).*?ResilienceMissingSinceMilliseconds = observation\.NowMilliseconds.*?if \(missingAge < ResilienceMissingGraceMilliseconds\) return Waiting\(state\);.*?Phase = MiracleCleanseFollowupPhase\.ReleaseOpportunity') {
+    throw 'Resilience must be positively observed within 750 ms before 150 ms of continuous live absence can open a release opportunity.'
+}
+if ($normalizedMiracleCleanseFollowupRules -notmatch 'var age = observation\.NowMilliseconds - state\.ResilienceObservedAtMilliseconds; if \(age < 0\).*?ClockMovedBackwards.*?if \(age >= ResilienceReleaseWaitMilliseconds\).*?ResilienceReleaseTimedOut.*?if \(candidate\.ActiveResilienceStatusCount == 1\)' -or
+    $normalizedMiracleCleanseFollowupRules -notmatch 'var releaseAge = observation\.NowMilliseconds - state\.ReleasedAtMilliseconds;.*?if \(releaseAge >= ReleaseOpportunityMilliseconds\).*?ReleaseOpportunityExpired.*?if \(observation\.HigherPriorityClaimed\) return Waiting\(state\);.*?new MiracleCleanseFollowupIntent\( signal, state\.ReleasedAtMilliseconds\).*?ReadyForPromotion.*?intent') {
+    throw 'The unconditional 3-second hard release deadline must run before every presence/absence/grace path; the 500-ms promotion window then yields to urgent threats without extension.'
+}
+if ($miracleCleanseFollowupRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|StatusAddress|StatusInstanceToken)\b|\bstatus\.[A-Za-z_]*Address\b|\bstatus\.RemainingTime\b') {
+    throw 'Pure post-Purify rules must never dispatch, mutate targets/input, use a status address, or predict release from RemainingTime.'
 }
 
 $mchMarkerRules = Read-RequiredSource (Join-Path $coreRoot 'MachinistLimitBreakMarkerRules.cs') 'MCH LB marker rules'
@@ -431,10 +491,15 @@ Assert-Literals $personalStatus @(
     'metadata.MarksmanSpiteVerified',
     'metadata.ZantetsukenVerified',
     'metadata.FuriousBacklashVerified',
+    'configuration.MiracleInterceptAfterPurifiedStun',
+    'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
 ) 'Shared self-Purify, Ally Rescue, and Miracle priority'
 if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, context == SupportedPvPContext\.CrystallineConflict, miracleInterceptConfigurationEnabled, !purifyClaimedPriority && !allyRescueClaimedPriority,') {
     throw 'Miracle must receive persistent feature/capture enablement separately from its transient Purify/Rescue dispatch permission.'
+}
+if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimitBreak, configuration\.MiracleInterceptSamZantetsuken, configuration\.MiracleInterceptViperNest, configuration\.MiracleInterceptAfterPurifiedStun, metadata\.MarksmanSpiteVerified, metadata\.ZantetsukenVerified, metadata\.FuriousBacklashVerified, metadata\.PurifyVerified, emergencyInputFrame') {
+    throw 'The independently default-off post-Purify subtype and Purify metadata verification must be wired separately after the three urgent Miracle triggers.'
 }
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
 if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
@@ -608,13 +673,36 @@ Assert-Literals $miracleIntercept @(
     'internal string LastOpportunity { get; init; } = "None observed"',
     'WithOpportunityDiagnostics(',
     'RecordWait(threat, MiracleWaitReason.HigherPriorityHelper)',
-    'RecordExpired(threat)',
-    'ResetWaitDiagnostics()'
+    'RecordExpired(expiringThreat)',
+    'ResetWaitDiagnostics()',
+    'bool enablePostPurifyStun',
+    'bool purifyMetadataVerified',
+    'var cleanseFollowupEnabled = enabled &&',
+    'capture.SetMiracleCleanseFollowupLocalEntityId(',
+    'MiracleCleanseFollowupRules.ResilienceAcquisitionMilliseconds',
+    'signal.FeatureGeneration != capture.CurrentMiracleCleanseFollowupGeneration',
+    'ResolveCleanseFollowupCandidate(',
+    'CountActiveStatuses(',
+    'inputFrame.FreshGameplayKeyPressed',
+    'inputFrame.HeldGameplayKeyEligible',
+    'MiracleCleanseFollowupRules.Observe(',
+    'cleanseFollowupState = decision.NextState',
+    'decision.ShouldPromote',
+    'decision.PromotionIntent',
+    'MiracleInterceptThreatKind.PostPurifyStun',
+    'MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds'
 ) 'Bounded exact-target WHM Miracle runtime'
 if ($normalizedMiracleIntercept -notmatch 'var protectionMetadataReady = RequiredCcProtectionStatusIds\.All\( verifiedProtectionStatusIds\.Contains\); var enabled = configurationEnabled && isCrystallineConflict && localIdentityValid && isWhiteMage && protectionMetadataReady;' -or
-    $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\), nowMilliseconds\)' -or
+    $normalizedMiracleIntercept -notmatch 'DrainThreats\( localPlayer!, enableMarksmanSpite && marksmanSpiteMetadataVerified, enableZantetsuken && zantetsukenMetadataVerified, enableFuriousBacklash && furiousBacklashMetadataVerified && verifiedProtectionStatusIds\.Contains\(EnemyCombatConstants\.HardenedScalesStatusId\), cleanseFollowupEnabled, nowMilliseconds\)' -or
     $miracleIntercept -match '\bShowCcProtection\b') {
     throw 'Miracle must require its complete independent blocker metadata, VPR Hardened Scales metadata, and each independently verified threat before arming.'
+}
+if ($normalizedMiracleIntercept -notmatch 'var cleanseFollowupEnabled = enabled && enablePostPurifyStun && purifyMetadataVerified;' -or
+    $normalizedMiracleIntercept -notmatch 'capture\.SetMiracleCleanseFollowupLocalEntityId\( cleanseFollowupEnabled && localAlive \? localPlayer!\.EntityId : 0\)') {
+    throw 'Post-Purify Stun ActionEffect capture must remain separately gated by its own toggle, verified Purify metadata, live WHM identity, and CC-only Miracle master.'
+}
+if ($normalizedMiracleIntercept -notmatch 'private IPlayerCharacter\? ResolveCleanseFollowupCandidate\( IPlayerCharacter localPlayer, MiracleCleanseFollowupTargetIdentity target\).*?enemy\.GameObjectId == target\.GameObjectId && enemy\.EntityId == target\.EntityId && enemy\.JobId == target\.JobId.*?Take\(2\).*?if \(canonical\.Length != 1\) return null;.*?player\.GameObjectId == target\.GameObjectId && player\.EntityId == target\.EntityId && player\.GameObjectId != localPlayer\.GameObjectId && player\.ClassJob\.IsValid && player\.ClassJob\.RowId == target\.JobId.*?Take\(2\).*?return players\.Length == 1 && IsLivePlayer\(players\[0\]\) && HasValidNativeIdentity\(players\[0\]\)') {
+    throw 'Post-Purify status observation must resolve exactly one unchanged canonical e1-e5 and exactly one matching live native player actor.'
 }
 if ($normalizedMiracleIntercept -notmatch 'var anyProtection = HasAnyVerifiedCcProtection\(candidate\); var hardenedScales = threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( candidate, EnemyCombatConstants\.HardenedScalesStatusId\); var otherProtection = anyProtection && !hardenedScales;.*?var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight' -or
     $normalizedMiracleIntercept -notmatch 'var revalidatedHardened = revalidated is not null && threat\.Kind == MiracleInterceptThreatKind\.FuriousBacklash && HasVerifiedActiveStatus\( revalidated, EnemyCombatConstants\.HardenedScalesStatusId\); var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated\);.*?if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedRange\)') {
@@ -636,10 +724,11 @@ if ($miracleIntercept -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOff
     $miracleIntercept -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'Miracle intercept must never cooldown-prefilter, retry, queue, or mutate a visible target.'
 }
-if ($miracleIntercept -match '\bstatus\.RemainingTime\b' -or
+if ($miracleIntercept -match '\bstatus\.RemainingTime\b|\bstatus\.[A-Za-z_]*Address\b|\b(StatusAddress|StatusInstanceToken)\b' -or
     $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\) && CcImmunityBrakeActionCatalog\.IsBlockerStatus\( CcImmunityBrakeBlockerFamily\.Miracle, status\.StatusId, targetJobId\).*?return true' -or
-    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?status\.StatusId == statusId.*?return true') {
-    throw 'Miracle protection gates must use live StatusList membership, never RemainingTime prediction.'
+    $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?status\.StatusId == statusId.*?return true' -or
+    $normalizedMiracleIntercept -notmatch 'private static int CountActiveStatuses\(IPlayerCharacter player, uint statusId\).*?foreach \(var status in player\.StatusList\).*?if \(status\.StatusId != statusId\) continue; count\+\+; if \(count > 1\) return count;') {
+    throw 'Miracle protection and Resilience-release gates must use unambiguous live StatusList membership, never status addresses or RemainingTime prediction.'
 }
 
 # The news flash is confirmation of the exact Miracle status application, not a
@@ -656,6 +745,7 @@ Assert-Literals $miracleConfirmationRules @(
     'MiracleInterceptThreatKind.MarksmanSpite',
     'MiracleInterceptThreatKind.Zantetsuken',
     'MiracleInterceptThreatKind.FuriousBacklash',
+    'MiracleInterceptThreatKind.PostPurifyStun',
     'observation.CasterEntityId == pending.LocalCasterEntityId',
     'observation.ActionId == pending.ActionId',
     'observation.TargetEntityId == pending.TargetEntityId',
@@ -705,12 +795,26 @@ if ($miracleTryUseIndex -lt 0 -or $miracleRegisterIndex -le $miracleTryUseIndex 
     throw 'Miracle confirmation may register only after this helper actually made its sole native attempt against the revalidated exact target.'
 }
 $miracleDrainConfirmationIndex = $normalizedMiracleIntercept.IndexOf('DrainConfirmations(nowMilliseconds)')
+$miracleFollowupIndex = $normalizedMiracleIntercept.IndexOf('ObserveCleanseFollowup(')
+$miracleNoThreatIndex = $normalizedMiracleIntercept.IndexOf('if (activeThreat is not { } threat)')
 $miracleDispatchGateIndex = $normalizedMiracleIntercept.IndexOf('if (!dispatchAllowed)')
 if ($miracleDrainConfirmationIndex -lt 0 -or
+    $miracleFollowupIndex -le $miracleDrainConfirmationIndex -or
+    $miracleNoThreatIndex -le $miracleFollowupIndex -or
     $miracleDispatchGateIndex -le $miracleDrainConfirmationIndex -or
-    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\); if \(nowMilliseconds < threat\.ObservedAtMilliseconds \|\| nowMilliseconds - threat\.ObservedAtMilliseconds >= ThreatLifetime\(threat\.Kind\)\) \{ RecordExpired\(threat\); activeThreat = null; return Publish\("Waiting", "No current exact threat", nowMilliseconds\); \}.*?if \(!dispatchAllowed\) \{ RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\); return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\); \}' -or
+    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ \} expiringThreat && \(nowMilliseconds < expiringThreat\.ObservedAtMilliseconds \|\| nowMilliseconds - expiringThreat\.ObservedAtMilliseconds >= ThreatLifetime\(expiringThreat\.Kind\)\)\) \{ RecordExpired\(expiringThreat\); activeThreat = null; \}.*?ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null, null, nowMilliseconds\); if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\);.*?if \(!dispatchAllowed\) \{ RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\); return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\); \}' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?if \(confirmationPendingForLocalCaster\) DrainConfirmations\(nowMilliseconds\);.*?"Waiting for exact Miracle landing evidence"') {
-    throw 'Transient Purify/Rescue priority must retain an exact Miracle threat only inside its original TTL, while local death must not erase an exact pending landing correlation or visible popup.'
+    throw 'Every follow-up frame must run before the sole dispatch decision; urgent/helper priority may only retain it inside its original TTL, while local death must preserve exact pending landing evidence.'
+}
+if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null,').Count -ne 2) {
+    throw 'Both new-signal and ordinary-frame follow-up observations must yield to urgent MCH/SAM/VPR threats and higher-priority Purify/Rescue input ownership.'
+}
+if ($normalizedMiracleIntercept -notmatch 'cleanseFollowupState = decision\.NextState;.*?if \(!decision\.ShouldPromote \|\| decision\.PromotionIntent is not \{ \} promotion\) return;.*?if \(activeThreat is not null\).*?return;.*?activeThreat = new MiracleThreatState\( MiracleInterceptThreatKind\.PostPurifyStun, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, promotion\.ReleasedAtMilliseconds' -or
+    $normalizedMiracleIntercept -notmatch 'private static long ThreatLifetime\(MiracleInterceptThreatKind kind\) => kind == MiracleInterceptThreatKind\.PostPurifyStun \? MiracleCleanseFollowupRules\.ReleaseOpportunityMilliseconds : MiracleInterceptRules\.GetThreatLifetimeMilliseconds\(kind\);') {
+    throw 'The exact post-Purify state must be retired before promotion, and the shared dispatcher must measure its unextended 500 ms from the original verified release edge.'
+}
+if ($normalizedMiracleIntercept -match 'MiracleInterceptThreatKind\.PostPurifyStun,.*?decision\.NextState\.LastObservedAtMilliseconds') {
+    throw 'Priority-delayed post-Purify promotion must never restart its 500-ms TTL from the later framework decision time.'
 }
 $miraclePriorityBranch = [regex]::Match(
     $normalizedMiracleIntercept,
@@ -741,6 +845,7 @@ Assert-Literals $overlaySource @(
     '"INTERRUPT ATTEMPT  •  MCH LB"',
     '"INTERRUPT ATTEMPT  •  SAM LB"',
     '"INTERRUPT ATTEMPT  •  VPR NEST"',
+    '"CC FOLLOW-UP  •  RESILIENCE ENDED"',
     'MiracleInterceptConfirmationRules.PopupDurationMilliseconds'
 ) 'Visible, bounded, non-overclaiming Miracle news flash'
 if ($overlaySource -match '(?i)interrupt(?:ed| successful| confirmed)|cancelled hostile|stopped (?:mch|sam|vpr|lb|nest)') {
@@ -2200,8 +2305,9 @@ Assert-Literals $physicalKeyRules @(
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
+$normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 15',
+    'public int Version { get; set; } = 16',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -2251,7 +2357,9 @@ Assert-Literals $configuration @(
     'EnableCcImmunityBrake = false',
     'CcBrakeJobs = CreateDefaultCcBrakeJobs()',
     'CcBrakeActions = CreateDefaultCcBrakeActions()',
-    'Version = 15',
+    'if (Version < 16)',
+    'MiracleInterceptAfterPurifiedStun = false',
+    'Version = 16',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -2268,18 +2376,24 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-15 held-key, target, resource-aura, job-helper, pressure, immunity-brake, and warning configuration migration'
+) 'Schema-16 held-key, target, resource-aura, job-helper, pressure, immunity-brake, and warning configuration migration'
 if ($configuration -notmatch '(?m)^\s*public bool ExperimentalMiracleInterceptOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptMchLimitBreak \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool MiracleInterceptSamZantetsuken \{ get; set; \} = true;\s*$' -or
-    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptViperNest \{ get; set; \} = true;\s*$') {
-    throw 'New installations must default Miracle master off and its three per-threat toggles on.'
+    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptViperNest \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool MiracleInterceptAfterPurifiedStun \{ get; set; \}\s*$') {
+    throw 'New installations must default Miracle master and post-Purify Stun subtype off while the three urgent threat toggles remain on.'
 }
 if ([regex]::Matches($configuration, '\bExperimentalMiracleInterceptOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bMiracleInterceptMchLimitBreak\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bMiracleInterceptSamZantetsuken\s*=\s*true\s*;').Count -lt 2 -or
-    [regex]::Matches($configuration, '\bMiracleInterceptViperNest\s*=\s*true\s*;').Count -lt 2) {
-    throw 'Miracle intercept must stay master-default-off with all three exact trigger toggles default-on in migration and reset.'
+    [regex]::Matches($configuration, '\bMiracleInterceptViperNest\s*=\s*true\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bMiracleInterceptAfterPurifiedStun\s*=\s*false\s*;').Count -lt 2) {
+    throw 'Schema 16 must keep Miracle master and post-Purify Stun subtype default-off in migration/reset, with all three urgent triggers default-on.'
+}
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*16\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 16\).*?return;.*?if \(Version < 16\).*?MiracleInterceptAfterPurifiedStun = false;.*?Version = 16;') {
+    throw 'Schema 16 must fast-path current settings and migrate/reset the new hostile-action subtype to off before persisting version 16.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -2343,4 +2457,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.11.0.2 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once; only an unchanged native zero/0xE0000000 carrier may be inspected through the same stable hard target without changing the forwarded target, while explicit redirect provenance keeps every plugin-suppressed zero unresolved and target-zero suppression stays limited to reviewed Near/Far carrier policies; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority, while a transient priority claim retains a VPR threat only inside its original TTL without input reuse or replay, and the persisted opportunity counters explain protection, range, input, priority, rejection, and expiry outcomes; the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."
+Write-Host "Seiton Sense v0.12.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Assist, Near Help, Far Help, and the default-off CC-immunity brake share one bounded target-only detour: an exact live e1-e5 immunity block returns false before downstream Original, while pass/fail-open calls reach Original exactly once; only an unchanged native zero/0xE0000000 carrier may be inspected through the same stable hard target without changing the forwarded target, while explicit redirect provenance keeps every plugin-suppressed zero unresolved and target-zero suppression stays limited to reviewed Near/Far carrier policies; the independently default-off post-Purify Stun subtype reuses the single bounded ActionEffect hook/queue, accepts only an exact generation-bound enemy self-Purify 29056 / 0x10 / Stun 1343 signal, requires positive live Resilience 3248 within 750 ms, enforces the unconditional 3000-ms hard release deadline before its 150-ms absence grace, never uses a status address or RemainingTime prediction, yields to urgent threats, and promotes for only 500 ms into the existing consume-before-sole-UseAction path; Miracle landing correlation preserves its first active pending attempt; the native-hotbar aura uses the visible ActionBarSlotVector OwnerNode union with no container fallback; one shared input generation keeps self-Purify, Ally Rescue, then WHM Miracle priority without input reuse or replay, and persisted opportunity counters explain protection, range, input, priority, rejection, and expiry outcomes; the bounded Miracle news flash reports only an exact confirmed 29228/0x0E/3085 landing, never a proven hostile interrupt."

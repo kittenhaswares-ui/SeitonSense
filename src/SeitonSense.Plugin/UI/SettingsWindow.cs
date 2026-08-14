@@ -455,6 +455,10 @@ internal sealed class SettingsWindow : Window
             "VPR Furious Backlash / Nest der Blutschuppen",
             configuration.MiracleInterceptViperNest,
             value => configuration.MiracleInterceptViperNest = value);
+        changed |= Checkbox(
+            "After an enemy Purifies Stun and Resilience ends",
+            configuration.MiracleInterceptAfterPurifiedStun,
+            value => configuration.MiracleInterceptAfterPurifiedStun = value);
         if (ImGui.Button("Preview MIRACLE LANDED flash"))
             overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
@@ -462,7 +466,9 @@ internal sealed class SettingsWindow : Window
             "Experimental and CC-only. WHM uses the exact early action marker and one already-eligible physical " +
             "gameplay-key generation; Turbo repeats do not create extra intent. The enemy must still be the exact " +
             "canonical opponent, alive, targetable, within Miracle's native 10-yalm range and line of sight. " +
-            "The MCH/SAM opportunity lasts 500 ms and the VPR opportunity 250 ms. " +
+            "The MCH/SAM opportunity lasts 500 ms and the VPR opportunity 250 ms. The optional post-cleanse " +
+            "follow-up requires an exact enemy self-Purify that actually removes Stun, observes Resilience live, " +
+            "and waits for its stable real disappearance rather than predicting the timer. " +
             "Nest waits until Hardened Scales is actually absent, so Miracle is never deliberately spent into " +
             "Viper's CC immunity. Self Purify wins first, then Ally Rescue, then this helper. State and input are " +
             "consumed before one native Miracle attempt; there is no selected-target change, fallback, or retry. " +
@@ -1175,7 +1181,12 @@ internal sealed class SettingsWindow : Window
             $"{miracle.PriorityWaitCount}, expired={miracle.ExpiredThreatCount}, " +
             $"landed={miracle.ConfirmedLandingCount}, confirm-capture/queue/drop=" +
             $"{miracle.CapturedConfirmationCount}/{miracle.ConfirmationQueueDepth}/{miracle.DroppedConfirmationCount}, " +
-            $"last={miracle.LastEvent}, last-opportunity={miracle.LastOpportunity}");
+            $"last={miracle.LastEvent}, last-opportunity={miracle.LastOpportunity}, " +
+            $"cleanse-followup={miracle.CleanseFollowupPhase}, target=" +
+            $"{miracle.CleanseFollowupTargetGameObjectId:X}/{miracle.CleanseFollowupTargetEntityId:X}, " +
+            $"resilience-seen={miracle.CleanseFollowupResilienceObserved}, signal/promote/cancel=" +
+            $"{miracle.CleanseFollowupSignalCount}/{miracle.CleanseFollowupPromotionCount}/" +
+            $"{miracle.CleanseFollowupCancellationCount}, cleanse-last={miracle.CleanseFollowupLastEvent}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
             $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +

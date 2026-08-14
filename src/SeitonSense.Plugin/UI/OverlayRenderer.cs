@@ -416,6 +416,7 @@ internal sealed class OverlayRenderer
             MiracleInterceptThreatKind.MarksmanSpite => "INTERRUPT ATTEMPT  •  MCH LB",
             MiracleInterceptThreatKind.Zantetsuken => "INTERRUPT ATTEMPT  •  SAM LB",
             MiracleInterceptThreatKind.FuriousBacklash => "INTERRUPT ATTEMPT  •  VPR NEST",
+            MiracleInterceptThreatKind.PostPurifyStun => "CC FOLLOW-UP  •  RESILIENCE ENDED",
             _ => "INTERRUPT ATTEMPT",
         };
 

@@ -308,6 +308,18 @@ effect-slot shape needed to reject later hit packets. The queue is bounded and
 exists only in memory. MCH and SAM opportunities expire after 500 ms; the VPR
 opportunity expires after 250 ms.
 
+Only if an independently default-off subtype beneath the same default-off
+Miracle master is explicitly enabled may the observer recognize an exact enemy
+self-Purify action `29056` with exactly one self target, a non-empty event
+sequence, and recovered-status effect `0x10` for Stun `1343`. On the framework
+thread, that source must resolve to exactly one live canonical `<e1>`-`<e5>`
+opponent. The plugin then transiently observes
+live Resilience `3248` membership for that exact actor. Resilience must first be
+positively present within 750 ms and then remain absent for 150 ms; the release
+wait is abandoned 3 seconds after positive observation. It does not inspect an
+internal status address, use `RemainingTime`, or predict the immunity timer. A
+confirmed release creates only one 500-ms opportunity.
+
 On the framework thread, the source must resolve to the exact canonical CC
 opponent with the expected job. The helper transiently reads that actor's
 life/targetable state and verified Miracle blocker statuses, including VPR-only
@@ -328,12 +340,22 @@ action, or retries a rejected/failed request. The exact native 10-yalm range and
 line-of-sight gate is unchanged. A client-accepted request is not recorded as
 proof that the enemy startup was interrupted.
 
+The urgent MCH/SAM/VPR threat paths retain priority over a waiting or released
+post-Purify Stun follow-up. That follow-up otherwise uses the same eligible held
+or fresh physical generation and the same final exact-actor, live-protection,
+native 10-yalm range, and line-of-sight checks. Its state and claimed generation
+are consumed before the sole native request; it cannot prefire from a predicted
+timer, choose another target or action, replay the input, or retry. Waiting
+behind an urgent threat retains the original verified release timestamp and
+never restarts or extends the 500-ms opportunity.
+
 The existing action-effect hook also places exact local Miracle status-add
 observations into a separate bounded in-memory queue. A 1.5-second visual
 confirmation is created only when local caster, action `29228`, pending threat
 target, effect type `0x0E`, status `3085`, and a non-empty event sequence match
 within 1500 ms of the one helper attempt. This is labelled `MIRACLE LANDED` and
-is not stored as proof that the hostile action's damage was cancelled. Bounded
+is not stored as proof that the hostile action was interrupted or its damage was
+cancelled. The subtitle also distinguishes the post-Purify Stun follow-up. Bounded
 capture/drop and confirmed-landing counters remain memory-only diagnostics.
 The first still-unexpired pending helper attempt is preserved; a later attempt
 registration does not replace that correlation before it expires.
@@ -373,10 +395,11 @@ layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
-the WHM Miracle master/per-trigger opt-ins, resource-aura surfaces/thresholds/
+the WHM Miracle master/per-trigger opt-ins, including the independently
+default-off post-Purify Stun subtype, resource-aura surfaces/thresholds/
 appearance, the Monk Earth's Reply master/triggers/thresholds, and the
 CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 15 remains unchanged in v0.11.0.2 and does
+schema 16 is current in v0.12.0.0 and does
 not save observed actors, targets, combat events,
 status timers, key state, Ally Rescue confirmation state, or its counters.
 

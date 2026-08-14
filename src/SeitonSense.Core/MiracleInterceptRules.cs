@@ -8,6 +8,7 @@ public enum MiracleInterceptThreatKind
     MarksmanSpite = 1,
     Zantetsuken = 2,
     FuriousBacklash = 3,
+    PostPurifyStun = 4,
 }
 
 public enum MiracleInterceptDecisionKind

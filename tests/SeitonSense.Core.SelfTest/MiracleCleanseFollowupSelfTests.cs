@@ -1,0 +1,355 @@
+using SeitonSense.Core;
+
+internal static class MiracleCleanseFollowupSelfTests
+{
+    internal static void ExactPurifyStunSignalIsNarrow()
+    {
+        True(IsExact(), "exact self-Purify Stun recovery");
+        False(IsExact(action: 29_057), "wrong action");
+        False(IsExact(target: 11), "not self-targeted");
+        False(IsExact(effectType: 0x0E), "status add is not recovery");
+        False(IsExact(effectValue: 1_347), "Silence recovery excluded");
+        False(IsExact(caster: 0, target: 0), "invalid actor IDs");
+        False(IsExact(globalSequence: 0, sourceSequence: 0), "missing packet identity");
+    }
+
+    internal static void ExactLifecyclePromotesOnceAfterObservedRelease()
+    {
+        var target = Target(10);
+        var signal = Signal(target, sequence: 100, now: 1_000);
+
+        var signalObserved = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(target), 1_000));
+        Equal(
+            MiracleCleanseFollowupDecisionKind.SignalObserved,
+            signalObserved.Kind,
+            "server cleanse signal arms only a presence check");
+
+        var resilienceObserved = MiracleCleanseFollowupRules.Observe(
+            signalObserved.NextState,
+            Observation(null, Candidate(target, resilienceCount: 1), 1_050));
+        Equal(
+            MiracleCleanseFollowupDecisionKind.ResilienceObserved,
+            resilienceObserved.Kind,
+            "positive live Resilience presence is latched");
+
+        var firstMissing = MiracleCleanseFollowupRules.Observe(
+            resilienceObserved.NextState,
+            Observation(null, Candidate(target), 3_800));
+        False(firstMissing.ShouldPromote, "first absence sample cannot promote");
+
+        var beforeGrace = MiracleCleanseFollowupRules.Observe(
+            firstMissing.NextState,
+            Observation(null, Candidate(target), 3_949));
+        False(beforeGrace.ShouldPromote, "149ms missing is still grace");
+
+        var ready = MiracleCleanseFollowupRules.Observe(
+            beforeGrace.NextState,
+            Observation(null, Candidate(target), 3_950));
+        True(ready.ShouldPromote, "actual 150ms absence promotes once");
+        True(ready.RetiresSignalBeforePromotion, "signal retires before runtime promotion");
+        Equal(target, ready.PromotionIntent!.Value.Target, "exact actor retained");
+        Equal(signal, ready.PromotionIntent.Value.Signal, "exact server intent retained");
+        Equal(
+            3_950L,
+            ready.PromotionIntent.Value.ReleasedAtMilliseconds,
+            "promotion retains the original stable-release edge");
+        Equal(
+            MiracleCleanseFollowupPhase.WaitingForSignal,
+            ready.NextState.Phase,
+            "state is terminal before existing dispatcher receives it");
+
+        var duplicate = MiracleCleanseFollowupRules.Observe(
+            ready.NextState,
+            Observation(signal, Candidate(target), 3_951));
+        False(duplicate.ShouldPromote, "same server signal never retries");
+        Equal(1, duplicate.NextState.ObservedSignals.Length, "dedupe key retained");
+    }
+
+    internal static void MissingGraceRejectsFlickerAndAmbiguity()
+    {
+        var target = Target(20);
+        var state = ArmWithResilience(target, now: 1_000);
+
+        var missing = MiracleCleanseFollowupRules.Observe(
+            state,
+            Observation(null, Candidate(target), 1_100));
+        var returned = MiracleCleanseFollowupRules.Observe(
+            missing.NextState,
+            Observation(null, Candidate(target, resilienceCount: 1), 1_200));
+        False(returned.ShouldPromote, "presence returning inside grace is flicker");
+        Equal(-1L, returned.NextState.ResilienceMissingSinceMilliseconds, "flicker resets absence");
+
+        var missingAgain = MiracleCleanseFollowupRules.Observe(
+            returned.NextState,
+            Observation(null, Candidate(target), 1_300));
+        var released = MiracleCleanseFollowupRules.Observe(
+            missingAgain.NextState,
+            Observation(null, Candidate(target), 1_450));
+        True(released.ShouldPromote, "continuous absence promotes once");
+
+        var ambiguousState = ArmWithResilience(target, now: 2_000);
+        var ambiguous = MiracleCleanseFollowupRules.Observe(
+            ambiguousState,
+            Observation(null, Candidate(target, resilienceCount: 2), 2_100));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ResilienceObservationAmbiguous,
+            ambiguous.CancelReason,
+            "duplicate 3248 rows are not presence or absence proof");
+    }
+
+    internal static void AcquisitionReleaseAndOpportunityWindowsAreBounded()
+    {
+        var target = Target(30);
+        var signal = Signal(target, sequence: 300, now: 1_000);
+        var armed = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(target), 1_000));
+        var insideAcquisition = MiracleCleanseFollowupRules.Observe(
+            armed.NextState,
+            Observation(null, Candidate(target), 1_749));
+        False(insideAcquisition.ShouldPromote, "749ms remains inside acquisition");
+        var acquisitionExpired = MiracleCleanseFollowupRules.Observe(
+            insideAcquisition.NextState,
+            Observation(null, Candidate(target), 1_750));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ResilienceNotObserved,
+            acquisitionExpired.CancelReason,
+            "exact 750ms boundary expires");
+
+        var waitingForEnd = ArmWithResilience(target, now: 2_000);
+        var beforeReleaseCap = MiracleCleanseFollowupRules.Observe(
+            waitingForEnd,
+            Observation(null, Candidate(target, resilienceCount: 1), 4_999));
+        False(beforeReleaseCap.ShouldPromote, "2999ms live presence remains bounded wait");
+        var releaseTimedOut = MiracleCleanseFollowupRules.Observe(
+            beforeReleaseCap.NextState,
+            Observation(null, Candidate(target, resilienceCount: 1), 5_000));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ResilienceReleaseTimedOut,
+            releaseTimedOut.CancelReason,
+            "exact 3000ms live-presence boundary expires");
+
+        var lateAbsenceState = ArmWithResilience(target, now: 10_000);
+        var lateFirstAbsence = MiracleCleanseFollowupRules.Observe(
+            lateAbsenceState,
+            Observation(null, Candidate(target), 12_999));
+        False(lateFirstAbsence.ShouldPromote, "absence at 2999ms still needs stable grace");
+        var graceCrossedHardDeadline = MiracleCleanseFollowupRules.Observe(
+            lateFirstAbsence.NextState,
+            Observation(null, Candidate(target), 13_149));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ResilienceReleaseTimedOut,
+            graceCrossedHardDeadline.CancelReason,
+            "absence grace cannot cross the hard 3000ms release deadline");
+
+        var releaseState = ReachReleaseOpportunity(target, now: 6_000);
+        var beforeOpportunityEnd = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(null, Candidate(target), 6_749, higherPriority: true));
+        False(beforeOpportunityEnd.ShouldPromote, "priority wait remains inside 500ms opportunity");
+        var opportunityExpired = MiracleCleanseFollowupRules.Observe(
+            beforeOpportunityEnd.NextState,
+            Observation(null, Candidate(target), 6_750));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
+            opportunityExpired.CancelReason,
+            "exact 500ms release boundary cannot promote late");
+    }
+
+    internal static void HigherPriorityWaitsWithoutDestroyingOpportunity()
+    {
+        var target = Target(40);
+        var releaseState = ReachReleaseOpportunity(target, now: 1_000);
+        var priority = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(null, Candidate(target), 1_251, higherPriority: true));
+        False(priority.ShouldPromote, "existing immediate MCH/SAM/VPR threat wins");
+        Equal(
+            MiracleCleanseFollowupPhase.ReleaseOpportunity,
+            priority.NextState.Phase,
+            "bounded opportunity survives transient priority");
+
+        var free = MiracleCleanseFollowupRules.Observe(
+            priority.NextState,
+            Observation(null, Candidate(target), 1_252));
+        True(free.ShouldPromote, "later free dispatcher slot receives promotion");
+        Equal(
+            1_250L,
+            free.PromotionIntent!.Value.ReleasedAtMilliseconds,
+            "priority wait cannot restart the 500ms release opportunity");
+    }
+
+    internal static void IdentityAmbiguityAndConcurrencyFailClosed()
+    {
+        var target = Target(50);
+        var signal = Signal(target, sequence: 500, now: 1_000);
+        var wrongTarget = Target(51);
+        var changed = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(wrongTarget), 1_000));
+        Equal(
+            MiracleCleanseFollowupCancelReason.CandidateChanged,
+            changed.CancelReason,
+            "signal target cannot drift");
+
+        var invalidIdentity = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(target) with
+            {
+                IsExactCanonicalEnemy = false,
+            }, 1_000));
+        Equal(
+            MiracleCleanseFollowupCancelReason.CandidateIdentityInvalid,
+            invalidIdentity.CancelReason,
+            "noncanonical actor fails closed");
+
+        var first = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(target), 1_000));
+        var secondTarget = Target(52);
+        var secondSignal = Signal(secondTarget, sequence: 501, now: 1_010);
+        var concurrent = MiracleCleanseFollowupRules.Observe(
+            first.NextState,
+            Observation(secondSignal, Candidate(secondTarget), 1_010));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ConcurrentSignal,
+            concurrent.CancelReason,
+            "concurrent cleanse cannot replace first target");
+        Equal(2, concurrent.NextState.ObservedSignals.Length, "both signals remain deduped");
+        Equal(
+            signal,
+            concurrent.NextState.ActiveSignal!.Value,
+            "first exact lifecycle remains authoritative");
+    }
+
+    internal static void PromotionKindLabelsConfirmationWithoutBroadeningStartRules()
+    {
+        Equal(
+            0L,
+            MiracleInterceptRules.GetThreatLifetimeMilliseconds(
+                MiracleInterceptThreatKind.PostPurifyStun),
+            "follow-up is not a native start-signal lifetime");
+        False(
+            MiracleInterceptRules.IsExpectedJob(MiracleInterceptThreatKind.PostPurifyStun, 24),
+            "follow-up is not classified from a job-specific hostile start");
+
+        var pending = new MiracleInterceptPendingAttempt(
+            LocalCasterEntityId: 100,
+            ActionId: MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+            TargetGameObjectId: 10_200,
+            TargetEntityId: 200,
+            Threat: MiracleInterceptThreatKind.PostPurifyStun,
+            UseActionAccepted: true,
+            AttemptedAtMilliseconds: 1_000);
+        True(pending.IsValid, "shared landing confirmation accepts follow-up label");
+    }
+
+    private static MiracleCleanseFollowupState ArmWithResilience(
+        MiracleCleanseFollowupTargetIdentity target,
+        long now)
+    {
+        var signal = Signal(target, (uint)now, now);
+        var decision = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(signal, Candidate(target, resilienceCount: 1), now));
+        Equal(
+            MiracleCleanseFollowupDecisionKind.ResilienceObserved,
+            decision.Kind,
+            "test setup latched Resilience presence");
+        return decision.NextState;
+    }
+
+    private static MiracleCleanseFollowupState ReachReleaseOpportunity(
+        MiracleCleanseFollowupTargetIdentity target,
+        long now)
+    {
+        var state = ArmWithResilience(target, now);
+        var missing = MiracleCleanseFollowupRules.Observe(
+            state,
+            Observation(null, Candidate(target), now + 100));
+        var releasedButBusy = MiracleCleanseFollowupRules.Observe(
+            missing.NextState,
+            Observation(null, Candidate(target), now + 250, higherPriority: true));
+        False(releasedButBusy.ShouldPromote, "test setup leaves promotion pending");
+        Equal(
+            MiracleCleanseFollowupPhase.ReleaseOpportunity,
+            releasedButBusy.NextState.Phase,
+            "test setup reached release opportunity");
+        return releasedButBusy.NextState;
+    }
+
+    private static MiracleCleanseFollowupTargetIdentity Target(uint entityId) =>
+        new(entityId + 10_000UL, entityId, 24);
+
+    private static MiracleCleanseFollowupSignal Signal(
+        MiracleCleanseFollowupTargetIdentity target,
+        uint sequence,
+        long now) =>
+        new(
+            new MiracleCleanseFollowupSignalKey(
+                target.EntityId,
+                MiracleCleanseFollowupRules.PurifyActionId,
+                target.EntityId,
+                MiracleCleanseFollowupRules.RecoveredFromStatusEffectType,
+                (ushort)MiracleCleanseFollowupRules.StunStatusId,
+                sequence,
+                1),
+            target,
+            now);
+
+    private static MiracleCleanseFollowupCandidate Candidate(
+        MiracleCleanseFollowupTargetIdentity target,
+        int resilienceCount = 0) =>
+        new(
+            target,
+            IsExactCanonicalEnemy: true,
+            IsAliveAndTargetable: true,
+            ActiveResilienceStatusCount: resilienceCount);
+
+    private static MiracleCleanseFollowupObservation Observation(
+        MiracleCleanseFollowupSignal? signal,
+        MiracleCleanseFollowupCandidate candidate,
+        long now,
+        bool higherPriority = false) =>
+        new(
+            ConfigurationEnabled: true,
+            IsCrystallineConflict: true,
+            IsLocalWhiteMageValid: true,
+            HigherPriorityClaimed: higherPriority,
+            NewSignal: signal,
+            Candidate: candidate,
+            NowMilliseconds: now);
+
+    private static bool IsExact(
+        uint caster = 10,
+        uint action = MiracleCleanseFollowupRules.PurifyActionId,
+        uint target = 10,
+        byte effectType = MiracleCleanseFollowupRules.RecoveredFromStatusEffectType,
+        ushort effectValue = (ushort)MiracleCleanseFollowupRules.StunStatusId,
+        uint globalSequence = 100,
+        ushort sourceSequence = 1) =>
+        MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+            caster,
+            action,
+            target,
+            effectType,
+            effectValue,
+            globalSequence,
+            sourceSequence);
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message) => True(!value, message);
+
+    private static void Equal<T>(T expected, T actual, string message)
+        where T : notnull
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{message}: expected {expected}, got {actual}");
+    }
+}

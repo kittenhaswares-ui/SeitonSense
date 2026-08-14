@@ -2,9 +2,9 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.11.0.2 hardens the
-default-off, per-job and per-action CC-immunity brake for a conservative set of
-targeted PvP actions. The suite
+one-shot macro assistance, and target highlights. Version 0.12.0.0 adds a
+strict, independently default-off post-Purify Stun follow-up beneath the
+existing default-off WHM Miracle helper. The suite
 combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
 Focus Glow into one configurable custom-repository plugin.
 
@@ -71,7 +71,9 @@ Focus Glow into one configurable custom-repository plugin.
   the exact enemy starting Marksman's Spite, Zantetsuken, or Furious Backlash /
   Nest der Blutschuppen. MCH/SAM opportunities last 500 ms, VPR lasts 250 ms,
   and the VPR path waits for Hardened Scales to be genuinely absent; no visible
-  target change, fallback action, or retry is added.
+  target change, fallback action, or retry is added. A separate default-off
+  subtype can follow an exact enemy self-Purify that removed Stun, but only
+  after Resilience was positively observed and then genuinely disappeared.
 - **Experimental Monk Earth's Reply:** while exact Earth Resonance is active on
   PvP Monk, a separate default-off helper can make one exact Earth's Reply
   attempt at or below 30% HP or at 1.25 seconds remaining by default. It never
@@ -83,7 +85,7 @@ Focus Glow into one configurable custom-repository plugin.
 - **Cleaner settings:** the CC-immunity brake, general resource readability and
   the Ninja, Monk, BRD/WHM, and WHM helpers are grouped under a dedicated Jobs
   tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 15 preserves
+  focused on their own feature families. Configuration schema 16 preserves
   existing settings; every action-attempt feature remains opt-in.
 
 ## Pressure and team focus
@@ -316,7 +318,7 @@ memory. The provided reset clears the displayed statistics and does not create
 another action or confirmation.
 
 The WHM-only **Miracle intercept** is a separate, default-off Crystalline
-Conflict experiment. It watches only three exact server start signals:
+Conflict experiment. Its three urgent triggers watch exact server start signals:
 Marksman's Spite `29415`, Zantetsuken `29537`, and the VPR Furious Backlash /
 Nest der Blutschuppen action `39188`. If an eligible physical key generation is
 held or freshly pressed during the bounded opportunity, the exact canonical
@@ -338,13 +340,35 @@ before the one native request; there is no selected-target change, alternate
 target, fallback, or retry. Turbo-generated logical repeats do not create new
 physical intent.
 
+A fourth **post-Purify Stun** subtype is independently default-off beneath that
+existing Miracle master. Only when explicitly enabled does it accept an exact
+enemy self-Purify `29056` ActionEffect with one self target and a recovered Stun
+`1343` result (`0x10`).
+The source must resolve to exactly one live canonical `<e1>`-`<e5>` opponent.
+The helper then requires positive live Resilience `3248` membership within
+750 ms, waits for that same status to be continuously absent for 150 ms, and
+abandons the release wait 3 seconds after positive observation. A confirmed
+release opens one 500-ms opportunity; it never predicts the status timer, reads
+an internal status address, or uses `RemainingTime` to decide when immunity
+ended.
+
+The original urgent MCH/SAM/VPR threats keep priority over this longer
+follow-up. The released opportunity otherwise uses the same eligible held or
+fresh physical key generation, exact actor revalidation, complete Miracle
+protection matrix, and native 10-yalm range/line-of-sight gate. State and input
+are consumed before the sole Miracle attempt. There is no alternate target,
+fallback, timer-based prefire, replay, or retry. Its 500 ms are always measured
+from the original verified Resilience-release edge; waiting behind an urgent
+threat never restarts or extends that window.
+
 After that sole helper attempt, the same bounded action-effect capture can show
 a blue `MIRACLE LANDED` news flash for 1.5 seconds. It requires the exact local
 caster, Miracle action `29228`, pending threat target, server status-add effect
 `0x0E`, and Miracle status `3085` within 1500 ms. The subtitle distinguishes
-`MCH LB`, `SAM LB`, and `VPR NEST`. This confirms that Miracle landed on the
-intended enemy; it does not conclusively prove that the hostile damage was
-cancelled. Correlation preserves the first still-unexpired pending helper
+`MCH LB`, `SAM LB`, `VPR NEST`, and the post-Purify Stun follow-up. This confirms
+that Miracle landed on the intended enemy; it does not conclusively prove that
+the hostile action was interrupted or cancelled. Correlation preserves the
+first still-unexpired pending helper
 attempt; a later registration cannot overwrite it before it expires. A preview
 button is available beside the Miracle settings.
 
@@ -640,7 +664,9 @@ changes. Live CC evidence reached Miracle's unchanged native 10-yalm range/LoS
 gate. The CC-immunity brake's selected-target sentinel resolution, direct-
 hotbar and Turbo pulse behavior, hard-return boundary, expiry edge, and
 simultaneous server-acceptance race still require continued current-patch A/B
-testing. The 0.7.0.1 ActionEffect confirmation and
+testing. The post-Purify Stun signal, positive Resilience observation, stable
+release window, and resulting Miracle attempt also require a live CC A/B test.
+The 0.7.0.1 ActionEffect confirmation and
 blue popup still require
 current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
 actual Miracle interruption likewise require a live CC A/B test; source and

@@ -479,7 +479,15 @@ public sealed class Plugin : IDalamudPlugin
                     $"landed={miracle.ConfirmedLandingCount},confirm-q={miracle.ConfirmationQueueDepth}," +
                     $"confirm-capture={miracle.CapturedConfirmationCount}," +
                     $"confirm-drop={miracle.DroppedConfirmationCount}," +
-                    $"last={miracle.LastEvent},last-op={miracle.LastOpportunity}]");
+                    $"last={miracle.LastEvent},last-op={miracle.LastOpportunity}," +
+                    $"cleanse[phase={miracle.CleanseFollowupPhase}," +
+                    $"target={miracle.CleanseFollowupTargetGameObjectId:X}/" +
+                    $"{miracle.CleanseFollowupTargetEntityId:X}," +
+                    $"resilience-seen={miracle.CleanseFollowupResilienceObserved}," +
+                    $"signal/promote/cancel={miracle.CleanseFollowupSignalCount}/" +
+                    $"{miracle.CleanseFollowupPromotionCount}/" +
+                    $"{miracle.CleanseFollowupCancellationCount}," +
+                    $"last={miracle.CleanseFollowupLastEvent}]]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +

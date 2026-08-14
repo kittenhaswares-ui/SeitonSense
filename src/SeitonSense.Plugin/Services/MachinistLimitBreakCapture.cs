@@ -38,6 +38,9 @@ internal readonly record struct MiracleInterceptThreatEvent(
     uint CasterEntityId,
     uint EventTargetEntityId,
     uint ActionId,
+    byte EffectType,
+    ushort EffectValue,
+    int FeatureGeneration,
     uint GlobalSequence,
     ushort SourceSequence);
 
@@ -76,6 +79,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private int machinistLocalEntityIdBits;
     private int allyRescueLocalEntityIdBits;
     private int miracleInterceptLocalEntityIdBits;
+    private int miracleCleanseFollowupLocalEntityIdBits;
+    private int miracleCleanseFollowupGeneration;
     private int pressureLocalEntityIdBits;
     private int queuedWarningCount;
     private int queuedAllyRescueCleanseCount;
@@ -104,6 +109,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public uint CurrentMachinistLocalEntityId => unchecked((uint)Volatile.Read(ref machinistLocalEntityIdBits));
     public uint CurrentAllyRescueLocalEntityId => unchecked((uint)Volatile.Read(ref allyRescueLocalEntityIdBits));
     public uint CurrentMiracleInterceptLocalEntityId => unchecked((uint)Volatile.Read(ref miracleInterceptLocalEntityIdBits));
+    public uint CurrentMiracleCleanseFollowupLocalEntityId =>
+        unchecked((uint)Volatile.Read(ref miracleCleanseFollowupLocalEntityIdBits));
+    public int CurrentMiracleCleanseFollowupGeneration => Volatile.Read(ref miracleCleanseFollowupGeneration);
     public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
     public int QueueDepth => Math.Max(0, Volatile.Read(ref queuedWarningCount));
     public int AllyRescueCleanseQueueDepth => Math.Max(0, Volatile.Read(ref queuedAllyRescueCleanseCount));
@@ -173,6 +181,15 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             ClearMiracleInterceptThreats();
             ClearMiracleInterceptConfirmations();
         }
+    }
+
+    public void SetMiracleCleanseFollowupLocalEntityId(uint entityId)
+    {
+        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
+        var previous = unchecked((uint)Interlocked.Exchange(
+            ref miracleCleanseFollowupLocalEntityIdBits,
+            unchecked((int)normalized)));
+        if (previous != normalized) Interlocked.Increment(ref miracleCleanseFollowupGeneration);
     }
 
     public void SetPressureLocalEntityId(uint entityId)
@@ -257,6 +274,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Interlocked.Exchange(ref machinistLocalEntityIdBits, 0);
         Interlocked.Exchange(ref allyRescueLocalEntityIdBits, 0);
         Interlocked.Exchange(ref miracleInterceptLocalEntityIdBits, 0);
+        Interlocked.Exchange(ref miracleCleanseFollowupLocalEntityIdBits, 0);
+        Interlocked.Increment(ref miracleCleanseFollowupGeneration);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
         actionEffectHook?.Dispose();
         IsRunning = false;
@@ -432,10 +451,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         ActionEffectHandler.TargetEffects* effects,
         GameObjectId* targetEntityIds)
     {
-        var localEntityId = CurrentMiracleInterceptLocalEntityId;
-        if (!IsNetworkEntityId(localEntityId) ||
-            !IsNetworkEntityId(casterEntityId) ||
-            casterEntityId == localEntityId ||
+        if (!IsNetworkEntityId(casterEntityId) ||
             header == null ||
             effects == null ||
             targetEntityIds == null ||
@@ -448,15 +464,55 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (actionId is not (
                 EnemyCombatConstants.MarksmanSpiteActionId or
                 EnemyCombatConstants.ZantetsukenActionId or
-                EnemyCombatConstants.FuriousBacklashActionId))
+                EnemyCombatConstants.FuriousBacklashActionId or
+                EnemyCombatConstants.PurifyActionId))
         {
             return null;
         }
+
+        var localEntityId = actionId == EnemyCombatConstants.PurifyActionId
+            ? CurrentMiracleCleanseFollowupLocalEntityId
+            : CurrentMiracleInterceptLocalEntityId;
+        if (!IsNetworkEntityId(localEntityId) || casterEntityId == localEntityId)
+            return null;
 
         var targetEntityId = targetEntityIds[0].ObjectId;
         if (!IsNetworkEntityId(targetEntityId)) return null;
 
         var targetEffects = effects[0].Effects;
+        if (actionId == EnemyCombatConstants.PurifyActionId)
+        {
+            for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
+            {
+                var effect = targetEffects[slot];
+                if (!MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+                        casterEntityId,
+                        actionId,
+                        targetEntityId,
+                        effect.Type,
+                        effect.Value,
+                        header->GlobalSequence,
+                        header->SourceSequence))
+                {
+                    continue;
+                }
+
+                return new MiracleInterceptThreatEvent(
+                    Environment.TickCount64,
+                    localEntityId,
+                    casterEntityId,
+                    targetEntityId,
+                    actionId,
+                    effect.Type,
+                    effect.Value,
+                    CurrentMiracleCleanseFollowupGeneration,
+                    header->GlobalSequence,
+                    header->SourceSequence);
+            }
+
+            return null;
+        }
+
         var kind = MiracleInterceptRules.ClassifyExactStartSignal(
             actionId,
             casterEntityId,
@@ -473,6 +529,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             casterEntityId,
             targetEntityId,
             actionId,
+            0,
+            0,
+            0,
             header->GlobalSequence,
             header->SourceSequence);
     }
@@ -614,12 +673,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
     private void EnqueueMiracleInterceptThreat(MiracleInterceptThreatEvent threat)
     {
+        var isCleanseFollowup = threat.ActionId == EnemyCombatConstants.PurifyActionId;
+        var currentLocalEntityId = isCleanseFollowup
+            ? CurrentMiracleCleanseFollowupLocalEntityId
+            : CurrentMiracleInterceptLocalEntityId;
         if (disposed ||
             Volatile.Read(ref captureBlocked) != 0 ||
-            threat.LocalEntityId != CurrentMiracleInterceptLocalEntityId ||
+            threat.LocalEntityId != currentLocalEntityId ||
             !IsNetworkEntityId(threat.CasterEntityId) ||
-            !IsNetworkEntityId(CurrentMiracleInterceptLocalEntityId) ||
-            threat.CasterEntityId == CurrentMiracleInterceptLocalEntityId)
+            !IsNetworkEntityId(currentLocalEntityId) ||
+            threat.CasterEntityId == currentLocalEntityId ||
+            (isCleanseFollowup &&
+             threat.FeatureGeneration != CurrentMiracleCleanseFollowupGeneration))
         {
             return;
         }

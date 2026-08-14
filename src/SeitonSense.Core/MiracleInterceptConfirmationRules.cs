@@ -19,7 +19,8 @@ public readonly record struct MiracleInterceptPendingAttempt(
         (Threat is
             MiracleInterceptThreatKind.MarksmanSpite or
             MiracleInterceptThreatKind.Zantetsuken or
-            MiracleInterceptThreatKind.FuriousBacklash) &&
+            MiracleInterceptThreatKind.FuriousBacklash or
+            MiracleInterceptThreatKind.PostPurifyStun) &&
         AttemptedAtMilliseconds >= 0;
 }
 
