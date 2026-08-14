@@ -42,6 +42,7 @@ public static class CcImmunityBrakeActionCatalog
     [
         3_248, // Resilience
         1_320, // Meikyo Shisui
+        4_096, // Hardened Scales
         3_143, // The Warden's Paean
         3_052, // Relentless Rush
         3_162, // Honing Dance
@@ -133,6 +134,7 @@ public static class CcImmunityBrakeActionCatalog
         statusId switch
         {
             1_320 => targetJobId == 34, // Meikyo Shisui: SAM
+            4_096 => targetJobId == 41, // Hardened Scales: VPR
             3_052 => targetJobId == 37, // Relentless Rush: GNB
             3_162 => targetJobId == 38, // Honing Dance: DNC
             _ => true,

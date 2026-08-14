@@ -685,8 +685,9 @@ internal sealed class SettingsWindow : Window
         ImGui.TextDisabled(
             "Crystalline Conflict only. This works directly from a hotbar; no macro is required. For the reviewed " +
             "single/primary-target list above, an enabled action aimed at an exactly identified enemy with verified " +
-            "protection against that exact CC receives an invalid target for that one incoming attempt. The action, " +
-            "target and input are never stored, replayed, changed to an alternative, or retried by Seiton Sense.");
+            "protection against that exact CC is stopped before the downstream game action for that one incoming " +
+            "attempt. Miracle uses its own verified matrix, including VPR-only Hardened Scales. The action, target and " +
+            "input are never stored, replayed, changed to an alternative, or retried by Seiton Sense.");
         ImGui.TextDisabled(
             "A later real press or Turbo Hotbar pulse is checked again and can pass as soon as protection is gone. " +
             "Vanilla key holding does not generate repeats by itself. The brake blocks the whole selected action, " +
@@ -1163,14 +1164,18 @@ internal sealed class SettingsWindow : Window
         ImGui.TextWrapped(
             $"Miracle intercept: {miracle.Phase}/{miracle.Threat}, target={miracle.TargetGameObjectId:X}/" +
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
-            $"protection={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
+            $"blocker scales/other={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
             $"range/LoS={miracle.HasNativeRangeAndLineOfSight}, key={miracle.InputKey}, " +
             $"attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}, " +
             $"count={miracle.AttemptCount}/{miracle.AcceptedCount}, " +
             $"capture/queue/drop={miracle.CapturedThreatCount}/{miracle.CaptureQueueDepth}/{miracle.DroppedThreatCount}, " +
+            $"seen/armed/rejected={miracle.RecognizedThreatCount}/{miracle.ArmedThreatCount}/" +
+            $"{miracle.RejectedThreatCount}, waits protection/range/input/priority=" +
+            $"{miracle.ProtectionWaitCount}/{miracle.RangeWaitCount}/{miracle.NoInputWaitCount}/" +
+            $"{miracle.PriorityWaitCount}, expired={miracle.ExpiredThreatCount}, " +
             $"landed={miracle.ConfirmedLandingCount}, confirm-capture/queue/drop=" +
             $"{miracle.CapturedConfirmationCount}/{miracle.ConfirmationQueueDepth}/{miracle.DroppedConfirmationCount}, " +
-            $"last={miracle.LastEvent}");
+            $"last={miracle.LastEvent}, last-opportunity={miracle.LastOpportunity}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
             $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +

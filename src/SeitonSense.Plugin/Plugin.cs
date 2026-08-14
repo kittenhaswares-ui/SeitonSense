@@ -438,11 +438,18 @@ public sealed class Plugin : IDalamudPlugin
                     $"ttl={farHelp.RemainingMilliseconds},arm={farHelp.ArmedCount}," +
                     $"redirect={farHelp.RedirectedCount},fallback={farHelp.FallbackCount}," +
                     $"party={farHelp.LastPartySlot},distance={farHelp.LastDistance:0.0},last={farHelp.LastEvent}], " +
-                    $"cc-brake[enabled={ccBrake.Enabled},meta={ccBrake.VerifiedActions}/" +
+                    $"cc-brake[configured={ccBrake.Configured},active={ccBrake.ActiveInCurrentContext}," +
+                    $"meta={ccBrake.VerifiedActions}/" +
                     $"{CcImmunityBrakeActionCatalog.Definitions.Count},statuses={ccBrake.VerifiedStatuses}," +
                     $"eval={ccBrake.EvaluatedAttempts},blocked={ccBrake.BlockedAttempts}," +
-                    $"fail-open={ccBrake.FailedOpenAttempts},action={ccBrake.LastActionId}," +
-                    $"status={ccBrake.LastBlockerStatusId},e={ccBrake.LastEnemySlot},last={ccBrake.LastEvent}], " +
+                    $"fail-open={ccBrake.FailedOpenAttempts},default={ccBrake.DefaultTargetResolutions}," +
+                    $"exact={ccBrake.ExactTargetResolutions},resolve-fail={ccBrake.TargetResolutionFailures}," +
+                    $"action={ccBrake.LastActionId},status={ccBrake.LastBlockerStatusId}," +
+                    $"e={ccBrake.LastEnemySlot},mode={ccBrake.LastMode}," +
+                    $"target={ccBrake.LastOriginalTargetId:X}/{ccBrake.LastForwardedTargetId:X}/" +
+                    $"{ccBrake.LastEffectiveTargetId:X},suppressed={ccBrake.LastTargetSuppressedByRedirect}," +
+                    $"resolve={ccBrake.LastTargetResolution}," +
+                    $"sample={ccBrake.LastSampledStatuses},last={ccBrake.LastEvent}], " +
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
@@ -461,14 +468,18 @@ public sealed class Plugin : IDalamudPlugin
                     $"[Seiton Sense] miracle[phase={miracle.Phase},threat={miracle.Threat}," +
                     $"target={miracle.TargetGameObjectId:X}/{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
                     $"ttl={miracle.ThreatRemainingMilliseconds},scales={miracle.HardenedScalesPresent}," +
-                    $"protection={miracle.OtherCcProtectionPresent},range={miracle.HasNativeRangeAndLineOfSight}," +
+                    $"other-blocker={miracle.OtherCcProtectionPresent},range={miracle.HasNativeRangeAndLineOfSight}," +
                     $"key={miracle.InputKey},attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
                     $"count={miracle.AttemptCount}/{miracle.AcceptedCount},q={miracle.CaptureQueueDepth}," +
                     $"capture={miracle.CapturedThreatCount},drop={miracle.DroppedThreatCount}," +
+                    $"seen/armed/reject={miracle.RecognizedThreatCount}/{miracle.ArmedThreatCount}/" +
+                    $"{miracle.RejectedThreatCount},wait[p/r/k]={miracle.ProtectionWaitCount}/" +
+                    $"{miracle.RangeWaitCount}/{miracle.NoInputWaitCount}," +
+                    $"priority={miracle.PriorityWaitCount},expired={miracle.ExpiredThreatCount}," +
                     $"landed={miracle.ConfirmedLandingCount},confirm-q={miracle.ConfirmationQueueDepth}," +
                     $"confirm-capture={miracle.CapturedConfirmationCount}," +
                     $"confirm-drop={miracle.DroppedConfirmationCount}," +
-                    $"last={miracle.LastEvent}]");
+                    $"last={miracle.LastEvent},last-op={miracle.LastOpportunity}]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +

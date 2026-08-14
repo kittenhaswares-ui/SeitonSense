@@ -137,6 +137,7 @@ var tests = new (string Name, Action Run)[]
     ("CC immunity brake action catalog is exact", CcImmunityBrakeSelfTests.ActionCatalogIsExactAndConservative),
     ("CC immunity brake toggle and identity gates pass safely", CcImmunityBrakeSelfTests.ToggleAndIdentityGatesPassWithoutMutation),
     ("CC immunity brake target matching is exact", CcImmunityBrakeSelfTests.TargetMustBeExactValidAndMatchIncomingCall),
+    ("CC immunity brake resolves only native default targets", CcImmunityBrakeSelfTests.DefaultTargetCarrierResolvesOnlyTheNativeHardTarget),
     ("CC immunity brake standard blocker matrix is exact", CcImmunityBrakeSelfTests.StandardBlockerMatrixIsExact),
     ("CC immunity brake Miracle blocker matrix is exact", CcImmunityBrakeSelfTests.MiracleBlockerMatrixIsExact),
     ("CC immunity brake is stable and stateless", CcImmunityBrakeSelfTests.StatusOrderingIsStableAndRulesAreStateless),
