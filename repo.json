@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, CC-immunity brake, job helpers, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating pressure and CC-protection cues, a default-off selected-target-aware hard-stop CC-immunity brake, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in job helpers, and target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, a default-off exact-target hard-stop CC-immunity brake with strict public-CC fallback resolution, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in job helpers, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.12.0.0",
-    "Changelog": "Adds an independently default-off post-Purify Stun subtype beneath the existing WHM Miracle master. Only an exact enemy self-Purify 29056 that recovers Stun 1343 may arm it, and the source must resolve to one canonical e1-e5 opponent. It requires positive live Resilience 3248 within 750 ms, waits for 150 ms stable absence without timer prediction, gives up 3 seconds after observing Resilience, and opens one unextended 500 ms opportunity measured from that release edge. Urgent MCH/SAM/VPR threats retain priority without restarting the window. The same held-or-fresh physical generation, exact target, complete blocker matrix, native 10y/LoS, one-attempt, and no-retry boundaries remain. MIRACLE LANDED proves status application, not an interrupt. Configuration schema 16 migrates the new subtype off.",
+    "AssemblyVersion": "0.12.0.1",
+    "Changelog": "Hardens the default-off CC-immunity brake when FFXIV omits an opponent's Hostile flag. A fallback is accepted only in a known public CC territory with one complete visible five-member local party; self, party/alliance, exact native e1-e5 identity, life, and targetable checks remain mandatory. Plugin-owned exact-target Miracle calls now bypass only macro redirection and still pass through the same final brake, closing the pre-check-to-dispatch protection race. The brake remains stateless and adds no timer, target mutation, alternate action, replay, or retry. Configuration schema 16 is unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786677412"
+    "LastUpdate": "1786683091"
   }
 ]

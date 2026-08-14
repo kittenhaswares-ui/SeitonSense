@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.0.1
+
+- Hardened exact enemy resolution for the default-off CC-immunity brake when
+  FFXIV omits the `Hostile` status flag in a public Crystalline Conflict match.
+  The fallback is accepted only in a known public CC territory when the local
+  party is exactly five members, includes the local player, and every party
+  entity is currently visible. Self, party/alliance, life/targetable, native
+  identity, and exact canonical `<e1>`-`<e5>` checks remain mandatory.
+- Plugin-owned exact-target Miracle requests now bypass only macro target
+  redirection. They still pass through the same final CC-immunity brake, so a
+  verified blocker appearing between the helper's pre-check and its native
+  request can stop that one attempt.
+- The brake remains a stateless per-attempt hard stop. This hotfix adds no
+  timer, stored input, target mutation, alternate action, replay, or retry.
+- Bumped the plugin version to 0.12.0.1. Configuration schema 16 is unchanged.
+
 ## 0.12.0.0
 
 - Added an independently default-off **post-Purify Stun** subtype beneath the

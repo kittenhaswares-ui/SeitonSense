@@ -876,26 +876,27 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // hook or the game can restore a default/current target. ReAction or the
         // game may supply a later independent attempt after protection ends. Any
         // uncertainty or exception preserves the fully resolved target.
-        if (!bypassRedirect)
+        // Plugin-owned exact-target actions bypass only the macro redirect
+        // branches above. They must still pass through the same final CC brake
+        // so a protection appearing between a helper's pre-check and UseAction
+        // can stop the one incoming attempt.
+        try
         {
-            try
+            var resolvedActionId = ResolveActionId(thisPtr, actionType, actionId);
+            if (ccImmunityBrake.ShouldBlock(
+                    actionType,
+                    resolvedActionId,
+                    targetId,
+                    forwardedTargetId,
+                    targetSuppressedByRedirect,
+                    mode))
             {
-                var resolvedActionId = ResolveActionId(thisPtr, actionType, actionId);
-                if (ccImmunityBrake.ShouldBlock(
-                        actionType,
-                        resolvedActionId,
-                        targetId,
-                        forwardedTargetId,
-                        targetSuppressedByRedirect,
-                        mode))
-                {
-                    return false;
-                }
+                return false;
             }
-            catch (Exception exception)
-            {
-                ccImmunityBrake.RecordFailedOpen(exception);
-            }
+        }
+        catch (Exception exception)
+        {
+            ccImmunityBrake.RecordFailedOpen(exception);
         }
 
         // This is the only native call made by the detour. Pass and fail-open paths

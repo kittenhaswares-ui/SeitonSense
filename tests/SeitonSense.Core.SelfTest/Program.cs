@@ -6,7 +6,7 @@ var tests = new (string Name, Action Run)[]
     ("execute threshold is strictly below half", ExecuteThresholdIsStrict),
     ("invalid HP fails closed", InvalidHpFailsClosed),
     ("enemy slot labels are exact", EnemySlotLabelsAreExact),
-    ("enemy validation fails closed", EnemyValidationFailsClosed),
+    ("enemy validation requires hostility or complete CC fallback", EnemyValidationFailsClosed),
     ("native range result accepts facing-only failure", NativeRangeResultIsExact),
     ("known CC territories are complete", KnownCcTerritoriesAreComplete),
     ("CC matching remains fail closed", CcMatchingIsFailClosed),
@@ -140,6 +140,7 @@ var tests = new (string Name, Action Run)[]
     ("CC immunity brake resolves only native default targets", CcImmunityBrakeSelfTests.DefaultTargetCarrierResolvesOnlyTheNativeHardTarget),
     ("CC immunity brake standard blocker matrix is exact", CcImmunityBrakeSelfTests.StandardBlockerMatrixIsExact),
     ("CC immunity brake Miracle blocker matrix is exact", CcImmunityBrakeSelfTests.MiracleBlockerMatrixIsExact),
+    ("CC immunity brake keeps exact internal Miracle eligible", CcImmunityBrakeSelfTests.ExactMiracleUsesTheSharedFinalDecision),
     ("CC immunity brake is stable and stateless", CcImmunityBrakeSelfTests.StatusOrderingIsStableAndRulesAreStateless),
     ("target pressure merges every exact source", TargetPressureSnapshotSelfTests.AllSourcesAreMergedAndExposed),
     ("target pressure eligibility fails closed", TargetPressureSnapshotSelfTests.EnemyEligibilityFailsClosed),
@@ -254,12 +255,15 @@ static void EnemySlotLabelsAreExact()
 static void EnemyValidationFailsClosed()
 {
     True(EnemySlotRules.CanUseResolvedEnemy(false, false, true, false, true, true, 10, 100), "hostile enemy");
-    True(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, true, 10, 100), "complete CC fallback");
-    False(EnemySlotRules.CanUseResolvedEnemy(true, false, true, true, true, true, 10, 100), "self");
-    False(EnemySlotRules.CanUseResolvedEnemy(false, true, true, true, true, true, 10, 100), "ally precedence");
+    True(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, true, 10, 100), "complete CC party fallback");
+    False(EnemySlotRules.CanUseResolvedEnemy(true, false, false, true, true, true, 10, 100), "fallback cannot admit self");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, true, false, true, true, true, 10, 100), "fallback cannot admit party or alliance");
     False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, false, true, true, 10, 100), "unknown relation");
-    False(EnemySlotRules.CanUseResolvedEnemy(false, false, true, false, false, true, 10, 100), "dead");
-    False(EnemySlotRules.CanUseResolvedEnemy(false, false, true, false, true, false, 10, 100), "untargetable");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, false, true, 10, 100), "fallback cannot admit dead");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, false, 10, 100), "fallback cannot admit untargetable");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, true, 0, 100), "fallback requires positive HP");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, true, 10, 0), "fallback requires positive max HP");
+    False(EnemySlotRules.CanUseResolvedEnemy(false, false, false, true, true, true, 101, 100), "fallback rejects impossible HP");
 }
 
 static void NativeRangeResultIsExact()

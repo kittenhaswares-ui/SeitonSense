@@ -2,7 +2,9 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.12.0.0 adds a
+one-shot macro assistance, and target highlights. Version 0.12.0.1 hardens the
+optional CC brake for public-match enemy flags and applies its final protection
+check to plugin-owned Miracle attempts as well. It retains version 0.12.0.0's
 strict, independently default-off post-Purify Stun follow-up beneath the
 existing default-off WHM Miracle helper. The suite
 combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
@@ -30,7 +32,8 @@ Focus Glow into one configurable custom-repository plugin.
   Turbo pulse independently, including unchanged native selected-target
   carriers `0` and `0xE0000000`. A confirmed block returns immediately without
   invoking the downstream/original action call; Seiton Sense never stores, replays,
-  redirects, or retries it.
+  redirects, or retries it. A strict complete-party fallback can certify an
+  exact public-CC `<e1>`-`<e5>` enemy when FFXIV omits its `Hostile` flag.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
   and Marksman's Spite receive stable warnings. The MCH LB card is larger by
   default and can play one selectable built-in FFXIV sound per verified threat.
@@ -201,11 +204,25 @@ It reads the native hard target, resolves it to exactly one live canonical
 `<e1>`-`<e5>` enemy, and confirms that the selection did not change during the
 protection check. The call itself is not rewritten.
 
+FFXIV can omit the `Hostile` actor flag on a valid public-match opponent. In a
+known public Crystalline Conflict territory only, the brake may fall back to a
+complete visible party proof: the local party must contain exactly five valid
+members, include the local player, and every party entity must be visible. The
+candidate must still come from exactly one native `<e1>`-`<e5>` slot, differ
+from self and every party/alliance member, retain exact native identity, and be
+alive and targetable. Missing or incomplete proof still passes unchanged.
+
 A zero deliberately produced by Seiton's fail-closed Near Assist, Near Help,
 Far Help, or legacy-fallback suppression carries explicit provenance and can
 never be restored to the selected target. Explicit actor IDs remain
 authoritative, and any missing, changed, non-canonical, duplicated, or
 otherwise ambiguous target still passes through unchanged.
+
+Plugin-owned exact-target Miracle requests bypass the macro-redirection
+branches only. They still reach this same final brake before the one downstream
+native call, closing the narrow race where verified protection appears after
+the helper's earlier pre-check. This adds no timer, target mutation, replay, or
+retry.
 
 For the standard CC family, the verified blockers are Guard `3054`/`3673`,
 Resilience `3248`, Inner Release `1303`, Meikyo Shisui `1320`, Hardened Scales
@@ -339,6 +356,11 @@ eligible generation that arrives before expiry. State and input are consumed
 before the one native request; there is no selected-target change, alternate
 target, fallback, or retry. Turbo-generated logical repeats do not create new
 physical intent.
+
+That plugin-owned request also passes through the final CC-immunity brake after
+redirect bypass. If the exact target gains a verified Miracle blocker between
+the helper pre-check and the native request, the single incoming attempt can be
+stopped without changing its target or creating another attempt.
 
 A fourth **post-Purify Stun** subtype is independently default-off beneath that
 existing Miracle master. Only when explicitly enabled does it accept an exact
@@ -629,8 +651,12 @@ an exact protected enemy, the optional brake can return `false` without calling
 the downstream/original action function. The exact native selected target may
 be read only to resolve an unchanged native target carrier of `0` or
 `0xE0000000`; a zero marked as deliberately suppressed by Seiton's redirect
-path is never restored. The brake never stores or replays input and never
-chooses another target or action. Near Assist, Near Help, and Far Help can
+path is never restored. A missing hostile flag can be replaced only by the
+strict complete visible five-member party proof in a known public CC territory;
+self, party/alliance, native identity, and exact `<e1>`-`<e5>` checks remain.
+Plugin-owned Miracle attempts receive the same final brake after redirect
+bypass. The brake never stores or replays input and never chooses another
+target or action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
 action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
 initiate one exact action attempt, but share one physical-generation ownership
@@ -664,7 +690,9 @@ changes. Live CC evidence reached Miracle's unchanged native 10-yalm range/LoS
 gate. The CC-immunity brake's selected-target sentinel resolution, direct-
 hotbar and Turbo pulse behavior, hard-return boundary, expiry edge, and
 simultaneous server-acceptance race still require continued current-patch A/B
-testing. The post-Purify Stun signal, positive Resilience observation, stable
+testing. The public-match complete-party fallback and final brake on internal
+Miracle requests likewise require a current-patch live CC A/B test. The
+post-Purify Stun signal, positive Resilience observation, stable
 release window, and resulting Miracle attempt also require a live CC A/B test.
 The 0.7.0.1 ActionEffect confirmation and
 blue popup still require
