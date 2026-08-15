@@ -25,7 +25,7 @@ public enum MiracleCleanseFollowupCancelReason
     None = 0,
     ConfigurationDisabled = 1,
     OutsideCrystallineConflict = 2,
-    LocalWhiteMageInvalid = 3,
+    LocalCounterJobInvalid = 3,
     InvalidSignal = 4,
     ConcurrentSignal = 5,
     CandidateIdentityInvalid = 6,
@@ -119,10 +119,11 @@ public readonly record struct MiracleCleanseFollowupState(
 public readonly record struct MiracleCleanseFollowupObservation(
     bool ConfigurationEnabled,
     bool IsCrystallineConflict,
-    bool IsLocalWhiteMageValid,
+    bool IsLocalCounterJobValid,
     bool HigherPriorityClaimed,
     MiracleCleanseFollowupSignal? NewSignal,
     MiracleCleanseFollowupCandidate? Candidate,
+    bool HasExactTeamFocus,
     long NowMilliseconds,
     bool HardReset = false);
 
@@ -145,10 +146,11 @@ public readonly record struct MiracleCleanseFollowupDecision(
 }
 
 /// <summary>
-/// Pure, opt-in WHM follow-up policy:
-/// exact enemy self-Purify recovering Stun -> positive live Resilience latch ->
+/// Pure, opt-in WHM/BRD follow-up policy:
+/// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
 /// 150ms continuous live absence -> one bounded promotion into the existing
-/// Miracle dispatcher. That shared dispatcher owns fresh/held input, native
+/// reactive-CC dispatcher. Exact local hard target plus at least one allied hard
+/// target is required at release. The shared dispatcher owns fresh/held input, native
 /// range/LoS, protection checks, input consumption, and the sole action call.
 /// RemainingTime is deliberately absent; release is never predicted.
 /// </summary>
@@ -156,6 +158,11 @@ public static class MiracleCleanseFollowupRules
 {
     public const uint PurifyActionId = 29_056;
     public const uint StunStatusId = 1_343;
+    public const uint HeavyStatusId = 1_344;
+    public const uint BindStatusId = 1_345;
+    public const uint SilenceStatusId = 1_347;
+    public const uint MiracleOfNatureStatusId = 3_085;
+    public const uint DeepFreezeStatusId = 3_219;
     public const uint ResilienceStatusId = 3_248;
     public const byte RecoveredFromStatusEffectType = 0x10;
 
@@ -165,7 +172,7 @@ public static class MiracleCleanseFollowupRules
     public const long ReleaseOpportunityMilliseconds = 500;
     public const int MaximumObservedSignals = 128;
 
-    public static bool IsExactStunPurifySignal(
+    public static bool IsExactPurifySignal(
         uint casterEntityId,
         uint actionId,
         uint targetEntityId,
@@ -177,8 +184,17 @@ public static class MiracleCleanseFollowupRules
         casterEntityId == targetEntityId &&
         actionId == PurifyActionId &&
         effectType == RecoveredFromStatusEffectType &&
-        effectValue == StunStatusId &&
+        IsPurifyRemovableStatus(effectValue) &&
         (globalSequence != 0 || sourceSequence != 0);
+
+    public static bool IsPurifyRemovableStatus(uint statusId) =>
+        statusId is
+            StunStatusId or
+            HeavyStatusId or
+            BindStatusId or
+            SilenceStatusId or
+            MiracleOfNatureStatusId or
+            DeepFreezeStatusId;
 
     public static bool IsValidEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000 and not uint.MaxValue;
@@ -186,7 +202,7 @@ public static class MiracleCleanseFollowupRules
     public static bool IsValidSignalShape(MiracleCleanseFollowupSignal signal) =>
         signal.Target.IsValid &&
         signal.Target.EntityId == signal.Key.TargetEntityId &&
-        IsExactStunPurifySignal(
+        IsExactPurifySignal(
             signal.Key.CasterEntityId,
             signal.Key.ActionId,
             signal.Key.TargetEntityId,
@@ -446,6 +462,13 @@ public static class MiracleCleanseFollowupRules
         if (observation.HigherPriorityClaimed)
             return Waiting(state);
 
+        // Team focus is intentionally live, exact and non-sticky. The runtime
+        // supplies true only when the local hard target is this exact enemy and
+        // at least one separate valid ally hard-targets the same actor. Wait
+        // inside the original 500-ms release window; never extend it.
+        if (!observation.HasExactTeamFocus)
+            return Waiting(state);
+
         if (state.ActiveSignal is not { } signal)
         {
             return Cancelled(
@@ -501,8 +524,8 @@ public static class MiracleCleanseFollowupRules
             return MiracleCleanseFollowupCancelReason.ConfigurationDisabled;
         if (!observation.IsCrystallineConflict)
             return MiracleCleanseFollowupCancelReason.OutsideCrystallineConflict;
-        if (!observation.IsLocalWhiteMageValid)
-            return MiracleCleanseFollowupCancelReason.LocalWhiteMageInvalid;
+        if (!observation.IsLocalCounterJobValid)
+            return MiracleCleanseFollowupCancelReason.LocalCounterJobInvalid;
         return MiracleCleanseFollowupCancelReason.None;
     }
 

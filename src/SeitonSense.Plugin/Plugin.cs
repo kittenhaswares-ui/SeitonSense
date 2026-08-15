@@ -31,6 +31,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly AutoEnemyFocusMarkService autoEnemyFocusMark;
+    private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
     private readonly NearAssistRedirector nearAssist;
     private readonly NamePlateAnchorTracker namePlateAnchors;
@@ -95,6 +97,25 @@ public sealed class Plugin : IDalamudPlugin
             metadata,
             machinistLimitBreakCapture,
             tracker);
+        autoEnemyFocusMark = new AutoEnemyFocusMarkService(
+            configuration,
+            clientState,
+            objectTable,
+            framework,
+            dutyState,
+            log,
+            metadata,
+            tracker,
+            pressureTracker);
+        isolationAwareness = new IsolationAwarenessService(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            framework,
+            dataManager,
+            log);
         var ccImmunityBrake = new CcImmunityBrakeService(
             configuration,
             clientState,
@@ -151,6 +172,7 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             personalStatus,
             pressureTracker,
+            isolationAwareness,
             namePlateAnchors,
             resourceAuraAnchors,
             gameGui,
@@ -167,6 +189,7 @@ public sealed class Plugin : IDalamudPlugin
             personalStatus,
             overlay,
             pressureTracker,
+            isolationAwareness,
             pressureCounter);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(settingsWindow);
@@ -278,6 +301,8 @@ public sealed class Plugin : IDalamudPlugin
         namePlateAnchors.Start();
         tracker.Start();
         pressureTracker.Start();
+        autoEnemyFocusMark.Start();
+        isolationAwareness.Start();
         nearAssist.Start();
         personalStatus.Start();
     }
@@ -298,6 +323,8 @@ public sealed class Plugin : IDalamudPlugin
         commandManager.RemoveHandler(AliasCommand);
         personalStatus.Dispose();
         nearAssist.Dispose();
+        isolationAwareness.Dispose();
+        autoEnemyFocusMark.Dispose();
         pressureTracker.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
@@ -397,6 +424,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.PreviewEnabled = false;
                 overlay.CcProtectionPreviewEnabled = false;
                 overlay.ResourceAuraPreviewEnabled = false;
+                overlay.IsolationWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 break;
             case "preview":
@@ -409,6 +437,7 @@ public sealed class Plugin : IDalamudPlugin
             case "debug":
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
+                var defense = personalStatus.DefensiveUtilityDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
@@ -465,8 +494,21 @@ public sealed class Plugin : IDalamudPlugin
                     $"capture={rescue.ConfirmationCaptureCount},drop={rescue.ConfirmationDropCount}," +
                     $"last={rescue.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] defense[active={defense.Active},action={defense.Action}," +
+                    $"trigger={defense.Trigger},pressure={defense.PressureKnown}/{defense.IncomingEnemyCount}," +
+                    $"guard={defense.GuardActive},stun3={defense.HighPressureStunObserved}," +
+                    $"post-purify={defense.WaitingForPostPurifyGuard}/" +
+                    $"{defense.PostPurifyGuardRemainingMilliseconds},candidates={defense.GuardianCandidateCount}," +
+                    $"target={defense.TargetGameObjectId:X}/{defense.TargetEntityId:X}," +
+                    $"fresh={defense.FreshGameplayKey},held={defense.HeldGameplayKey}," +
+                    $"claimed={defense.InputClaimed},attempt={defense.UseActionAttempted}/" +
+                    $"{defense.UseActionAccepted},count={defense.AttemptCount}/{defense.AcceptedCount}," +
+                    $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
+                    $"last={defense.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] miracle[phase={miracle.Phase},threat={miracle.Threat}," +
-                    $"target={miracle.TargetGameObjectId:X}/{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
+                    $"action={miracle.CounterActionId},target={miracle.TargetGameObjectId:X}/" +
+                    $"{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
                     $"ttl={miracle.ThreatRemainingMilliseconds},scales={miracle.HardenedScalesPresent}," +
                     $"other-blocker={miracle.OtherCcProtectionPresent},range={miracle.HasNativeRangeAndLineOfSight}," +
                     $"key={miracle.InputKey},attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
@@ -481,6 +523,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"confirm-drop={miracle.DroppedConfirmationCount}," +
                     $"last={miracle.LastEvent},last-op={miracle.LastOpportunity}," +
                     $"cleanse[phase={miracle.CleanseFollowupPhase}," +
+                    $"removed={miracle.CleanseFollowupRemovedStatusId}," +
+                    $"focus={miracle.CleanseFollowupTeamPressure}," +
                     $"target={miracle.CleanseFollowupTargetGameObjectId:X}/" +
                     $"{miracle.CleanseFollowupTargetEntityId:X}," +
                     $"resilience-seen={miracle.CleanseFollowupResilienceObserved}," +
@@ -495,6 +539,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"adjusted={monk.AdjustedActionId},priority={monk.HigherPriorityClaimed}," +
                     $"attempt={monk.UseActionAttempted}/{monk.UseActionAccepted}," +
                     $"count={monk.AttemptCount}/{monk.AcceptedCount}]");
+                chatGui.Print($"[Seiton Sense] isolation[{isolationAwareness.Diagnostics.ToChatLine()}]");
+                chatGui.Print($"[Seiton Sense] auto-mark[{autoEnemyFocusMark.Diagnostics.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -506,6 +552,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.PreviewEnabled = false;
                 overlay.CcProtectionPreviewEnabled = false;
                 overlay.ResourceAuraPreviewEnabled = false;
+                overlay.IsolationWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;

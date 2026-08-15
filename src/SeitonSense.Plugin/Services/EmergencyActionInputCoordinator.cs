@@ -4,7 +4,7 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
-/// by emergency self-Purify, ally rescue, and Miracle intercept. Consumption is deliberately shared:
+/// by emergency self-Purify, defensive utilities, ally rescue, and Miracle intercept. Consumption is deliberately shared:
 /// once either helper claims a generation, every later helper sees no input.
 /// </summary>
 internal sealed class EmergencyActionInputFrame
@@ -45,6 +45,7 @@ internal sealed class EmergencyActionInputCoordinator
 {
     private readonly GameInputContextProbe probe;
     private bool purifyHeldWasEnabled;
+    private bool defensiveUtilityHeldWasEnabled;
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
 
@@ -56,6 +57,7 @@ internal sealed class EmergencyActionInputCoordinator
     internal EmergencyActionInputFrame Observe(
         bool shouldObserve,
         bool purifyHeldEnabled,
+        bool defensiveUtilityHeldEnabled,
         bool allyRescueHeldEnabled,
         bool miracleInterceptHeldEnabled)
     {
@@ -70,9 +72,11 @@ internal sealed class EmergencyActionInputCoordinator
         var input = probe.Observe();
         var heldOptionJustEnabled =
             (purifyHeldEnabled && !purifyHeldWasEnabled) ||
+            (defensiveUtilityHeldEnabled && !defensiveUtilityHeldWasEnabled) ||
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
+        defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
 
@@ -98,6 +102,7 @@ internal sealed class EmergencyActionInputCoordinator
         Observe(
             shouldObserve,
             purifyHeldEnabled,
+            defensiveUtilityHeldEnabled: false,
             allyRescueHeldEnabled,
             miracleInterceptHeldEnabled: false);
 
@@ -105,6 +110,7 @@ internal sealed class EmergencyActionInputCoordinator
     {
         probe.Reset();
         purifyHeldWasEnabled = false;
+        defensiveUtilityHeldWasEnabled = false;
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
     }

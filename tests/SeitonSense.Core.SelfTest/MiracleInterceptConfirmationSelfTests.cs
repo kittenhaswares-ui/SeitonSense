@@ -33,6 +33,55 @@ internal static class MiracleInterceptConfirmationSelfTests
         True(decision.NextState.Pending is null, "confirmation consumes pending attempt");
     }
 
+    public static void SilentNocturneRequiresExactSilenceStatus()
+    {
+        var state = Register(
+            MiracleInterceptThreatKind.Contradance,
+            accepted: true,
+            now: 1_000,
+            actionId: MiracleInterceptConfirmationRules.SilentNocturneActionId).NextState;
+        var wrongStatus = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            state,
+            Effect(
+                now: 1_100,
+                actionId: MiracleInterceptConfirmationRules.SilentNocturneActionId,
+                effectValue: MiracleInterceptConfirmationRules.MiracleOfNatureStatusId));
+        False(wrongStatus.Confirmed, "Silent Nocturne cannot confirm from Miracle status");
+
+        var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            state,
+            Effect(
+                now: 1_101,
+                actionId: MiracleInterceptConfirmationRules.SilentNocturneActionId,
+                effectValue: MiracleInterceptConfirmationRules.SilenceStatusId));
+        True(exact.Confirmed, "exact Silent Nocturne Silence add confirms");
+        Equal(
+            MiracleInterceptConfirmationRules.SilentNocturneActionId,
+            exact.TriggeredPopup!.Value.ActionId,
+            "popup retains the actual counter-CC action");
+        Equal(
+            MiracleInterceptThreatKind.Contradance,
+            exact.TriggeredPopup.Value.Threat,
+            "DNC startup label is retained");
+
+        state = Register(
+            MiracleInterceptThreatKind.PostPurifyCrowdControl,
+            accepted: true,
+            now: 2_000,
+            actionId: MiracleInterceptConfirmationRules.SilentNocturneActionId,
+            removedStatusId: MiracleCleanseFollowupRules.DeepFreezeStatusId).NextState;
+        var followup = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            state,
+            Effect(
+                now: 2_100,
+                actionId: MiracleInterceptConfirmationRules.SilentNocturneActionId));
+        True(followup.Confirmed, "post-Purify Silent confirmation is exact");
+        Equal(
+            MiracleCleanseFollowupRules.DeepFreezeStatusId,
+            followup.TriggeredPopup!.Value.RemovedStatusId,
+            "popup retains the Purify-removed CC label");
+    }
+
     public static void CorrelationRequiresExactIdentityShapeAndWindow()
     {
         var variants = new[]
@@ -124,32 +173,42 @@ internal static class MiracleInterceptConfirmationSelfTests
     private static MiracleInterceptConfirmationDecision Register(
         MiracleInterceptThreatKind threat,
         bool accepted,
-        long now) =>
+        long now,
+        uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+        uint removedStatusId = 0) =>
         MiracleInterceptConfirmationRules.RegisterAttempt(
             MiracleInterceptConfirmationState.Initial,
-            Attempt(threat, accepted, now),
+            Attempt(threat, accepted, now, actionId, removedStatusId),
             now);
 
     private static MiracleInterceptPendingAttempt Attempt(
         MiracleInterceptThreatKind threat,
         bool accepted,
-        long now) =>
+        long now,
+        uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+        uint removedStatusId = 0) =>
         new(
             Caster,
-            MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+            actionId,
             TargetObject,
             Target,
             threat,
             accepted,
-            now);
+            now)
+        {
+            RemovedStatusId = removedStatusId,
+        };
 
-    private static MiracleInterceptLandedObservation Effect(long now) =>
+    private static MiracleInterceptLandedObservation Effect(
+        long now,
+        uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+        ushort? effectValue = null) =>
         new(
             Caster,
-            MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+            actionId,
             Target,
             MiracleInterceptConfirmationRules.AddStatusEffectType,
-            MiracleInterceptConfirmationRules.MiracleOfNatureStatusId,
+            effectValue ?? MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId),
             77,
             9,
             now);

@@ -9,6 +9,12 @@ internal static class EnemyCombatConstants
     internal const float GuardDurationSeconds = 4f;
     internal const float GuardCooldownSeconds = 30f;
 
+    internal const uint GuardianActionId = 29066;
+    internal const uint GuardianIconId = 9584;
+    internal const uint PaladinJobId = 19;
+    internal const ushort GuardianRecast100ms = 300;
+    internal const int GuardianSheetRange = 20;
+
     internal const uint RecuperateActionId = 29711;
     internal const uint RecuperateIconId = 9108;
     internal const uint RecuperateMpCost = 2000;
@@ -49,6 +55,19 @@ internal static class EnemyCombatConstants
     internal const uint WhiteMageJobId = 24;
     internal const ushort MiracleOfNatureRecast100ms = 240;
     internal const float MiracleOfNatureRange = 10f;
+
+    internal const uint SilentNocturneActionId = 29395;
+    internal const uint SilentNocturneActionIconId = 9627;
+    internal const uint BardJobId = 23;
+    internal const ushort SilentNocturneRecast100ms = 200;
+    internal const float SilentNocturneRange = 20f;
+
+    internal const uint ContradanceActionId = 29432;
+    internal const uint ContradanceActionIconId = 9641;
+    internal const uint DancerJobId = 38;
+    internal const ushort ContradanceRecast100ms = 100;
+    internal const uint SeducedStatusId = 3024;
+    internal const uint SeducedStatusIconId = 214889;
 
     internal const uint DeathWarrantActionId = 29549;
     internal const uint DeathWarrantActionIconId = 9669;

@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "PvP pressure, CC-immunity brake, job helpers, assists, and target clarity.",
-  "Description": "A local PvP HUD integrating pressure and CC-protection cues, a default-off exact-target hard-stop CC-immunity brake with strict public-CC fallback resolution, native-HUD resource auras, Ninja Seiton decisions, warnings, fail-closed macro utilities, opt-in job helpers, and target highlights.",
+  "Punchline": "PvP pressure, isolation, defensive/reactive utilities, assists, and target clarity.",
+  "Description": "A local PvP HUD integrating pressure and CC-protection cues, an urgent isolation warning, native-HUD resource auras, Ninja Seiton decisions, fail-closed macro assistance, default-off defensive/reactive utilities and team-visible focus marking, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

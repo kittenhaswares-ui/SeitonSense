@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.13.0.0
+
+- Added an enabled-by-default urgent isolation warning for exact Crystalline
+  Conflict. It requires the complete five-person local party and FFXIV's native
+  20-yalm range/line-of-sight result for every living ally. Continuous confirmed
+  isolation enters after 500 ms, confirmed connection clears after 200 ms, and
+  incomplete or unknown data stays silent. The large gently pulsing card is
+  local, fixed at the top-left, and never issues an action or target change.
+- Deliberately omitted automatic navigation, a tactical position guide,
+  Splatoon integration, and map painting. The release reports only the narrow
+  isolation fact it can verify rather than presenting rapidly changing tactical
+  placement as authoritative.
+- Added default-off Crystalline Conflict defensive utilities behind one shared
+  physical-input-generation boundary. At known pressure from at least three
+  unique enemies, exact Stun can request Purify; Guard requires positive live
+  Resilience, removal of the CC, and a new release/repress generation, so Purify
+  and Guard cannot fire from the same physical generation.
+- Added a risk-based pre-Guard at or below 50% HP with three or more known
+  incoming enemies and no existing Purify-removable CC. Added PLD Guardian for
+  an exact party ally at or below 20% HP, strict distance below 10 yalms, native
+  range/line of sight, and both own Guard and Guardian available. Lowest HP%,
+  known higher pressure, distance, and stable identity determine the ally.
+- Active own Guard now suppresses every Seiton Sense action-request helper. A
+  non-extending 1.5-second propagation gate begins at an exact local Guard
+  request and covers the interval before the live status appears, preventing the
+  plugin from cancelling Guard. Manual FFXIV actions and other plugins remain
+  outside that boundary, and exact live client/server ordering for the new
+  defensive rules still requires current-patch validation.
+- Expanded the default-off WHM Miracle helper into WHM/BRD reactive counter-CC.
+  Both jobs can respond to the exact DNC Contradance `29432` startup; WHM uses
+  Miracle of Nature `29228` at native 10-yalm range and BRD uses Silent Nocturne
+  `29395` at native 20-yalm range. Existing MCH/SAM/VPR urgent startup paths
+  remain WHM-only, with VPR still waiting for live Hardened Scales absence.
+- Expanded the enemy-Purify follow-up from Stun to all six exact removable PvP
+  statuses: Stun, Heavy, Bind, Silence, Miracle of Nature, and Deep Freeze. It
+  requires exact self-Purify, positive live Resilience followed by stable real
+  absence, and exact team focus of at least two: the local hard target plus at
+  least one exact ally hard-targeting the same enemy.
+- Replaced the Miracle-only success card with action-specific blue
+  `AUTO CC LANDED` confirmation. It requires exact Miracle status for WHM or
+  Silence for BRD on the pending enemy. It proves the counter-CC status landed;
+  it does not prove Contradance, another limit break, or damage was interrupted.
+- Added a separate default-off, exact-CC party-visible Attack1 focus module. An
+  enemy is eligible only when Guard is known unavailable and HP is at or below
+  50% and/or trusted low MP is active. The trusted state enters after 150 ms
+  below 2,000 MP and clears after 150 ms at or above 2,300 MP. Ranking is both
+  low, HP-only, MP-only, then lowest HP%, lowest trusted MP%, highest known
+  team-target count, and stable `<e1>`-`<e5>` slot.
+- The marker module sends only the hardcoded normal `/mk attack1 <eN>` command,
+  never changes the selected target, never overwrites an occupied Attack1, and
+  clears only after an empty-to-exact-target transition established ownership
+  and the same slot, actor, and marker timestamp still match. Native command and
+  shared-marker behavior still require live current-patch CC validation.
+- Added focused Jobs settings and diagnostics for defensive utilities, reactive
+  counter-CC, and the team-visible sign. Existing Miracle master/post-Purify
+  choices migrate into the new reactive controls; DNC activation remains off
+  for upgrades. Defensive and marker masters remain default-off; the reactive
+  master defaults off for new installs while preserving an existing Miracle opt-in.
+- Bumped the plugin version to 0.13.0.0 and configuration schema to 17. Source
+  build and deterministic tests validate thresholds, ordering, fail-closed
+  identity, debounce, and marker ownership rules; they do not claim fresh live
+  confirmation of native line of sight, action timing, interruption, or the
+  party-visible marker command.
+
 ## 0.12.0.1
 
 - Hardened exact enemy resolution for the default-off CC-immunity brake when

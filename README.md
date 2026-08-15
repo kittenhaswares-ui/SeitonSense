@@ -2,13 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.12.0.1 hardens the
-optional CC brake for public-match enemy flags and applies its final protection
-check to plugin-owned Miracle attempts as well. It retains version 0.12.0.0's
-strict, independently default-off post-Purify Stun follow-up beneath the
-existing default-off WHM Miracle helper. The suite
-combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super
-Focus Glow into one configurable custom-repository plugin.
+one-shot macro assistance, and target highlights. Version 0.13.0.0 adds an
+urgent local isolation warning and three conservative, opt-in CC utilities:
+defensive Purify/Guard/Guardian decisions, WHM/BRD reactive counter-CC, and a
+real team-visible Attack1 focus sign. The suite combines the useful parts of
+HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow into one configurable
+custom-repository plugin.
 
 ## Highlights
 
@@ -39,6 +38,10 @@ Focus Glow into one configurable custom-repository plugin.
   default and can play one selectable built-in FFXIV sound per verified threat.
   Warning-card background opacity is independent from its icon, text, and
   border, so the fill can be fully transparent without hiding the warning.
+- **Urgent isolation warning:** in exact Crystalline Conflict, a large gently
+  pulsing top-left warning appears only after a complete five-person local party
+  proves that no living ally is within 20 yalms and native line of sight. Missing,
+  ambiguous, or unknown native reachability stays silent.
 - **Native-HUD resource aura:** low HP softly pulses red around your visible
   native action bars, trusted low MP pulses blue, and both together pulse
   purple. The same state can be drawn more subtly around exact party-list and
@@ -69,14 +72,21 @@ Focus Glow into one configurable custom-repository plugin.
   uses HP, incoming pressure, trusted MP, and distance in that order. A matching
   successful status-removal effect produces a blue `CLEANSED` popup and feeds
   resettable, in-memory match/session counters.
-- **Experimental Miracle intercept:** on WHM, one eligible physical held or
-  freshly pressed key generation can make one Miracle of Nature attempt against
-  the exact enemy starting Marksman's Spite, Zantetsuken, or Furious Backlash /
-  Nest der Blutschuppen. MCH/SAM opportunities last 500 ms, VPR lasts 250 ms,
-  and the VPR path waits for Hardened Scales to be genuinely absent; no visible
-  target change, fallback action, or retry is added. A separate default-off
-  subtype can follow an exact enemy self-Purify that removed Stun, but only
-  after Resilience was positively observed and then genuinely disappeared.
+- **Experimental defensive utilities:** the default-off CC helper can use one
+  physical input generation for a high-pressure Stun Purify, a later-generation
+  Guard after positive Resilience, a low-HP pre-Guard, or PLD Guardian on an
+  exact critically low ally. An active own Guard, plus the bounded 1.5-second
+  status-propagation window after an exact Guard request, blocks all plugin action
+  helpers.
+- **Experimental reactive counter-CC:** the default-off helper uses WHM Miracle
+  of Nature or BRD Silent Nocturne on an exact DNC Contradance startup. It can
+  also follow any of the six exact Purify-removable enemy statuses only after
+  real Resilience ends and exact team focus reaches two. Existing urgent
+  MCH/SAM/VPR startup paths remain WHM-only.
+- **Optional team focus sign:** a separate default-off module can place the real,
+  party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
+  and whose HP and/or trusted MP is low. It never overwrites an occupied Attack1,
+  clears only a sign it can still prove it owns, and never changes your target.
 - **Experimental Monk Earth's Reply:** while exact Earth Resonance is active on
   PvP Monk, a separate default-off helper can make one exact Earth's Reply
   attempt at or below 30% HP or at 1.25 seconds remaining by default. It never
@@ -85,10 +95,10 @@ Focus Glow into one configurable custom-repository plugin.
 - **Target clarity:** the integrated focus glow, independent current-target
   highlight, and fixed target-information card remain optional. The information
   card can also show team pressure and whether that target is pressuring you.
-- **Cleaner settings:** the CC-immunity brake, general resource readability and
-  the Ninja, Monk, BRD/WHM, and WHM helpers are grouped under a dedicated Jobs
-  tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 16 preserves
+- **Cleaner settings:** defensive utilities, reactive counter-CC, the team focus
+  sign, CC-immunity brake, resource readability, and job helpers are grouped
+  under a dedicated Jobs tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
+  focused on their own feature families. Configuration schema 17 preserves
   existing settings; every action-attempt feature remains opt-in.
 
 ## Pressure and team focus
@@ -179,6 +189,24 @@ Active Guard replaces the crossed Guard-cooldown icon instead of creating a
 duplicate. Guard cooldown remains an estimate based only on a Guard status
 observed by this client; unknown cooldowns are never guessed. Guard does not
 block the Seiton cue because Seiton Tenchu ignores Guard.
+
+## Isolation warning and positioning scope
+
+The isolation warning is a local, action-free Crystalline Conflict cue. It
+requires the exact complete five-person party, including the local player and
+four unique allies. Each living ally is checked with FFXIV's native 20-yalm
+range/line-of-sight result. The large top-left card enters only after 500 ms of
+continuous confirmed isolation and clears after 200 ms of confirmed connection;
+dead allies do not count as a reachable teammate. Any incomplete identity,
+unsupported native result, or other ambiguity suppresses the warning rather
+than guessing.
+
+This release deliberately does not include a position guide, automatic
+navigation, Splatoon integration, or map painting. A useful position changes
+too quickly with map geometry, teams, objectives, and the current fight for a
+static overlay to remain trustworthy. The isolation cue reports only the narrow
+fact it can prove: no living ally is currently within 20 yalms and native line
+of sight.
 
 ## Optional CC-immunity brake
 
@@ -334,79 +362,84 @@ session plus per-action/per-status details. These aggregates live only in
 memory. The provided reset clears the displayed statistics and does not create
 another action or confirmation.
 
-The WHM-only **Miracle intercept** is a separate, default-off Crystalline
-Conflict experiment. Its three urgent triggers watch exact server start signals:
-Marksman's Spite `29415`, Zantetsuken `29537`, and the VPR Furious Backlash /
-Nest der Blutschuppen action `39188`. If an eligible physical key generation is
-held or freshly pressed during the bounded opportunity, the exact canonical
-enemy remains alive and targetable, and Miracle's native 10-yalm range and
-line-of-sight check passes, Seiton Sense may make one Miracle of Nature `29228`
-attempt on that enemy.
+The **Defensive utilities** module is a separate, default-off Crystalline
+Conflict helper. All of its rules require one fresh or explicitly eligible held
+physical gameplay-key generation and exact local metadata. At three or more
+unique enemies currently pressuring you, an exact Stun can enable one Purify
+attempt even if the ordinary Purify helper is off. Guard is never attempted from
+that same physical generation: the helper must positively observe live
+Resilience `3248`, see the removable CC gone, and receive a genuinely new
+release/repress generation inside its bounded follow-up window.
 
-MCH and SAM opportunities expire after 500 ms; the VPR opportunity expires
-after 250 ms. For VPR, the start signal only arms that short-lived opportunity.
-The helper waits for live Hardened Scales `4096` to disappear and never predicts
-its end from a countdown. Other verified Miracle blockers also prevent deliberately
-spending Miracle into immunity. Self-Purify has first claim on the shared
-physical input, Ally Rescue second, and Miracle third. A transient higher-
-priority claim no longer destroys an already armed exact Miracle opportunity,
-but it does consume that physical input generation. The opportunity keeps its
-original 500-ms or 250-ms deadline and can act only from a genuinely fresh
-eligible generation that arrives before expiry. State and input are consumed
-before the one native request; there is no selected-target change, alternate
-target, fallback, or retry. Turbo-generated logical repeats do not create new
-physical intent.
+The second defensive rule can pre-Guard at or below 50% HP while the same
+three-enemy pressure threshold is known and no Purify-removable CC is already
+present. This is a risk reaction, not a prediction that an instant future stun
+will occur. The PLD-only rule can attempt Guardian `29066` for an exact living,
+targetable, non-self party member at or below 20% HP, at a strict distance below
+10 yalms, and inside native range and line of sight. Both your own Guard and
+Guardian must be available. Candidates rank by lowest exact HP percentage,
+then known higher incoming pressure, distance, and stable party identity.
 
-That plugin-owned request also passes through the final CC-immunity brake after
-redirect bypass. If the exact target gains a verified Miracle blocker between
-the helper pre-check and the native request, the single incoming attempt can be
-stopped without changing its target or creating another attempt.
+While your own Guard is active, Seiton Sense blocks all of its action-request
+helpers, including Purify, defensive utilities, Ally Rescue, reactive counter-CC,
+and Earth's Reply. The same suppression starts immediately for a bounded 1.5
+seconds after an exact local Guard request, covering the short interval before
+the live Guard status becomes visible without extending the deadline. This
+prevents the plugin from cancelling Guard. It cannot prevent a manual game action
+or another plugin from cancelling Guard, and the exact live client/server ordering
+of these new rules still needs in-game validation.
 
-A fourth **post-Purify Stun** subtype is independently default-off beneath that
-existing Miracle master. Only when explicitly enabled does it accept an exact
-enemy self-Purify `29056` ActionEffect with one self target and a recovered Stun
-`1343` result (`0x10`).
-The source must resolve to exactly one live canonical `<e1>`-`<e5>` opponent.
-The helper then requires positive live Resilience `3248` membership within
-750 ms, waits for that same status to be continuously absent for 150 ms, and
-abandons the release wait 3 seconds after positive observation. A confirmed
-release opens one 500-ms opportunity; it never predicts the status timer, reads
-an internal status address, or uses `RemainingTime` to decide when immunity
-ended.
+The **Reactive counter-CC** module is also default-off and CC-only. On WHM it
+uses Miracle of Nature `29228` at native 10-yalm range; on BRD it uses Silent
+Nocturne `29395` at native 20-yalm range. Both jobs can respond to the exact
+early DNC Contradance `29432` startup signal. The existing urgent Marksman's
+Spite `29415`, Zantetsuken `29537`, and VPR Furious Backlash / Nest der
+Blutschuppen `39188` startup paths remain WHM-only. VPR waits for live Hardened
+Scales `4096` to be genuinely absent, and every path revalidates exact canonical
+enemy identity, life/targetability, action-specific CC protection, native range,
+and line of sight.
 
-The original urgent MCH/SAM/VPR threats keep priority over this longer
-follow-up. The released opportunity otherwise uses the same eligible held or
-fresh physical key generation, exact actor revalidation, complete Miracle
-protection matrix, and native 10-yalm range/line-of-sight gate. State and input
-are consumed before the sole Miracle attempt. There is no alternate target,
-fallback, timer-based prefire, replay, or retry. Its 500 ms are always measured
-from the original verified Resilience-release edge; waiting behind an urgent
-threat never restarts or extends that window.
+The post-Purify subtype now accepts all six exact recovered statuses: Stun
+`1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of Nature `3085`, and
+Deep Freeze `3219`. It requires exact enemy self-Purify `29056`, positive live
+Resilience `3248`, and then 150 ms of stable real Resilience absence rather than
+predicting its timer. Promotion also requires exact team focus of at least two:
+the enemy must be your current hard target and at least one exact ally's hard
+target. The resulting opportunity retains its original bounded release edge and
+is never extended while another threat has priority.
 
-After that sole helper attempt, the same bounded action-effect capture can show
-a blue `MIRACLE LANDED` news flash for 1.5 seconds. It requires the exact local
-caster, Miracle action `29228`, pending threat target, server status-add effect
-`0x0E`, and Miracle status `3085` within 1500 ms. The subtitle distinguishes
-`MCH LB`, `SAM LB`, `VPR NEST`, and the post-Purify Stun follow-up. This confirms
-that Miracle landed on the intended enemy; it does not conclusively prove that
-the hostile action was interrupted or cancelled. Correlation preserves the
-first still-unexpired pending helper
-attempt; a later registration cannot overwrite it before it expires. A preview
-button is available beside the Miracle settings.
+Self-Purify, defensive utilities, Ally Rescue, and reactive counter-CC share one
+physical-generation path in that order. State and input are consumed before one
+normal exact-target request; there is no visible selected-target change,
+alternate action/target, fallback, replay, or retry. Plugin-owned Miracle and
+Silent Nocturne requests still pass through the final action-specific
+CC-immunity brake immediately before the native call.
 
-The MCH and SAM signals occur before their later damage presentation in the
-current captured event shape, but FFXIV remains authoritative. A locally
-accepted Miracle request is not proof that the already-started action was
-interrupted. This path is intentionally marked experimental until it has been
-rechecked live on the current patch.
+After the sole request, a blue `AUTO CC LANDED` popup appears only if the bounded
+ActionEffect observer captures the matching status on that exact pending enemy:
+Miracle `3085` for WHM or Silence `1347` for BRD. A local client-accepted request
+does not count. Even an exact landed popup proves only that the counter-CC status
+landed; it does not conclusively prove that Contradance, another limit break, or
+its damage was interrupted. All startup timing, Purify/Resilience release
+ordering, BRD/WHM dispatch, and claimed interruption outcomes remain explicit
+current-patch live-validation boundaries.
 
-`/seiton debug` and the Advanced settings diagnostics now retain aggregate
-Miracle opportunity counts and the last opportunity result after leaving CC:
-recognized, armed, rejected, protection/range/input/priority waits, and expiry.
-The active threat and bounded queues are still cleared on context exit. Live CC
-evidence reached the existing native 10-yalm range/line-of-sight gate; this
-release keeps that range and every identity, protection, deadline, input,
-one-attempt, and no-retry boundary unchanged.
+The separate **team-visible enemy focus sign** module is default-off and exact
+CC-only. It considers an enemy only when this client knows Guard is unavailable
+and the exact enemy is at or below 50% HP and/or has entered the trusted low-MP
+state. That state enters after 150 ms continuously below 2,000 MP and clears
+after 150 ms continuously at or above 2,300 MP, preventing threshold flicker.
+Priority is both low, then HP-only, then MP-only; ties use lowest exact
+HP percentage, lowest trusted MP percentage, highest known exact team-target count,
+and stable `<e1>`-`<e5>` slot.
+
+The module sends only the hardcoded normal `/mk attack1 <eN>` command and never
+changes the selected target. It never overwrites an occupied Attack1 sign. It
+claims ownership only after observing an empty-to-exact-target transition with a
+changed native marker timestamp, and clears only while the same slot, actor, and
+timestamp still match. Uncertain ownership deliberately leaves the sign alone.
+The command path and party-visible ownership/clear behavior are covered at
+source level but still require live current-patch Crystalline Conflict validation.
 
 The Monk section contains a separate default-off Earth's Reply helper for PvP
 job 20. It requires one exact Earth Resonance `3171`, current metadata
@@ -584,9 +617,12 @@ focus module to avoid drawing both over the same actor.
 | Verified CC-protection icons | Yes | Yes, for the strict duel opponent | Yes, including large-scale-only Swift |
 | Optional per-action CC-immunity brake | Yes | No | No |
 | Personal warnings and optional self-Purify | Yes | Yes | No |
+| Urgent isolation warning | Yes | No | No |
 | Native-HUD low-resource aura | Yes | Yes | Yes, without CC team rows |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
-| Optional WHM Miracle intercept | Yes | No | No |
+| Optional defensive utilities | Yes | No | No |
+| Optional WHM/BRD reactive counter-CC | Yes | No | No |
+| Optional team-visible Attack1 focus sign | Yes | No | No |
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Near Assist | Yes | No | No |
@@ -626,7 +662,8 @@ update through the same repository.
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
-  selected-target CC-brake resolution, and retained Miracle opportunity results
+  selected-target CC-brake resolution, isolation/defensive state, and retained
+  reactive counter-CC opportunity results
 - `/seiton reset` - restore defaults
 
 ## Standalone plugin retirement
@@ -654,19 +691,29 @@ be read only to resolve an unchanged native target carrier of `0` or
 path is never restored. A missing hostile flag can be replaced only by the
 strict complete visible five-member party proof in a known public CC territory;
 self, party/alliance, native identity, and exact `<e1>`-`<e5>` checks remain.
-Plugin-owned Miracle attempts receive the same final brake after redirect
-bypass. The brake never stores or replays input and never chooses another
-target or action. Near Assist, Near Help, and Far Help can
+Plugin-owned Miracle and Silent Nocturne attempts receive the same final
+action-specific brake after redirect bypass. The brake never stores or replays
+input and never chooses another target or action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
-action. The optional self-Purify, Ally Rescue, and Miracle experiments may each
-initiate one exact action attempt, but share one physical-generation ownership
-path with self-Purify first, Ally Rescue second, and Miracle third. Ally Rescue
+action. Optional self-Purify, defensive utilities, Ally Rescue, and reactive
+counter-CC may each initiate one exact action attempt, but share one physical-
+generation ownership path in that order. A post-Purify Guard requires a new
+physical generation. While your own Guard is active, all Seiton action-request
+helpers are blocked; the same gate applies for the bounded 1.5-second status-
+propagation interval after an exact local Guard request. Manual game actions remain
+outside that protection. Ally Rescue
 labels a removal `CLEANSED` only after the exact
 successful status-removal ActionEffect is observed; attempts and client-accepted
 requests alone are not success claims.
 The separate default-off Monk helper may initiate at most one exact Earth's
 Reply attempt per continuously observed Earth Resonance after self-Purify
 declines priority; it has no alternate action or retry.
+
+The isolation warning is local and display-only. The optional Attack1 focus
+module is not display-only: it issues one normal, hardcoded party-visible marker
+command when its exact gates pass. It never swaps targets or overwrites an
+occupied Attack1 sign and clears only a marker whose ownership it can still
+prove from exact identity and marker time.
 
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
@@ -683,19 +730,18 @@ the Dalamud plugin SDK depends on assemblies from a local XIVLauncher install.
 Those checks validate source, contracts, and packaging; they are not a claim of
 fresh live in-game confirmation. Exact nameplate placement, native action-bar /
 party-row / current CC-row aura anchoring, pressure evidence, MCH marker/sound
-timing, optional Purify/Ally Rescue/Miracle/Earth's Reply behavior, and the macro helpers
-with both normal macros and Turbo Hotbar should be rechecked in the relevant
-live PvP context after FFXIV, Dalamud, macro, network-event, or input-handling
-changes. Live CC evidence reached Miracle's unchanged native 10-yalm range/LoS
-gate. The CC-immunity brake's selected-target sentinel resolution, direct-
-hotbar and Turbo pulse behavior, hard-return boundary, expiry edge, and
-simultaneous server-acceptance race still require continued current-patch A/B
-testing. The public-match complete-party fallback and final brake on internal
-Miracle requests likewise require a current-patch live CC A/B test. The
-post-Purify Stun signal, positive Resilience observation, stable
-release window, and resulting Miracle attempt also require a live CC A/B test.
-The 0.7.0.1 ActionEffect confirmation and
-blue popup still require
-current-patch live validation. The v0.8 MCH/SAM/VPR start-marker timing and any
-actual Miracle interruption likewise require a live CC A/B test; source and
-package checks cannot prove that server outcome.
+timing, optional action helpers, and the macro helpers with both normal macros
+and Turbo Hotbar should be rechecked in the relevant live PvP context after
+FFXIV, Dalamud, macro, network-event, or input-handling changes.
+
+For v0.13.0.0 specifically, source tests cover the isolation debounce and
+fail-closed unknown state, defensive thresholds and generation ownership,
+reactive event/status/team-focus rules, and Attack1 selection/ownership rules.
+They do not prove the current client's native 20-yalm line-of-sight result,
+Purify-to-Resilience-to-new-generation Guard ordering, pre-Guard/Guardian
+dispatch, Contradance startup timing, BRD/WHM counter dispatch, or the native
+party-visible marker command and clear path. An `AUTO CC LANDED` confirmation
+proves the matching status was observed on the intended enemy, not that a limit
+break or damage was stopped. Those outcomes all require a current-patch live CC
+A/B test. The deliberately omitted position/Splatoon guide has no runtime or
+validation claim.

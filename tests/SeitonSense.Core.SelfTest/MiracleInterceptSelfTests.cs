@@ -16,11 +16,37 @@ internal static class MiracleInterceptSelfTests
             MiracleInterceptThreatKind.FuriousBacklash,
             Classify(39_188, 10, 10, 0, true, true),
             "VPR self start packet");
+        Equal(
+            MiracleInterceptThreatKind.Contradance,
+            Classify(29_432, 10, 10, 0, true, true, variation: 0),
+            "DNC variation-0 self startup packet");
 
         Equal(MiracleInterceptThreatKind.None, Classify(29_415, 10, 20, 3, false, true), "MCH hit");
         Equal(MiracleInterceptThreatKind.None, Classify(29_537, 10, 20, 0, true, false), "SAM extra effect");
         Equal(MiracleInterceptThreatKind.None, Classify(39_188, 10, 20, 0, true, true), "VPR wrong target");
         Equal(MiracleInterceptThreatKind.None, Classify(39_187, 10, 10, 0, true, true), "base Backlash excluded");
+        Equal(
+            MiracleInterceptThreatKind.None,
+            Classify(29_432, 10, 10, 0, true, true, variation: 2),
+            "DNC impact variation excluded");
+        Equal(
+            MiracleInterceptThreatKind.None,
+            Classify(29_432, 10, 20, 0, true, true, variation: 0),
+            "DNC startup must be self-targeted");
+
+        Equal(
+            3,
+            MiracleInterceptRules.GetDispatchPriority(MiracleInterceptThreatKind.MarksmanSpite),
+            "urgent one-shot threat priority");
+        Equal(
+            2,
+            MiracleInterceptRules.GetDispatchPriority(MiracleInterceptThreatKind.Contradance),
+            "DNC startup follows urgent one-shots");
+        Equal(
+            1,
+            MiracleInterceptRules.GetDispatchPriority(
+                MiracleInterceptThreatKind.PostPurifyCrowdControl),
+            "post-Purify follow-up is lowest reactive priority");
     }
 
     internal static void HeldInputDispatchesAndSignalCannotRearm()
@@ -94,6 +120,18 @@ internal static class MiracleInterceptSelfTests
             viperWaiting.NextState,
             Observation(null, 2_250, held: true));
         Equal(MiracleInterceptCancelReason.ThreatExpired, viperExpired.CancelReason, "exact 250ms Viper boundary expires");
+
+        var dancer = Threat(MiracleInterceptThreatKind.Contradance, 32, 3_000);
+        var dancerWaiting = MiracleInterceptRules.Observe(
+            MiracleInterceptState.Initial,
+            Observation(dancer, 3_000));
+        var dancerExpired = MiracleInterceptRules.Observe(
+            dancerWaiting.NextState,
+            Observation(null, 3_750, held: true));
+        Equal(
+            MiracleInterceptCancelReason.ThreatExpired,
+            dancerExpired.CancelReason,
+            "exact 750ms DNC startup boundary expires");
     }
 
     internal static void HigherPriorityAndIdentityFailClosed()
@@ -168,7 +206,10 @@ internal static class MiracleInterceptSelfTests
             Observation(threat with
             {
                 Signal = threat.Signal with { GlobalSequence = 51 },
-            }, 3_000, fresh: true, held: true) with { IsTextInputActive = true });
+            }, 3_000, fresh: true, held: true) with
+            {
+                IsTextInputActive = true,
+            });
         False(typing.ShouldDispatch, "chat input is never intent");
     }
 
@@ -196,7 +237,8 @@ internal static class MiracleInterceptSelfTests
         uint target,
         byte firstType,
         bool firstEmpty,
-        bool additionalEmpty) =>
+        bool additionalEmpty,
+        byte variation = 0) =>
         MiracleInterceptRules.ClassifyExactStartSignal(
             action,
             caster,
@@ -204,7 +246,8 @@ internal static class MiracleInterceptSelfTests
             1,
             firstType,
             firstEmpty,
-            additionalEmpty);
+            additionalEmpty,
+            variation);
 
     private static MiracleInterceptThreat Threat(
         MiracleInterceptThreatKind kind,
@@ -216,6 +259,7 @@ internal static class MiracleInterceptSelfTests
             MiracleInterceptThreatKind.MarksmanSpite => MiracleInterceptRules.MarksmanSpiteActionId,
             MiracleInterceptThreatKind.Zantetsuken => MiracleInterceptRules.ZantetsukenActionId,
             MiracleInterceptThreatKind.FuriousBacklash => MiracleInterceptRules.FuriousBacklashActionId,
+            MiracleInterceptThreatKind.Contradance => MiracleInterceptRules.ContradanceActionId,
             _ => 0,
         };
         uint job = kind switch
@@ -223,6 +267,7 @@ internal static class MiracleInterceptSelfTests
             MiracleInterceptThreatKind.MarksmanSpite => MiracleInterceptRules.MachinistJobId,
             MiracleInterceptThreatKind.Zantetsuken => MiracleInterceptRules.SamuraiJobId,
             MiracleInterceptThreatKind.FuriousBacklash => MiracleInterceptRules.ViperJobId,
+            MiracleInterceptThreatKind.Contradance => MiracleInterceptRules.DancerJobId,
             _ => 0,
         };
         return new MiracleInterceptThreat(
@@ -245,7 +290,7 @@ internal static class MiracleInterceptSelfTests
         new(
             ConfigurationEnabled: true,
             IsCrystallineConflict: true,
-            IsLocalWhiteMageValid: true,
+            IsLocalCounterJobValid: true,
             HigherPriorityClaimed: false,
             NewThreat: threat,
             CandidateIdentityValid: true,

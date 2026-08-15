@@ -98,6 +98,23 @@ internal sealed class TargetPressureTracker : IDisposable
     }
 
     /// <summary>
+    /// Returns the existing HOWMANY union for the exact local player. False is
+    /// unknown/inactive and must never be treated as a synthetic zero.
+    /// </summary>
+    internal bool TryGetSelfIncomingPressure(out int uniqueEnemyCount)
+    {
+        var current = Snapshot;
+        if (current.Active && current.PressureActive)
+        {
+            uniqueEnemyCount = current.IncomingOpponents.Count;
+            return true;
+        }
+
+        uniqueEnemyCount = 0;
+        return false;
+    }
+
+    /// <summary>
     /// Returns current incoming intent for one exact party ally. False means
     /// pressure tracking is inactive or that exact identity is absent; it must
     /// not be treated as a synthetic zero-pressure observation.
@@ -161,8 +178,12 @@ internal sealed class TargetPressureTracker : IDisposable
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
-                                      configuration.NearAssistPreferTeamPressure ||
-                                      configuration.ShowCurrentTargetInfoHud;
+                                       configuration.NearAssistPreferTeamPressure ||
+                                       configuration.ShowCurrentTargetInfoHud ||
+                                       configuration.EnableDefensiveUtilities ||
+                                       (configuration.EnableReactiveCcUtilities &&
+                                        configuration.ReactiveCcAfterEnemyPurify) ||
+                                       configuration.EnableAutoEnemyFocusMark;
         var pressureEnabledForContext = pressureFeaturesEnabled &&
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);
         var incomingAllyPressureEnabledForContext =
@@ -201,7 +222,9 @@ internal sealed class TargetPressureTracker : IDisposable
             return;
         }
 
-        capture.SetPressureLocalEntityId(pressureEnabledForContext ? local.EntityId : 0);
+        var localPlayer = local!;
+
+        capture.SetPressureLocalEntityId(pressureEnabledForContext ? localPlayer.EntityId : 0);
         if (!pressureEnabledForContext)
         {
             capture.ClearPressureEvents();
@@ -215,9 +238,10 @@ internal sealed class TargetPressureTracker : IDisposable
         Dictionary<ulong, int> exactEnemySlots;
         if (isWolvesDen)
         {
-            var opponent = WolvesDenOpponentResolver.Resolve(objectTable, local, out _, out _, out _);
-            exactEnemySlots = CreateIdentity(opponent).IsValid
-                ? new Dictionary<ulong, int> { [opponent!.GameObjectId] = EnemySlotRules.FirstSlot }
+            var opponent = WolvesDenOpponentResolver.Resolve(objectTable, localPlayer, out _, out _, out _);
+            var opponentIdentity = CreateIdentity(opponent);
+            exactEnemySlots = opponent is not null && opponentIdentity.IsValid
+                ? new Dictionary<ulong, int> { [opponent.GameObjectId] = EnemySlotRules.FirstSlot }
                 : [];
         }
         else
@@ -316,10 +340,14 @@ internal sealed class TargetPressureTracker : IDisposable
         foreach (var (player, observation) in enemies)
         {
             liveIdentities.Add(observation.Actor);
-            var sources = pressureEnabledForContext &&
-                          core.TryGetOpponent(observation.Actor, out var opponent)
-                ? opponent.Sources
-                : TargetPressureSources.None;
+            var sources = TargetPressureSources.None;
+            if (pressureEnabledForContext)
+            {
+                if (core.TryGetOpponent(observation.Actor, out var opponentSnapshot))
+                {
+                    sources = opponentSnapshot.Sources;
+                }
+            }
             var displays = UpdateProtections(player, observation.Actor, now, isLargeScalePvP);
             protectionCount += displays.Count;
             result.Add(new TargetPressureOpponentSnapshot(

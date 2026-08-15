@@ -28,6 +28,7 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 LowHealthAuraColor = new(1f, 0.08f, 0.16f, 1f);
     private static readonly Vector4 LowManaAuraColor = new(0.12f, 0.48f, 1f, 1f);
     private static readonly Vector4 CombinedResourceAuraColor = new(0.72f, 0.16f, 1f, 1f);
+    private static readonly Vector4 IsolationColor = new(1f, 0.72f, 0.18f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.96f);
     private const uint WardensPaeanIconId = 9628;
@@ -37,6 +38,7 @@ internal sealed class OverlayRenderer
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly IsolationAwarenessService isolationAwareness;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly IGameGui gameGui;
@@ -51,6 +53,7 @@ internal sealed class OverlayRenderer
         ExecuteTracker tracker,
         PersonalStatusService personalStatus,
         TargetPressureTracker pressureTracker,
+        IsolationAwarenessService isolationAwareness,
         NamePlateAnchorTracker namePlateAnchors,
         ResourceAuraAnchorTracker resourceAuraAnchors,
         IGameGui gameGui,
@@ -60,6 +63,7 @@ internal sealed class OverlayRenderer
         this.tracker = tracker;
         this.personalStatus = personalStatus;
         this.pressureTracker = pressureTracker;
+        this.isolationAwareness = isolationAwareness;
         this.namePlateAnchors = namePlateAnchors;
         this.resourceAuraAnchors = resourceAuraAnchors;
         this.gameGui = gameGui;
@@ -81,6 +85,7 @@ internal sealed class OverlayRenderer
     }
     public bool CcProtectionPreviewEnabled { get; set; }
     public bool ResourceAuraPreviewEnabled { get; set; }
+    public bool IsolationWarningPreviewEnabled { get; set; }
     public int NativeAnchorCount => namePlateAnchors.Anchors.Count;
     public int ResourceAuraAnchorCount => resourceAuraAnchors.LastAnchorCount;
     public int ResourceAuraSelfHotbarCount => resourceAuraAnchors.LastSelfHotbarCount;
@@ -114,9 +119,11 @@ internal sealed class OverlayRenderer
         previewAllyRescueConfirmation = null;
         var now = Environment.TickCount64;
         previewMiracleInterceptConfirmation = new MiracleInterceptConfirmationPopup(
+            MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
             1,
             1,
             MiracleInterceptThreatKind.MarksmanSpite,
+            0,
             now,
             now + MiracleInterceptConfirmationRules.PopupDurationMilliseconds);
     }
@@ -131,6 +138,8 @@ internal sealed class OverlayRenderer
         DrawPopup(previewPopup);
 
         var now = Environment.TickCount64;
+        if (IsolationWarningPreviewEnabled || isolationAwareness.Snapshot.Visible)
+            DrawIsolationWarning(now);
         DrawResourceAuras(now);
         if (!configuration.Enabled)
         {
@@ -152,6 +161,59 @@ internal sealed class OverlayRenderer
         // filters those cards itself, so a confirmed cleanse stays visible even
         // when ordinary personal warnings are hidden.
         DrawPersonalWarnings(now);
+    }
+
+    private void DrawIsolationWarning(long now)
+    {
+        var configuredScale = Math.Clamp(configuration.IsolationWarningScale, 0.75f, 1.75f);
+        var scale = configuredScale * ImGuiHelpers.GlobalScale;
+        var viewport = ImGui.GetMainViewport();
+        var topLeft = viewport.WorkPos + (new Vector2(28f, 42f) * ImGuiHelpers.GlobalScale);
+        var bottomRight = topLeft + (new Vector2(342f, 88f) * scale);
+        var cycle = ((now % 60_000L) / 1000d) * Math.Tau * 0.55d;
+        var pulse = (float)((Math.Sin(cycle) + 1d) * 0.5d);
+        var accentAlpha = 0.72f + (pulse * 0.2f);
+        var fillAlpha = 0.68f + (pulse * 0.06f);
+        var rounding = 11f * scale;
+        var draw = ImGui.GetForegroundDrawList();
+
+        // Geometry is deliberately static; only alpha breathes so the corner
+        // warning remains noticeable without looking like an urgent hit alert.
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(0.025f, 0.028f, 0.04f, fillAlpha)),
+            rounding);
+        draw.AddRectFilled(
+            topLeft,
+            new Vector2(topLeft.X + (7f * scale), bottomRight.Y),
+            Pack(new Vector4(IsolationColor.X, IsolationColor.Y, IsolationColor.Z, accentAlpha)),
+            rounding);
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(IsolationColor.X, IsolationColor.Y, IsolationColor.Z, accentAlpha)),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2f, 2.6f * scale));
+
+        var textLeft = topLeft.X + (22f * scale);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textLeft, topLeft.Y + (12f * scale)),
+            "ISOLATED",
+            1.55f * configuredScale,
+            false,
+            0.94f,
+            IsolationColor);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textLeft, topLeft.Y + (58f * scale)),
+            "NO ALLY <=20y IN SIGHT",
+            0.76f * configuredScale,
+            false,
+            0.86f,
+            new Vector4(0.9f, 0.94f, 1f, 1f));
     }
 
     private void DrawResourceAuras(long now)
@@ -383,7 +445,9 @@ internal sealed class OverlayRenderer
         var iconMax = iconMin + new Vector2(iconSize);
         if (!TryDrawGameIcon(
                 draw,
-                EnemyCombatConstants.MiracleOfNatureActionIconId,
+                popup.ActionId == EnemyCombatConstants.SilentNocturneActionId
+                    ? EnemyCombatConstants.SilentNocturneActionIconId
+                    : EnemyCombatConstants.MiracleOfNatureActionIconId,
                 iconMin,
                 iconMax,
                 1f))
@@ -399,25 +463,45 @@ internal sealed class OverlayRenderer
         DrawOutlinedText(
             draw,
             new Vector2(textCenterX, center.Y - (21f * scale)),
-            "MIRACLE LANDED",
+            "AUTO CC LANDED",
             1.08f * configuredScale,
             true);
         DrawOutlinedText(
             draw,
             new Vector2(textCenterX, center.Y + (13f * scale)),
-            MiracleInterceptConfirmationSubtitle(popup.Threat),
+            MiracleInterceptConfirmationSubtitle(popup),
             0.72f * configuredScale,
             true);
     }
 
-    private static string MiracleInterceptConfirmationSubtitle(MiracleInterceptThreatKind threat) =>
-        threat switch
+    private static string MiracleInterceptConfirmationSubtitle(
+        MiracleInterceptConfirmationPopup popup)
+    {
+        var action = popup.ActionId == EnemyCombatConstants.SilentNocturneActionId
+            ? "SILENCE"
+            : "MIRACLE";
+        return popup.Threat switch
         {
-            MiracleInterceptThreatKind.MarksmanSpite => "INTERRUPT ATTEMPT  •  MCH LB",
-            MiracleInterceptThreatKind.Zantetsuken => "INTERRUPT ATTEMPT  •  SAM LB",
-            MiracleInterceptThreatKind.FuriousBacklash => "INTERRUPT ATTEMPT  •  VPR NEST",
-            MiracleInterceptThreatKind.PostPurifyStun => "CC FOLLOW-UP  •  RESILIENCE ENDED",
-            _ => "INTERRUPT ATTEMPT",
+            MiracleInterceptThreatKind.MarksmanSpite => $"{action}  •  MCH LB START",
+            MiracleInterceptThreatKind.Zantetsuken => $"{action}  •  SAM LB START",
+            MiracleInterceptThreatKind.FuriousBacklash => $"{action}  •  VPR NEST START",
+            MiracleInterceptThreatKind.Contradance => $"{action}  •  DNC LB START",
+            MiracleInterceptThreatKind.PostPurifyCrowdControl =>
+                $"{action}  •  AFTER PURIFY ({PurifyStatusLabel(popup.RemovedStatusId)})",
+            _ => action,
+        };
+    }
+
+    private static string PurifyStatusLabel(uint statusId) =>
+        statusId switch
+        {
+            MiracleCleanseFollowupRules.StunStatusId => "STUN",
+            MiracleCleanseFollowupRules.HeavyStatusId => "HEAVY",
+            MiracleCleanseFollowupRules.BindStatusId => "BIND",
+            MiracleCleanseFollowupRules.SilenceStatusId => "SILENCE",
+            MiracleCleanseFollowupRules.MiracleOfNatureStatusId => "MIRACLE",
+            MiracleCleanseFollowupRules.DeepFreezeStatusId => "DEEP FREEZE",
+            _ => "CC",
         };
 
     private float AllyRescueConfirmationCardHeight() =>
@@ -1376,6 +1460,8 @@ internal sealed class OverlayRenderer
             Environment.TickCount64,
             true,
             18.4f,
+            20000,
+            55500,
             true,
             1200,
             10000);

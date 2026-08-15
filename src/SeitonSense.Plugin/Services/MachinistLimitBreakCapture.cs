@@ -38,6 +38,7 @@ internal readonly record struct MiracleInterceptThreatEvent(
     uint CasterEntityId,
     uint EventTargetEntityId,
     uint ActionId,
+    byte AnimationVariation,
     byte EffectType,
     ushort EffectValue,
     int FeatureGeneration,
@@ -51,6 +52,7 @@ internal readonly record struct MiracleInterceptLandedEffect(
     uint ActionId,
     byte EffectType,
     ushort EffectValue,
+    int FeatureGeneration,
     uint GlobalSequence,
     ushort SourceSequence);
 
@@ -79,6 +81,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private int machinistLocalEntityIdBits;
     private int allyRescueLocalEntityIdBits;
     private int miracleInterceptLocalEntityIdBits;
+    private int miracleInterceptGeneration;
     private int miracleCleanseFollowupLocalEntityIdBits;
     private int miracleCleanseFollowupGeneration;
     private int pressureLocalEntityIdBits;
@@ -109,6 +112,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public uint CurrentMachinistLocalEntityId => unchecked((uint)Volatile.Read(ref machinistLocalEntityIdBits));
     public uint CurrentAllyRescueLocalEntityId => unchecked((uint)Volatile.Read(ref allyRescueLocalEntityIdBits));
     public uint CurrentMiracleInterceptLocalEntityId => unchecked((uint)Volatile.Read(ref miracleInterceptLocalEntityIdBits));
+    public int CurrentMiracleInterceptGeneration => Volatile.Read(ref miracleInterceptGeneration);
     public uint CurrentMiracleCleanseFollowupLocalEntityId =>
         unchecked((uint)Volatile.Read(ref miracleCleanseFollowupLocalEntityIdBits));
     public int CurrentMiracleCleanseFollowupGeneration => Volatile.Read(ref miracleCleanseFollowupGeneration);
@@ -178,6 +182,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             unchecked((int)normalized)));
         if (previous != normalized)
         {
+            Interlocked.Increment(ref miracleInterceptGeneration);
             ClearMiracleInterceptThreats();
             ClearMiracleInterceptConfirmations();
         }
@@ -274,6 +279,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Interlocked.Exchange(ref machinistLocalEntityIdBits, 0);
         Interlocked.Exchange(ref allyRescueLocalEntityIdBits, 0);
         Interlocked.Exchange(ref miracleInterceptLocalEntityIdBits, 0);
+        Interlocked.Increment(ref miracleInterceptGeneration);
         Interlocked.Exchange(ref miracleCleanseFollowupLocalEntityIdBits, 0);
         Interlocked.Increment(ref miracleCleanseFollowupGeneration);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
@@ -465,6 +471,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                 EnemyCombatConstants.MarksmanSpiteActionId or
                 EnemyCombatConstants.ZantetsukenActionId or
                 EnemyCombatConstants.FuriousBacklashActionId or
+                EnemyCombatConstants.ContradanceActionId or
                 EnemyCombatConstants.PurifyActionId))
         {
             return null;
@@ -473,6 +480,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         var localEntityId = actionId == EnemyCombatConstants.PurifyActionId
             ? CurrentMiracleCleanseFollowupLocalEntityId
             : CurrentMiracleInterceptLocalEntityId;
+        var featureGeneration = actionId == EnemyCombatConstants.PurifyActionId
+            ? CurrentMiracleCleanseFollowupGeneration
+            : CurrentMiracleInterceptGeneration;
         if (!IsNetworkEntityId(localEntityId) || casterEntityId == localEntityId)
             return null;
 
@@ -482,10 +492,11 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         var targetEffects = effects[0].Effects;
         if (actionId == EnemyCombatConstants.PurifyActionId)
         {
+            ushort removedStatusId = 0;
             for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
             {
                 var effect = targetEffects[slot];
-                if (!MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+                if (!MiracleCleanseFollowupRules.IsExactPurifySignal(
                         casterEntityId,
                         actionId,
                         targetEntityId,
@@ -497,20 +508,32 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                     continue;
                 }
 
-                return new MiracleInterceptThreatEvent(
+                // One Purify packet can report more than one removed status.
+                // Collapse it to exactly one deterministic lifecycle so a
+                // single physical input can never fan out into multiple CCs.
+                if (removedStatusId == 0 ||
+                    PurifyRemovalPriority(effect.Value) > PurifyRemovalPriority(removedStatusId))
+                {
+                    removedStatusId = effect.Value;
+                }
+            }
+
+            return removedStatusId == 0 ||
+                   featureGeneration != CurrentMiracleCleanseFollowupGeneration ||
+                   localEntityId != CurrentMiracleCleanseFollowupLocalEntityId
+                ? null
+                : new MiracleInterceptThreatEvent(
                     Environment.TickCount64,
                     localEntityId,
                     casterEntityId,
                     targetEntityId,
                     actionId,
-                    effect.Type,
-                    effect.Value,
-                    CurrentMiracleCleanseFollowupGeneration,
+                    header->AnimationVariation,
+                    MiracleCleanseFollowupRules.RecoveredFromStatusEffectType,
+                    removedStatusId,
+                    featureGeneration,
                     header->GlobalSequence,
                     header->SourceSequence);
-            }
-
-            return null;
         }
 
         var kind = MiracleInterceptRules.ClassifyExactStartSignal(
@@ -520,8 +543,14 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             header->NumTargets,
             targetEffects[0].Type,
             IsEmpty(targetEffects[0]),
-            HasOnlyEmptyAdditionalEffects(targetEffects));
-        if (kind == SeitonSense.Core.MiracleInterceptThreatKind.None) return null;
+            HasOnlyEmptyAdditionalEffects(targetEffects),
+            header->AnimationVariation);
+        if (kind == SeitonSense.Core.MiracleInterceptThreatKind.None ||
+            featureGeneration != CurrentMiracleInterceptGeneration ||
+            localEntityId != CurrentMiracleInterceptLocalEntityId)
+        {
+            return null;
+        }
 
         return new MiracleInterceptThreatEvent(
             Environment.TickCount64,
@@ -529,9 +558,10 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             casterEntityId,
             targetEntityId,
             actionId,
+            header->AnimationVariation,
             0,
             0,
-            0,
+            featureGeneration,
             header->GlobalSequence,
             header->SourceSequence);
     }
@@ -543,41 +573,53 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         GameObjectId* targetEntityIds)
     {
         var localEntityId = CurrentMiracleInterceptLocalEntityId;
+        var featureGeneration = CurrentMiracleInterceptGeneration;
         if (!IsNetworkEntityId(localEntityId) ||
             casterEntityId != localEntityId ||
             header == null ||
             effects == null ||
             targetEntityIds == null ||
-            header->NumTargets != 1)
+            header->NumTargets is 0 or > MaximumTargetsPerAction)
         {
             return null;
         }
 
         var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
-        if (actionId != MiracleInterceptConfirmationRules.MiracleOfNatureActionId) return null;
+        var expectedStatus = MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId);
+        if (expectedStatus == 0) return null;
 
-        var targetEntityId = targetEntityIds[0].ObjectId;
-        if (!IsNetworkEntityId(targetEntityId) || targetEntityId == localEntityId) return null;
-
-        var targetEffects = effects[0].Effects;
-        for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
+        for (var targetIndex = 0; targetIndex < header->NumTargets; targetIndex++)
         {
-            var effect = targetEffects[slot];
-            if (effect.Type != MiracleInterceptConfirmationRules.AddStatusEffectType ||
-                effect.Value != MiracleInterceptConfirmationRules.MiracleOfNatureStatusId)
-            {
-                continue;
-            }
+            var targetEntityId = targetEntityIds[targetIndex].ObjectId;
+            if (!IsNetworkEntityId(targetEntityId) || targetEntityId == localEntityId) continue;
 
-            return new MiracleInterceptLandedEffect(
-                Environment.TickCount64,
-                casterEntityId,
-                targetEntityId,
-                actionId,
-                effect.Type,
-                effect.Value,
-                header->GlobalSequence,
-                header->SourceSequence);
+            var targetEffects = effects[targetIndex].Effects;
+            for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
+            {
+                var effect = targetEffects[slot];
+                if (effect.Type != MiracleInterceptConfirmationRules.AddStatusEffectType ||
+                    effect.Value != expectedStatus)
+                {
+                    continue;
+                }
+
+                if (featureGeneration != CurrentMiracleInterceptGeneration ||
+                    localEntityId != CurrentMiracleInterceptLocalEntityId)
+                {
+                    return null;
+                }
+
+                return new MiracleInterceptLandedEffect(
+                    Environment.TickCount64,
+                    casterEntityId,
+                    targetEntityId,
+                    actionId,
+                    effect.Type,
+                    effect.Value,
+                    featureGeneration,
+                    header->GlobalSequence,
+                    header->SourceSequence);
+            }
         }
 
         return null;
@@ -677,14 +719,16 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         var currentLocalEntityId = isCleanseFollowup
             ? CurrentMiracleCleanseFollowupLocalEntityId
             : CurrentMiracleInterceptLocalEntityId;
+        var currentGeneration = isCleanseFollowup
+            ? CurrentMiracleCleanseFollowupGeneration
+            : CurrentMiracleInterceptGeneration;
         if (disposed ||
             Volatile.Read(ref captureBlocked) != 0 ||
             threat.LocalEntityId != currentLocalEntityId ||
             !IsNetworkEntityId(threat.CasterEntityId) ||
             !IsNetworkEntityId(currentLocalEntityId) ||
             threat.CasterEntityId == currentLocalEntityId ||
-            (isCleanseFollowup &&
-             threat.FeatureGeneration != CurrentMiracleCleanseFollowupGeneration))
+            threat.FeatureGeneration != currentGeneration)
         {
             return;
         }
@@ -706,6 +750,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (disposed ||
             Volatile.Read(ref captureBlocked) != 0 ||
             confirmation.CasterEntityId != CurrentMiracleInterceptLocalEntityId ||
+            confirmation.FeatureGeneration != CurrentMiracleInterceptGeneration ||
             !IsNetworkEntityId(confirmation.TargetEntityId))
         {
             return;
@@ -775,6 +820,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
     private static bool IsPurifyRemovableStatus(uint statusId) =>
         statusId is 1343 or 1344 or 1345 or 1347 or 3085 or 3219;
+
+    private static int PurifyRemovalPriority(uint statusId) =>
+        statusId switch
+        {
+            MiracleCleanseFollowupRules.MiracleOfNatureStatusId => 6,
+            MiracleCleanseFollowupRules.DeepFreezeStatusId => 5,
+            MiracleCleanseFollowupRules.StunStatusId => 4,
+            MiracleCleanseFollowupRules.SilenceStatusId => 3,
+            MiracleCleanseFollowupRules.BindStatusId => 2,
+            MiracleCleanseFollowupRules.HeavyStatusId => 1,
+            _ => 0,
+        };
 
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000u;

@@ -2,6 +2,7 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
 
@@ -49,6 +50,9 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal long CleanseFollowupPromotionCount { get; init; }
     internal long CleanseFollowupCancellationCount { get; init; }
     internal string CleanseFollowupLastEvent { get; init; } = "None observed";
+    internal uint CounterActionId { get; init; }
+    internal uint CleanseFollowupRemovedStatusId { get; init; }
+    internal int CleanseFollowupTeamPressure { get; init; }
 
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
@@ -77,26 +81,34 @@ internal sealed record MiracleInterceptProbeSnapshot(
 }
 
 /// <summary>
-/// Experimental CC-only WHM helper. It consumes at most one shared physical
-/// gameplay-key generation and makes one exact-target Miracle of Nature call.
+/// Experimental CC-only WHM/BRD helper. It consumes at most one shared physical
+/// gameplay-key generation and makes one exact-target Miracle or Silent Nocturne call.
 /// It never changes the selected target and never retries.
 /// </summary>
 internal sealed class MiracleInterceptProbe
 {
     private const int MaximumRememberedSignals = 128;
-    private static readonly uint[] RequiredCcProtectionStatusIds =
+    private static readonly uint[] RequiredMiracleProtectionStatusIds =
         CcImmunityBrakeActionCatalog
             .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle)
             .Append(EnemyCombatConstants.HardenedScalesStatusId)
             .Distinct()
             .ToArray();
+    private static readonly uint[] RequiredSilentProtectionStatusIds =
+        CcImmunityBrakeActionCatalog
+            .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.StandardPurifyCc)
+            .Distinct()
+            .ToArray();
 
     private readonly IObjectTable objectTable;
     private readonly ExecuteTracker executeTracker;
+    private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly MachinistLimitBreakCapture capture;
     private readonly IPluginLog log;
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
+    private readonly bool silentNocturneMetadataVerified;
+    private readonly bool contradanceMetadataVerified;
     private readonly HashSet<MiracleSignalIdentity> rememberedSignals = [];
     private readonly Queue<MiracleSignalIdentity> rememberedSignalOrder = [];
     private MiracleThreatState? activeThreat;
@@ -125,27 +137,30 @@ internal sealed class MiracleInterceptProbe
     private bool protectionWaitRecorded;
     private string lastOpportunity = "None observed";
     private string cleanseFollowupLastEvent = "None observed";
+    private uint counterActionId;
+    private uint cleanseFollowupRemovedStatusId;
+    private int cleanseFollowupTeamPressure;
     private long nextErrorLogAt;
 
     internal MiracleInterceptProbe(
         IObjectTable objectTable,
         IReadOnlySet<uint> verifiedCcBrakeStatusIds,
         ExecuteTracker executeTracker,
+        TargetPressureTracker pressureTracker,
         NearAssistRedirector nearAssist,
         MachinistLimitBreakCapture capture,
-        IPluginLog log)
+        IPluginLog log,
+        PvPMetadataValidation metadata)
     {
         this.objectTable = objectTable;
         this.executeTracker = executeTracker;
+        this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         this.capture = capture;
         this.log = log;
-        // Miracle has a narrower blocker matrix than ordinary Purify-removable
-        // CC. Hardened Scales is verified through that matrix for VPR and also
-        // remains the explicit Furious Backlash release-timing gate below.
-        verifiedProtectionStatusIds = verifiedCcBrakeStatusIds
-            .Where(RequiredCcProtectionStatusIds.Contains)
-            .ToHashSet();
+        verifiedProtectionStatusIds = verifiedCcBrakeStatusIds.ToHashSet();
+        silentNocturneMetadataVerified = metadata.SilentNocturneVerified;
+        contradanceMetadataVerified = metadata.ContradanceVerified;
     }
 
     internal MiracleInterceptProbeSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -154,14 +169,17 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter? localPlayer,
         bool isCrystallineConflict,
         bool configurationEnabled,
+        bool allowHeldGameplayKey,
         bool dispatchAllowed,
         bool enableMarksmanSpite,
         bool enableZantetsuken,
         bool enableFuriousBacklash,
-        bool enablePostPurifyStun,
+        bool enableContradance,
+        bool enablePostPurifyCrowdControl,
         bool marksmanSpiteMetadataVerified,
         bool zantetsukenMetadataVerified,
         bool furiousBacklashMetadataVerified,
+        bool miracleMetadataVerified,
         bool purifyMetadataVerified,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
@@ -172,18 +190,22 @@ internal sealed class MiracleInterceptProbe
 
         var localIdentityValid = localPlayer is not null && HasValidNativeIdentity(localPlayer);
         var localAlive = localIdentityValid && IsLivePlayer(localPlayer);
-        var isWhiteMage = localIdentityValid &&
-                           localPlayer!.ClassJob.IsValid &&
-                          localPlayer.ClassJob.RowId == EnemyCombatConstants.WhiteMageJobId;
-        var protectionMetadataReady = RequiredCcProtectionStatusIds.All(
+        var localJobId = localIdentityValid && localPlayer!.ClassJob.IsValid
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        counterActionId = ResolveCounterActionId(
+            localJobId,
+            miracleMetadataVerified,
+            silentNocturneMetadataVerified);
+        var protectionMetadataReady = RequiredProtectionStatusIds(counterActionId).All(
             verifiedProtectionStatusIds.Contains);
         var enabled = configurationEnabled &&
                       isCrystallineConflict &&
                       localIdentityValid &&
-                      isWhiteMage &&
+                      counterActionId != 0 &&
                       protectionMetadataReady;
         var cleanseFollowupEnabled = enabled &&
-                                     enablePostPurifyStun &&
+                                     enablePostPurifyCrowdControl &&
                                      purifyMetadataVerified;
         var confirmationPendingForLocalCaster = enabled &&
             confirmationState.Pending is { } pending &&
@@ -210,7 +232,7 @@ internal sealed class MiracleInterceptProbe
             return Publish(
                 "Disabled",
                 protectionMetadataReady
-                    ? "Feature gate closed"
+                    ? "Feature gate closed or local job has no verified counter-CC"
                     : "Required CC-protection metadata unavailable",
                 nowMilliseconds);
         }
@@ -233,18 +255,31 @@ internal sealed class MiracleInterceptProbe
             return Publish(
                 "Confirmation",
                 confirmationPendingForLocalCaster
-                    ? "Waiting for exact Miracle landing evidence"
+                    ? "Waiting for exact reactive-CC landing evidence"
                     : "Local player cannot dispatch",
                 nowMilliseconds);
         }
 
-        var cleanseSignals = DrainThreats(
-            localPlayer!,
-            enableMarksmanSpite && marksmanSpiteMetadataVerified,
-            enableZantetsuken && zantetsukenMetadataVerified,
+        var marksmanSpiteEnabled =
+            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
+            enableMarksmanSpite &&
+            marksmanSpiteMetadataVerified;
+        var zantetsukenEnabled =
+            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
+            enableZantetsuken &&
+            zantetsukenMetadataVerified;
+        var furiousBacklashEnabled =
+            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
             enableFuriousBacklash &&
             furiousBacklashMetadataVerified &&
-            verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId),
+            verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId);
+        var contradanceEnabled = enableContradance && contradanceMetadataVerified;
+        var cleanseSignals = DrainThreats(
+            localPlayer!,
+            marksmanSpiteEnabled,
+            zantetsukenEnabled,
+            furiousBacklashEnabled,
+            contradanceEnabled,
             cleanseFollowupEnabled,
             nowMilliseconds);
         DrainConfirmations(nowMilliseconds);
@@ -260,9 +295,16 @@ internal sealed class MiracleInterceptProbe
             activeThreat = null;
         }
 
-        if (!cleanseFollowupEnabled &&
-            activeThreat is { Kind: MiracleInterceptThreatKind.PostPurifyStun })
+        if (activeThreat is { } disabledThreat &&
+            !IsThreatKindEnabled(
+                disabledThreat.Kind,
+                marksmanSpiteEnabled,
+                zantetsukenEnabled,
+                furiousBacklashEnabled,
+                contradanceEnabled,
+                cleanseFollowupEnabled))
         {
+            lastOpportunity = $"{disabledThreat.Kind}: retired because its trigger was disabled";
             activeThreat = null;
         }
 
@@ -286,7 +328,7 @@ internal sealed class MiracleInterceptProbe
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
 
-        // A transient higher-priority Purify/Rescue claim cannot dispatch a
+        // A transient higher-priority Purify/defense/Rescue claim cannot dispatch a
         // second action from the same physical generation, but it also need not
         // destroy the exact threat. Retain it only inside its original deadline
         // so a genuinely fresh later generation can still act; never replay or
@@ -306,22 +348,29 @@ internal sealed class MiracleInterceptProbe
             return Publish("Cancelled", "Exact enemy identity changed", nowMilliseconds);
         }
 
-        var anyProtection = HasAnyVerifiedCcProtection(candidate);
+        var blockerFamily = BlockerFamilyForAction(counterActionId);
+        var anyProtection = HasAnyVerifiedCcProtection(candidate, blockerFamily);
         var hardenedScales = threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
                              HasVerifiedActiveStatus(
                                  candidate,
                                  EnemyCombatConstants.HardenedScalesStatusId);
         var otherProtection = anyProtection && !hardenedScales;
-        var rangeAndLineOfSight = HasMiracleRangeAndLineOfSight(localPlayer!, candidate);
+        var rangeAndLineOfSight = HasActionRangeAndLineOfSight(
+            counterActionId,
+            localPlayer!,
+            candidate);
+        var teamFocus = threat.Kind != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
+                        HasExactTeamFocus(localPlayer!, candidate, out cleanseFollowupTeamPressure);
         var locallyReady = !hardenedScales &&
                            !otherProtection &&
                            rangeAndLineOfSight &&
+                           teamFocus &&
                            ActionManager.Instance() != null;
 
         var input = inputFrame.Snapshot;
         var triggerKey = inputFrame.FreshGameplayKeyPressed
             ? input.FreshGameplayKey
-            : inputFrame.HeldGameplayKeyEligible
+            : allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible
                 ? input.HeldGameplayKey
                 : VirtualKey.NO_KEY;
         if (input.IsTextInputActive || triggerKey == VirtualKey.NO_KEY)
@@ -353,9 +402,11 @@ internal sealed class MiracleInterceptProbe
                     ? MiracleWaitReason.HardenedScales
                     : otherProtection
                         ? MiracleWaitReason.OtherProtection
-                        : MiracleWaitReason.RangeOrLineOfSight);
-            // Keep the generation available while VPR protection is genuinely
-            // present or the exact enemy is briefly out of native 10y/LoS.
+                        : !rangeAndLineOfSight
+                            ? MiracleWaitReason.RangeOrLineOfSight
+                            : MiracleWaitReason.TeamFocus);
+            // Keep the generation available while protection is genuinely
+            // present or the exact enemy is briefly out of native action range/LoS.
             return PublishCandidate(
                 threat,
                 candidate,
@@ -363,8 +414,10 @@ internal sealed class MiracleInterceptProbe
                 hardenedScales
                     ? "Waiting: Hardened Scales still active"
                     : otherProtection
-                        ? "Waiting: verified Miracle blocker active"
-                    : "Waiting: outside native 10y/LoS",
+                        ? "Waiting: verified counter-CC blocker active"
+                    : !rangeAndLineOfSight
+                        ? "Waiting: outside native action range/LoS"
+                        : "Waiting: exact team focus below 2",
                 triggerKey,
                 false,
                 false,
@@ -387,18 +440,29 @@ internal sealed class MiracleInterceptProbe
                                   HasVerifiedActiveStatus(
                                       revalidated,
                                       EnemyCombatConstants.HardenedScalesStatusId);
-        var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection(revalidated);
+        var revalidatedProtection = revalidated is not null &&
+                                    HasAnyVerifiedCcProtection(revalidated, blockerFamily);
         var revalidatedRange = revalidated is not null &&
-                               HasMiracleRangeAndLineOfSight(localPlayer!, revalidated);
+                               HasActionRangeAndLineOfSight(
+                                   counterActionId,
+                                   localPlayer!,
+                                   revalidated);
+        var revalidatedTeamFocus = revalidated is not null &&
+            (threat.Kind != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
+             HasExactTeamFocus(localPlayer!, revalidated, out cleanseFollowupTeamPressure));
         if (revalidated is not null &&
             !revalidatedHardened &&
             !revalidatedProtection &&
-            revalidatedRange)
+            revalidatedRange &&
+            revalidatedTeamFocus)
         {
             try
             {
                 attemptedAtMilliseconds = Environment.TickCount64;
-                accepted = TryUseMiracleOnce(revalidated.GameObjectId, out attempted);
+                accepted = TryUseCounterCcOnce(
+                    counterActionId,
+                    revalidated.GameObjectId,
+                    out attempted);
                 if (attempted) Interlocked.Increment(ref attemptCount);
                 if (accepted) Interlocked.Increment(ref acceptedCount);
             }
@@ -415,18 +479,21 @@ internal sealed class MiracleInterceptProbe
                 confirmationState,
                 new MiracleInterceptPendingAttempt(
                     localPlayer!.EntityId,
-                    MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+                    counterActionId,
                     revalidated.GameObjectId,
                     revalidated.EntityId,
                     threat.Kind,
                     accepted,
-                    attemptedAtMilliseconds),
+                    attemptedAtMilliseconds)
+                {
+                    RemovedStatusId = threat.RemovedStatusId,
+                },
                 attemptedAtMilliseconds);
             confirmationState = registered.NextState;
         }
 
         lastOpportunity = attempted
-            ? $"{threat.Kind}: Miracle attempted (accepted={accepted})"
+            ? $"{threat.Kind}: action {counterActionId} attempted (accepted={accepted})"
             : $"{threat.Kind}: consumed but final identity/range/protection validation changed";
 
         return PublishCandidate(
@@ -434,7 +501,7 @@ internal sealed class MiracleInterceptProbe
             candidate,
             attempted ? "Spent" : "Cancelled",
             attempted
-                ? accepted ? "Miracle action accepted locally" : "Miracle action rejected locally"
+                ? accepted ? "Reactive CC accepted locally" : "Reactive CC rejected locally"
                 : "Consumed without action: target/range/protection changed",
             triggerKey,
             attempted,
@@ -469,7 +536,8 @@ internal sealed class MiracleInterceptProbe
         bool enableMarksmanSpite,
         bool enableZantetsuken,
         bool enableFuriousBacklash,
-        bool enablePostPurifyStun,
+        bool enableContradance,
+        bool enablePostPurifyCrowdControl,
         long nowMilliseconds)
     {
         var cleanseSignals = new List<MiracleCleanseFollowupSignal>();
@@ -478,14 +546,14 @@ internal sealed class MiracleInterceptProbe
             var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
             if (signal.ActionId == EnemyCombatConstants.PurifyActionId)
             {
-                if (!enablePostPurifyStun || signal.LocalEntityId != localPlayer.EntityId)
+                if (!enablePostPurifyCrowdControl || signal.LocalEntityId != localPlayer.EntityId)
                     continue;
 
                 if (signal.ObservedAtMilliseconds > eventNow ||
                     eventNow - signal.ObservedAtMilliseconds >=
                     MiracleCleanseFollowupRules.ResilienceAcquisitionMilliseconds ||
                     signal.FeatureGeneration != capture.CurrentMiracleCleanseFollowupGeneration ||
-                    !MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+                    !MiracleCleanseFollowupRules.IsExactPurifySignal(
                         signal.CasterEntityId,
                         signal.ActionId,
                         signal.EventTargetEntityId,
@@ -495,7 +563,7 @@ internal sealed class MiracleInterceptProbe
                         signal.SourceSequence))
                 {
                     Interlocked.Increment(ref rejectedThreatCount);
-                    cleanseFollowupLastEvent = "PostPurifyStun: invalid or stale exact Purify/Stun signal";
+                    cleanseFollowupLastEvent = "PostPurifyCC: invalid or stale exact Purify recovery signal";
                     continue;
                 }
 
@@ -504,7 +572,7 @@ internal sealed class MiracleInterceptProbe
                 {
                     Interlocked.Increment(ref rejectedThreatCount);
                     cleanseFollowupLastEvent =
-                        "PostPurifyStun: Purify caster was not one exact canonical e1-e5 enemy";
+                        "PostPurifyCC: Purify caster was not one exact canonical e1-e5 enemy";
                     continue;
                 }
 
@@ -525,6 +593,13 @@ internal sealed class MiracleInterceptProbe
                 continue;
             }
 
+            if (signal.FeatureGeneration != capture.CurrentMiracleInterceptGeneration)
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = "ReactiveCC: retired stale capture generation";
+                continue;
+            }
+
             var kind = signal.ActionId switch
             {
                 EnemyCombatConstants.MarksmanSpiteActionId when enableMarksmanSpite =>
@@ -533,6 +608,8 @@ internal sealed class MiracleInterceptProbe
                     MiracleInterceptThreatKind.Zantetsuken,
                 EnemyCombatConstants.FuriousBacklashActionId when enableFuriousBacklash =>
                     MiracleInterceptThreatKind.FuriousBacklash,
+                EnemyCombatConstants.ContradanceActionId when enableContradance =>
+                    MiracleInterceptThreatKind.Contradance,
                 _ => MiracleInterceptThreatKind.None,
             };
             if (kind == MiracleInterceptThreatKind.None ||
@@ -565,10 +642,13 @@ internal sealed class MiracleInterceptProbe
                 lastOpportunity = $"{kind}: caster was not one exact canonical e1-e5 enemy";
                 continue;
             }
-            var expectedTarget = kind == MiracleInterceptThreatKind.FuriousBacklash
+            var expectedTarget = kind is
+                MiracleInterceptThreatKind.FuriousBacklash or
+                MiracleInterceptThreatKind.Contradance
                 ? signal.CasterEntityId
                 : signal.EventTargetEntityId;
-            if (kind == MiracleInterceptThreatKind.FuriousBacklash &&
+            if ((kind is MiracleInterceptThreatKind.FuriousBacklash or
+                         MiracleInterceptThreatKind.Contradance) &&
                 expectedTarget != signal.CasterEntityId)
             {
                 Interlocked.Increment(ref rejectedThreatCount);
@@ -578,8 +658,16 @@ internal sealed class MiracleInterceptProbe
 
             if (activeThreat is { } previousThreat && previousThreat.Signal != identity)
             {
+                if (MiracleInterceptRules.GetDispatchPriority(kind) <=
+                    MiracleInterceptRules.GetDispatchPriority(previousThreat.Kind))
+                {
+                    Interlocked.Increment(ref rejectedThreatCount);
+                    lastOpportunity = $"{kind}: retired behind exact {previousThreat.Kind}";
+                    continue;
+                }
+
                 Interlocked.Increment(ref rejectedThreatCount);
-                lastOpportunity = $"{previousThreat.Kind}: superseded by newer exact {kind} signal";
+                lastOpportunity = $"{previousThreat.Kind}: superseded by higher-priority exact {kind} signal";
             }
             activeThreat = new MiracleThreatState(
                 kind,
@@ -587,7 +675,8 @@ internal sealed class MiracleInterceptProbe
                 canonical.EntityId,
                 canonical.JobId,
                 signal.ObservedAtMilliseconds,
-                identity);
+                identity,
+                RemovedStatusId: 0);
             Interlocked.Increment(ref armedThreatCount);
             ResetWaitDiagnostics();
             lastOpportunity = $"{kind}: exact threat armed";
@@ -606,6 +695,8 @@ internal sealed class MiracleInterceptProbe
         var previous = cleanseFollowupState;
         var target = newSignal?.Target ?? previous.ActiveSignal?.Target;
         MiracleCleanseFollowupCandidate? candidate = null;
+        var hasExactTeamFocus = false;
+        cleanseFollowupTeamPressure = 0;
         if (target is { } targetIdentity)
         {
             var player = ResolveCleanseFollowupCandidate(localPlayer, targetIdentity);
@@ -618,6 +709,10 @@ internal sealed class MiracleInterceptProbe
                     ActiveResilienceStatusCount: CountActiveStatuses(
                         player,
                         EnemyCombatConstants.ResilienceStatusId));
+                hasExactTeamFocus = HasExactTeamFocus(
+                    localPlayer,
+                    player,
+                    out cleanseFollowupTeamPressure);
             }
         }
 
@@ -633,10 +728,11 @@ internal sealed class MiracleInterceptProbe
             new MiracleCleanseFollowupObservation(
                 configurationEnabled,
                 IsCrystallineConflict: true,
-                IsLocalWhiteMageValid: true,
+                IsLocalCounterJobValid: true,
                 higherPriorityClaimed,
                 newSignal,
                 candidate,
+                hasExactTeamFocus,
                 nowMilliseconds));
 
         // The exact signal is retired in Core before a promotion can reach the
@@ -666,21 +762,25 @@ internal sealed class MiracleInterceptProbe
         cleanseFollowupLastEvent = decision.Kind switch
         {
             MiracleCleanseFollowupDecisionKind.SignalObserved =>
-                "PostPurifyStun: exact enemy Purify removed Stun; waiting for Resilience",
+                $"PostPurifyCC: exact enemy Purify removed {newSignal?.Key.EffectValue ?? previous.ActiveSignal?.Key.EffectValue}; waiting for Resilience",
             MiracleCleanseFollowupDecisionKind.ResilienceObserved =>
-                "PostPurifyStun: Resilience observed live; waiting for stable absence",
+                "PostPurifyCC: Resilience observed live; waiting for stable absence",
             MiracleCleanseFollowupDecisionKind.ReadyForPromotion =>
-                "PostPurifyStun: Resilience absent for 150 ms; promoted to Miracle dispatcher",
+                "PostPurifyCC: Resilience absent and team focus >=2; promoted to reactive-CC dispatcher",
             MiracleCleanseFollowupDecisionKind.Cancelled when
                 previous.ActiveSignal is not null || newSignal is not null =>
-                $"PostPurifyStun: cancelled ({decision.CancelReason})",
+                $"PostPurifyCC: cancelled ({decision.CancelReason})",
             MiracleCleanseFollowupDecisionKind.Cancelled => cleanseFollowupLastEvent,
             MiracleCleanseFollowupDecisionKind.Waiting when
                 decision.NextState.Phase == MiracleCleanseFollowupPhase.ReleaseOpportunity &&
                 higherPriorityClaimed =>
-                "PostPurifyStun: release ready; waiting behind higher-priority helper/threat",
+                "PostPurifyCC: release ready; waiting behind higher-priority helper/threat",
+            MiracleCleanseFollowupDecisionKind.Waiting when
+                decision.NextState.Phase == MiracleCleanseFollowupPhase.ReleaseOpportunity &&
+                !hasExactTeamFocus =>
+                $"PostPurifyCC: release ready; waiting for exact team focus >=2 (now {cleanseFollowupTeamPressure})",
             MiracleCleanseFollowupDecisionKind.Waiting =>
-                $"PostPurifyStun: waiting ({decision.NextState.Phase})",
+                $"PostPurifyCC: waiting ({decision.NextState.Phase})",
             _ => cleanseFollowupLastEvent,
         };
 
@@ -691,15 +791,15 @@ internal sealed class MiracleInterceptProbe
         if (activeThreat is not null)
         {
             // Defensive only: HigherPriorityClaimed prevents Core promotion
-            // whenever another Miracle opportunity already owns this path.
+            // whenever another reactive-CC opportunity already owns this path.
             Interlocked.Increment(ref cleanseFollowupCancellationCount);
-            cleanseFollowupLastEvent = "PostPurifyStun: promotion retired while another threat owned dispatch";
+            cleanseFollowupLastEvent = "PostPurifyCC: promotion retired while another threat owned dispatch";
             return;
         }
 
         var promotionSignal = promotion.Signal;
         activeThreat = new MiracleThreatState(
-            MiracleInterceptThreatKind.PostPurifyStun,
+            MiracleInterceptThreatKind.PostPurifyCrowdControl,
             promotion.Target.GameObjectId,
             promotion.Target.EntityId,
             promotion.Target.JobId,
@@ -708,9 +808,11 @@ internal sealed class MiracleInterceptProbe
                 promotionSignal.Key.CasterEntityId,
                 promotionSignal.Key.ActionId,
                 promotionSignal.Key.GlobalSequence,
-                promotionSignal.Key.SourceSequence));
+                promotionSignal.Key.SourceSequence),
+            promotionSignal.Key.EffectValue);
+        cleanseFollowupRemovedStatusId = promotionSignal.Key.EffectValue;
         ResetWaitDiagnostics();
-        lastOpportunity = "PostPurifyStun: exact threat armed after verified Resilience absence";
+        lastOpportunity = "PostPurifyCC: exact threat armed after verified Resilience absence and team focus";
     }
 
     private void DrainConfirmations(long nowMilliseconds)
@@ -718,7 +820,8 @@ internal sealed class MiracleInterceptProbe
         while (capture.TryDequeueMiracleInterceptConfirmation(out var effect))
         {
             var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
-            if (effect.ObservedAtMilliseconds > eventNow ||
+            if (effect.FeatureGeneration != capture.CurrentMiracleInterceptGeneration ||
+                effect.ObservedAtMilliseconds > eventNow ||
                 eventNow - effect.ObservedAtMilliseconds >
                 MiracleInterceptConfirmationRules.CorrelationMilliseconds)
             {
@@ -753,6 +856,7 @@ internal sealed class MiracleInterceptProbe
             MiracleInterceptThreatKind.MarksmanSpite => EnemyCombatConstants.MachinistJobId,
             MiracleInterceptThreatKind.Zantetsuken => EnemyCombatConstants.SamuraiJobId,
             MiracleInterceptThreatKind.FuriousBacklash => EnemyCombatConstants.ViperJobId,
+            MiracleInterceptThreatKind.Contradance => EnemyCombatConstants.DancerJobId,
             _ => 0u,
         };
         if (expectedJob == 0) return null;
@@ -833,7 +937,9 @@ internal sealed class MiracleInterceptProbe
             : null;
     }
 
-    private bool HasAnyVerifiedCcProtection(IPlayerCharacter player)
+    private bool HasAnyVerifiedCcProtection(
+        IPlayerCharacter player,
+        CcImmunityBrakeBlockerFamily blockerFamily)
     {
         var targetJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
         foreach (var status in player.StatusList)
@@ -842,7 +948,7 @@ internal sealed class MiracleInterceptProbe
             // gate. Never predict immunity expiry from RemainingTime.
             if (verifiedProtectionStatusIds.Contains(status.StatusId) &&
                 CcImmunityBrakeActionCatalog.IsBlockerStatus(
-                    CcImmunityBrakeBlockerFamily.Miracle,
+                    blockerFamily,
                     status.StatusId,
                     targetJobId))
             {
@@ -879,24 +985,69 @@ internal sealed class MiracleInterceptProbe
         return count;
     }
 
-    private static unsafe bool HasMiracleRangeAndLineOfSight(
+    private static unsafe bool HasActionRangeAndLineOfSight(
+        uint actionId,
         IPlayerCharacter localPlayer,
         IPlayerCharacter target)
     {
+        if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0)
+            return false;
+
         var sourceObject = GetNativeObject(localPlayer);
         var targetObject = GetNativeObject(target);
         if (sourceObject == null || targetObject == null) return false;
         var result = ActionManager.GetActionInRangeOrLoS(
-            EnemyCombatConstants.MiracleOfNatureActionId,
+            actionId,
             sourceObject,
             targetObject);
         return SeitonRangeRules.HasNativeRangeAndLineOfSight(result);
     }
 
-    private unsafe bool TryUseMiracleOnce(ulong targetGameObjectId, out bool attempted)
+    private static unsafe bool HasExactTeamFocus(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter candidate,
+        TargetPressureTracker pressureTracker,
+        out int totalTargetCount)
+    {
+        totalTargetCount = 0;
+        if (!HasValidNativeIdentity(localPlayer) ||
+            !HasValidNativeIdentity(candidate))
+        {
+            return false;
+        }
+
+        var targetId = ((Character*)localPlayer.Address)->GetTargetId();
+        if (targetId.Id != candidate.GameObjectId ||
+            targetId.ObjectId != candidate.EntityId)
+        {
+            return false;
+        }
+
+        var alliedTargetCount = pressureTracker.GetTeamTargetCount(
+            candidate.GameObjectId,
+            candidate.EntityId);
+        totalTargetCount = 1 + Math.Max(0, alliedTargetCount);
+        return alliedTargetCount >= 1;
+    }
+
+    private bool HasExactTeamFocus(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter candidate,
+        out int totalTargetCount) =>
+        HasExactTeamFocus(localPlayer, candidate, pressureTracker, out totalTargetCount);
+
+    private unsafe bool TryUseCounterCcOnce(
+        uint actionId,
+        ulong targetGameObjectId,
+        out bool attempted)
     {
         attempted = false;
-        if (!TargetHighlightRules.IsValidGameObjectId(targetGameObjectId)) return false;
+        if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0 ||
+            !TargetHighlightRules.IsValidGameObjectId(targetGameObjectId))
+        {
+            return false;
+        }
+
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return false;
 
@@ -904,12 +1055,38 @@ internal sealed class MiracleInterceptProbe
         return nearAssist.RunWithoutRedirect(() =>
             actionManager->UseAction(
                 ActionType.Action,
-                EnemyCombatConstants.MiracleOfNatureActionId,
+                actionId,
                 targetGameObjectId,
                 0,
                 ActionManager.UseActionMode.None,
                 0));
     }
+
+    private static uint ResolveCounterActionId(
+        uint localJobId,
+        bool miracleMetadataVerified,
+        bool silentNocturneMetadataVerified) =>
+        localJobId switch
+        {
+            EnemyCombatConstants.WhiteMageJobId when miracleMetadataVerified =>
+                EnemyCombatConstants.MiracleOfNatureActionId,
+            EnemyCombatConstants.BardJobId when silentNocturneMetadataVerified =>
+                EnemyCombatConstants.SilentNocturneActionId,
+            _ => 0,
+        };
+
+    private static CcImmunityBrakeBlockerFamily BlockerFamilyForAction(uint actionId) =>
+        actionId == EnemyCombatConstants.SilentNocturneActionId
+            ? CcImmunityBrakeBlockerFamily.StandardPurifyCc
+            : CcImmunityBrakeBlockerFamily.Miracle;
+
+    private static IReadOnlyList<uint> RequiredProtectionStatusIds(uint actionId) =>
+        actionId switch
+        {
+            EnemyCombatConstants.MiracleOfNatureActionId => RequiredMiracleProtectionStatusIds,
+            EnemyCombatConstants.SilentNocturneActionId => RequiredSilentProtectionStatusIds,
+            _ => Array.Empty<uint>(),
+        };
 
     private bool RememberSignal(MiracleSignalIdentity identity)
     {
@@ -999,6 +1176,9 @@ internal sealed class MiracleInterceptProbe
     {
         activeThreat = null;
         cleanseFollowupState = MiracleCleanseFollowupState.Initial;
+        counterActionId = 0;
+        cleanseFollowupRemovedStatusId = 0;
+        cleanseFollowupTeamPressure = 0;
         ResetWaitDiagnostics();
         rememberedSignals.Clear();
         rememberedSignalOrder.Clear();
@@ -1035,6 +1215,11 @@ internal sealed class MiracleInterceptProbe
             CleanseFollowupPromotionCount = Interlocked.Read(ref cleanseFollowupPromotionCount),
             CleanseFollowupCancellationCount = Interlocked.Read(ref cleanseFollowupCancellationCount),
             CleanseFollowupLastEvent = cleanseFollowupLastEvent,
+            CounterActionId = counterActionId,
+            CleanseFollowupRemovedStatusId = cleanseFollowupState.ActiveSignal?.Key.EffectValue ??
+                                             activeThreat?.RemovedStatusId ??
+                                             cleanseFollowupRemovedStatusId,
+            CleanseFollowupTeamPressure = cleanseFollowupTeamPressure,
         };
 
     private void RecordWait(MiracleThreatState threat, MiracleWaitReason reason)
@@ -1081,19 +1266,37 @@ internal sealed class MiracleInterceptProbe
 
     private static string DescribeWaitReason(MiracleWaitReason reason) => reason switch
     {
-        MiracleWaitReason.HigherPriorityHelper => "Purify/Ally Rescue priority",
+        MiracleWaitReason.HigherPriorityHelper => "Purify/defense/Ally Rescue priority",
         MiracleWaitReason.NoEligibleInput => "an eligible held/fresh physical key",
         MiracleWaitReason.TextInput => "text input to close",
         MiracleWaitReason.HardenedScales => "Hardened Scales to disappear",
-        MiracleWaitReason.OtherProtection => "a verified Miracle blocker to disappear",
-        MiracleWaitReason.RangeOrLineOfSight => "native 10y range/line of sight",
+        MiracleWaitReason.OtherProtection => "a verified counter-CC blocker to disappear",
+        MiracleWaitReason.RangeOrLineOfSight => "native action range/line of sight",
+        MiracleWaitReason.TeamFocus => "exact local-plus-one-ally team focus",
         _ => "the next runtime evaluation",
     };
 
     private static long ThreatLifetime(MiracleInterceptThreatKind kind) =>
-        kind == MiracleInterceptThreatKind.PostPurifyStun
+        kind == MiracleInterceptThreatKind.PostPurifyCrowdControl
             ? MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds
             : MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
+
+    private static bool IsThreatKindEnabled(
+        MiracleInterceptThreatKind kind,
+        bool marksmanSpiteEnabled,
+        bool zantetsukenEnabled,
+        bool furiousBacklashEnabled,
+        bool contradanceEnabled,
+        bool postPurifyEnabled) =>
+        kind switch
+        {
+            MiracleInterceptThreatKind.MarksmanSpite => marksmanSpiteEnabled,
+            MiracleInterceptThreatKind.Zantetsuken => zantetsukenEnabled,
+            MiracleInterceptThreatKind.FuriousBacklash => furiousBacklashEnabled,
+            MiracleInterceptThreatKind.Contradance => contradanceEnabled,
+            MiracleInterceptThreatKind.PostPurifyCrowdControl => postPurifyEnabled,
+            _ => false,
+        };
 
     private static bool IsLivePlayer(IPlayerCharacter? player) =>
         player is not null &&
@@ -1125,7 +1328,7 @@ internal sealed class MiracleInterceptProbe
     {
         if (nowMilliseconds < nextErrorLogAt) return;
         nextErrorLogAt = nowMilliseconds + 10_000;
-        log.Error(exception, "Seiton Sense Miracle intercept failed closed; the action will not be retried.");
+        log.Error(exception, "Seiton Sense reactive CC failed closed; the action will not be retried.");
     }
 
     private readonly record struct MiracleSignalIdentity(
@@ -1140,7 +1343,8 @@ internal sealed class MiracleInterceptProbe
         uint EntityId,
         uint JobId,
         long ObservedAtMilliseconds,
-        MiracleSignalIdentity Signal);
+        MiracleSignalIdentity Signal,
+        uint RemovedStatusId);
 
     private enum MiracleWaitReason : byte
     {
@@ -1151,5 +1355,6 @@ internal sealed class MiracleInterceptProbe
         HardenedScales = 4,
         OtherProtection = 5,
         RangeOrLineOfSight = 6,
+        TeamFocus = 7,
     }
 }

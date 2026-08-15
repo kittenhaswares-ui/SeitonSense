@@ -22,8 +22,11 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
+    private readonly TargetPressureTracker pressureTracker;
+    private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
+    private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
     private readonly MonkEarthReplyProbe monkEarthReply;
@@ -68,8 +71,17 @@ internal sealed class PersonalStatusService : IDisposable
         this.log = log;
         this.configuration = configuration;
         this.metadata = metadata;
+        this.pressureTracker = pressureTracker;
+        this.nearAssist = nearAssist;
         emergencyInput = new EmergencyActionInputCoordinator(keyState);
         emergencyPurify = new EmergencyPurifyProbe(log);
+        defensiveUtility = new DefensiveUtilityProbe(
+            objectTable,
+            dataManager,
+            pressureTracker,
+            nearAssist,
+            log,
+            metadata);
         allyRescue = new AllyRescueProbe(
             objectTable,
             dataManager,
@@ -81,15 +93,18 @@ internal sealed class PersonalStatusService : IDisposable
             objectTable,
             nearAssist.VerifiedCcBrakeStatusIds,
             executeTracker,
+            pressureTracker,
             nearAssist,
             machinistLimitBreakCapture,
-            log);
+            log,
+            metadata);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
+    internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
@@ -154,6 +169,7 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakThreat = null;
             emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
+            defensiveUtility.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
             monkEarthReply.FailClosed(now);
@@ -186,14 +202,51 @@ internal sealed class PersonalStatusService : IDisposable
             ClearStatusTracking();
             emergencyInput.Reset();
             emergencyPurify.Reset();
+            defensiveUtility.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
             monkEarthReply.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
+        var isCrystallineConflict = context == SupportedPvPContext.CrystallineConflict;
         var alive = IsAlive(localPlayer);
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
+        var defensiveUtilitiesConfigurationEnabled = configuration.Enabled &&
+                                                    configuration.EnableDefensiveUtilities &&
+                                                    isCrystallineConflict;
+        var pressureKnown = pressureTracker.TryGetSelfIncomingPressure(out var incomingEnemyCount);
+        var highPressure = DefensiveUtilityRules.IsHighPressure(
+            pressureKnown,
+            incomingEnemyCount);
+        var guardActive = DefensiveUtilityProbe.HasActiveGuard(localPlayer);
+        var exactGuardActive = guardActive;
+        var guardObservationNow = Math.Max(now, Environment.TickCount64);
+        var observedGuardAttemptAt = -1L;
+        if (localPlayer is not null)
+        {
+            nearAssist.TryGetRecentExactLocalGuardAttempt(
+                clientState.TerritoryType,
+                localPlayer.GameObjectId,
+                localPlayer.EntityId,
+                guardObservationNow,
+                DefensiveUtilityRules.GuardPropagationLatchMilliseconds,
+                out observedGuardAttemptAt);
+        }
+
+        guardActive = defensiveUtility.ObserveGuardSuppression(
+            exactGuardActive,
+            observedGuardAttemptAt,
+            guardObservationNow,
+            hardReset).SuppressDirectActionHelpers;
+        now = guardObservationNow;
+        var highPressureStunObserved = defensiveUtilitiesConfigurationEnabled &&
+                                        configuration.GuardOnStunPressure &&
+                                        highPressure &&
+                                        HasActiveStatus(
+                                            localPlayer,
+                                            EnemyCombatConstants.PvPStunStatusId);
+        var hasPurifyRemovableCrowdControl = HasAnyPurifyRemovableCrowdControl(localPlayer);
         var anyWarningEnabled = configuration.ShowPersonalWarnings &&
                                 (configuration.WarnWildfire ||
                                  configuration.WarnDeathWarrant ||
@@ -202,9 +255,10 @@ internal sealed class PersonalStatusService : IDisposable
         var shouldScanStatuses = configuration.Enabled &&
                                  isSupportedPvPContext &&
                                  alive &&
-                                 (anyWarningEnabled ||
-                                  (configuration.ExperimentalPurifyOnNextKey &&
-                                   anyPurifyAutomationEnabled));
+                                  (anyWarningEnabled ||
+                                   (configuration.ExperimentalPurifyOnNextKey &&
+                                    anyPurifyAutomationEnabled) ||
+                                   defensiveUtilitiesConfigurationEnabled);
         var observed = shouldScanStatuses
             ? ScanExactStatuses(localPlayer, now)
             : [];
@@ -245,37 +299,53 @@ internal sealed class PersonalStatusService : IDisposable
                              !hardReset;
         var statuses = BuildAlertSnapshots(observed, now, warningsActive, hardReset);
 
+        var regularPurifyConfigurationEnabled = configuration.Enabled &&
+                                                configuration.ExperimentalPurifyOnNextKey &&
+                                                anyPurifyAutomationEnabled &&
+                                                metadata.PurifyVerified &&
+                                                !guardActive;
+        var pressureStunPurifyConfigurationEnabled = defensiveUtilitiesConfigurationEnabled &&
+                                                      configuration.GuardOnStunPressure &&
+                                                      highPressureStunObserved &&
+                                                      metadata.PurifyVerified &&
+                                                      !guardActive;
         var purifyStatus = SelectPurifyStatus(
             observed,
             now,
+            regularPurifyConfigurationEnabled,
+            pressureStunPurifyConfigurationEnabled,
             out var purifyStatusCurrentlyObserved);
-        var purifyConfigurationEnabled = configuration.Enabled &&
-                                         configuration.ExperimentalPurifyOnNextKey &&
-                                         anyPurifyAutomationEnabled &&
-                                         metadata.PurifyVerified;
+        var purifyConfigurationEnabled = regularPurifyConfigurationEnabled ||
+                                         pressureStunPurifyConfigurationEnabled;
+        var allowPurifyHeldGameplayKey =
+            (regularPurifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey) ||
+            (pressureStunPurifyConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey);
         var allyRescueConfigurationEnabled = configuration.Enabled &&
                                              configuration.ExperimentalAllyRescueOnNextKey &&
                                              metadata.AllyRescueStatusesVerified &&
-                                             context == SupportedPvPContext.CrystallineConflict;
+                                             isCrystallineConflict &&
+                                             !guardActive;
         var miracleInterceptConfigurationEnabled = configuration.Enabled &&
-                                                    configuration.ExperimentalMiracleInterceptOnHeldKey &&
-                                                    metadata.MiracleOfNatureActionVerified &&
-                                                    context == SupportedPvPContext.CrystallineConflict;
+                                                    configuration.EnableReactiveCcUtilities &&
+                                                    isCrystallineConflict &&
+                                                    !guardActive;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
             isSupportedPvPContext &&
             (purifyConfigurationEnabled ||
+             defensiveUtilitiesConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
              miracleInterceptConfigurationEnabled),
-            purifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey,
+            allowPurifyHeldGameplayKey,
+            defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
-            miracleInterceptConfigurationEnabled);
+            miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
             purifyConfigurationEnabled,
-            configuration.PurifyOnHeldGameplayKey,
+            allowPurifyHeldGameplayKey,
             purifyStatus,
             purifyStatusCurrentlyObserved,
             resilienceActive,
@@ -291,10 +361,32 @@ internal sealed class PersonalStatusService : IDisposable
             EmergencyActionPriorityRules.SelfPurifyClaimsPriority(
                 purify.Decision,
                 purify.InputTrigger);
+        var defense = defensiveUtility.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            defensiveUtilitiesConfigurationEnabled,
+            configuration.DefensiveUtilitiesOnHeldKey,
+            configuration.GuardOnStunPressure,
+            configuration.PreGuardOnLowHpPressure,
+            configuration.PaladinGuardianLowAlly,
+            pressureKnown,
+            incomingEnemyCount,
+            highPressureStunObserved,
+            purify.UseActionAttempted,
+            resilienceActive,
+            hasPurifyRemovableCrowdControl,
+            guardActive,
+            purifyClaimedPriority,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var defensiveUtilityClaimedPriority = defense.InputClaimed;
         var rescue = allyRescue.Observe(
             localPlayer,
-            context == SupportedPvPContext.CrystallineConflict,
-            allyRescueConfigurationEnabled && !purifyClaimedPriority,
+            isCrystallineConflict,
+            allyRescueConfigurationEnabled &&
+            !purifyClaimedPriority &&
+            !defensiveUtilityClaimedPriority,
             configuration.AllyRescueOnHeldGameplayKey,
             emergencyInputFrame,
             now,
@@ -310,16 +402,21 @@ internal sealed class PersonalStatusService : IDisposable
         now = Environment.TickCount64;
         var miracle = miracleIntercept.Observe(
             localPlayer,
-            context == SupportedPvPContext.CrystallineConflict,
+            isCrystallineConflict,
             miracleInterceptConfigurationEnabled,
-            !purifyClaimedPriority && !allyRescueClaimedPriority,
+            configuration.ReactiveCcOnHeldKey,
+            !purifyClaimedPriority &&
+            !defensiveUtilityClaimedPriority &&
+            !allyRescueClaimedPriority,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
             configuration.MiracleInterceptViperNest,
-            configuration.MiracleInterceptAfterPurifiedStun,
+            configuration.ReactiveCcDancerLimitBreak,
+            configuration.ReactiveCcAfterEnemyPurify,
             metadata.MarksmanSpiteVerified,
             metadata.ZantetsukenVerified,
             metadata.FuriousBacklashVerified,
+            metadata.MiracleOfNatureActionVerified,
             metadata.PurifyVerified,
             emergencyInputFrame,
             now,
@@ -327,13 +424,18 @@ internal sealed class PersonalStatusService : IDisposable
         monkEarthReply.Observe(
             localPlayer,
             isSupportedPvPContext,
-            configuration.Enabled && configuration.EnableMonkEarthReplyHelper,
+            configuration.Enabled &&
+            configuration.EnableMonkEarthReplyHelper &&
+            !guardActive,
             metadata.MonkEarthReplyVerified,
             configuration.MonkEarthReplyOnLowHp,
             configuration.MonkEarthReplyBeforeExpiry,
             configuration.MonkEarthReplyHpPercent,
             configuration.MonkEarthReplyExpirySeconds,
-            purifyClaimedPriority || rescue.UseActionAttempted || miracle.UseActionAttempted,
+            purifyClaimedPriority ||
+            defense.InputClaimed ||
+            rescue.UseActionAttempted ||
+            miracle.UseActionAttempted,
             now,
             hardReset);
 
@@ -379,7 +481,6 @@ internal sealed class PersonalStatusService : IDisposable
                 var definition = PersonalStatusDefinitions.Find(status.StatusId);
                 if (definition is null ||
                     !PersonalStatusDefinitions.IsMetadataVerified(definition, metadata) ||
-                    status.Address == 0 ||
                     !float.IsFinite(status.RemainingTime) ||
                     status.RemainingTime <= 0f)
                 {
@@ -574,16 +675,25 @@ internal sealed class PersonalStatusService : IDisposable
     private PurifyCcStatusInstance? SelectPurifyStatus(
         IReadOnlyList<ObservedPersonalStatus> observed,
         long nowMilliseconds,
+        bool regularPurifyEnabled,
+        bool pressureStunPurifyEnabled,
         out bool currentlyObserved)
     {
         currentlyObserved = false;
         var purifiable = observed
             .Where(status =>
                 status.Definition.CanTriggerPurifyBuffer &&
-                IsPurifyAutomationEnabled(status.Definition.StatusId))
+                IsPurifyStatusEnabled(
+                    status.Definition.StatusId,
+                    regularPurifyEnabled,
+                    pressureStunPurifyEnabled))
             .ToArray();
         var tracked = emergencyPurify.TrackedStatusInstance;
-        if (tracked is not null && IsPurifyAutomationEnabled(tracked.Value.StatusId))
+        if (tracked is not null &&
+            IsPurifyStatusEnabled(
+                tracked.Value.StatusId,
+                regularPurifyEnabled,
+                pressureStunPurifyEnabled))
         {
             var same = purifiable.FirstOrDefault(status =>
                 status.Definition.StatusId == tracked.Value.StatusId &&
@@ -649,6 +759,13 @@ internal sealed class PersonalStatusService : IDisposable
             _ => false,
         };
 
+    private bool IsPurifyStatusEnabled(
+        uint statusId,
+        bool regularPurifyEnabled,
+        bool pressureStunPurifyEnabled) =>
+        (regularPurifyEnabled && IsPurifyAutomationEnabled(statusId)) ||
+        (pressureStunPurifyEnabled && statusId == EnemyCombatConstants.PvPStunStatusId);
+
     private ulong NextInstanceToken()
     {
         var token = nextInstanceToken++;
@@ -663,6 +780,7 @@ internal sealed class PersonalStatusService : IDisposable
         ClearStatusTracking();
         emergencyInput.Reset();
         emergencyPurify.Reset();
+        defensiveUtility.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
         monkEarthReply.Reset();
@@ -694,7 +812,6 @@ internal sealed class PersonalStatusService : IDisposable
         foreach (var status in player.StatusList)
         {
             if (status.StatusId == statusId &&
-                status.Address != 0 &&
                 float.IsFinite(status.RemainingTime) &&
                 status.RemainingTime > 0f)
             {
@@ -704,6 +821,14 @@ internal sealed class PersonalStatusService : IDisposable
 
         return false;
     }
+
+    private static bool HasAnyPurifyRemovableCrowdControl(IPlayerCharacter? player) =>
+        HasActiveStatus(player, EnemyCombatConstants.PvPStunStatusId) ||
+        HasActiveStatus(player, EnemyCombatConstants.PvPHeavyStatusId) ||
+        HasActiveStatus(player, EnemyCombatConstants.PvPBindStatusId) ||
+        HasActiveStatus(player, EnemyCombatConstants.PvPSilenceStatusId) ||
+        HasActiveStatus(player, EnemyCombatConstants.DeepFreezeStatusId) ||
+        HasActiveStatus(player, EnemyCombatConstants.MiracleOfNatureStatusId);
 
     private static long SaturatingAdd(long left, long right) =>
         left > long.MaxValue - right ? long.MaxValue : left + right;
