@@ -320,8 +320,13 @@ internal sealed class OverlayRenderer
     private void DrawPersonalWarnings(long now)
     {
         var personal = personalStatus.Snapshot;
+        var defense = personalStatus.DefensiveUtilityDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var guardianPopup = defense.GuardianPopup is { } acceptedGuardian &&
+                            acceptedGuardian.IsVisible(now)
+            ? acceptedGuardian
+            : (GuardianTriggerPopup?)null;
         var liveConfirmation = rescue.ConfirmationPopup is { } popup && popup.IsVisible(now)
             ? popup
             : (AllyRescueConfirmationPopup?)null;
@@ -348,16 +353,25 @@ internal sealed class OverlayRenderer
                 .Take(4)
                 .ToArray()
             : [];
-        if (statuses.Length == 0 && confirmation is null && miracleConfirmation is null) return;
+        if (statuses.Length == 0 &&
+            guardianPopup is null &&
+            confirmation is null &&
+            miracleConfirmation is null)
+        {
+            return;
+        }
 
         var heights = new List<float>(
             statuses.Length +
+            (guardianPopup is null ? 0 : 1) +
             (confirmation is null ? 0 : 1) +
             (miracleConfirmation is null ? 0 : 1));
         if (miracleConfirmation is not null)
             heights.Add(MiracleInterceptConfirmationCardHeight());
         if (confirmation is not null)
             heights.Add(AllyRescueConfirmationCardHeight());
+        if (guardianPopup is not null)
+            heights.Add(GuardianTriggerCardHeight());
         heights.AddRange(statuses.Select(status => PersonalWarningCardHeight(status, now)));
         var offsets = BuildCenteredOffsets(heights, 7f * ImGuiHelpers.GlobalScale);
         var stackCenterY = ImGui.GetIO().DisplaySize.Y *
@@ -383,6 +397,15 @@ internal sealed class OverlayRenderer
             offsetIndex++;
         }
 
+        if (guardianPopup is { } visibleGuardianPopup)
+        {
+            DrawGuardianTriggerCard(
+                visibleGuardianPopup,
+                stackCenterY + offsets[offsetIndex],
+                now);
+            offsetIndex++;
+        }
+
         for (var index = 0; index < statuses.Length; index++)
         {
             DrawPersonalWarningCard(
@@ -391,6 +414,84 @@ internal sealed class OverlayRenderer
                 stackCenterY + offsets[offsetIndex + index],
                 now);
         }
+    }
+
+    private float GuardianTriggerCardHeight() =>
+        70f * Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f) *
+        ImGuiHelpers.GlobalScale;
+
+    private void DrawGuardianTriggerCard(
+        GuardianTriggerPopup popup,
+        float centerY,
+        long now)
+    {
+        var configuredScale = Math.Clamp(configuration.PersonalWarningScale, 0.55f, 1.8f);
+        var scale = configuredScale * ImGuiHelpers.GlobalScale;
+        var duration = Math.Max(1L, popup.EndsAtMilliseconds - popup.StartedAtMilliseconds);
+        var progress = Math.Clamp((now - popup.StartedAtMilliseconds) / (float)duration, 0f, 1f);
+        var entryPulse = MathF.Exp(-progress * 10f);
+        var cardSize = new Vector2(328f, 70f) * scale * (1f + (entryPulse * 0.055f));
+        var screen = ImGui.GetIO().DisplaySize;
+        var center = new Vector2(
+            screen.X * Math.Clamp(configuration.PersonalWarningScreenX, 0.05f, 0.95f),
+            centerY);
+        var topLeft = center - (cardSize * 0.5f);
+        var bottomRight = center + (cardSize * 0.5f);
+        var draw = ImGui.GetForegroundDrawList();
+        var rounding = 10f * scale;
+
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(
+                0.012f,
+                0.035f,
+                0.065f,
+                Math.Clamp(configuration.PersonalWarningBackgroundOpacity, 0f, 1f))),
+            rounding);
+        draw.AddRectFilled(
+            topLeft,
+            new Vector2(topLeft.X + (7f * scale), bottomRight.Y),
+            Pack(GuardColor),
+            rounding);
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(GuardColor),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2.25f, (2.75f + (entryPulse * 1.75f)) * scale));
+
+        var iconSize = 48f * scale;
+        var iconMin = new Vector2(topLeft.X + (12f * scale), center.Y - (iconSize * 0.5f));
+        var iconMax = iconMin + new Vector2(iconSize);
+        if (!TryDrawGameIcon(
+                draw,
+                EnemyCombatConstants.GuardianIconId,
+                iconMin,
+                iconMax,
+                1f))
+        {
+            draw.AddRectFilled(
+                iconMin,
+                iconMax,
+                Pack(new Vector4(GuardColor.X * 0.22f, GuardColor.Y * 0.22f, GuardColor.Z * 0.22f, 1f)),
+                6f * scale);
+        }
+
+        var textCenterX = iconMax.X + ((bottomRight.X - iconMax.X) * 0.5f) - (5f * scale);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y - (20f * scale)),
+            "GUARDIAN TRIGGERED",
+            1.01f * configuredScale,
+            true);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textCenterX, center.Y + (11f * scale)),
+            $"P{popup.PartySlot}  •  CLIENT ACCEPTED",
+            0.72f * configuredScale,
+            true);
     }
 
     private float MiracleInterceptConfirmationCardHeight() =>

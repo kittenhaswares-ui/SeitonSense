@@ -501,7 +501,9 @@ internal sealed class SettingsWindow : Window
             "Guardian additionally requires PLD, the exact non-self party ally alive and targetable within FFXIV's " +
             "native 20-yalm action range/line of sight, and both your own Guard and Guardian available. There is no " +
             "custom center-distance cap; the 10-yalm condition is the protection leash after the jump. Lowest HP% " +
-            "wins, then known higher incoming pressure and shorter distance. While your own Guard is active, and for " +
+            "wins, then known higher incoming pressure and shorter distance. An accepted automatic Guardian request " +
+            "shows a 1.5-second GUARDIAN TRIGGERED card for the selected party slot; CLIENT ACCEPTED does not prove " +
+            "that the server applied protection. While your own Guard is active, and for " +
             "the bounded 1.5-second status-propagation interval after an exact Guard request, every Seiton Sense " +
             "action-request helper is blocked, so none can cancel Guard. Manual game actions and another plugin's " +
             "repeats remain outside that boundary and can still end Guard normally.");
@@ -1304,6 +1306,8 @@ internal sealed class SettingsWindow : Window
             $"target={defense.TargetGameObjectId:X}/{defense.TargetEntityId:X}, " +
             $"key={defense.FreshGameplayKey}/{defense.HeldGameplayKey}, claim={defense.InputClaimed}, " +
             $"attempt={defense.UseActionAttempted}/{defense.UseActionAccepted}, " +
+            $"Guardian popup={defense.GuardianPopup?.PartySlot ?? 0}/" +
+            $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
         ImGui.TextWrapped(

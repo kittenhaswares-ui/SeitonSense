@@ -6,7 +6,7 @@
     "Description": "A local PvP HUD integrating pressure and CC-protection cues, an urgent isolation warning, native-HUD resource auras, Ninja Seiton decisions, fail-closed macro assistance, default-off defensive/reactive utilities and team-visible focus marking, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
     "AssemblyVersion": "0.13.0.1",
-    "Changelog": "Hotfixes Guardian targeting in defensive utilities and Far Help: FFXIV's native, hitbox-aware 20-yalm action range and line of sight are authoritative, with no custom center-distance cap. Guardian's 10-yalm condition is the protection leash after the jump, not a cast limit. Configuration schema 17 and saved settings are unchanged.",
+    "Changelog": "Hotfixes Guardian targeting in defensive utilities and Far Help: FFXIV's native, hitbox-aware 20-yalm action range and line of sight are authoritative, with no custom center-distance cap. Adds a 1.5-second GUARDIAN TRIGGERED card for accepted automatic requests; CLIENT ACCEPTED is dispatch feedback, not server-confirmed protection. Configuration schema 17 and saved settings are unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786767112"
+    "LastUpdate": "1786768259"
   }
 ]

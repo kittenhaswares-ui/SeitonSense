@@ -382,7 +382,11 @@ custom center-distance cap: native reachability remains authoritative and
 hitbox-aware. After the jump, Guardian's protection requires the Paladin to
 remain within 10 yalms of the protected member. Both your own Guard and
 Guardian must be available. Candidates rank by lowest exact HP percentage,
-then known higher incoming pressure, distance, and stable party identity.
+then known higher incoming pressure, distance, and stable party identity. When
+the automatic Guardian request is accepted locally, a blue 1.5-second
+**GUARDIAN TRIGGERED** card shows the selected party slot and explicitly labels
+the result **CLIENT ACCEPTED**. This is dispatch feedback, not proof that the
+server applied Guardian or intercepted damage.
 
 While your own Guard is active, Seiton Sense blocks all of its action-request
 helpers, including Purify, defensive utilities, Ally Rescue, reactive counter-CC,

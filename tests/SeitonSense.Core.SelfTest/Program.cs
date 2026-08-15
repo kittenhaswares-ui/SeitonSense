@@ -34,6 +34,7 @@ var tests = new (string Name, Action Run)[]
     ("Guard propagation latch is bounded and non-rearming", DefensiveUtilitySelfTests.GuardPropagationLatchIsBoundedAndNonRearming),
     ("Guardian eligibility uses native reachability", DefensiveUtilitySelfTests.GuardianEligibilityUsesNativeReachability),
     ("Guardian ranking is deterministic", DefensiveUtilitySelfTests.GuardianRankingIsDeterministic),
+    ("Guardian trigger popup is accepted only and bounded", DefensiveUtilitySelfTests.GuardianTriggerPopupIsAcceptedOnlyAndBounded),
     ("isolation warning requires continuous isolation", IsolationWarningSelfTests.ContinuousIsolationUsesEntryDelay),
     ("isolation warning clears only after stable connection", IsolationWarningSelfTests.StableConnectionUsesClearDelay),
     ("isolation warning ignores dead allies", IsolationWarningSelfTests.DeadAlliesDoNotProvideConnection),

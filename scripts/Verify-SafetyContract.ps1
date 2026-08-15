@@ -626,6 +626,19 @@ Assert-Literals $defensiveUtilityRules @(
     'GuardPropagationDecision(',
     'public bool SuppressDirectActionHelpers =>',
     'ExactGuardActive || PropagationLatchActive',
+    'GuardianTriggerPopup(',
+    'PartySlot is >= 1 and <= 8',
+    'nowMilliseconds >= StartedAtMilliseconds',
+    'nowMilliseconds < EndsAtMilliseconds',
+    'GuardianTriggerPopupDurationMilliseconds = 1_500',
+    'ObserveGuardianTriggerPopup(',
+    'hardReset || !runtimeEnabled || nowMilliseconds < 0',
+    'action != DefensiveUtilityActionKind.Guardian',
+    'trigger != DefensiveUtilityTrigger.PaladinGuardianLowAlly',
+    '!useActionAttempted',
+    '!useActionAccepted',
+    'selectedPartySlot is < 1 or > 8',
+    'SaturatingAdd(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds)',
     'GuardPropagationLatchMilliseconds = 1_500',
     'RequiredIncomingEnemyCount = 3',
     'PreGuardHpPercent = 50',
@@ -641,6 +654,16 @@ Assert-Literals $defensiveUtilityRules @(
     'candidate.DistanceSquared >= 0f',
     'spentActors?.Contains(candidate.Actor) == true'
 ) 'Exact pressure, HP, native Guardian reachability, Resilience, and one-intent defensive rules'
+$guardianTriggerPopupMethod = [regex]::Match(
+    $normalizedDefensiveUtilityRules,
+    'public static GuardianTriggerPopup\? ObserveGuardianTriggerPopup\(.*?\) \{(?<Body>.*?)\} public static bool CanDispatchPostPurifyGuard')
+$guardianTriggerPopupBody = $guardianTriggerPopupMethod.Groups['Body'].Value
+if (-not $guardianTriggerPopupMethod.Success -or
+    [regex]::Matches($defensiveUtilityRules, 'public const long GuardianTriggerPopupDurationMilliseconds\s*=\s*1_500\s*;').Count -ne 1 -or
+    $guardianTriggerPopupBody -notmatch 'if \(hardReset \|\| !runtimeEnabled \|\| nowMilliseconds < 0\) return null;.*?var current = previous is \{ \} visible && visible\.IsVisible\(nowMilliseconds\).*?if \(action != DefensiveUtilityActionKind\.Guardian \|\| trigger != DefensiveUtilityTrigger\.PaladinGuardianLowAlly \|\| !useActionAttempted \|\| !useActionAccepted \|\| selectedPartySlot is < 1 or > 8\) \{ return current; \}.*?new GuardianTriggerPopup\( selectedPartySlot, nowMilliseconds, SaturatingAdd\(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds\)\).*?return next\.IsValid \? next : current;' -or
+    $guardianTriggerPopupBody -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
+    throw 'Guardian trigger popup must be a pure 1500-ms latch created only for a valid-slot attempted-and-client-accepted automatic Guardian while its runtime is enabled.'
+}
 if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagationLatchMilliseconds\s*=\s*1_500\s*;').Count -ne 1 -or
     $normalizedDefensiveUtilityRules -notmatch 'observedGuardAttemptAtMilliseconds >= 0 && observedGuardAttemptAtMilliseconds <= nowMilliseconds && observedGuardAttemptAtMilliseconds > lastObservedAttempt\) \{ lastObservedAttempt = observedGuardAttemptAtMilliseconds; expiresAt = SaturatingAdd\( observedGuardAttemptAtMilliseconds, GuardPropagationLatchMilliseconds\); \}' -or
     $normalizedDefensiveUtilityRules -notmatch 'if \(exactGuardActive\) expiresAt = -1; var latchActive = !exactGuardActive && expiresAt > nowMilliseconds; var next = new GuardPropagationState\( lastObservedAttempt, latchActive \? expiresAt : -1\);' -or
@@ -648,7 +671,7 @@ if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagation
     throw 'Guard propagation must last exactly 1500ms from each first/new attempt timestamp, reject duplicate re-extension, and retire its latch on exact Guard membership.'
 }
 if ($defensiveUtilityRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
-    throw 'Pure Guard-propagation rules may suppress helper eligibility only; they must never call, replay, suppress, or retarget an action.'
+    throw 'Pure defensive utility rules may only decide eligibility and visual latch state; they must never call, replay, suppress, or retarget an action.'
 }
 $guardianCandidateMethod = [regex]::Match(
     $normalizedDefensiveUtilityRules,
@@ -680,6 +703,9 @@ Assert-Literals $defensiveUtility @(
     'PartySlotResolver.Resolve',
     'GetActionInRangeOrLoS',
     'SelectGuardianCandidateIndex',
+    'GuardianTriggerPopup? GuardianPopup',
+    'selectedGuardianPartySlot = selected.PartySlot',
+    'ObserveGuardianTriggerPopup(',
     'HasActiveGuard(localPlayer)',
     'IsActionOffCooldown(EnemyCombatConstants.GuardActionId)',
     'IsActionOffCooldown(EnemyCombatConstants.GuardianActionId)',
@@ -690,6 +716,13 @@ if ($normalizedDefensiveUtility -notmatch 'if \(highPressureStunObserved && puri
     $normalizedDefensiveUtility -notmatch 'trigger = DefensiveUtilityTrigger\.PreGuardLowHpPressure; preGuardEpisodeSpent = true; inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardOnce' -or
     $normalizedDefensiveUtility -notmatch 'guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce') {
     throw 'Each defensive intent must be retired and its shared physical generation consumed before the sole native request; Purify follow-up requires a later Resilience-confirmed generation.'
+}
+if ([regex]::Matches($defensiveUtility, '\bObserveGuardianTriggerPopup\s*\(').Count -ne 1 -or
+    $normalizedDefensiveUtility -notmatch 'action = DefensiveUtilityActionKind\.Guardian; trigger = DefensiveUtilityTrigger\.PaladinGuardianLowAlly; targetGameObjectId = selected\.GameObjectId; targetEntityId = selected\.EntityId; selectedGuardianPartySlot = selected\.PartySlot; guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce\(localPlayer!, selected, out attempted\);' -or
+    $normalizedDefensiveUtility -notmatch 'guardianPopup = DefensiveUtilityRules\.ObserveGuardianTriggerPopup\( guardianPopup, configurationEnabled && isCrystallineConflict && enablePaladinGuardianLowAlly && localIdentityValid && IsPaladin\(localPlayer!\), action, trigger, attempted, accepted, selectedGuardianPartySlot, nowMilliseconds, hardReset\);' -or
+    $normalizedDefensiveUtility -notmatch 'if \(hardReset\) ResetRuntime\(\); else if \(!configurationEnabled \|\| !isCrystallineConflict\) ResetOpportunityRuntime\(\);' -or
+    $normalizedDefensiveUtility -notmatch 'private void ResetOpportunityRuntime\(\) \{.*?guardianPopup = null; \}') {
+    throw 'Only the attempted-and-client-accepted PLD Guardian helper branch may feed the popup, and disable, CC-context loss, fail-closed, or reset must clear it.'
 }
 if ($normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
@@ -1086,6 +1119,35 @@ Assert-Literals $overlaySource @(
 ) 'Visible, bounded, truthful AUTO CC LANDED news flash'
 if ($overlaySource -match '(?i)interrupt(?:ed| successful| confirmed)|cancelled hostile|stopped (?:mch|sam|vpr|dnc|lb|nest)') {
     throw 'AUTO CC LANDED may name the exact counter status and trigger, but may not claim the hostile action was proven interrupted.'
+}
+Assert-Literals $overlaySource @(
+    'var defense = personalStatus.DefensiveUtilityDiagnostics',
+    'defense.GuardianPopup is { } acceptedGuardian',
+    'acceptedGuardian.IsVisible(now)',
+    'heights.Add(GuardianTriggerCardHeight())',
+    'BuildCenteredOffsets(heights, 7f * ImGuiHelpers.GlobalScale)',
+    'DrawGuardianTriggerCard(',
+    'EnemyCombatConstants.GuardianIconId',
+    '"GUARDIAN TRIGGERED"',
+    '$"P{popup.PartySlot}  •  CLIENT ACCEPTED"'
+) 'Shared-stack client-accepted automatic Guardian popup'
+$normalizedGuardianOverlay = $overlaySource -replace '\s+', ' '
+$guardianWarningStackMethod = [regex]::Match(
+    $normalizedGuardianOverlay,
+    'private void DrawPersonalWarnings\(long now\) \{(?<Body>.*?)\} private float GuardianTriggerCardHeight')
+$guardianCardMethod = [regex]::Match(
+    $normalizedGuardianOverlay,
+    'private void DrawGuardianTriggerCard\(.*?\) \{(?<Body>.*?)\} private float MiracleInterceptConfirmationCardHeight')
+$guardianWarningStackBody = $guardianWarningStackMethod.Groups['Body'].Value
+$guardianCardBody = $guardianCardMethod.Groups['Body'].Value
+if (-not $guardianWarningStackMethod.Success -or
+    -not $guardianCardMethod.Success -or
+    [regex]::Matches($overlaySource, '\bDrawGuardianTriggerCard\s*\(').Count -ne 2 -or
+    $guardianWarningStackBody -notmatch 'var defense = personalStatus\.DefensiveUtilityDiagnostics;.*?defense\.GuardianPopup is \{ \} acceptedGuardian && acceptedGuardian\.IsVisible\(now\).*?heights\.Add\(GuardianTriggerCardHeight\(\)\);.*?BuildCenteredOffsets\(heights, 7f \* ImGuiHelpers\.GlobalScale\).*?DrawGuardianTriggerCard\( visibleGuardianPopup, stackCenterY \+ offsets\[offsetIndex\], now\);' -or
+    $guardianCardBody -notmatch 'EnemyCombatConstants\.GuardianIconId.*?"GUARDIAN TRIGGERED".*?\$"P\{popup\.PartySlot\} • CLIENT ACCEPTED"' -or
+    $guardianCardBody -match '(?i)\b(landed|saved|protected)\b' -or
+    $guardianCardBody -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Guardian popup must remain one visual-only card in DrawPersonalWarnings, use the Guardian icon, and state only GUARDIAN TRIGGERED / P# CLIENT ACCEPTED without a server-landed or protection-success claim.'
 }
 
 # Monk Earth's Reply is a separate default-off direct self-action boundary. It

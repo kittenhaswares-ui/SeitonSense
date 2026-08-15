@@ -387,6 +387,12 @@ consumes its selected state and physical generation before at most one normal
 native action request. It does not change the visible target, select an alternate
 action after failure, replay input, or retry.
 
+An accepted automatic Guardian request creates a local in-memory notification
+containing only the selected party slot and its start/end timestamps. The
+1.5-second `GUARDIAN TRIGGERED` card says `CLIENT ACCEPTED`; it is cleared on
+reset, configuration/context loss, or expiry and is not stored or transmitted.
+It does not claim server-confirmed protection or damage interception.
+
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
 The same in-memory suppression begins immediately after an exact local Guard
 request and expires after 1.5 seconds unless the real Guard status takes over; the

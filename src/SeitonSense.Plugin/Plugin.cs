@@ -503,6 +503,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"fresh={defense.FreshGameplayKey},held={defense.HeldGameplayKey}," +
                     $"claimed={defense.InputClaimed},attempt={defense.UseActionAttempted}/" +
                     $"{defense.UseActionAccepted},count={defense.AttemptCount}/{defense.AcceptedCount}," +
+                    $"popup={defense.GuardianPopup?.PartySlot ?? 0}/" +
+                    $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)}," +
                     $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
                     $"last={defense.LastEvent}]");
                 chatGui.Print(
