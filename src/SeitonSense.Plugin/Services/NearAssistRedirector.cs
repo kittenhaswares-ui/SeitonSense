@@ -1979,9 +1979,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // transformed actions wait without consuming the armed token.
         switch (actionId)
         {
-            case 29066: // PLD Guardian. Official execution condition is within 10y.
+            case 29066: // PLD Guardian. Native range/LoS owns the verified 20y sheet reachability.
                 expectedJobId = 19;
-                maximumDistance = 10f;
+                maximumDistance = float.PositiveInfinity;
                 return true;
             case 29261: // SGE Icarus
                 expectedJobId = 40;

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0.1
+
+- Corrected Guardian `29066` targeting in both defensive utility selection and
+  Far Help. FFXIV's native, hitbox-aware 20-yalm action-range and line-of-sight
+  result is now authoritative, with no custom center-distance cap.
+- Clarified that Guardian's 10-yalm condition governs staying close enough to
+  the protected party member after the jump; it is not a 10-yalm cast limit.
+- Added a 1.5-second `GUARDIAN TRIGGERED` card after the automatic PLD helper's
+  native request is accepted. It identifies the selected party slot and says
+  `CLIENT ACCEPTED`; it does not claim the server applied Guardian protection.
+- Bumped the plugin version to 0.13.0.1. Configuration schema 17 and all saved
+  settings remain unchanged.
+
 ## 0.13.0.0
 
 - Added an enabled-by-default urgent isolation warning for exact Crystalline

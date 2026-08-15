@@ -276,8 +276,10 @@ farthest of those actors from the local player wins. If none pass or the enemy
 snapshot cannot certify them, the farthest otherwise valid reachable ally wins
 instead. Only at exactly equal measured distance does role break the tie, in
 healer, ranged/caster, then other-job order. Native party order and stable actor
-identity resolve any remaining tie. Guardian also uses a strict under-10-yalm
-local-player limit. This is a preference and does not guarantee tactical safety.
+identity resolve any remaining tie. Guardian uses FFXIV's native 20-yalm
+action-range and line-of-sight result without a custom center-distance cap. Its
+10-yalm condition governs staying close enough for protection after the jump.
+This is a preference and does not guarantee tactical safety.
 Only having no valid reachable ally produces no movement.
 
 The recommended macro has exactly three lines: `/mlock`, `/farhelp`, and one
@@ -376,12 +378,20 @@ pre-Guard rule requires HP at or below 50%, the same known pressure threshold,
 no removable CC, and Guard available.
 
 The PLD-only rule requires an exact living, targetable, non-self party member at
-or below 20% HP, strict distance below 10 yalms, native range/line of sight, and
-both own Guard and Guardian `29066` available. Candidate ranking uses exact HP
-ratio, known incoming pressure, distance, and stable party identity. The helper
+or below 20% HP, FFXIV's native 20-yalm Guardian range/line-of-sight acceptance,
+and both own Guard and Guardian `29066` available. No custom center-distance cap
+is applied; the 10-yalm condition governs staying close enough for protection
+after the jump. Candidate ranking uses exact HP ratio, known incoming pressure,
+distance, and stable party identity. The helper
 consumes its selected state and physical generation before at most one normal
 native action request. It does not change the visible target, select an alternate
 action after failure, replay input, or retry.
+
+An accepted automatic Guardian request creates a local in-memory notification
+containing only the selected party slot and its start/end timestamps. The
+1.5-second `GUARDIAN TRIGGERED` card says `CLIENT ACCEPTED`; it is cleared on
+reset, configuration/context loss, or expiry and is not stored or transmitted.
+It does not claim server-confirmed protection or damage interception.
 
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
 The same in-memory suppression begins immediately after an exact local Guard
@@ -476,7 +486,7 @@ isolation warning/scale, defensive master/held-key/per-rule opt-ins, WHM/BRD
 reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
 marker opt-in, resource-aura surfaces/thresholds/appearance, the Monk Earth's
 Reply master/triggers/thresholds, and the CC-immunity-brake master plus exact
-per-job/per-action selections. Configuration schema 17 is current in v0.13.0.0
+per-job/per-action selections. Configuration schema 17 is current in v0.13.0.1
 and does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.

@@ -36,6 +36,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
     long AcceptedCount,
     bool GuardMetadataVerified,
     bool GuardianMetadataVerified,
+    GuardianTriggerPopup? GuardianPopup,
     string LastEvent)
 {
     internal static DefensiveUtilityProbeSnapshot Initial { get; } = new(
@@ -62,6 +63,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
         0,
         false,
         false,
+        null,
         "Not started");
 }
 
@@ -85,6 +87,7 @@ internal sealed class DefensiveUtilityProbe
     private bool awaitingPostPurifyConfirmation;
     private long postPurifyGuardExpiresAt = -1;
     private GuardPropagationState guardPropagationState = GuardPropagationState.Initial;
+    private GuardianTriggerPopup? guardianPopup;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -209,6 +212,7 @@ internal sealed class DefensiveUtilityProbe
         var accepted = false;
         var targetGameObjectId = 0UL;
         var targetEntityId = 0U;
+        var selectedGuardianPartySlot = 0;
         var lastEvent = DescribeWaitingState(
             configurationEnabled,
             isCrystallineConflict,
@@ -281,6 +285,7 @@ internal sealed class DefensiveUtilityProbe
                 trigger = DefensiveUtilityTrigger.PaladinGuardianLowAlly;
                 targetGameObjectId = selected.GameObjectId;
                 targetEntityId = selected.EntityId;
+                selectedGuardianPartySlot = selected.PartySlot;
                 guardianSpentActors.Add(selected.Actor);
                 inputClaimed = true;
                 inputFrame.Consume();
@@ -293,6 +298,21 @@ internal sealed class DefensiveUtilityProbe
 
         if (attempted) Interlocked.Increment(ref attemptCount);
         if (accepted) Interlocked.Increment(ref acceptedCount);
+
+        guardianPopup = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            guardianPopup,
+            configurationEnabled &&
+            isCrystallineConflict &&
+            enablePaladinGuardianLowAlly &&
+            localIdentityValid &&
+            IsPaladin(localPlayer!),
+            action,
+            trigger,
+            attempted,
+            accepted,
+            selectedGuardianPartySlot,
+            nowMilliseconds,
+            hardReset);
 
         var guardSuppressionNow = Math.Max(nowMilliseconds, Environment.TickCount64);
         var guardSuppression = ObserveGuardSuppression(
@@ -326,6 +346,7 @@ internal sealed class DefensiveUtilityProbe
             Interlocked.Read(ref acceptedCount),
             guardMetadataVerified,
             guardianMetadataVerified,
+            guardianPopup,
             lastEvent);
         Volatile.Write(ref snapshot, result);
         return result;
@@ -795,6 +816,7 @@ internal sealed class DefensiveUtilityProbe
         preGuardEpisodeSpent = false;
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
+        guardianPopup = null;
     }
 
     private static string DescribeWaitingState(

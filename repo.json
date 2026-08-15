@@ -5,8 +5,8 @@
     "Punchline": "PvP pressure, isolation, defensive/reactive utilities, assists, and target clarity.",
     "Description": "A local PvP HUD integrating pressure and CC-protection cues, an urgent isolation warning, native-HUD resource auras, Ninja Seiton decisions, fail-closed macro assistance, default-off defensive/reactive utilities and team-visible focus marking, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.13.0.0",
-    "Changelog": "Adds an urgent exact-CC isolation warning plus default-off defensive Purify/Guard/Guardian utilities, WHM/BRD reactive counter-CC for DNC Contradance and all-six post-Purify follow-up with exact team focus 2+, and a real party-visible Attack1 sign for known Guard-down low-resource enemies. One physical generation still makes at most one helper action; active own Guard blocks plugin action helpers. Counter popups prove only the exact status landed, not that damage or an LB was interrupted. The marker never swaps targets or overwrites Attack1 and clears only confirmed-owned state. Configuration schema 17; defensive/marker masters default off, while reactive preserves the old Miracle opt-in. Native timing, line of sight, and marker-command behavior still require live CC validation.",
+    "AssemblyVersion": "0.13.0.1",
+    "Changelog": "Hotfixes Guardian targeting in defensive utilities and Far Help: FFXIV's native, hitbox-aware 20-yalm action range and line of sight are authoritative, with no custom center-distance cap. Adds a 1.5-second GUARDIAN TRIGGERED card for accepted automatic requests; CLIENT ACCEPTED is dispatch feedback, not server-confirmed protection. Configuration schema 17 and saved settings are unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786759737"
+    "LastUpdate": "1786768259"
   }
 ]

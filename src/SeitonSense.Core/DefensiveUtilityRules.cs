@@ -33,6 +33,22 @@ public readonly record struct PaladinGuardianCandidate(
     public TargetPressureActorIdentity Actor => new(GameObjectId, EntityId);
 }
 
+public readonly record struct GuardianTriggerPopup(
+    int PartySlot,
+    long StartedAtMilliseconds,
+    long EndsAtMilliseconds)
+{
+    public bool IsValid =>
+        PartySlot is >= 1 and <= 8 &&
+        StartedAtMilliseconds >= 0 &&
+        EndsAtMilliseconds > StartedAtMilliseconds;
+
+    public bool IsVisible(long nowMilliseconds) =>
+        IsValid &&
+        nowMilliseconds >= StartedAtMilliseconds &&
+        nowMilliseconds < EndsAtMilliseconds;
+}
+
 public readonly record struct GuardPropagationState(
     long LastObservedAttemptAtMilliseconds,
     long ExpiresAtMilliseconds)
@@ -60,7 +76,7 @@ public static class DefensiveUtilityRules
     public const int RequiredIncomingEnemyCount = 3;
     public const int PreGuardHpPercent = 50;
     public const int GuardianAllyHpPercent = 20;
-    public const float GuardianStrictMaximumDistance = 10f;
+    public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
     // Covers the normal client/server status-propagation and action-queue window
     // without turning one Guard request into an unbounded helper lockout.
@@ -139,6 +155,38 @@ public static class DefensiveUtilityRules
         IsHighPressure(pressureKnown, incomingEnemyCount) &&
         IsAtOrBelowHpPercent(currentHp, maximumHp, PreGuardHpPercent);
 
+    public static GuardianTriggerPopup? ObserveGuardianTriggerPopup(
+        GuardianTriggerPopup? previous,
+        bool runtimeEnabled,
+        DefensiveUtilityActionKind action,
+        DefensiveUtilityTrigger trigger,
+        bool useActionAttempted,
+        bool useActionAccepted,
+        int selectedPartySlot,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        if (hardReset || !runtimeEnabled || nowMilliseconds < 0) return null;
+
+        var current = previous is { } visible && visible.IsVisible(nowMilliseconds)
+            ? visible
+            : (GuardianTriggerPopup?)null;
+        if (action != DefensiveUtilityActionKind.Guardian ||
+            trigger != DefensiveUtilityTrigger.PaladinGuardianLowAlly ||
+            !useActionAttempted ||
+            !useActionAccepted ||
+            selectedPartySlot is < 1 or > 8)
+        {
+            return current;
+        }
+
+        var next = new GuardianTriggerPopup(
+            selectedPartySlot,
+            nowMilliseconds,
+            SaturatingAdd(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds));
+        return next.IsValid ? next : current;
+    }
+
     public static bool CanDispatchPostPurifyGuard(
         bool awaitingPurifyConfirmation,
         bool resilienceObserved,
@@ -153,8 +201,6 @@ public static class DefensiveUtilityRules
 
     public static bool IsGuardianCandidate(PaladinGuardianCandidate candidate)
     {
-        var strictMaximumDistanceSquared =
-            GuardianStrictMaximumDistance * GuardianStrictMaximumDistance;
         return candidate.Actor.IsValid &&
                candidate.PartySlot is >= 1 and <= 8 &&
                candidate.IsExactPartyMember &&
@@ -164,7 +210,7 @@ public static class DefensiveUtilityRules
                candidate.HasValidNativeTarget &&
                candidate.HasNativeRangeAndLineOfSight &&
                float.IsFinite(candidate.DistanceSquared) &&
-               candidate.DistanceSquared < strictMaximumDistanceSquared &&
+               candidate.DistanceSquared >= 0f &&
                IsAtOrBelowHpPercent(
                    candidate.CurrentHp,
                    candidate.MaximumHp,

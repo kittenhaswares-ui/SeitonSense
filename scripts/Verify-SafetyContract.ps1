@@ -626,20 +626,44 @@ Assert-Literals $defensiveUtilityRules @(
     'GuardPropagationDecision(',
     'public bool SuppressDirectActionHelpers =>',
     'ExactGuardActive || PropagationLatchActive',
+    'GuardianTriggerPopup(',
+    'PartySlot is >= 1 and <= 8',
+    'nowMilliseconds >= StartedAtMilliseconds',
+    'nowMilliseconds < EndsAtMilliseconds',
+    'GuardianTriggerPopupDurationMilliseconds = 1_500',
+    'ObserveGuardianTriggerPopup(',
+    'hardReset || !runtimeEnabled || nowMilliseconds < 0',
+    'action != DefensiveUtilityActionKind.Guardian',
+    'trigger != DefensiveUtilityTrigger.PaladinGuardianLowAlly',
+    '!useActionAttempted',
+    '!useActionAccepted',
+    'selectedPartySlot is < 1 or > 8',
+    'SaturatingAdd(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds)',
     'GuardPropagationLatchMilliseconds = 1_500',
     'RequiredIncomingEnemyCount = 3',
     'PreGuardHpPercent = 50',
     'GuardianAllyHpPercent = 20',
-    'GuardianStrictMaximumDistance = 10f',
     'PostPurifyGuardWindowMilliseconds = 2_000',
     'pressureKnown && incomingEnemyCount >= RequiredIncomingEnemyCount',
     '(ulong)currentHp * 100UL <= (ulong)maximumHp * (ulong)threshold',
     '!hasPurifyRemovableCrowdControl',
     '!awaitingPurifyConfirmation',
     'resilienceObserved',
-    'candidate.DistanceSquared < strictMaximumDistanceSquared',
+    'candidate.HasNativeRangeAndLineOfSight',
+    'float.IsFinite(candidate.DistanceSquared)',
+    'candidate.DistanceSquared >= 0f',
     'spentActors?.Contains(candidate.Actor) == true'
-) 'Exact pressure, HP, strict-distance, Resilience, and one-intent defensive rules'
+) 'Exact pressure, HP, native Guardian reachability, Resilience, and one-intent defensive rules'
+$guardianTriggerPopupMethod = [regex]::Match(
+    $normalizedDefensiveUtilityRules,
+    'public static GuardianTriggerPopup\? ObserveGuardianTriggerPopup\(.*?\) \{(?<Body>.*?)\} public static bool CanDispatchPostPurifyGuard')
+$guardianTriggerPopupBody = $guardianTriggerPopupMethod.Groups['Body'].Value
+if (-not $guardianTriggerPopupMethod.Success -or
+    [regex]::Matches($defensiveUtilityRules, 'public const long GuardianTriggerPopupDurationMilliseconds\s*=\s*1_500\s*;').Count -ne 1 -or
+    $guardianTriggerPopupBody -notmatch 'if \(hardReset \|\| !runtimeEnabled \|\| nowMilliseconds < 0\) return null;.*?var current = previous is \{ \} visible && visible\.IsVisible\(nowMilliseconds\).*?if \(action != DefensiveUtilityActionKind\.Guardian \|\| trigger != DefensiveUtilityTrigger\.PaladinGuardianLowAlly \|\| !useActionAttempted \|\| !useActionAccepted \|\| selectedPartySlot is < 1 or > 8\) \{ return current; \}.*?new GuardianTriggerPopup\( selectedPartySlot, nowMilliseconds, SaturatingAdd\(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds\)\).*?return next\.IsValid \? next : current;' -or
+    $guardianTriggerPopupBody -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
+    throw 'Guardian trigger popup must be a pure 1500-ms latch created only for a valid-slot attempted-and-client-accepted automatic Guardian while its runtime is enabled.'
+}
 if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagationLatchMilliseconds\s*=\s*1_500\s*;').Count -ne 1 -or
     $normalizedDefensiveUtilityRules -notmatch 'observedGuardAttemptAtMilliseconds >= 0 && observedGuardAttemptAtMilliseconds <= nowMilliseconds && observedGuardAttemptAtMilliseconds > lastObservedAttempt\) \{ lastObservedAttempt = observedGuardAttemptAtMilliseconds; expiresAt = SaturatingAdd\( observedGuardAttemptAtMilliseconds, GuardPropagationLatchMilliseconds\); \}' -or
     $normalizedDefensiveUtilityRules -notmatch 'if \(exactGuardActive\) expiresAt = -1; var latchActive = !exactGuardActive && expiresAt > nowMilliseconds; var next = new GuardPropagationState\( lastObservedAttempt, latchActive \? expiresAt : -1\);' -or
@@ -647,12 +671,18 @@ if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagation
     throw 'Guard propagation must last exactly 1500ms from each first/new attempt timestamp, reject duplicate re-extension, and retire its latch on exact Guard membership.'
 }
 if ($defensiveUtilityRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
-    throw 'Pure Guard-propagation rules may suppress helper eligibility only; they must never call, replay, suppress, or retarget an action.'
+    throw 'Pure defensive utility rules may only decide eligibility and visual latch state; they must never call, replay, suppress, or retarget an action.'
 }
+$guardianCandidateMethod = [regex]::Match(
+    $normalizedDefensiveUtilityRules,
+    'public static bool IsGuardianCandidate\(.*?\) \{.*?\} public static int SelectGuardianCandidateIndex').Value
 if ($normalizedDefensiveUtilityRules -notmatch 'IsPreGuardRisk\(.*?\) => !guardActive && !hasPurifyRemovableCrowdControl && IsHighPressure\(pressureKnown, incomingEnemyCount\) && IsAtOrBelowHpPercent\(currentHp, maximumHp, PreGuardHpPercent\)' -or
     $normalizedDefensiveUtilityRules -notmatch 'CanDispatchPostPurifyGuard\(.*?\) => !awaitingPurifyConfirmation && resilienceObserved && !hasPurifyRemovableCrowdControl && nowMilliseconds >= 0 && expiresAtMilliseconds > nowMilliseconds' -or
-    $normalizedDefensiveUtilityRules -notmatch 'candidate\.DistanceSquared < strictMaximumDistanceSquared.*?GuardianAllyHpPercent') {
-    throw 'Defensive rules must require known pressure >=3, self HP <=50%, ally HP <=20%, strict distance <10y, and positive post-Purify Resilience before Guard.'
+    [string]::IsNullOrWhiteSpace($guardianCandidateMethod) -or
+    $guardianCandidateMethod -notmatch 'candidate\.HasValidNativeTarget && candidate\.HasNativeRangeAndLineOfSight && float\.IsFinite\(candidate\.DistanceSquared\) && candidate\.DistanceSquared >= 0f && IsAtOrBelowHpPercent\( candidate\.CurrentHp, candidate\.MaximumHp, GuardianAllyHpPercent\)' -or
+    $guardianCandidateMethod -match 'DistanceSquared\s*<' -or
+    $defensiveUtilityRules -match '\bGuardianStrictMaximumDistance\b|\bstrictMaximumDistanceSquared\b') {
+    throw 'Defensive rules must require known pressure >=3, self HP <=50%, ally HP <=20%, finite nonnegative distance, native Guardian range/LoS, and positive post-Purify Resilience without a raw-distance upper cap.'
 }
 if ([regex]::Matches($defensiveUtility, '(?:->|\.)UseAction\s*\(').Count -ne 2) {
     throw 'Defensive utility runtime must contain exactly one Guard and one Guardian native UseAction boundary.'
@@ -673,6 +703,9 @@ Assert-Literals $defensiveUtility @(
     'PartySlotResolver.Resolve',
     'GetActionInRangeOrLoS',
     'SelectGuardianCandidateIndex',
+    'GuardianTriggerPopup? GuardianPopup',
+    'selectedGuardianPartySlot = selected.PartySlot',
+    'ObserveGuardianTriggerPopup(',
     'HasActiveGuard(localPlayer)',
     'IsActionOffCooldown(EnemyCombatConstants.GuardActionId)',
     'IsActionOffCooldown(EnemyCombatConstants.GuardianActionId)',
@@ -683,6 +716,13 @@ if ($normalizedDefensiveUtility -notmatch 'if \(highPressureStunObserved && puri
     $normalizedDefensiveUtility -notmatch 'trigger = DefensiveUtilityTrigger\.PreGuardLowHpPressure; preGuardEpisodeSpent = true; inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardOnce' -or
     $normalizedDefensiveUtility -notmatch 'guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce') {
     throw 'Each defensive intent must be retired and its shared physical generation consumed before the sole native request; Purify follow-up requires a later Resilience-confirmed generation.'
+}
+if ([regex]::Matches($defensiveUtility, '\bObserveGuardianTriggerPopup\s*\(').Count -ne 1 -or
+    $normalizedDefensiveUtility -notmatch 'action = DefensiveUtilityActionKind\.Guardian; trigger = DefensiveUtilityTrigger\.PaladinGuardianLowAlly; targetGameObjectId = selected\.GameObjectId; targetEntityId = selected\.EntityId; selectedGuardianPartySlot = selected\.PartySlot; guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce\(localPlayer!, selected, out attempted\);' -or
+    $normalizedDefensiveUtility -notmatch 'guardianPopup = DefensiveUtilityRules\.ObserveGuardianTriggerPopup\( guardianPopup, configurationEnabled && isCrystallineConflict && enablePaladinGuardianLowAlly && localIdentityValid && IsPaladin\(localPlayer!\), action, trigger, attempted, accepted, selectedGuardianPartySlot, nowMilliseconds, hardReset\);' -or
+    $normalizedDefensiveUtility -notmatch 'if \(hardReset\) ResetRuntime\(\); else if \(!configurationEnabled \|\| !isCrystallineConflict\) ResetOpportunityRuntime\(\);' -or
+    $normalizedDefensiveUtility -notmatch 'private void ResetOpportunityRuntime\(\) \{.*?guardianPopup = null; \}') {
+    throw 'Only the attempted-and-client-accepted PLD Guardian helper branch may feed the popup, and disable, CC-context loss, fail-closed, or reset must clear it.'
 }
 if ($normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
@@ -1079,6 +1119,35 @@ Assert-Literals $overlaySource @(
 ) 'Visible, bounded, truthful AUTO CC LANDED news flash'
 if ($overlaySource -match '(?i)interrupt(?:ed| successful| confirmed)|cancelled hostile|stopped (?:mch|sam|vpr|dnc|lb|nest)') {
     throw 'AUTO CC LANDED may name the exact counter status and trigger, but may not claim the hostile action was proven interrupted.'
+}
+Assert-Literals $overlaySource @(
+    'var defense = personalStatus.DefensiveUtilityDiagnostics',
+    'defense.GuardianPopup is { } acceptedGuardian',
+    'acceptedGuardian.IsVisible(now)',
+    'heights.Add(GuardianTriggerCardHeight())',
+    'BuildCenteredOffsets(heights, 7f * ImGuiHelpers.GlobalScale)',
+    'DrawGuardianTriggerCard(',
+    'EnemyCombatConstants.GuardianIconId',
+    '"GUARDIAN TRIGGERED"',
+    '$"P{popup.PartySlot}  •  CLIENT ACCEPTED"'
+) 'Shared-stack client-accepted automatic Guardian popup'
+$normalizedGuardianOverlay = $overlaySource -replace '\s+', ' '
+$guardianWarningStackMethod = [regex]::Match(
+    $normalizedGuardianOverlay,
+    'private void DrawPersonalWarnings\(long now\) \{(?<Body>.*?)\} private float GuardianTriggerCardHeight')
+$guardianCardMethod = [regex]::Match(
+    $normalizedGuardianOverlay,
+    'private void DrawGuardianTriggerCard\(.*?\) \{(?<Body>.*?)\} private float MiracleInterceptConfirmationCardHeight')
+$guardianWarningStackBody = $guardianWarningStackMethod.Groups['Body'].Value
+$guardianCardBody = $guardianCardMethod.Groups['Body'].Value
+if (-not $guardianWarningStackMethod.Success -or
+    -not $guardianCardMethod.Success -or
+    [regex]::Matches($overlaySource, '\bDrawGuardianTriggerCard\s*\(').Count -ne 2 -or
+    $guardianWarningStackBody -notmatch 'var defense = personalStatus\.DefensiveUtilityDiagnostics;.*?defense\.GuardianPopup is \{ \} acceptedGuardian && acceptedGuardian\.IsVisible\(now\).*?heights\.Add\(GuardianTriggerCardHeight\(\)\);.*?BuildCenteredOffsets\(heights, 7f \* ImGuiHelpers\.GlobalScale\).*?DrawGuardianTriggerCard\( visibleGuardianPopup, stackCenterY \+ offsets\[offsetIndex\], now\);' -or
+    $guardianCardBody -notmatch 'EnemyCombatConstants\.GuardianIconId.*?"GUARDIAN TRIGGERED".*?\$"P\{popup\.PartySlot\} • CLIENT ACCEPTED"' -or
+    $guardianCardBody -match '(?i)\b(landed|saved|protected)\b' -or
+    $guardianCardBody -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Guardian popup must remain one visual-only card in DrawPersonalWarnings, use the Guardian icon, and state only GUARDIAN TRIGGERED / P# CLIENT ACCEPTED without a server-landed or protection-success claim.'
 }
 
 # Monk Earth's Reply is a separate default-off direct self-action boundary. It
@@ -1759,7 +1828,7 @@ if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction.*?return resolvedAc
     throw 'Far Help pre-consumption filtering must use only the exact reviewed resolved-action allowlist, not generic metadata.'
 }
 foreach ($mapping in @(
-    'case 29066:.*?expectedJobId = 19;.*?maximumDistance = 10f;',
+    'case 29066:.*?expectedJobId = 19;.*?maximumDistance = float.PositiveInfinity;',
     'case 29261:.*?expectedJobId = 40;.*?maximumDistance = float.PositiveInfinity;',
     'case 29484:.*?expectedJobId = 20;.*?maximumDistance = float.PositiveInfinity;',
     'case 29660:.*?expectedJobId = 25;.*?maximumDistance = float.PositiveInfinity;',
@@ -1776,8 +1845,10 @@ if ($normalizedNearAssist -notmatch 'hasActionMetadata && hasExactMovementDefini
     $normalizedNearAssist -notmatch 'if \(supportedContext && supportedAction && movementAction && friendlyAction && !areaTargetedAction && actionManager != null && localIdentityValid\)') {
     throw 'Far Help must revalidate complete PvP movement, friendly-target, job, non-self, non-area, positive-range, and LoS metadata after consuming the exact intent.'
 }
-if ($normalizedNearAssist -notmatch 'distanceSquared < maximumDistance \* maximumDistance') {
-    throw 'Guardian must retain the strict under-10-yalm candidate limit; equality is not accepted.'
+if ($normalizedNearAssist -notmatch 'case 29066:.*?expectedJobId = 19;.*?maximumDistance = float\.PositiveInfinity;.*?return true;' -or
+    $normalizedNearAssist -notmatch 'var rangeResult = hasValidActionTarget \? ActionManager\.GetActionInRangeOrLoS\(resolvedActionId, sourceObject, targetObject\) : uint\.MaxValue;.*?insideActionSpecificLimit && SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\)' -or
+    $normalizedNearAssist -match 'case 29066:.*?maximumDistance = 10f;') {
+    throw 'Guardian Far Help must use the exact action/job allowlist plus native range/LoS with no manual under-10-yalm center-distance cap.'
 }
 
 $farHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'FarHelpSelectionRules.cs') 'Far Help selection rules'
@@ -2617,6 +2688,10 @@ foreach ($entry in $exactCombatIds.GetEnumerator()) {
         throw "Patch 7.5 metadata ID drifted: $($entry.Key) must be $($entry.Value)."
     }
 }
+if ($metadataGuard -notmatch 'guardian\.Range\s*==\s*EnemyCombatConstants\.GuardianSheetRange' -or
+    $defensiveUtility -notmatch 'action\.Range\s*==\s*EnemyCombatConstants\.GuardianSheetRange') {
+    throw 'Both Guardian metadata boundaries must retain the exact verified sheet range of 20 yalms.'
+}
 
 $personalDefinitionsPath = Join-Path $pluginServicesRoot 'PersonalStatusDefinition.cs'
 $personalDefinitions = Read-RequiredSource $personalDefinitionsPath 'Personal status definitions'
@@ -2915,4 +2990,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.13.0.0 safety contract verified across $($sourceFiles.Count) source files; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."
+Write-Host "Seiton Sense v0.13.0.1 safety contract verified across $($sourceFiles.Count) source files; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; defensive and Far Help Guardian eligibility trusts verified sheet range 20 plus native range/LoS without a raw center-distance upper cap; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."

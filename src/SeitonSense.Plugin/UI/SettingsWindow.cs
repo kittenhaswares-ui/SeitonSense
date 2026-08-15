@@ -498,9 +498,12 @@ internal sealed class SettingsWindow : Window
             "generation; Purify and Guard never fire from the same generation. Pre-Guard is a risk reaction, not a " +
             "prediction of an instant future stun, and it yields while removable CC is already present.");
         ImGui.TextDisabled(
-            "Guardian additionally requires PLD, the exact non-self party ally alive and targetable at a strict distance " +
-            "below 10 yalms with native range/line of sight, and both your own Guard and Guardian available. Lowest HP% " +
-            "wins, then known higher incoming pressure and shorter distance. While your own Guard is active, and for " +
+            "Guardian additionally requires PLD, the exact non-self party ally alive and targetable within FFXIV's " +
+            "native 20-yalm action range/line of sight, and both your own Guard and Guardian available. There is no " +
+            "custom center-distance cap; the 10-yalm condition is the protection leash after the jump. Lowest HP% " +
+            "wins, then known higher incoming pressure and shorter distance. An accepted automatic Guardian request " +
+            "shows a 1.5-second GUARDIAN TRIGGERED card for the selected party slot; CLIENT ACCEPTED does not prove " +
+            "that the server applied protection. While your own Guard is active, and for " +
             "the bounded 1.5-second status-propagation interval after an exact Guard request, every Seiton Sense " +
             "action-request helper is blocked, so none can cancel Guard. Manual game actions and another plugin's " +
             "repeats remain outside that boundary and can still end Guard normally.");
@@ -1072,8 +1075,9 @@ internal sealed class SettingsWindow : Window
             "backline group. The farthest member of that group wins. If none can be certified, or enemy data is missing, " +
             "ambiguous, invalid, or has no live enemy, Far Help instead uses the farthest otherwise valid reachable ally. " +
             "Only an exact distance tie prefers healer, then physical/magical ranged or caster, then every other job. " +
-            "This map-agnostic preference cannot guarantee tactical safety. " +
-            "Guardian additionally requires a strict distance below 10 yalms from you. " +
+            "This map-agnostic preference cannot guarantee tactical safety. Guardian uses FFXIV's native, hitbox-aware " +
+            "20-yalm action range and line of sight with no custom center-distance cap; its 10-yalm condition is the " +
+            "protection leash after the jump. " +
             "Use exactly the three lines shown: there is deliberately no <t> fallback. All five actions cannot " +
             "target self, so <me> stays intrinsically invalid without a valid redirect, even if no token or hook is " +
             "available. Only no valid reachable ally means no movement; Far Help never uses your selected target or self " +
@@ -1302,6 +1306,8 @@ internal sealed class SettingsWindow : Window
             $"target={defense.TargetGameObjectId:X}/{defense.TargetEntityId:X}, " +
             $"key={defense.FreshGameplayKey}/{defense.HeldGameplayKey}, claim={defense.InputClaimed}, " +
             $"attempt={defense.UseActionAttempted}/{defense.UseActionAccepted}, " +
+            $"Guardian popup={defense.GuardianPopup?.PartySlot ?? 0}/" +
+            $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
         ImGui.TextWrapped(

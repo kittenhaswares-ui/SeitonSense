@@ -127,13 +127,13 @@ internal static class DefensiveUtilitySelfTests
         False(future.SuppressDirectActionHelpers, "a future timestamp fails closed without inventing a latch");
     }
 
-    public static void GuardianEligibilityIsStrict()
+    public static void GuardianEligibilityUsesNativeReachability()
     {
-        var valid = Candidate(10, hp: 20, maxHp: 100, distance: 9.999f);
-        True(DefensiveUtilityRules.IsGuardianCandidate(valid), "strictly inside ten yalms");
-        False(
-            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = 100f }),
-            "exactly ten yalms rejected");
+        var valid = Candidate(10, hp: 20, maxHp: 100, distance: 15f);
+        True(DefensiveUtilityRules.IsGuardianCandidate(valid), "ten-to-twenty yalms accepted when native reachability succeeds");
+        True(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = 21f * 21f }),
+            "native hitbox-aware reachability remains authoritative above a raw center-distance boundary");
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { CurrentHp = 21 }),
             "above twenty percent rejected");
@@ -143,6 +143,12 @@ internal static class DefensiveUtilitySelfTests
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { HasNativeRangeAndLineOfSight = false }),
             "native reachability required");
+        False(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = float.NaN }),
+            "non-finite distance rejected");
+        False(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = -1f }),
+            "negative distance rejected");
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { GameObjectId = 0 }),
             "invalid identity rejected");
@@ -166,6 +172,123 @@ internal static class DefensiveUtilitySelfTests
             "spent exact actor is excluded without changing target identity");
         Equal(-1, DefensiveUtilityRules.SelectGuardianCandidateIndex(null),
             "missing candidates fail closed");
+    }
+
+    public static void GuardianTriggerPopupIsAcceptedOnlyAndBounded()
+    {
+        var rejected = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            DefensiveUtilityTrigger.PaladinGuardianLowAlly,
+            useActionAttempted: true,
+            useActionAccepted: false,
+            selectedPartySlot: 3,
+            nowMilliseconds: 1_000);
+        True(rejected is null, "a rejected request never creates a popup");
+
+        var wrongAction = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guard,
+            DefensiveUtilityTrigger.PreGuardLowHpPressure,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            selectedPartySlot: 3,
+            nowMilliseconds: 1_000);
+        True(wrongAction is null, "Guard acceptance cannot masquerade as Guardian");
+
+        var wrongTrigger = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            DefensiveUtilityTrigger.PreGuardLowHpPressure,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            selectedPartySlot: 3,
+            nowMilliseconds: 1_000);
+        True(wrongTrigger is null, "a non-Guardian trigger cannot create the card");
+
+        var invalidSlot = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            DefensiveUtilityTrigger.PaladinGuardianLowAlly,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            selectedPartySlot: 0,
+            nowMilliseconds: 1_000);
+        True(invalidSlot is null, "invalid party slot fails closed");
+
+        var invalidTime = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            DefensiveUtilityTrigger.PaladinGuardianLowAlly,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            selectedPartySlot: 3,
+            nowMilliseconds: -1);
+        True(invalidTime is null, "invalid time fails closed");
+
+        var accepted = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            DefensiveUtilityTrigger.PaladinGuardianLowAlly,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            selectedPartySlot: 3,
+            nowMilliseconds: 1_000);
+        True(accepted is not null, "an accepted automatic Guardian creates a popup");
+        var popup = accepted!.Value;
+        Equal(3, popup.PartySlot, "popup retains only the selected party slot");
+        Equal(2_500L, popup.EndsAtMilliseconds, "popup lifetime is exactly 1500 ms");
+
+        var retained = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            accepted,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.None,
+            DefensiveUtilityTrigger.None,
+            useActionAttempted: false,
+            useActionAccepted: false,
+            selectedPartySlot: 0,
+            nowMilliseconds: 2_499);
+        Equal(2_500L, retained!.Value.EndsAtMilliseconds, "later idle frames cannot extend the popup");
+
+        var expired = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            retained,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.None,
+            DefensiveUtilityTrigger.None,
+            useActionAttempted: false,
+            useActionAccepted: false,
+            selectedPartySlot: 0,
+            nowMilliseconds: 2_500);
+        True(expired is null, "popup expires at the exact duration boundary");
+
+        var disabled = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            accepted,
+            runtimeEnabled: false,
+            DefensiveUtilityActionKind.None,
+            DefensiveUtilityTrigger.None,
+            useActionAttempted: false,
+            useActionAccepted: false,
+            selectedPartySlot: 0,
+            nowMilliseconds: 1_100);
+        True(disabled is null, "disabling the runtime clears the popup immediately");
+
+        var reset = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
+            accepted,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.None,
+            DefensiveUtilityTrigger.None,
+            useActionAttempted: false,
+            useActionAccepted: false,
+            selectedPartySlot: 0,
+            nowMilliseconds: 1_100,
+            hardReset: true);
+        True(reset is null, "hard reset clears the popup immediately");
     }
 
     private static PaladinGuardianCandidate Candidate(
