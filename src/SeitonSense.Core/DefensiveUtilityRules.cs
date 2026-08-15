@@ -60,7 +60,6 @@ public static class DefensiveUtilityRules
     public const int RequiredIncomingEnemyCount = 3;
     public const int PreGuardHpPercent = 50;
     public const int GuardianAllyHpPercent = 20;
-    public const float GuardianStrictMaximumDistance = 10f;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
     // Covers the normal client/server status-propagation and action-queue window
     // without turning one Guard request into an unbounded helper lockout.
@@ -153,8 +152,6 @@ public static class DefensiveUtilityRules
 
     public static bool IsGuardianCandidate(PaladinGuardianCandidate candidate)
     {
-        var strictMaximumDistanceSquared =
-            GuardianStrictMaximumDistance * GuardianStrictMaximumDistance;
         return candidate.Actor.IsValid &&
                candidate.PartySlot is >= 1 and <= 8 &&
                candidate.IsExactPartyMember &&
@@ -164,7 +161,7 @@ public static class DefensiveUtilityRules
                candidate.HasValidNativeTarget &&
                candidate.HasNativeRangeAndLineOfSight &&
                float.IsFinite(candidate.DistanceSquared) &&
-               candidate.DistanceSquared < strictMaximumDistanceSquared &&
+               candidate.DistanceSquared >= 0f &&
                IsAtOrBelowHpPercent(
                    candidate.CurrentHp,
                    candidate.MaximumHp,

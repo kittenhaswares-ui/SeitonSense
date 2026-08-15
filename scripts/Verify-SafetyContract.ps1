@@ -630,16 +630,17 @@ Assert-Literals $defensiveUtilityRules @(
     'RequiredIncomingEnemyCount = 3',
     'PreGuardHpPercent = 50',
     'GuardianAllyHpPercent = 20',
-    'GuardianStrictMaximumDistance = 10f',
     'PostPurifyGuardWindowMilliseconds = 2_000',
     'pressureKnown && incomingEnemyCount >= RequiredIncomingEnemyCount',
     '(ulong)currentHp * 100UL <= (ulong)maximumHp * (ulong)threshold',
     '!hasPurifyRemovableCrowdControl',
     '!awaitingPurifyConfirmation',
     'resilienceObserved',
-    'candidate.DistanceSquared < strictMaximumDistanceSquared',
+    'candidate.HasNativeRangeAndLineOfSight',
+    'float.IsFinite(candidate.DistanceSquared)',
+    'candidate.DistanceSquared >= 0f',
     'spentActors?.Contains(candidate.Actor) == true'
-) 'Exact pressure, HP, strict-distance, Resilience, and one-intent defensive rules'
+) 'Exact pressure, HP, native Guardian reachability, Resilience, and one-intent defensive rules'
 if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagationLatchMilliseconds\s*=\s*1_500\s*;').Count -ne 1 -or
     $normalizedDefensiveUtilityRules -notmatch 'observedGuardAttemptAtMilliseconds >= 0 && observedGuardAttemptAtMilliseconds <= nowMilliseconds && observedGuardAttemptAtMilliseconds > lastObservedAttempt\) \{ lastObservedAttempt = observedGuardAttemptAtMilliseconds; expiresAt = SaturatingAdd\( observedGuardAttemptAtMilliseconds, GuardPropagationLatchMilliseconds\); \}' -or
     $normalizedDefensiveUtilityRules -notmatch 'if \(exactGuardActive\) expiresAt = -1; var latchActive = !exactGuardActive && expiresAt > nowMilliseconds; var next = new GuardPropagationState\( lastObservedAttempt, latchActive \? expiresAt : -1\);' -or
@@ -649,10 +650,16 @@ if ([regex]::Matches($defensiveUtilityRules, 'public const long GuardPropagation
 if ($defensiveUtilityRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b') {
     throw 'Pure Guard-propagation rules may suppress helper eligibility only; they must never call, replay, suppress, or retarget an action.'
 }
+$guardianCandidateMethod = [regex]::Match(
+    $normalizedDefensiveUtilityRules,
+    'public static bool IsGuardianCandidate\(.*?\) \{.*?\} public static int SelectGuardianCandidateIndex').Value
 if ($normalizedDefensiveUtilityRules -notmatch 'IsPreGuardRisk\(.*?\) => !guardActive && !hasPurifyRemovableCrowdControl && IsHighPressure\(pressureKnown, incomingEnemyCount\) && IsAtOrBelowHpPercent\(currentHp, maximumHp, PreGuardHpPercent\)' -or
     $normalizedDefensiveUtilityRules -notmatch 'CanDispatchPostPurifyGuard\(.*?\) => !awaitingPurifyConfirmation && resilienceObserved && !hasPurifyRemovableCrowdControl && nowMilliseconds >= 0 && expiresAtMilliseconds > nowMilliseconds' -or
-    $normalizedDefensiveUtilityRules -notmatch 'candidate\.DistanceSquared < strictMaximumDistanceSquared.*?GuardianAllyHpPercent') {
-    throw 'Defensive rules must require known pressure >=3, self HP <=50%, ally HP <=20%, strict distance <10y, and positive post-Purify Resilience before Guard.'
+    [string]::IsNullOrWhiteSpace($guardianCandidateMethod) -or
+    $guardianCandidateMethod -notmatch 'candidate\.HasValidNativeTarget && candidate\.HasNativeRangeAndLineOfSight && float\.IsFinite\(candidate\.DistanceSquared\) && candidate\.DistanceSquared >= 0f && IsAtOrBelowHpPercent\( candidate\.CurrentHp, candidate\.MaximumHp, GuardianAllyHpPercent\)' -or
+    $guardianCandidateMethod -match 'DistanceSquared\s*<' -or
+    $defensiveUtilityRules -match '\bGuardianStrictMaximumDistance\b|\bstrictMaximumDistanceSquared\b') {
+    throw 'Defensive rules must require known pressure >=3, self HP <=50%, ally HP <=20%, finite nonnegative distance, native Guardian range/LoS, and positive post-Purify Resilience without a raw-distance upper cap.'
 }
 if ([regex]::Matches($defensiveUtility, '(?:->|\.)UseAction\s*\(').Count -ne 2) {
     throw 'Defensive utility runtime must contain exactly one Guard and one Guardian native UseAction boundary.'
@@ -1759,7 +1766,7 @@ if ($normalizedNearAssist -notmatch 'IsEligibleFarHelpAction.*?return resolvedAc
     throw 'Far Help pre-consumption filtering must use only the exact reviewed resolved-action allowlist, not generic metadata.'
 }
 foreach ($mapping in @(
-    'case 29066:.*?expectedJobId = 19;.*?maximumDistance = 10f;',
+    'case 29066:.*?expectedJobId = 19;.*?maximumDistance = float.PositiveInfinity;',
     'case 29261:.*?expectedJobId = 40;.*?maximumDistance = float.PositiveInfinity;',
     'case 29484:.*?expectedJobId = 20;.*?maximumDistance = float.PositiveInfinity;',
     'case 29660:.*?expectedJobId = 25;.*?maximumDistance = float.PositiveInfinity;',
@@ -1776,8 +1783,10 @@ if ($normalizedNearAssist -notmatch 'hasActionMetadata && hasExactMovementDefini
     $normalizedNearAssist -notmatch 'if \(supportedContext && supportedAction && movementAction && friendlyAction && !areaTargetedAction && actionManager != null && localIdentityValid\)') {
     throw 'Far Help must revalidate complete PvP movement, friendly-target, job, non-self, non-area, positive-range, and LoS metadata after consuming the exact intent.'
 }
-if ($normalizedNearAssist -notmatch 'distanceSquared < maximumDistance \* maximumDistance') {
-    throw 'Guardian must retain the strict under-10-yalm candidate limit; equality is not accepted.'
+if ($normalizedNearAssist -notmatch 'case 29066:.*?expectedJobId = 19;.*?maximumDistance = float\.PositiveInfinity;.*?return true;' -or
+    $normalizedNearAssist -notmatch 'var rangeResult = hasValidActionTarget \? ActionManager\.GetActionInRangeOrLoS\(resolvedActionId, sourceObject, targetObject\) : uint\.MaxValue;.*?insideActionSpecificLimit && SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\)' -or
+    $normalizedNearAssist -match 'case 29066:.*?maximumDistance = 10f;') {
+    throw 'Guardian Far Help must use the exact action/job allowlist plus native range/LoS with no manual under-10-yalm center-distance cap.'
 }
 
 $farHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'FarHelpSelectionRules.cs') 'Far Help selection rules'
@@ -2617,6 +2626,10 @@ foreach ($entry in $exactCombatIds.GetEnumerator()) {
         throw "Patch 7.5 metadata ID drifted: $($entry.Key) must be $($entry.Value)."
     }
 }
+if ($metadataGuard -notmatch 'guardian\.Range\s*==\s*EnemyCombatConstants\.GuardianSheetRange' -or
+    $defensiveUtility -notmatch 'action\.Range\s*==\s*EnemyCombatConstants\.GuardianSheetRange') {
+    throw 'Both Guardian metadata boundaries must retain the exact verified sheet range of 20 yalms.'
+}
 
 $personalDefinitionsPath = Join-Path $pluginServicesRoot 'PersonalStatusDefinition.cs'
 $personalDefinitions = Read-RequiredSource $personalDefinitionsPath 'Personal status definitions'
@@ -2915,4 +2928,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.13.0.0 safety contract verified across $($sourceFiles.Count) source files; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."
+Write-Host "Seiton Sense v0.13.0.1 safety contract verified across $($sourceFiles.Count) source files; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; defensive and Far Help Guardian eligibility trusts verified sheet range 20 plus native range/LoS without a raw center-distance upper cap; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."

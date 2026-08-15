@@ -2,12 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.13.0.0 adds an
+one-shot macro assistance, and target highlights. Version 0.13.0.1 includes an
 urgent local isolation warning and three conservative, opt-in CC utilities:
 defensive Purify/Guard/Guardian decisions, WHM/BRD reactive counter-CC, and a
-real team-visible Attack1 focus sign. The suite combines the useful parts of
-HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow into one configurable
-custom-repository plugin.
+real team-visible Attack1 focus sign, and corrects Guardian targeting to use
+its native 20-yalm action range and line-of-sight result. The suite combines
+the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow
+into one configurable custom-repository plugin.
 
 ## Highlights
 
@@ -375,8 +376,11 @@ The second defensive rule can pre-Guard at or below 50% HP while the same
 three-enemy pressure threshold is known and no Purify-removable CC is already
 present. This is a risk reaction, not a prediction that an instant future stun
 will occur. The PLD-only rule can attempt Guardian `29066` for an exact living,
-targetable, non-self party member at or below 20% HP, at a strict distance below
-10 yalms, and inside native range and line of sight. Both your own Guard and
+targetable, non-self party member at or below 20% HP when FFXIV's native
+20-yalm action-range and line-of-sight check accepts that target. There is no
+custom center-distance cap: native reachability remains authoritative and
+hitbox-aware. After the jump, Guardian's protection requires the Paladin to
+remain within 10 yalms of the protected member. Both your own Guard and
 Guardian must be available. Candidates rank by lowest exact HP percentage,
 then known higher incoming pressure, distance, and stable party identity.
 
@@ -573,10 +577,11 @@ farthest of those candidates from you wins. If none pass or the snapshot cannot
 certify them, Far Help falls back to the farthest otherwise valid reachable
 ally. Only at exactly equal measured distance does role break the tie: healer,
 then physical/magical ranged or caster, then every other job. Native party order
-and stable actor identity break any remaining tie. Guardian additionally uses a
-strict distance below 10 yalms from you matching its execution condition. The
-enemy-clearance test is a map-agnostic preference, not a guarantee that a
-destination is tactically safe.
+and stable actor identity break any remaining tie. Guardian uses FFXIV's native
+20-yalm action-range and line-of-sight result with no custom center-distance
+cap; its 10-yalm condition applies to staying close enough for protection after
+the jump. The enemy-clearance test is a map-agnostic preference, not a guarantee
+that a destination is tactically safe.
 
 Use exactly those three lines; Far Help deliberately has no selected-target
 fallback. `<me>` is an intrinsically invalid carrier because none of the five
@@ -734,10 +739,11 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.13.0.0 specifically, source tests cover the isolation debounce and
+For v0.13.0.1 specifically, source tests cover the isolation debounce and
 fail-closed unknown state, defensive thresholds and generation ownership,
-reactive event/status/team-focus rules, and Attack1 selection/ownership rules.
-They do not prove the current client's native 20-yalm line-of-sight result,
+reactive event/status/team-focus rules, Attack1 selection/ownership rules, and
+Guardian's delegation to native reachability without a custom center-distance
+cap. They do not prove the current client's native 20-yalm line-of-sight result,
 Purify-to-Resilience-to-new-generation Guard ordering, pre-Guard/Guardian
 dispatch, Contradance startup timing, BRD/WHM counter dispatch, or the native
 party-visible marker command and clear path. An `AUTO CC LANDED` confirmation

@@ -127,13 +127,13 @@ internal static class DefensiveUtilitySelfTests
         False(future.SuppressDirectActionHelpers, "a future timestamp fails closed without inventing a latch");
     }
 
-    public static void GuardianEligibilityIsStrict()
+    public static void GuardianEligibilityUsesNativeReachability()
     {
-        var valid = Candidate(10, hp: 20, maxHp: 100, distance: 9.999f);
-        True(DefensiveUtilityRules.IsGuardianCandidate(valid), "strictly inside ten yalms");
-        False(
-            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = 100f }),
-            "exactly ten yalms rejected");
+        var valid = Candidate(10, hp: 20, maxHp: 100, distance: 15f);
+        True(DefensiveUtilityRules.IsGuardianCandidate(valid), "ten-to-twenty yalms accepted when native reachability succeeds");
+        True(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = 21f * 21f }),
+            "native hitbox-aware reachability remains authoritative above a raw center-distance boundary");
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { CurrentHp = 21 }),
             "above twenty percent rejected");
@@ -143,6 +143,12 @@ internal static class DefensiveUtilitySelfTests
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { HasNativeRangeAndLineOfSight = false }),
             "native reachability required");
+        False(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = float.NaN }),
+            "non-finite distance rejected");
+        False(
+            DefensiveUtilityRules.IsGuardianCandidate(valid with { DistanceSquared = -1f }),
+            "negative distance rejected");
         False(
             DefensiveUtilityRules.IsGuardianCandidate(valid with { GameObjectId = 0 }),
             "invalid identity rejected");
