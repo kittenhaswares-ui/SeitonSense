@@ -11,6 +11,8 @@ internal sealed record EnemyHudSnapshot(
     long SeitonPulseStartedAtMilliseconds,
     bool GuardUnavailable,
     float GuardCooldownRemainingSeconds,
+    uint CurrentHp,
+    uint MaxHp,
     bool LowMp,
     uint CurrentMp,
     uint MaxMp)

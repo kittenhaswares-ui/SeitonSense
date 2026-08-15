@@ -13,15 +13,20 @@ public readonly record struct MiracleInterceptPendingAttempt(
 {
     public bool IsValid =>
         MiracleInterceptConfirmationRules.IsValidEntityId(LocalCasterEntityId) &&
-        ActionId == MiracleInterceptConfirmationRules.MiracleOfNatureActionId &&
+        MiracleInterceptConfirmationRules.ExpectedStatusForAction(ActionId) != 0 &&
         TargetHighlightRules.IsValidGameObjectId(TargetGameObjectId) &&
         MiracleInterceptConfirmationRules.IsValidEntityId(TargetEntityId) &&
         (Threat is
             MiracleInterceptThreatKind.MarksmanSpite or
             MiracleInterceptThreatKind.Zantetsuken or
             MiracleInterceptThreatKind.FuriousBacklash or
-            MiracleInterceptThreatKind.PostPurifyStun) &&
+            MiracleInterceptThreatKind.Contradance or
+            MiracleInterceptThreatKind.PostPurifyCrowdControl) &&
+        (Threat != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
+         MiracleCleanseFollowupRules.IsPurifyRemovableStatus(RemovedStatusId)) &&
         AttemptedAtMilliseconds >= 0;
+
+    public uint RemovedStatusId { get; init; }
 }
 
 public readonly record struct MiracleInterceptLandedObservation(
@@ -36,14 +41,17 @@ public readonly record struct MiracleInterceptLandedObservation(
 
 public readonly record struct MiracleInterceptConfirmationKey(
     uint CasterEntityId,
+    uint ActionId,
     uint TargetEntityId,
     uint GlobalSequence,
     ushort SourceSequence);
 
 public readonly record struct MiracleInterceptConfirmationPopup(
+    uint ActionId,
     ulong TargetGameObjectId,
     uint TargetEntityId,
     MiracleInterceptThreatKind Threat,
+    uint RemovedStatusId,
     long StartedAtMilliseconds,
     long EndsAtMilliseconds)
 {
@@ -77,15 +85,17 @@ public readonly record struct MiracleInterceptConfirmationDecision(
     MiracleInterceptConfirmationPopup? TriggeredPopup);
 
 /// <summary>
-/// Correlates the sole native Miracle attempt made by the intercept helper with
-/// the server ActionEffect that applies Miracle of Nature to that exact target.
-/// This proves that Miracle landed; it does not prove that the hostile action's
-/// damage was cancelled.
+/// Correlates the sole native WHM Miracle or BRD Silent Nocturne attempt made by
+/// the reactive helper with the exact server status-add on the intended target.
+/// This proves only that the counter-CC landed; it never claims the hostile
+/// action was interrupted.
 /// </summary>
 public static class MiracleInterceptConfirmationRules
 {
     public const uint MiracleOfNatureActionId = 29_228;
     public const ushort MiracleOfNatureStatusId = 3_085;
+    public const uint SilentNocturneActionId = 29_395;
+    public const ushort SilenceStatusId = 1_347;
     public const byte AddStatusEffectType = 0x0E;
     public const long CorrelationMilliseconds = 1_500;
     public const long PopupDurationMilliseconds = 1_500;
@@ -159,6 +169,7 @@ public static class MiracleInterceptConfirmationRules
 
         var key = new MiracleInterceptConfirmationKey(
             observation.CasterEntityId,
+            observation.ActionId,
             observation.TargetEntityId,
             observation.GlobalSequence,
             observation.SourceSequence);
@@ -178,9 +189,11 @@ public static class MiracleInterceptConfirmationRules
         }
 
         var triggeredPopup = new MiracleInterceptConfirmationPopup(
+            pending.ActionId,
             pending.TargetGameObjectId,
             pending.TargetEntityId,
             pending.Threat,
+            pending.RemovedStatusId,
             now,
             SaturatingAdd(now, PopupDurationMilliseconds));
         var next = previous with
@@ -219,6 +232,14 @@ public static class MiracleInterceptConfirmationRules
     public static bool IsValidEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000 and not uint.MaxValue;
 
+    public static ushort ExpectedStatusForAction(uint actionId) =>
+        actionId switch
+        {
+            MiracleOfNatureActionId => MiracleOfNatureStatusId,
+            SilentNocturneActionId => SilenceStatusId,
+            _ => 0,
+        };
+
     private static bool Matches(
         MiracleInterceptPendingAttempt pending,
         MiracleInterceptLandedObservation observation)
@@ -233,7 +254,7 @@ public static class MiracleInterceptConfirmationRules
                observation.ActionId == pending.ActionId &&
                observation.TargetEntityId == pending.TargetEntityId &&
                observation.EffectType == AddStatusEffectType &&
-               observation.EffectValue == MiracleOfNatureStatusId &&
+               observation.EffectValue == ExpectedStatusForAction(pending.ActionId) &&
                (observation.GlobalSequence != 0 || observation.SourceSequence != 0);
     }
 

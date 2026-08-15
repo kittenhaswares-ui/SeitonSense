@@ -10,6 +10,7 @@ namespace SeitonSense.Plugin.Services;
 internal sealed record PvPMetadataValidation(
     bool SeitonVerified,
     bool GuardVerified,
+    bool GuardianVerified,
     bool RecuperateVerified,
     bool WildfireVerified,
     bool DeathWarrantVerified,
@@ -17,11 +18,13 @@ internal sealed record PvPMetadataValidation(
     bool PurifyVerified,
     bool AllyRescueStatusesVerified,
     bool MiracleOfNatureActionVerified,
+    bool SilentNocturneVerified,
+    bool ContradanceVerified,
     bool ZantetsukenVerified,
     bool FuriousBacklashVerified,
     bool MonkEarthReplyVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -58,6 +61,43 @@ internal static class PvPMetadataGuard
                    guardStatus.Name.ToString() == "Guard" &&
                    statuses.TryGetRow(EnemyCombatConstants.GuardStatusAlternateId, out var alternateGuardStatus) &&
                    alternateGuardStatus.Name.ToString() == "Guard";
+        });
+
+        var guardianVerified = ValidateFeature("Guardian", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.GuardianActionId, out var guardian) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.GuardianActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return guardian.Name.ToString() == "Guardian" &&
+                   guardian.Icon == EnemyCombatConstants.GuardianIconId &&
+                   guardian.IsPvP &&
+                   guardian.IsPlayerAction &&
+                   guardian.ClassJob.IsValid &&
+                   guardian.ClassJob.RowId == EnemyCombatConstants.PaladinJobId &&
+                   guardian.Range == EnemyCombatConstants.GuardianSheetRange &&
+                   guardian.EffectRange == 0 &&
+                   guardian.Cast100ms == 0 &&
+                   guardian.Recast100ms == EnemyCombatConstants.GuardianRecast100ms &&
+                   !guardian.CanTargetSelf &&
+                   guardian.CanTargetParty &&
+                   !guardian.CanTargetAlly &&
+                   !guardian.CanTargetAlliance &&
+                   !guardian.CanTargetHostile &&
+                   !guardian.TargetArea &&
+                   guardian.RequiresLineOfSight &&
+                   guardian.AffectsPosition &&
+                   description.Contains(
+                       "Take all damage intended for the targeted party member",
+                       StringComparison.Ordinal) &&
+                   description.Contains("Duration: 8s", StringComparison.Ordinal) &&
+                   description.Contains("closer than 10 yalms", StringComparison.Ordinal) &&
+                   description.Contains("Cannot be executed while bound", StringComparison.Ordinal);
         });
 
         var recuperateVerified = ValidateFeature("Recuperate", log, () =>
@@ -330,6 +370,70 @@ internal static class PvPMetadataGuard
                        expectTransfiguration: true);
         });
 
+        var silentNocturneVerified = ValidateFeature("Silent Nocturne", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            return actions.TryGetRow(EnemyCombatConstants.SilentNocturneActionId, out var action) &&
+                   descriptions.TryGetRow(
+                       EnemyCombatConstants.SilentNocturneActionId,
+                       out var transient) &&
+                   string.Equals(
+                       action.Name.ToString(),
+                       "Silent Nocturne",
+                       StringComparison.Ordinal) &&
+                   action.Icon == EnemyCombatConstants.SilentNocturneActionIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.BardJobId &&
+                   action.Range == EnemyCombatConstants.SilentNocturneRange &&
+                   action.EffectRange == 0 &&
+                   action.CastType == 1 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.SilentNocturneRecast100ms &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetAlliance &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   !action.AffectsPosition &&
+                   transient.Description.ToString().Contains(
+                       "Silences target.",
+                       StringComparison.Ordinal);
+        });
+
+        var contradanceVerified = ValidateFeature("Contradance", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            return actions.TryGetRow(EnemyCombatConstants.ContradanceActionId, out var action) &&
+                   descriptions.TryGetRow(
+                       EnemyCombatConstants.ContradanceActionId,
+                       out var transient) &&
+                   statuses.TryGetRow(EnemyCombatConstants.SeducedStatusId, out var seduced) &&
+                   string.Equals(action.Name.ToString(), "Contradance", StringComparison.Ordinal) &&
+                   action.Icon == EnemyCombatConstants.ContradanceActionIconId &&
+                   action.IsPvP &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.DancerJobId &&
+                   action.Range == 0 &&
+                   action.EffectRange == 15 &&
+                   action.CastType == 2 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.ContradanceRecast100ms &&
+                   action.CanTargetSelf &&
+                   !action.CanTargetHostile &&
+                   !action.TargetArea &&
+                   !action.AffectsPosition &&
+                   transient.Description.ToString().Contains("Seduced", StringComparison.Ordinal) &&
+                   string.Equals(seduced.Name.ToString(), "Seduced", StringComparison.Ordinal) &&
+                   seduced.Icon == EnemyCombatConstants.SeducedStatusIconId;
+        });
+
         var zantetsukenVerified = ValidateFeature("Zantetsuken", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
@@ -456,6 +560,7 @@ internal static class PvPMetadataGuard
         var validation = new PvPMetadataValidation(
             seitonVerified,
             guardVerified,
+            guardianVerified,
             recuperateVerified,
             wildfireVerified,
             deathWarrantVerified,
@@ -463,17 +568,21 @@ internal static class PvPMetadataGuard
             purifyVerified,
             allyRescueStatusesVerified,
             miracleOfNatureActionVerified,
+            silentNocturneVerified,
+            contradanceVerified,
             zantetsukenVerified,
             furiousBacklashVerified,
             monkEarthReplyVerified);
 
         log.Information(
-            "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Recuperate={Recuperate}, " +
+            "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
-            "Zantetsuken={Zantetsuken}, FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}.",
+            "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
+            "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}.",
             validation.SeitonVerified,
             validation.GuardVerified,
+            validation.GuardianVerified,
             validation.RecuperateVerified,
             validation.WildfireVerified,
             validation.DeathWarrantVerified,
@@ -481,6 +590,8 @@ internal static class PvPMetadataGuard
             validation.PurifyVerified,
             validation.AllyRescueStatusesVerified,
             validation.MiracleOfNatureActionVerified,
+            validation.SilentNocturneVerified,
+            validation.ContradanceVerified,
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
             validation.MonkEarthReplyVerified);

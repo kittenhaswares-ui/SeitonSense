@@ -2,13 +2,15 @@ using SeitonSense.Core;
 
 internal static class MiracleCleanseFollowupSelfTests
 {
-    internal static void ExactPurifyStunSignalIsNarrow()
+    internal static void ExactPurifySignalAcceptsOnlyKnownRemovableCrowdControl()
     {
-        True(IsExact(), "exact self-Purify Stun recovery");
+        foreach (var statusId in new ushort[] { 1_343, 1_344, 1_345, 1_347, 3_085, 3_219 })
+            True(IsExact(effectValue: statusId), $"exact self-Purify recovery {statusId}");
+
         False(IsExact(action: 29_057), "wrong action");
         False(IsExact(target: 11), "not self-targeted");
         False(IsExact(effectType: 0x0E), "status add is not recovery");
-        False(IsExact(effectValue: 1_347), "Silence recovery excluded");
+        False(IsExact(effectValue: 9_999), "unknown recovery status excluded");
         False(IsExact(caster: 0, target: 0), "invalid actor IDs");
         False(IsExact(globalSequence: 0, sourceSequence: 0), "missing packet identity");
     }
@@ -181,6 +183,38 @@ internal static class MiracleCleanseFollowupSelfTests
             "priority wait cannot restart the 500ms release opportunity");
     }
 
+    internal static void ExactTeamFocusWaitsInsideOriginalOpportunity()
+    {
+        var target = Target(45);
+        var releaseState = ReachReleaseOpportunity(target, now: 1_000);
+        var unfocused = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(null, Candidate(target), 1_251, teamFocus: false));
+        False(unfocused.ShouldPromote, "local target without one allied target cannot promote");
+        Equal(
+            MiracleCleanseFollowupPhase.ReleaseOpportunity,
+            unfocused.NextState.Phase,
+            "team-focus wait stays inside existing release opportunity");
+
+        var focused = MiracleCleanseFollowupRules.Observe(
+            unfocused.NextState,
+            Observation(null, Candidate(target), 1_252, teamFocus: true));
+        True(focused.ShouldPromote, "exact local plus one ally focus promotes");
+        Equal(
+            1_250L,
+            focused.PromotionIntent!.Value.ReleasedAtMilliseconds,
+            "focus arrival cannot restart the release lifetime");
+
+        releaseState = ReachReleaseOpportunity(target, now: 2_000);
+        var expired = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(null, Candidate(target), 2_750, teamFocus: true));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
+            expired.CancelReason,
+            "team focus at the exact deadline is too late");
+    }
+
     internal static void IdentityAmbiguityAndConcurrencyFailClosed()
     {
         var target = Target(50);
@@ -229,10 +263,12 @@ internal static class MiracleCleanseFollowupSelfTests
         Equal(
             0L,
             MiracleInterceptRules.GetThreatLifetimeMilliseconds(
-                MiracleInterceptThreatKind.PostPurifyStun),
+                MiracleInterceptThreatKind.PostPurifyCrowdControl),
             "follow-up is not a native start-signal lifetime");
         False(
-            MiracleInterceptRules.IsExpectedJob(MiracleInterceptThreatKind.PostPurifyStun, 24),
+            MiracleInterceptRules.IsExpectedJob(
+                MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                24),
             "follow-up is not classified from a job-specific hostile start");
 
         var pending = new MiracleInterceptPendingAttempt(
@@ -240,9 +276,12 @@ internal static class MiracleCleanseFollowupSelfTests
             ActionId: MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
             TargetGameObjectId: 10_200,
             TargetEntityId: 200,
-            Threat: MiracleInterceptThreatKind.PostPurifyStun,
+            Threat: MiracleInterceptThreatKind.PostPurifyCrowdControl,
             UseActionAccepted: true,
-            AttemptedAtMilliseconds: 1_000);
+            AttemptedAtMilliseconds: 1_000)
+        {
+            RemovedStatusId = MiracleCleanseFollowupRules.StunStatusId,
+        };
         True(pending.IsValid, "shared landing confirmation accepts follow-up label");
     }
 
@@ -312,14 +351,16 @@ internal static class MiracleCleanseFollowupSelfTests
         MiracleCleanseFollowupSignal? signal,
         MiracleCleanseFollowupCandidate candidate,
         long now,
-        bool higherPriority = false) =>
+        bool higherPriority = false,
+        bool teamFocus = true) =>
         new(
             ConfigurationEnabled: true,
             IsCrystallineConflict: true,
-            IsLocalWhiteMageValid: true,
+            IsLocalCounterJobValid: true,
             HigherPriorityClaimed: higherPriority,
             NewSignal: signal,
             Candidate: candidate,
+            HasExactTeamFocus: teamFocus,
             NowMilliseconds: now);
 
     private static bool IsExact(
@@ -330,7 +371,7 @@ internal static class MiracleCleanseFollowupSelfTests
         ushort effectValue = (ushort)MiracleCleanseFollowupRules.StunStatusId,
         uint globalSequence = 100,
         ushort sourceSequence = 1) =>
-        MiracleCleanseFollowupRules.IsExactStunPurifySignal(
+        MiracleCleanseFollowupRules.IsExactPurifySignal(
             caster,
             action,
             target,

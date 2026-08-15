@@ -351,6 +351,8 @@ internal sealed class ExecuteTracker : IDisposable
                 state.SeitonPulseStartedAtMilliseconds,
                 guardUnavailable,
                 guardRemainingSeconds,
+                player.CurrentHp,
+                player.MaxHp,
                 lowMp,
                 player.CurrentMp,
                 player.MaxMp));

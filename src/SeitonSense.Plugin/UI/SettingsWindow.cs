@@ -15,6 +15,7 @@ internal sealed class SettingsWindow : Window
     private readonly PersonalStatusService personalStatus;
     private readonly OverlayRenderer overlay;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
 
     public SettingsWindow(
@@ -23,6 +24,7 @@ internal sealed class SettingsWindow : Window
         PersonalStatusService personalStatus,
         OverlayRenderer overlay,
         TargetPressureTracker pressureTracker,
+        IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter)
         : base("Seiton Sense###SeitonSenseSettings")
     {
@@ -31,6 +33,7 @@ internal sealed class SettingsWindow : Window
         this.personalStatus = personalStatus;
         this.overlay = overlay;
         this.pressureTracker = pressureTracker;
+        this.isolationAwareness = isolationAwareness;
         this.pressureCounter = pressureCounter;
         Size = new Vector2(700f, 760f);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -52,6 +55,7 @@ internal sealed class SettingsWindow : Window
                 overlay.PreviewEnabled = false;
                 overlay.CcProtectionPreviewEnabled = false;
                 overlay.ResourceAuraPreviewEnabled = false;
+                overlay.IsolationWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
             });
 
@@ -111,6 +115,7 @@ internal sealed class SettingsWindow : Window
         overlay.PreviewEnabled = false;
         overlay.CcProtectionPreviewEnabled = false;
         overlay.ResourceAuraPreviewEnabled = false;
+        overlay.IsolationWarningPreviewEnabled = false;
         pressureCounter.PreviewEnabled = false;
     }
 
@@ -159,6 +164,7 @@ internal sealed class SettingsWindow : Window
             overlay.PreviewEnabled = false;
             overlay.CcProtectionPreviewEnabled = false;
             overlay.ResourceAuraPreviewEnabled = false;
+            overlay.IsolationWarningPreviewEnabled = false;
             pressureCounter.PreviewEnabled = false;
             pressureCounter.ResetWindowPosition();
             changed = true;
@@ -366,6 +372,31 @@ internal sealed class SettingsWindow : Window
         ImGui.TextDisabled("At 0, the warning text, icon and border remain visible while the card fill disappears.");
 
         ImGui.Separator();
+        ImGui.TextUnformatted("Spatial awareness");
+        changed |= Checkbox(
+            "Warn when no party ally is within 20y and line of sight",
+            configuration.WarnWhenIsolated,
+            value => configuration.WarnWhenIsolated = value);
+        changed |= Slider(
+            "Isolation warning size",
+            configuration.IsolationWarningScale,
+            0.75f,
+            1.75f,
+            value => configuration.IsolationWarningScale = value,
+            "%.2f x");
+        if (ImGui.Button(
+                overlay.IsolationWarningPreviewEnabled
+                    ? "Stop isolation warning preview"
+                    : "Preview isolation warning"))
+        {
+            overlay.IsolationWarningPreviewEnabled = !overlay.IsolationWarningPreviewEnabled;
+        }
+        ImGui.TextDisabled(
+            "CC only. Requires an exact five-player party and FFXIV's native 20y range/line-of-sight result. " +
+            "Unknown data stays silent.");
+        ImGui.TextDisabled(isolationAwareness.Diagnostics.ToChatLine());
+
+        ImGui.Separator();
         ImGui.TextUnformatted("Marksman's Spite");
         changed |= Slider(
             "MCH LB warning size",
@@ -428,53 +459,145 @@ internal sealed class SettingsWindow : Window
         return changed;
     }
 
-    private bool DrawMiracleInterceptControls()
+    private bool DrawDefensiveUtilityControls()
     {
         var changed = false;
         changed |= Checkbox(
-            "Use Miracle of Nature once from a held gameplay key",
-            configuration.ExperimentalMiracleInterceptOnHeldKey,
-            value => configuration.ExperimentalMiracleInterceptOnHeldKey = value);
-        ImGui.TextColored(
-            configuration.ExperimentalMiracleInterceptOnHeldKey
-                ? new Vector4(0.35f, 0.9f, 1f, 1f)
-                : new Vector4(1f, 0.4f, 0.35f, 1f),
-            configuration.ExperimentalMiracleInterceptOnHeldKey
-                ? "ON — threat capture is active in CC while playing WHM."
-                : "OFF — no threat is captured and no Miracle attempt can occur.");
-        ImGui.TextUnformatted("Trigger separately for:");
+            "Enable defensive one-action utilities",
+            configuration.EnableDefensiveUtilities,
+            value => configuration.EnableDefensiveUtilities = value);
         changed |= Checkbox(
-            "MCH Marksman's Spite startup",
+            "A held gameplay key may supply the one physical input generation (includes WASD)",
+            configuration.DefensiveUtilitiesOnHeldKey,
+            value => configuration.DefensiveUtilitiesOnHeldKey = value);
+        ImGui.TextColored(
+            configuration.EnableDefensiveUtilities
+                ? new Vector4(0.35f, 0.9f, 1f, 1f)
+                : new Vector4(0.7f, 0.72f, 0.78f, 1f),
+            configuration.EnableDefensiveUtilities
+                ? "ON — exact defensive rules may claim one eligible physical input in CC."
+                : "OFF — no Purify, Guard, or Guardian request is added by this module.");
+        ImGui.TextUnformatted("Rules:");
+        changed |= Checkbox(
+            "At 3+ incoming enemies and Stun: Purify, then Guard on a later input",
+            configuration.GuardOnStunPressure,
+            value => configuration.GuardOnStunPressure = value);
+        changed |= Checkbox(
+            "Pre-Guard at 50% HP or lower with 3+ incoming enemies",
+            configuration.PreGuardOnLowHpPressure,
+            value => configuration.PreGuardOnLowHpPressure = value);
+        changed |= Checkbox(
+            "PLD Guardian for an ally at 20% HP or lower",
+            configuration.PaladinGuardianLowAlly,
+            value => configuration.PaladinGuardianLowAlly = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Crystalline Conflict only and disabled by default. One physical key generation can produce at most one " +
+            "Seiton Sense action request. If high-pressure Stun triggers Purify, Guard is allowed only after live " +
+            "Resilience confirms the cleanse, the removable CC is gone, and you release/repress for a new physical " +
+            "generation; Purify and Guard never fire from the same generation. Pre-Guard is a risk reaction, not a " +
+            "prediction of an instant future stun, and it yields while removable CC is already present.");
+        ImGui.TextDisabled(
+            "Guardian additionally requires PLD, the exact non-self party ally alive and targetable at a strict distance " +
+            "below 10 yalms with native range/line of sight, and both your own Guard and Guardian available. Lowest HP% " +
+            "wins, then known higher incoming pressure and shorter distance. While your own Guard is active, and for " +
+            "the bounded 1.5-second status-propagation interval after an exact Guard request, every Seiton Sense " +
+            "action-request helper is blocked, so none can cancel Guard. Manual game actions and another plugin's " +
+            "repeats remain outside that boundary and can still end Guard normally.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawReactiveCcControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Enable reactive counter-CC",
+            configuration.EnableReactiveCcUtilities,
+            value => configuration.EnableReactiveCcUtilities = value);
+        changed |= Checkbox(
+            "A held gameplay key may trigger when an opportunity appears (includes WASD)",
+            configuration.ReactiveCcOnHeldKey,
+            value => configuration.ReactiveCcOnHeldKey = value);
+        ImGui.TextColored(
+            configuration.EnableReactiveCcUtilities
+                ? new Vector4(0.35f, 0.9f, 1f, 1f)
+                : new Vector4(0.7f, 0.72f, 0.78f, 1f),
+            configuration.EnableReactiveCcUtilities
+                ? "ON — WHM Miracle or BRD Silent Nocturne may claim one eligible input in CC."
+                : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
+
+        ImGui.TextUnformatted("BRD / WHM triggers:");
+        changed |= Checkbox(
+            "DNC Contradance startup",
+            configuration.ReactiveCcDancerLimitBreak,
+            value => configuration.ReactiveCcDancerLimitBreak = value);
+        changed |= Checkbox(
+            "After enemy Purify: all six removable CC types, team focus 2+",
+            configuration.ReactiveCcAfterEnemyPurify,
+            value => configuration.ReactiveCcAfterEnemyPurify = value);
+
+        ImGui.TextUnformatted("Additional WHM-only urgent startup triggers:");
+        changed |= Checkbox(
+            "MCH Marksman's Spite",
             configuration.MiracleInterceptMchLimitBreak,
             value => configuration.MiracleInterceptMchLimitBreak = value);
         changed |= Checkbox(
-            "SAM Zantetsuken startup",
+            "SAM Zantetsuken",
             configuration.MiracleInterceptSamZantetsuken,
             value => configuration.MiracleInterceptSamZantetsuken = value);
         changed |= Checkbox(
             "VPR Furious Backlash / Nest der Blutschuppen",
             configuration.MiracleInterceptViperNest,
             value => configuration.MiracleInterceptViperNest = value);
-        changed |= Checkbox(
-            "After an enemy Purifies Stun and Resilience ends",
-            configuration.MiracleInterceptAfterPurifiedStun,
-            value => configuration.MiracleInterceptAfterPurifiedStun = value);
-        if (ImGui.Button("Preview MIRACLE LANDED flash"))
+
+        if (ImGui.Button("Preview AUTO CC LANDED flash"))
             overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Experimental and CC-only. WHM uses the exact early action marker and one already-eligible physical " +
-            "gameplay-key generation; Turbo repeats do not create extra intent. The enemy must still be the exact " +
-            "canonical opponent, alive, targetable, within Miracle's native 10-yalm range and line of sight. " +
-            "The MCH/SAM opportunity lasts 500 ms and the VPR opportunity 250 ms. The optional post-cleanse " +
-            "follow-up requires an exact enemy self-Purify that actually removes Stun, observes Resilience live, " +
-            "and waits for its stable real disappearance rather than predicting the timer. " +
-            "Nest waits until Hardened Scales is actually absent, so Miracle is never deliberately spent into " +
-            "Viper's CC immunity. Self Purify wins first, then Ally Rescue, then this helper. State and input are " +
-            "consumed before one native Miracle attempt; there is no selected-target change, fallback, or retry. " +
-            "A blue MIRACLE LANDED flash appears only after the server reports Miracle status 3085 on that exact " +
-            "pending threat target within 1500 ms. This confirms that Miracle landed, not conclusively that the " +
-            "hostile damage was cancelled. Client acceptance alone still proves neither result.");
+            "Experimental, CC-only, and disabled by default. WHM uses Miracle of Nature at its native 10-yalm range; " +
+            "BRD uses Silent Nocturne at its native 20-yalm range. The enemy must remain the exact canonical opponent, " +
+            "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
+            "Contradance uses its exact startup signal. The post-Purify rule accepts Stun, Heavy, Bind, Silence, Deep " +
+            "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It also " +
+            "requires that enemy to be your exact hard target and at least one ally's hard target (team focus 2+). " +
+            "Viper waits until Hardened Scales is actually absent.");
+        ImGui.TextDisabled(
+            "One already-eligible physical generation makes at most one exact-target attempt; Turbo pulses add no " +
+            "intent. Self Purify, defensive utilities, and Ally Rescue have priority. Input is consumed before the " +
+            "native call, with no selected-target change, fallback, or retry. The blue AUTO CC LANDED flash appears " +
+            "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +
+            "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawAutoEnemyFocusMarkControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Automatically place the team-visible Attack1 enemy sign",
+            configuration.EnableAutoEnemyFocusMark,
+            value => configuration.EnableAutoEnemyFocusMark = value);
+        ImGui.TextColored(
+            configuration.EnableAutoEnemyFocusMark
+                ? new Vector4(1f, 0.78f, 0.3f, 1f)
+                : new Vector4(0.7f, 0.72f, 0.78f, 1f),
+            configuration.EnableAutoEnemyFocusMark
+                ? "ON — this can visibly change the shared Attack1 sign for your team."
+                : "OFF — no party-visible enemy sign command is issued.");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Exact Crystalline Conflict only and disabled by default. A target is eligible only when this client " +
+            "observed its Guard on cooldown and it is at 50% HP or lower and/or has trusted low MP. The MP state enters " +
+            "after 150 ms below 2,000 and clears after 150 ms at or above 2,300 to prevent threshold flicker. Priority is " +
+            "both resources low, then HP-only, then MP-only; ties use lowest HP%, lowest trusted MP%, highest known " +
+            "team-target count, and stable enemy slot. This sends the normal /mk attack1 <eN> command and never changes " +
+            "your target.");
+        ImGui.TextDisabled(
+            "An existing Attack1 sign is never overwritten. Seiton Sense clears only a sign whose empty-to-exact-target " +
+            "transition it confirmed and whose enemy identity and marker timestamp are still unchanged. If ownership " +
+            "cannot be proven, it deliberately leaves the sign alone.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -552,6 +675,14 @@ internal sealed class SettingsWindow : Window
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "ALL JOBS / GENERAL QUALITY OF LIFE");
         changed |= DrawResourceAuraControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("All jobs: Defensive utilities", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawDefensiveUtilityControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("All jobs: Team-visible enemy focus sign", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawAutoEnemyFocusMarkControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("All jobs: CC-immunity brake", ImGuiTreeNodeFlags.DefaultOpen))
@@ -646,9 +777,12 @@ internal sealed class SettingsWindow : Window
         }
 
         ImGui.Separator();
-        ImGui.TextColored(new Vector4(1f, 0.92f, 0.92f, 1f), "WHITE MAGE");
-        if (ImGui.CollapsingHeader("Miracle of Nature intercept", ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawMiracleInterceptControls();
+        if (ImGui.CollapsingHeader(
+                "Reactive counter-CC: Silent Nocturne / Miracle of Nature",
+                ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= DrawReactiveCcControls();
+        }
 
         return changed;
     }
@@ -1145,6 +1279,7 @@ internal sealed class SettingsWindow : Window
             $"CC rows {overlay.ResourceAuraCcRowCount})");
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
+        var defense = personalStatus.DefensiveUtilityDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
         var monk = personalStatus.MonkEarthReplyDiagnostics;
@@ -1160,6 +1295,16 @@ internal sealed class SettingsWindow : Window
             $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
             $"errors={mchLimitBreak.CaptureErrors}, drops={mchLimitBreak.DroppedWarnings}");
         ImGui.TextWrapped(
+            $"Defensive utility: active={defense.Active}, action/trigger={defense.Action}/{defense.Trigger}, " +
+            $"pressure={defense.PressureKnown}/{defense.IncomingEnemyCount}, guard={defense.GuardActive}, " +
+            $"stun={defense.HighPressureStunObserved}, post-Purify={defense.WaitingForPostPurifyGuard}/" +
+            $"{defense.PostPurifyGuardRemainingMilliseconds} ms, Guardian candidates={defense.GuardianCandidateCount}, " +
+            $"target={defense.TargetGameObjectId:X}/{defense.TargetEntityId:X}, " +
+            $"key={defense.FreshGameplayKey}/{defense.HeldGameplayKey}, claim={defense.InputClaimed}, " +
+            $"attempt={defense.UseActionAttempted}/{defense.UseActionAccepted}, " +
+            $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
+            $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
+        ImGui.TextWrapped(
             $"Ally Rescue: {rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
             $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
@@ -1168,7 +1313,8 @@ internal sealed class SettingsWindow : Window
             $"confirmed={rescue.MatchConfirmations.TotalConfirmed}/{rescue.SessionConfirmations.TotalConfirmed}, " +
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
         ImGui.TextWrapped(
-            $"Miracle intercept: {miracle.Phase}/{miracle.Threat}, target={miracle.TargetGameObjectId:X}/" +
+            $"Reactive CC: {miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
+            $"target={miracle.TargetGameObjectId:X}/" +
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
             $"blocker scales/other={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
             $"range/LoS={miracle.HasNativeRangeAndLineOfSight}, key={miracle.InputKey}, " +
@@ -1182,7 +1328,8 @@ internal sealed class SettingsWindow : Window
             $"landed={miracle.ConfirmedLandingCount}, confirm-capture/queue/drop=" +
             $"{miracle.CapturedConfirmationCount}/{miracle.ConfirmationQueueDepth}/{miracle.DroppedConfirmationCount}, " +
             $"last={miracle.LastEvent}, last-opportunity={miracle.LastOpportunity}, " +
-            $"cleanse-followup={miracle.CleanseFollowupPhase}, target=" +
+            $"cleanse-followup={miracle.CleanseFollowupPhase}, removed=" +
+            $"{miracle.CleanseFollowupRemovedStatusId}, team-focus={miracle.CleanseFollowupTeamPressure}, target=" +
             $"{miracle.CleanseFollowupTargetGameObjectId:X}/{miracle.CleanseFollowupTargetEntityId:X}, " +
             $"resilience-seen={miracle.CleanseFollowupResilienceObserved}, signal/promote/cancel=" +
             $"{miracle.CleanseFollowupSignalCount}/{miracle.CleanseFollowupPromotionCount}/" +
@@ -1202,11 +1349,12 @@ internal sealed class SettingsWindow : Window
             "and uploads no gameplay data to an external service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The optional Purify, Ally Rescue, and Miracle helpers " +
-            "share one physical input generation and can each initiate at most one exact action attempt, in that priority " +
-            "order. Monk Earth's Reply is a separate automatic follow-up that yields whenever an earlier helper already " +
-            "attempted an action in the same update. All helpers are " +
-            "disabled by default. Like all third-party modifications, use " +
+            "Purify, defensive utilities, Ally Rescue, and reactive counter-CC share one physical input generation and " +
+            "can initiate at most one exact action attempt, in that priority order. Guard after Purify requires a later " +
+            "physical generation, and every action-request helper is blocked while your own Guard is active. Monk Earth's " +
+            "Reply is a separate automatic follow-up that yields whenever an earlier helper already attempted an action " +
+            "in the same update. Automatic action helpers and the team-visible Attack1 marker are disabled by default. " +
+            "Like all third-party modifications, use " +
             "it at your own risk.");
         ImGui.PopTextWrapPos();
         return changed;

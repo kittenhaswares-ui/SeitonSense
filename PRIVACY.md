@@ -6,7 +6,7 @@ character names, Home Worlds, combat, target, status, or key history.
 Ally Rescue attempt, client-accepted, and confirmed-cleanse counters exist only
 in memory for the current match/plugin session and are never uploaded.
 
-## Transient display data
+## Transient local data
 
 While an enabled feature is active, the plugin can transiently read the
 following data already available in the local FFXIV client:
@@ -22,12 +22,31 @@ following data already available in the local FFXIV client:
   and Crystalline Conflict ally/enemy rows; a visible CC row name is compared
   transiently for equality with the resolved actor and is not retained;
 - when its optional module is enabled, your manually selected current/focus
-  target and locally available job, HP, distance, CC slot, and pressure state.
+  target and locally available job, HP, distance, CC slot, and pressure state;
+- for the isolation/defensive helpers, exact local party membership and FFXIV's
+  native action range/line-of-sight result for the relevant ally;
+- when the team-visible focus-sign module is enabled, the current native Attack1
+  marker target and marker timestamp needed to avoid overwriting or clearing a
+  sign the plugin cannot prove it owns.
 
 Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
 protection timers are held only in bounded in-memory state needed to smooth
 short client/UI sampling gaps.
+
+## Isolation warning
+
+The local isolation warning is enabled only in exact Crystalline Conflict. It
+requires one complete five-player party containing the local player and four
+unique allies. For each living ally, the plugin transiently reads exact identity,
+life state, and FFXIV's native 20-yalm range/line-of-sight result. Dead allies do
+not count as connected. The warning uses only a 500-ms entry debounce and 200-ms
+clear debounce in memory; incomplete party data, an unsupported native result,
+or any other unknown state suppresses it.
+
+The warning draws one local top-left overlay. It does not issue an action,
+target change, marker, navigation instruction, map paint, or network message.
+No Splatoon integration or position guide is included.
 
 ## Native-HUD resource aura
 
@@ -71,10 +90,37 @@ bounded, dropped-event counts are aggregate diagnostics, and no combat history,
 actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
-When the optional Ally Rescue experiment is enabled, the same current-frame
-enemy hard/cast identities are also reduced to a unique incoming-pressure count
-for exact party members. This tie-break data is bounded to the live snapshot and
-is not retained as combat history.
+When optional Ally Rescue or defensive utilities are enabled, the same current-
+frame enemy hard/cast identities are also reduced to a unique incoming-pressure
+count for the local player and/or exact party members. This drives only the
+documented pressure thresholds and candidate tie-breaks. The data is bounded to
+the live snapshot and is not retained as combat history.
+
+## Optional team-visible Attack1 focus sign
+
+This module is disabled by default and runs only in exact Crystalline Conflict.
+It transiently reads canonical `<e1>`-`<e5>` identity, life/targetable state,
+current/maximum HP and MP, the locally observed Guard-unavailable state, exact
+team-target count, and the native Attack1 marker target/time. MP is eligible only
+after the existing trusted low-MP signal has observed 150 ms continuously below
+2,000 MP; it clears after 150 ms continuously at or above 2,300 MP. Unknown MP
+never qualifies. An enemy must also be at or below 50% HP and/or have that trusted
+low-MP state while Guard is known unavailable.
+
+Eligible enemies rank as both resources low, then HP-only, then MP-only; ties use
+lowest exact HP ratio, lowest trusted MP ratio, highest known team-target count, and
+stable enemy slot. The module can issue only the hardcoded normal
+`/mk attack1 <eN>` or matching owned-clear command. It does not read character
+names for the command, write marker memory directly, or change a hard, soft, or
+focus target.
+
+An already occupied Attack1 is never overwritten. Ownership is accepted only
+after the plugin observed an empty marker, sent its one command, then observed
+the exact intended actor with a changed marker timestamp. Clear is allowed only
+while the same canonical slot, game-object/network identity, target, and marker
+timestamp still match. Uncertain state relinquishes ownership without clearing.
+The command attempt and bounded ownership state are not persisted or uploaded;
+current-patch party-visible command behavior remains a live-validation boundary.
 
 ## Marksman's Spite warning
 
@@ -312,80 +358,91 @@ statistics. No ActionEffect payload, actor identity, counter, or popup history
 is written to disk, logged as combat history, sent over the network, or
 uploaded.
 
-## Experimental WHM Miracle intercept
+## Experimental defensive utilities
 
-If explicitly enabled in Crystalline Conflict, the plugin extends its existing
-bounded local action-effect observer to recognize only the reviewed early event
-shapes for Marksman's Spite `29415`, Zantetsuken `29537`, and VPR Furious
-Backlash / Nest der Blutschuppen `39188`. It reads the source and target network
-identity, action identity, bounded event sequence/time, and the small fixed
-effect-slot shape needed to reject later hit packets. The queue is bounded and
-exists only in memory. MCH and SAM opportunities expire after 500 ms; the VPR
-opportunity expires after 250 ms.
+This module is disabled by default and exact-Crystalline-Conflict-only. It
+transiently reads the local player's exact identity, job, HP, Stun and Resilience
+status membership, own Guard state/cooldown, current unique incoming-enemy count,
+and current physical gameplay-key generation. PLD Guardian selection additionally
+reads exact party identity, life/targetable state, HP, position, incoming pressure,
+and native Guardian range/line-of-sight result.
 
-Only if an independently default-off subtype beneath the same default-off
-Miracle master is explicitly enabled may the observer recognize an exact enemy
-self-Purify action `29056` with exactly one self target, a non-empty event
-sequence, and recovered-status effect `0x10` for Stun `1343`. On the framework
-thread, that source must resolve to exactly one live canonical `<e1>`-`<e5>`
-opponent. The plugin then transiently observes
-live Resilience `3248` membership for that exact actor. Resilience must first be
-positively present within 750 ms and then remain absent for 150 ms; the release
-wait is abandoned 3 seconds after positive observation. It does not inspect an
-internal status address, use `RemainingTime`, or predict the immunity timer. A
-confirmed release creates only one 500-ms opportunity.
+At known pressure from at least three unique enemies, an exact Stun can permit
+one normal Purify `29056` request. The same physical generation can never also
+request Guard `29054`. A later Guard request requires a genuinely new release/
+repress generation, positive live Resilience `3248`, no remaining
+Purify-removable CC, and the bounded post-Purify opportunity. The optional
+pre-Guard rule requires HP at or below 50%, the same known pressure threshold,
+no removable CC, and Guard available.
 
-On the framework thread, the source must resolve to the exact canonical CC
-opponent with the expected job. The helper transiently reads that actor's
-life/targetable state and verified Miracle blocker statuses, including VPR-only
-Hardened Scales `4096`. For the VPR trigger it waits for `4096` to be actually
-absent rather than predicting status expiry. The exact target must also pass
-Miracle of Nature's native 10-yalm range and line-of-sight result.
+The PLD-only rule requires an exact living, targetable, non-self party member at
+or below 20% HP, strict distance below 10 yalms, native range/line of sight, and
+both own Guard and Guardian `29066` available. Candidate ranking uses exact HP
+ratio, known incoming pressure, distance, and stable party identity. The helper
+consumes its selected state and physical generation before at most one normal
+native action request. It does not change the visible target, select an alternate
+action after failure, replay input, or retry.
 
-The helper shares the existing physical key-generation observer and receives
-priority only after self-Purify and Ally Rescue. A transient higher-priority
-claim retains the exact threat only until its original 500-ms MCH/SAM or 250-ms
-VPR deadline; it does not extend or replay the opportunity. The claimed
-physical input generation cannot be reused, so only a genuinely fresh eligible
-generation inside that original window may proceed. If all gates remain valid,
-the helper consumes its state and that input generation before at most one
-normal native Miracle of Nature `29228` request to the exact enemy. It never
-changes the visible target, chooses an alternate enemy, falls back to another
-action, or retries a rejected/failed request. The exact native 10-yalm range and
-line-of-sight gate is unchanged. A client-accepted request is not recorded as
-proof that the enemy startup was interrupted.
+When own Guard is active, every Seiton Sense action-request helper is suppressed.
+The same in-memory suppression begins immediately after an exact local Guard
+request and expires after 1.5 seconds unless the real Guard status takes over; the
+same observed request cannot extend or rearm it. This prevents the plugin from
+cancelling Guard; it does not intercept or prevent manual FFXIV actions or action
+requests from another plugin. All observations, pending state, and aggregate
+attempt diagnostics are bounded in memory and are not stored as combat/key
+history or uploaded. Exact client/server action ordering remains a live-validation
+boundary.
 
-The helper's internal redirect bypass excludes only macro target rewriting; it
-does not bypass the final CC-immunity brake. Current exact-actor and verified
-Miracle-protection membership are therefore checked again at the shared native
-dispatch boundary, with no timer, alternate target, replay, or retry added.
+## Experimental WHM/BRD reactive counter-CC
 
-The urgent MCH/SAM/VPR threat paths retain priority over a waiting or released
-post-Purify Stun follow-up. That follow-up otherwise uses the same eligible held
-or fresh physical generation and the same final exact-actor, live-protection,
-native 10-yalm range, and line-of-sight checks. Its state and claimed generation
-are consumed before the sole native request; it cannot prefire from a predicted
-timer, choose another target or action, replay the input, or retry. Waiting
-behind an urgent threat retains the original verified release timestamp and
-never restarts or extends the 500-ms opportunity.
+If explicitly enabled in exact Crystalline Conflict, the plugin extends its
+bounded local action-effect observer to recognize the reviewed early event
+shapes for DNC Contradance `29432`, Marksman's Spite `29415`, Zantetsuken
+`29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188`. It reads
+source/target network identity, action identity, bounded event sequence/time,
+and the small fixed effect-slot shape needed to reject later hit packets. DNC is
+available to WHM and BRD; MCH/SAM/VPR remain WHM-only. The bounded queues exist
+only in memory.
 
-The existing action-effect hook also places exact local Miracle status-add
-observations into a separate bounded in-memory queue. A 1.5-second visual
-confirmation is created only when local caster, action `29228`, pending threat
-target, effect type `0x0E`, status `3085`, and a non-empty event sequence match
-within 1500 ms of the one helper attempt. This is labelled `MIRACLE LANDED` and
-is not stored as proof that the hostile action was interrupted or its damage was
-cancelled. The subtitle also distinguishes the post-Purify Stun follow-up. Bounded
-capture/drop and confirmed-landing counters remain memory-only diagnostics.
-The first still-unexpired pending helper attempt is preserved; a later attempt
-registration does not replace that correlation before it expires.
+The optional post-Purify path recognizes only exact enemy self-Purify `29056`
+with one self target, a non-empty event sequence, and recovered-status effect
+`0x10` for Stun `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of
+Nature `3085`, or Deep Freeze `3219`. The source must resolve to one exact live
+canonical `<e1>`-`<e5>` enemy. The plugin then requires positive live Resilience
+`3248`, waits for 150 ms of stable real absence, and never predicts its timer.
+Promotion additionally requires the enemy to be the local player's exact hard
+target and at least one exact ally's hard target, for team focus of two or more.
 
-No observed threat, actor identity, key state, status, or action result is
-written to disk, uploaded, or retained as combat history. Aggregate bounded
-diagnostic counters for recognized, armed, rejected, waiting, and expired
-opportunities plus the last opportunity result remain memory-only across a
-context exit. Active threats and bounded queues are still cleared when the
-context changes.
+At dispatch, the enemy identity, expected triggering job, life/targetable state,
+and action-specific verified protection are revalidated. WHM uses only Miracle
+of Nature `29228` with native 10-yalm range/line of sight. BRD uses only Silent
+Nocturne `29395` with native 20-yalm range/line of sight. VPR requires live
+Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
+750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
+post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
+
+The helper shares the physical-generation observer after self-Purify, defensive
+utilities, and Ally Rescue. A claimed generation cannot be reused. The helper
+consumes its state and generation before at most one normal native exact-target
+request, without changing the visible target, choosing an alternate enemy/action,
+replaying input, or retrying. Its internal redirect bypass excludes only macro
+target rewriting; the final action-specific CC-immunity brake still runs at the
+native dispatch boundary.
+
+The action-effect hook also places exact local counter-status observations into
+a separate bounded in-memory queue. A 1.5-second `AUTO CC LANDED` visual is
+created only when local caster, expected action, pending enemy, effect type
+`0x0E`, non-empty sequence, and action-specific status match within 1500 ms:
+Miracle `3085` for WHM or Silence `1347` for BRD. This proves only that the
+counter-CC status landed on the intended enemy, not that Contradance, another
+limit break, or damage was interrupted. A client-accepted action request alone
+is never presented as confirmation.
+
+No observed threat, actor identity, key state, status, action result, or team
+focus is written to disk, uploaded, or retained as combat history. Aggregate
+bounded diagnostics remain memory-only across context exit; active threats and
+queues are cleared. Current-patch startup, release, dispatch, and interruption
+behavior remains a live-validation boundary.
 
 ## Experimental Monk Earth's Reply helper
 
@@ -415,13 +472,14 @@ layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
-the WHM Miracle master/per-trigger opt-ins, including the independently
-default-off post-Purify Stun subtype, resource-aura surfaces/thresholds/
-appearance, the Monk Earth's Reply master/triggers/thresholds, and the
-CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 16 is current in v0.12.0.1 and does
-not save observed actors, targets, combat events,
-status timers, key state, Ally Rescue confirmation state, or its counters.
+isolation warning/scale, defensive master/held-key/per-rule opt-ins, WHM/BRD
+reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
+marker opt-in, resource-aura surfaces/thresholds/appearance, the Monk Earth's
+Reply master/triggers/thresholds, and the CC-immunity-brake master plus exact
+per-job/per-action selections. Configuration schema 17 is current in v0.13.0.0
+and does not save observed actors, targets, combat events, status timers, key
+state, marker ownership, pending helper state, ActionEffect confirmation state,
+or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

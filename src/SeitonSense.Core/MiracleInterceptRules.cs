@@ -8,7 +8,8 @@ public enum MiracleInterceptThreatKind
     MarksmanSpite = 1,
     Zantetsuken = 2,
     FuriousBacklash = 3,
-    PostPurifyStun = 4,
+    PostPurifyCrowdControl = 4,
+    Contradance = 5,
 }
 
 public enum MiracleInterceptDecisionKind
@@ -32,7 +33,7 @@ public enum MiracleInterceptCancelReason
     None = 0,
     ConfigurationDisabled = 1,
     OutsideCrystallineConflict = 2,
-    LocalWhiteMageInvalid = 3,
+    LocalCounterJobInvalid = 3,
     HigherPriorityClaimed = 4,
     InvalidSignal = 5,
     CandidateIdentityInvalid = 6,
@@ -66,7 +67,7 @@ public readonly record struct MiracleInterceptState(
 public readonly record struct MiracleInterceptObservation(
     bool ConfigurationEnabled,
     bool IsCrystallineConflict,
-    bool IsLocalWhiteMageValid,
+    bool IsLocalCounterJobValid,
     bool HigherPriorityClaimed,
     MiracleInterceptThreat? NewThreat,
     bool CandidateIdentityValid,
@@ -91,8 +92,8 @@ public readonly record struct MiracleInterceptDecision(
 }
 
 /// <summary>
-/// Pure one-event/one-physical-generation policy for the experimental WHM
-/// Miracle helper. A dispatch clears the active event while retaining its
+/// Pure one-event/one-physical-generation policy for the experimental WHM/BRD
+/// reactive-CC helper. A dispatch clears the active event while retaining its
 /// bounded signal key, so a false or throwing native call cannot re-arm it.
 /// </summary>
 public static class MiracleInterceptRules
@@ -100,13 +101,19 @@ public static class MiracleInterceptRules
     public const uint MarksmanSpiteActionId = 29_415;
     public const uint ZantetsukenActionId = 29_537;
     public const uint FuriousBacklashActionId = 39_188;
+    public const uint ContradanceActionId = 29_432;
     public const uint HardenedScalesStatusId = 4_096;
     public const uint MachinistJobId = 31;
     public const uint SamuraiJobId = 34;
     public const uint ViperJobId = 41;
+    public const uint DancerJobId = 38;
     public const long MarksmanSpiteThreatLifetimeMilliseconds = 500;
     public const long ZantetsukenThreatLifetimeMilliseconds = 500;
     public const long FuriousBacklashThreatLifetimeMilliseconds = 250;
+    // The exact variation-0 Contradance start marker precedes the variation-2
+    // impact by roughly two seconds in the fixed runtime sample. Keep the
+    // helper opportunity much shorter: it must react to the start, not trail it.
+    public const long ContradanceThreatLifetimeMilliseconds = 750;
     public const int MaximumObservedSignals = 128;
 
     public static MiracleInterceptThreatKind ClassifyExactStartSignal(
@@ -116,7 +123,8 @@ public static class MiracleInterceptRules
         int targetCount,
         byte firstEffectType,
         bool firstEffectIsCompletelyEmpty,
-        bool additionalEffectsAreCompletelyEmpty)
+        bool additionalEffectsAreCompletelyEmpty,
+        byte animationVariation = 0)
     {
         if (!IsNetworkEntityId(casterEntityId) ||
             !IsNetworkEntityId(targetEntityId) ||
@@ -137,6 +145,10 @@ public static class MiracleInterceptRules
             FuriousBacklashActionId when targetEntityId == casterEntityId &&
                                          firstEffectIsCompletelyEmpty =>
                 MiracleInterceptThreatKind.FuriousBacklash,
+            ContradanceActionId when targetEntityId == casterEntityId &&
+                                     animationVariation == 0 &&
+                                     firstEffectIsCompletelyEmpty =>
+                MiracleInterceptThreatKind.Contradance,
             _ => MiracleInterceptThreatKind.None,
         };
     }
@@ -226,6 +238,7 @@ public static class MiracleInterceptRules
             MiracleInterceptThreatKind.MarksmanSpite => jobId == MachinistJobId,
             MiracleInterceptThreatKind.Zantetsuken => jobId == SamuraiJobId,
             MiracleInterceptThreatKind.FuriousBacklash => jobId == ViperJobId,
+            MiracleInterceptThreatKind.Contradance => jobId == DancerJobId,
             _ => false,
         };
 
@@ -235,6 +248,18 @@ public static class MiracleInterceptRules
             MiracleInterceptThreatKind.MarksmanSpite => MarksmanSpiteThreatLifetimeMilliseconds,
             MiracleInterceptThreatKind.Zantetsuken => ZantetsukenThreatLifetimeMilliseconds,
             MiracleInterceptThreatKind.FuriousBacklash => FuriousBacklashThreatLifetimeMilliseconds,
+            MiracleInterceptThreatKind.Contradance => ContradanceThreatLifetimeMilliseconds,
+            _ => 0,
+        };
+
+    public static int GetDispatchPriority(MiracleInterceptThreatKind kind) =>
+        kind switch
+        {
+            MiracleInterceptThreatKind.MarksmanSpite or
+            MiracleInterceptThreatKind.Zantetsuken or
+            MiracleInterceptThreatKind.FuriousBacklash => 3,
+            MiracleInterceptThreatKind.Contradance => 2,
+            MiracleInterceptThreatKind.PostPurifyCrowdControl => 1,
             _ => 0,
         };
 
@@ -244,8 +269,8 @@ public static class MiracleInterceptRules
             return MiracleInterceptCancelReason.ConfigurationDisabled;
         if (!observation.IsCrystallineConflict)
             return MiracleInterceptCancelReason.OutsideCrystallineConflict;
-        if (!observation.IsLocalWhiteMageValid)
-            return MiracleInterceptCancelReason.LocalWhiteMageInvalid;
+        if (!observation.IsLocalCounterJobValid)
+            return MiracleInterceptCancelReason.LocalCounterJobInvalid;
         if (observation.HigherPriorityClaimed)
             return MiracleInterceptCancelReason.HigherPriorityClaimed;
         return MiracleInterceptCancelReason.None;
@@ -276,6 +301,7 @@ public static class MiracleInterceptRules
             MiracleInterceptThreatKind.MarksmanSpite => MarksmanSpiteActionId,
             MiracleInterceptThreatKind.Zantetsuken => ZantetsukenActionId,
             MiracleInterceptThreatKind.FuriousBacklash => FuriousBacklashActionId,
+            MiracleInterceptThreatKind.Contradance => ContradanceActionId,
             _ => 0,
         };
 

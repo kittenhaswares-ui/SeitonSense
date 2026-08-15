@@ -94,6 +94,12 @@ internal readonly record struct FarHelpDiagnostics(
     float LastDistance,
     string LastEvent);
 
+internal readonly record struct LocalGuardActionAttempt(
+    uint TerritoryId,
+    ulong LocalGameObjectId,
+    uint LocalEntityId,
+    long ObservedAtMilliseconds);
+
 /// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist
 /// /nearhelp, and /farhelp macro lines.
@@ -125,6 +131,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly TargetPressureTracker pressureTracker;
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly object tokenGate = new();
+    private readonly object guardAttemptGate = new();
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
 
@@ -136,6 +143,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private FarHelpOneShotState farHelpState = FarHelpOneShotState.Initial;
     private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
         FarHelpFallbackSuppressionState.Initial;
+    private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
@@ -268,6 +276,41 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal CcImmunityBrakeDiagnostics CcBrakeDiagnostics => ccImmunityBrake.Diagnostics;
     internal IReadOnlySet<uint> VerifiedCcBrakeStatusIds => ccImmunityBrake.VerifiedStatusIds;
+
+    internal bool TryGetRecentExactLocalGuardAttempt(
+        uint territoryId,
+        ulong localGameObjectId,
+        uint localEntityId,
+        long nowMilliseconds,
+        long maximumAgeMilliseconds,
+        out long observedAtMilliseconds)
+    {
+        observedAtMilliseconds = -1;
+        if (nowMilliseconds < 0 ||
+            maximumAgeMilliseconds <= 0 ||
+            !IsNetworkObjectId(localGameObjectId) ||
+            !IsNetworkEntityId(localEntityId))
+        {
+            return false;
+        }
+
+        lock (guardAttemptGate)
+        {
+            if (latestLocalGuardActionAttempt is not { } attempt ||
+                attempt.TerritoryId != territoryId ||
+                attempt.LocalGameObjectId != localGameObjectId ||
+                attempt.LocalEntityId != localEntityId ||
+                attempt.ObservedAtMilliseconds < 0 ||
+                attempt.ObservedAtMilliseconds > nowMilliseconds ||
+                nowMilliseconds - attempt.ObservedAtMilliseconds >= maximumAgeMilliseconds)
+            {
+                return false;
+            }
+
+            observedAtMilliseconds = attempt.ObservedAtMilliseconds;
+            return true;
+        }
+    }
 
     /// <summary>
     /// Runs one plugin-owned exact-target action through the existing hook without
@@ -623,6 +666,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
         ClearToken("Disposed");
+        lock (guardAttemptGate) latestLocalGuardActionAttempt = null;
         useActionHook?.Dispose();
     }
 
@@ -903,6 +947,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // execute it exactly once with every argument other than an optional helper
         // target substitution intact. A confirmed immunity block returns above and
         // deliberately executes no downstream/original call.
+        ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
         return useActionHook!.Original(
             thisPtr,
             actionType,
@@ -912,6 +957,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             mode,
             comboRouteId,
             outOptAreaTargeted);
+    }
+
+    private void ObserveExactLocalGuardActivationAttempt(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId)
+    {
+        try
+        {
+            if (ResolveActionId(actionManager, actionType, actionId) !=
+                EnemyCombatConstants.GuardActionId)
+            {
+                return;
+            }
+
+            var local = objectTable.LocalPlayer;
+            if (!IsLivePlayer(local) || DefensiveUtilityProbe.HasActiveGuard(local))
+                return;
+
+            var attempt = new LocalGuardActionAttempt(
+                clientState.TerritoryType,
+                local!.GameObjectId,
+                local.EntityId,
+                Environment.TickCount64);
+            lock (guardAttemptGate) latestLocalGuardActionAttempt = attempt;
+        }
+        catch
+        {
+            // Observation must never alter or suppress the incoming Guard call.
+        }
     }
 
     private ulong TryResolveRedirect(

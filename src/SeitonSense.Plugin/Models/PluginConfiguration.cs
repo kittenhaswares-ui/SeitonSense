@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 16;
+    public int Version { get; set; } = 17;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -64,6 +64,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float PersonalWarningScreenY { get; set; } = 0.34f;
     public float PersonalWarningScale { get; set; } = 1f;
     public float PersonalWarningBackgroundOpacity { get; set; } = 0.92f;
+    public bool WarnWhenIsolated { get; set; } = true;
+    public float IsolationWarningScale { get; set; } = 1f;
     public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
     public bool MchLimitBreakSoundEnabled { get; set; } = true;
     public int MchLimitBreakSoundId { get; set; } = 6;
@@ -91,6 +93,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool MiracleInterceptSamZantetsuken { get; set; } = true;
     public bool MiracleInterceptViperNest { get; set; } = true;
     public bool MiracleInterceptAfterPurifiedStun { get; set; }
+    public bool EnableDefensiveUtilities { get; set; }
+    public bool DefensiveUtilitiesOnHeldKey { get; set; } = true;
+    public bool GuardOnStunPressure { get; set; } = true;
+    public bool PreGuardOnLowHpPressure { get; set; } = true;
+    public bool PaladinGuardianLowAlly { get; set; } = true;
+    public bool EnableReactiveCcUtilities { get; set; }
+    public bool ReactiveCcOnHeldKey { get; set; } = true;
+    public bool ReactiveCcDancerLimitBreak { get; set; } = true;
+    public bool ReactiveCcAfterEnemyPurify { get; set; } = true;
     public bool EnableMonkEarthReplyHelper { get; set; }
     public bool MonkEarthReplyOnLowHp { get; set; } = true;
     public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
@@ -160,6 +171,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowCcProtection { get; set; } = true;
     public bool ShowCcProtectionCountdown { get; set; } = true;
     public float CcProtectionEmblemScale { get; set; } = 1f;
+    public bool EnableAutoEnemyFocusMark { get; set; }
     public bool EnableCcImmunityBrake { get; set; }
     public Dictionary<uint, bool> CcBrakeJobs { get; set; } = CreateDefaultCcBrakeJobs();
     public Dictionary<uint, bool> CcBrakeActions { get; set; } = CreateDefaultCcBrakeActions();
@@ -171,7 +183,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 16)
+        if (Version >= 17)
         {
             if (repaired) Save();
             return;
@@ -326,7 +338,25 @@ public sealed class PluginConfiguration : IPluginConfiguration
             MiracleInterceptAfterPurifiedStun = false;
         }
 
-        Version = 16;
+        if (Version < 17)
+        {
+            // Defensive action requests are new and therefore remain an explicit opt-in.
+            // Their individual rules are ready when the master switch is enabled.
+            EnableDefensiveUtilities = false;
+            DefensiveUtilitiesOnHeldKey = true;
+            GuardOnStunPressure = true;
+            PreGuardOnLowHpPressure = true;
+            PaladinGuardianLowAlly = true;
+
+            // Preserve the old Miracle helper opt-in and its post-cleanse choice. The
+            // newly supported DNC startup is not silently enabled for upgrading users.
+            EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;
+            ReactiveCcOnHeldKey = true;
+            ReactiveCcDancerLimitBreak = false;
+            ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;
+        }
+
+        Version = 17;
         ClampSettings();
         Save();
     }
@@ -335,7 +365,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 16;
+        Version = 17;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -364,6 +394,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PersonalWarningScreenY = 0.34f;
         PersonalWarningScale = 1f;
         PersonalWarningBackgroundOpacity = 0.92f;
+        WarnWhenIsolated = true;
+        IsolationWarningScale = 1f;
         MarksmanSpiteWarningScale = 1.45f;
         MchLimitBreakSoundEnabled = true;
         MchLimitBreakSoundId = 6;
@@ -391,6 +423,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
         MiracleInterceptSamZantetsuken = true;
         MiracleInterceptViperNest = true;
         MiracleInterceptAfterPurifiedStun = false;
+        EnableDefensiveUtilities = false;
+        DefensiveUtilitiesOnHeldKey = true;
+        GuardOnStunPressure = true;
+        PreGuardOnLowHpPressure = true;
+        PaladinGuardianLowAlly = true;
+        EnableReactiveCcUtilities = false;
+        ReactiveCcOnHeldKey = true;
+        ReactiveCcDancerLimitBreak = true;
+        ReactiveCcAfterEnemyPurify = true;
         EnableMonkEarthReplyHelper = false;
         MonkEarthReplyOnLowHp = true;
         MonkEarthReplyBeforeExpiry = true;
@@ -421,6 +462,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowCcProtection = true;
         ShowCcProtectionCountdown = true;
         CcProtectionEmblemScale = 1f;
+        EnableAutoEnemyFocusMark = false;
         EnableCcImmunityBrake = false;
         CcBrakeJobs = CreateDefaultCcBrakeJobs();
         CcBrakeActions = CreateDefaultCcBrakeActions();
@@ -508,6 +550,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PressureBackgroundOpacity, 0f, 1f, 0.62f, value => PressureBackgroundOpacity = value);
         changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
         changed |= Clamp(PersonalWarningBackgroundOpacity, 0f, 1f, 0.92f, value => PersonalWarningBackgroundOpacity = value);
+        changed |= Clamp(IsolationWarningScale, 0.75f, 1.75f, 1f, value => IsolationWarningScale = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
         changed |= Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f, value => CcProtectionEmblemScale = value);
         changed |= Clamp(ResourceAuraIntensity, 0.1f, 1.5f, 0.8f, value => ResourceAuraIntensity = value);
