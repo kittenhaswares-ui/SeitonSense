@@ -90,11 +90,12 @@ bounded, dropped-event counts are aggregate diagnostics, and no combat history,
 actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
-When optional Ally Rescue or defensive utilities are enabled, the same current-
-frame enemy hard/cast identities are also reduced to a unique incoming-pressure
-count for the local player and/or exact party members. This drives only the
-documented pressure thresholds and candidate tie-breaks. The data is bounded to
-the live snapshot and is not retained as combat history.
+When optional Ally Rescue, Near Help pressure preference, or defensive utilities
+are enabled, the same current-frame enemy hard/cast identities are also reduced
+to a unique incoming-pressure count for the local player and/or exact party
+members. This drives only the documented pressure thresholds and candidate
+ordering. The data is bounded to the live snapshot and is not retained as
+combat history.
 
 ## Optional team-visible Attack1 focus sign
 
@@ -240,17 +241,28 @@ Seiton Sense adds no repeat of its own.
 Near Help is disabled by default and runs only in Crystalline Conflict. It
 shares Near Assist's bounded action boundary but uses a separate, mutually
 exclusive token. When `/nearhelp` or `/sshelp` is armed, the plugin transiently
-reads exact party-slot identity, current HP, position, and the next supported
-friendly PvP action. It filters party members through that action's native
-range and line-of-sight result, then selects the lowest HP percentage with
-distance and stable party/actor identity as deterministic tie-breakers.
+reads exact party-slot identity, current HP, position, current incoming-pressure
+counts, and the next supported friendly PvP action. It filters candidates
+through that action's native target, range, and line-of-sight result. The local
+player is eligible only when that exact resolved action explicitly supports
+self-targeting and passes the same action-specific validation.
+
+Lowest exact HP is the anchor. At or below 25% HP it always wins. Above that
+boundary, the enabled pressure preference requires a trusted live pressure view
+and complete non-negative counts for every eligible candidate no more than
+10 HP percentage points above the anchor. Only that bounded group can be ranked
+by highest unique incoming enemy count, then lower exact HP, distance, and
+stable party/actor identity. Missing data inside that bounded group or zero-only
+pressure falls back to the original exact lowest-HP ordering; unknown data
+outside it is irrelevant. Observed counts and the selection decision remain
+transient and are not persisted.
 
 The recommended `<2>` line is only a concrete friendly carrier. If no eligible
 party member is found, Seiton Sense substitutes an invalid target for that
 exact carrier attempt so the following authored `<t>` line can run normally.
 A compact `<t>` form otherwise preserves its incoming target. The token is
 consumed before the one original game call. Near Help does not initiate an
-action, visibly change a target, try a second party member, or retry.
+action, visibly change a target, try a second candidate, or retry.
 
 ## One-shot Far Help
 
@@ -454,6 +466,34 @@ bounded diagnostics remain memory-only across context exit; active threats and
 queues are cleared. Current-patch startup, release, dispatch, and interruption
 behavior remains a live-validation boundary.
 
+## Experimental Ninja Seiton fresh-key helper
+
+This helper is disabled by default and runs only for PvP Ninja in exact
+Crystalline Conflict. When explicitly enabled, it transiently reads the local
+player's exact identity and job, fresh physical gameplay-key down edges, own
+Guard state, the current adjusted Seiton action and readiness state, and the
+exact canonical `<e1>`-`<e5>` enemy actors. Eligible candidates must remain
+living, targetable, hostile, strictly below 50% HP, and accepted by FFXIV's
+native action range and line-of-sight check. Selection uses the lowest exact HP
+ratio, then stable enemy slot and actor identity.
+
+The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
+and its Unsealed follow-up `29516`. Self-Purify, defensive utilities, Ally
+Rescue, and reactive counter-CC retain priority over the shared physical input
+generation. Active own Guard and the bounded post-request Guard-propagation
+state suppress the helper. The already-selected target is never changed, and
+the helper never changes the visible hard, soft, or focus target.
+
+After every gate passes, the intent and input generation are consumed before at
+most one exact native action request. A changed identity, readiness, health, or
+reachability result; a false return; or an exception is not followed by an
+additional selection, alternate target, fallback action, replay, or retry. The
+original gameplay key is neither swallowed nor replayed. The local request
+return may be kept as a bounded aggregate `client-accepted` diagnostic, but it
+is not proof that Seiton
+landed, executed the target, or caused a kill. No target, key, attempt, or result
+history is persisted, transmitted, or uploaded.
+
 ## Experimental Monk Earth's Reply helper
 
 If explicitly enabled on PvP Monk, the helper transiently reads the local job,
@@ -480,13 +520,15 @@ combat history, written to disk, transmitted, or uploaded.
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
-Near Assist search/preferences, target-highlight settings, the Purify
+Near Assist search/preferences, the Near Help incoming-pressure preference,
+target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 isolation warning/scale, defensive master/held-key/per-rule opt-ins, WHM/BRD
 reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
 marker opt-in, resource-aura surfaces/thresholds/appearance, the Monk Earth's
-Reply master/triggers/thresholds, and the CC-immunity-brake master plus exact
-per-job/per-action selections. Configuration schema 17 is current in v0.13.0.1
+Reply master/triggers/thresholds, the Ninja Seiton fresh-key opt-in, and the
+CC-immunity-brake master plus exact per-job/per-action selections. Configuration
+schema 19 is current in v0.14.0.0
 and does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.

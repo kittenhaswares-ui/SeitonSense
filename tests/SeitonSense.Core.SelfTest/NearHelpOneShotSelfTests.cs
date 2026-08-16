@@ -30,6 +30,27 @@ internal static class NearHelpOneShotSelfTests
         Equal(OwnTarget, following.ForwardTargetId, "following action remains unchanged");
     }
 
+    public static void PressureSelectionRemainsActionTimeAndOneShot()
+    {
+        var decision = NearHelpOneShotRules.Observe(
+            Arm(),
+            ValidAttempt(),
+            [
+                Candidate(FriendlyA, currentHp: 30, distance: 1f, pressure: 0),
+                Candidate(FriendlyB, currentHp: 40, distance: 10f, pressure: 3),
+            ],
+            preferIncomingPressure: true,
+            hasTrustedPressureView: true);
+
+        True(decision.ShouldRewrite, "pressure-refined candidate rewrites once");
+        Equal(FriendlyB, decision.ForwardTargetId, "pressure refines inside the exact health window");
+        Equal(
+            NearHelpSelectionReason.IncomingPressure,
+            decision.SelectionReason,
+            "one-shot decision exposes the selection reason");
+        False(decision.NextState.IsArmed, "pressure refinement still consumes before dispatch");
+    }
+
     public static void MissingCandidateUsesExactCarrierFallbackPolicy()
     {
         var compact = NearHelpOneShotRules.Observe(Arm(), ValidAttempt(), []);
@@ -150,7 +171,8 @@ internal static class NearHelpOneShotSelfTests
     private static NearHelpSelectionCandidate Candidate(
         ulong gameObjectId,
         uint currentHp,
-        float distance) =>
+        float distance,
+        int? pressure = null) =>
         new(
             gameObjectId,
             (uint)gameObjectId,
@@ -161,7 +183,8 @@ internal static class NearHelpOneShotSelfTests
             IsExactFriendly: true,
             IsSelf: false,
             HasValidActionTarget: true,
-            HasRangeAndLineOfSight: true);
+            HasRangeAndLineOfSight: true,
+            UniqueIncomingEnemyPressureCount: pressure);
 
     private static void ConsumedFallback(
         NearHelpOneShotDecision decision,

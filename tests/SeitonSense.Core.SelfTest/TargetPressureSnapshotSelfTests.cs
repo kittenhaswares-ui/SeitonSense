@@ -291,6 +291,48 @@ internal static class TargetPressureSnapshotSelfTests
         False(TargetPressureSnapshot.Empty.TryGetIncomingAllyPressure(ally, out _), "inactive empty snapshot remains unknown");
     }
 
+    public static void IncomingPressureIncludesExactLocalPlayer()
+    {
+        var enemyA = Identity(10);
+        var enemyB = Identity(20);
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [
+                Enemy(enemyA, hardTarget: Local, castTarget: Local),
+                Enemy(enemyB, castTarget: Local),
+            ],
+            partyAllies: [PartyAlly(Local)]);
+
+        True(
+            snapshot.TryGetIncomingAllyPressure(Local, out var count),
+            "exact observed local player has known incoming pressure");
+        Equal(2, count, "unique hard and cast intent counts for self exactly like an ally");
+
+        False(
+            TargetPressureSnapshot.Build(
+                    Local,
+                    [Enemy(enemyA, hardTarget: Local)],
+                    partyAllies: [PartyAlly(Local with { EntityId = Local.EntityId + 1 })])
+                .TryGetIncomingAllyPressure(Local, out _),
+            "partial local identity never seeds a self pressure value");
+    }
+
+    public static void LocalRecentSignalDoesNotInventIncomingIntent()
+    {
+        var enemy = Identity(10);
+        var snapshot = TargetPressureSnapshot.Build(
+            Local,
+            [Enemy(enemy)],
+            [new TargetPressureSignal(enemy, TargetPressureSources.RecentHarmfulAction)],
+            partyAllies: [PartyAlly(Local)]);
+
+        True(
+            snapshot.TryGetIncomingAllyPressure(Local, out var count),
+            "explicit exact local observation publishes known zero");
+        Equal(0, count, "recent harmful evidence cannot invent an exact hard or cast target");
+        Equal(1, snapshot.RecentHarmfulActionCount, "recent signal remains available to its original pressure view");
+    }
+
     public static void OrderingIsDeterministic()
     {
         TargetPressureEnemyObservation[] enemies =

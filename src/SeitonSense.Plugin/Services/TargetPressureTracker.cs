@@ -68,6 +68,8 @@ internal sealed class TargetPressureTracker : IDisposable
 
     internal TargetPressureRuntimeSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal bool IsActive => Snapshot.Active;
+    internal bool HasActiveIncomingAllyPressureView =>
+        Volatile.Read(ref incomingAllyPressure).Active;
     internal TargetPressureDiagnostics Diagnostics => Volatile.Read(ref diagnostics);
     internal int VerifiedProtectionStatusCount => verifiedProtectionStatusIds.Count;
 
@@ -187,9 +189,11 @@ internal sealed class TargetPressureTracker : IDisposable
         var pressureEnabledForContext = pressureFeaturesEnabled &&
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);
         var incomingAllyPressureEnabledForContext =
-            configuration.ExperimentalAllyRescueOnNextKey &&
-            metadata.AllyRescueStatusesVerified &&
-            supportedContext == SupportedPvPContext.CrystallineConflict;
+            supportedContext == SupportedPvPContext.CrystallineConflict &&
+            ((configuration.ExperimentalAllyRescueOnNextKey &&
+              metadata.AllyRescueStatusesVerified) ||
+             (configuration.EnableNearAssistMacro &&
+              configuration.NearHelpPreferIncomingPressure));
         var pressureStateTrackingEnabled =
             pressureEnabledForContext || incomingAllyPressureEnabledForContext;
         var wolvesTrackingEnabled = isWolvesDen &&
@@ -267,6 +271,19 @@ internal sealed class TargetPressureTracker : IDisposable
         var enemies = new List<(IPlayerCharacter Player, TargetPressureEnemyObservation Observation)>();
         var allies = new List<TargetPressureAllyObservation>();
         var partyAllies = new List<TargetPressurePartyAllyObservation>();
+        if (pressureStateTrackingEnabled)
+        {
+            // Near Help may legitimately select the local player for actions
+            // whose exact resolved metadata permits self-targeting. Publish the
+            // local identity into the same atomic ally-pressure view so every
+            // candidate is queried by the same GOID + EntityId contract.
+            partyAllies.Add(new TargetPressurePartyAllyObservation(
+                localIdentity,
+                true,
+                false,
+                localPlayer.IsTargetable));
+        }
+
         foreach (var player in players)
         {
             var identity = CreateIdentity(player);

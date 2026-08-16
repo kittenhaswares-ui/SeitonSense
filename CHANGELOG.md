@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.14.0.0
+
+- Added a separate default-off **Seiton on fresh gameplay key** experiment for
+  PvP Ninja in exact Crystalline Conflict. It considers every exact canonical
+  `S1`-`S5` enemy that is strictly below 50% HP and natively reachable, then
+  selects the lowest exact HP ratio with stable slot/actor tie-breaks.
+- A genuinely fresh physical gameplay-key down edge is eligible only while the
+  metadata-verified adjusted action is ready as base Seiton Tenchu `29515` or
+  Unsealed follow-up `29516`. The exact target must remain living, targetable,
+  hostile, strictly below 50% HP, and accepted by FFXIV's native action range
+  and line-of-sight check immediately before dispatch.
+- Kept Self-Purify, defensive utilities, Ally Rescue, and reactive counter-CC
+  ahead of Ninja Seiton in the shared physical-generation chain. Active own
+  Guard and the bounded 1.5-second Guard-propagation gate suppress the helper.
+- The exact selected intent and input generation are consumed before at most
+  one native action request. There is no target mutation, second selection,
+  alternate target/action, fallback, replay, or retry after a race, false
+  return, or exception; the original gameplay key is not swallowed.
+- Client acceptance remains dispatch-only feedback and is not presented as
+  proof that Seiton landed, executed the enemy, or caused a kill. Current-patch
+  Crystalline Conflict timing and dispatch still require live validation.
+- Bumped the plugin version to 0.14.0.0 and configuration schema to 19. The new
+  action-initiating option is off for new configurations, upgrades, and reset
+  defaults.
+
+## 0.13.1.0
+
+- Upgraded Near Help from strict lowest-party-HP routing to a bounded survival
+  preference. Lowest exact HP remains the anchor and always wins at or below
+  25% HP. Above that boundary, optional incoming pressure may reorder only
+  candidates no more than 10 HP percentage points above the anchor.
+- Pressure ordering requires a trusted live view and a non-negative count for
+  every eligible candidate inside that window. Highest unique enemy
+  pressure wins, then lower exact HP, shorter distance, and stable party/actor
+  identity. Missing data inside the window or zero-only pressure falls back
+  exactly to the previous lowest-HP behavior; unknown data outside it is ignored.
+- Allowed the local player to enter Near Help selection only when the actually
+  resolved friendly PvP action explicitly supports self-targeting and the same
+  exact action-target plus native range/line-of-sight gates succeed. Actions
+  that cannot target self keep excluding it.
+- Preserved the existing one-shot boundary: Near Help still redirects only one
+  explicitly armed, already incoming action, consumes before the game call,
+  never changes the action ID or visible target, and has no alternate candidate,
+  action, replay, or retry.
+- Added the dedicated **Prefer incoming pressure near the lowest-health target**
+  setting. Configuration schema 18 enables it for upgrades, new configurations,
+  and reset defaults, while the shared macro-helper master itself remains the
+  existing explicit opt-in. Bumped the plugin version to 0.13.1.0.
+- Deterministic source tests cover the exact 25% and +10-point boundaries,
+  incomplete-pressure fallback, overflow-safe ratios, self-target eligibility,
+  and stable ordering. Current-patch live macro/action validation remains
+  required before claiming in-game confirmation.
+
 ## 0.13.0.1
 
 - Corrected Guardian `29066` targeting in both defensive utility selection and
