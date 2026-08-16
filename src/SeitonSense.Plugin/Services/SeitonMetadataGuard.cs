@@ -22,9 +22,10 @@ internal sealed record PvPMetadataValidation(
     bool ContradanceVerified,
     bool ZantetsukenVerified,
     bool FuriousBacklashVerified,
-    bool MonkEarthReplyVerified)
+    bool MonkEarthReplyVerified,
+    bool ScholarCriticalStrategyVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -98,6 +99,53 @@ internal static class PvPMetadataGuard
                    description.Contains("Duration: 8s", StringComparison.Ordinal) &&
                    description.Contains("closer than 10 yalms", StringComparison.Ordinal) &&
                    description.Contains("Cannot be executed while bound", StringComparison.Ordinal);
+        });
+
+        var scholarCriticalStrategyVerified = ValidateFeature("Scholar Critical Strategy", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.ScholarCriticalStrategyActionId, out var action) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.ScholarCriticalStrategyActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return action.Name.ToString() == "Chain Stratagem" &&
+                   action.Icon == EnemyCombatConstants.ScholarCriticalStrategyIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.ScholarJobId &&
+                   action.ClassJobCategory.IsValid &&
+                   action.ClassJobCategory.RowId == 29 &&
+                   action.ActionCategory.IsValid &&
+                   action.ActionCategory.RowId == 4 &&
+                   action.Range == EnemyCombatConstants.ScholarCriticalStrategySheetRange &&
+                   action.EffectRange == 0 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.ScholarCriticalStrategyRecast100ms &&
+                   action.PrimaryCostType == 0 &&
+                   action.PrimaryCostValue == 0 &&
+                   action.CooldownGroup == 3 &&
+                   action.MaxCharges == 0 &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlliance &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetOwnPet &&
+                   !action.CanTargetPartyPet &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.NeedToFaceTarget &&
+                   !action.AffectsPosition &&
+                   action.CastType == 1 &&
+                   description.Contains("Increases target's damage taken by 10%", StringComparison.Ordinal) &&
+                   description.Contains(
+                       "Halves the defensive bonus of Guard instead when targeting enemies under its effect.",
+                       StringComparison.Ordinal);
         });
 
         var recuperateVerified = ValidateFeature("Recuperate", log, () =>
@@ -572,14 +620,16 @@ internal static class PvPMetadataGuard
             contradanceVerified,
             zantetsukenVerified,
             furiousBacklashVerified,
-            monkEarthReplyVerified);
+            monkEarthReplyVerified,
+            scholarCriticalStrategyVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
-            "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}.",
+            "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
+            "ScholarCriticalStrategy={ScholarCriticalStrategy}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.GuardianVerified,
@@ -594,7 +644,8 @@ internal static class PvPMetadataGuard
             validation.ContradanceVerified,
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
-            validation.MonkEarthReplyVerified);
+            validation.MonkEarthReplyVerified,
+            validation.ScholarCriticalStrategyVerified);
 
         return validation;
     }

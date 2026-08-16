@@ -490,6 +490,10 @@ internal sealed class SettingsWindow : Window
             "PLD Guardian for an ally at 20% HP or lower",
             configuration.PaladinGuardianLowAlly,
             value => configuration.PaladinGuardianLowAlly = value);
+        changed |= Checkbox(
+            "After accepted Auto Guardian: Quick Chat + Bind pair (party-visible)",
+            configuration.PaladinGuardianAnnounceAndMark,
+            value => configuration.PaladinGuardianAnnounceAndMark = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Crystalline Conflict only and disabled by default. One physical key generation can produce at most one " +
@@ -507,6 +511,20 @@ internal sealed class SettingsWindow : Window
             "the bounded 1.5-second status-propagation interval after an exact Guard request, every Seiton Sense " +
             "action-request helper is blocked, so none can cancel Guard. Manual game actions and another plugin's " +
             "repeats remain outside that boundary and can still end Guard normally.");
+        ImGui.TextDisabled(
+            "The separate communication opt-in runs only after this module's automatic Guardian request is client-" +
+            "accepted in exact Crystalline Conflict. It uses localized CC Quick Chat row 35 (Ziel decken, displayed " +
+            "as Ich decke ...) for the frozen exact P-slot, then places Bind2 on that slot followed by Bind1 on self. " +
+            "If either sign is occupied or marker state is uncertain, the marker sequence is not started. Bind2 must " +
+            "be confirmed on the exact ally before Bind1 is attempted; if Bind1 then fails, only the proven-owned " +
+            "Bind2 may be cleaned. A complete pair expires nine seconds after Guardian acceptance. Cleanup tries " +
+            "Bind2 and then Bind1, each only while its exact actor/sign/timestamp ownership remains proven; drift is " +
+            "relinquished rather than cleared.");
+        ImGui.TextDisabled(
+            "Communication never changes a hard, soft, focus, or mouseover target, initiates another combat action, " +
+            "selects an alternate, falls back, or retries. A command issued is not proof that chat or signs appeared. " +
+            "Localized Quick Chat syntax, party visibility, pair placement, and cleanup remain current-patch live-" +
+            "confirmation boundaries.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -785,6 +803,33 @@ internal sealed class SettingsWindow : Window
             1f,
             value => configuration.PopupBackgroundOpacity = value,
             "%.2f");
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.55f, 0.85f, 1f, 1f), "SCHOLAR");
+        changed |= Checkbox(
+            "Critical Strategy on held gameplay key (Guard targets only, experimental)",
+            configuration.EnableScholarCriticalStrategyOnHeldKey,
+            value => configuration.EnableScholarCriticalStrategyOnHeldKey = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off, PvP Scholar, and exact Crystalline Conflict only. One shared held physical gameplay-key " +
+            "generation may request Critical Strategy (29716) only against a living, targetable exact canonical " +
+            "S1-S5 enemy with live Guard (3054 or 3673), verified readiness, and FFXIV's native 25-yalm range/line " +
+            "of sight. It is never spent as the ordinary 10% damage-taken debuff: on Guard, the current official " +
+            "effect instead halves Guard's defensive bonus for 10 seconds.");
+        ImGui.TextDisabled(
+            "Selection requires the complete unique S1-S5 set. If every eligible guarded candidate has one active, " +
+            "exact, non-negative team-pressure count and any count is positive, highest team pressure wins, then " +
+            "lowest exact HP ratio. Any unknown/negative pressure, or all-zero pressure, makes the entire selection " +
+            "HP-first. Stable S-slot, entity ID, and game-object ID break exact ties. Pressure is selection-only and " +
+            "is not revalidated as a final dispatch gate.");
+        ImGui.TextDisabled(
+            "The frozen intent and shared held-key generation are consumed before at most one native attempt. It " +
+            "then revalidates only exact identity, action readiness, live Guard, and native range/line of sight. It " +
+            "never changes a hard, soft, focus, or mouseover target, reranks, selects an alternate after drift, " +
+            "substitutes another action, falls back, replays, or retries. The original key is not swallowed, and " +
+            "client acceptance does not prove that Critical Strategy landed or changed Guard.");
+        ImGui.PopTextWrapPos();
 
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.92f, 0.7f, 0.35f, 1f), "MONK");

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.15.0.0
+
+- Added a separate, persisted, default-off **Auto Guardian Quick Chat + Bind
+  pair** option under Jobs > Defensive utilities. It can run only after this
+  module's automatic PLD Guardian `29066` request returns client-accepted in
+  exact Crystalline Conflict; manual Guardian, Far Help, and rejected requests
+  do not arm communication.
+- The communication freezes the same exact party slot and may issue the
+  client-localized CC Quick Chat row 35 (`Ziel decken`, displayed as `Ich decke
+  ...` on a German client) for that `P#`. It may then place Bind2 on that exact
+  party member followed by Bind1 on self.
+- The complete marker pair is skipped when either sign is occupied or marker
+  state is uncertain. Bind2 must be confirmed on the exact ally before Bind1 is
+  attempted on self. If Bind1 then fails, only the proven-owned Bind2 may be
+  cleaned. A complete pair expires nine seconds after Guardian was accepted;
+  cleanup tries Bind2 and then Bind1, each only while actor, sign, and marker
+  timestamp still prove ownership. Drift is relinquished rather than cleared.
+- This path does not mutate any selected target, initiate another combat action,
+  select an alternate, fall back, replay, or retry. Guardian client acceptance
+  does not prove server-applied protection, and an issued command does not prove
+  that Quick Chat or the signs appeared.
+- Added a separate default-off **Critical Strategy on held gameplay key** option
+  under Jobs > Scholar. On PvP SCH in exact CC, one shared held-key generation
+  may select only among the complete unique canonical `S1`-`S5` enemies with
+  live Guard `3054`/`3673`, exact living/targetable identity, verified Critical
+  Strategy `29716` readiness, and native 25-yalm range/line of sight.
+- If every eligible Guard candidate has an active, exact, non-negative team-
+  pressure count and at least one is positive, highest team pressure wins and
+  lowest exact HP ratio follows. If any eligible pressure is unavailable or
+  invalid, or every count is zero, the whole selection is HP-first. Stable
+  S-slot, entity ID, and game-object ID resolve remaining ties. Pressure is
+  selection-only and is not a final dispatch gate.
+- The Scholar helper never uses Critical Strategy as its ordinary 10% damage-
+  taken debuff. On a Guard target, the current official effect instead halves
+  Guard's defensive bonus for 10 seconds. The frozen intent and held generation
+  are consumed before one native attempt. Final revalidation covers only exact
+  identity, readiness, live Guard, and native range/line of sight, with no
+  rerank, target mutation, alternate, fallback action, replay, or retry.
+- Bumped the plugin version to 0.15.0.0 and configuration schema to 21. Guardian
+  team communication and Scholar Critical Strategy both remain off for new
+  configurations, upgrades, and reset defaults. Localized Quick Chat, marker
+  placement/cleanup, and Critical Strategy dispatch/effect remain current-patch
+  live-confirmation boundaries.
+
 ## 0.14.0.0
 
 - Added a separate default-off **Seiton on fresh gameplay key** experiment for

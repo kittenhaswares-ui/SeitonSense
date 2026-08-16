@@ -3,9 +3,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
-using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 
@@ -82,6 +80,7 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
     private readonly PvPMetadataValidation metadata;
     private readonly ExecuteTracker executeTracker;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly ReviewedPvpCommandDispatcher commands;
 
     private AutoEnemyFocusMarkDiagnostics diagnostics = AutoEnemyFocusMarkDiagnostics.Inactive;
     private MarkerOwnership? ownership;
@@ -111,7 +110,8 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
         IPluginLog log,
         PvPMetadataValidation metadata,
         ExecuteTracker executeTracker,
-        TargetPressureTracker pressureTracker)
+        TargetPressureTracker pressureTracker,
+        ReviewedPvpCommandDispatcher commands)
     {
         this.configuration = configuration;
         this.clientState = clientState;
@@ -122,6 +122,7 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
         this.metadata = metadata;
         this.executeTracker = executeTracker;
         this.pressureTracker = pressureTracker;
+        this.commands = commands;
     }
 
     internal AutoEnemyFocusMarkDiagnostics Diagnostics => Volatile.Read(ref diagnostics);
@@ -195,7 +196,11 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
                 return;
             }
 
-            if (!TryExecuteClearCommand(owned.EnemySlot)) return;
+            if (commands.TryClearAttack1(owned.EnemySlot, now) !=
+                ReviewedPvpCommandDispatchResult.Invoked)
+            {
+                return;
+            }
             lastCommandAt = now;
             clearCommands++;
             lastEvent = $"Owned Attack-1 clear issued once during dispose for e{owned.EnemySlot}";
@@ -471,8 +476,16 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
             return;
         }
 
+        var markResult = commands.TryMarkAttack1(desired.Value.EnemySlot, now);
+        if (markResult == ReviewedPvpCommandDispatchResult.MarkerRateLimited)
+        {
+            lastEvent = "Mark waiting for the shared marker command reservation";
+            Publish(true, true, textInputActive, AutoEnemyFocusMarkPhase.Ready, candidates.Count, desiredIdentity, observedMarker, observedMarkerTime);
+            return;
+        }
+
         blockedMarkCandidate = desiredIdentity;
-        if (!TryExecuteMarkCommand(desired.Value.EnemySlot))
+        if (markResult != ReviewedPvpCommandDispatchResult.Invoked)
         {
             lastEvent = "Mark command could not be issued";
             Publish(true, true, textInputActive, AutoEnemyFocusMarkPhase.Suppressed, candidates.Count, desiredIdentity, observedMarker, observedMarkerTime);
@@ -542,7 +555,23 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
             return;
         }
 
-        if (!TryExecuteClearCommand(owned.EnemySlot))
+        var clearResult = commands.TryClearAttack1(owned.EnemySlot, now);
+        if (clearResult == ReviewedPvpCommandDispatchResult.MarkerRateLimited)
+        {
+            lastEvent = "Clear waiting for the shared marker command reservation";
+            Publish(
+                configuration.EnableAutoEnemyFocusMark,
+                true,
+                textInputActive,
+                AutoEnemyFocusMarkPhase.Owned,
+                candidateCount,
+                desiredIdentity,
+                observedMarker,
+                observedMarkerTime);
+            return;
+        }
+
+        if (clearResult != ReviewedPvpCommandDispatchResult.Invoked)
         {
             Relinquish("Clear command could not be issued");
             Publish(
@@ -817,51 +846,6 @@ internal sealed class AutoEnemyFocusMarkService : IDisposable
 
     private bool CanIssueCommand(long now) =>
         now >= lastCommandAt && now - lastCommandAt >= MinimumCommandIntervalMilliseconds;
-
-    private static bool TryExecuteMarkCommand(int enemySlot) => enemySlot switch
-    {
-        1 => TryExecuteShellCommand("/mk attack1 <e1>"),
-        2 => TryExecuteShellCommand("/mk attack1 <e2>"),
-        3 => TryExecuteShellCommand("/mk attack1 <e3>"),
-        4 => TryExecuteShellCommand("/mk attack1 <e4>"),
-        5 => TryExecuteShellCommand("/mk attack1 <e5>"),
-        _ => false,
-    };
-
-    private static bool TryExecuteClearCommand(int enemySlot) => enemySlot switch
-    {
-        1 => TryExecuteShellCommand("/mk off <e1>"),
-        2 => TryExecuteShellCommand("/mk off <e2>"),
-        3 => TryExecuteShellCommand("/mk off <e3>"),
-        4 => TryExecuteShellCommand("/mk off <e4>"),
-        5 => TryExecuteShellCommand("/mk off <e5>"),
-        _ => false,
-    };
-
-    private static unsafe bool TryExecuteShellCommand(string exactHardcodedCommand)
-    {
-        Utf8String* command = null;
-        try
-        {
-            var uiModule = UIModule.Instance();
-            if (uiModule == null) return false;
-            var shell = uiModule->GetRaptureShellModule();
-            if (shell == null) return false;
-
-            command = Utf8String.FromString(exactHardcodedCommand);
-            if (command == null) return false;
-            shell->ExecuteCommandInner(command, uiModule);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            if (command != null) command->Dtor(true);
-        }
-    }
 
     private void Relinquish(string reason)
     {

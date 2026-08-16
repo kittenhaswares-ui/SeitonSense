@@ -2,10 +2,11 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.14.0.0 adds a
-default-off Ninja experiment that can spend one fresh physical gameplay-key
-edge on the lowest-HP exact reachable CC enemy below 50% when Seiton Tenchu is
-verifiably ready and every execute gate passes. The suite combines
+one-shot macro assistance, and target highlights. Version 0.15.0.0 adds two
+separate default-off exact-CC utilities: party-visible Quick Chat plus an
+ownership-safe Bind pair after a client-accepted automatic PLD Guardian, and a
+held-key SCH Critical Strategy helper restricted to exact enemies with live
+Guard. The suite combines
 the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow
 into one configurable custom-repository plugin.
 
@@ -56,6 +57,10 @@ into one configurable custom-repository plugin.
   below 50% and natively reachable. Exact CC context, Ninja job, adjusted action
   readiness, own-Guard safety, and the shared higher-priority helper boundary
   all fail closed.
+- **Experimental Scholar Critical Strategy helper:** a separate default-off
+  held-key option selects only among the complete canonical `S1`-`S5` enemies
+  with live Guard. Fully trusted positive team pressure ranks first, otherwise
+  exact HP does; every target still requires native 25-yalm range/line of sight.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
@@ -84,7 +89,9 @@ into one configurable custom-repository plugin.
   Guard after positive Resilience, a low-HP pre-Guard, or PLD Guardian on an
   exact critically low ally. An active own Guard, plus the bounded 1.5-second
   status-propagation window after an exact Guard request, blocks all plugin action
-  helpers.
+  helpers. A separate default-off option can communicate only a client-accepted
+  automatic Guardian with localized CC Quick Chat row 35 and an ownership-safe
+  Bind2-ally/Bind1-self pair.
 - **Experimental reactive counter-CC:** the default-off helper uses WHM Miracle
   of Nature or BRD Silent Nocturne on an exact DNC Contradance startup. It can
   also follow any of the six exact Purify-removable enemy statuses only after
@@ -105,9 +112,10 @@ into one configurable custom-repository plugin.
 - **Cleaner settings:** defensive utilities, reactive counter-CC, the team focus
   sign, CC-immunity brake, resource readability, and job helpers are grouped
   under a dedicated Jobs tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 19 adds the
-  Ninja fresh-key helper as an explicit default-off option for new, upgraded,
-  and reset settings; every action-attempt feature remains opt-in.
+  focused on their own feature families. Configuration schema 21 keeps Guardian
+  team communication and Scholar Critical Strategy as separate default-off
+  options for new, upgraded, and reset settings; every action-attempt and party-
+  visible communication feature remains opt-in.
 
 ## Pressure and team focus
 
@@ -336,6 +344,37 @@ does not prove that Seiton
 landed, executed the enemy, or caused a kill. Current-patch timing and dispatch
 remain live-validation boundaries.
 
+## Scholar Critical Strategy held-key helper
+
+The separate **Critical Strategy on held gameplay key** experiment is disabled
+by default and runs only on PvP Scholar in exact Crystalline Conflict. It can
+use Critical Strategy `29716` only while its metadata and readiness are verified
+and one living, targetable enemy from the complete unique canonical `S1`-`S5`
+set has live Guard `3054` or `3673`. The same frozen enemy must pass FFXIV's
+native 25-yalm action range and line-of-sight check immediately before dispatch.
+
+The helper deliberately never spends Critical Strategy as its ordinary 10%
+damage-taken debuff. The current official action instead halves Guard's
+defensive bonus when the chosen enemy has Guard; the effect lasts 10 seconds.
+If every eligible guarded candidate has an active exact non-negative team-
+pressure count and at least one count is positive, highest team pressure wins,
+then lowest exact HP ratio. If any eligible candidate has unavailable, inactive,
+or negative pressure, or every count is zero, the whole candidate set ranks by
+lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
+remaining ties. Pressure is used only for this one selection and is not a final
+dispatch requirement.
+
+One shared held physical gameplay-key generation can produce at most one frozen
+Critical Strategy intent. The intent and generation are consumed before one
+native attempt, then the frozen enemy is revalidated only for exact identity,
+action readiness, live Guard, and native range/line of sight. Pressure drift
+neither reranks nor switches or invalidates the frozen target. The helper never
+mutates a hard, soft, focus, or mouseover target, makes a second selection,
+chooses an alternate target/action, falls back, replays, or retries, and it does
+not swallow the original key. A client-accepted return is dispatch feedback only;
+it does not prove that Critical Strategy landed or changed Guard. Exact current-
+patch held-input timing, dispatch, and effect behavior require a live CC test.
+
 ## Personal warnings and job quality-of-life helpers
 
 Wildfire and Death Warrant receive danger warnings. Marksman's Spite uses its
@@ -417,6 +456,28 @@ the automatic Guardian request is accepted locally, a blue 1.5-second
 **GUARDIAN TRIGGERED** card shows the selected party slot and explicitly labels
 the result **CLIENT ACCEPTED**. This is dispatch feedback, not proof that the
 server applied Guardian or intercepted damage.
+
+The separate **After accepted Auto Guardian: Quick Chat + Bind pair** option is
+also disabled by default. It can run only after this automatic Guardian request
+returns client-accepted in exact Crystalline Conflict; manually used Guardian,
+Far Help, and rejected requests do not arm it. It freezes the same exact party
+slot and uses the client-localized Crystalline Conflict Quick Chat row 35
+(`Ziel decken`, displayed as `Ich decke ...` on a German client) for that `P#`.
+It can then place Bind2 on that exact party slot followed by Bind1 on the local
+Paladin.
+If either sign is already occupied or current marker state cannot be proven,
+the marker sequence is not started. Bind2 must be observed on the exact ally
+with a new marker timestamp before Bind1 is attempted on self. If Bind1 then
+fails, only the proven-owned Bind2 is eligible for cleanup. A complete pair
+expires nine seconds after Guardian was accepted; cleanup tries Bind2 and then
+Bind1, each only while the same actor/sign/timestamp ownership remains exact.
+Drift is relinquished rather than cleared.
+
+This communication path never changes a hard, soft, focus, or mouseover target,
+initiates another combat action, selects another ally, falls back, or retries.
+A locally issued command is not proof that the party received Quick Chat or saw
+both markers. The exact localized row-35 syntax, party display, marker pairing,
+and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all of its action-request
 helpers, including Purify, defensive utilities, Ally Rescue, reactive counter-CC,
@@ -725,10 +786,12 @@ standalone plugins' saved configuration.
 
 ## Privacy and safety
 
-Seiton Sense has no account, server, telemetry, or gameplay upload. It does not
-read character names or Home Worlds and stores no combat, target, or key
-history. Transient observations and the exact one-shot action boundary are
-documented in [PRIVACY.md](PRIVACY.md).
+Seiton Sense has no account, independent server, telemetry, or gameplay upload.
+It does not read character names or Home Worlds and stores no combat, target, or
+key history. The separate default-off Guardian communication uses ordinary
+FFXIV Quick Chat and marker commands, so enabling it creates the described
+party-visible in-game side effect through FFXIV. Transient observations and the
+exact one-shot action boundary are documented in [PRIVACY.md](PRIVACY.md).
 
 Display features, including the resource aura, never target or press actions or
 mutate native UI. For one already incoming, enabled CC action attempt against
@@ -772,6 +835,20 @@ command when its exact gates pass. It never swaps targets or overwrites an
 occupied Attack1 sign and clears only a marker whose ownership it can still
 prove from exact identity and marker time.
 
+The separate Guardian communication option is likewise not display-only. After
+one client-accepted automatic Guardian request it may issue one localized,
+standardized CC Quick Chat for the frozen exact `P#` and a Bind2-ally/Bind1-self
+pair. It sends no free text or character name and does not start the marker
+sequence while either sign is occupied or uncertain. Bind2 is confirmed before
+Bind1; a later Bind1 failure can clean only the proven-owned Bind2, and every
+cleanup remains exact per sign. It does not issue another combat action or
+retry a failed command.
+
+The Scholar helper is not display-only either. When explicitly enabled, it may
+initiate one Critical Strategy action attempt against its frozen exact guarded
+enemy from one shared held-key generation. It never sends chat or markers,
+changes the selected target, chooses another enemy after drift, or retries.
+
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
 repository.
@@ -791,10 +868,18 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.14.0.0 specifically, source checks additionally cover the Ninja helper's
-fresh-edge ownership, exact hard-target and adjusted-action gates, strict
-below-50% boundary, Guard/priority suppression, and one-attempt/no-retry
-contract. They do not prove live client/server acceptance, execution, or a kill.
+For v0.15.0.0 specifically, source checks retain the Ninja helper's fresh-edge
+ownership, complete canonical `S1`-`S5` auto-selection and adjusted-action
+gates, strict below-50% boundary, Guard/priority suppression, and one-attempt/
+no-retry contract. The helper has no hard-target dependency. Those checks do not
+prove live client/server acceptance, execution, or a kill. Guardian communication
+checks cover accepted-episode consumption, chat-only occupied-marker behavior,
+Bind2-before-Bind1 confirmation, exact per-sign ownership, partial cleanup, and
+no post-invocation retry. Scholar checks cover Guard-only complete `S1`-`S5`
+selection, trusted-positive-pressure/HP ranking, held-generation ownership,
+native reachability, frozen-intent revalidation, and one attempt without target
+mutation or alternate. Localized Quick Chat, marker placement/cleanup, and
+Critical Strategy dispatch/effect still require current-patch live confirmation.
 Existing tests cover Near Help's exact self-target gate, critical-health
 override, bounded pressure window, complete-view fallback, and deterministic
 pressure/HP/distance ordering, plus the isolation debounce and

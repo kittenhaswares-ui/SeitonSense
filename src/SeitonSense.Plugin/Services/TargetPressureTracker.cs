@@ -185,6 +185,7 @@ internal sealed class TargetPressureTracker : IDisposable
                                        configuration.EnableDefensiveUtilities ||
                                        (configuration.EnableReactiveCcUtilities &&
                                         configuration.ReactiveCcAfterEnemyPurify) ||
+                                       configuration.EnableScholarCriticalStrategyOnHeldKey ||
                                        configuration.EnableAutoEnemyFocusMark;
         var pressureEnabledForContext = pressureFeaturesEnabled &&
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);

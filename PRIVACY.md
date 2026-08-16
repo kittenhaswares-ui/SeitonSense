@@ -1,10 +1,15 @@
 # Privacy
 
-Seiton Sense is local-only. It does not create accounts, contact a server,
-upload gameplay data, or include telemetry. It does not persist or transmit
-character names, Home Worlds, combat, target, status, or key history.
-Ally Rescue attempt, client-accepted, and confirmed-cleanse counters exist only
-in memory for the current match/plugin session and are never uploaded.
+Seiton Sense has no account, independent server, telemetry, or external gameplay
+upload. Optional gameplay helpers can submit ordinary action, target-sign, or
+Quick Chat commands to FFXIV. In particular, the separate default-off Guardian
+communication option can send one standardized Crystalline Conflict Quick Chat
+and party-visible marker commands through the normal FFXIV service after an
+automatic Guardian request is client-accepted. It embeds no character name or
+free text. The plugin does not otherwise persist or transmit character names,
+Home Worlds, combat, target, status, or key history. Ally Rescue attempt,
+client-accepted, and confirmed-cleanse counters exist only in memory for the
+current match/plugin session and are never uploaded.
 
 ## Transient local data
 
@@ -27,7 +32,16 @@ following data already available in the local FFXIV client:
   native action range/line-of-sight result for the relevant ally;
 - when the team-visible focus-sign module is enabled, the current native Attack1
   marker target and marker timestamp needed to avoid overwriting or clearing a
-  sign the plugin cannot prove it owns.
+  sign the plugin cannot prove it owns;
+- when Guardian communication is enabled, the client language and localized
+  Quick Chat row-35 metadata, the bounded client-accepted Guardian episode and
+  exact party slot, and current Bind2/Bind1 targets and marker timestamps needed
+  to skip occupied/uncertain signs and prove cleanup ownership;
+- when the Scholar held-key helper is enabled, the exact local job and held-key
+  generation, Critical Strategy `29716` readiness/metadata, the complete unique
+  canonical `S1`-`S5` actor set, live Guard `3054`/`3673`, exact HP and trusted
+  team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
+  result for the frozen candidate.
 
 Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
@@ -405,6 +419,63 @@ containing only the selected party slot and its start/end timestamps. The
 reset, configuration/context loss, or expiry and is not stored or transmitted.
 It does not claim server-confirmed protection or damage interception.
 
+The separate Guardian communication setting is persisted but disabled by
+default. Only a new client-accepted automatic Guardian episode in exact
+Crystalline Conflict can make it consume a bounded communication opportunity.
+The helper revalidates the same frozen exact party slot before it may issue the
+client-localized CC Quick Chat row 35 (`Ziel decken`, displayed as `Ich decke
+...` on a German client) for that party placeholder. This standardized message
+is sent through FFXIV's normal Quick Chat channel and is visible to the party;
+there is no plugin service or additional upload.
+
+The same opportunity may place Bind2 on the same exact party member followed by
+Bind1 on the exact local Paladin. If either sign is occupied or marker state is
+unknown, the marker sequence is not started. Bind2 must be observed on the exact
+ally with a new marker timestamp before Bind1 is attempted. If Bind1 then fails,
+only the proven-owned Bind2 may be cleaned. A complete pair expires nine seconds
+after Guardian acceptance; cleanup tries Bind2 and then Bind1, each only while
+the same actor, sign, and marker timestamp remain exact. Drift is relinquished
+rather than cleared, and cleanup success cannot be guaranteed. Communication
+does not change a selected target, issue another combat action, select an
+alternate, fall back, queue, replay, or retry. A command attempt and its bounded
+ownership state are not persisted as history. Client-accepted Guardian does not
+prove server-applied protection; an issued Quick Chat or marker command does not
+prove delivery or display. Localized row-35 syntax, party display, Bind pairing,
+and cleanup remain current-patch live-validation boundaries.
+
+## Experimental Scholar Critical Strategy held-key helper
+
+This separate persisted option is disabled by default and can run only for PvP
+Scholar in exact Crystalline Conflict. It transiently reads the exact local job
+and held physical gameplay-key generation, verified Critical Strategy `29716`
+metadata/readiness, the complete unique canonical `S1`-`S5` actor set, enemy
+life/targetable state, exact HP, live Guard `3054` or `3673`, exact team-pressure
+observations, and FFXIV's native 25-yalm range/line-of-sight result.
+
+Only a living, targetable exact canonical enemy with one of those live Guard
+statuses is eligible. The helper never spends Critical Strategy as its ordinary
+10% damage-taken debuff; against Guard, the current official action instead
+halves Guard's defensive bonus for 10 seconds. If every eligible guarded
+candidate has active, exact, non-negative team pressure and at least one count
+is positive, candidates rank by team target count descending and then exact HP
+ratio ascending. If any eligible candidate has inactive, unavailable, or
+negative pressure, or if all counts are zero, the whole set ranks by exact HP
+ratio ascending. Stable `S#`, network entity ID, and game-object ID resolve the
+remaining ties. Pressure is used only for that frozen selection and is not a
+final dispatch requirement.
+
+One shared held-key generation can create at most one frozen intent. The intent
+and generation are consumed before one normal native action request. The frozen
+enemy is then revalidated only for exact identity, action readiness, live Guard,
+and native range/line of sight. Pressure drift neither reranks, switches, nor
+invalidates that frozen target. No drift can cause another selection, alternate
+target/action, fallback, queue, replay, or retry, and the helper never changes a
+hard, soft, focus, or mouseover target or swallows the original key. Bounded
+state and diagnostics remain local in memory and are not saved as combat,
+target, or key history or uploaded. A client-accepted request does not prove
+that Critical Strategy landed or changed Guard; exact dispatch and effect
+behavior remain current-patch live-validation boundaries.
+
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
 The same in-memory suppression begins immediately after an exact local Guard
 request and expires after 1.5 seconds unless the real Guard status takes over; the
@@ -525,10 +596,11 @@ target-highlight settings, the Purify
 opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
 isolation warning/scale, defensive master/held-key/per-rule opt-ins, WHM/BRD
 reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
-marker opt-in, resource-aura surfaces/thresholds/appearance, the Monk Earth's
-Reply master/triggers/thresholds, the Ninja Seiton fresh-key opt-in, and the
-CC-immunity-brake master plus exact per-job/per-action selections. Configuration
-schema 19 is current in v0.14.0.0
+marker opt-in, the separate Guardian Quick Chat/Bind-pair opt-in, resource-aura
+surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
+thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
+held-key opt-in, and the CC-immunity-brake master plus exact per-job/per-action
+selections. Configuration schema 21 is current in v0.15.0.0
 and does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.
