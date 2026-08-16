@@ -60,7 +60,8 @@ public readonly record struct NearHelpOneShotDecision(
     ulong ForwardTargetId,
     int SelectedCandidateIndex,
     NearHelpOneShotDecisionKind Kind,
-    NearHelpOneShotReason Reason)
+    NearHelpOneShotReason Reason,
+    NearHelpSelectionReason SelectionReason = NearHelpSelectionReason.None)
 {
     public bool ShouldRewrite => Kind == NearHelpOneShotDecisionKind.RewriteTarget;
 
@@ -97,7 +98,9 @@ public static class NearHelpOneShotRules
     public static NearHelpOneShotDecision Observe(
         NearHelpOneShotState previous,
         NearHelpActionAttempt attempt,
-        IReadOnlyList<NearHelpSelectionCandidate>? candidates)
+        IReadOnlyList<NearHelpSelectionCandidate>? candidates,
+        bool preferIncomingPressure = false,
+        bool hasTrustedPressureView = false)
     {
         if (attempt.HardReset)
             return Cleared(attempt.OriginalTargetId, NearHelpOneShotReason.HardReset);
@@ -130,17 +133,26 @@ public static class NearHelpOneShotRules
         if (failure != NearHelpOneShotReason.None)
             return ConsumedFallback(attempt, failure);
 
-        var selectedIndex = NearHelpSelectionRules.SelectBestIndex(candidates);
-        if (selectedIndex < 0)
-            return ConsumedFallback(attempt, NearHelpOneShotReason.NoEligibleFriendlyCandidate);
+        var selection = NearHelpSelectionRules.SelectBest(
+            candidates,
+            preferIncomingPressure,
+            hasTrustedPressureView);
+        if (selection.SelectedIndex < 0)
+        {
+            return ConsumedFallback(
+                attempt,
+                NearHelpOneShotReason.NoEligibleFriendlyCandidate,
+                selection.Reason);
+        }
 
-        var selected = candidates![selectedIndex];
+        var selected = candidates![selection.SelectedIndex];
         return new NearHelpOneShotDecision(
             NearHelpOneShotState.Initial,
             selected.GameObjectId,
-            selectedIndex,
+            selection.SelectedIndex,
             NearHelpOneShotDecisionKind.RewriteTarget,
-            NearHelpOneShotReason.Rewritten);
+            NearHelpOneShotReason.Rewritten,
+            selection.Reason);
     }
 
     private static NearHelpOneShotReason GetSelectionFailure(NearHelpActionAttempt attempt)
@@ -161,7 +173,8 @@ public static class NearHelpOneShotRules
 
     private static NearHelpOneShotDecision ConsumedFallback(
         NearHelpActionAttempt attempt,
-        NearHelpOneShotReason reason) =>
+        NearHelpOneShotReason reason,
+        NearHelpSelectionReason selectionReason = NearHelpSelectionReason.None) =>
         new(
             NearHelpOneShotState.Initial,
             attempt.IsFallbackCarrier
@@ -169,7 +182,8 @@ public static class NearHelpOneShotRules
                 : attempt.OriginalTargetId,
             -1,
             NearHelpOneShotDecisionKind.ConsumedWithoutRewrite,
-            reason);
+            reason,
+            selectionReason);
 
     private static NearHelpOneShotDecision PassThrough(
         ulong originalTargetId,

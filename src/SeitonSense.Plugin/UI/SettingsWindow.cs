@@ -698,6 +698,26 @@ internal sealed class SettingsWindow : Window
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.8f, 0.65f, 1f, 1f), "NINJA");
         changed |= Checkbox(
+            "Seiton on fresh gameplay key (experimental)",
+            configuration.EnableNinjaSeitonOnFreshGameplayKey,
+            value => configuration.EnableNinjaSeitonOnFreshGameplayKey = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off and exact Crystalline Conflict only. On PvP Ninja, one fresh physical gameplay-key down " +
+            "edge can request the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
+            "exact canonical S1-S5 enemies that are living, targetable, below 50% HP, and accepted by FFXIV's native " +
+            "range/line-of-sight check; the lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
+            "its bounded propagation gate blocks the helper, and existing higher-priority helpers win the shared " +
+            "input generation.");
+        ImGui.TextDisabled(
+            "State and input are consumed before at most one native attempt. Seiton Sense never changes the target, " +
+            "selects again, chooses an alternate, falls back, replays, or retries; the original gameplay key is not " +
+            "swallowed. A client-accepted return is dispatch feedback only, not proof that Seiton landed or killed " +
+            "the target.");
+        ImGui.PopTextWrapPos();
+
+        ImGui.Spacing();
+        changed |= Checkbox(
             "Seiton-ready icon + S-slot (NIN)",
             configuration.ShowNameplateSeiton,
             value => configuration.ShowNameplateSeiton = value);
@@ -1002,6 +1022,7 @@ internal sealed class SettingsWindow : Window
             "Enable one-shot /nearassist, /nearhelp, and /farhelp targeting",
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
+        ImGui.TextUnformatted("Near Assist preferences");
         changed |= Slider(
             "Near Assist ally search distance",
             configuration.NearAssistMaxAllyDistance,
@@ -1020,6 +1041,16 @@ internal sealed class SettingsWindow : Window
         ImGui.TextDisabled(
             "Team-pressure preference is independent and opt-in. If no valid pressure candidate exists, the " +
             "normal smart/nearest selection and then your original <t> target remain the fallback.");
+
+        ImGui.TextUnformatted("Near Help survival preference");
+        changed |= Checkbox(
+            "Prefer incoming pressure near the lowest-health target",
+            configuration.NearHelpPreferIncomingPressure,
+            value => configuration.NearHelpPreferIncomingPressure = value);
+        ImGui.TextDisabled(
+            "Lowest exact HP is the anchor and always wins at 25% HP or lower. Otherwise, a trusted live pressure " +
+            "view may prefer the highest incoming enemy count only within 10 HP percentage points of that anchor; " +
+            "lower HP and distance break ties. Missing data inside that window falls back to lowest HP.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Assist-first macro with vanilla <t> fallback:");
@@ -1045,19 +1076,20 @@ internal sealed class SettingsWindow : Window
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Lowest-health ally first, with vanilla <t> fallback:");
+        ImGui.TextUnformatted("Lowest-health survival target, with vanilla <t> fallback:");
         ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/nearhelp");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <2>");
         ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Near Help considers live non-self party members only after it sees the actual friendly PvP action. " +
-            "It keeps only targets inside that action's native range and line of sight, then chooses the lowest " +
-            "HP percentage; equal health uses shorter distance and stable actor identity. The <2> line is only a " +
-            "carrier. If no valid ally exists, Seiton invalidates that carrier so the authored <t> line remains " +
-            "the normal fallback. /mlock prevents Turbo Hotbar from restarting the macro before its fallback line. " +
-            "No visible target change, direct action, retry, or automatic self-heal is performed.");
+            "Near Help resolves the actual friendly PvP action first. It considers exact live party members and may " +
+            "also consider you only when that resolved action explicitly supports self-targeting and its native " +
+            "target/range/line-of-sight check succeeds. The pressure option uses the bounded survival ranking above. " +
+            "The <2> line is only a carrier. If no valid target exists, Seiton invalidates that carrier so the " +
+            "authored <t> line remains the normal fallback. /mlock prevents Turbo Hotbar from restarting the macro " +
+            "before its fallback line. Near Help redirects only that one incoming action; it does not invent an " +
+            "action, visibly change your target, try an alternate candidate, or retry.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();

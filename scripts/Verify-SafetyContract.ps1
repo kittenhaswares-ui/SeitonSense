@@ -56,6 +56,7 @@ $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionI
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
 $defensiveUtilityProbePath = Join-Path $pluginServicesRoot 'DefensiveUtilityProbe.cs'
+$ninjaSeitonProbePath = Join-Path $pluginServicesRoot 'NinjaSeitonDispatchProbe.cs'
 $isolationAwarenessPath = Join-Path $pluginServicesRoot 'IsolationAwarenessService.cs'
 $autoEnemyFocusMarkPath = Join-Path $pluginServicesRoot 'AutoEnemyFocusMarkService.cs'
 $monkEarthReplyProbePath = Join-Path $pluginServicesRoot 'MonkEarthReplyProbe.cs'
@@ -63,6 +64,7 @@ $resourceAuraAnchorPath = Join-Path $pluginServicesRoot 'ResourceAuraAnchorTrack
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
 $miracleCleanseFollowupRulesPath = Join-Path $coreRoot 'MiracleCleanseFollowupRules.cs'
 $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
+$ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
 $isolationWarningRulesPath = Join-Path $coreRoot 'IsolationWarningRules.cs'
 $autoEnemyFocusMarkRulesPath = Join-Path $coreRoot 'AutoEnemyFocusMarkRules.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
@@ -89,6 +91,7 @@ $allowedUnsafe = @(
     $allyRescueProbePath,
     $miracleInterceptProbePath,
     $defensiveUtilityProbePath,
+    $ninjaSeitonProbePath,
     $isolationAwarenessPath,
     $autoEnemyFocusMarkPath,
     $monkEarthReplyProbePath,
@@ -128,6 +131,8 @@ Assert-Literals $pluginSource @(
     'NearAssistAliasCommand = "/ssassist"',
     'NearHelpCommand = "/nearhelp"',
     'NearHelpAliasCommand = "/sshelp"',
+    'CC-only survival-target helper: bounded pressure, plus exact self when the action allows it.',
+    '/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows).',
     'FarHelpCommand = "/farhelp"',
     'FarHelpAliasCommand = "/ssfar"',
     'new NearAssistRedirector(',
@@ -145,6 +150,9 @@ Assert-Literals $pluginSource @(
     'if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand)',
     'nearAssist.Dispose()'
 ) 'Near Assist, Near Help, and Far Help command ownership and lifecycle'
+if ($pluginSource -match 'lowest-health ally helper') {
+    throw 'Near Help command copy must describe survival targeting with bounded pressure and action-gated self eligibility.'
+}
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
         throw "Expected narrow probe is missing: $allowed"
@@ -186,12 +194,13 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
 
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
-# one exact WHM/BRD reactive-CC boundary, and one exact default-off Monk Earth's Reply call. Near
+# one exact WHM/BRD reactive-CC boundary, one exact default-off NIN Seiton
+# boundary, and one exact default-off Monk Earth's Reply call. Near
 # Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
+        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
@@ -200,7 +209,7 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, AllyRescueProbe, MiracleInterceptProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
 # Team Attack-1 is the sole reviewed shell-command boundary. It may issue only
@@ -558,12 +567,17 @@ $purifyObserve = [regex]::Match($personalStatus, '\bemergencyPurify\.Observe\s*\
 $defenseObserve = [regex]::Match($personalStatus, '\bdefensiveUtility\.Observe\s*\(')
 $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
 $miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
-if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $rescueObserve.Success -or -not $miracleObserve.Success -or
+$ninjaSeitonObserve = [regex]::Match($personalStatus, '\bninjaSeiton\.Observe\s*\(')
+$monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
+if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $rescueObserve.Success -or
+    -not $miracleObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $monkEarthReplyObserve.Success -or
     $purifyObserve.Index -gt $defenseObserve.Index -or
     $defenseObserve.Index -gt $rescueObserve.Index -or
     $rescueObserve.Index -gt $miracleObserve.Index -or
-    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 5) {
-    throw 'Personal status coordination must give self-Purify, defense, Ally Rescue, then reactive CC first-to-last claim on one shared input frame.'
+    $miracleObserve.Index -gt $ninjaSeitonObserve.Index -or
+    $ninjaSeitonObserve.Index -gt $monkEarthReplyObserve.Index -or
+    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 6) {
+    throw 'Personal status coordination must give Purify, defense, Ally Rescue, reactive CC, NIN Seiton, then Monk first-to-last claim on one shared input frame.'
 }
 Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
@@ -590,14 +604,27 @@ Assert-Literals $personalStatus @(
     'configuration.ReactiveCcOnHeldKey',
     'configuration.ReactiveCcDancerLimitBreak',
     'configuration.ReactiveCcAfterEnemyPurify',
+    'configuration.EnableNinjaSeitonOnFreshGameplayKey',
+    'ninjaSeitonConfigurationEnabled',
+    'new NinjaSeitonDispatchProbe(',
+    'NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics',
+    'ninjaSeiton.FailClosed()',
+    'ninjaSeiton.Reset()',
+    'metadata.SeitonVerified',
+    'ninjaSeiton.Observe(',
+    'ninja.InputClaimed',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
-) 'Shared self-Purify, defensive utility, Ally Rescue, and reactive-CC priority'
+) 'Shared self-Purify, defensive utility, Ally Rescue, reactive-CC, and NIN Seiton priority'
 if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, isCrystallineConflict, miracleInterceptConfigurationEnabled, configuration\.ReactiveCcOnHeldKey, !purifyClaimedPriority && !defensiveUtilityClaimedPriority && !allyRescueClaimedPriority,') {
     throw 'Reactive CC must receive persistent feature/capture enablement separately from its transient Purify/defense/Rescue dispatch permission.'
 }
 if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimitBreak, configuration\.MiracleInterceptSamZantetsuken, configuration\.MiracleInterceptViperNest, configuration\.ReactiveCcDancerLimitBreak, configuration\.ReactiveCcAfterEnemyPurify, metadata\.MarksmanSpiteVerified, metadata\.ZantetsukenVerified, metadata\.FuriousBacklashVerified, metadata\.MiracleOfNatureActionVerified, metadata\.PurifyVerified, emergencyInputFrame') {
     throw 'Reactive MCH/SAM/VPR/DNC/Purify subtypes and metadata gates must be wired separately into the shared one-generation dispatcher.'
+}
+if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnFreshGameplayKey;' -or
+    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
+    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/Rescue/reactive CC.'
 }
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
 if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
@@ -1150,6 +1177,169 @@ if (-not $guardianWarningStackMethod.Success -or
     throw 'Guardian popup must remain one visual-only card in DrawPersonalWarnings, use the Guardian icon, and state only GUARDIAN TRIGGERED / P# CLIENT ACCEPTED without a server-landed or protection-success claim.'
 }
 
+# The NIN Seiton helper is a separate default-off fresh-edge action boundary.
+# Pure rules select exactly one canonical CC enemy by exact HP ratio; runtime
+# consumes the shared generation before revalidating only that frozen intent.
+$ninjaSeitonRules = Read-RequiredSource $ninjaSeitonDispatchRulesPath 'NIN Seiton dispatch rules'
+$ninjaSeiton = Read-RequiredSource $ninjaSeitonProbePath 'NIN Seiton dispatch runtime'
+$normalizedNinjaSeitonRules = $ninjaSeitonRules -replace '\s+', ' '
+$normalizedNinjaSeiton = $ninjaSeiton -replace '\s+', ' '
+Assert-Literals $ninjaSeitonRules @(
+    'BaseActionId = 29_515',
+    'FollowUpActionId = 29_516',
+    'IReadOnlyList<NinjaSeitonDispatchCandidate>? Candidates',
+    'FreshGameplayKeyPressed',
+    'ActionHelpersSuppressedByGuard',
+    'HigherPriorityClaimed',
+    'ExactCanonicalIdentity',
+    'ExecuteThreshold.IsBelowHalf',
+    'HasValidActionTarget',
+    'HasNativeRangeAndLineOfSight',
+    'SelectBestCandidateIndex(',
+    'new HashSet<int>()',
+    'new HashSet<TargetPressureActorIdentity>()',
+    '!occupiedSlots.Add(candidate.EnemySlot)',
+    '!occupiedActors.Add(candidate.Actor)',
+    'CompareRatio(',
+    'left.EnemySlot.CompareTo(right.EnemySlot)',
+    'left.Actor.EntityId.CompareTo(right.Actor.EntityId)',
+    'left.Actor.GameObjectId.CompareTo(right.Actor.GameObjectId)',
+    'public bool ShouldConsumeInputGeneration => ShouldDispatch',
+    'CanUseExactIntent(',
+    'candidate.EnemySlot == intent.EnemySlot',
+    'candidate.Actor == intent.Target',
+    'selector again after consuming input; drift simply cancels the attempt'
+) 'Deterministic exact NIN Seiton dispatch policy'
+if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.FreshGameplayKeyPressed\).*?NoFreshGameplayKey.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
+    throw 'NIN Seiton policy must require default-off enablement, exact CC/NIN/local identity, verified metadata, no Guard or higher claim, one fresh non-text key edge, and exact ready 29515/29516.'
+}
+if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
+    $normalizedNinjaSeitonRules -notmatch 'if \(!occupiedSlots\.Add\(candidate\.EnemySlot\) \|\| !occupiedActors\.Add\(candidate\.Actor\)\) \{ return -1; \}.*?if \(bestIndex < 0 \|\| Compare\(candidate, candidates\[bestIndex\]\) < 0\) bestIndex = index;' -or
+    $normalizedNinjaSeitonRules -notmatch '\(\(ulong\)leftCurrent \* rightMaximum\)\.CompareTo\( \(ulong\)rightCurrent \* leftMaximum\)') {
+    throw 'NIN Seiton selection must fail closed on duplicate exact slots/actors and rank only eligible sub-50 targets by overflow-safe exact HP ratio.'
+}
+if ($normalizedNinjaSeitonRules -notmatch 'var health = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\); if \(health != 0\) return health; var slot = left\.EnemySlot\.CompareTo\(right\.EnemySlot\); if \(slot != 0\) return slot; var entity = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entity != 0 \? entity : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
+    $normalizedNinjaSeitonRules -notmatch 'intent\.IsValid && actionLocallyReady && resolvedActionId == intent\.ActionId && candidate\.EnemySlot == intent\.EnemySlot && candidate\.Actor == intent\.Target && IsEligibleCandidate\(candidate, localPlayer\)') {
+    throw 'NIN Seiton must use ratio, S-slot, EntityId, and GameObjectId ordering, then validate only the frozen action/slot/actor intent.'
+}
+if ($ninjaSeitonRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $ninjaSeitonRules -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|HeldGameplayKeyEligible|PendingDispatch|BufferedDispatch)\b') {
+    throw 'Pure NIN Seiton rules must never dispatch, observe time/held level, buffer, queue, retry, mutate, or depend on the visible target.'
+}
+
+if ([regex]::Matches($ninjaSeiton, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
+    throw 'NIN Seiton runtime must contain exactly one native UseAction boundary.'
+}
+Assert-Literals $ninjaSeiton @(
+    'NinjaSeitonDispatchProbeSnapshot(',
+    'UseActionAttempted',
+    'UseActionAccepted',
+    'CandidateCount',
+    'CandidateResolution',
+    'executeTracker.Diagnostics',
+    'diagnosticsBefore.IsCrystallineConflict',
+    'diagnosticsBefore.SeitonMetadataVerified',
+    'executeTracker.Enemies.ToArray()',
+    'seenSlots.Add(snapshotEnemy.Slot)',
+    'seenGameObjectIds.Add(snapshotEnemy.GameObjectId)',
+    'seenEntityIds.Add(snapshotEnemy.EntityId)',
+    'diagnosticsBefore.SlotCapacity != EnemySlotRules.LastSlot',
+    'diagnosticsBefore.ResolvedSlots != EnemySlotRules.LastSlot',
+    'ReferenceEquals(diagnosticsBefore, diagnosticsAfter)',
+    'snapshots.Length != diagnosticsBefore.ValidEnemySlots',
+    'new Dictionary<int, EnemyHudSnapshot>(snapshots.Length)',
+    'for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)',
+    'new HashSet<nint>()',
+    'eligibleCurrentSlots.Length != diagnosticsBefore.ValidEnemySlots',
+    'snapshotsBySlot.TryGetValue(slot, out var snapshotEnemy)',
+    'Native S{slot} changed during capture',
+    'EnemySlotResolver.Resolve(objectTable, enemySlot)',
+    'objectTable.SearchByEntityId(target.EntityId)',
+    'SeitonReadinessProbe.TryGetReadyAction(',
+    'SeitonReadinessProbe.HasRangeAndLineOfSight(',
+    'inputFrame.FreshGameplayKeyPressed',
+    'NinjaSeitonDispatchRules.Observe(',
+    'decision.ShouldConsumeInputGeneration',
+    'inputFrame.Consume()',
+    'ResolveFrozenIntent(localPlayer!, intent, finalResolvedActionId)',
+    'NinjaSeitonDispatchRules.CanUseExactIntent(',
+    'TryUseSeitonOnce(localPlayer!, intent, out attempted)',
+    'nearAssist.RunWithoutRedirect',
+    'ActionType.Action',
+    'ActionManager.UseActionMode.None',
+    'attempted (accepted={accepted})',
+    'failed and will not be retried'
+) 'Exact one-attempt NIN Seiton runtime and truthful diagnostics'
+if ($normalizedNinjaSeiton -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && ExecuteThreshold\.IsNinja\(localJobId\) && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionReady = featureContextReady && localIdentity\.IsValid && SeitonReadinessProbe\.TryGetReadyAction\(localPlayer!, out resolvedActionId\);' -or
+    $normalizedNinjaSeiton -notmatch 'var shouldResolveCandidates = actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && inputFrame\.FreshGameplayKeyPressed;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?FreshGameplayKeyPressed, resolvedActionId, actionReady, candidates, hardReset') {
+    throw 'NIN Seiton may capture candidates only behind exact CC/NIN/metadata/Guard/readiness gates and one unclaimed fresh non-text key edge.'
+}
+if ($normalizedNinjaSeiton -notmatch 'var diagnosticsBefore = executeTracker\.Diagnostics; if \(!diagnosticsBefore\.Active \|\| !diagnosticsBefore\.IsCrystallineConflict \|\| !diagnosticsBefore\.SeitonMetadataVerified\).*?if \(diagnosticsBefore\.SlotCapacity != EnemySlotRules\.LastSlot \|\| diagnosticsBefore\.ResolvedSlots != EnemySlotRules\.LastSlot\).*?var snapshots = executeTracker\.Enemies\.ToArray\(\); var diagnosticsAfter = executeTracker\.Diagnostics; if \(!ReferenceEquals\(diagnosticsBefore, diagnosticsAfter\)\).*?if \(snapshots\.Length > EnemySlotRules\.LastSlot \|\| snapshots\.Length != diagnosticsBefore\.ValidEnemySlots\)' -or
+    $normalizedNinjaSeiton -notmatch 'foreach \(var snapshotEnemy in snapshots\).*?!seenSlots\.Add\(snapshotEnemy\.Slot\).*?!seenGameObjectIds\.Add\(snapshotEnemy\.GameObjectId\).*?!seenEntityIds\.Add\(snapshotEnemy\.EntityId\).*?return \[\];.*?snapshotsBySlot\.Add\(snapshotEnemy\.Slot, snapshotEnemy\);') {
+    throw 'NIN Seiton must require a stable complete five-slot tracker frame with a duplicate-free valid-enemy snapshot before considering a target.'
+}
+if ($normalizedNinjaSeiton -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\).*?objectTable\.SearchByEntityId\(player!\.EntityId\) as IPlayerCharacter.*?tablePlayer\.Address != player\.Address.*?tablePlayer\.GameObjectId != player\.GameObjectId.*?tablePlayer\.EntityId != player\.EntityId.*?!seenGameObjectIds\.Add\(player\.GameObjectId\).*?!seenEntityIds\.Add\(player\.EntityId\).*?!seenAddresses\.Add\(player\.Address\).*?return \[\];.*?currentSlots\.Add\(\(slot, player\)\);') {
+    throw 'NIN Seiton must resolve all native e1-e5 slots to unique object-table address/GOID/EID identities; any missing, mismatched, or duplicate identity aborts the full set.'
+}
+if ($normalizedNinjaSeiton -notmatch 'var eligibleCurrentSlots = currentSlots \.Where\(static entry => IsLivePlayer\(entry\.Player\) && entry\.Player\.IsTargetable && ExecuteThreshold\.HasValidHp\(entry\.Player\.CurrentHp, entry\.Player\.MaxHp\)\) \.ToArray\(\); if \(eligibleCurrentSlots\.Length != diagnosticsBefore\.ValidEnemySlots \|\| eligibleCurrentSlots\.Length != snapshots\.Length\).*?foreach \(var \(slot, player\) in eligibleCurrentSlots\).*?!snapshotsBySlot\.TryGetValue\(slot, out var snapshotEnemy\).*?snapshotEnemy\.GameObjectId != player\.GameObjectId.*?snapshotEnemy\.EntityId != player\.EntityId.*?return \[\];.*?var candidate = BuildExactSlotCandidate\( localPlayer, actionId, slot, expectedTarget\); if \(candidate is not \{ \} exact\).*?return \[\];.*?candidates\.Add\(exact\);') {
+    throw 'Every current live, targetable, valid-HP enemy must exactly match one tracker slot and pass native action validation; incomplete or stale eligible sets must fail closed.'
+}
+if ($normalizedNinjaSeiton -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?resolution = \$"Exact coherent set: \{candidates\.Count\} candidates"; return candidates;') {
+    throw 'NIN Seiton must re-resolve the complete native e1-e5 identity set unchanged before returning any ranked candidates.'
+}
+if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\)') {
+    throw 'Every NIN Seiton candidate must re-resolve one canonical e-slot, match both exact actor IDs/address, and pass FFXIV native range/LoS.'
+}
+$ninjaConsume = [regex]::Match($ninjaSeiton, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
+$ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(localPlayer!, intent, finalResolvedActionId\)')
+$ninjaIntentRevalidation = [regex]::Match($ninjaSeiton, 'NinjaSeitonDispatchRules\.CanUseExactIntent\s*\(')
+$ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\(localPlayer!, intent, out attempted\)')
+$ninjaNativeCall = [regex]::Match($ninjaSeiton, 'actionManager->UseAction\s*\(')
+if (-not $ninjaConsume.Success -or -not $ninjaFrozenResolve.Success -or
+    -not $ninjaIntentRevalidation.Success -or -not $ninjaTryUse.Success -or -not $ninjaNativeCall.Success -or
+    $ninjaConsume.Index -gt $ninjaFrozenResolve.Index -or
+    $ninjaFrozenResolve.Index -gt $ninjaIntentRevalidation.Index -or
+    $ninjaIntentRevalidation.Index -gt $ninjaTryUse.Index -or
+    $ninjaTryUse.Index -gt $ninjaNativeCall.Index) {
+    throw 'NIN Seiton must consume the shared input generation before frozen-target revalidation and its sole native request.'
+}
+$ninjaPostConsumeWindow = $ninjaSeiton.Substring(
+    $ninjaConsume.Index,
+    $ninjaTryUse.Index + $ninjaTryUse.Length - $ninjaConsume.Index)
+if ($ninjaPostConsumeWindow -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(' -or
+    $ninjaPostConsumeWindow -match '\bexecuteTracker\.Enemies\b') {
+    throw 'After input consumption NIN Seiton may revalidate only the frozen intent; it must never rerank or choose an alternate.'
+}
+if ($normalizedNinjaSeiton -notmatch 'BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target\)' -or
+    $normalizedNinjaSeiton -notmatch 'actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
+    throw 'NIN Seiton final validation and UseAction must retain the one frozen slot, exact actor, and exact adjusted action with no fallback.'
+}
+if ($ninjaSeiton -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $ninjaSeiton -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|HeldGameplayKeyEligible|PendingDispatch|BufferedDispatch)\b' -or
+    $ninjaSeiton -match '(?:->|\.)Original\s*\(') {
+    throw 'NIN Seiton must use only the existing internal redirect bypass and must never hook, queue, retry, mutate, or depend on a visible target.'
+}
+Assert-Literals $pluginSource @(
+    'personalStatus.NinjaSeitonDiagnostics',
+    '[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}',
+    'ready={ninja.LocallyReady},action={ninja.ResolvedActionId}',
+    'candidates={ninja.CandidateCount},S={ninja.EnemySlot}',
+    'fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}',
+    'attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}',
+    'count={ninja.AttemptCount}/{ninja.AcceptedCount}',
+    'resolve={ninja.CandidateResolution},last={ninja.LastEvent}'
+) 'Truthful NIN Seiton source diagnostics'
+$ninjaDebugStart = $pluginSource.IndexOf('[Seiton Sense] ninja-seiton[')
+$ninjaDebugEnd = if ($ninjaDebugStart -ge 0) {
+    $pluginSource.IndexOf('[Seiton Sense] monk-reply[', $ninjaDebugStart)
+} else {
+    -1
+}
+if ($ninjaDebugStart -lt 0 -or $ninjaDebugEnd -le $ninjaDebugStart -or
+    $pluginSource.Substring($ninjaDebugStart, $ninjaDebugEnd - $ninjaDebugStart) -match '(?i)\b(landed|killed|executed successfully|server accepted)\b') {
+    throw 'NIN Seiton diagnostics may report only attempted/client-accepted telemetry, never a landed action or kill.'
+}
+
 # Monk Earth's Reply is a separate default-off direct self-action boundary. It
 # may dispatch only exact adjusted 29483, after self-Purify declines priority,
 # and must spend the continuous resonance before its sole native attempt.
@@ -1232,16 +1422,16 @@ Assert-Literals $metadataGuard @(
 ) 'Independent Monk Earth Reply metadata gate'
 
 $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
-if (-not $monkObserve.Success -or $monkObserve.Index -lt $miracleObserve.Index -or
+if (-not $monkObserve.Success -or $monkObserve.Index -lt $ninjaSeitonObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted') {
-    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/Rescue/reactive CC already claimed or attempted.'
+    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed') {
+    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/Rescue/reactive CC/NIN already claimed or attempted.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
-if ($normalizedTargetPressureTracker -notmatch 'configuration\.ExperimentalAllyRescueOnNextKey\s*&&\s*metadata\.AllyRescueStatusesVerified\s*&&\s*supportedContext\s*==\s*SupportedPvPContext\.CrystallineConflict') {
-    throw 'Incoming Ally Rescue pressure tracking must require verified statuses and remain CC-only.'
+if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
+    throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate for the explicitly enabled Near Help pressure preference.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableAutoEnemyFocusMark') {
     throw 'Pressure tracking must remain active for defensive, post-Purify team-focus, and automatic Attack-1 utility consumers.'
@@ -1744,6 +1934,14 @@ Assert-Literals $nearAssist @(
     'mode != ActionManager.UseActionMode.Queue',
     'GetActionInRangeOrLoS',
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
+    'configuration.NearHelpPreferIncomingPressure',
+    'action.RowId == resolvedActionId',
+    'action.CanTargetSelf',
+    'pressureTracker.TryGetIncomingAllyPressure(',
+    'pressureTracker.HasActiveIncomingAllyPressureView',
+    'IsSelf: true',
+    'IsActionSelfTargetable: true',
+    'hasTrustedPressureView',
     'RunWithoutRedirect<T>',
     '[ThreadStatic]',
     'internalRedirectBypassDepth++',
@@ -1759,20 +1957,36 @@ if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
     throw 'The redirect bypass may guard only the four redirect branches; it must never wrap or skip the unconditional final CC brake.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
+$normalizedNearHelpSelection = $nearHelpSelection -replace '\s+', ' '
 Assert-Literals $nearHelpSelection @(
     'candidate.CurrentHp * current.MaximumHp',
     'current.CurrentHp * candidate.MaximumHp',
     'candidate.DistanceSquared.CompareTo(current.DistanceSquared)',
     'candidate.IsExactFriendly',
-    '!candidate.IsSelf',
+    '(!candidate.IsSelf || candidate.IsActionSelfTargetable)',
     'candidate.HasValidActionTarget',
-    'candidate.HasRangeAndLineOfSight'
-) 'Near Help selection rules'
+    'candidate.HasRangeAndLineOfSight',
+    'CriticalHealthPercent = 25',
+    'PressureWindowPercentagePoints = 10',
+    'UniqueIncomingEnemyPressureCount',
+    'hasTrustedPressureView',
+    'IsAtOrBelowCriticalHealth(healthAnchor)',
+    'PressureViewUntrusted',
+    'PressureDataIncomplete',
+    'NoPositivePressure',
+    'IncomingPressure',
+    'IsInsidePressureWindow(candidate, healthAnchor)',
+    'IsBetterByPressure',
+    '(UInt128)100 * candidate.CurrentHp * healthAnchor.MaximumHp'
+) 'Near Help exact self gate and bounded pressure selection rules'
+if ($normalizedNearHelpSelection -notmatch 'if \(IsAtOrBelowCriticalHealth\(healthAnchor\)\).*?CriticalHealthAnchor.*?if \(!hasTrustedPressureView\).*?PressureViewUntrusted.*?candidate\.UniqueIncomingEnemyPressureCount is not >= 0.*?PressureDataIncomplete.*?if \(!hasPositivePressure\).*?NoPositivePressure.*?NearHelpSelectionReason\.IncomingPressure') {
+    throw 'Near Help must preserve critical lowest-HP priority and fail back to exact HP before using complete positive incoming-pressure data.'
+}
 $nearHelpOneShot = Read-RequiredSource (Join-Path $coreRoot 'NearHelpOneShotRules.cs') 'Near Help one-shot rules'
 Assert-Literals $nearHelpOneShot @(
     'DefaultLifetimeMilliseconds = 750',
     'NearHelpOneShotState.Initial',
-    'NearHelpSelectionRules.SelectBestIndex',
+    'NearHelpSelectionRules.SelectBest',
     'attempt.IsFallbackCarrier',
     'InvalidFallbackCarrierTargetId'
 ) 'Near Help one-shot rules'
@@ -1788,6 +2002,14 @@ if ($normalizedNearAssist -notmatch 'IsEligibleHelpAction\s*\(\s*thisPtr\s*,\s*a
 }
 if ($normalizedNearAssist -notmatch 'action\.IsPvP\s*&&\s*\(action\.CanTargetParty \|\| action\.CanTargetAlly \|\| action\.CanTargetAlliance\)\s*&&\s*!action\.TargetArea\s*&&\s*action\.Range > 0') {
     throw 'Near Help pre-consumption filtering must require a friendly-capable PvP action with native range and no ground targeting.'
+}
+if ($normalizedNearAssist -notmatch 'var isActionSelfTargetable = supportedAction && action\.RowId == resolvedActionId && action\.CanTargetSelf;.*?if \(isActionSelfTargetable\).*?exactLocal\.GameObjectId, exactLocal\.EntityId.*?GetActionInRangeOrLoS\( resolvedActionId, sourceObject, sourceObject\).*?IsSelf: true,.*?IsActionSelfTargetable: true' -or
+    $normalizedNearAssist -notmatch 'var hasTrustedPressureView = preferIncomingPressure && pressureTracker\.HasActiveIncomingAllyPressureView;.*?NearHelpOneShotRules\.Observe\( previousState, attempt, candidates, preferIncomingPressure, hasTrustedPressureView\)') {
+    throw 'Near Help self selection must require exact resolved self metadata and native reachability, while pressure trust comes only from the active atomic view and is delegated to pure window-local rules.'
+}
+if ([regex]::Matches($nearAssist, '\bpressureTracker\.TryGetIncomingAllyPressure\s*\(').Count -ne 2 -or
+    $normalizedNearAssist -match 'hasTrustedPressureView\s*=.*?\.All\s*\(') {
+    throw 'Near Help must query exact GOID/EID pressure for self and ally candidates without globally rejecting unknown data outside the bounded health window.'
 }
 $helpConsumeState = [regex]::Match($nearAssist, 'nearHelpState\s*=\s*NearHelpOneShotState\.Initial\s*;')
 if (-not $helpConsumeState.Success -or $helpConsumeState.Index -gt $originalCall.Index) {
@@ -2168,6 +2390,12 @@ Assert-Literals $targetPressureTracker @(
     'Snapshot.Find(gameObjectId, entityId)',
     'CcProtectionStatusCatalog.BuildIndicators',
     'indicator.StatusId is 3054 or 3673 ? 3054u : indicator.StatusId',
+    'configuration.EnableNearAssistMacro &&',
+    'configuration.NearHelpPreferIncomingPressure',
+    'HasActiveIncomingAllyPressureView',
+    'new TargetPressurePartyAllyObservation(',
+    'localIdentity,',
+    'localPlayer.IsTargetable',
     'now - state.LastSeenAtMilliseconds >= ProtectionMissingGraceMilliseconds'
 ) 'Read-only target pressure tracker'
 Assert-Literals $coreTargetPressure @(
@@ -2180,6 +2408,7 @@ Assert-Literals $coreTargetPressure @(
     'observation.CastTarget == localPlayer',
     'ally.HardTarget is { } hardTarget',
     'enemies.ContainsKey(ally.HardTarget!.Value)',
+    'ally.Actor == localPlayer || !SharesEitherId(ally.Actor, localPlayer)',
     'counts[pair.Value] = counts.GetValueOrDefault(pair.Value) + 1'
 ) 'Exact-identity target pressure aggregation'
 Assert-Literals $nearAssistPressureSelection @(
@@ -2559,6 +2788,14 @@ Assert-Literals $settingsWindow @(
     'All jobs: Team-visible enemy focus sign',
     'DrawAutoEnemyFocusMarkControls()',
     '"NINJA"',
+    'Seiton on fresh gameplay key (experimental)',
+    'configuration.EnableNinjaSeitonOnFreshGameplayKey',
+    'Default off and exact Crystalline Conflict only.',
+    'exact canonical S1-S5 enemies',
+    'the lowest exact HP ratio wins, then stable slot/actor identity',
+    'State and input are consumed before at most one native attempt.',
+    'selects again, chooses an alternate, falls back, replays, or retries',
+    'A client-accepted return is dispatch feedback only',
     '"MONK"',
     'DrawMonkEarthReplyControls()',
     '"BARD / WHITE MAGE"',
@@ -2568,7 +2805,7 @@ Assert-Literals $settingsWindow @(
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark'
 ) 'Jobs quality-of-life settings organization'
-if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?All jobs: Defensive utilities.*?DrawDefensiveUtilityControls\(\).*?All jobs: Team-visible enemy focus sign.*?DrawAutoEnemyFocusMarkControls\(\).*?"NINJA".*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?DrawReactiveCcControls\(\)') {
+if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?All jobs: Defensive utilities.*?DrawDefensiveUtilityControls\(\).*?All jobs: Team-visible enemy focus sign.*?DrawAutoEnemyFocusMarkControls\(\).*?"NINJA".*?Seiton on fresh gameplay key \(experimental\).*?configuration\.EnableNinjaSeitonOnFreshGameplayKey.*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?DrawReactiveCcControls\(\)') {
     throw 'Jobs tab must keep general defensive/marker utilities before Ninja, Monk, and BRD/WHM reactive controls in reviewable order.'
 }
 
@@ -2815,11 +3052,25 @@ Assert-Literals $physicalKeyRules @(
     'public static PhysicalGameplayKeyState Consume'
 ) 'Physical gameplay key generation rules'
 
+$projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.csproj') 'Plugin project'
+$pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
+$repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
+Assert-Literals $projectFile @(
+    '<Version>0.14.0.0</Version>',
+    '<AssemblyVersion>0.14.0.0</AssemblyVersion>',
+    '<FileVersion>0.14.0.0</FileVersion>'
+) 'v0.14.0.0 project version'
+Assert-Literals ($pluginManifest + $repositoryIndex) @(
+    'Ninja Seiton cues and a default-off fresh-key helper',
+    '"AssemblyVersion": "0.14.0.0"',
+    'Configuration schema 19 keeps the helper off for new, upgraded, and reset settings.'
+) 'v0.14.0.0 manifest and repository metadata'
+
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 17',
+    'public int Version { get; set; } = 19',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -2881,10 +3132,14 @@ Assert-Literals $configuration @(
     'ReactiveCcOnHeldKey = true',
     'ReactiveCcDancerLimitBreak = false',
     'ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun',
+    'if (Version < 18)',
+    'NearHelpPreferIncomingPressure = true',
+    'if (Version < 19)',
+    'EnableNinjaSeitonOnFreshGameplayKey = false',
     'WarnWhenIsolated = true',
     'IsolationWarningScale = 1f',
     'EnableAutoEnemyFocusMark = false',
-    'Version = 17',
+    'Version = 19',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -2902,7 +3157,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-17 held-key, defensive, reactive-CC, isolation, marker, and prior configuration migration'
+) 'Schema-19 default-off NIN Seiton helper and prior configuration migration'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -2924,9 +3179,17 @@ if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;
     [regex]::Matches($configuration, '\bReactiveCcOnHeldKey\s*=\s*true\s*;').Count -lt 2) {
     throw 'Schema 17 migration/reset defaults must preserve opt-in action/marker masters, held-key leaves, and visible-by-default isolation.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*17\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 17\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?Version = 17;') {
-    throw 'Schema 17 must fast-path current settings and migrate legacy Miracle choices without silently enabling DNC or defensive action requests.'
+if ($configuration -notmatch '(?m)^\s*public bool NearHelpPreferIncomingPressure \{ get; set; \} = true;\s*$' -or
+    [regex]::Matches($configuration, '\bNearHelpPreferIncomingPressure\s*=\s*true\s*;').Count -lt 2) {
+    throw 'Schema 18 must enable the bounded Near Help pressure preference for upgrades and reset defaults while the shared helper master remains opt-in.'
+}
+if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGameplayKey \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
+    throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
+}
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*19\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 19\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?Version = 19;') {
+    throw 'Schema 19 must fast-path current settings, preserve schema-17/18 migrations, and introduce only the default-off NIN Seiton helper.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -2990,4 +3253,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.13.0.1 safety contract verified across $($sourceFiles.Count) source files; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; defensive and Far Help Guardian eligibility trusts verified sheet range 20 plus native range/LoS without a raw center-distance upper cap; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."
+Write-Host "Seiton Sense v0.14.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window, with missing in-window data falling back to exact HP and out-of-window unknowns ignored; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; default-off exact-CC NIN Seiton requires a fresh non-text edge, verified adjusted 29515/29516 readiness, and a complete canonical e1-e5 view, ranks strict sub-50 targets by exact HP ratio then stable slot/actor identity, consumes before frozen-intent revalidation, and issues at most one client-requested action without target mutation, reranking, alternate, fallback, queue, or retry; defensive and Far Help Guardian eligibility trusts verified sheet range 20 plus native range/LoS without a raw center-distance upper cap; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."

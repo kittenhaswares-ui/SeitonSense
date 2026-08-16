@@ -2,11 +2,10 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.13.0.1 includes an
-urgent local isolation warning and three conservative, opt-in CC utilities:
-defensive Purify/Guard/Guardian decisions, WHM/BRD reactive counter-CC, and a
-real team-visible Attack1 focus sign, and corrects Guardian targeting to use
-its native 20-yalm action range and line-of-sight result. The suite combines
+one-shot macro assistance, and target highlights. Version 0.14.0.0 adds a
+default-off Ninja experiment that can spend one fresh physical gameplay-key
+edge on the lowest-HP exact reachable CC enemy below 50% when Seiton Tenchu is
+verifiably ready and every execute gate passes. The suite combines
 the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow
 into one configurable custom-repository plugin.
 
@@ -51,13 +50,20 @@ into one configurable custom-repository plugin.
 - **Ninja Seiton decisions:** persistent job-icon cards, `S1`-`S5`, preparation
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
+- **Experimental Ninja Seiton helper:** a separate default-off option can use
+  one fresh physical gameplay-key down edge for one Seiton attempt. It selects
+  the lowest exact HP ratio among canonical `S1`-`S5` enemies that are strictly
+  below 50% and natively reachable. Exact CC context, Ninja job, adjusted action
+  readiness, own-Guard safety, and the shared higher-priority helper boundary
+  all fail closed.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
 - **One-shot Near Help:** `/nearhelp` redirects one already incoming friendly
-  PvP macro action to the reachable non-self party member with the lowest exact
-  HP percentage. Ability-specific range and line of sight are checked before
-  distance is used as the tie-breaker.
+  PvP macro action to an exact reachable party target, including self only when
+  the resolved action explicitly supports it. Lowest HP is the anchor; above
+  the critical 25% boundary, optional incoming pressure can win only within a
+  10-percentage-point health window. Unknown pressure falls back to exact HP.
 - **One-shot Far Help:** `/farhelp` redirects one already incoming, reviewed
   friendly movement action to a reachable non-self party member. It first
   prefers destinations with strictly more than 10 yalms of horizontal
@@ -99,8 +105,9 @@ into one configurable custom-repository plugin.
 - **Cleaner settings:** defensive utilities, reactive counter-CC, the team focus
   sign, CC-immunity brake, resource readability, and job helpers are grouped
   under a dedicated Jobs tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 17 preserves
-  existing settings; every action-attempt feature remains opt-in.
+  focused on their own feature families. Configuration schema 19 adds the
+  Ninja fresh-key helper as an explicit default-off option for new, upgraded,
+  and reset settings; every action-attempt feature remains opt-in.
 
 ## Pressure and team focus
 
@@ -305,6 +312,29 @@ the real execute window can produce one short pulse.
 In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
+
+The separate **Seiton on fresh gameplay key** experiment is disabled by default
+and runs only in exact Crystalline Conflict on PvP Ninja. One genuinely fresh
+physical gameplay-key down edge considers the exact canonical `S1`-`S5` enemy
+actors; a key that was already held before the opportunity is not a trigger.
+Every candidate must remain living, targetable, hostile, strictly below 50% HP,
+and accepted by FFXIV's native action range and line-of-sight result. The lowest
+exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
+The current adjusted action must be the ready base Seiton Tenchu `29515` or its
+verified Unsealed follow-up `29516`.
+
+Self-Purify, defensive utilities, Ally Rescue, and reactive counter-CC retain
+their existing higher priority over the same physical generation. Active own
+Guard and the bounded post-request Guard-propagation gate suppress the Ninja
+helper. Once the exact intent is claimed, its state and input generation are
+consumed before at most one native action request. A readiness, identity,
+health, or reachability race; a false return; or an exception produces no
+second selection, alternate target, fallback action, replay, or retry. The
+helper never mutates a hard, soft, or focus target and never swallows the
+original gameplay key. A client-accepted return is dispatch feedback only; it
+does not prove that Seiton
+landed, executed the enemy, or caused a kill. Current-patch timing and dispatch
+remain live-validation boundaries.
 
 ## Personal warnings and job quality-of-life helpers
 
@@ -532,10 +562,19 @@ ordinary target fallback:
 
 `/nearhelp` arms one token for at most 750 ms. When the next supported friendly
 PvP macro action arrives, Seiton resolves the current native party list and
-checks every exact, live, targetable, non-self party member against that
-action's native range and line of sight. It selects the lowest exact HP
-percentage first. Equal health uses shorter distance, then native party order
-and stable actor identity.
+checks every exact, live, targetable party member against that action's native
+target, range, and line-of-sight rules. Self enters the same candidate list only
+when the resolved action explicitly supports self-targeting and the native
+target check succeeds.
+
+Lowest exact HP is always the anchor. At 25% HP or lower, that critical target
+always wins. Otherwise, when **Prefer incoming pressure near the lowest-health
+target** is enabled and the live pressure view is trusted, only candidates
+within 10 HP percentage points of the anchor may compete; the highest unique
+incoming enemy count wins, followed by lower exact HP, shorter distance, native
+party order, and stable actor identity. Missing pressure on any candidate inside
+that window, or zero-only pressure, falls back exactly to lowest HP; unknown
+pressure outside the window is irrelevant.
 
 The `<2>` line is only a reliable concrete friendly carrier; it does not make
 party member 2 the preferred destination. When a valid candidate exists,
@@ -546,11 +585,10 @@ selected target already is party member 2, exact identity handling preserves
 the compact `<t>` form instead of mistaking it for a carrier.
 
 Dual-purpose skills are supported when current game metadata explicitly allows
-party or ally targets. Self is deliberately excluded from automatic selection;
-use the normal authored fallback if self-casting is desired. Near Help and Near
-Assist replace each other's pending token. Near Help never visibly switches a
-target, sends an action by itself, changes the action ID, accepts generic Queue
-mode, or retries.
+party, ally, or self targets. Near Help and Near Assist replace each other's
+pending token. Near Help never visibly switches a target, sends an action by
+itself, changes the action ID, accepts generic Queue mode, tries an alternate
+candidate, or retries.
 
 ## One-shot Far Help mobility macro
 
@@ -634,6 +672,7 @@ focus module to avoid drawing both over the same actor.
 | Optional team-visible Attack1 focus sign | Yes | No | No |
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
+| Optional NIN Seiton fresh-key helper | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
@@ -661,8 +700,8 @@ update through the same repository.
   following supported PvP macro action
 - `/ssassist` - collision-free alias for `/nearassist`; `/seiton assist` is an
   additional fallback
-- `/nearhelp` - arm one CC-only lowest-health party redirect for the next
-  supported friendly PvP macro action
+- `/nearhelp` - arm one CC-only survival-target redirect for the next supported
+  friendly PvP macro action; exact self is allowed only for self-targetable actions
 - `/sshelp` - collision-free alias for `/nearhelp`
 - `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
   the next reviewed friendly movement action; no valid reachable ally means no movement
@@ -704,7 +743,9 @@ Plugin-owned Miracle and Silent Nocturne attempts receive the same final
 action-specific brake after redirect bypass. The brake never stores or replays
 input and never chooses another target or action. Near Assist, Near Help, and Far Help can
 each replace only the target ID of one explicitly armed, already incoming macro
-action. Optional self-Purify, defensive utilities, Ally Rescue, and reactive
+action. Near Help may choose the local player only when the exact resolved action
+supports self and passes native target/range/line-of-sight validation. Optional
+self-Purify, defensive utilities, Ally Rescue, and reactive
 counter-CC may each initiate one exact action attempt, but share one physical-
 generation ownership path in that order. A post-Purify Guard requires a new
 physical generation. While your own Guard is active, all Seiton action-request
@@ -714,6 +755,13 @@ outside that protection. Ally Rescue
 labels a removal `CLEANSED` only after the exact
 successful status-removal ActionEffect is observed; attempts and client-accepted
 requests alone are not success claims.
+The separate default-off Ninja helper follows those higher-priority helpers. It
+can initiate at most one adjusted Seiton `29515`/`29516` attempt from a fresh
+physical down edge against the lowest exact HP-ratio candidate among the
+canonical, reachable `S1`-`S5` enemies below 50%. Its selected intent and input
+are consumed before dispatch, and it has no target mutation, second selection,
+alternate, fallback, replay, or retry. The original key is not swallowed, and
+a client-accepted return is not a landed-action or kill claim.
 The separate default-off Monk helper may initiate at most one exact Earth's
 Reply attempt per continuously observed Earth Resonance after self-Purify
 declines priority; it has no alternate action or retry.
@@ -743,7 +791,13 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.13.0.1 specifically, source tests cover the isolation debounce and
+For v0.14.0.0 specifically, source checks additionally cover the Ninja helper's
+fresh-edge ownership, exact hard-target and adjusted-action gates, strict
+below-50% boundary, Guard/priority suppression, and one-attempt/no-retry
+contract. They do not prove live client/server acceptance, execution, or a kill.
+Existing tests cover Near Help's exact self-target gate, critical-health
+override, bounded pressure window, complete-view fallback, and deterministic
+pressure/HP/distance ordering, plus the isolation debounce and
 fail-closed unknown state, defensive thresholds and generation ownership,
 reactive event/status/team-focus rules, Attack1 selection/ownership rules, and
 Guardian's delegation to native reachability without a custom center-distance

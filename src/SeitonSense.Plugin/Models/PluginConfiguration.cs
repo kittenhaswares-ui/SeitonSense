@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 17;
+    public int Version { get; set; } = 19;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -45,6 +45,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSeitonPopup { get; set; } = true;
     public bool ShowPersistentSeitonCue { get; set; } = true;
     public bool ShowSeitonPreparation { get; set; } = true;
+    public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -152,6 +153,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
     public bool NearAssistPreferDamageRoles { get; set; } = true;
     public bool NearAssistPreferTeamPressure { get; set; }
+    public bool NearHelpPreferIncomingPressure { get; set; } = true;
     public bool ShowPressureCounter { get; set; } = true;
     public bool PressureLocked { get; set; }
     public bool PressureClickThroughWhenLocked { get; set; } = true;
@@ -183,7 +185,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 17)
+        if (Version >= 19)
         {
             if (repaired) Save();
             return;
@@ -356,7 +358,21 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;
         }
 
-        Version = 17;
+        if (Version < 18)
+        {
+            // Near Help still remains behind the shared default-off macro-helper master.
+            // Once a user deliberately arms it, the requested survival ranking is ready.
+            NearHelpPreferIncomingPressure = true;
+        }
+
+        if (Version < 19)
+        {
+            // This helper can initiate one hostile NIN limit-break action attempt,
+            // so new and upgrading installations must opt in deliberately.
+            EnableNinjaSeitonOnFreshGameplayKey = false;
+        }
+
+        Version = 19;
         ClampSettings();
         Save();
     }
@@ -365,7 +381,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 17;
+        Version = 19;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -375,6 +391,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowSeitonPopup = true;
         ShowPersistentSeitonCue = true;
         ShowSeitonPreparation = true;
+        EnableNinjaSeitonOnFreshGameplayKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
@@ -443,6 +460,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         NearAssistMaxAllyDistance = 25f;
         NearAssistPreferDamageRoles = true;
         NearAssistPreferTeamPressure = false;
+        NearHelpPreferIncomingPressure = true;
         ShowPressureCounter = true;
         PressureLocked = false;
         PressureClickThroughWhenLocked = true;

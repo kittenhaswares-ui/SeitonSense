@@ -4,8 +4,9 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
-/// by emergency self-Purify, defensive utilities, ally rescue, and Miracle intercept. Consumption is deliberately shared:
-/// once either helper claims a generation, every later helper sees no input.
+/// by emergency self-Purify, defensive utilities, ally rescue, Miracle
+/// intercept, and fresh-key Ninja Seiton. Consumption is deliberately shared:
+/// once any helper claims a generation, every later helper sees no input.
 /// </summary>
 internal sealed class EmergencyActionInputFrame
 {

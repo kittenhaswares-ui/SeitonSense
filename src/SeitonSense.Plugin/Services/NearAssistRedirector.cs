@@ -1119,29 +1119,76 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                               friendlyAction &&
                               !areaTargetedAction &&
                               action.Range > 0;
+        var isActionSelfTargetable = supportedAction &&
+                                     action.RowId == resolvedActionId &&
+                                     action.CanTargetSelf;
+        var preferIncomingPressure = configuration.NearHelpPreferIncomingPressure;
 
-        var candidates = new List<NearHelpSelectionCandidate>(8);
+        var candidates = new List<NearHelpSelectionCandidate>(9);
         if (supportedContext && supportedAction && actionManager != null && localIdentityValid)
         {
+            var exactLocal = localPlayer!;
             var partySlots = GetPartySlots();
-            var sourceObject = GetNativeObject(localPlayer!);
+            var sourceObject = GetNativeObject(exactLocal);
             if (sourceObject != null)
             {
+                if (isActionSelfTargetable)
+                {
+                    int? incomingPressure = null;
+                    if (preferIncomingPressure &&
+                        pressureTracker.TryGetIncomingAllyPressure(
+                            exactLocal.GameObjectId,
+                            exactLocal.EntityId,
+                            out var pressureCount))
+                    {
+                        incomingPressure = pressureCount;
+                    }
+
+                    var rangeResult = ActionManager.GetActionInRangeOrLoS(
+                        resolvedActionId,
+                        sourceObject,
+                        sourceObject);
+                    candidates.Add(new NearHelpSelectionCandidate(
+                        exactLocal.GameObjectId,
+                        exactLocal.EntityId,
+                        partySlots.GetValueOrDefault(exactLocal.EntityId),
+                        exactLocal.CurrentHp,
+                        exactLocal.MaxHp,
+                        DistanceSquared: 0f,
+                        IsExactFriendly: true,
+                        IsSelf: true,
+                        HasValidActionTarget: true,
+                        HasRangeAndLineOfSight:
+                            SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
+                        UniqueIncomingEnemyPressureCount: incomingPressure,
+                        IsActionSelfTargetable: true));
+                }
+
                 foreach (var ally in objectTable.PlayerObjects.OfType<IPlayerCharacter>())
                 {
                     if (!IsLivePlayer(ally) ||
-                        ally.GameObjectId == localPlayer!.GameObjectId ||
+                        ally.GameObjectId == exactLocal.GameObjectId ||
                         !partySlots.ContainsKey(ally.EntityId))
                     {
                         continue;
                     }
 
                     var targetObject = GetNativeObject(ally);
-                    var distanceSquared = Vector3.DistanceSquared(localPlayer.Position, ally.Position);
+                    var distanceSquared = Vector3.DistanceSquared(exactLocal.Position, ally.Position);
                     var hasValidActionTarget = targetObject != null;
                     var rangeResult = hasValidActionTarget
                         ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, targetObject)
                         : uint.MaxValue;
+                    int? incomingPressure = null;
+                    if (preferIncomingPressure &&
+                        pressureTracker.TryGetIncomingAllyPressure(
+                            ally.GameObjectId,
+                            ally.EntityId,
+                            out var pressureCount))
+                    {
+                        incomingPressure = pressureCount;
+                    }
+
                     candidates.Add(new NearHelpSelectionCandidate(
                         ally.GameObjectId,
                         ally.EntityId,
@@ -1152,10 +1199,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         IsExactFriendly: true,
                         IsSelf: false,
                         hasValidActionTarget,
-                        SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult)));
+                        SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
+                        UniqueIncomingEnemyPressureCount: incomingPressure,
+                        IsActionSelfTargetable: false));
                 }
             }
         }
+
+        var eligibleCandidateCount = candidates.Count(NearHelpSelectionRules.IsEligible);
+        var hasTrustedPressureView =
+            preferIncomingPressure &&
+            pressureTracker.HasActiveIncomingAllyPressureView;
 
         var attempt = new NearHelpActionAttempt(
             originalTargetId,
@@ -1167,19 +1221,30 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             friendlyAction,
             areaTargetedAction,
             IsFallbackCarrier: isFallbackCarrier);
-        var decision = NearHelpOneShotRules.Observe(previousState, attempt, candidates);
+        var decision = NearHelpOneShotRules.Observe(
+            previousState,
+            attempt,
+            candidates,
+            preferIncomingPressure,
+            hasTrustedPressureView);
 
         lock (tokenGate) nearHelpState = decision.NextState;
         rewritten = decision.ShouldRewrite;
         if (rewritten && decision.SelectedCandidateIndex >= 0)
         {
             var selected = candidates[decision.SelectedCandidateIndex];
-            reason = $"Redirected lowest HP ally {selected.CurrentHp}/{selected.MaximumHp}, " +
-                     $"distance={MathF.Sqrt(selected.DistanceSquared):0.0}y";
+            var pressure = selected.UniqueIncomingEnemyPressureCount is { } pressureCount
+                ? pressureCount.ToString()
+                : "unknown";
+            reason = $"Redirected tier={decision.SelectionReason}, " +
+                     $"hp={selected.CurrentHp}/{selected.MaximumHp}, pressure={pressure}, " +
+                     $"self={selected.IsSelf}, distance={MathF.Sqrt(selected.DistanceSquared):0.0}y";
         }
         else
         {
-            reason = $"Fallback: {decision.Reason}, candidates={candidates.Count}, resolved={resolvedActionId}";
+            reason = $"Fallback: {decision.Reason}, selection={decision.SelectionReason}, " +
+                     $"candidates={candidates.Count}/{eligibleCandidateCount}, " +
+                     $"trusted-pressure-view={hasTrustedPressureView}, resolved={resolvedActionId}";
         }
 
         return decision.ForwardTargetId;

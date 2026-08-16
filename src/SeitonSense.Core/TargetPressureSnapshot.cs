@@ -430,7 +430,7 @@ public sealed class TargetPressureSnapshot
         TargetPressureActorIdentity localPlayer,
         TargetPressurePartyAllyObservation ally) =>
         ally.Actor.IsValid &&
-        !SharesEitherId(ally.Actor, localPlayer) &&
+        (ally.Actor == localPlayer || !SharesEitherId(ally.Actor, localPlayer)) &&
         ally.IsPartyMember &&
         !ally.IsDead &&
         ally.IsTargetable;

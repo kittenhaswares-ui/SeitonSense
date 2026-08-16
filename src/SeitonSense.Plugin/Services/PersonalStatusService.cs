@@ -29,6 +29,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
+    private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
@@ -98,6 +99,11 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture,
             log,
             metadata);
+        ninjaSeiton = new NinjaSeitonDispatchProbe(
+            objectTable,
+            executeTracker,
+            nearAssist,
+            log);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
@@ -107,6 +113,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
+    internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
@@ -172,6 +179,7 @@ internal sealed class PersonalStatusService : IDisposable
             defensiveUtility.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
+            ninjaSeiton.FailClosed();
             monkEarthReply.FailClosed(now);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
@@ -205,6 +213,7 @@ internal sealed class PersonalStatusService : IDisposable
             defensiveUtility.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
+            ninjaSeiton.Reset();
             monkEarthReply.Reset();
         }
 
@@ -326,9 +335,11 @@ internal sealed class PersonalStatusService : IDisposable
                                              isCrystallineConflict &&
                                              !guardActive;
         var miracleInterceptConfigurationEnabled = configuration.Enabled &&
-                                                    configuration.EnableReactiveCcUtilities &&
-                                                    isCrystallineConflict &&
-                                                    !guardActive;
+                                                     configuration.EnableReactiveCcUtilities &&
+                                                     isCrystallineConflict &&
+                                                     !guardActive;
+        var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
+                                              configuration.EnableNinjaSeitonOnFreshGameplayKey;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -336,7 +347,11 @@ internal sealed class PersonalStatusService : IDisposable
             (purifyConfigurationEnabled ||
              defensiveUtilitiesConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
-             miracleInterceptConfigurationEnabled),
+             miracleInterceptConfigurationEnabled ||
+             (ninjaSeitonConfigurationEnabled &&
+              isCrystallineConflict &&
+              metadata.SeitonVerified &&
+              !guardActive)),
             allowPurifyHeldGameplayKey,
             defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
@@ -421,6 +436,20 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        var ninja = ninjaSeiton.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            ninjaSeitonConfigurationEnabled,
+            metadata.SeitonVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            defensiveUtilityClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.UseActionAttempted ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
         monkEarthReply.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -435,7 +464,8 @@ internal sealed class PersonalStatusService : IDisposable
             purifyClaimedPriority ||
             defense.InputClaimed ||
             rescue.UseActionAttempted ||
-            miracle.UseActionAttempted,
+            miracle.UseActionAttempted ||
+            ninja.InputClaimed,
             now,
             hardReset);
 
@@ -783,6 +813,7 @@ internal sealed class PersonalStatusService : IDisposable
         defensiveUtility.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
+        ninjaSeiton.Reset();
         monkEarthReply.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }

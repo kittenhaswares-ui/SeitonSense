@@ -230,7 +230,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         const string nearHelpHelp =
-            "CC-only lowest-health ally helper. Macro: /mlock, /nearhelp, friendly PvP action with <2>, then the same action with <t>.";
+            "CC-only survival-target helper: bounded pressure, plus exact self when the action allows it. Macro: /mlock, /nearhelp, friendly PvP action with <2>, then the same action with <t>.";
         nearHelpCommandRegistered = commandManager.AddHandler(
             NearHelpCommand,
             new CommandInfo(OnNearHelpCommand)
@@ -440,6 +440,7 @@ public sealed class Plugin : IDalamudPlugin
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
+                var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
@@ -535,6 +536,15 @@ public sealed class Plugin : IDalamudPlugin
                     $"{miracle.CleanseFollowupCancellationCount}," +
                     $"last={miracle.CleanseFollowupLastEvent}]]");
                 chatGui.Print(
+                    $"[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}," +
+                    $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +
+                    $"candidates={ninja.CandidateCount},S={ninja.EnemySlot}," +
+                    $"target={ninja.TargetGameObjectId:X}/{ninja.TargetEntityId:X}," +
+                    $"fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}," +
+                    $"attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}," +
+                    $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +
+                    $"resolve={ninja.CandidateResolution},last={ninja.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +
                     $"ttl={monk.ResonanceRemainingMilliseconds},hp={monk.CurrentHp}/{monk.MaximumHp}," +
@@ -575,7 +585,7 @@ public sealed class Plugin : IDalamudPlugin
         const string text =
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
-            "/nearhelp and /sshelp arm the one-shot lowest-health ally helper. " +
+            "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "Integrated pressure uses /howmany.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
