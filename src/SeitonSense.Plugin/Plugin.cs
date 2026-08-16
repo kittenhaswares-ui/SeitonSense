@@ -97,6 +97,7 @@ public sealed class Plugin : IDalamudPlugin
             metadata,
             machinistLimitBreakCapture,
             tracker);
+        var reviewedPvpCommands = new ReviewedPvpCommandDispatcher();
         autoEnemyFocusMark = new AutoEnemyFocusMarkService(
             configuration,
             clientState,
@@ -106,7 +107,8 @@ public sealed class Plugin : IDalamudPlugin
             log,
             metadata,
             tracker,
-            pressureTracker);
+            pressureTracker,
+            reviewedPvpCommands);
         isolationAwareness = new IsolationAwarenessService(
             configuration,
             clientState,
@@ -149,7 +151,8 @@ public sealed class Plugin : IDalamudPlugin
             machinistLimitBreakCapture,
             log,
             configuration,
-            metadata);
+            metadata,
+            reviewedPvpCommands);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         resourceAuraAnchors = new ResourceAuraAnchorTracker(
             configuration,
@@ -438,9 +441,11 @@ public sealed class Plugin : IDalamudPlugin
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
+                var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
+                var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
@@ -509,6 +514,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
                     $"last={defense.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] guardian-comm[{guardianCommunication.ToChatLine()}]");
+                chatGui.Print(
                     $"[Seiton Sense] miracle[phase={miracle.Phase},threat={miracle.Threat}," +
                     $"action={miracle.CounterActionId},target={miracle.TargetGameObjectId:X}/" +
                     $"{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
@@ -544,6 +551,16 @@ public sealed class Plugin : IDalamudPlugin
                     $"attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}," +
                     $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +
                     $"resolve={ninja.CandidateResolution},last={ninja.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] scholar-strategy[decision={scholar.Decision},reason={scholar.Reason}," +
+                    $"ready={scholar.LocallyReady},action={scholar.ResolvedActionId}," +
+                    $"candidates={scholar.CandidateCount},S={scholar.EnemySlot}," +
+                    $"target={scholar.TargetGameObjectId:X}/{scholar.TargetEntityId:X}," +
+                    $"pressure={scholar.PressureKnown}/{scholar.TeamTargetCount}," +
+                    $"held={scholar.HeldGameplayKey},claimed={scholar.InputClaimed}," +
+                    $"attempt={scholar.UseActionAttempted}/{scholar.UseActionAccepted}," +
+                    $"count={scholar.AttemptCount}/{scholar.AcceptedCount}," +
+                    $"resolve={scholar.CandidateResolution},last={scholar.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +

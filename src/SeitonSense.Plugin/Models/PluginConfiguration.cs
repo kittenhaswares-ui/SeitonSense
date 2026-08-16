@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 19;
+    public int Version { get; set; } = 21;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -46,6 +46,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowPersistentSeitonCue { get; set; } = true;
     public bool ShowSeitonPreparation { get; set; } = true;
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
+    public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -99,6 +100,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool GuardOnStunPressure { get; set; } = true;
     public bool PreGuardOnLowHpPressure { get; set; } = true;
     public bool PaladinGuardianLowAlly { get; set; } = true;
+    public bool PaladinGuardianAnnounceAndMark { get; set; }
     public bool EnableReactiveCcUtilities { get; set; }
     public bool ReactiveCcOnHeldKey { get; set; } = true;
     public bool ReactiveCcDancerLimitBreak { get; set; } = true;
@@ -185,7 +187,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 19)
+        if (Version >= 21)
         {
             if (repaired) Save();
             return;
@@ -372,7 +374,21 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableNinjaSeitonOnFreshGameplayKey = false;
         }
 
-        Version = 19;
+        if (Version < 20)
+        {
+            // Party-visible Guardian communication is a separate social side effect.
+            // New and upgrading installations must opt in deliberately.
+            PaladinGuardianAnnounceAndMark = false;
+        }
+
+        if (Version < 21)
+        {
+            // This helper can initiate one hostile SCH action attempt from held input,
+            // so new and upgrading installations must opt in deliberately.
+            EnableScholarCriticalStrategyOnHeldKey = false;
+        }
+
+        Version = 21;
         ClampSettings();
         Save();
     }
@@ -381,7 +397,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 19;
+        Version = 21;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -392,6 +408,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowPersistentSeitonCue = true;
         ShowSeitonPreparation = true;
         EnableNinjaSeitonOnFreshGameplayKey = false;
+        EnableScholarCriticalStrategyOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
@@ -445,6 +462,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         GuardOnStunPressure = true;
         PreGuardOnLowHpPressure = true;
         PaladinGuardianLowAlly = true;
+        PaladinGuardianAnnounceAndMark = false;
         EnableReactiveCcUtilities = false;
         ReactiveCcOnHeldKey = true;
         ReactiveCcDancerLimitBreak = true;

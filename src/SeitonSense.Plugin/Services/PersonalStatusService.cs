@@ -27,9 +27,11 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
+    private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
+    private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
@@ -63,7 +65,8 @@ internal sealed class PersonalStatusService : IDisposable
         MachinistLimitBreakCapture machinistLimitBreakCapture,
         IPluginLog log,
         PluginConfiguration configuration,
-        PvPMetadataValidation metadata)
+        PvPMetadataValidation metadata,
+        ReviewedPvpCommandDispatcher commands)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
@@ -83,6 +86,14 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             log,
             metadata);
+        guardianCommunication = new GuardianCommunicationService(
+            configuration,
+            clientState,
+            objectTable,
+            dutyState,
+            dataManager,
+            log,
+            commands);
         allyRescue = new AllyRescueProbe(
             objectTable,
             dataManager,
@@ -104,6 +115,15 @@ internal sealed class PersonalStatusService : IDisposable
             executeTracker,
             nearAssist,
             log);
+        scholarCriticalStrategy = new ScholarCriticalStrategyProbe(
+            clientState,
+            objectTable,
+            dutyState,
+            configuration,
+            executeTracker,
+            pressureTracker,
+            nearAssist,
+            log);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
@@ -111,9 +131,13 @@ internal sealed class PersonalStatusService : IDisposable
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
+    internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
+        guardianCommunication.Diagnostics;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
+    internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
+        scholarCriticalStrategy.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
@@ -153,6 +177,10 @@ internal sealed class PersonalStatusService : IDisposable
         if (disposed) return;
         disposed = true;
         if (started) framework.Update -= OnFrameworkUpdate;
+        guardianCommunication.TryClearOneExactOwnershipOnDispose(
+            objectTable.LocalPlayer,
+            ResolveSupportedPvPContext(),
+            Environment.TickCount64);
         machinistLimitBreakCapture.Dispose();
         ResetRuntime();
     }
@@ -177,9 +205,11 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
+            guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
             ninjaSeiton.FailClosed();
+            scholarCriticalStrategy.FailClosed();
             monkEarthReply.FailClosed(now);
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
@@ -211,9 +241,11 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             emergencyPurify.Reset();
             defensiveUtility.Reset();
+            guardianCommunication.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
             ninjaSeiton.Reset();
+            scholarCriticalStrategy.Reset();
             monkEarthReply.Reset();
         }
 
@@ -340,6 +372,17 @@ internal sealed class PersonalStatusService : IDisposable
                                                      !guardActive;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                               configuration.EnableNinjaSeitonOnFreshGameplayKey;
+        var scholarCriticalStrategyConfigurationEnabled = configuration.Enabled &&
+                                                           configuration.EnableScholarCriticalStrategyOnHeldKey;
+        var localJobId = localPlayer?.ClassJob.IsValid == true
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        var scholarCriticalStrategyHeldEnabled =
+            scholarCriticalStrategyConfigurationEnabled &&
+            isCrystallineConflict &&
+            metadata.ScholarCriticalStrategyVerified &&
+            !guardActive &&
+            localJobId == ScholarCriticalStrategyRules.ScholarJobId;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -351,11 +394,13 @@ internal sealed class PersonalStatusService : IDisposable
              (ninjaSeitonConfigurationEnabled &&
               isCrystallineConflict &&
               metadata.SeitonVerified &&
-              !guardActive)),
+              !guardActive) ||
+             scholarCriticalStrategyHeldEnabled),
             allowPurifyHeldGameplayKey,
             defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
-            miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey);
+            miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey,
+            scholarCriticalStrategyHeldEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -393,6 +438,17 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             purifyClaimedPriority,
             emergencyInputFrame,
+            now,
+            hardReset);
+        // Guardian may return client-accepted a millisecond after this frame's
+        // original timestamp. Refresh before handing the exact episode to the
+        // same-frame communication consumer so it is never misclassified as a
+        // future event.
+        now = Math.Max(now, Environment.TickCount64);
+        guardianCommunication.Observe(
+            localPlayer,
+            context,
+            defense.LastAcceptedGuardianEpisode,
             now,
             hardReset);
         var defensiveUtilityClaimedPriority = defense.InputClaimed;
@@ -450,6 +506,21 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        var scholar = scholarCriticalStrategy.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            scholarCriticalStrategyConfigurationEnabled,
+            metadata.ScholarCriticalStrategyVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            defensiveUtilityClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.UseActionAttempted ||
+            ninja.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
         monkEarthReply.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -465,7 +536,8 @@ internal sealed class PersonalStatusService : IDisposable
             defense.InputClaimed ||
             rescue.UseActionAttempted ||
             miracle.UseActionAttempted ||
-            ninja.InputClaimed,
+            ninja.InputClaimed ||
+            scholar.InputClaimed,
             now,
             hardReset);
 
@@ -811,9 +883,11 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput.Reset();
         emergencyPurify.Reset();
         defensiveUtility.Reset();
+        guardianCommunication.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
         ninjaSeiton.Reset();
+        scholarCriticalStrategy.Reset();
         monkEarthReply.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }

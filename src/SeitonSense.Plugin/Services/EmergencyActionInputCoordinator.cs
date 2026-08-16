@@ -5,8 +5,9 @@ namespace SeitonSense.Plugin.Services;
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
 /// by emergency self-Purify, defensive utilities, ally rescue, Miracle
-/// intercept, and fresh-key Ninja Seiton. Consumption is deliberately shared:
-/// once any helper claims a generation, every later helper sees no input.
+/// intercept, fresh-key Ninja Seiton, and held-key Scholar Critical Strategy.
+/// Consumption is deliberately shared: once any helper claims a generation,
+/// every later helper sees no input.
 /// </summary>
 internal sealed class EmergencyActionInputFrame
 {
@@ -49,6 +50,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool defensiveUtilityHeldWasEnabled;
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
+    private bool scholarCriticalStrategyHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -60,7 +62,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool purifyHeldEnabled,
         bool defensiveUtilityHeldEnabled,
         bool allyRescueHeldEnabled,
-        bool miracleInterceptHeldEnabled)
+        bool miracleInterceptHeldEnabled,
+        bool scholarCriticalStrategyHeldEnabled)
     {
         if (!shouldObserve)
         {
@@ -75,11 +78,13 @@ internal sealed class EmergencyActionInputCoordinator
             (purifyHeldEnabled && !purifyHeldWasEnabled) ||
             (defensiveUtilityHeldEnabled && !defensiveUtilityHeldWasEnabled) ||
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
-            (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled);
+            (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
+            (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
+        scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -105,7 +110,8 @@ internal sealed class EmergencyActionInputCoordinator
             purifyHeldEnabled,
             defensiveUtilityHeldEnabled: false,
             allyRescueHeldEnabled,
-            miracleInterceptHeldEnabled: false);
+            miracleInterceptHeldEnabled: false,
+            scholarCriticalStrategyHeldEnabled: false);
 
     internal void Reset()
     {
@@ -114,5 +120,6 @@ internal sealed class EmergencyActionInputCoordinator
         defensiveUtilityHeldWasEnabled = false;
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
+        scholarCriticalStrategyHeldWasEnabled = false;
     }
 }

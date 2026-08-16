@@ -10,6 +10,7 @@ $sourceRoot = Join-Path $resolvedRoot 'src'
 $pluginServicesRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\Services'
 $pluginUiRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\UI'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
+$coreSelfTestRoot = Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest'
 $sourceFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse |
     Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
 if ($sourceFiles.Count -eq 0) { throw 'No C# source files found.' }
@@ -19,7 +20,7 @@ function Read-RequiredSource([string]$Path, [string]$Label) {
         throw "$Label source is missing: $Path"
     }
 
-    return Get-Content -LiteralPath $Path -Raw
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8
 }
 
 function Assert-Literals([string]$Content, [string[]]$Required, [string]$Label) {
@@ -57,8 +58,12 @@ $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
 $defensiveUtilityProbePath = Join-Path $pluginServicesRoot 'DefensiveUtilityProbe.cs'
 $ninjaSeitonProbePath = Join-Path $pluginServicesRoot 'NinjaSeitonDispatchProbe.cs'
+$scholarCriticalStrategyProbePath = Join-Path $pluginServicesRoot 'ScholarCriticalStrategyProbe.cs'
 $isolationAwarenessPath = Join-Path $pluginServicesRoot 'IsolationAwarenessService.cs'
 $autoEnemyFocusMarkPath = Join-Path $pluginServicesRoot 'AutoEnemyFocusMarkService.cs'
+$reviewedPvpCommandDispatcherPath = Join-Path $pluginServicesRoot 'ReviewedPvpCommandDispatcher.cs'
+$guardianCommunicationPath = Join-Path $pluginServicesRoot 'GuardianCommunicationService.cs'
+$guardianCommunicationMetadataGuardPath = Join-Path $pluginServicesRoot 'GuardianCommunicationMetadataGuard.cs'
 $monkEarthReplyProbePath = Join-Path $pluginServicesRoot 'MonkEarthReplyProbe.cs'
 $resourceAuraAnchorPath = Join-Path $pluginServicesRoot 'ResourceAuraAnchorTracker.cs'
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
@@ -67,6 +72,10 @@ $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
 $ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
 $isolationWarningRulesPath = Join-Path $coreRoot 'IsolationWarningRules.cs'
 $autoEnemyFocusMarkRulesPath = Join-Path $coreRoot 'AutoEnemyFocusMarkRules.cs'
+$guardianTeamCommunicationRulesPath = Join-Path $coreRoot 'GuardianTeamCommunicationRules.cs'
+$guardianTeamCommunicationSelfTestsPath = Join-Path $coreSelfTestRoot 'GuardianTeamCommunicationSelfTests.cs'
+$scholarCriticalStrategyRulesPath = Join-Path $coreRoot 'ScholarCriticalStrategyRules.cs'
+$scholarCriticalStrategySelfTestsPath = Join-Path $coreSelfTestRoot 'ScholarCriticalStrategySelfTests.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
@@ -92,8 +101,11 @@ $allowedUnsafe = @(
     $miracleInterceptProbePath,
     $defensiveUtilityProbePath,
     $ninjaSeitonProbePath,
+    $scholarCriticalStrategyProbePath,
     $isolationAwarenessPath,
     $autoEnemyFocusMarkPath,
+    $reviewedPvpCommandDispatcherPath,
+    $guardianCommunicationPath,
     $monkEarthReplyProbePath,
     $resourceAuraAnchorPath,
     $nearAssistPath,
@@ -195,12 +207,13 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
 # one exact WHM/BRD reactive-CC boundary, one exact default-off NIN Seiton
-# boundary, and one exact default-off Monk Earth's Reply call. Near
+# boundary, one exact default-off SCH Critical Strategy boundary, and one exact
+# default-off Monk Earth's Reply call. Near
 # Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
+        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
@@ -209,48 +222,525 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
-# Team Attack-1 is the sole reviewed shell-command boundary. It may issue only
-# ten compile-time commands: attack1/off paired with exact CC enemy slots e1-e5.
-$shellApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString|MarkingController)\b')
-$unexpectedShellApis = @($shellApiMatches | Where-Object { $_.Path -ne $autoEnemyFocusMarkPath })
-if ($unexpectedShellApis.Count -gt 0) {
-    $locations = $unexpectedShellApis | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only AutoEnemyFocusMarkService may read Attack-1 telemetry or invoke the reviewed shell boundary: $($locations -join ', ')"
+# All party-visible commands share one closed, typed dispatcher. The dispatcher
+# is the sole raw RaptureShell boundary; the two feature services may only read
+# their exact marker telemetry and call its reviewed methods.
+$rawShellApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b')
+$unexpectedRawShellApis = @($rawShellApiMatches | Where-Object { $_.Path -ne $reviewedPvpCommandDispatcherPath })
+if ($unexpectedRawShellApis.Count -gt 0) {
+    $locations = $unexpectedRawShellApis | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Only ReviewedPvpCommandDispatcher may cross the raw RaptureShell boundary: $($locations -join ', ')"
 }
-$autoEnemyFocusMark = Read-RequiredSource $autoEnemyFocusMarkPath 'Auto enemy focus mark service'
-Assert-Literals $autoEnemyFocusMark @(
+$markerTelemetryMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bMarkingController\b')
+$unexpectedMarkerTelemetry = @($markerTelemetryMatches | Where-Object {
+    $_.Path -notin @($autoEnemyFocusMarkPath, $guardianCommunicationPath)
+})
+if ($unexpectedMarkerTelemetry.Count -gt 0) {
+    $locations = $unexpectedMarkerTelemetry | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Only Team Attack-1 and Guardian communication may read native marker telemetry: $($locations -join ', ')"
+}
+
+$reviewedPvpCommandDispatcher = Read-RequiredSource $reviewedPvpCommandDispatcherPath 'Reviewed PvP command dispatcher'
+$normalizedReviewedPvpCommandDispatcher = $reviewedPvpCommandDispatcher -replace '\s+', ' '
+Assert-Literals $reviewedPvpCommandDispatcher @(
+    'internal const long MinimumMarkerCommandIntervalMilliseconds = 100',
+    'private readonly object markerReservationGate = new()',
+    'ReviewedPvpCommandDispatchResult.MarkerRateLimited',
+    'lastMarkerReservationAt = nowMilliseconds',
+    'private static string? ResolveExactHardcodedCommand(ReviewedPvpCommand command)',
+    'private static unsafe bool TryExecuteShellCommand(string exactHardcodedCommand)',
     'UIModule.Instance()',
     'uiModule->GetRaptureShellModule()',
     'Utf8String.FromString(exactHardcodedCommand)',
     'shell->ExecuteCommandInner(command, uiModule)',
     'command->Dtor(true)'
-) 'Single reviewed RaptureShell command execution boundary'
-if ([regex]::Matches($autoEnemyFocusMark, '\bExecuteCommandInner\s*\(').Count -ne 1 -or
-    [regex]::Matches($autoEnemyFocusMark, '\bUtf8String\.FromString\s*\(').Count -ne 1 -or
-    [regex]::Matches($autoEnemyFocusMark, '\bMarkingController\.Instance\s*\(').Count -lt 2 -or
-    [regex]::Matches($autoEnemyFocusMark, '\bTryExecuteShellCommand\s*\(').Count -ne 11 -or
-    $autoEnemyFocusMark -notmatch 'private static unsafe bool TryExecuteShellCommand\(string exactHardcodedCommand\)') {
-    throw 'Team Attack-1 must retain one shell execution call, one UTF-8 command boundary, and reviewed live/dispose marker telemetry reads.'
+) 'Single closed reviewed PvP shell-command boundary'
+if ([regex]::Matches($reviewedPvpCommandDispatcher, '\bExecuteCommandInner\s*\(').Count -ne 1 -or
+    [regex]::Matches($reviewedPvpCommandDispatcher, '\bUtf8String\.FromString\s*\(').Count -ne 1 -or
+    [regex]::Matches($reviewedPvpCommandDispatcher, '\bTryExecuteShellCommand\s*\(').Count -ne 3 -or
+    $reviewedPvpCommandDispatcher -match '(?m)^\s*(?:public|internal)\s+[^\r\n(]+\([^\r\n)]*\bstring\b' -or
+    $normalizedReviewedPvpCommandDispatcher -notmatch 'lock \(markerReservationGate\).*?if \(!MarkerIntervalElapsed\(nowMilliseconds\)\).*?return ReviewedPvpCommandDispatchResult\.MarkerRateLimited;.*?lastMarkerReservationAt = nowMilliseconds;.*?return TryExecuteShellCommand\(exactHardcodedCommand\)') {
+    throw 'The shared dispatcher must expose no arbitrary-string API, reserve each marker request before one native shell invocation, and keep one UTF-8 command lifetime.'
 }
-$markerCommandLiterals = @([regex]::Matches($autoEnemyFocusMark, '"(?<Command>/mk (?:attack1|off) <e[1-5]>)"') |
-    ForEach-Object { $_.Groups['Command'].Value })
-$expectedMarkerCommands = @(
-    '/mk attack1 <e1>', '/mk attack1 <e2>', '/mk attack1 <e3>', '/mk attack1 <e4>', '/mk attack1 <e5>',
-    '/mk off <e1>', '/mk off <e2>', '/mk off <e3>', '/mk off <e4>', '/mk off <e5>'
+
+$expectedReviewedCommands = @()
+$japaneseCoveringTarget = -join @(
+    [char]0x63F4,
+    [char]0x8B77,
+    [char]0xFF1A,
+    [char]0x30BF,
+    [char]0x30FC,
+    [char]0x30B2,
+    [char]0x30C3,
+    [char]0x30C8)
+foreach ($slot in 1..5) {
+    $expectedReviewedCommands += "/mk attack1 <e$slot>"
+    $expectedReviewedCommands += "/mk off <e$slot>"
+}
+foreach ($slot in 1..8) {
+    $expectedReviewedCommands += ('/quickchat "Covering Target" <{0}>' -f $slot)
+    $expectedReviewedCommands += ('/quickchat <{0}> "Ziel decken"' -f $slot)
+    $expectedReviewedCommands += ('/quickchat "Soutien : cible" <{0}>' -f $slot)
+    $expectedReviewedCommands += ('/quickchat "{0}" <{1}>' -f $japaneseCoveringTarget, $slot)
+    $expectedReviewedCommands += "/mk bind2 <$slot>"
+}
+$expectedReviewedCommands += @(
+    '/mk bind1 <me>',
+    '/mk off <bind1>',
+    '/mk off <bind2>'
 )
-$actualMarkerCommandSet = ($markerCommandLiterals | Sort-Object) -join '|'
-$expectedMarkerCommandSet = ($expectedMarkerCommands | Sort-Object) -join '|'
-$allMarkerCommandLiterals = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '"/mk\s+')
-if ($markerCommandLiterals.Count -ne 10 -or
-    $actualMarkerCommandSet -ne $expectedMarkerCommandSet -or
-    $allMarkerCommandLiterals.Count -ne 10) {
-    throw 'Team Attack-1 shell allowlist must contain exactly hardcoded attack1/off commands for e1-e5 and no other /mk literal.'
+$reviewedCommandLiterals = @([regex]::Matches(
+        $reviewedPvpCommandDispatcher,
+        '(?m)=>\s*"(?<Command>/(?:mk|quickchat).*)",\s*$') |
+    ForEach-Object { $_.Groups['Command'].Value -replace '\\"', '"' })
+$actualReviewedCommandSet = ($reviewedCommandLiterals | Sort-Object) -join '|'
+$expectedReviewedCommandSet = ($expectedReviewedCommands | Sort-Object) -join '|'
+$allReviewedCommandLiteralLines = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '=>\s*"/(?:mk|quickchat)')
+if ($reviewedCommandLiterals.Count -ne 53 -or
+    $actualReviewedCommandSet -ne $expectedReviewedCommandSet -or
+    $allReviewedCommandLiteralLines.Count -ne 53 -or
+    @($allReviewedCommandLiteralLines | Where-Object { $_.Path -ne $reviewedPvpCommandDispatcherPath }).Count -gt 0 -or
+    $reviewedPvpCommandDispatcher -match '"/p\s|<t>|<e[1-5]>.*Guardian|Guardian.*<e[1-5]>') {
+    throw 'The dispatcher allowlist must contain exactly 53 reviewed commands: Attack1 set/clear e1-e5, localized row-35 Quick Chat P1-P8, Bind2 P1-P8, Bind1 self, and exact Bind clears.'
 }
-if ($autoEnemyFocusMark -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|Markers\s*\[[^\]]+\]\s*=|MarkerTimes\s*\[[^\]]+\]\s*=') {
-    throw 'Team Attack-1 may not mutate a target or write raw marker memory.'
+
+$autoEnemyFocusMark = Read-RequiredSource $autoEnemyFocusMarkPath 'Auto enemy focus mark service'
+Assert-Literals $autoEnemyFocusMark @(
+    'ReviewedPvpCommandDispatcher commands',
+    'commands.TryMarkAttack1(desired.Value.EnemySlot, now)',
+    'commands.TryClearAttack1(owned.EnemySlot, now)',
+    'ReviewedPvpCommandDispatchResult.MarkerRateLimited',
+    'MarkingController.Instance()'
+) 'Team Attack-1 typed dispatcher and telemetry ownership'
+if ([regex]::Matches($autoEnemyFocusMark, '\bMarkingController\.Instance\s*\(').Count -lt 2 -or
+    $autoEnemyFocusMark -match '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString|TryExecuteShellCommand)\b' -or
+    $autoEnemyFocusMark -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|Markers\s*\[[^\]]+\]\s*=|MarkerTimes\s*\[[^\]]+\]\s*=') {
+    throw 'Team Attack-1 must retain read-only marker telemetry and typed shared-dispatcher calls without target mutation, raw marker writes, or its own shell boundary.'
+}
+
+# Guardian team communication starts only from the strong event emitted by the
+# sole client-accepted automatic Guardian request. Core owns one-shot episode
+# consumption, marker ownership, confirmation, sequencing, and cleanup.
+$guardianTeamCommunicationRules = Read-RequiredSource $guardianTeamCommunicationRulesPath 'Guardian team communication rules'
+$normalizedGuardianTeamCommunicationRules = $guardianTeamCommunicationRules -replace '\s+', ' '
+$guardianTeamCommunicationSelfTests = Read-RequiredSource $guardianTeamCommunicationSelfTestsPath 'Guardian team communication self-tests'
+$coreSelfTestProgramForGuardian = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registry'
+Assert-Literals $guardianTeamCommunicationRules @(
+    'GuardianTeamCommunicationState Initial',
+    'GuardianTeamCommunicationDecision(',
+    'public bool ShouldIssueCommand =>',
+    'public const int Bind1MarkerIndex = 5;',
+    'public const int Bind2MarkerIndex = 6;',
+    'public const long ActiveLifetimeMilliseconds = 9_000;',
+    'public const long CommandConfirmationTimeoutMilliseconds = 1_500;',
+    'var consumed = ToIdle(episode.Token);',
+    'state = state with { LastConsumedEpisodeToken = observedEpisode.Token };',
+    'var pairPlanned = BothMarkersExactlyEmpty(observation);',
+    'SaturatingAdd(episode.AcceptedAtMilliseconds, ActiveLifetimeMilliseconds)',
+    'GuardianTeamCommunicationCommandKind.SendQuickChat',
+    'GuardianTeamCommunicationCommandKind.SetBind2',
+    'GuardianTeamCommunicationCommandKind.SetBind1',
+    'GuardianTeamCommunicationCommandKind.ClearBind2',
+    'GuardianTeamCommunicationCommandKind.ClearBind1',
+    'marker.GameObjectId == expectedActor.GameObjectId',
+    'marker.MarkerTime != markerTimeBeforeCommand',
+    'observation.Bind2.MarkerTime != bind2.MarkerTime',
+    'observation.Bind1.MarkerTime != bind1.MarkerTime',
+    'ClearBind2Command(state.Episode!.Value, owned.MarkerTime)',
+    'ClearBind1Command(state.Episode!.Value, bind1Owned.MarkerTime)',
+    'ExpectedMarkerTime'
+) 'Pure accepted-Guardian communication FSM'
+$pendingBind2ConfirmationIndex = $normalizedGuardianTeamCommunicationRules.IndexOf(
+    'if (state.Phase == GuardianTeamCommunicationPhase.AwaitingBind2Confirmation)')
+$pendingBind1ConfirmationIndex = $normalizedGuardianTeamCommunicationRules.IndexOf(
+    'if (state.Phase == GuardianTeamCommunicationPhase.AwaitingBind1Confirmation)')
+$configurationGateIndex = $normalizedGuardianTeamCommunicationRules.IndexOf(
+    'if (!observation.ConfigurationEnabled)')
+$cleanupBind2Index = $normalizedGuardianTeamCommunicationRules.IndexOf(
+    'if (state.OwnsBind2)',
+    $normalizedGuardianTeamCommunicationRules.IndexOf('private static GuardianTeamCommunicationDecision ObserveCleanup'))
+$cleanupBind1Index = $normalizedGuardianTeamCommunicationRules.IndexOf(
+    'var bind1Owned = state.Bind1Ownership!.Value;',
+    [Math]::Max(0, $cleanupBind2Index))
+if ($pendingBind2ConfirmationIndex -lt 0 -or
+    $pendingBind1ConfirmationIndex -le $pendingBind2ConfirmationIndex -or
+    $configurationGateIndex -le $pendingBind1ConfirmationIndex -or
+    $cleanupBind2Index -lt 0 -or
+    $cleanupBind1Index -le $cleanupBind2Index -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'if \(outcome == GuardianTeamCommunicationCommandOutcome\.DeferredBeforeInvocation && command\.Kind != GuardianTeamCommunicationCommandKind\.SendQuickChat\).*?Phase = ReadyPhaseFor\(command\.Kind\).*?PendingCommand = null' -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'GuardianTeamCommunicationCommandKind\.SendQuickChat => AdvanceAfterQuickChat\(state\).*?GuardianTeamCommunicationCommandKind\.SetBind2 => outcome == GuardianTeamCommunicationCommandOutcome\.Invoked.*?AwaitingBind2Confirmation.*?: ToIdle\(state\.LastConsumedEpisodeToken\).*?GuardianTeamCommunicationCommandKind\.SetBind1 => outcome == GuardianTeamCommunicationCommandOutcome\.Invoked.*?AwaitingBind1Confirmation.*?: StartCleanupOrIdle' -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'observation\.Bind1\.IsExactlyEmpty\(Bind1MarkerIndex\) && observation\.Bind2\.IsExactlyEmpty\(Bind2MarkerIndex\).*?observation\.Bind1\.MarkerTime == state\.Bind1MarkerTimeBeforeSet && observation\.Bind2\.MarkerTime == state\.Bind2MarkerTimeBeforeSet' -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'if \(!observation\.TextInputStateKnown \|\| observation\.TextInputActive\).*?StartCleanupOrIdle\(state\).*?GuardianTeamCommunicationDecisionKind\.Waiting' -or
+    $guardianTeamCommunicationRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Guardian Core must consume accepted episodes before gates, offer Quick Chat once, allow only pre-invocation marker deferral, confirm async marker ownership through config/text loss, and clear Bind2 before Bind1 without gameplay or shell access.'
+}
+
+$guardianSelfTestMethods = @(
+    'AcceptedEpisodeQuickChatIsOneShot',
+    'InitialFailuresConsumeWithoutCommands',
+    'OccupiedOrUnknownMarkersStayQuickChatOnly',
+    'MarkerPairIsSequentialAndExactlyConfirmed',
+    'SetConfirmationRequiresActorAndChangedTime',
+    'PartialBind1FailureCleansOnlyOwnedBind2',
+    'DeadlineCleanupIsBind2ThenBind1',
+    'ExternalDriftCleansOnlyRemainingOwnership',
+    'ResetAndContextLossOnlyUseSafeCleanup',
+    'PendingConfirmationSurvivesConfigAndTextUntilCleanupIsSafe',
+    'DeferredBeforeInvocationIsTheOnlyRepeatableDecision',
+    'NewEpisodeWhileBusyIsConsumedWithoutReplacement'
+)
+foreach ($method in $guardianSelfTestMethods) {
+    Assert-Literals $guardianTeamCommunicationSelfTests @("internal static void $method()") "Guardian communication self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("GuardianTeamCommunicationSelfTests.$method") "Guardian communication test registration $method"
+}
+if ([regex]::Matches($guardianTeamCommunicationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 12 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bGuardianTeamCommunicationSelfTests\.\w+').Count -ne 12) {
+    throw 'All twelve Guardian communication lifecycle and fail-closed self-tests must remain registered exactly once.'
+}
+
+$defensiveUtilityGuardianSource = Read-RequiredSource $defensiveUtilityProbePath 'Defensive utility Guardian event source'
+$normalizedDefensiveUtilityGuardianSource = $defensiveUtilityGuardianSource -replace '\s+', ' '
+Assert-Literals $defensiveUtilityGuardianSource @(
+    'internal readonly record struct AcceptedAutoGuardianEpisode(',
+    'AcceptedAutoGuardianEpisode? LastAcceptedGuardianEpisode,',
+    'private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;',
+    'private long guardianEpisodeToken;',
+    'accepted = TryUseGuardianOnce(localPlayer!, selected, out attempted);',
+    'if (attempted && accepted)',
+    'lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode(',
+    'NextGuardianEpisodeToken()',
+    'selected.Actor',
+    'selected.PartySlot',
+    'lastAcceptedGuardianEpisode = null;',
+    'var current = Volatile.Read(ref guardianEpisodeToken);',
+    'if (current == long.MaxValue) return long.MaxValue;',
+    'var next = current + 1;',
+    'Interlocked.CompareExchange(ref guardianEpisodeToken, next, current) == current'
+) 'Client-accepted automatic Guardian episode source'
+$acceptedGuardianConstructors = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bnew\s+AcceptedAutoGuardianEpisode\s*\(')
+$resetRuntimeMethod = [regex]::Match(
+    $normalizedDefensiveUtilityGuardianSource,
+    'private void ResetRuntime\(\) \{(?<Body>.*?)\} private void ResetOpportunityRuntime').Groups['Body'].Value
+if ($acceptedGuardianConstructors.Count -ne 1 -or
+    $acceptedGuardianConstructors[0].Path -ne $defensiveUtilityProbePath -or
+    $normalizedDefensiveUtilityGuardianSource -notmatch 'action = DefensiveUtilityActionKind\.Guardian; trigger = DefensiveUtilityTrigger\.PaladinGuardianLowAlly;.*?selectedGuardianPartySlot = selected\.PartySlot;.*?guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce\(localPlayer!, selected, out attempted\); if \(attempted && accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), new TargetPressureActorIdentity\( localPlayer!\.GameObjectId, localPlayer\.EntityId\), selected\.Actor, selected\.PartySlot\); \}' -or
+    $normalizedDefensiveUtilityGuardianSource -notmatch 'private long NextGuardianEpisodeToken\(\) \{ while \(true\) \{ var current = Volatile\.Read\(ref guardianEpisodeToken\); if \(current == long\.MaxValue\) return long\.MaxValue; var next = current \+ 1; if \(Interlocked\.CompareExchange\(ref guardianEpisodeToken, next, current\) == current\) return next; \} \}' -or
+    [string]::IsNullOrWhiteSpace($resetRuntimeMethod) -or
+    $resetRuntimeMethod -notmatch 'lastAcceptedGuardianEpisode = null;' -or
+    $resetRuntimeMethod -match 'guardianEpisodeToken') {
+    throw 'Only the consumed, frozen automatic Guardian branch may publish a monotonically tokened event after attempted-and-client-accepted; hard reset clears the event but never rewinds the token.'
+}
+
+$guardianCommunicationMetadataGuard = Read-RequiredSource $guardianCommunicationMetadataGuardPath 'Guardian communication metadata guard'
+$japaneseMetadataLiteral = 'ClientLanguage.Japanese => "' + $japaneseCoveringTarget + '",'
+Assert-Literals $guardianCommunicationMetadataGuard @(
+    'internal const uint QuickChatRowId = 35;',
+    'internal const int QuickChatIconId = 9964;',
+    'internal const uint QuickChatAddonRowId = 11718;',
+    'internal const uint QuickChatTransientRowId = 52;',
+    'ClientLanguage.English => "Covering Target"',
+    'ClientLanguage.German => "Ziel decken"',
+    'ClientLanguage.French => "Soutien : cible"',
+    $japaneseMetadataLiteral,
+    'dataManager.GetExcelSheet<QuickChat>(language)',
+    'quickChat.RowId == QuickChatRowId',
+    'quickChat.NameAction.ToString() == expectedName',
+    'quickChat.Icon == QuickChatIconId',
+    'quickChat.Addon.RowId == QuickChatAddonRowId',
+    'quickChat.QuickChatTransient.RowId == QuickChatTransientRowId',
+    'return new GuardianCommunicationMetadataValidation(false, language)'
+) 'Exact localized Quick Chat row-35 metadata guard'
+if ($guardianCommunicationMetadataGuard -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController)\b') {
+    throw 'Guardian Quick Chat metadata validation must remain read-only and fail closed.'
+}
+
+$guardianCommunication = Read-RequiredSource $guardianCommunicationPath 'Guardian communication runtime'
+$normalizedGuardianCommunication = $guardianCommunication -replace '\s+', ' '
+Assert-Literals $guardianCommunication @(
+    'AcceptedAutoGuardianEpisode? acceptedEpisode',
+    'new GuardianTeamCommunicationEpisode(',
+    'ResolveSupportedPvPContext() == SupportedPvPContext.CrystallineConflict',
+    'GuardianTeamCommunicationRules.Observe(state, observation)',
+    'if (decision.ShouldIssueCommand && decision.Command is { } command)',
+    'GuardianTeamCommunicationRules.ApplyCommandResult(state, command, outcome)',
+    'LastConsumedEpisodeToken = Math.Max(',
+    'state.LastConsumedEpisodeToken,',
+    'lastObservedEpisodeToken)',
+    'configuration.Enabled &&',
+    'configuration.EnableDefensiveUtilities &&',
+    'configuration.PaladinGuardianLowAlly &&',
+    'configuration.PaladinGuardianAnnounceAndMark &&',
+    'metadata.Verified &&',
+    'clientState.ClientLanguage == metadata.Language',
+    'localPlayer.ClassJob.RowId == EnemyCombatConstants.PaladinJobId',
+    'private static unsafe bool TryGetExactIdentity(',
+    'private static unsafe void ReadMarkerObservations(',
+    'private static unsafe bool TryGetTextInputState(',
+    'PartySlotResolver.Resolve(objectTable, partySlot)',
+    'native->EntityId != player.EntityId',
+    'MarkingController.Instance()',
+    'GuardianTeamCommunicationRules.Bind1MarkerIndex',
+    'GuardianTeamCommunicationRules.Bind2MarkerIndex',
+    'commands.TryQuickChatCoveringTarget(',
+    'commands.TryMarkGuardianAlly(command.PartySlot, nowMilliseconds)',
+    'commands.TryMarkGuardianSelf(nowMilliseconds)',
+    'commands.TryClearGuardianAlly(nowMilliseconds)',
+    'commands.TryClearGuardianSelf(nowMilliseconds)',
+    'ReviewedPvpCommandDispatchResult.MarkerRateLimited',
+    'GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation',
+    'GuardianTeamCommunicationCommandOutcome.TerminalFailure',
+    'invoked=',
+    'TryClearOneExactOwnershipOnDispose('
+) 'Exact CC-only Guardian communication runtime mapping'
+$guardianObserveMethod = [regex]::Match(
+    $normalizedGuardianCommunication,
+    'internal GuardianCommunicationDiagnostics Observe\(.*?\) \{(?<Body>.*?)\} internal void Reset')
+$guardianDispatchMethod = [regex]::Match(
+    $normalizedGuardianCommunication,
+    'private GuardianTeamCommunicationCommandOutcome DispatchOnce\(.*?\) \{(?<Body>.*?)\} private void CountOutcome')
+$guardianObserveBody = $guardianObserveMethod.Groups['Body'].Value
+$guardianDispatchBody = $guardianDispatchMethod.Groups['Body'].Value
+if (-not $guardianObserveMethod.Success -or
+    -not $guardianDispatchMethod.Success -or
+    [regex]::Matches($guardianObserveBody, '\bDispatchOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($guardianDispatchBody, '\bcommands\.Try(?:QuickChatCoveringTarget|MarkGuardianAlly|MarkGuardianSelf|ClearGuardianAlly|ClearGuardianSelf)\s*\(').Count -ne 5 -or
+    $guardianDispatchBody -notmatch 'command\.IsValid.*?episode\.Token != command\.EpisodeToken.*?context != SupportedPvPContext\.CrystallineConflict.*?ResolveSupportedPvPContext\(\) != SupportedPvPContext\.CrystallineConflict.*?!TryGetTextInputState\(out var textInputActive\).*?textInputActive' -or
+    $guardianDispatchBody -notmatch 'var exactLocal = ResolveExactLocal\(localPlayer\); if \(!exactLocal\.Exact \|\| exactLocal\.Actor != episode\.LocalPlayer\).*?TerminalFailure' -or
+    $guardianDispatchBody -notmatch 'case GuardianTeamCommunicationCommandKind\.SetBind2:.*?!MatchesExactPartyTarget\(episode, command\).*?!bind1\.IsExactlyEmpty\(GuardianTeamCommunicationRules\.Bind1MarkerIndex\).*?!bind2\.IsExactlyEmpty\(GuardianTeamCommunicationRules\.Bind2MarkerIndex\).*?bind1\.MarkerTime != state\.Bind1MarkerTimeBeforeSet.*?bind2\.MarkerTime != state\.Bind2MarkerTimeBeforeSet.*?commands\.TryMarkGuardianAlly' -or
+    $guardianDispatchBody -notmatch 'case GuardianTeamCommunicationCommandKind\.SetBind1:.*?command\.Actor != episode\.LocalPlayer.*?!exactTarget\.Exact.*?exactTarget\.Actor != episode\.Target.*?!bind1\.IsExactlyEmpty.*?!state\.OwnsBind2.*?bind2\.GameObjectId != episode\.Target\.GameObjectId.*?bind2\.MarkerTime != state\.Bind2OwnedMarkerTime.*?commands\.TryMarkGuardianSelf' -or
+    $guardianDispatchBody -notmatch 'case GuardianTeamCommunicationCommandKind\.ClearBind2:.*?command\.Actor != episode\.Target.*?!MatchesExactPartyTarget\(episode, command\).*?!MarkerMatchesOwnedCommand\(bind2, command\).*?commands\.TryClearGuardianAlly' -or
+    $guardianDispatchBody -notmatch 'case GuardianTeamCommunicationCommandKind\.ClearBind1:.*?command\.Actor != episode\.LocalPlayer.*?!MarkerMatchesOwnedCommand\(bind1, command\).*?commands\.TryClearGuardianSelf' -or
+    $guardianDispatchBody -notmatch 'ReviewedPvpCommandDispatchResult\.Invoked => GuardianTeamCommunicationCommandOutcome\.Invoked, ReviewedPvpCommandDispatchResult\.MarkerRateLimited when command\.Kind != GuardianTeamCommunicationCommandKind\.SendQuickChat => GuardianTeamCommunicationCommandOutcome\.DeferredBeforeInvocation, _ => GuardianTeamCommunicationCommandOutcome\.TerminalFailure' -or
+    [regex]::Matches($guardianCommunication, '\bunsafe\b').Count -ne 3 -or
+    [regex]::Matches($guardianCommunication, '\bMarkingController\.Instance\s*\(').Count -ne 1 -or
+    $guardianCommunication -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|Markers\s*\[[^\]]+\]\s*=|MarkerTimes\s*\[[^\]]+\]\s*=') {
+    throw 'Guardian runtime must revalidate exact CC/local/P-slot/text/config/metadata/marker ownership, issue at most one typed command per Observe tick, map only marker reservation to pre-invocation deferral, and never initiate combat, retarget, write marker memory, or own a raw shell boundary.'
+}
+
+# Scholar Critical Strategy is a pure, immediate held-generation policy. It
+# requires a complete exact S1-S5 set, uses pressure only wholesale for initial
+# ranking, and exposes one frozen intent for post-consumption revalidation.
+$scholarCriticalStrategyRules = Read-RequiredSource $scholarCriticalStrategyRulesPath 'Scholar Critical Strategy rules'
+$normalizedScholarCriticalStrategyRules = $scholarCriticalStrategyRules -replace '\s+', ' '
+$scholarCriticalStrategySelfTests = Read-RequiredSource $scholarCriticalStrategySelfTestsPath 'Scholar Critical Strategy self-tests'
+Assert-Literals $scholarCriticalStrategyRules @(
+    'public readonly record struct ScholarCriticalStrategyCandidate(',
+    'public readonly record struct ScholarCriticalStrategyIntent(',
+    'public readonly record struct ScholarCriticalStrategyObservation(',
+    'public readonly record struct ScholarCriticalStrategyDecision(',
+    'public bool ShouldConsumeInputGeneration => ShouldDispatch;',
+    'public const uint ScholarJobId = 28;',
+    'public const uint ActionId = 29_716;',
+    'public const uint GuardStatusId = 3_054;',
+    'public const uint GuardStatusLargeScaleId = 3_673;',
+    'bool CompleteCanonicalEnemySet,',
+    'bool HeldGameplayKeyEligible,',
+    'bool GuardActive,',
+    'bool NativeTargetValid,',
+    'bool NativeRangeAndLineOfSight,',
+    'bool PressureKnown,',
+    'int TeamTargetCount',
+    'candidates.Count != EnemySlotRules.LastSlot',
+    '!occupiedSlots.Add(candidate.EnemySlot)',
+    '!occupiedActors.Add(candidate.Actor)',
+    'if (!occupiedSlots.Contains(slot)) return false;',
+    'eligibleIndices.All(index =>',
+    'candidates[index].PressureKnown &&',
+    'candidates[index].TeamTargetCount >= 0',
+    'eligibleIndices.Any(index =>',
+    'candidates[index].TeamTargetCount > 0',
+    'right.TeamTargetCount.CompareTo(left.TeamTargetCount)',
+    'left.EnemySlot.CompareTo(right.EnemySlot)',
+    'left.Actor.EntityId.CompareTo(right.Actor.EntityId)',
+    'left.Actor.GameObjectId.CompareTo(right.Actor.GameObjectId)',
+    'currentCandidate.EnemySlot == intent.EnemySlot',
+    'currentCandidate.Actor == intent.Target',
+    'IsEligibleCandidate(currentCandidate, currentLocal)'
+) 'Pure SCH held-key guarded-target policy'
+$scholarSelectionMethod = [regex]::Match(
+    $normalizedScholarCriticalStrategyRules,
+    'public static int SelectBestCandidateIndex\(.*?\) \{(?<Body>.*?)\} /// <summary> /// Revalidates only the frozen actor and action\..*?public static bool CanUseExactIntent')
+$scholarFinalIntentMethod = [regex]::Match(
+    $normalizedScholarCriticalStrategyRules,
+    'public static bool CanUseExactIntent\(.*?\) =>(?<Body>.*?); private static ScholarCriticalStrategyDecisionReason GetGateFailure')
+$scholarSelectionBody = $scholarSelectionMethod.Groups['Body'].Value
+$scholarFinalIntentBody = $scholarFinalIntentMethod.Groups['Body'].Value
+if (-not $scholarSelectionMethod.Success -or
+    -not $scholarFinalIntentMethod.Success -or
+    $normalizedScholarCriticalStrategyRules -notmatch 'if \(observation\.HardReset\).*?HardReset.*?if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(observation\.LocalJobId != ScholarJobId\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(observation\.ResolvedActionId != ActionId\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady.*?if \(!observation\.CompleteCanonicalEnemySet\).*?IncompleteCanonicalEnemySet' -or
+    $normalizedScholarCriticalStrategyRules -notmatch 'candidate\.Alive && candidate\.Targetable && candidate\.CurrentHp > 0 && candidate\.MaximumHp > 0 && candidate\.CurrentHp <= candidate\.MaximumHp && candidate\.GuardActive && candidate\.NativeTargetValid && candidate\.NativeRangeAndLineOfSight' -or
+    $scholarSelectionBody -notmatch 'var useTeamPressure = eligibleIndices\.All\(.*?PressureKnown.*?TeamTargetCount >= 0\) && eligibleIndices\.Any\(.*?TeamTargetCount > 0\).*?Compare\( candidates\[candidateIndex\], candidates\[bestIndex\], useTeamPressure\)' -or
+    $scholarFinalIntentBody -match '\b(PressureKnown|TeamTargetCount|SelectBestCandidateIndex|Candidates)\b' -or
+    $scholarFinalIntentBody -notmatch 'currentLocal == intent\.LocalPlayer.*?actionLocallyReady.*?resolvedActionId == intent\.ActionId.*?currentCandidate\.EnemySlot == intent\.EnemySlot.*?currentCandidate\.Actor == intent\.Target.*?IsEligibleCandidate\(currentCandidate, currentLocal\)' -or
+    $scholarCriticalStrategyRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'SCH Core must require default-off exact CC/SCH/held/action gates, a complete unique canonical set, live Guard and native reachability, wholesale positive pressure ranking with HP fallback, and pressure-free frozen-intent revalidation without dispatch or target access.'
+}
+
+$scholarSelfTestMethods = @(
+    'CandidateEligibilityRequiresLiveGuardAndNativeReachability',
+    'CompleteCanonicalSetIsExactAndUnique',
+    'TrustedPositivePressureRanksBeforeExactHp',
+    'UnknownOrAllZeroPressureFallsBackToHp',
+    'DispatchRequiresEveryGateAndHeldGeneration',
+    'DispatchFreezesOneIntentWithoutPressureRevalidation',
+    'ConsumedHeldGenerationCannotRetry'
+)
+foreach ($method in $scholarSelfTestMethods) {
+    Assert-Literals $scholarCriticalStrategySelfTests @("internal static void $method()") "Scholar Critical Strategy self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("ScholarCriticalStrategySelfTests.$method") "Scholar Critical Strategy test registration $method"
+}
+if ([regex]::Matches($scholarCriticalStrategySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bScholarCriticalStrategySelfTests\.\w+').Count -ne 7) {
+    throw 'All seven Scholar Critical Strategy gate, ranking, intent, and one-generation self-tests must remain registered exactly once.'
+}
+
+# The SCH runtime may resolve candidates only for one eligible held generation.
+# It must capture the full canonical S1-S5 view, consume before every final
+# native read, and issue one frozen exact request through the internal redirect
+# bypass. Pressure is selection-only and must never be sampled after consume.
+$scholarCriticalStrategyProbe = Read-RequiredSource $scholarCriticalStrategyProbePath 'Scholar Critical Strategy runtime probe'
+$normalizedScholarCriticalStrategyProbe = $scholarCriticalStrategyProbe -replace '\s+', ' '
+Assert-Literals $scholarCriticalStrategyProbe @(
+    'internal sealed record ScholarCriticalStrategyProbeSnapshot(',
+    'bool PressureKnown,',
+    'int TeamTargetCount,',
+    'bool InputClaimed,',
+    'bool UseActionAttempted,',
+    'bool UseActionAccepted,',
+    'string CandidateResolution,',
+    'internal ScholarCriticalStrategyProbeSnapshot Observe(',
+    'var shouldResolveCandidates = actionReady &&',
+    'inputFrame.HeldGameplayKeyEligible;',
+    '? ResolveExactCandidates(localPlayer!, resolvedActionId, out candidateResolution)',
+    'var completeCanonicalSet = candidates.Count == EnemySlotRules.LastSlot;',
+    'var inputClaimed = decision.ShouldConsumeInputGeneration;',
+    'if (inputClaimed) inputFrame.Consume();',
+    'var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer);',
+    'IsCurrentCrystallineConflict()',
+    '!IsCurrentlySuppressedByGuard(currentLocal, Environment.TickCount64)',
+    'ResolveFrozenIntent(currentLocal!, intent, finalResolvedActionId)',
+    'ScholarCriticalStrategyRules.CanUseExactIntent(',
+    'TryUseCriticalStrategyOnce(',
+    'nearAssist.RunWithoutRedirect',
+    'actionManager->UseAction(',
+    'intent.ActionId,',
+    'intent.Target.GameObjectId,',
+    'attempted (accepted={accepted})',
+    'terminal exact-intent revalidation failed',
+    'failed and will not be retried'
+) 'Exact one-attempt SCH Critical Strategy runtime and truthful diagnostics'
+
+$scholarObserveMethod = [regex]::Match(
+    $normalizedScholarCriticalStrategyProbe,
+    'internal ScholarCriticalStrategyProbeSnapshot Observe\(.*?\) \{(?<Body>.*?)\} internal void Reset')
+$scholarCandidateCaptureMethod = [regex]::Match(
+    $normalizedScholarCriticalStrategyProbe,
+    'private IReadOnlyList<ScholarCriticalStrategyCandidate> ResolveExactCandidates\(.*?\) \{(?<Body>.*?)\} private ScholarCriticalStrategyCandidate\? ResolveFrozenIntent')
+$scholarTryUseMethod = [regex]::Match(
+    $normalizedScholarCriticalStrategyProbe,
+    'private unsafe bool TryUseCriticalStrategyOnce\(.*?\) \{(?<Body>.*?)\} private unsafe bool TryGetReadyAction')
+$scholarObserveBody = $scholarObserveMethod.Groups['Body'].Value
+$scholarCandidateCaptureBody = $scholarCandidateCaptureMethod.Groups['Body'].Value
+$scholarTryUseBody = $scholarTryUseMethod.Groups['Body'].Value
+if (-not $scholarObserveMethod.Success -or
+    -not $scholarCandidateCaptureMethod.Success -or
+    -not $scholarTryUseMethod.Success) {
+    throw 'SCH runtime Observe, complete-set capture, and sole UseAction methods must remain independently reviewable.'
+}
+
+if ($normalizedScholarCriticalStrategyProbe -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && localJobId == ScholarCriticalStrategyRules\.ScholarJobId && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionReady = featureContextReady && localIdentity\.IsValid && TryGetReadyAction\(localPlayer!, out resolvedActionId\);' -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'var shouldResolveCandidates = actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && inputFrame\.HeldGameplayKeyEligible;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?var completeCanonicalSet = candidates\.Count == EnemySlotRules\.LastSlot;.*?HeldGameplayKeyEligible, resolvedActionId, actionReady, completeCanonicalSet, candidates, hardReset') {
+    throw 'SCH candidate capture must remain behind exact CC/SCH/metadata/own-Guard/readiness gates and one unclaimed held non-text gameplay-key generation.'
+}
+
+if ($scholarCandidateCaptureBody -notmatch 'var diagnosticsBefore = executeTracker\.Diagnostics; var trackerEnemies = executeTracker\.Enemies; if \(!diagnosticsBefore\.Active \|\| !diagnosticsBefore\.IsCrystallineConflict \|\| !diagnosticsBefore\.GuardMetadataVerified\).*?if \(diagnosticsBefore\.SlotCapacity != EnemySlotRules\.LastSlot \|\| diagnosticsBefore\.ResolvedSlots != EnemySlotRules\.LastSlot\).*?var snapshots = trackerEnemies\.ToArray\(\); if \(!ReferenceEquals\(diagnosticsBefore, executeTracker\.Diagnostics\) \|\| !ReferenceEquals\(trackerEnemies, executeTracker\.Enemies\)\).*?if \(snapshots\.Length > EnemySlotRules\.LastSlot \|\| snapshots\.Length != diagnosticsBefore\.ValidEnemySlots\)' -or
+    $scholarCandidateCaptureBody -notmatch 'foreach \(var trackerEnemy in snapshots\).*?!snapshotSlots\.Add\(trackerEnemy\.Slot\).*?!snapshotGameObjectIds\.Add\(trackerEnemy\.GameObjectId\).*?!snapshotEntityIds\.Add\(trackerEnemy\.EntityId\).*?return \[\];.*?snapshotsBySlot\.Add\(trackerEnemy\.Slot, trackerEnemy\);') {
+    throw 'SCH must require stable exact-CC Guard metadata and a duplicate-free tracker snapshot inside a complete five-slot frame.'
+}
+if ($scholarCandidateCaptureBody -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\).*?objectTable\.SearchByEntityId\(player!\.EntityId\) as IPlayerCharacter.*?tablePlayer\.Address != player\.Address.*?tablePlayer\.GameObjectId != player\.GameObjectId.*?tablePlayer\.EntityId != player\.EntityId.*?!nativeGameObjectIds\.Add\(player\.GameObjectId\).*?!nativeEntityIds\.Add\(player\.EntityId\).*?!nativeAddresses\.Add\(player\.Address\).*?return \[\];.*?currentSlots\.Add\(\(slot, player\)\);') {
+    throw 'SCH must resolve all native e1-e5 slots to unique object-table address/GOID/EID identities; one unresolved, mismatched, or duplicate actor aborts the full capture.'
+}
+if ($scholarCandidateCaptureBody -notmatch 'var trackerEligibleSlots = currentSlots \.Where\(static entry => IsLivePlayer\(entry\.Player\) && entry\.Player\.IsTargetable && ExecuteThreshold\.HasValidHp\(entry\.Player\.CurrentHp, entry\.Player\.MaxHp\)\) \.ToArray\(\); if \(trackerEligibleSlots\.Length != diagnosticsBefore\.ValidEnemySlots \|\| trackerEligibleSlots\.Length != snapshots\.Length\).*?foreach \(var \(slot, player\) in trackerEligibleSlots\).*?!snapshotsBySlot\.TryGetValue\(slot, out var trackerEnemy\).*?trackerEnemy\.GameObjectId != player\.GameObjectId.*?trackerEnemy\.EntityId != player\.EntityId.*?return \[\];') {
+    throw 'Every live targetable valid-HP native enemy must exactly match the current tracker slot and IDs; incomplete or stale eligible sets must fail closed as a whole.'
+}
+if ($scholarCandidateCaptureBody -notmatch 'var pressureSnapshot = pressureTracker\.Snapshot; var pressureSnapshotUsable = pressureSnapshot\.Active && pressureSnapshot\.PressureActive;.*?pressureSnapshot\.Find\(actor\.GameObjectId, actor\.EntityId\).*?pressure\.EnemySlot == slot && pressure\.TeamTargetCount >= 0;.*?var candidate = BuildExactSlotCandidate\( localPlayer, actionId, slot, actor, pressureKnown, pressureKnown \? pressure!\.TeamTargetCount : 0\); if \(candidate is not \{ \} exact\).*?return \[\];.*?candidates\.Add\(exact\);') {
+    throw 'SCH may attach team pressure only from one active exact-slot nonnegative snapshot, while every S-slot must still pass native action validation.'
+}
+if ($scholarCandidateCaptureBody -notmatch 'if \(!ReferenceEquals\(pressureSnapshot, pressureTracker\.Snapshot\)\).*?candidates = candidates \.Select\(static candidate => candidate with \{ PressureKnown = false, TeamTargetCount = 0, \}\) \.ToList\(\); pressureSnapshotUsable = false;' -or
+    $scholarCandidateCaptureBody -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?if \(!ReferenceEquals\(diagnosticsBefore, executeTracker\.Diagnostics\) \|\| !ReferenceEquals\(trackerEnemies, executeTracker\.Enemies\)\).*?return \[\];') {
+    throw 'Pressure snapshot drift must degrade every SCH candidate to HP fallback, and the full native/tracker identity view must remain unchanged before selection.'
+}
+
+$scholarConsume = [regex]::Match($scholarObserveBody, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
+$scholarFrozenResolve = [regex]::Match($scholarObserveBody, 'ResolveFrozenIntent\(currentLocal!, intent, finalResolvedActionId\)')
+$scholarIntentRevalidation = [regex]::Match($scholarObserveBody, 'ScholarCriticalStrategyRules\.CanUseExactIntent\s*\(')
+$scholarTryUse = [regex]::Match($scholarObserveBody, 'TryUseCriticalStrategyOnce\s*\(')
+if (-not $scholarConsume.Success -or -not $scholarFrozenResolve.Success -or
+    -not $scholarIntentRevalidation.Success -or -not $scholarTryUse.Success -or
+    $scholarConsume.Index -gt $scholarFrozenResolve.Index -or
+    $scholarFrozenResolve.Index -gt $scholarIntentRevalidation.Index -or
+    $scholarIntentRevalidation.Index -gt $scholarTryUse.Index) {
+    throw 'SCH must consume the shared held generation before frozen-target revalidation and its sole attempt.'
+}
+$scholarPostConsumeWindow = $scholarObserveBody.Substring($scholarConsume.Index)
+if ($scholarPostConsumeWindow -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(' -or
+    $scholarPostConsumeWindow -match '\b(pressureTracker|pressureSnapshot|executeTracker\.Enemies)\b') {
+    throw 'After SCH consumes input it may revalidate only the frozen intent; pressure rereads, reranking, and alternate capture are forbidden.'
+}
+
+if ($normalizedScholarCriticalStrategyProbe -notmatch 'BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target, intent\.PressureKnown, intent\.TeamTargetCount\)' -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\).*?HasLiveGuard\(target\)' -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'rangeStatus = ActionManager\.GetActionInRangeOrLoS\( actionId, sourceObject, targetObject\); return SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeStatus\);') {
+    throw 'Initial and final SCH candidates must re-resolve only the frozen canonical S-slot/IDs and require live Guard plus FFXIV native range/line of sight.'
+}
+if ($scholarObserveBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); var finalContextReady = currentLocal is not null && IsCurrentCrystallineConflict\(\) && IsLivePlayer\(currentLocal\) && currentLocal\.ClassJob\.IsValid && currentLocal\.ClassJob\.RowId == ScholarCriticalStrategyRules\.ScholarJobId && metadataVerified && !actionHelpersSuppressedByGuard && !IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\);.*?TryGetReadyAction\(currentLocal!, out finalResolvedActionId\).*?ResolveFrozenIntent\(currentLocal!, intent, finalResolvedActionId\).*?ScholarCriticalStrategyRules\.CanUseExactIntent\( intent, exactCandidate, currentLocalIdentity, finalResolvedActionId, finalActionReady\)') {
+    throw 'SCH post-consume preflight must freshly revalidate exact local SCH/CC/metadata/own-Guard state, adjusted readiness, and only the frozen target.'
+}
+if ($scholarTryUseBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); if \(currentLocal is null \|\| currentLocal\.Address != localPlayer\.Address \|\| !IsLivePlayer\(currentLocal\) \|\| !currentLocal\.ClassJob\.IsValid \|\| currentLocal\.ClassJob\.RowId != ScholarCriticalStrategyRules\.ScholarJobId \|\| !IsCurrentCrystallineConflict\(\) \|\| !metadataVerified \|\| IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\) \|\| !intent\.IsValid \|\| !TryGetReadyAction\(currentLocal, out var resolvedActionId\) \|\| resolvedActionId != intent\.ActionId\).*?var exactCandidate = ResolveFrozenIntent\(currentLocal, intent, resolvedActionId\).*?ScholarCriticalStrategyRules\.CanUseExactIntent\( intent, currentCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?attempted = true; return nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\);') {
+    throw 'The SCH native boundary must repeat exact local/context/action/frozen-target validation immediately before one explicit UseAction request.'
+}
+if ($normalizedScholarCriticalStrategyProbe -notmatch 'resolvedActionId = actionManager->GetAdjustedActionId\( EnemyCombatConstants\.ScholarCriticalStrategyActionId\); return resolvedActionId == ScholarCriticalStrategyRules\.ActionId && actionManager->IsActionOffCooldown\(ActionType\.Action, resolvedActionId\);' -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'if \(DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\)\) return true; return nearAssist\.TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, localPlayer\.GameObjectId, localPlayer\.EntityId, nowMilliseconds, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out _\);' -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'ScholarCriticalStrategyRules\.IsExactGuardStatus\(status\.StatusId\) && float\.IsFinite\(status\.RemainingTime\) && status\.RemainingTime > 0f') {
+    throw 'SCH must use exact adjusted/off-cooldown 29716 readiness, suppress on live or recent exact own Guard, and accept only positive finite exact Guard 3054/3673 on the enemy.'
+}
+if ([regex]::Matches($scholarCriticalStrategyProbe, '\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($scholarObserveBody, '\bTryUseCriticalStrategyOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($scholarCriticalStrategyProbe, '\bResolveFrozenIntent\s*\(').Count -ne 3 -or
+    [regex]::Matches($scholarCriticalStrategyProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
+    $scholarObserveBody -match '\b(pressureTracker|pressureSnapshot)\b' -or
+    $scholarTryUseBody -match '\b(pressureTracker|pressureSnapshot|TeamTargetCount|PressureKnown)\b' -or
+    $scholarCriticalStrategyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $scholarCriticalStrategyProbe -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch)\b' -or
+    $scholarCriticalStrategyProbe -match '(?:->|\.)Original\s*\(') {
+    throw 'SCH must have exactly one client action boundary and no hook, shell, target mutation, queue, replay, retry, pressure-gated final check, or external redirect path.'
+}
+
+Assert-Literals $pluginSource @(
+    'personalStatus.ScholarCriticalStrategyDiagnostics',
+    '[Seiton Sense] scholar-strategy[decision={scholar.Decision},reason={scholar.Reason}',
+    'ready={scholar.LocallyReady},action={scholar.ResolvedActionId}',
+    'candidates={scholar.CandidateCount},S={scholar.EnemySlot}',
+    'target={scholar.TargetGameObjectId:X}/{scholar.TargetEntityId:X}',
+    'pressure={scholar.PressureKnown}/{scholar.TeamTargetCount}',
+    'held={scholar.HeldGameplayKey},claimed={scholar.InputClaimed}',
+    'attempt={scholar.UseActionAttempted}/{scholar.UseActionAccepted}',
+    'count={scholar.AttemptCount}/{scholar.AcceptedCount}',
+    'resolve={scholar.CandidateResolution},last={scholar.LastEvent}'
+) 'Truthful SCH Critical Strategy source diagnostics'
+$scholarDebugStart = $pluginSource.IndexOf('[Seiton Sense] scholar-strategy[')
+$scholarDebugEnd = if ($scholarDebugStart -ge 0) {
+    $pluginSource.IndexOf('[Seiton Sense] monk-reply[', $scholarDebugStart)
+} else {
+    -1
+}
+if ($scholarDebugStart -lt 0 -or $scholarDebugEnd -le $scholarDebugStart -or
+    $pluginSource.Substring($scholarDebugStart, $scholarDebugEnd - $scholarDebugStart) -match '(?i)\b(landed|killed|executed successfully|server accepted)\b') {
+    throw 'SCH diagnostics may report only attempted/client-accepted telemetry, never a landed effect, Guard change, or kill.'
 }
 
 # Warning audio is restricted to one bounded client-owned chat sound. External audio
@@ -554,9 +1044,11 @@ Assert-Literals $emergencyInputCoordinator @(
     'allyRescueHeldEnabled',
     'miracleInterceptHeldEnabled',
     'miracleInterceptHeldWasEnabled',
+    'scholarCriticalStrategyHeldEnabled',
+    'scholarCriticalStrategyHeldWasEnabled',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared Purify, defensive utility, Ally Rescue, and reactive-CC input ownership'
+) 'Shared Purify, defensive utility, Ally Rescue, reactive-CC, NIN, and SCH input ownership'
 if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
     throw 'The shared emergency input coordinator may only observe and consume physical generations.'
 }
@@ -565,19 +1057,23 @@ $personalStatus = Read-RequiredSource $personalStatusPath 'Personal status coord
 $normalizedPersonalStatus = $personalStatus -replace '\s+', ' '
 $purifyObserve = [regex]::Match($personalStatus, '\bemergencyPurify\.Observe\s*\(')
 $defenseObserve = [regex]::Match($personalStatus, '\bdefensiveUtility\.Observe\s*\(')
+$guardianCommunicationObserve = [regex]::Match($personalStatus, '\bguardianCommunication\.Observe\s*\(')
 $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
 $miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
 $ninjaSeitonObserve = [regex]::Match($personalStatus, '\bninjaSeiton\.Observe\s*\(')
+$scholarCriticalStrategyObserve = [regex]::Match($personalStatus, '\bscholarCriticalStrategy\.Observe\s*\(')
 $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
-if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $rescueObserve.Success -or
-    -not $miracleObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $monkEarthReplyObserve.Success -or
+if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $rescueObserve.Success -or
+    -not $miracleObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or
     $purifyObserve.Index -gt $defenseObserve.Index -or
-    $defenseObserve.Index -gt $rescueObserve.Index -or
+    $defenseObserve.Index -gt $guardianCommunicationObserve.Index -or
+    $guardianCommunicationObserve.Index -gt $rescueObserve.Index -or
     $rescueObserve.Index -gt $miracleObserve.Index -or
     $miracleObserve.Index -gt $ninjaSeitonObserve.Index -or
-    $ninjaSeitonObserve.Index -gt $monkEarthReplyObserve.Index -or
+    $ninjaSeitonObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
+    $scholarCriticalStrategyObserve.Index -gt $monkEarthReplyObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 6) {
-    throw 'Personal status coordination must give Purify, defense, Ally Rescue, reactive CC, NIN Seiton, then Monk first-to-last claim on one shared input frame.'
+    throw 'Personal status coordination must process Purify, defense, same-frame Guardian communication, Ally Rescue, reactive CC, NIN Seiton, then Monk in exact order while action helpers share one input frame.'
 }
 Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
@@ -587,6 +1083,13 @@ Assert-Literals $personalStatus @(
     'configuration.GuardOnStunPressure',
     'configuration.PreGuardOnLowHpPressure',
     'configuration.PaladinGuardianLowAlly',
+    'new GuardianCommunicationService(',
+    'GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics',
+    'guardianCommunication.Observe(',
+    'defense.LastAcceptedGuardianEpisode',
+    'guardianCommunication.TryClearOneExactOwnershipOnDispose(',
+    'guardianCommunication.FailClosed(now, exception)',
+    'guardianCommunication.Reset()',
     'purify.UseActionAttempted',
     'resilienceActive',
     'guardActive',
@@ -613,6 +1116,15 @@ Assert-Literals $personalStatus @(
     'metadata.SeitonVerified',
     'ninjaSeiton.Observe(',
     'ninja.InputClaimed',
+    'configuration.EnableScholarCriticalStrategyOnHeldKey',
+    'scholarCriticalStrategyHeldEnabled',
+    'new ScholarCriticalStrategyProbe(',
+    'ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics',
+    'metadata.ScholarCriticalStrategyVerified',
+    'scholarCriticalStrategy.Observe(',
+    'scholar.InputClaimed',
+    'scholarCriticalStrategy.FailClosed()',
+    'scholarCriticalStrategy.Reset()',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
 ) 'Shared self-Purify, defensive utility, Ally Rescue, reactive-CC, and NIN Seiton priority'
@@ -625,6 +1137,13 @@ if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimit
 if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnFreshGameplayKey;' -or
     $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
     throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/Rescue/reactive CC.'
+}
+if ($normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyConfigurationEnabled = configuration\.Enabled && configuration\.EnableScholarCriticalStrategyOnHeldKey;' -or
+    $normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyHeldEnabled = scholarCriticalStrategyConfigurationEnabled && isCrystallineConflict && metadata\.ScholarCriticalStrategyVerified && !guardActive && localJobId == ScholarCriticalStrategyRules\.ScholarJobId;' -or
+    $normalizedPersonalStatus -notmatch 'scholarCriticalStrategyHeldEnabled\); var purify = emergencyPurify\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); monkEarthReply\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
+    throw 'SCH Critical Strategy must be a default-off exact-CC/SCH/metadata/Guard-gated held-generation consumer after NIN and before Monk, sharing the same consumed priority chain.'
 }
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
 if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
@@ -639,6 +1158,15 @@ if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe
 }
 if ($normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.Observe\( localPlayer, isCrystallineConflict, defensiveUtilitiesConfigurationEnabled, configuration\.DefensiveUtilitiesOnHeldKey, configuration\.GuardOnStunPressure, configuration\.PreGuardOnLowHpPressure, configuration\.PaladinGuardianLowAlly, pressureKnown, incomingEnemyCount, highPressureStunObserved, purify\.UseActionAttempted, resilienceActive, hasPurifyRemovableCrowdControl, guardActive, purifyClaimedPriority, emergencyInputFrame') {
     throw 'Defensive utilities must observe after Purify with its attempted result, positive Resilience state, active-Guard state, and Purify priority on the same shared generation.'
+}
+if ([regex]::Matches($personalStatus, '\bguardianCommunication\.Observe\s*\(').Count -ne 1 -or
+    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.Observe\(.*?\);.*?now = Math\.Max\(now, Environment\.TickCount64\); guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\); var defensiveUtilityClaimedPriority = defense\.InputClaimed; var rescue = allyRescue\.Observe\(') {
+    throw 'Guardian communication must observe exactly once in the same framework frame, immediately after the automatic defense result and before any later helper.'
+}
+if ([regex]::Matches($pluginSource, '\bnew ReviewedPvpCommandDispatcher\s*\(').Count -ne 1 -or
+    $normalizedPersonalStatus -notmatch 'GuardianCommunicationService\( configuration, clientState, objectTable, dutyState, dataManager, log, commands\)' -or
+    ($pluginSource -replace '\s+', ' ') -notmatch 'var reviewedPvpCommands = new ReviewedPvpCommandDispatcher\(\); autoEnemyFocusMark = new AutoEnemyFocusMarkService\(.*?reviewedPvpCommands\);.*?personalStatus = new PersonalStatusService\(.*?reviewedPvpCommands\);') {
+    throw 'Plugin startup must create one shared reviewed dispatcher and inject that same instance into Team Attack-1 and Guardian communication.'
 }
 
 # Defensive utilities share the same physical input generation. Purify owns a
@@ -1130,18 +1658,19 @@ Assert-Literals $pluginSource @(
     'last={miracle.LastEvent},last-op={miracle.LastOpportunity}'
 ) 'Persistent Miracle opportunity diagnostics'
 $overlaySource = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\UI\OverlayRenderer.cs') 'Overlay renderer'
+$bullet = [char]0x2022
 Assert-Literals $overlaySource @(
     'miracle.ConfirmationPopup is { } miraclePopup && miraclePopup.IsVisible(now)',
     'DrawMiracleInterceptConfirmationCard(',
     '"AUTO CC LANDED"',
     '? "SILENCE"',
     ': "MIRACLE"',
-    'MiracleInterceptThreatKind.MarksmanSpite => $"{action}  •  MCH LB START"',
-    'MiracleInterceptThreatKind.Zantetsuken => $"{action}  •  SAM LB START"',
-    'MiracleInterceptThreatKind.FuriousBacklash => $"{action}  •  VPR NEST START"',
-    'MiracleInterceptThreatKind.Contradance => $"{action}  •  DNC LB START"',
+    ('MiracleInterceptThreatKind.MarksmanSpite => $"{action}  ' + $bullet + '  MCH LB START"'),
+    ('MiracleInterceptThreatKind.Zantetsuken => $"{action}  ' + $bullet + '  SAM LB START"'),
+    ('MiracleInterceptThreatKind.FuriousBacklash => $"{action}  ' + $bullet + '  VPR NEST START"'),
+    ('MiracleInterceptThreatKind.Contradance => $"{action}  ' + $bullet + '  DNC LB START"'),
     'MiracleInterceptThreatKind.PostPurifyCrowdControl =>',
-    '$"{action}  •  AFTER PURIFY ({PurifyStatusLabel(popup.RemovedStatusId)})"',
+    ('$"{action}  ' + $bullet + '  AFTER PURIFY ({PurifyStatusLabel(popup.RemovedStatusId)})"'),
     'MiracleInterceptConfirmationRules.PopupDurationMilliseconds'
 ) 'Visible, bounded, truthful AUTO CC LANDED news flash'
 if ($overlaySource -match '(?i)interrupt(?:ed| successful| confirmed)|cancelled hostile|stopped (?:mch|sam|vpr|dnc|lb|nest)') {
@@ -1156,7 +1685,7 @@ Assert-Literals $overlaySource @(
     'DrawGuardianTriggerCard(',
     'EnemyCombatConstants.GuardianIconId',
     '"GUARDIAN TRIGGERED"',
-    '$"P{popup.PartySlot}  •  CLIENT ACCEPTED"'
+    ('$"P{popup.PartySlot}  ' + $bullet + '  CLIENT ACCEPTED"')
 ) 'Shared-stack client-accepted automatic Guardian popup'
 $normalizedGuardianOverlay = $overlaySource -replace '\s+', ' '
 $guardianWarningStackMethod = [regex]::Match(
@@ -1171,7 +1700,7 @@ if (-not $guardianWarningStackMethod.Success -or
     -not $guardianCardMethod.Success -or
     [regex]::Matches($overlaySource, '\bDrawGuardianTriggerCard\s*\(').Count -ne 2 -or
     $guardianWarningStackBody -notmatch 'var defense = personalStatus\.DefensiveUtilityDiagnostics;.*?defense\.GuardianPopup is \{ \} acceptedGuardian && acceptedGuardian\.IsVisible\(now\).*?heights\.Add\(GuardianTriggerCardHeight\(\)\);.*?BuildCenteredOffsets\(heights, 7f \* ImGuiHelpers\.GlobalScale\).*?DrawGuardianTriggerCard\( visibleGuardianPopup, stackCenterY \+ offsets\[offsetIndex\], now\);' -or
-    $guardianCardBody -notmatch 'EnemyCombatConstants\.GuardianIconId.*?"GUARDIAN TRIGGERED".*?\$"P\{popup\.PartySlot\} • CLIENT ACCEPTED"' -or
+    $guardianCardBody -notmatch ('EnemyCombatConstants\.GuardianIconId.*?"GUARDIAN TRIGGERED".*?\$"P\{popup\.PartySlot\} ' + [regex]::Escape($bullet) + ' CLIENT ACCEPTED"') -or
     $guardianCardBody -match '(?i)\b(landed|saved|protected)\b' -or
     $guardianCardBody -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Replay|Retry|Dispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'Guardian popup must remain one visual-only card in DrawPersonalWarnings, use the Guardian icon, and state only GUARDIAN TRIGGERED / P# CLIENT ACCEPTED without a server-landed or protection-success claim.'
@@ -1433,8 +1962,8 @@ $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
 if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
     throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate for the explicitly enabled Near Help pressure preference.'
 }
-if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableAutoEnemyFocusMark') {
-    throw 'Pressure tracking must remain active for defensive, post-Purify team-focus, and automatic Attack-1 utility consumers.'
+if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableScholarCriticalStrategyOnHeldKey \|\| configuration\.EnableAutoEnemyFocusMark') {
+    throw 'Pressure tracking must remain independently active for defensive, post-Purify team-focus, SCH ranking, and automatic Attack-1 utility consumers.'
 }
 
 # Isolation is a warning-only exact-CC reader. It resolves one native five-member
@@ -1536,12 +2065,12 @@ if ($normalizedAutoEnemyFocusMark -notmatch 'var structuralExactContext = localI
     throw 'Attack-1 must clear only confirmed unchanged ownership, including disable; any actor/slot/marker-time drift must relinquish without a command.'
 }
 if ($normalizedAutoEnemyFocusMark -notmatch 'public void Dispose\(\).*?TryClearOwnedOnDispose\(\); Relinquish\("Disposed"\)' -or
-    $normalizedAutoEnemyFocusMark -notmatch 'TryClearOwnedOnDispose\(\).*?ownership is not \{ \} owned \|\| pending is not null.*?context != SupportedPvPContext\.CrystallineConflict \|\| !metadata\.GuardVerified \|\| !TryGetTextInputState\(out var textInputActive\) \|\| textInputActive.*?AutoEnemyFocusMarkRules\.CanClearOwnedMarker\(.*?TryExecuteClearCommand\(owned\.EnemySlot\)') {
+    $normalizedAutoEnemyFocusMark -notmatch 'TryClearOwnedOnDispose\(\).*?ownership is not \{ \} owned \|\| pending is not null.*?context != SupportedPvPContext\.CrystallineConflict \|\| !metadata\.GuardVerified \|\| !TryGetTextInputState\(out var textInputActive\) \|\| textInputActive.*?AutoEnemyFocusMarkRules\.CanClearOwnedMarker\(.*?commands\.TryClearAttack1\(owned\.EnemySlot, now\) != ReviewedPvpCommandDispatchResult\.Invoked') {
     throw 'Dispose may issue only one best-effort owned clear after exact CC, text, slot/entity, marker, timestamp, and rate-limit revalidation.'
 }
-if ($normalizedAutoEnemyFocusMark -notmatch 'blockedMarkCandidate = desiredIdentity; if \(!TryExecuteMarkCommand\(desired\.Value\.EnemySlot\)\).*?lastCommandAt = now; markCommands\+\+; pending = new PendingMarkerCommand' -or
+if ($normalizedAutoEnemyFocusMark -notmatch 'var markResult = commands\.TryMarkAttack1\(desired\.Value\.EnemySlot, now\); if \(markResult == ReviewedPvpCommandDispatchResult\.MarkerRateLimited\).*?return;.*?blockedMarkCandidate = desiredIdentity; if \(markResult != ReviewedPvpCommandDispatchResult\.Invoked\).*?return;.*?lastCommandAt = now; markCommands\+\+; pending = new PendingMarkerCommand' -or
     $normalizedAutoEnemyFocusMark -notmatch 'private bool CanIssueCommand\(long now\) => now >= lastCommandAt && now - lastCommandAt >= MinimumCommandIntervalMilliseconds') {
-    throw 'Attack-1 must issue at most one command per transition, never retry the same candidate transition, and rate-limit commands to at least one second.'
+    throw 'Attack-1 must issue through the shared marker reservation, consume non-rate-limit failures for the candidate transition, and retain its own at-least-one-second transition limit.'
 }
 Assert-Literals $pluginSource @(
     'new AutoEnemyFocusMarkService(',
@@ -2843,6 +3372,11 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.MiracleOfNatureStatusId',
     'EnemyCombatConstants.MiracleOfNatureActionId',
     'EnemyCombatConstants.GuardianActionId',
+    'EnemyCombatConstants.ScholarCriticalStrategyActionId',
+    'EnemyCombatConstants.ScholarCriticalStrategyIconId',
+    'EnemyCombatConstants.ScholarJobId',
+    'EnemyCombatConstants.ScholarCriticalStrategySheetRange',
+    'EnemyCombatConstants.ScholarCriticalStrategyRecast100ms',
     'EnemyCombatConstants.SilentNocturneActionId',
     'EnemyCombatConstants.ContradanceActionId',
     'EnemyCombatConstants.SeducedStatusId',
@@ -2857,20 +3391,29 @@ Assert-Literals $metadata @(
     'ValidateFeature("Purify"',
     'ValidateFeature("Miracle of Nature action"',
     'ValidateFeature("Guardian"',
+    'ValidateFeature("Scholar Critical Strategy"',
     'ValidateFeature("Silent Nocturne"',
     'ValidateFeature("Contradance"',
     'ValidateFeature("Zantetsuken"',
     'ValidateFeature("Furious Backlash"',
     'MiracleOfNatureActionVerified',
     'GuardianVerified',
+    'ScholarCriticalStrategyVerified',
     'SilentNocturneVerified',
     'ContradanceVerified',
     'ZantetsukenVerified',
     'FuriousBacklashVerified',
     'Forcibly transforms target',
     'preventing them from using actions other than Purify',
-    'nullifies status afflictions that can be removed by Purify'
+    'nullifies status afflictions that can be removed by Purify',
+    'Increases target''s damage taken by 10%',
+    'Halves the defensive bonus of Guard instead when targeting enemies under its effect.'
 ) 'Metadata guard'
+
+$normalizedMetadata = $metadata -replace '\s+', ' '
+if ($normalizedMetadata -notmatch 'var scholarCriticalStrategyVerified = ValidateFeature\("Scholar Critical Strategy", log, \(\) => \{ var actions = dataManager\.GetExcelSheet<ActionSheet>\(ClientLanguage\.English\); var descriptions = dataManager\.GetExcelSheet<ActionTransient>\(ClientLanguage\.English\); if \(!actions\.TryGetRow\(EnemyCombatConstants\.ScholarCriticalStrategyActionId, out var action\) \|\| !descriptions\.TryGetRow\(EnemyCombatConstants\.ScholarCriticalStrategyActionId, out var transient\)\).*?return action\.Name\.ToString\(\) == "Chain Stratagem" && action\.Icon == EnemyCombatConstants\.ScholarCriticalStrategyIconId && action\.IsPvP && action\.IsPlayerAction && action\.ClassJob\.IsValid && action\.ClassJob\.RowId == EnemyCombatConstants\.ScholarJobId && action\.ClassJobCategory\.IsValid && action\.ClassJobCategory\.RowId == 29 && action\.ActionCategory\.IsValid && action\.ActionCategory\.RowId == 4 && action\.Range == EnemyCombatConstants\.ScholarCriticalStrategySheetRange && action\.EffectRange == 0 && action\.Cast100ms == 0 && action\.Recast100ms == EnemyCombatConstants\.ScholarCriticalStrategyRecast100ms && action\.PrimaryCostType == 0 && action\.PrimaryCostValue == 0 && action\.CooldownGroup == 3 && action\.MaxCharges == 0 && !action\.CanTargetSelf && !action\.CanTargetParty && !action\.CanTargetAlliance && action\.CanTargetHostile && !action\.CanTargetAlly && !action\.CanTargetOwnPet && !action\.CanTargetPartyPet && !action\.TargetArea && action\.RequiresLineOfSight && action\.NeedToFaceTarget && !action\.AffectsPosition && action\.CastType == 1 && description\.Contains\("Increases target''s damage taken by 10%", StringComparison\.Ordinal\) && description\.Contains\( "Halves the defensive bonus of Guard instead when targeting enemies under its effect\.", StringComparison\.Ordinal\); \}\);') {
+    throw 'SCH Critical Strategy must fail closed unless exact English action/transient metadata proves PvP SCH 29716, icon 9284, 25y single-hostile targeting, 20s recast, and the Guard-specific effect.'
+}
 
 $exactCombatIds = [ordered]@{
     GuardActionId = 29054
@@ -2879,6 +3422,11 @@ $exactCombatIds = [ordered]@{
     PaladinJobId = 19
     GuardianRecast100ms = 300
     GuardianSheetRange = 20
+    ScholarCriticalStrategyActionId = 29716
+    ScholarCriticalStrategyIconId = 9284
+    ScholarJobId = 28
+    ScholarCriticalStrategyRecast100ms = 200
+    ScholarCriticalStrategySheetRange = 25
     WildfireActionId = 29409
     WildfireStatusId = 1323
     DeathWarrantActionId = 29549
@@ -3056,21 +3604,74 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.14.0.0</Version>',
-    '<AssemblyVersion>0.14.0.0</AssemblyVersion>',
-    '<FileVersion>0.14.0.0</FileVersion>'
-) 'v0.14.0.0 project version'
+    '<Version>0.15.0.0</Version>',
+    '<AssemblyVersion>0.15.0.0</AssemblyVersion>',
+    '<FileVersion>0.15.0.0</FileVersion>'
+) 'v0.15.0.0 project version'
 Assert-Literals ($pluginManifest + $repositoryIndex) @(
-    'Ninja Seiton cues and a default-off fresh-key helper',
-    '"AssemblyVersion": "0.14.0.0"',
-    'Configuration schema 19 keeps the helper off for new, upgraded, and reset settings.'
-) 'v0.14.0.0 manifest and repository metadata'
+    'default-off Ninja and Scholar action helpers',
+    'optional Guardian team communication',
+    '"AssemblyVersion": "0.15.0.0"',
+    'After a client-accepted automatic Guardian',
+    'localized Covering Target Quick Chat for the frozen P-slot',
+    'Bind2 on that ally and Bind1 on self',
+    'cleanup is exact per-sign ownership only',
+    'Critical Strategy 29716 only on an exact guarded canonical S1-S5 enemy',
+    'ranking trusted positive team pressure before exact HP and otherwise using HP-first',
+    'pressure is selection-only, while final validation checks identity, readiness, live Guard, and native reachability',
+    'Both paths freeze intent, never mutate targets, and have no alternate action or post-invocation retry.',
+    'Schema 21 keeps both opt-ins off for new, upgraded, and reset settings',
+    'live command/action confirmation remains required.'
+) 'v0.15.0.0 manifest and repository metadata'
+$readme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'README'
+$changelog = Read-RequiredSource (Join-Path $resolvedRoot 'CHANGELOG.md') 'Changelog'
+$privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy documentation'
+Assert-Literals $readme @(
+    'Version 0.15.0.0 adds two',
+    'Configuration schema 21 keeps Guardian',
+    '## Scholar Critical Strategy held-key helper',
+    'runs only on PvP Scholar in exact Crystalline Conflict',
+    'native 25-yalm action range and line-of-sight check immediately before dispatch',
+    'If every eligible guarded candidate has an active exact non-negative team-',
+    'or negative pressure, or every count is zero, the whole candidate set ranks by',
+    'Pressure is used only for this one selection and is not a final',
+    'The intent and generation are consumed before one',
+    'Pressure drift',
+    'neither reranks nor switches or invalidates the frozen target',
+    'not swallow the original key.',
+    'current-patch live-confirmation boundaries'
+) 'v0.15 Guardian and Scholar user contract'
+Assert-Literals $changelog @(
+    '## 0.15.0.0',
+    'manual Guardian, Far Help, and rejected requests',
+    'Bind2 must be confirmed on the exact ally before Bind1 is',
+    'cleanup tries Bind2 and then Bind1',
+    'Strategy `29716` readiness, and native 25-yalm range/line of sight.',
+    'or every count is zero, the whole selection is HP-first.',
+    'selection-only and is not a final dispatch gate.',
+    'The frozen intent and held generation',
+    'are consumed before one native attempt.',
+    'rerank, target mutation, alternate, fallback action, replay, or retry.',
+    'configuration schema to 21.'
+) 'v0.15 release notes'
+Assert-Literals $privacy @(
+    'The separate Guardian communication setting is persisted but disabled by',
+    'Only a new client-accepted automatic Guardian episode in exact',
+    '## Experimental Scholar Critical Strategy held-key helper',
+    'Scholar in exact Crystalline Conflict',
+    'live Guard `3054` or `3673`',
+    'native 25-yalm range/line-of-sight result',
+    'Pressure is used only for that frozen selection and is not a',
+    'Pressure drift neither reranks, switches, nor',
+    'No drift can cause another selection, alternate',
+    'Configuration schema 21 is current in v0.15.0.0'
+) 'v0.15 local-data and live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 19',
+    'public int Version { get; set; } = 21',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -3136,10 +3737,14 @@ Assert-Literals $configuration @(
     'NearHelpPreferIncomingPressure = true',
     'if (Version < 19)',
     'EnableNinjaSeitonOnFreshGameplayKey = false',
+    'EnableScholarCriticalStrategyOnHeldKey = false',
+    'if (Version < 20)',
+    'PaladinGuardianAnnounceAndMark = false',
+    'if (Version < 21)',
     'WarnWhenIsolated = true',
     'IsolationWarningScale = 1f',
     'EnableAutoEnemyFocusMark = false',
-    'Version = 19',
+    'Version = 21',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -3157,12 +3762,14 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-19 default-off NIN Seiton helper and prior configuration migration'
+) 'Schema-21 default-off Scholar helper, Guardian communication, and prior configuration migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool PreGuardOnLowHpPressure \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool PaladinGuardianLowAlly \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool PaladinGuardianAnnounceAndMark \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool EnableScholarCriticalStrategyOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableReactiveCcUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcDancerLimitBreak \{ get; set; \} = true;\s*$' -or
@@ -3174,6 +3781,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ ge
 if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableReactiveCcUtilities\s*=\s*false\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bEnableAutoEnemyFocusMark\s*=\s*false\s*;').Count -lt 1 -or
+    [regex]::Matches($configuration, '\bPaladinGuardianAnnounceAndMark\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bEnableScholarCriticalStrategyOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bWarnWhenIsolated\s*=\s*true\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bDefensiveUtilitiesOnHeldKey\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bReactiveCcOnHeldKey\s*=\s*true\s*;').Count -lt 2) {
@@ -3187,9 +3796,9 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGamepl
     [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
     throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*19\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 19\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?Version = 19;') {
-    throw 'Schema 19 must fast-path current settings, preserve schema-17/18 migrations, and introduce only the default-off NIN Seiton helper.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*21\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 21\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?Version = 21;') {
+    throw 'Schema 21 must fast-path current settings, preserve schema-17/18/19/20 migrations, and introduce only the default-off Scholar held-key helper.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -3253,4 +3862,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.14.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window, with missing in-window data falling back to exact HP and out-of-window unknowns ignored; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > Monk priority with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action even when the defense master is off, without Guard replay or retries; default-off exact-CC NIN Seiton requires a fresh non-text edge, verified adjusted 29515/29516 readiness, and a complete canonical e1-e5 view, ranks strict sub-50 targets by exact HP ratio then stable slot/actor identity, consumes before frozen-intent revalidation, and issues at most one client-requested action without target mutation, reranking, alternate, fallback, queue, or retry; defensive and Far Help Guardian eligibility trusts verified sheet range 20 plus native range/LoS without a raw center-distance upper cap; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; default-off Team Attack-1 never overwrites, mutates targets, or writes marker memory and may issue only hardcoded /mk attack1/off <e1-e5> after exact timestamp ownership gates, including owned disable/dispose cleanup. Shell-command execution remains source-level verified pending a live Crystalline Conflict test."
+Write-Host "Seiton Sense v0.15.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window, with missing in-window data falling back to exact HP and out-of-window unknowns ignored; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > SCH Critical Strategy > Monk priority, with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action; default-off NIN Seiton consumes one fresh edge before frozen sub-50 exact-intent dispatch; default-off SCH Critical Strategy consumes one held generation before one frozen exact guarded S1-S5 intent, uses only wholesale trusted positive pressure for initial ranking with HP fallback, and never rereads pressure or reranks after consumption; client-accepted automatic Guardian alone may start one Quick Chat then optional Bind2-ally/Bind1-self episode through the sole closed shared shell dispatcher, with exact per-sign ownership confirmation and Bind2-first cleanup at accepted plus 9000ms; neither new path mutates targets, chooses an alternate/fallback, queues, replays, or retries after invocation; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; Team Attack-1 retains exact timestamp ownership through the same marker reservation. Shell/action execution remains source-level verified pending live current-patch Crystalline Conflict confirmation."

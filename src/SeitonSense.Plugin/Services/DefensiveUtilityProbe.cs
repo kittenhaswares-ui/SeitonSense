@@ -12,6 +12,22 @@ using GameStatus = Lumina.Excel.Sheets.Status;
 
 namespace SeitonSense.Plugin.Services;
 
+internal readonly record struct AcceptedAutoGuardianEpisode(
+    long Token,
+    long AcceptedAtMilliseconds,
+    TargetPressureActorIdentity LocalPlayer,
+    TargetPressureActorIdentity Target,
+    int PartySlot)
+{
+    internal bool IsValid =>
+        Token > 0 &&
+        AcceptedAtMilliseconds >= 0 &&
+        LocalPlayer.IsValid &&
+        Target.IsValid &&
+        LocalPlayer != Target &&
+        PartySlot is >= 1 and <= 8;
+}
+
 internal sealed record DefensiveUtilityProbeSnapshot(
     bool Active,
     DefensiveUtilityActionKind Action,
@@ -36,6 +52,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
     long AcceptedCount,
     bool GuardMetadataVerified,
     bool GuardianMetadataVerified,
+    AcceptedAutoGuardianEpisode? LastAcceptedGuardianEpisode,
     GuardianTriggerPopup? GuardianPopup,
     string LastEvent)
 {
@@ -64,6 +81,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
         false,
         false,
         null,
+        null,
         "Not started");
 }
 
@@ -88,6 +106,8 @@ internal sealed class DefensiveUtilityProbe
     private long postPurifyGuardExpiresAt = -1;
     private GuardPropagationState guardPropagationState = GuardPropagationState.Initial;
     private GuardianTriggerPopup? guardianPopup;
+    private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;
+    private long guardianEpisodeToken;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -290,6 +310,17 @@ internal sealed class DefensiveUtilityProbe
                 inputClaimed = true;
                 inputFrame.Consume();
                 accepted = TryUseGuardianOnce(localPlayer!, selected, out attempted);
+                if (attempted && accepted)
+                {
+                    lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode(
+                        NextGuardianEpisodeToken(),
+                        Math.Max(nowMilliseconds, Environment.TickCount64),
+                        new TargetPressureActorIdentity(
+                            localPlayer!.GameObjectId,
+                            localPlayer.EntityId),
+                        selected.Actor,
+                        selected.PartySlot);
+                }
                 lastEvent = accepted
                     ? $"Guardian request accepted for P{selected.PartySlot} {selected.CurrentHp}/{selected.MaximumHp}"
                     : $"Guardian intent for P{selected.PartySlot} consumed; request rejected or target changed";
@@ -346,6 +377,7 @@ internal sealed class DefensiveUtilityProbe
             Interlocked.Read(ref acceptedCount),
             guardMetadataVerified,
             guardianMetadataVerified,
+            lastAcceptedGuardianEpisode,
             guardianPopup,
             lastEvent);
         Volatile.Write(ref snapshot, result);
@@ -808,6 +840,7 @@ internal sealed class DefensiveUtilityProbe
     {
         ResetOpportunityRuntime();
         guardPropagationState = GuardPropagationState.Initial;
+        lastAcceptedGuardianEpisode = null;
     }
 
     private void ResetOpportunityRuntime()
@@ -817,6 +850,19 @@ internal sealed class DefensiveUtilityProbe
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
         guardianPopup = null;
+    }
+
+    private long NextGuardianEpisodeToken()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref guardianEpisodeToken);
+            if (current == long.MaxValue) return long.MaxValue;
+
+            var next = current + 1;
+            if (Interlocked.CompareExchange(ref guardianEpisodeToken, next, current) == current)
+                return next;
+        }
     }
 
     private static string DescribeWaitingState(
