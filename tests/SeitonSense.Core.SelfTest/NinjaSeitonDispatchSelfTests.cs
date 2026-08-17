@@ -128,6 +128,22 @@ internal static class NinjaSeitonDispatchSelfTests
         False(
             NinjaSeitonDispatchRules.CanUseExactIntent(
                 intent,
+                alternate with { CurrentHp = 50, MaximumHp = 100 },
+                LocalPlayer,
+                NinjaSeitonDispatchRules.BaseActionId,
+                actionLocallyReady: true),
+            "healing to exactly half cancels the frozen intent");
+        False(
+            NinjaSeitonDispatchRules.CanUseExactIntent(
+                intent,
+                alternate with { CurrentHp = 51, MaximumHp = 100 },
+                LocalPlayer,
+                NinjaSeitonDispatchRules.BaseActionId,
+                actionLocallyReady: true),
+            "healing above half cancels the frozen intent");
+        False(
+            NinjaSeitonDispatchRules.CanUseExactIntent(
+                intent,
                 selected,
                 LocalPlayer,
                 NinjaSeitonDispatchRules.BaseActionId,

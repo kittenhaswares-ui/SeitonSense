@@ -650,6 +650,31 @@ internal sealed class SettingsWindow : Window
         return changed;
     }
 
+    private bool DrawBardWardensPaeanPressureRedirectControls()
+    {
+        var changed = Checkbox(
+            "Smart Paean target for manual / Turbo calls at 3+ incoming enemies",
+            configuration.EnableBardWardensPaeanPressureRedirect,
+            value => configuration.EnableBardWardensPaeanPressureRedirect = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off and exact Crystalline Conflict only. This never casts Paean by itself. It only examines an " +
+            "already incoming The Warden's Paean (29400) ability call from the normal action path or a downstream " +
+            "Turbo pulse. A complete, unique, stable exact party view is required. Eligible non-self allies must be " +
+            "living, targetable, without the live Paean ward (3143), accepted by native 30-yalm range/line of sight, " +
+            "and have a trusted current count of at least three unique enemies hard-targeting or casting at them. " +
+            "Highest pressure wins, then lowest exact HP ratio, party slot, entity ID, and game-object ID. An unknown " +
+            "count excludes only that ally. No exact known 3+ candidate leaves the original call vanilla.");
+        ImGui.TextDisabled(
+            "Once a redirect is frozen, final identity, job, exact resolved action/metadata, life, HP, Paean ward, " +
+            "native range/line-of-sight, or pressure drift suppresses that one call instead of using the original " +
+            "target or another ally. There is deliberately no cooldown/readiness gate. It never changes a selected " +
+            "target, creates or substitutes an action, replays, or retries. A later Turbo pulse is a separate call. " +
+            "Client acceptance does not prove that Paean applied or removed or nullified CC.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
     private bool DrawPurifyControls()
     {
         var changed = false;
@@ -729,9 +754,10 @@ internal sealed class SettingsWindow : Window
             "input generation.");
         ImGui.TextDisabled(
             "State and input are consumed before at most one native attempt. Seiton Sense never changes the target, " +
-            "selects again, chooses an alternate, falls back, replays, or retries; the original gameplay key is not " +
-            "swallowed. A client-accepted return is dispatch feedback only, not proof that Seiton landed or killed " +
-            "the target.");
+            "selects again, chooses an alternate, falls back, replays, or retries. The frozen actor and its HP are " +
+            "read again at the latest safe point before the request; exactly 50% or higher cancels the spent attempt. " +
+            "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
+            "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
         ImGui.PopTextWrapPos();
 
         ImGui.Spacing();
@@ -830,6 +856,10 @@ internal sealed class SettingsWindow : Window
             "substitutes another action, falls back, replays, or retries. The original key is not swallowed, and " +
             "client acceptance does not prove that Critical Strategy landed or changed Guard.");
         ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.45f, 0.8f, 1f, 1f), "BARD");
+        changed |= DrawBardWardensPaeanPressureRedirectControls();
 
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.92f, 0.7f, 0.35f, 1f), "MONK");

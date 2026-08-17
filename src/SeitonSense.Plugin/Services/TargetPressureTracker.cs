@@ -73,6 +73,19 @@ internal sealed class TargetPressureTracker : IDisposable
     internal TargetPressureDiagnostics Diagnostics => Volatile.Read(ref diagnostics);
     internal int VerifiedProtectionStatusCount => verifiedProtectionStatusIds.Count;
 
+    /// <summary>
+    /// Captures one immutable published ally-pressure view. Selection code must
+    /// rank every party member from this same view instead of combining values
+    /// from separate framework publications.
+    /// </summary>
+    internal bool TryCaptureIncomingAllyPressure(
+        out IReadOnlyDictionary<TargetPressureActorIdentity, int> counts)
+    {
+        var current = Volatile.Read(ref incomingAllyPressure);
+        counts = current.Counts;
+        return current.Active;
+    }
+
     internal void Start()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -193,6 +206,7 @@ internal sealed class TargetPressureTracker : IDisposable
             supportedContext == SupportedPvPContext.CrystallineConflict &&
             ((configuration.ExperimentalAllyRescueOnNextKey &&
               metadata.AllyRescueStatusesVerified) ||
+             configuration.EnableBardWardensPaeanPressureRedirect ||
              (configuration.EnableNearAssistMacro &&
               configuration.NearHelpPreferIncomingPressure));
         var pressureStateTrackingEnabled =

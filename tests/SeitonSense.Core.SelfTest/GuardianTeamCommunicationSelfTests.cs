@@ -74,6 +74,87 @@ internal static class GuardianTeamCommunicationSelfTests
         Equal(GuardianTeamCommunicationPhase.Idle, complete.Phase, "chat failure does not retry or mark unknown pair");
     }
 
+    internal static void InvalidNativeMarkerSentinelIsExactlyEmpty()
+    {
+        var episode = Episode();
+        var emptySentinel = GuardianTeamCommunicationRules.InvalidMarkerGameObjectId;
+        var observation = Observation(
+            episode,
+            bind1GameObjectId: emptySentinel,
+            bind2GameObjectId: emptySentinel);
+
+        var quickChat = GuardianTeamCommunicationRules.Observe(
+            GuardianTeamCommunicationState.Initial,
+            observation);
+        Command(GuardianTeamCommunicationCommandKind.SendQuickChat, quickChat, "sentinel-empty pair still chats");
+        True(quickChat.State.MarkerPairPlanned, "sentinel-empty pair is reserved after chat");
+        var state = Apply(quickChat, GuardianTeamCommunicationCommandOutcome.Invoked);
+
+        var bind2 = GuardianTeamCommunicationRules.Observe(
+            state,
+            observation with { NowMilliseconds = 1_001 });
+        Command(GuardianTeamCommunicationCommandKind.SetBind2, bind2, "sentinel-empty Bind2 is set first");
+        state = Apply(bind2, GuardianTeamCommunicationCommandOutcome.Invoked);
+
+        var waitingBind2 = GuardianTeamCommunicationRules.Observe(
+            state,
+            observation with { NowMilliseconds = 1_002 });
+        Equal(
+            GuardianTeamCommunicationPhase.AwaitingBind2Confirmation,
+            waitingBind2.State.Phase,
+            "sentinel-empty Bind2 waits for native propagation");
+
+        var confirmedBind2 = GuardianTeamCommunicationRules.Observe(
+            waitingBind2.State,
+            observation with
+            {
+                NowMilliseconds = 1_003,
+                Bind2 = Marker(
+                    GuardianTeamCommunicationRules.Bind2MarkerIndex,
+                    episode.Target.GameObjectId,
+                    21),
+            });
+        Equal(
+            GuardianTeamCommunicationPhase.ReadyToSetBind1,
+            confirmedBind2.State.Phase,
+            "sentinel-empty Bind1 remains available after Bind2 confirmation");
+
+        var bind1Observation = observation with
+        {
+            NowMilliseconds = 1_004,
+            Bind2 = Marker(
+                GuardianTeamCommunicationRules.Bind2MarkerIndex,
+                episode.Target.GameObjectId,
+                21),
+        };
+        var bind1 = GuardianTeamCommunicationRules.Observe(
+            confirmedBind2.State,
+            bind1Observation);
+        Command(GuardianTeamCommunicationCommandKind.SetBind1, bind1, "sentinel-empty Bind1 is set second");
+        state = Apply(bind1, GuardianTeamCommunicationCommandOutcome.Invoked);
+
+        var waitingBind1 = GuardianTeamCommunicationRules.Observe(
+            state,
+            bind1Observation with { NowMilliseconds = 1_005 });
+        Equal(
+            GuardianTeamCommunicationPhase.AwaitingBind1Confirmation,
+            waitingBind1.State.Phase,
+            "sentinel-empty Bind1 waits for native propagation");
+
+        var active = GuardianTeamCommunicationRules.Observe(
+            waitingBind1.State,
+            bind1Observation with
+            {
+                NowMilliseconds = 1_006,
+                Bind1 = Marker(
+                    GuardianTeamCommunicationRules.Bind1MarkerIndex,
+                    episode.LocalPlayer.GameObjectId,
+                    11),
+            });
+        Equal(GuardianTeamCommunicationPhase.ActivePair, active.State.Phase, "sentinel-empty pair confirms normally");
+        True(active.State.OwnsBind1 && active.State.OwnsBind2, "sentinel path records exact ownership");
+    }
+
     internal static void MarkerPairIsSequentialAndExactlyConfirmed()
     {
         var episode = Episode();

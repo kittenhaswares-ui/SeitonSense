@@ -121,7 +121,8 @@ public readonly record struct GuardianTeamCommunicationMarkerObservation(
         MarkerTime >= 0;
 
     public bool IsExactlyEmpty(int expectedIndex) =>
-        HasExactShape(expectedIndex) && GameObjectId == 0;
+        HasExactShape(expectedIndex) &&
+        GuardianTeamCommunicationRules.IsEmptyMarkerGameObjectId(GameObjectId);
 }
 
 public readonly record struct GuardianTeamCommunicationMarkerOwnership(
@@ -239,8 +240,12 @@ public static class GuardianTeamCommunicationRules
 {
     public const int Bind1MarkerIndex = 5;
     public const int Bind2MarkerIndex = 6;
+    public const ulong InvalidMarkerGameObjectId = 0xE0000000UL;
     public const long ActiveLifetimeMilliseconds = 9_000;
     public const long CommandConfirmationTimeoutMilliseconds = 1_500;
+
+    public static bool IsEmptyMarkerGameObjectId(ulong gameObjectId) =>
+        gameObjectId is 0 or InvalidMarkerGameObjectId;
 
     public static GuardianTeamCommunicationDecision Observe(
         GuardianTeamCommunicationState state,
@@ -584,7 +589,7 @@ public static class GuardianTeamCommunicationRules
                 GuardianTeamCommunicationDecisionReason.Bind2Confirmed);
         }
 
-        if (observation.Bind2.GameObjectId != 0)
+        if (!observation.Bind2.IsExactlyEmpty(Bind2MarkerIndex))
             return CancelWithoutOwnership(state, GuardianTeamCommunicationDecisionReason.ExternalMarkerDrift);
         if (observation.NowMilliseconds >= state.PendingCommandExpiresAtMilliseconds)
             return CancelWithoutOwnership(state, GuardianTeamCommunicationDecisionReason.MarkerConfirmationTimeout);
@@ -692,13 +697,13 @@ public static class GuardianTeamCommunicationRules
                     : GuardianTeamCommunicationDecisionReason.PartialPairFailure);
         }
 
-        if (observation.Bind1.GameObjectId != 0 ||
+        if (!observation.Bind1.IsExactlyEmpty(Bind1MarkerIndex) ||
             observation.NowMilliseconds >= state.PendingCommandExpiresAtMilliseconds)
         {
             return HoldOrObserveCleanup(
                 StartCleanupOrIdle(state),
                 observation,
-                observation.Bind1.GameObjectId != 0
+                !observation.Bind1.IsExactlyEmpty(Bind1MarkerIndex)
                     ? GuardianTeamCommunicationDecisionReason.ExternalMarkerDrift
                     : GuardianTeamCommunicationDecisionReason.MarkerConfirmationTimeout);
         }

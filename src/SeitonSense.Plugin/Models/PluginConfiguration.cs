@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 21;
+    public int Version { get; set; } = 22;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -90,6 +90,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float ResourceAuraPulseSpeed { get; set; } = 0.75f;
     public bool ExperimentalAllyRescueOnNextKey { get; set; }
     public bool AllyRescueOnHeldGameplayKey { get; set; }
+    public bool EnableBardWardensPaeanPressureRedirect { get; set; }
     public bool ExperimentalMiracleInterceptOnHeldKey { get; set; }
     public bool MiracleInterceptMchLimitBreak { get; set; } = true;
     public bool MiracleInterceptSamZantetsuken { get; set; } = true;
@@ -187,7 +188,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 21)
+        if (Version >= 22)
         {
             if (repaired) Save();
             return;
@@ -388,7 +389,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableScholarCriticalStrategyOnHeldKey = false;
         }
 
-        Version = 21;
+        if (Version < 22)
+        {
+            // This helper can redirect an already incoming friendly action call,
+            // so new and upgrading installations must opt in explicitly.
+            EnableBardWardensPaeanPressureRedirect = false;
+        }
+
+        Version = 22;
         ClampSettings();
         Save();
     }
@@ -397,7 +405,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 21;
+        Version = 22;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -452,6 +460,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ResourceAuraPulseSpeed = 0.75f;
         ExperimentalAllyRescueOnNextKey = false;
         AllyRescueOnHeldGameplayKey = false;
+        EnableBardWardensPaeanPressureRedirect = false;
         ExperimentalMiracleInterceptOnHeldKey = false;
         MiracleInterceptMchLimitBreak = true;
         MiracleInterceptSamZantetsuken = true;

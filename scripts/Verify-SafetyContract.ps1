@@ -70,12 +70,16 @@ $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRu
 $miracleCleanseFollowupRulesPath = Join-Path $coreRoot 'MiracleCleanseFollowupRules.cs'
 $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
 $ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
+$ninjaSeitonDispatchSelfTestsPath = Join-Path $coreSelfTestRoot 'NinjaSeitonDispatchSelfTests.cs'
 $isolationWarningRulesPath = Join-Path $coreRoot 'IsolationWarningRules.cs'
 $autoEnemyFocusMarkRulesPath = Join-Path $coreRoot 'AutoEnemyFocusMarkRules.cs'
 $guardianTeamCommunicationRulesPath = Join-Path $coreRoot 'GuardianTeamCommunicationRules.cs'
 $guardianTeamCommunicationSelfTestsPath = Join-Path $coreSelfTestRoot 'GuardianTeamCommunicationSelfTests.cs'
 $scholarCriticalStrategyRulesPath = Join-Path $coreRoot 'ScholarCriticalStrategyRules.cs'
 $scholarCriticalStrategySelfTestsPath = Join-Path $coreSelfTestRoot 'ScholarCriticalStrategySelfTests.cs'
+$smartWardensPaeanRulesPath = Join-Path $coreRoot 'SmartWardensPaeanTargetRules.cs'
+$smartWardensPaeanServicePath = Join-Path $pluginServicesRoot 'SmartWardensPaeanService.cs'
+$smartWardensPaeanSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartWardensPaeanTargetSelfTests.cs'
 $nearAssistPath = Join-Path $pluginServicesRoot 'NearAssistRedirector.cs'
 $partySlotResolverPath = Join-Path $pluginServicesRoot 'PartySlotResolver.cs'
 $machinistLimitBreakCapturePath = Join-Path $pluginServicesRoot 'MachinistLimitBreakCapture.cs'
@@ -102,6 +106,7 @@ $allowedUnsafe = @(
     $defensiveUtilityProbePath,
     $ninjaSeitonProbePath,
     $scholarCriticalStrategyProbePath,
+    $smartWardensPaeanServicePath,
     $isolationAwarenessPath,
     $autoEnemyFocusMarkPath,
     $reviewedPvpCommandDispatcherPath,
@@ -335,6 +340,9 @@ Assert-Literals $guardianTeamCommunicationRules @(
     'public bool ShouldIssueCommand =>',
     'public const int Bind1MarkerIndex = 5;',
     'public const int Bind2MarkerIndex = 6;',
+    'public const ulong InvalidMarkerGameObjectId = 0xE0000000UL;',
+    'public static bool IsEmptyMarkerGameObjectId(ulong gameObjectId) =>',
+    'gameObjectId is 0 or InvalidMarkerGameObjectId;',
     'public const long ActiveLifetimeMilliseconds = 9_000;',
     'public const long CommandConfirmationTimeoutMilliseconds = 1_500;',
     'var consumed = ToIdle(episode.Token);',
@@ -373,6 +381,9 @@ if ($pendingBind2ConfirmationIndex -lt 0 -or
     $cleanupBind1Index -le $cleanupBind2Index -or
     $normalizedGuardianTeamCommunicationRules -notmatch 'if \(outcome == GuardianTeamCommunicationCommandOutcome\.DeferredBeforeInvocation && command\.Kind != GuardianTeamCommunicationCommandKind\.SendQuickChat\).*?Phase = ReadyPhaseFor\(command\.Kind\).*?PendingCommand = null' -or
     $normalizedGuardianTeamCommunicationRules -notmatch 'GuardianTeamCommunicationCommandKind\.SendQuickChat => AdvanceAfterQuickChat\(state\).*?GuardianTeamCommunicationCommandKind\.SetBind2 => outcome == GuardianTeamCommunicationCommandOutcome\.Invoked.*?AwaitingBind2Confirmation.*?: ToIdle\(state\.LastConsumedEpisodeToken\).*?GuardianTeamCommunicationCommandKind\.SetBind1 => outcome == GuardianTeamCommunicationCommandOutcome\.Invoked.*?AwaitingBind1Confirmation.*?: StartCleanupOrIdle' -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'public bool HasExactShape\(int expectedIndex\) => Available && MarkerIndex == expectedIndex && MarkerTime >= 0; public bool IsExactlyEmpty\(int expectedIndex\) => HasExactShape\(expectedIndex\) && GuardianTeamCommunicationRules\.IsEmptyMarkerGameObjectId\(GameObjectId\);' -or
+    $normalizedGuardianTeamCommunicationRules -notmatch 'public static bool IsEmptyMarkerGameObjectId\(ulong gameObjectId\) => gameObjectId is 0 or InvalidMarkerGameObjectId;' -or
+    [regex]::Matches($guardianTeamCommunicationRules, '\bIsEmptyMarkerGameObjectId\s*\(').Count -ne 2 -or
     $normalizedGuardianTeamCommunicationRules -notmatch 'observation\.Bind1\.IsExactlyEmpty\(Bind1MarkerIndex\) && observation\.Bind2\.IsExactlyEmpty\(Bind2MarkerIndex\).*?observation\.Bind1\.MarkerTime == state\.Bind1MarkerTimeBeforeSet && observation\.Bind2\.MarkerTime == state\.Bind2MarkerTimeBeforeSet' -or
     $normalizedGuardianTeamCommunicationRules -notmatch 'if \(!observation\.TextInputStateKnown \|\| observation\.TextInputActive\).*?StartCleanupOrIdle\(state\).*?GuardianTeamCommunicationDecisionKind\.Waiting' -or
     $guardianTeamCommunicationRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
@@ -383,6 +394,7 @@ $guardianSelfTestMethods = @(
     'AcceptedEpisodeQuickChatIsOneShot',
     'InitialFailuresConsumeWithoutCommands',
     'OccupiedOrUnknownMarkersStayQuickChatOnly',
+    'InvalidNativeMarkerSentinelIsExactlyEmpty',
     'MarkerPairIsSequentialAndExactlyConfirmed',
     'SetConfirmationRequiresActorAndChangedTime',
     'PartialBind1FailureCleansOnlyOwnedBind2',
@@ -397,9 +409,22 @@ foreach ($method in $guardianSelfTestMethods) {
     Assert-Literals $guardianTeamCommunicationSelfTests @("internal static void $method()") "Guardian communication self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("GuardianTeamCommunicationSelfTests.$method") "Guardian communication test registration $method"
 }
-if ([regex]::Matches($guardianTeamCommunicationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 12 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bGuardianTeamCommunicationSelfTests\.\w+').Count -ne 12) {
-    throw 'All twelve Guardian communication lifecycle and fail-closed self-tests must remain registered exactly once.'
+Assert-Literals $guardianTeamCommunicationSelfTests @(
+    'var emptySentinel = GuardianTeamCommunicationRules.InvalidMarkerGameObjectId;',
+    'bind1GameObjectId: emptySentinel',
+    'bind2GameObjectId: emptySentinel',
+    'GuardianTeamCommunicationCommandKind.SendQuickChat',
+    '"sentinel-empty Bind2 is set first"',
+    'GuardianTeamCommunicationPhase.AwaitingBind2Confirmation',
+    'GuardianTeamCommunicationPhase.ReadyToSetBind1',
+    '"sentinel-empty Bind1 is set second"',
+    'GuardianTeamCommunicationPhase.AwaitingBind1Confirmation',
+    'GuardianTeamCommunicationPhase.ActivePair',
+    'active.State.OwnsBind1 && active.State.OwnsBind2'
+) 'Guardian native-invalid empty sentinel sequence and ownership test'
+if ([regex]::Matches($guardianTeamCommunicationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 13 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bGuardianTeamCommunicationSelfTests\.\w+').Count -ne 13) {
+    throw 'All thirteen Guardian communication lifecycle, native-empty-sentinel, ownership, cleanup, and fail-closed self-tests must remain registered exactly once.'
 }
 
 $defensiveUtilityGuardianSource = Read-RequiredSource $defensiveUtilityProbePath 'Defensive utility Guardian event source'
@@ -1706,6 +1731,184 @@ if (-not $guardianWarningStackMethod.Success -or
     throw 'Guardian popup must remain one visual-only card in DrawPersonalWarnings, use the Guardian icon, and state only GUARDIAN TRIGGERED / P# CLIENT ACCEPTED without a server-landed or protection-success claim.'
 }
 
+# Smart Warden's Paean is a passive target transform for one already incoming
+# action call. Pure Core must preserve vanilla behavior until one exact target
+# is selected; runtime drift after selection suppresses that call without an
+# original-target fallback, alternate, deferred action, replay, or retry.
+$smartWardensPaeanRules = Read-RequiredSource $smartWardensPaeanRulesPath 'Smart Warden''s Paean target rules'
+$normalizedSmartWardensPaeanRules = $smartWardensPaeanRules -replace '\s+', ' '
+$smartWardensPaeanService = Read-RequiredSource $smartWardensPaeanServicePath 'Smart Warden''s Paean runtime service'
+$normalizedSmartWardensPaeanService = $smartWardensPaeanService -replace '\s+', ' '
+$smartWardensPaeanSelfTests = Read-RequiredSource $smartWardensPaeanSelfTestsPath 'Smart Warden''s Paean self-tests'
+$smartPaeanPressureTracker = Read-RequiredSource $targetPressureTrackerPath 'Smart Paean pressure source'
+$normalizedSmartPaeanPressureTracker = $smartPaeanPressureTracker -replace '\s+', ' '
+
+Assert-Literals $smartWardensPaeanRules @(
+    'public readonly record struct SmartWardensPaeanCandidate(',
+    'bool HasWardensPaeanWard,',
+    'bool PressureKnown,',
+    'int UniqueIncomingEnemyCount);',
+    'public readonly record struct SmartWardensPaeanIntent(',
+    'public readonly record struct SmartWardensPaeanObservation(',
+    'bool CompleteExactPartyView,',
+    'Vanilla = 0,',
+    'Redirect = 1,',
+    'public const uint BardJobId = 23;',
+    'public const uint ActionId = 29_400;',
+    'public const uint WardensPaeanWardStatusId = 3_143;',
+    'public const int MinimumIncomingEnemyCount = 3;',
+    'public const int RequiredCrystallineConflictPartySize = 5;',
+    'public const int FirstPartySlot = 1;',
+    'public const int LastPartySlot = 8;',
+    'new HashSet<int>()',
+    'new HashSet<ulong>()',
+    'new HashSet<uint>()',
+    '!occupiedSlots.Add(candidate.PartySlot)',
+    '!occupiedGameObjectIds.Add(candidate.Actor.GameObjectId)',
+    '!occupiedEntityIds.Add(candidate.Actor.EntityId)',
+    'return localEntries == 1;',
+    '!candidate.HasWardensPaeanWard',
+    'candidate.PressureKnown',
+    'candidate.UniqueIncomingEnemyCount >= MinimumIncomingEnemyCount',
+    'right.UniqueIncomingEnemyCount.CompareTo(',
+    'left.UniqueIncomingEnemyCount);',
+    'left.PartySlot.CompareTo(right.PartySlot)',
+    'left.Actor.EntityId.CompareTo(right.Actor.EntityId)',
+    'left.Actor.GameObjectId.CompareTo(right.Actor.GameObjectId)',
+    'currentCandidate.PartySlot == intent.PartySlot',
+    'currentCandidate.Actor == intent.Target',
+    'IsEligibleCandidate(currentCandidate, currentLocalPlayer)'
+) 'Pure Smart Warden''s Paean exact-pressure target policy'
+if ($normalizedSmartWardensPaeanRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(observation\.LocalJobId != BardJobId\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ResolvedActionId != ActionId\).*?ResolvedActionInvalid' -or
+    $normalizedSmartWardensPaeanRules -notmatch 'candidates\.Count != RequiredCrystallineConflictPartySize.*?candidate\.PartySlot is < FirstPartySlot or > LastPartySlot.*?!candidate\.ExactPartyIdentity.*?!candidate\.Actor\.IsValid.*?candidate\.IsSelf != isExactLocal.*?!occupiedSlots\.Add\(candidate\.PartySlot\).*?!occupiedGameObjectIds\.Add\(candidate\.Actor\.GameObjectId\).*?!occupiedEntityIds\.Add\(candidate\.Actor\.EntityId\).*?return localEntries == 1;' -or
+    $normalizedSmartWardensPaeanRules -notmatch 'candidate\.Actor != localPlayer.*?!candidate\.IsSelf.*?candidate\.Alive.*?candidate\.Targetable.*?!candidate\.HasWardensPaeanWard.*?candidate\.CurrentHp > 0.*?candidate\.MaximumHp > 0.*?candidate\.CurrentHp <= candidate\.MaximumHp.*?candidate\.NativeTargetValid.*?candidate\.NativeRangeAndLineOfSight.*?candidate\.PressureKnown.*?candidate\.UniqueIncomingEnemyCount >= MinimumIncomingEnemyCount') {
+    throw 'Smart Paean Core must require default-off exact CC/BRD/action metadata, one complete unique exact five-member party view, a non-self live target without ward 3143, native reachability, and known pressure of at least three.'
+}
+if ($normalizedSmartWardensPaeanRules -notmatch 'var pressure = right\.UniqueIncomingEnemyCount\.CompareTo\( left\.UniqueIncomingEnemyCount\); if \(pressure != 0\) return pressure; var health = \(\(ulong\)left\.CurrentHp \* right\.MaximumHp\)\.CompareTo\( \(ulong\)right\.CurrentHp \* left\.MaximumHp\); if \(health != 0\) return health; var partySlot = left\.PartySlot\.CompareTo\(right\.PartySlot\); if \(partySlot != 0\) return partySlot; var entityId = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entityId != 0 \? entityId : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
+    $normalizedSmartWardensPaeanRules -notmatch 'var selectedIndex = SelectBestCandidateIndex\( observation\.Candidates, observation\.LocalPlayer\); if \(selectedIndex < 0\).*?NoKnownPressureTarget.*?var candidate = observation\.Candidates!\[selectedIndex\]; var intent = new SmartWardensPaeanIntent\( observation\.ResolvedActionId, candidate\.PartySlot, observation\.LocalPlayer, candidate\.Actor, candidate\.UniqueIncomingEnemyCount\);') {
+    throw 'Smart Paean must rank pressure descending, exact HP ratio ascending, then P-slot/EID/GOID, and freeze exactly that one selected actor intent.'
+}
+$smartPaeanFinalIntentMethod = [regex]::Match(
+    $normalizedSmartWardensPaeanRules,
+    'public static bool CanUseFrozenIntent\(.*?\) =>(?<Body>.*?); private static SmartWardensPaeanDecisionReason GetGateFailure')
+if (-not $smartPaeanFinalIntentMethod.Success -or
+    $smartPaeanFinalIntentMethod.Groups['Body'].Value -notmatch 'intent\.IsValid.*?configurationEnabled.*?isCrystallineConflict.*?currentLocalJobId == BardJobId.*?currentLocalPlayer == intent\.LocalPlayer.*?isLocalPlayerAlive.*?metadataVerified.*?resolvedActionId == intent\.ActionId.*?currentCandidate\.PartySlot == intent\.PartySlot.*?currentCandidate\.Actor == intent\.Target.*?IsEligibleCandidate\(currentCandidate, currentLocalPlayer\)' -or
+    $smartWardensPaeanRules -match '\b(ActionLocallyReady|OffCooldown|CooldownRemaining|GetRecastTime|UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Smart Paean frozen-intent validation must recheck only the same exact action/local/P-slot/actor eligibility, including live pressure and ward, without a cooldown gate, dispatch, target mutation, scheduling, or retry state.'
+}
+
+$smartPaeanSelfTestMethods = @(
+    'EligibilityRequiresKnownPressureAndNativeReachability',
+    'CompletePartyViewRejectsIdentityAmbiguity',
+    'RankingIsPressureThenExactHpThenStableSlot',
+    'UnknownOrMissingPressurePreservesVanillaCall',
+    'FrozenIntentCannotRerankFallbackOrRetry'
+)
+foreach ($method in $smartPaeanSelfTestMethods) {
+    Assert-Literals $smartWardensPaeanSelfTests @("internal static void $method()") "Smart Paean self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("SmartWardensPaeanTargetSelfTests.$method") "Smart Paean test registration $method"
+}
+Assert-Literals $smartWardensPaeanSelfTests @(
+    'IsWardensPaeanWardStatus(3_143)',
+    'IsWardensPaeanWardStatus(2_178)',
+    'UniqueIncomingEnemyCount = 2',
+    'PressureKnown = false',
+    'HasWardensPaeanWard = true',
+    'NativeRangeAndLineOfSight = false',
+    '"33/100 is exactly lower than 1/3"',
+    'SmartWardensPaeanDecisionKind.Vanilla',
+    '"a now-better alternate cannot replace the frozen actor"',
+    '"pressure became unknown"',
+    '"pressure fell below threshold"',
+    '"PvP ward appeared before dispatch"'
+) 'Smart Paean positive, vanilla, ward, pressure, ranking, and frozen-intent tests'
+if ([regex]::Matches($smartWardensPaeanSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 5 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartWardensPaeanTargetSelfTests\.\w+').Count -ne 5) {
+    throw 'All five Smart Paean eligibility, exact-party, ranking, vanilla, and frozen-intent self-tests must remain registered exactly once.'
+}
+
+Assert-Literals $smartWardensPaeanService @(
+    'internal sealed unsafe class SmartWardensPaeanService',
+    'internal const uint WardensPaeanIconId = 9_628;',
+    'internal const uint WardensPaeanWardIconId = 212_611;',
+    'private const ushort ExpectedRecast100ms = 240;',
+    'private const int ExpectedRange = 30;',
+    'ResolveActionId(actionManager, actionType, rawActionId)',
+    'SmartWardensPaeanTargetRules.ActionId',
+    'SmartWardensPaeanTargetRules.WardensPaeanWardStatusId',
+    'configuration.EnableBardWardensPaeanPressureRedirect',
+    'ResolveContext() == SupportedPvPContext.CrystallineConflict',
+    'localJobId == SmartWardensPaeanTargetRules.BardJobId',
+    'CaptureExactParty(localPlayer!)',
+    'pressureTracker.TryCaptureIncomingAllyPressure(',
+    'PartySlotResolver.Resolve(objectTable, intent.PartySlot)',
+    'SmartWardensPaeanTargetRules.CanUseFrozenIntent(',
+    'redirectCommitted = true;',
+    '? RecordSuppressed(',
+    ': RecordVanilla(',
+    'HasLiveGuard(currentLocal)',
+    'HasLiveWardensPaeanWard(target)',
+    'ActionManager.GetActionInRangeOrLoS(',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult)',
+    'status.RemainingTime > 0f',
+    'Client accepted redirected Paean',
+    'Client rejected redirected Paean'
+) 'Passive exact Smart Paean runtime and truthful client-return diagnostics'
+$smartPaeanEvaluateMethod = [regex]::Match(
+    $normalizedSmartWardensPaeanService,
+    'internal SmartWardensPaeanInterceptResult Evaluate\(.*?\) \{(?<Body>.*?)\} internal void RecordNativeResult')
+$smartPaeanCaptureMethod = [regex]::Match(
+    $normalizedSmartWardensPaeanService,
+    'private ExactPartyCapture CaptureExactParty\(.*?\) \{(?<Body>.*?)\} private bool PartySlotsRemainExact')
+$smartPaeanBuildCandidateMethod = [regex]::Match(
+    $normalizedSmartWardensPaeanService,
+    'private RuntimeCandidate BuildCandidate\(.*?\) \{(?<Body>.*?)\} private HashSet<uint>\? CaptureExactPartyEntityIds')
+$smartPaeanEvaluateBody = $smartPaeanEvaluateMethod.Groups['Body'].Value
+$smartPaeanCaptureBody = $smartPaeanCaptureMethod.Groups['Body'].Value
+$smartPaeanBuildCandidateBody = $smartPaeanBuildCandidateMethod.Groups['Body'].Value
+if (-not $smartPaeanEvaluateMethod.Success -or
+    -not $smartPaeanCaptureMethod.Success -or
+    -not $smartPaeanBuildCandidateMethod.Success -or
+    $smartPaeanEvaluateBody -notmatch 'if \(resolvedActionId != SmartWardensPaeanTargetRules\.ActionId\).*?Vanilla.*?if \(!IsRecognizedInvocation\(actionType, mode\)\).*?RecordVanilla.*?if \(localGuardActiveOrPropagating\).*?RecordVanilla' -or
+    $smartPaeanEvaluateBody -notmatch 'var decision = SmartWardensPaeanTargetRules\.Observe\(.*?if \(!decision\.ShouldRedirect.*?RecordVanilla.*?redirectCommitted = true;.*?currentTarget = PartySlotResolver\.Resolve\(objectTable, intent\.PartySlot\).*?currentTargetIdentity != intent\.Target.*?RecordSuppressed.*?CanUseFrozenIntent\(.*?RecordSuppressed.*?RecordRedirect\(' -or
+    $smartPaeanEvaluateBody -notmatch 'catch \(Exception exception\).*?return redirectCommitted \? RecordSuppressed\(.*?: RecordVanilla\(') {
+    throw 'Smart Paean must keep every preselection failure vanilla, commit one frozen target only after Core redirect selection, then suppress every exact-final-preflight failure or exception without fallback.'
+}
+if ($smartPaeanCaptureBody -notmatch 'var partyBefore = CaptureExactPartyEntityIds\(\).*?pressureTracker\.TryCaptureIncomingAllyPressure\( out var pressureCounts\).*?for \(var slot = SmartWardensPaeanTargetRules\.FirstPartySlot; slot <= SmartWardensPaeanTargetRules\.LastPartySlot; slot\+\+\).*?BuildCandidate\( localPlayer, player!, slot, pressureViewActive, pressureCounts\).*?var partyAfter = CaptureExactPartyEntityIds\(\).*?partyBefore\.SetEquals\(partyAfter\).*?members\.Count == SmartWardensPaeanTargetRules\.RequiredCrystallineConflictPartySize.*?SetEquals\(partyBefore\).*?Distinct\(\)\.Count\(\) == members\.Count.*?PartySlotsRemainExact\(members\)' -or
+    $smartPaeanBuildCandidateBody -notmatch 'GetNativeObject\(localPlayer\).*?GetNativeObject\(target\).*?ActionManager\.GetActionInRangeOrLoS\( SmartWardensPaeanTargetRules\.ActionId, sourceObject, targetObject\).*?pressureViewActive && pressureCounts\.TryGetValue\( targetIdentity, out incomingEnemyCount\) && incomingEnemyCount >= 0.*?HasLiveWardensPaeanWard\(target\).*?SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\).*?pressureKnown, incomingEnemyCount') {
+    throw 'Smart Paean selection must capture one immutable pressure view for one stable complete five-member P1-P8 party set and build every candidate from exact IDs/address, live ward, native 30y/LoS, and non-negative pressure in that same view.'
+}
+if ($normalizedSmartWardensPaeanService -notmatch 'private bool PartySlotsRemainExact\(.*?PartySlotResolver\.Resolve\( objectTable, member\.Candidate\.PartySlot\).*?stableIdentity != member\.Candidate\.Actor.*?stablePlayer!\.Address != member\.Address.*?return false;' -or
+    $normalizedSmartWardensPaeanService -notmatch 'private HashSet<uint>\? CaptureExactPartyEntityIds\(\).*?ids\.Length != SmartWardensPaeanTargetRules\.RequiredCrystallineConflictPartySize.*?ids\.Any\(static entityId => !IsNetworkEntityId\(entityId\)\).*?unique\.Count == ids\.Length \? unique : null' -or
+    $normalizedSmartWardensPaeanService -notmatch 'private bool TryGetExactIdentity\(.*?player\.Address == nint\.Zero.*?!IsNetworkObjectId\(player\.GameObjectId\).*?!IsNetworkEntityId\(player\.EntityId\).*?native->EntityId != player\.EntityId.*?tablePlayer\.Address != player\.Address.*?tablePlayer\.GameObjectId != player\.GameObjectId.*?tablePlayer\.EntityId != player\.EntityId') {
+    throw 'Smart Paean exact-party capture must reject incomplete, duplicate, changed, or object-table/native identity mismatches before a redirect can be committed.'
+}
+if ($normalizedSmartWardensPaeanService -notmatch 'action\.Name\.ToString\(\), "The Warden''s Paean".*?action\.Icon == WardensPaeanIconId.*?action\.IsPvP.*?action\.IsPlayerAction.*?action\.ClassJob\.RowId == SmartWardensPaeanTargetRules\.BardJobId.*?action\.Range == ExpectedRange.*?action\.EffectRange == 0.*?action\.Cast100ms == 0.*?action\.Recast100ms == ExpectedRecast100ms.*?action\.CanTargetSelf.*?action\.CanTargetParty.*?!action\.CanTargetAlly.*?!action\.CanTargetAlliance.*?!action\.CanTargetHostile.*?!action\.TargetArea.*?action\.RequiresLineOfSight.*?actionDescription\.Contains\("Removes".*?actionDescription\.Contains\("Purify".*?actionDescription\.Contains\("barrier"' -or
+    $normalizedSmartWardensPaeanService -notmatch 'ward\.Name\.ToString\(\), "The Warden''s Paean".*?ward\.Icon == WardensPaeanWardIconId.*?ward\.StatusCategory == 1.*?wardDescription\.Contains\("Purify"' -or
+    $normalizedSmartWardensPaeanService -notmatch 'SmartWardensPaeanTargetRules\.IsWardensPaeanWardStatus\(status\.StatusId\).*?float\.IsFinite\(status\.RemainingTime\).*?status\.RemainingTime > 0f') {
+    throw 'Smart Paean metadata must fail closed on exact PvP BRD action 29400 (icon 9628, 30y, LoS, target flags and description) and exact live ward status 3143 (icon 212611/category/description).'
+}
+if ($normalizedSmartWardensPaeanService -notmatch 'private static bool IsRecognizedInvocation\(.*?actionType is ActionType\.Action or ActionType\.PvPAction.*?mode is ActionManager\.UseActionMode\.None or ActionManager\.UseActionMode\.Macro or ActionManager\.UseActionMode\.Queue.*?\(uint\)mode == 100' -or
+    ($smartWardensPaeanRules + $smartWardensPaeanService + $smartWardensPaeanSelfTests) -match '\b(ActionLocallyReady|OffCooldown|CooldownRemaining|GetRecastTimeElapsed|GetRecastTimeRemaining)\b' -or
+    $smartWardensPaeanService -match '(?:->|\.)UseAction\s*\(|\b(Hook<|HookFromAddress|ITargetManager|TargetManager|SetTarget|UseActionLocation|ExecuteAction|SendAction|ActionQueued|QueuedAction|QueueAction|RetryAction|RetryDispatch|PendingDispatch|BufferedDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Smart Paean must review normal/PvP manual, macro, queue, and Turbo-mode incoming calls without any cooldown gate, hook, action initiation, target mutation, buffer, alternate, or retry of its own.'
+}
+if ($normalizedSmartPaeanPressureTracker -notmatch 'internal bool TryCaptureIncomingAllyPressure\( out IReadOnlyDictionary<TargetPressureActorIdentity, int> counts\) \{ var current = Volatile\.Read\(ref incomingAllyPressure\); counts = current\.Counts; return current\.Active; \}' -or
+    $normalizedSmartPaeanPressureTracker -notmatch 'incomingAllyPressureEnabledForContext = supportedContext == SupportedPvPContext\.CrystallineConflict &&.*?configuration\.EnableBardWardensPaeanPressureRedirect' -or
+    $normalizedSmartPaeanPressureTracker -notmatch 'new IncomingAllyPressureRuntimeState\( pressureStateTrackingEnabled, core\.IncomingAllyPressure\.ToDictionary\( static pressure => pressure\.Ally, static pressure => pressure\.UniqueEnemyCount\)\); Interlocked\.Exchange\(ref incomingAllyPressure, publishedIncomingAllyPressure\);') {
+    throw 'Smart Paean pressure must activate independently in exact CC and expose one atomically published immutable exact-identity/count view per selection or frozen-target revalidation.'
+}
+
+$smartPaeanTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bSmartWardensPaeanService\b')
+$unexpectedSmartPaeanReferences = @($smartPaeanTypeReferences | Where-Object {
+    $_.Path -notin @($pluginPath, $nearAssistPath, $smartWardensPaeanServicePath)
+})
+if ($unexpectedSmartPaeanReferences.Count -gt 0 -or
+    [regex]::Matches($pluginSource, '\bnew\s+SmartWardensPaeanService\s*\(').Count -ne 1) {
+    $locations = $unexpectedSmartPaeanReferences | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Smart Paean may be constructed once and consulted only by the existing shared action detour: $($locations -join ', ')"
+}
+
 # The NIN Seiton helper is a separate default-off fresh-edge action boundary.
 # Pure rules select exactly one canonical CC enemy by exact HP ratio; runtime
 # consumes the shared generation before revalidating only that frozen intent.
@@ -1763,6 +1966,11 @@ Assert-Literals $ninjaSeiton @(
     'NinjaSeitonDispatchProbeSnapshot(',
     'UseActionAttempted',
     'UseActionAccepted',
+    'RevalidatedCurrentHp',
+    'RevalidatedMaximumHp',
+    'BoundaryThresholdRevalidated',
+    'ThresholdDriftCancelled',
+    'ThresholdDriftCancellationCount',
     'CandidateCount',
     'CandidateResolution',
     'executeTracker.Diagnostics',
@@ -1792,7 +2000,12 @@ Assert-Literals $ninjaSeiton @(
     'inputFrame.Consume()',
     'ResolveFrozenIntent(localPlayer!, intent, finalResolvedActionId)',
     'NinjaSeitonDispatchRules.CanUseExactIntent(',
-    'TryUseSeitonOnce(localPlayer!, intent, out attempted)',
+    'accepted = TryUseSeitonOnce(',
+    'ReadFrozenThresholdAtUseActionBoundary(',
+    'BoundaryThresholdResult.AtOrAboveHalf',
+    'thresholdResult != BoundaryThresholdResult.BelowHalf',
+    'thresholdRevalidatedAtBoundary = true;',
+    'attemptedAtBoundary = true;',
     'nearAssist.RunWithoutRedirect',
     'ActionType.Action',
     'ActionManager.UseActionMode.None',
@@ -1822,7 +2035,7 @@ if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(o
 $ninjaConsume = [regex]::Match($ninjaSeiton, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
 $ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(localPlayer!, intent, finalResolvedActionId\)')
 $ninjaIntentRevalidation = [regex]::Match($ninjaSeiton, 'NinjaSeitonDispatchRules\.CanUseExactIntent\s*\(')
-$ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\(localPlayer!, intent, out attempted\)')
+$ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\s*\(\s*localPlayer!,\s*intent,\s*out attempted,')
 $ninjaNativeCall = [regex]::Match($ninjaSeiton, 'actionManager->UseAction\s*\(')
 if (-not $ninjaConsume.Success -or -not $ninjaFrozenResolve.Success -or
     -not $ninjaIntentRevalidation.Success -or -not $ninjaTryUse.Success -or -not $ninjaNativeCall.Success -or
@@ -1843,6 +2056,32 @@ if ($normalizedNinjaSeiton -notmatch 'BuildExactSlotCandidate\( localPlayer, act
     $normalizedNinjaSeiton -notmatch 'actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
     throw 'NIN Seiton final validation and UseAction must retain the one frozen slot, exact actor, and exact adjusted action with no fallback.'
 }
+$ninjaTryUseMethod = [regex]::Match(
+    $normalizedNinjaSeiton,
+    'private unsafe bool TryUseSeitonOnce\(.*?\) \{(?<Body>.*?)\} private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary')
+$ninjaBoundaryThresholdMethod = [regex]::Match(
+    $normalizedNinjaSeiton,
+    'private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary\(.*?\) \{(?<Body>.*?)\} private static bool IsValidAtOrAboveHalf')
+$ninjaTryUseBody = $ninjaTryUseMethod.Groups['Body'].Value
+$ninjaBoundaryThresholdBody = $ninjaBoundaryThresholdMethod.Groups['Body'].Value
+if (-not $ninjaTryUseMethod.Success -or
+    -not $ninjaBoundaryThresholdMethod.Success -or
+    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp\).*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; attemptedAtBoundary = true; return actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
+    $ninjaTryUseBody -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(|\bexecuteTracker\.Enemies\b') {
+    throw 'At the NIN UseAction boundary, the internal bypass must revalidate only the same frozen action/S-slot/GOID/EID, then perform the latest strict sub-50 HP read immediately before its sole native request with no rerank or alternate.'
+}
+if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
+    [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.CurrentHp\b').Count -ne 1 -or
+    [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.MaxHp\b').Count -ne 1) {
+    throw 'The final NIN threshold read must resolve only the frozen S-slot and exact GOID/EID/address, read that actor HP once, reject invalid/dead/untargetable state, and treat exactly 50 percent or higher as terminal cancellation.'
+}
+$ninjaSeitonSelfTests = Read-RequiredSource $ninjaSeitonDispatchSelfTestsPath 'NIN Seiton dispatch self-tests'
+Assert-Literals $ninjaSeitonSelfTests @(
+    'alternate with { CurrentHp = 50, MaximumHp = 100 }',
+    '"healing to exactly half cancels the frozen intent"',
+    'alternate with { CurrentHp = 51, MaximumHp = 100 }',
+    '"healing above half cancels the frozen intent"'
+) 'NIN exact-50 and above-50 frozen-target cancellation tests'
 if ($ninjaSeiton -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
     $ninjaSeiton -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|HeldGameplayKeyEligible|PendingDispatch|BufferedDispatch)\b' -or
     $ninjaSeiton -match '(?:->|\.)Original\s*\(') {
@@ -1853,6 +2092,10 @@ Assert-Literals $pluginSource @(
     '[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}',
     'ready={ninja.LocallyReady},action={ninja.ResolvedActionId}',
     'candidates={ninja.CandidateCount},S={ninja.EnemySlot}',
+    'hp={ninja.RevalidatedCurrentHp}/{ninja.RevalidatedMaximumHp}',
+    'boundary<50={ninja.BoundaryThresholdRevalidated}',
+    'threshold-cancel={ninja.ThresholdDriftCancelled}/',
+    '{ninja.ThresholdDriftCancellationCount}',
     'fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}',
     'attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}',
     'count={ninja.AttemptCount}/{ninja.AcceptedCount}',
@@ -1959,8 +2202,8 @@ if (-not $monkObserve.Success -or $monkObserve.Index -lt $ninjaSeitonObserve.Ind
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
-if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
-    throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate for the explicitly enabled Near Help pressure preference.'
+if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| configuration\.EnableBardWardensPaeanPressureRedirect \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
+    throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate independently for Smart Paean or the explicitly enabled Near Help pressure preference.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableScholarCriticalStrategyOnHeldKey \|\| configuration\.EnableAutoEnemyFocusMark') {
     throw 'Pressure tracking must remain independently active for defensive, post-Purify team-focus, SCH ranking, and automatic Attack-1 utility consumers.'
@@ -2118,6 +2361,13 @@ Assert-Literals $nearAssist @(
     'GetActionInRangeOrLoS',
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
     'SupportedPvPContext.CrystallineConflict',
+    'SmartWardensPaeanInterceptResult.Vanilla(',
+    'smartWardensPaean.Evaluate(',
+    'IsLocalGuardActiveOrPropagating()',
+    'smartPaeanResult.ShouldSuppress',
+    'smartPaeanResult.ShouldRedirect',
+    'smartPaeanResult.ForwardTargetId',
+    'smartWardensPaean.RecordNativeResult(smartPaeanResult, clientAccepted)',
     'TokenLifetimeMilliseconds = 750',
     'NearAssistCarrierRules.IsFallbackCarrier',
     'IsEligibleRedirectAction',
@@ -2155,6 +2405,10 @@ if ($nearAssist -match '(?:->|\.)UseAction\s*\(' -or
 }
 if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*forwardedTargetId\s*,\s*extraParam\s*,\s*mode\s*,\s*comboRouteId\s*,\s*outOptAreaTargeted\s*\)') {
     throw 'Near Assist Original must preserve every native action argument except the bounded forwardedTargetId.'
+}
+if ([regex]::Matches($nearAssist, '\bsmartWardensPaean\.Evaluate\s*\(').Count -ne 1 -or
+    [regex]::Matches($nearAssist, '\bsmartWardensPaean\.RecordNativeResult\s*\(').Count -ne 1) {
+    throw 'The existing shared UseAction hook must contain exactly one Smart Paean evaluation branch and one post-Original client-return recorder.'
 }
 
 # The optional CC-immunity brake is a final-target filter inside the already
@@ -2196,16 +2450,38 @@ $useActionDetour = $useActionDetourMatch.Value
 $normalizedUseActionDetour = $useActionDetour -replace '\s+', ' '
 $guardAttemptObserverMatch = [regex]::Match(
     $nearAssist,
-    '(?s)private void ObserveExactLocalGuardActivationAttempt\(.*?\r?\n    \}\r?\n\r?\n    private ulong TryResolveRedirect')
+    '(?s)private void ObserveExactLocalGuardActivationAttempt\(.*?\r?\n    \}\r?\n\r?\n    private bool IsLocalGuardActiveOrPropagating')
+$guardStateObserverMatch = [regex]::Match(
+    $nearAssist,
+    '(?s)private bool IsLocalGuardActiveOrPropagating\(.*?\r?\n    \}\r?\n\r?\n    private ulong TryResolveRedirect')
 if (-not $guardAttemptObserverMatch.Success) {
     throw 'The exact local Guard-attempt observer could not be isolated for safety review.'
 }
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
-if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); return useActionHook!\.Original\(' -or
+if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); return clientAccepted;' -or
     $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64\); lock \(guardAttemptGate\) latestLocalGuardActionAttempt = attempt;' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
+}
+if (-not $guardStateObserverMatch.Success -or
+    ($guardStateObserverMatch.Value -replace '\s+', ' ') -notmatch 'var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\)\) return false; if \(DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return true; return TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out _\);.*?catch.*?return true;') {
+    throw 'Smart Paean own-Guard suppression must use exact live Guard or the bounded same-identity/territory propagation latch and fail closed on an uncertain Guard view.'
+}
+$nearAssistBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleToken(')
+$nearHelpBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleHelpToken(')
+$farHelpBranchIndex = $normalizedUseActionDetour.IndexOf('TryConsumeEligibleFarHelpToken(')
+$smartPaeanBranchIndex = $normalizedUseActionDetour.IndexOf('smartWardensPaean.Evaluate(')
+$smartPaeanSuppressIndex = $normalizedUseActionDetour.IndexOf('if (smartPaeanResult.ShouldSuppress) return false;')
+$smartPaeanRedirectIndex = $normalizedUseActionDetour.IndexOf('if (smartPaeanResult.ShouldRedirect)', [Math]::Max(0, $smartPaeanSuppressIndex))
+if ($nearAssistBranchIndex -lt 0 -or
+    $nearHelpBranchIndex -le $nearAssistBranchIndex -or
+    $farHelpBranchIndex -le $nearHelpBranchIndex -or
+    $smartPaeanBranchIndex -le $farHelpBranchIndex -or
+    $smartPaeanSuppressIndex -le $smartPaeanBranchIndex -or
+    $smartPaeanRedirectIndex -le $smartPaeanSuppressIndex -or
+    $normalizedUseActionDetour -notmatch 'if \(!bypassRedirect && !helperTokenConsumed && !targetSuppressedByRedirect && forwardedTargetId == targetId\) \{ smartPaeanResult = smartWardensPaean\.Evaluate\( thisPtr, actionType, actionId, targetId, mode, IsLocalGuardActiveOrPropagating\(\)\); if \(smartPaeanResult\.ShouldSuppress\) return false; if \(smartPaeanResult\.ShouldRedirect\) forwardedTargetId = smartPaeanResult\.ForwardTargetId; \}') {
+    throw 'Smart Paean must run once only after Near Assist, Near Help, and Far Help decline ownership; internal bypass, consumed/suppressed carriers, changed targets, and own Guard must prevent its passive redirect.'
 }
 if ($guardAttemptObserver -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Original|Replay|Retry|Dispatch|Queue)\b|\bforwardedTargetId\b|\btargetId\b|\breturn\s+false\b|(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'Guard propagation observation must remain read-only: it may not suppress, replay, dispatch, queue, or retarget the incoming action.'
@@ -2479,11 +2755,11 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 4) {
-    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression plus the Near Assist, Near Help, and Far Help branches without consuming any macro token.'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 5) {
+    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression plus Near Assist, Near Help, Far Help, and passive Smart Paean without consuming any macro token or transforming the plugin-owned action.'
 }
 if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
-    throw 'The redirect bypass may guard only the four redirect branches; it must never wrap or skip the unconditional final CC brake.'
+    throw 'The redirect bypass may guard only the five reviewed redirect/transform branches; it must never wrap or skip the unconditional final CC brake.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 $normalizedNearHelpSelection = $nearHelpSelection -replace '\s+', ' '
@@ -3324,7 +3600,22 @@ Assert-Literals $settingsWindow @(
     'the lowest exact HP ratio wins, then stable slot/actor identity',
     'State and input are consumed before at most one native attempt.',
     'selects again, chooses an alternate, falls back, replays, or retries',
+    'read again at the latest safe point before the request; exactly 50% or higher cancels the spent attempt.',
     'A client-accepted return is dispatch feedback only',
+    '"SCHOLAR"',
+    '"BARD"',
+    'DrawBardWardensPaeanPressureRedirectControls()',
+    'Smart Paean target for manual / Turbo calls at 3+ incoming enemies',
+    'configuration.EnableBardWardensPaeanPressureRedirect',
+    'already incoming The Warden''s Paean (29400) ability call',
+    'complete, unique, stable exact party view is required',
+    'live Paean ward (3143)',
+    'native 30-yalm range/line of sight',
+    'Highest pressure wins, then lowest exact HP ratio, party slot, entity ID, and game-object ID.',
+    'No exact known 3+ candidate leaves the original call vanilla.',
+    'pressure drift suppresses that one call instead of using the original',
+    'There is deliberately no cooldown/readiness gate.',
+    'target, creates or substitutes an action, replays, or retries.',
     '"MONK"',
     'DrawMonkEarthReplyControls()',
     '"BARD / WHITE MAGE"',
@@ -3334,8 +3625,8 @@ Assert-Literals $settingsWindow @(
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark'
 ) 'Jobs quality-of-life settings organization'
-if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?All jobs: Defensive utilities.*?DrawDefensiveUtilityControls\(\).*?All jobs: Team-visible enemy focus sign.*?DrawAutoEnemyFocusMarkControls\(\).*?"NINJA".*?Seiton on fresh gameplay key \(experimental\).*?configuration\.EnableNinjaSeitonOnFreshGameplayKey.*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?DrawReactiveCcControls\(\)') {
-    throw 'Jobs tab must keep general defensive/marker utilities before Ninja, Monk, and BRD/WHM reactive controls in reviewable order.'
+if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?All jobs: Defensive utilities.*?DrawDefensiveUtilityControls\(\).*?All jobs: Team-visible enemy focus sign.*?DrawAutoEnemyFocusMarkControls\(\).*?"NINJA".*?Seiton on fresh gameplay key \(experimental\).*?configuration\.EnableNinjaSeitonOnFreshGameplayKey.*?"SCHOLAR".*?configuration\.EnableScholarCriticalStrategyOnHeldKey.*?"BARD".*?DrawBardWardensPaeanPressureRedirectControls\(\).*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?DrawReactiveCcControls\(\)') {
+    throw 'Jobs tab must keep general defensive/marker utilities before Ninja, Scholar, Smart Bard Paean, Monk, and BRD/WHM reactive controls in reviewable order.'
 }
 
 $rangeRules = Read-RequiredSource (Join-Path $coreRoot 'SeitonRangeRules.cs') 'Seiton range rules'
@@ -3604,31 +3895,55 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.15.0.0</Version>',
-    '<AssemblyVersion>0.15.0.0</AssemblyVersion>',
-    '<FileVersion>0.15.0.0</FileVersion>'
-) 'v0.15.0.0 project version'
+    '<Version>0.16.0.0</Version>',
+    '<AssemblyVersion>0.16.0.0</AssemblyVersion>',
+    '<FileVersion>0.16.0.0</FileVersion>'
+) 'v0.16.0.0 project version'
 Assert-Literals ($pluginManifest + $repositoryIndex) @(
     'default-off Ninja and Scholar action helpers',
+    'a default-off passive Smart Bard Paean target redirect',
     'optional Guardian team communication',
-    '"AssemblyVersion": "0.15.0.0"',
-    'After a client-accepted automatic Guardian',
-    'localized Covering Target Quick Chat for the frozen P-slot',
-    'Bind2 on that ally and Bind1 on self',
-    'cleanup is exact per-sign ownership only',
-    'Critical Strategy 29716 only on an exact guarded canonical S1-S5 enemy',
-    'ranking trusted positive team pressure before exact HP and otherwise using HP-first',
-    'pressure is selection-only, while final validation checks identity, readiness, live Guard, and native reachability',
-    'Both paths freeze intent, never mutate targets, and have no alternate action or post-invocation retry.',
-    'Schema 21 keeps both opt-ins off for new, upgraded, and reset settings',
-    'live command/action confirmation remains required.'
-) 'v0.15.0.0 manifest and repository metadata'
+    '"AssemblyVersion": "0.16.0.0"',
+    'The Warden''s Paean 29400 call',
+    'exact reachable non-self party ally without the live Paean ward',
+    'known incoming pressure of at least three',
+    'ranking pressure before exact HP and stable identity',
+    'leaves the original call vanilla',
+    'suppresses that one call with no original-target fallback, alternate, replay, retry, action substitution, or selected-target mutation',
+    'This passive transform has no cooldown/readiness gate.',
+    'final frozen-target HP read that cancels at exactly 50% or higher',
+    'unused native marker slot reports 0xE0000000 instead of zero',
+    'Schema 22 keeps Smart Paean off for new, upgraded, and reset settings',
+    'existing Ally Rescue and Aquaveil behavior remains unchanged.'
+) 'v0.16.0.0 manifest and repository metadata'
 $readme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'README'
 $changelog = Read-RequiredSource (Join-Path $resolvedRoot 'CHANGELOG.md') 'Changelog'
 $privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy documentation'
 Assert-Literals $readme @(
-    'Version 0.15.0.0 adds two',
-    'Configuration schema 21 keeps Guardian',
+    'Version 0.16.0.0 adds a',
+    'Configuration schema 22 keeps the Bard',
+    'The separate **Smart Bard Paean pressure redirect**',
+    'disabled by default and',
+    'runs only for PvP Bard in exact Crystalline Conflict',
+    'already incoming The Warden''s Paean `29400` ability call',
+    'complete, unique, stable',
+    'living, targetable, non-self party member',
+    'native 30-yalm',
+    'without the live Warden''s Paean ward `3143`',
+    'trusted current count of at least three unique live enemies',
+    'higher incoming pressure wins, then lower',
+    'exact HP ratio, party slot, entity ID, and game-object ID',
+    'forwards the original',
+    'target and ability call unchanged as vanilla behavior',
+    'pressure drift suppresses that one call',
+    'deliberately no cooldown/readiness gate',
+    'fall back to the original target, select another ally, or retry',
+    'client-accepted return is dispatch feedback only',
+    'existing fresh/held-key Ally Rescue behavior, including Aquaveil, remains',
+    'latest-safe frozen-actor HP re-read, exact-50% cancellation',
+    'has no hard-target dependency',
+    'both native empty-marker representations',
+    '`0xE0000000`',
     '## Scholar Critical Strategy held-key helper',
     'runs only on PvP Scholar in exact Crystalline Conflict',
     'native 25-yalm action range and line-of-sight check immediately before dispatch',
@@ -3640,23 +3955,49 @@ Assert-Literals $readme @(
     'neither reranks nor switches or invalidates the frozen target',
     'not swallow the original key.',
     'current-patch live-confirmation boundaries'
-) 'v0.15 Guardian and Scholar user contract'
+) 'v0.16 Smart Paean, NIN boundary, Guardian sentinel, and existing Scholar user contract'
 Assert-Literals $changelog @(
-    '## 0.15.0.0',
-    'manual Guardian, Far Help, and rejected requests',
-    'Bind2 must be confirmed on the exact ally before Bind1 is',
-    'cleanup tries Bind2 and then Bind1',
-    'Strategy `29716` readiness, and native 25-yalm range/line of sight.',
-    'or every count is zero, the whole selection is HP-first.',
-    'selection-only and is not a final dispatch gate.',
-    'The frozen intent and held generation',
-    'are consumed before one native attempt.',
-    'rerank, target mutation, alternate, fallback action, replay, or retry.',
-    'configuration schema to 21.'
-) 'v0.15 release notes'
+    '## 0.16.0.0',
+    'default-off **Smart Paean target for manual /',
+    'already incoming The Warden''s',
+    'Paean `29400` ability call',
+    'never creates an action or consumes the shared generic input',
+    'complete, unique, stable exact party view',
+    'live Warden''s Paean ward `3143`',
+    'native 30-yalm range and line of',
+    'trusted incoming-pressure count of at least three',
+    'Higher pressure wins, then lower exact',
+    'target and incoming call remain unchanged as vanilla behavior',
+    'suppresses that one call rather than falling back',
+    'no cooldown',
+    'never changes a selected target, substitutes an action, replays,',
+    'Hardened the experimental Ninja Seiton helper at its latest safe dispatch',
+    're-resolves only the frozen `S#` actor and re-reads that exact actor''s HP',
+    'healing to exactly 50% or higher cancels the spent attempt with no alternate',
+    'unused native marker slot as `0xE0000000` instead of `0`',
+    'Both native empty',
+    'Bumped the plugin version to 0.16.0.0 and configuration schema to 22',
+    'Paean remains off for new configurations, upgrades, and reset defaults'
+) 'v0.16 Smart Paean, NIN boundary, Guardian sentinel, and schema release notes'
 Assert-Literals $privacy @(
-    'The separate Guardian communication setting is persisted but disabled by',
-    'Only a new client-accepted automatic Guardian episode in exact',
+    '## Smart Bard Paean pressure redirect',
+    'separate option is disabled by default and exact-Crystalline-Conflict-only',
+    'already incoming The Warden''s Paean',
+    'ability call `29400`',
+    'does not read a generic',
+    'physical gameplay-key generation and never creates an action call by itself',
+    'complete, unique, stable party view',
+    'non-self party member without the live Warden''s Paean ward `3143`',
+    'native 30-yalm range and line of sight',
+    'trusted count of at least',
+    'higher pressure, lower exact HP ratio, party slot, entity ID, and game-object',
+    'incoming call are forwarded unchanged',
+    'pressure drift suppresses that one call',
+    'no cooldown/readiness gate',
+    'never changes any selected target or substitutes an',
+    'client-accepted return is not stored or',
+    'Existing Ally Rescue behavior',
+    'unused-marker values `0` and `0xE0000000` are recognized only while the marker',
     '## Experimental Scholar Critical Strategy held-key helper',
     'Scholar in exact Crystalline Conflict',
     'live Guard `3054` or `3673`',
@@ -3664,14 +4005,14 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 21 is current in v0.15.0.0'
-) 'v0.15 local-data and live-boundary disclosure'
+    'Configuration schema 22 is current in v0.16.0.0'
+) 'v0.16 Smart Paean, Guardian sentinel, and existing Scholar local-data/live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 21',
+    'public int Version { get; set; } = 22',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -3737,14 +4078,16 @@ Assert-Literals $configuration @(
     'NearHelpPreferIncomingPressure = true',
     'if (Version < 19)',
     'EnableNinjaSeitonOnFreshGameplayKey = false',
-    'EnableScholarCriticalStrategyOnHeldKey = false',
     'if (Version < 20)',
     'PaladinGuardianAnnounceAndMark = false',
     'if (Version < 21)',
+    'EnableScholarCriticalStrategyOnHeldKey = false',
+    'if (Version < 22)',
+    'EnableBardWardensPaeanPressureRedirect = false',
     'WarnWhenIsolated = true',
     'IsolationWarningScale = 1f',
     'EnableAutoEnemyFocusMark = false',
-    'Version = 21',
+    'Version = 22',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -3762,7 +4105,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-21 default-off Scholar helper, Guardian communication, and prior configuration migrations'
+) 'Schema-22 default-off Smart Paean, Scholar helper, Guardian communication, and prior configuration migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -3770,6 +4113,7 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ ge
     $configuration -notmatch '(?m)^\s*public bool PaladinGuardianLowAlly \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool PaladinGuardianAnnounceAndMark \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableScholarCriticalStrategyOnHeldKey \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool EnableBardWardensPaeanPressureRedirect \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableReactiveCcUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcDancerLimitBreak \{ get; set; \} = true;\s*$' -or
@@ -3783,6 +4127,7 @@ if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;
     [regex]::Matches($configuration, '\bEnableAutoEnemyFocusMark\s*=\s*false\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bPaladinGuardianAnnounceAndMark\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableScholarCriticalStrategyOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bEnableBardWardensPaeanPressureRedirect\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bWarnWhenIsolated\s*=\s*true\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bDefensiveUtilitiesOnHeldKey\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bReactiveCcOnHeldKey\s*=\s*true\s*;').Count -lt 2) {
@@ -3796,9 +4141,9 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGamepl
     [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
     throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*21\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 21\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?Version = 21;') {
-    throw 'Schema 21 must fast-path current settings, preserve schema-17/18/19/20 migrations, and introduce only the default-off Scholar held-key helper.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*22\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 22\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?Version = 22;') {
+    throw 'Schema 22 must fast-path current settings, preserve schema-17/18/19/20/21 migrations, and introduce only the default-off passive Smart Paean target redirect.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -3862,4 +4207,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.15.0.0 safety contract verified across $($sourceFiles.Count) source files; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window, with missing in-window data falling back to exact HP and out-of-window unknowns ignored; one bounded ActionEffect hook calls Original exactly once and owns all reviewed queue limits; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > SCH Critical Strategy > Monk priority, with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing every plugin-owned direct action; default-off NIN Seiton consumes one fresh edge before frozen sub-50 exact-intent dispatch; default-off SCH Critical Strategy consumes one held generation before one frozen exact guarded S1-S5 intent, uses only wholesale trusted positive pressure for initial ranking with HP fallback, and never rereads pressure or reranks after consumption; client-accepted automatic Guardian alone may start one Quick Chat then optional Bind2-ally/Bind1-self episode through the sole closed shared shell dispatcher, with exact per-sign ownership confirmation and Bind2-first cleanup at accepted plus 9000ms; neither new path mutates targets, chooses an alternate/fallback, queues, replays, or retries after invocation; exact DNC variation-0 startup plus six enemy Purify recoveries require positive Resilience 3248, stable absence, and exact local-plus-one-ally focus before action-specific 29228/29395 AddStatus 0x0E confirmation can display truthful AUTO CC LANDED; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; Team Attack-1 retains exact timestamp ownership through the same marker reservation. Shell/action execution remains source-level verified pending live current-patch Crystalline Conflict confirmation."
+Write-Host "Seiton Sense v0.16.0.0 safety contract verified across $($sourceFiles.Count) source files; Smart Bard Paean is one default-off passive branch in the existing hook: exact CC/BRD/action/ward metadata, a stable complete five-member party, atomic known incoming pressure of at least three, pressure-then-HP/P-slot/EID/GOID ranking, native 30y/LoS, unchanged vanilla before selection, and frozen-call suppression without cooldown gate, action creation, target mutation, alternate, replay, or retry after selection; NIN Seiton consumes one fresh edge, freezes one exact canonical S1-S5 sub-50 actor, and re-resolves that same slot/GOID/EID/address for one latest HP read immediately before its sole native request, cancelling at exactly 50 percent or higher without hard-target dependency, alternate, or retry; Guardian accepts native marker-empty values 0 and 0xE0000000 only behind exact availability/index/timestamp telemetry while retaining Quick Chat, Bind2-then-Bind1 confirmation, exact per-sign ownership, drift relinquishment, and ownership-safe cleanup; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window; one bounded ActionEffect hook calls Original exactly once; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > SCH Critical Strategy > Monk priority, with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing plugin-owned direct actions; SCH uses one held generation and one frozen exact guarded S1-S5 intent with selection-only pressure; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; Team Attack-1 retains exact timestamp ownership through the shared marker reservation. Shell/action execution and target transformation remain source-level verified pending live current-patch Crystalline Conflict confirmation."

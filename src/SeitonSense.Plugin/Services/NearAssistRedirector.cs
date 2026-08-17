@@ -129,6 +129,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly IFramework framework;
     private readonly IPluginLog log;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
@@ -173,6 +174,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         IGameInteropProvider interop,
         IFramework framework,
         TargetPressureTracker pressureTracker,
+        SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
         IPluginLog log)
     {
@@ -184,6 +186,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.dataManager = dataManager;
         this.framework = framework;
         this.pressureTracker = pressureTracker;
+        this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
@@ -275,6 +278,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     internal CcImmunityBrakeDiagnostics CcBrakeDiagnostics => ccImmunityBrake.Diagnostics;
+    internal SmartWardensPaeanDiagnostics SmartWardensPaeanDiagnostics =>
+        smartWardensPaean.Diagnostics;
     internal IReadOnlySet<uint> VerifiedCcBrakeStatusIds => ccImmunityBrake.VerifiedStatusIds;
 
     internal bool TryGetRecentExactLocalGuardAttempt(
@@ -687,6 +692,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var suppressingLegacyFarHelpFallback = false;
         var targetSuppressedByRedirect = false;
         var bypassRedirect = internalRedirectBypassDepth > 0;
+        var helperTokenConsumed = false;
+        var smartPaeanResult = SmartWardensPaeanInterceptResult.Vanilla(
+            targetId,
+            "Not evaluated");
         try
         {
             if (!bypassRedirect &&
@@ -712,9 +721,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     mode,
                     targetId,
                     out var token,
-                    out var previousOneShotState,
-                    out consumedFallbackCarrier))
+                out var previousOneShotState,
+                out consumedFallbackCarrier))
             {
+                helperTokenConsumed = true;
                 forwardedTargetId = TryResolveRedirect(
                     thisPtr,
                     actionType,
@@ -759,6 +769,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                          out var previousHelpState,
                          out consumedFallbackCarrier))
             {
+                helperTokenConsumed = true;
                 handlingNearHelp = true;
                 forwardedTargetId = TryResolveHelpRedirect(
                     thisPtr,
@@ -805,6 +816,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                          out var previousFarHelpState,
                          out consumedFallbackCarrier))
             {
+                helperTokenConsumed = true;
                 handlingFarHelp = true;
                 ArmFarHelpFallbackSuppression(actionType, actionId, resolvedFarHelpActionId);
                 forwardedTargetId = TryResolveFarHelpRedirect(
@@ -851,6 +863,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         $"age={Math.Max(0, Environment.TickCount64 - (farHelpToken.ExpiresAtMilliseconds - TokenLifetimeMilliseconds))}ms " +
                         $"result={(rewritten ? "redirect" : reason)}");
                 }
+            }
+
+            // A normal Paean/Turbo call is reviewed only after every explicit
+            // one-shot macro route had the opportunity to own it. Internal
+            // plugin dispatches and consumed helper carriers remain untouched.
+            if (!bypassRedirect &&
+                !helperTokenConsumed &&
+                !targetSuppressedByRedirect &&
+                forwardedTargetId == targetId)
+            {
+                smartPaeanResult = smartWardensPaean.Evaluate(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    targetId,
+                    mode,
+                    IsLocalGuardActiveOrPropagating());
+                if (smartPaeanResult.ShouldSuppress) return false;
+                if (smartPaeanResult.ShouldRedirect)
+                    forwardedTargetId = smartPaeanResult.ForwardTargetId;
             }
         }
         catch (Exception exception)
@@ -948,7 +980,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // target substitution intact. A confirmed immunity block returns above and
         // deliberately executes no downstream/original call.
         ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
-        return useActionHook!.Original(
+        var clientAccepted = useActionHook!.Original(
             thisPtr,
             actionType,
             actionId,
@@ -957,6 +989,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             mode,
             comboRouteId,
             outOptAreaTargeted);
+        smartWardensPaean.RecordNativeResult(smartPaeanResult, clientAccepted);
+        return clientAccepted;
     }
 
     private void ObserveExactLocalGuardActivationAttempt(
@@ -986,6 +1020,29 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         catch
         {
             // Observation must never alter or suppress the incoming Guard call.
+        }
+    }
+
+    private bool IsLocalGuardActiveOrPropagating()
+    {
+        try
+        {
+            var local = objectTable.LocalPlayer;
+            if (!IsLivePlayer(local)) return false;
+            if (DefensiveUtilityProbe.HasActiveGuard(local)) return true;
+
+            return TryGetRecentExactLocalGuardAttempt(
+                clientState.TerritoryType,
+                local!.GameObjectId,
+                local.EntityId,
+                Environment.TickCount64,
+                DefensiveUtilityRules.GuardPropagationLatchMilliseconds,
+                out _);
+        }
+        catch
+        {
+            // An uncertain local Guard view must never enable a target rewrite.
+            return true;
         }
     }
 

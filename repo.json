@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "PvP pressure, isolation, defensive/reactive utilities, assists, and target clarity.",
-    "Description": "A local PvP HUD integrating pressure and CC-protection cues, an urgent isolation warning, native-HUD resource auras, default-off Ninja and Scholar action helpers, fail-closed macro assistance, defensive/reactive utilities with optional Guardian team communication, team-visible focus marking, and target highlights.",
+    "Description": "A local PvP HUD integrating pressure and CC-protection cues, an urgent isolation warning, native-HUD resource auras, default-off Ninja and Scholar action helpers, a default-off passive Smart Bard Paean target redirect, fail-closed macro assistance, defensive/reactive utilities with optional Guardian team communication, team-visible focus marking, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.15.0.0",
-    "Changelog": "Adds two separate default-off exact-CC utilities. After a client-accepted automatic Guardian, optional party communication may issue localized Covering Target Quick Chat for the frozen P-slot, then place Bind2 on that ally and Bind1 on self; occupied or uncertain signs prevent the sequence from starting, Bind2 is confirmed first, and any cleanup is exact per-sign ownership only. On Scholar, one shared held-key generation may use Critical Strategy 29716 only on an exact guarded canonical S1-S5 enemy, ranking trusted positive team pressure before exact HP and otherwise using HP-first; pressure is selection-only, while final validation checks identity, readiness, live Guard, and native reachability. Both paths freeze intent, never mutate targets, and have no alternate action or post-invocation retry. Schema 21 keeps both opt-ins off for new, upgraded, and reset settings; live command/action confirmation remains required.",
+    "AssemblyVersion": "0.16.0.0",
+    "Changelog": "Adds a separate default-off Smart Bard Paean target option for exact Crystalline Conflict. It may redirect only an already incoming manual or downstream Turbo The Warden's Paean 29400 call to an exact reachable non-self party ally without the live Paean ward and with known incoming pressure of at least three, ranking pressure before exact HP and stable identity. An incomplete or ambiguous party view, or no known eligible ally, leaves the original call vanilla. After a redirect is frozen, final identity, action metadata, life, HP, ward, reachability, or pressure drift suppresses that one call with no original-target fallback, alternate, replay, retry, action substitution, or selected-target mutation. This passive transform has no cooldown/readiness gate. Also hardens Ninja Seiton with a final frozen-target HP read that cancels at exactly 50% or higher, and fixes Guardian Bind pairs when an unused native marker slot reports 0xE0000000 instead of zero without weakening exact ownership checks. Schema 22 keeps Smart Paean off for new, upgraded, and reset settings; existing Ally Rescue and Aquaveil behavior remains unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -26,6 +26,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786912806"
+    "LastUpdate": "1786952641"
   }
 ]
