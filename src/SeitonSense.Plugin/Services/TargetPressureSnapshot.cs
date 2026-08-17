@@ -37,9 +37,16 @@ internal sealed record TargetPressureOpponentSnapshot(
 internal sealed record TargetPressureRuntimeSnapshot(
     bool Active,
     bool PressureActive,
+    TargetPressureActorIdentity LocalPlayer,
+    long PublishedAtMilliseconds,
     IReadOnlyList<TargetPressureOpponentSnapshot> Opponents)
 {
-    internal static TargetPressureRuntimeSnapshot Inactive { get; } = new(false, false, []);
+    internal static TargetPressureRuntimeSnapshot Inactive { get; } = new(
+        false,
+        false,
+        default,
+        -1,
+        []);
 
     internal IReadOnlyList<TargetPressureOpponentSnapshot> IncomingOpponents =>
         Opponents.Where(static opponent => opponent.IsIncoming).ToArray();
@@ -57,6 +64,18 @@ internal sealed record TargetPressureRuntimeSnapshot(
         return match;
     }
 }
+
+/// <summary>
+/// One fresh, exact-self view of enemies whose current hard target or cast
+/// target is the local player. Counts are taken from one immutable pressure
+/// publication; the union never includes recent-damage or early-marker hints.
+/// </summary>
+internal readonly record struct DirectSelfPressureSnapshot(
+    TargetPressureActorIdentity LocalPlayer,
+    long PublishedAtMilliseconds,
+    int UniqueEnemyCount,
+    int HardTargetEnemyCount,
+    int CastTargetEnemyCount);
 
 internal sealed record TargetPressureDiagnostics(
     bool Active,

@@ -23,9 +23,10 @@ internal sealed record PvPMetadataValidation(
     bool ZantetsukenVerified,
     bool FuriousBacklashVerified,
     bool MonkEarthReplyVerified,
-    bool ScholarCriticalStrategyVerified)
+    bool ScholarCriticalStrategyVerified,
+    bool AutoLowMpFocusProbeVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -46,6 +47,26 @@ internal static class PvPMetadataGuard
                    unsealed.Description.ToString().Contains(
                        "Able to execute Seiton Tenchu.",
                        StringComparison.Ordinal);
+        });
+
+        var autoLowMpFocusProbeVerified = ValidateFeature("Auto Low-MP Focus probe", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            return actions.TryGetRow(AutoLowMpFocusTargetRules.ProbeActionId, out var action) &&
+                   action.Name.ToString() == "Seiton Tenchu" &&
+                   action.Icon == EnemyCombatConstants.SeitonIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == 30 &&
+                   action.Range == AutoLowMpFocusTargetRules.ProbeRange &&
+                   action.EffectRange == 0 &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight;
         });
 
         var guardVerified = ValidateFeature("Guard", log, () =>
@@ -621,7 +642,8 @@ internal static class PvPMetadataGuard
             zantetsukenVerified,
             furiousBacklashVerified,
             monkEarthReplyVerified,
-            scholarCriticalStrategyVerified);
+            scholarCriticalStrategyVerified,
+            autoLowMpFocusProbeVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
@@ -629,7 +651,7 @@ internal static class PvPMetadataGuard
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
-            "ScholarCriticalStrategy={ScholarCriticalStrategy}.",
+            "ScholarCriticalStrategy={ScholarCriticalStrategy}, AutoLowMpFocusProbe={AutoLowMpFocusProbe}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.GuardianVerified,
@@ -645,7 +667,8 @@ internal static class PvPMetadataGuard
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
             validation.MonkEarthReplyVerified,
-            validation.ScholarCriticalStrategyVerified);
+            validation.ScholarCriticalStrategyVerified,
+            validation.AutoLowMpFocusProbeVerified);
 
         return validation;
     }

@@ -42,7 +42,16 @@ internal sealed class MachinistLimitBreakWarningSound
         nextThreatSoundAt = 0;
     }
 
-    private unsafe bool TryPlay(int soundId)
+    private bool TryPlay(int soundId) =>
+        TryPlayShared(
+            soundId,
+            log,
+            "Seiton Sense MCH warning sound failed closed.");
+
+    internal static unsafe bool TryPlayShared(
+        int soundId,
+        IPluginLog log,
+        string failureMessage)
     {
         if (soundId is < 1 or > 16) return false;
         try
@@ -52,7 +61,7 @@ internal sealed class MachinistLimitBreakWarningSound
         }
         catch (Exception exception)
         {
-            log.Warning(exception, "Seiton Sense MCH warning sound failed closed.");
+            log.Warning(exception, failureMessage);
             return false;
         }
     }

@@ -2,7 +2,8 @@
 
 Seiton Sense has no account, independent server, telemetry, or external gameplay
 upload. Optional gameplay helpers can submit ordinary action, target-sign, or
-Quick Chat commands to FFXIV. In particular, the separate default-off Guardian
+Quick Chat commands to FFXIV, and the separate default-off Auto Low-MP Focus
+helper can set only an empty local native Focus Target. In particular, the separate default-off Guardian
 communication option can send one standardized Crystalline Conflict Quick Chat
 and party-visible marker commands through the normal FFXIV service after an
 automatic Guardian request is client-accepted. It embeds no character name or
@@ -26,10 +27,18 @@ following data already available in the local FFXIV client:
 - the copied rectangles of visible native self action bars, party-list rows,
   and Crystalline Conflict ally/enemy rows; a visible CC row name is compared
   transiently for equality with the resolved actor and is not retained;
-- when its optional module is enabled, your manually selected current/focus
-  target and locally available job, HP, distance, CC slot, and pressure state;
+- when its optional visual module is enabled, your current hard/Focus Target and
+  locally available job, HP, distance, CC slot, and pressure state;
+- when Auto Low-MP Focus is enabled, the native Focus Target's empty/occupied
+  state, the complete exact canonical `S1`-`S5` set, trusted HP/MP samples and
+  low-MP latches, local identity/text-input state, and FFXIV's native 20-yalm
+  range/line-of-sight result for the frozen candidate;
 - for the isolation/defensive helpers, exact local party membership and FFXIV's
   native action range/line-of-sight result for the relevant ally;
+- for the optional high-pressure warning/sound/Sprint features, the distinct
+  exact current enemies whose hard or cast target is the local player, the
+  bounded warning-episode token, held gameplay-key generation, own Guard/Sprint
+  state, and exact Sprint action metadata/readiness;
 - when the team-visible focus-sign module is enabled, the current native Attack1
   marker target and marker timestamp needed to avoid overwriting or clearing a
   sign the plugin cannot prove it owns;
@@ -42,6 +51,11 @@ following data already available in the local FFXIV client:
   canonical `S1`-`S5` actor set, live Guard `3054`/`3673`, exact HP and trusted
   team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
   result for the frozen candidate.
+- when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
+  local DRK and current canonical target identities, native combo/Shadowbringer
+  recast and queue state, action sequence, animation lock/cast state, HP/Dark
+  Arts and Guard states, and both actions' native range/line-of-sight/readiness
+  results.
 
 Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
@@ -111,6 +125,41 @@ members. This drives only the documented pressure thresholds and candidate
 ordering. The data is bounded to the live snapshot and is not retained as
 combat history.
 
+## High-pressure warning, sound, and held Sprint
+
+The high-pressure feature uses only a narrower live subset of the existing
+pressure snapshot: distinct exact enemies whose current hard target or cast
+target is the local player. At least three are required. Recent damage/action
+history cannot start or sustain the warning, sound, or Sprint eligibility, and
+unknown or inactive pressure data fails closed.
+
+The visual option draws one fixed local top-center warning. The separate
+isolation warning keeps its own top-left position when both are visible, except
+that a narrow work area stacks it below the pressure card if their actual scaled
+rectangles would overlap. The optional alert calls one
+selected built-in FFXIV UI/system sound once when a new high-pressure episode
+begins. No audio is downloaded, recorded, persisted, transmitted, or uploaded.
+The in-memory episode token is cleared with context/player/feature lifetime and
+exists only to prevent the same episode from sounding every frame.
+Unknown/stale pressure hides the visual state immediately but does not rearm a
+second sound; rearming requires a continuously known below-threshold separation.
+
+The separate default-off held-key option can submit at most one exact ordinary
+self Sprint action attempt for one physical WASD/arrow movement-key generation
+while the same direct-enemy count remains at least three. The original movement
+key is not swallowed. It reads current local identity,
+life state, own Guard/Sprint status, exact Sprint metadata/readiness, and the
+shared input-generation claim. The generation is consumed before the final
+native request. It never changes a selected target, chooses another action,
+stores or replays the key, or retries after drift, rejection, or exception.
+The native request result is diagnostic only and does not prove that Sprint was
+accepted or applied by the server.
+
+Across action-request helpers, one physical generation is offered in this exact
+order: Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
+counter-CC, Ninja Seiton, Scholar Critical Strategy, then Monk Earth's Reply.
+Once an earlier helper claims it, no later helper can reuse that generation.
+
 ## Optional team-visible Attack1 focus sign
 
 This module is disabled by default and runs only in exact Crystalline Conflict.
@@ -136,6 +185,36 @@ while the same canonical slot, game-object/network identity, target, and marker
 timestamp still match. Uncertain state relinquishes ownership without clearing.
 The command attempt and bounded ownership state are not persisted or uploaded;
 current-patch party-visible command behavior remains a live-validation boundary.
+
+## Optional Auto Low-MP Focus Target
+
+This separate local setter is disabled by default and runs only in exact
+Crystalline Conflict. It requires one complete, unique canonical `S1`-`S5` set.
+For every enemy it transiently samples exact game-object/network identity,
+life/targetable state, HP/MP, and native reachability. MP must remain trusted at
+2,000 or lower for 150 ms to enter a low-MP wave; the wave clears only after
+150 ms continuously at 2,300 MP or higher. Unknown MP never qualifies. A
+candidate must also pass FFXIV's native 20-yalm action range and line-of-sight
+probe. Lowest exact MP ratio wins, then lowest HP ratio, stable S-slot, entity
+ID, and game-object ID.
+
+The helper reads the native Focus Target state and may invoke exactly one
+reviewed setter only after Focus was observed stably empty and the frozen
+candidate passed a final exact preflight. It never clears, replaces, restores,
+or retries a Focus Target. An already occupied Focus spends that low-MP wave
+without mutation. After an exact plugin-set readback, any confirmed manual or
+external change or clear latches manual ownership until the option is toggled
+off/on or a new exact match lifetime begins. The local native Focus feeds
+FFXIV's Focus Target HUD and `<f>`; it is not a team-visible Attack1 sign and
+does not change the hard or soft target.
+
+Dalamud exposes no atomic Focus Target compare-and-set. The sole same-thread
+setter therefore has an immediately adjacent final empty read followed by an
+exact readback, but a live client race remains possible. Setter invocation and
+readback counts, bounded low-MP state, exact actor identities, and last decision
+remain in memory only and are cleared with feature/context/player lifetime.
+Nothing is persisted or uploaded. The current-patch setter, HUD/`<f>` result,
+and native range probe remain live A/B boundaries.
 
 ## Marksman's Spite warning
 
@@ -324,6 +403,41 @@ Help does not initiate, repeat, queue, or retry an action; change
 its ID; or visibly change a hard, soft, or focus target. No observed
 party/action data is persisted or uploaded.
 
+## Experimental DRK Shadowbringer macro helper
+
+This helper is disabled by default and runs only for exact PvP Dark Knight in
+Crystalline Conflict. `/seitonbringer` may arm only the immediately following
+authored Souleater Combo `<t>` macro line for at most 750 ms. The macro name,
+line cursor, exact local identity/context, proven GCD-cycle token, incoming
+action/route/mode, and exact current canonical `S1`-`S5` target are kept only
+long enough to pair those two adjacent lines. The recommended ReAction setup
+uses both Macro Queue and Turbo; Seiton Sense does not create a macro pulse.
+
+A cycle is proven only from the exact 2.40-second combo recast group restarting
+with a changed native action sequence. At most one Shadowbringer attempt may be
+claimed for that cycle, and only in the inclusive 0.60-0.80-seconds-remaining
+window. A missed window is skipped and 0.50 seconds or less never triggers
+Shadowbringer. The paired outer Souleater Combo call continues unchanged so a
+later authored Turbo pulse can enter FFXIV's normal queue window.
+
+Before and after spending the cycle's one-attempt token, the helper revalidates
+exact context/local/target identity, the Souleater Combo route, unchanged GCD
+token and action sequence, an empty stable native queue, clear cast and
+animation lock, clear own Guard/propagation and target Guard, native 5-yalm
+combo and 10-yalm Shadowbringer range/line of sight, and exact action readiness
+and resources. Base Shadowbringer requires strictly more than 12,000 HP; its
+adjusted Dark Arts action requires the exact Dark Arts status/action state.
+
+The plugin may submit one normal exact-target Shadowbringer request before the
+unchanged outer combo call. It never changes a hard, soft, or Focus Target,
+chooses another target/action, replays the macro, or retries after drift,
+rejection, or exception. A local client-accepted return is bounded diagnostic
+feedback only and does not prove server execution or a clip-free weave. Macro
+Queue/Turbo mode, native queue and recast-group timing, action effect, and
+clipping remain current-patch live-trace boundaries. All paired identities,
+cycle/queue samples, counters, and last-result diagnostics remain memory-only
+and are neither persisted nor uploaded.
+
 ## Experimental Purify helper
 
 If the experimental helper is explicitly enabled, the plugin reads current
@@ -361,9 +475,9 @@ and native range/line-of-sight result are still revalidated. FFXIV receives one
 normal native request and remains the authority on whether it queues or
 executes.
 
-Self-Purify and Ally Rescue share one physical input-generation observer, with
-self-Purify receiving first claim. Ally Rescue consumes its state and that
-generation before at most one exact native action attempt. A false return,
+Self-Purify, defensive utilities, and pressure Sprint receive the shared
+physical input generation before Ally Rescue. Ally Rescue consumes its state
+and that generation before at most one exact native action attempt. A false return,
 exception, vanished status, or changed target is not retried. The original key
 is still neither swallowed nor replayed, and no observed ally/status/input data
 is logged, persisted, or transmitted.
@@ -411,7 +525,7 @@ HP, live ward, native reachability, or pressure drift suppresses that one call
 instead of forwarding the original target, choosing another ally, replaying, or
 retrying. There is deliberately no cooldown/readiness gate on this passive
 transform. The option never changes any selected target or substitutes an
-action. Each later manual or downstream Turbo call is a separate incoming call
+action. Each later manual or Turbo call is a separate incoming call
 and is evaluated independently. A client-accepted return is not stored or
 presented as proof that Paean applied, removed, or nullified crowd control.
 
@@ -552,8 +666,9 @@ Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
 
-The helper shares the physical-generation observer after self-Purify, defensive
-utilities, and Ally Rescue. A claimed generation cannot be reused. The helper
+The helper shares the physical-generation observer after Self-Purify, defensive
+utilities, pressure Sprint, and Ally Rescue. A claimed generation cannot be
+reused. The helper
 consumes its state and generation before at most one normal native exact-target
 request, without changing the visible target, choosing an alternate enemy/action,
 replaying input, or retrying. Its internal redirect bypass excludes only macro
@@ -587,9 +702,9 @@ native action range and line-of-sight check. Selection uses the lowest exact HP
 ratio, then stable enemy slot and actor identity.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Self-Purify, defensive utilities, Ally
-Rescue, and reactive counter-CC retain priority over the shared physical input
-generation. Active own Guard and the bounded post-request Guard-propagation
+and its Unsealed follow-up `29516`. Self-Purify, defensive utilities, pressure
+Sprint, Ally Rescue, and reactive counter-CC retain priority over the shared
+physical input generation. Active own Guard and the bounded post-request Guard-propagation
 state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
 
@@ -616,9 +731,11 @@ Current English action/status/proc metadata must independently validate before
 the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
-At the configured low-HP or expiry threshold, and only after a same-frame
-self-Purify opportunity declines priority, the continuous resonance state is
-marked spent before at most one normal self-targeted Earth's Reply `29483`
+At the configured low-HP or expiry threshold, and only after Self-Purify,
+defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Ninja
+Seiton, and Scholar Critical Strategy decline the shared generation, the
+continuous resonance state is marked spent before at most one normal
+self-targeted Earth's Reply `29483`
 request. The helper never activates Riddle of Earth `29482`, substitutes an
 alternate action or target, changes a visible target, queues a custom retry, or
 tries again after a false return or exception. The local request return is only
@@ -632,19 +749,21 @@ combat history, written to disk, transmitted, or uploaded.
 
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
-MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
+MCH warning size/sound selection, the high-pressure warning/native-sound/Sprint
+opt-ins and sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, the Near Help incoming-pressure preference,
-target-highlight settings, the Purify opt-in/held-key/per-debuff controls, the
-Ally Rescue master/held-key opt-ins, the separate Bard Paean pressure-redirect
+target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
+Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
+opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, defensive master/held-key/per-rule opt-ins,
-WHM/BRD
-reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
+WHM/BRD reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
 marker opt-in, the separate Guardian Quick Chat/Bind-pair opt-in, resource-aura
 surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
 thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
-held-key opt-in, and the CC-immunity-brake master plus exact per-job/per-action
-selections. Configuration schema 22 is current in v0.16.0.0
-and does not save observed actors, targets, combat events, status timers, key
+held-key opt-in, the DRK Shadowbringer macro opt-in, and the CC-immunity-brake
+master plus exact per-job/per-action selections. Configuration schema 24 is
+current in v0.18.0.0. Both new v0.18 opt-ins are off for fresh, upgraded, and
+reset configurations. Configuration does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.
 

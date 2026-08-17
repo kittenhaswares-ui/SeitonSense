@@ -2,15 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.16.0.0 adds a
-separate default-off Bard utility that may redirect one already incoming
-manual or Turbo Warden's Paean call to an exact reachable non-self party ally
-under pressure from at least three unique enemies. Without an exact eligible
-ally, the original target and call remain unchanged vanilla. It also hardens
-the Ninja execute's final strict-below-50% check and recognizes both native
-empty-marker representations for Guardian's Bind pair. The suite combines
-the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow
-into one configurable custom-repository plugin.
+one-shot macro assistance, and target highlights. Version 0.18.0.0 adds two
+separate default-off exact Crystalline Conflict helpers: a set-only local native
+Focus Target for a trusted reachable `S1`-`S5` enemy at 2,000 MP or lower, and
+an exact two-line DRK/ReAction macro that may weave Shadowbringer once in a
+proven Souleater Combo GCD window.
+The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
+and Super Focus Glow into one configurable custom-repository plugin.
 
 ## Highlights
 
@@ -20,6 +18,17 @@ into one configurable custom-repository plugin.
   marker. The main number uses an explicit pixel-sized game font instead of
   scaling the whole window, with optional attacker job icons, CC enemy slots,
   threat colors, background, locking, and click-through.
+- **High-pressure alarm:** three or more exact current hard/cast targets produce
+  a large fixed red `FOCUSED xN` card at the top center. The separate isolation
+  warning keeps its own top-left position; only on a narrow work area where the
+  two scaled cards would overlap is isolation stacked vertically below it. Both
+  pulse only their border/alpha, never their screen position or size. The
+  optional sound is a selectable built-in FFXIV system sound and fires once on entry rather than every frame.
+- **Optional pressure Sprint:** a separate default-off option may use one held
+  WASD/arrow movement-key generation for one exact self Sprint attempt while
+  the same direct-enemy count is at least three. The movement key still reaches
+  FFXIV. It shares the existing single-action input boundary and never
+  substitutes another action or retries; any later native PvP action ends Sprint.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
   the enemy is directly targeting/casting at you, recently hit you, or placed
@@ -80,6 +89,12 @@ into one configurable custom-repository plugin.
   job. It supports Guardian, Thunderclap, Aetherial Manipulation, Icarus, and
   Slither. Only no valid reachable ally means no movement; it never falls back
   to your target.
+- **DRK Shadowbringer macro:** the separate default-off `/seitonbringer` helper
+  pairs only with the immediately following authored Souleater Combo `<t>` line
+  on exact PvP Dark Knight in Crystalline Conflict. With ReAction Macro Queue
+  and Turbo, it may attempt Shadowbringer at most once per proven 2.40-second
+  GCD, and only at 0.60-0.80 seconds remaining. It never changes a target,
+  substitutes an action, or retries.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -87,7 +102,7 @@ into one configurable custom-repository plugin.
   successful status-removal effect produces a blue `CLEANSED` popup and feeds
   resettable, in-memory match/session counters.
 - **Smart Bard Paean target:** a separate default-off exact-CC option examines
-  only an already incoming manual or downstream Turbo Warden's Paean call. It
+  only an already incoming manual or Turbo Warden's Paean call. It
   may redirect that call to an exact reachable non-self party ally with trusted
   incoming pressure from at least three unique enemies. No initial candidate
   preserves vanilla; drift after one exact redirect is frozen suppresses only
@@ -109,20 +124,28 @@ into one configurable custom-repository plugin.
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
   and whose HP and/or trusted MP is low. It never overwrites an occupied Attack1,
   clears only a sign it can still prove it owns, and never changes your target.
+- **Optional local low-MP Focus Target:** a separate default-off exact-CC helper
+  may fill only an empty native Focus Target with one exact reachable `S1`-`S5`
+  enemy after the trusted 2,000-MP latch. It never clears, replaces, restores,
+  or retries a Focus; manual/external changes win and latch. This feeds the
+  local Focus Target HUD and `<f>` and is independent of the team Attack1 sign.
 - **Experimental Monk Earth's Reply:** while exact Earth Resonance is active on
   PvP Monk, a separate default-off helper can make one exact Earth's Reply
   attempt at or below 30% HP or at 1.25 seconds remaining by default. It never
   starts Riddle of Earth, never falls back to it, and never retries the same
   continuous resonance.
 - **Target clarity:** the integrated focus glow, independent current-target
-  highlight, and fixed target-information card remain optional. The information
-  card can also show team pressure and whether that target is pressuring you.
-- **Cleaner settings:** defensive utilities, reactive counter-CC, the team focus
-  sign, CC-immunity brake, resource readability, and job helpers are grouped
-  under a dedicated Jobs tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 22 keeps the Bard
-  Paean pressure redirect, Guardian team communication, and Scholar Critical
-  Strategy as separate default-off options for new, upgraded, and reset settings;
+  highlight, and fixed target-information card remain optional. The Focus Glow
+  renders the current native Focus Target, whether selected manually or set by
+  the separate low-MP opt-in. The information card can also show team pressure
+  and whether the current hard target is pressuring you.
+- **Cleaner settings:** a persistent sidebar separates Start, Alerts, HUD &
+  Nameplates, Action Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics.
+  Shared-input actions are shown in their real priority order, while visual,
+  macro, and job-specific controls stay in their own pages. Configuration schema
+  24 keeps Auto Low-MP Focus, the DRK macro, pressure Sprint, its native system
+  sound, the Bard Paean pressure redirect, Guardian team communication, and
+  Scholar Critical Strategy as separate default-off options;
   every action-attempt, target-redirect, and party-visible communication feature
   remains opt-in.
 
@@ -140,6 +163,16 @@ enemy `P#` nameplate badge, the current-target information card, and the
 optional **Prefer allies attacking the highest team-pressure target** setting
 for Near Assist. That preference is off by default and cannot pull selection
 outside Near Assist's normal nearby-candidate window.
+
+The urgent high-pressure alarm deliberately uses the narrower direct-intent
+view: distinct exact enemies currently hard-targeting or casting at the local
+player. Recent harmful-action evidence can keep the ordinary pressure counter
+useful, but it cannot start or sustain this warning, its sound, or pressure
+Sprint. Unknown/inactive pressure data stays silent. The visual warning is on
+for fresh/reset settings and off after migration so an update cannot add a
+large surprise overlay; sound and Sprint are always explicit opt-ins.
+Unknown/stale pressure hides the card immediately but cannot manufacture a new
+sound episode; only a continuously known below-three separation can rearm it.
 
 ## Stable nameplates and CC protection
 
@@ -226,6 +259,11 @@ dead allies do not count as a reachable teammate. Any incomplete identity,
 unsupported native result, or other ambiguity suppresses the warning rather
 than guessing.
 
+The separate high-pressure card remains fixed at the top center. Isolation
+keeps its normal top-left position when both are visible and moves below the
+pressure card only when the two actual scaled rectangles would overlap on a
+narrow work area.
+
 This release deliberately does not include a position guide, automatic
 navigation, Splatoon integration, or map painting. A useful position changes
 too quickly with map geometry, teams, objectives, and the current fight for a
@@ -285,7 +323,7 @@ Warden's Paean `3143`, Relentless Rush `3052`, and Honing Dance `3162`.
 Job-owned protections are accepted only on their exact job. Unsupported or
 unverified statuses do not become blockers from their display text alone.
 
-The Jobs tab provides one master switch plus separate job and action switches.
+The Action Helpers page provides one master switch plus separate job and action switches.
 The conservative current list is:
 
 - PLD: Intervene `29065`;
@@ -340,8 +378,9 @@ exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
-Self-Purify, defensive utilities, Ally Rescue, and reactive counter-CC retain
-their existing higher priority over the same physical generation. Active own
+Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
+counter-CC retain their existing higher priority over the same physical
+generation. Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
 helper. Once the exact intent is claimed, its state and input generation are
 consumed before at most one native action request. A readiness, identity,
@@ -378,7 +417,9 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-One shared held physical gameplay-key generation can produce at most one frozen
+The exact shared priority before Scholar is Self-Purify, defensive utilities,
+pressure Sprint, Ally Rescue, reactive counter-CC, and Ninja Seiton. One shared
+held physical gameplay-key generation can produce at most one frozen
 Critical Strategy intent. The intent and generation are consumed before one
 native attempt, then the frozen enemy is revalidated only for exact identity,
 action readiness, live Guard, and native range/line of sight. Pressure drift
@@ -398,10 +439,10 @@ sound effects, plays at most once for a verified threat, and has a test button.
 It never presses Guard or another action.
 
 Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature receive urgent
-Purify warnings. The experimental **Purify on next gameplay key** helper is
-disabled by default. Each debuff type has its own automation toggle, and a
-separate default-off option allows an already-held gameplay key such as WASD to
-trigger once when the enabled debuff appears.
+Purify warnings. The experimental **Self-Purify physical-key helper** is disabled
+by default. Each debuff type has its own automation toggle, and a separate
+default-off option allows an already-held gameplay key such as WASD to trigger
+once when the enabled debuff appears.
 
 The original key is never swallowed, delayed, or replayed. One physical
 press/hold generation permits at most one normal native Purify attempt and is
@@ -426,9 +467,10 @@ local cooldown-ready sample. After the exact ally, status, action, native range,
 and line of sight are revalidated, FFXIV receives one normal action request and
 decides whether it can queue or execute.
 
-Self-Purify observes the shared physical key first. One input generation can
-therefore produce at most one helper attempt, and Ally Rescue stores its spent
-state before the exact Paean/Aquaveil call with no retry. The BRD metadata check
+Self-Purify, defensive utilities, and pressure Sprint receive the shared
+physical generation before Ally Rescue. One input generation can therefore
+produce at most one helper attempt, and Ally Rescue stores its spent state
+before the exact Paean/Aquaveil call with no retry. The BRD metadata check
 also accepts the current lowercase leading article in `the Warden's Paean`;
 numeric action identity still drives runtime behavior.
 
@@ -440,7 +482,7 @@ can confirm it: Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature.
 Heavy and Bind remain confirmation-only here and still never activate Ally
 Rescue. One exact confirmation shows a blue `CLEANSED` popup for 1.5 seconds.
 
-The Overview tab separates attempts, client-accepted requests, and exact
+The Action Helpers page separates attempts, client-accepted requests, and exact
 confirmed removals, with confirmed totals for the current match and plugin
 session plus per-action/per-status details. These aggregates live only in
 memory. The provided reset clears the displayed statistics and does not create
@@ -450,7 +492,7 @@ The separate **Smart Bard Paean pressure redirect** is disabled by default and
 runs only for PvP Bard in exact Crystalline Conflict. It does not observe the
 shared generic gameplay-key generation and never casts an action by itself. It
 examines only an already incoming The Warden's Paean `29400` ability call from
-the normal manual action path or a downstream Turbo pulse.
+the normal manual action path or a Turbo pulse.
 
 At that incoming call, selection first requires a complete, unique, stable
 exact Crystalline Conflict party view. An eligible destination must be an exact
@@ -530,8 +572,9 @@ both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all of its action-request
-helpers, including Purify, defensive utilities, Ally Rescue, reactive counter-CC,
-and Earth's Reply. The same suppression starts immediately for a bounded 1.5
+helpers, including Purify, defensive utilities, pressure Sprint, Ally Rescue,
+reactive counter-CC, Ninja Seiton, Critical Strategy, and Earth's Reply. The
+same suppression starts immediately for a bounded 1.5
 seconds after an exact local Guard request, covering the short interval before
 the live Guard status becomes visible without extending the deadline. This
 prevents the plugin from cancelling Guard. It cannot prevent a manual game action
@@ -557,8 +600,9 @@ the enemy must be your current hard target and at least one exact ally's hard
 target. The resulting opportunity retains its original bounded release edge and
 is never extended while another threat has priority.
 
-Self-Purify, defensive utilities, Ally Rescue, and reactive counter-CC share one
-physical-generation path in that order. State and input are consumed before one
+Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
+counter-CC share one physical-generation path in that order. State and input
+are consumed before one
 normal exact-target request; there is no visible selected-target change,
 alternate action/target, fallback, replay, or retry. Plugin-owned Miracle and
 Silent Nocturne requests still pass through the final action-specific
@@ -599,8 +643,10 @@ default).
 
 The continuous resonance is marked spent before one self-targeted normal
 `29483` request. A rejected or throwing request is not retried, and `29482` is
-never used as an alternate action. A same-frame self-Purify opportunity has
-priority, so the Monk helper waits rather than competing with it. The helper
+never used as an alternate action. The shared priority is Self-Purify,
+defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Ninja
+Seiton, Scholar Critical Strategy, then Monk Earth's Reply, so the Monk helper
+waits rather than competing with an earlier claim. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
 the native direct-call result and exact timer behavior still need a live test.
 
@@ -754,13 +800,82 @@ movement action for the rest of the bounded 750-ms window, including a former
 fourth `<t>` line and Turbo duplicates. Remove that old line; it is not part of
 the supported Far Help macro.
 
+## DRK Shadowbringer two-line macro
+
+This separate helper is disabled by default and supports only exact PvP Dark
+Knight in Crystalline Conflict. Author exactly two adjacent macro lines:
+
+```text
+/seitonbringer
+/pvpac "Souleater Combo" <t>
+```
+
+On a non-English client, replace only the quoted `Souleater Combo` text with
+the exact localized PvP action name. Keep `/seitonbringer`, the line order, and
+`<t>` unchanged. In ReAction, enable both **Macro Queue** and **Turbo** for this
+macro.
+
+The command may arm only the immediately following exact Souleater Combo route
+against your unchanged current `<t>`, which must resolve to one exact canonical
+`S1`-`S5` enemy. The helper recognizes a new GCD cycle only from a proven exact
+2.40-second combo recast restart plus action-sequence change. It may claim at
+most one Shadowbringer attempt for that cycle, and only while the inclusive
+remaining-time window is 0.60-0.80 seconds. A missed window is skipped;
+0.50 seconds or less never triggers Shadowbringer. The paired combo call still
+reaches vanilla unchanged, and a later Turbo pulse can queue the authored combo
+line inside FFXIV's normal queue window.
+
+Both the preliminary and final checks require the same context, DRK identity,
+GCD token, exact target and combo route; an empty stable native queue; unchanged
+action sequence; no cast or animation lock; clear own Guard/propagation and
+target Guard; native 5-yalm combo and 10-yalm Shadowbringer range and line of
+sight; and exact action/readiness/resource metadata. Base Shadowbringer requires
+strictly more than 12,000 HP. Its adjusted Dark Arts form requires the exact
+Dark Arts status/action state instead.
+
+The cycle's one-attempt token is spent before the final native Shadowbringer
+request. Drift, rejection, or an exception cannot choose another target or
+action, replay the macro, or retry. Seiton Sense never changes the visible hard,
+soft, or Focus Target. `CLIENT ACCEPTED` is local dispatch feedback, not proof
+that the server executed Shadowbringer or that the weave did not clip. ReAction
+mode, native queue ownership, recast-group timing, action effect, and clipping
+remain current-patch live-trace boundaries.
+
+## Optional Auto Low-MP Focus Target
+
+This separate local setter is disabled by default and supports only exact
+Crystalline Conflict. It requires a complete, unique native `S1`-`S5` set and
+trusted enemy MP that remains at 2,000 or lower for 150 ms. That low-MP wave
+clears only after 150 ms continuously at 2,300 MP or higher. The selected enemy
+must remain alive, targetable, exact, and accepted by FFXIV's native 20-yalm
+range and line-of-sight result. Lowest exact MP ratio wins, then lowest HP ratio,
+stable S-slot, and exact actor identity.
+
+The helper can fill only a native Focus Target observed stably empty. It never
+clears, replaces, restores, or retries one. An already occupied Focus spends
+that low-MP wave without mutation. If the plugin confirmed its own set and the
+Focus is then changed or cleared manually or externally, manual ownership wins
+and latches until the option is toggled off/on or a new exact match lifetime
+begins. Missing identity, MP trust, text-input state, metadata, range, or Focus
+state fails closed.
+
+This local native Focus Target feeds FFXIV's Focus Target HUD and `<f>` and can
+be rendered by the optional Focus Glow. It is independent of the party-visible
+Attack1 sign and never changes the hard or soft target. Dalamud exposes no
+atomic compare-and-set operation for Focus Target, so Seiton performs a final
+same-thread empty read immediately beside its sole setter and then an exact
+readback. The setter, HUD/`<f>` result, native range probe, and unavoidable
+read-to-write race remain current-patch live A/B boundaries.
+
 ## Focus and current-target modules
 
 The focus glow contains the former Super Focus Glow visual controls: projected
 hitbox ring, halo, rays, chevrons, label, pulse, color, foreground, rainbow, and
 reduced-motion options. The current-target highlight has an independent style.
-Both only observe a target you selected through FFXIV and never choose, retain,
-assist, or change one.
+The visual focus module only renders FFXIV's current native Focus Target; the
+separate default-off low-MP helper above is the only integrated focus feature
+that may set one. The current-target highlight remains read-only and never
+chooses, retains, assists, or changes your hard target.
 
 The target-information HUD is a separate fixed screen-space card. It does not
 attach to the native nameplate, job icon, health bar, or Seiton indicator slots.
@@ -781,9 +896,11 @@ focus module to avoid drawing both over the same actor.
 | Optional defensive utilities | Yes | No | No |
 | Optional WHM/BRD reactive counter-CC | Yes | No | No |
 | Optional team-visible Attack1 focus sign | Yes | No | No |
+| Optional local Auto Low-MP Focus Target | Yes | No | No |
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Seiton fresh-key helper | Yes | No | No |
+| Optional DRK Shadowbringer two-line macro | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
@@ -817,13 +934,19 @@ update through the same repository.
 - `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
   the next reviewed friendly movement action; no valid reachable ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
-- `/seiton show` / `/seiton hide` - enable or disable the HUD
+- `/seitonbringer` - arm the immediately following exact DRK Souleater Combo
+  macro line for the bounded Shadowbringer weave check
+- `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
-  selected-target CC-brake resolution, isolation/defensive state, and retained
-  reactive counter-CC opportunity results
+  selected-target CC-brake resolution, isolation/defensive state, Auto Low-MP
+  Focus, DRK Shadowbringer, and retained reactive counter-CC opportunity results
 - `/seiton reset` - restore defaults
+- `/howmany show` / `/howmany hide` - show or hide only the integrated pressure
+  counter; these do not disable pressure-dependent helpers
+- `/howmany lock` / `/howmany unlock` - lock or unlock only the counter window
+- `/howmany reset` - restore only the counter-window position
 
 ## Standalone plugin retirement
 
@@ -843,8 +966,10 @@ FFXIV Quick Chat and marker commands, so enabling it creates the described
 party-visible in-game side effect through FFXIV. Transient observations and the
 exact one-shot action boundary are documented in [PRIVACY.md](PRIVACY.md).
 
-Display features, including the resource aura, never target or press actions or
-mutate native UI. For one already incoming, enabled CC action attempt against
+Display-only features, including the resource aura, never target or press
+actions or mutate native UI. Auto Low-MP Focus is a separate explicit setter,
+and the DRK macro is a separate explicit action helper; both are default-off
+and bounded as described above. For one already incoming, enabled CC action attempt against
 an exact protected enemy, the optional brake can return `false` without calling
 the downstream/original action function. The exact native selected target may
 be read only to resolve an unchanged native target carrier of `0` or
@@ -858,9 +983,11 @@ input and never chooses another target or action. Near Assist, Near Help, and Fa
 each replace only the target ID of one explicitly armed, already incoming macro
 action. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-self-Purify, defensive utilities, Ally Rescue, and reactive
-counter-CC may each initiate one exact action attempt, but share one physical-
-generation ownership path in that order. A post-Purify Guard requires a new
+self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
+counter-CC, Ninja Seiton, and Scholar Critical Strategy may each initiate one
+exact action attempt and share one physical-generation ownership path in that
+order. Monk Earth's Reply is a separate automatic follow-up that yields after
+an earlier helper attempt. A post-Purify Guard requires a new
 physical generation. While your own Guard is active, all Seiton action-request
 helpers are blocked; the same gate applies for the bounded 1.5-second status-
 propagation interval after an exact local Guard request. Manual game actions remain
@@ -876,14 +1003,24 @@ are consumed before dispatch, and it has no target mutation, second selection,
 alternate, fallback, replay, or retry. The original key is not swallowed, and
 a client-accepted return is not a landed-action or kill claim.
 The separate default-off Monk helper may initiate at most one exact Earth's
-Reply attempt per continuously observed Earth Resonance after self-Purify
-declines priority; it has no alternate action or retry.
+Reply attempt per continuously observed Earth Resonance after every earlier
+helper in the listed priority declines; it has no alternate action or retry.
+The separate DRK macro does not use that physical-input priority chain. It may
+add only one already-spent Shadowbringer attempt to the exact authored
+Souleater Combo carrier inside one proven GCD window; the carrier and visible
+target remain unchanged, with no alternate or retry.
 
 The isolation warning is local and display-only. The optional Attack1 focus
 module is not display-only: it issues one normal, hardcoded party-visible marker
 command when its exact gates pass. It never swaps targets or overwrites an
 occupied Attack1 sign and clears only a marker whose ownership it can still
 prove from exact identity and marker time.
+
+The separate Auto Low-MP Focus option is local but not display-only: it can use
+the one reviewed Focus Target setter only after an empty-to-exact preflight. It
+never clears, replaces, or restores a Focus Target. Manual/external ownership
+wins and latches, and the local Focus HUD/`<f>` result remains independent of
+the party-visible Attack1 sign.
 
 The separate Guardian communication option is likewise not display-only. After
 one client-accepted automatic Guardian request it may issue one localized,
@@ -918,7 +1055,28 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.16.0.0 specifically, source checks cover the Bard-only Paean action and
+For v0.18.0.0 specifically, source checks cover Auto Low-MP Focus's complete
+canonical set, trusted MP hysteresis, deterministic selection, stable-empty and
+manual-override ownership, frozen final preflight, sole set-only write, exact
+readback, and no clear/replace/restore/retry contract. DRK checks cover exact
+macro adjacency and carrier shape, proven 2.40-second GCD-cycle ownership, the
+inclusive 0.60-0.80 remaining-time window, the never-at-or-below-0.50 boundary,
+one token spent before one request, exact target/Guard/range/line-of-sight/
+queue/resource gates, unchanged outer combo call, and no alternate, mutation,
+replay, or retry. Those checks cannot prove the live Focus setter/HUD/`<f>`
+result, ReAction Macro Queue/Turbo mode, native queue and recast-group timing,
+server execution, or clipping; both features still require current-patch live
+CC A/B traces.
+
+The retained v0.17.0.0 source checks cover the exact direct hard/cast
+pressure threshold, warning-entry episode ownership, native-sound one-shot
+behavior, held-generation ownership, exact Sprint metadata/readiness, own-Guard
+suppression, final pressure revalidation, and one consumed self action attempt
+without alternate, replay, or retry. Those checks cannot prove live enemy-target
+telemetry, the chosen FFXIV system sound, or Sprint acceptance/effect in the
+current client and therefore still require a live CC A/B test.
+
+The retained v0.16.0.0 source checks cover the Bard-only Paean action and
 metadata boundary, the exact `3+` incoming-pressure threshold, exact non-self
 party identity and native reachability, deterministic pressure/HP/identity
 ranking, unchanged vanilla fallthrough before selection, frozen-intent

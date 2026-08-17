@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 22;
+    public int Version { get; set; } = 24;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -68,6 +68,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float PersonalWarningBackgroundOpacity { get; set; } = 0.92f;
     public bool WarnWhenIsolated { get; set; } = true;
     public float IsolationWarningScale { get; set; } = 1f;
+    public bool ShowHighPressureWarning { get; set; } = true;
+    public bool PlayHighPressureWarningSound { get; set; }
+    public int HighPressureWarningSoundId { get; set; } = 6;
+    public bool EnablePressureEscapeSprintOnHeldKey { get; set; }
     public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
     public bool MchLimitBreakSoundEnabled { get; set; } = true;
     public int MchLimitBreakSoundId { get; set; } = 6;
@@ -111,6 +115,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
     public int MonkEarthReplyHpPercent { get; set; } = 30;
     public float MonkEarthReplyExpirySeconds { get; set; } = 1.25f;
+    public bool EnableDarkKnightShadowbringerMacro { get; set; }
+    public bool EnableAutoLowMpFocusTarget { get; set; }
     public bool EnableFocusGlow { get; set; }
     public bool FocusHideWithGameUi { get; set; } = true;
     public bool FocusDrawInForeground { get; set; } = true;
@@ -188,7 +194,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 22)
+        if (Version >= 24)
         {
             if (repaired) Save();
             return;
@@ -396,7 +402,27 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableBardWardensPaeanPressureRedirect = false;
         }
 
-        Version = 22;
+        if (Version < 23)
+        {
+            // The visual warning is deliberately off for existing installations so an
+            // upgrade cannot suddenly add a prominent top-center alert. Native sound and
+            // the held-key Sprint action remain separate explicit opt-ins everywhere.
+            ShowHighPressureWarning = false;
+            PlayHighPressureWarningSound = false;
+            HighPressureWarningSoundId = 6;
+            EnablePressureEscapeSprintOnHeldKey = false;
+        }
+
+        if (Version < 24)
+        {
+            // Both features can mutate local game state: one may set an empty native
+            // Focus Target and one may initiate a DRK action. Every upgrading user
+            // must explicitly opt in after reviewing their exact boundaries.
+            EnableAutoLowMpFocusTarget = false;
+            EnableDarkKnightShadowbringerMacro = false;
+        }
+
+        Version = 24;
         ClampSettings();
         Save();
     }
@@ -405,7 +431,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 22;
+        Version = 24;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -438,6 +464,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PersonalWarningBackgroundOpacity = 0.92f;
         WarnWhenIsolated = true;
         IsolationWarningScale = 1f;
+        ShowHighPressureWarning = true;
+        PlayHighPressureWarningSound = false;
+        HighPressureWarningSoundId = 6;
+        EnablePressureEscapeSprintOnHeldKey = false;
         MarksmanSpiteWarningScale = 1.45f;
         MchLimitBreakSoundEnabled = true;
         MchLimitBreakSoundId = 6;
@@ -481,6 +511,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         MonkEarthReplyBeforeExpiry = true;
         MonkEarthReplyHpPercent = 30;
         MonkEarthReplyExpirySeconds = 1.25f;
+        EnableDarkKnightShadowbringerMacro = false;
+        EnableAutoLowMpFocusTarget = false;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
         EnableNearAssistMacro = false;
@@ -639,6 +671,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (soundId != MchLimitBreakSoundId)
         {
             MchLimitBreakSoundId = soundId;
+            changed = true;
+        }
+
+        var highPressureSoundId = Math.Clamp(HighPressureWarningSoundId, 1, 16);
+        if (highPressureSoundId != HighPressureWarningSoundId)
+        {
+            HighPressureWarningSoundId = highPressureSoundId;
             changed = true;
         }
 
