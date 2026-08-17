@@ -15,6 +15,10 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     int EnemySlot,
     ulong TargetGameObjectId,
     uint TargetEntityId,
+    uint RevalidatedCurrentHp,
+    uint RevalidatedMaximumHp,
+    bool BoundaryThresholdRevalidated,
+    bool ThresholdDriftCancelled,
     bool LocallyReady,
     VirtualKey FreshGameplayKey,
     bool InputClaimed,
@@ -22,6 +26,7 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     bool UseActionAccepted,
     long AttemptCount,
     long AcceptedCount,
+    long ThresholdDriftCancellationCount,
     string CandidateResolution,
     string LastEvent)
 {
@@ -33,11 +38,16 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
         0,
         0,
         0,
+        0,
+        0,
+        false,
+        false,
         false,
         VirtualKey.NO_KEY,
         false,
         false,
         false,
+        0,
         0,
         0,
         "Not evaluated",
@@ -58,6 +68,7 @@ internal sealed class NinjaSeitonDispatchProbe
     private NinjaSeitonDispatchProbeSnapshot snapshot = NinjaSeitonDispatchProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
+    private long thresholdDriftCancellationCount;
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
 
@@ -142,12 +153,22 @@ internal sealed class NinjaSeitonDispatchProbe
 
         var attempted = false;
         var accepted = false;
+        var revalidatedCurrentHp = 0u;
+        var revalidatedMaximumHp = 0u;
+        var boundaryThresholdRevalidated = false;
+        var thresholdDriftCancelled = false;
         if (decision.ShouldDispatch && decision.Intent is { } intent)
         {
             var finalActionReady = SeitonReadinessProbe.TryGetReadyAction(
                 localPlayer!,
                 out var finalResolvedActionId);
             var finalCandidate = ResolveFrozenIntent(localPlayer!, intent, finalResolvedActionId);
+            if (finalCandidate is { } observedCandidate)
+            {
+                revalidatedCurrentHp = observedCandidate.CurrentHp;
+                revalidatedMaximumHp = observedCandidate.MaximumHp;
+            }
+
             if (finalCandidate is { } exactCandidate &&
                 NinjaSeitonDispatchRules.CanUseExactIntent(
                     intent,
@@ -158,11 +179,27 @@ internal sealed class NinjaSeitonDispatchProbe
             {
                 try
                 {
-                    accepted = TryUseSeitonOnce(localPlayer!, intent, out attempted);
+                    accepted = TryUseSeitonOnce(
+                        localPlayer!,
+                        intent,
+                        out attempted,
+                        out var boundaryCandidate,
+                        out boundaryThresholdRevalidated,
+                        out thresholdDriftCancelled);
+                    if (boundaryCandidate is { } observedBoundaryCandidate)
+                    {
+                        revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
+                        revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
+                    }
+
                     if (attempted) Interlocked.Increment(ref attemptCount);
                     if (accepted) Interlocked.Increment(ref acceptedCount);
-                    lastEvent =
-                        $"S{intent.EnemySlot} action {intent.ActionId} attempted (accepted={accepted})";
+                    lastEvent = attempted
+                        ? $"S{intent.EnemySlot} action {intent.ActionId} attempted (accepted={accepted})"
+                        : thresholdDriftCancelled
+                            ? $"S{intent.EnemySlot} terminal threshold drift at UseAction boundary " +
+                              $"({revalidatedCurrentHp}/{revalidatedMaximumHp})"
+                            : $"S{intent.EnemySlot} terminal UseAction-boundary revalidation failed";
                 }
                 catch (Exception exception)
                 {
@@ -173,9 +210,18 @@ internal sealed class NinjaSeitonDispatchProbe
             }
             else
             {
-                lastEvent = $"S{intent.EnemySlot} terminal exact-intent revalidation failed";
+                thresholdDriftCancelled =
+                    finalCandidate is { } thresholdCandidate &&
+                    IsValidAtOrAboveHalf(thresholdCandidate);
+                lastEvent = thresholdDriftCancelled
+                    ? $"S{intent.EnemySlot} terminal threshold drift before UseAction boundary " +
+                      $"({revalidatedCurrentHp}/{revalidatedMaximumHp})"
+                    : $"S{intent.EnemySlot} terminal exact-intent revalidation failed";
             }
         }
+
+        if (thresholdDriftCancelled)
+            Interlocked.Increment(ref thresholdDriftCancellationCount);
 
         var selectedCandidate = decision.SelectedCandidateIndex >= 0 &&
                                 decision.SelectedCandidateIndex < candidates.Count
@@ -189,6 +235,10 @@ internal sealed class NinjaSeitonDispatchProbe
             selectedCandidate?.EnemySlot ?? 0,
             selectedCandidate?.Actor.GameObjectId ?? 0,
             selectedCandidate?.Actor.EntityId ?? 0,
+            revalidatedCurrentHp,
+            revalidatedMaximumHp,
+            boundaryThresholdRevalidated,
+            thresholdDriftCancelled,
             actionReady,
             input.FreshGameplayKey,
             inputClaimed,
@@ -196,6 +246,7 @@ internal sealed class NinjaSeitonDispatchProbe
             accepted,
             Interlocked.Read(ref attemptCount),
             Interlocked.Read(ref acceptedCount),
+            Interlocked.Read(ref thresholdDriftCancellationCount),
             candidateResolution,
             lastEvent);
         Volatile.Write(ref snapshot, result);
@@ -209,6 +260,8 @@ internal sealed class NinjaSeitonDispatchProbe
         {
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
+            ThresholdDriftCancellationCount =
+                Interlocked.Read(ref thresholdDriftCancellationCount),
             LastEvent = lastEvent,
         });
     }
@@ -222,6 +275,8 @@ internal sealed class NinjaSeitonDispatchProbe
             Reason = NinjaSeitonDispatchDecisionReason.HardReset,
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
+            ThresholdDriftCancellationCount =
+                Interlocked.Read(ref thresholdDriftCancellationCount),
             LastEvent = lastEvent,
         };
         Volatile.Write(ref snapshot, result);
@@ -440,13 +495,17 @@ internal sealed class NinjaSeitonDispatchProbe
     private unsafe bool TryUseSeitonOnce(
         IPlayerCharacter localPlayer,
         NinjaSeitonDispatchIntent intent,
-        out bool attempted)
+        out bool attempted,
+        out NinjaSeitonDispatchCandidate? boundaryCandidate,
+        out bool boundaryThresholdRevalidated,
+        out bool thresholdDriftCancelled)
     {
         attempted = false;
+        boundaryCandidate = null;
+        boundaryThresholdRevalidated = false;
+        thresholdDriftCancelled = false;
         if (!HasValidNativeIdentity(localPlayer) ||
-            !intent.IsValid ||
-            !SeitonReadinessProbe.TryGetReadyAction(localPlayer, out var resolvedActionId) ||
-            resolvedActionId != intent.ActionId)
+            !intent.IsValid)
         {
             return false;
         }
@@ -454,15 +513,132 @@ internal sealed class NinjaSeitonDispatchProbe
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return false;
 
-        attempted = true;
-        return nearAssist.RunWithoutRedirect(() =>
-            actionManager->UseAction(
-                ActionType.Action,
-                intent.ActionId,
-                intent.Target.GameObjectId,
-                0,
-                ActionManager.UseActionMode.None,
-                0));
+        var attemptedAtBoundary = false;
+        NinjaSeitonDispatchCandidate? candidateAtBoundary = null;
+        var thresholdRevalidatedAtBoundary = false;
+        var thresholdDriftAtBoundary = false;
+        try
+        {
+            return nearAssist.RunWithoutRedirect(() =>
+            {
+                if (!HasValidNativeIdentity(localPlayer) ||
+                    !SeitonReadinessProbe.TryGetReadyAction(
+                        localPlayer,
+                        out var resolvedActionId))
+                {
+                    return false;
+                }
+
+                var currentLocalIdentity = new TargetPressureActorIdentity(
+                    localPlayer.GameObjectId,
+                    localPlayer.EntityId);
+                var exactCandidate = ResolveFrozenIntent(
+                    localPlayer,
+                    intent,
+                    resolvedActionId);
+                if (exactCandidate is not { } frozenCandidate)
+                    return false;
+
+                candidateAtBoundary = frozenCandidate;
+                if (!NinjaSeitonDispatchRules.CanUseExactIntent(
+                        intent,
+                        frozenCandidate,
+                        currentLocalIdentity,
+                        resolvedActionId,
+                        actionLocallyReady: true))
+                {
+                    thresholdDriftAtBoundary = IsValidAtOrAboveHalf(frozenCandidate);
+                    return false;
+                }
+
+                // HP is deliberately read once more after every other exact
+                // preflight, leaving only the unavoidable client-call/server
+                // execution race after this strict sub-50 check.
+                var thresholdResult = ReadFrozenThresholdAtUseActionBoundary(
+                    intent,
+                    out var currentHp,
+                    out var maximumHp);
+                candidateAtBoundary = frozenCandidate with
+                {
+                    CurrentHp = currentHp,
+                    MaximumHp = maximumHp,
+                };
+                if (thresholdResult != BoundaryThresholdResult.BelowHalf)
+                {
+                    thresholdDriftAtBoundary =
+                        thresholdResult == BoundaryThresholdResult.AtOrAboveHalf;
+                    return false;
+                }
+
+                thresholdRevalidatedAtBoundary = true;
+                attemptedAtBoundary = true;
+                return actionManager->UseAction(
+                    ActionType.Action,
+                    intent.ActionId,
+                    intent.Target.GameObjectId,
+                    0,
+                    ActionManager.UseActionMode.None,
+                    0);
+            });
+        }
+        finally
+        {
+            attempted = attemptedAtBoundary;
+            boundaryCandidate = candidateAtBoundary;
+            boundaryThresholdRevalidated = thresholdRevalidatedAtBoundary;
+            thresholdDriftCancelled = thresholdDriftAtBoundary;
+        }
+    }
+
+    private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary(
+        NinjaSeitonDispatchIntent intent,
+        out uint currentHp,
+        out uint maximumHp)
+    {
+        currentHp = 0;
+        maximumHp = 0;
+        var target = EnemySlotResolver.Resolve(objectTable, intent.EnemySlot);
+        if (!HasValidNativeIdentity(target) ||
+            target!.GameObjectId != intent.Target.GameObjectId ||
+            target.EntityId != intent.Target.EntityId)
+        {
+            return BoundaryThresholdResult.Unresolved;
+        }
+
+        var tableTarget = objectTable.SearchByEntityId(target.EntityId) as IPlayerCharacter;
+        if (tableTarget is null ||
+            tableTarget.Address != target.Address ||
+            tableTarget.GameObjectId != target.GameObjectId ||
+            tableTarget.EntityId != target.EntityId)
+        {
+            return BoundaryThresholdResult.Unresolved;
+        }
+
+        currentHp = target.CurrentHp;
+        maximumHp = target.MaxHp;
+        if (target.IsDead ||
+            !target.IsTargetable ||
+            !ExecuteThreshold.HasValidHp(currentHp, maximumHp))
+        {
+            return BoundaryThresholdResult.InvalidTarget;
+        }
+
+        return ExecuteThreshold.IsBelowHalf(currentHp, maximumHp)
+            ? BoundaryThresholdResult.BelowHalf
+            : BoundaryThresholdResult.AtOrAboveHalf;
+    }
+
+    private static bool IsValidAtOrAboveHalf(
+        NinjaSeitonDispatchCandidate candidate) =>
+        ExecuteThreshold.HasValidHp(candidate.CurrentHp, candidate.MaximumHp) &&
+        !ExecuteThreshold.IsBelowHalf(candidate.CurrentHp, candidate.MaximumHp);
+
+    private enum BoundaryThresholdResult
+    {
+        Unresolved = 0,
+        InvalidTarget = 1,
+        AtOrAboveHalf = 2,
+        BelowHalf = 3,
     }
 
     private static unsafe GameObject* GetNativeObject(IPlayerCharacter? player)

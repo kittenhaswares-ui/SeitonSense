@@ -2,11 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.15.0.0 adds two
-separate default-off exact-CC utilities: party-visible Quick Chat plus an
-ownership-safe Bind pair after a client-accepted automatic PLD Guardian, and a
-held-key SCH Critical Strategy helper restricted to exact enemies with live
-Guard. The suite combines
+one-shot macro assistance, and target highlights. Version 0.16.0.0 adds a
+separate default-off Bard utility that may redirect one already incoming
+manual or Turbo Warden's Paean call to an exact reachable non-self party ally
+under pressure from at least three unique enemies. Without an exact eligible
+ally, the original target and call remain unchanged vanilla. It also hardens
+the Ninja execute's final strict-below-50% check and recognizes both native
+empty-marker representations for Guardian's Bind pair. The suite combines
 the useful parts of HOWMANY, CCImmunityWatch, NearAssist, and Super Focus Glow
 into one configurable custom-repository plugin.
 
@@ -84,6 +86,12 @@ into one configurable custom-repository plugin.
   uses HP, incoming pressure, trusted MP, and distance in that order. A matching
   successful status-removal effect produces a blue `CLEANSED` popup and feeds
   resettable, in-memory match/session counters.
+- **Smart Bard Paean target:** a separate default-off exact-CC option examines
+  only an already incoming manual or downstream Turbo Warden's Paean call. It
+  may redirect that call to an exact reachable non-self party ally with trusted
+  incoming pressure from at least three unique enemies. No initial candidate
+  preserves vanilla; drift after one exact redirect is frozen suppresses only
+  that call. It never initiates an action or selects an alternate.
 - **Experimental defensive utilities:** the default-off CC helper can use one
   physical input generation for a high-pressure Stun Purify, a later-generation
   Guard after positive Resilience, a low-HP pre-Guard, or PLD Guardian on an
@@ -112,10 +120,11 @@ into one configurable custom-repository plugin.
 - **Cleaner settings:** defensive utilities, reactive counter-CC, the team focus
   sign, CC-immunity brake, resource readability, and job helpers are grouped
   under a dedicated Jobs tab. Overview, Pressure, Warnings, Assist, Targets, and Advanced remain
-  focused on their own feature families. Configuration schema 21 keeps Guardian
-  team communication and Scholar Critical Strategy as separate default-off
-  options for new, upgraded, and reset settings; every action-attempt and party-
-  visible communication feature remains opt-in.
+  focused on their own feature families. Configuration schema 22 keeps the Bard
+  Paean pressure redirect, Guardian team communication, and Scholar Critical
+  Strategy as separate default-off options for new, upgraded, and reset settings;
+  every action-attempt, target-redirect, and party-visible communication feature
+  remains opt-in.
 
 ## Pressure and team focus
 
@@ -338,6 +347,11 @@ helper. Once the exact intent is claimed, its state and input generation are
 consumed before at most one native action request. A readiness, identity,
 health, or reachability race; a false return; or an exception produces no
 second selection, alternate target, fallback action, replay, or retry. The
+same frozen S-slot and actor identity are resolved again at the latest safe
+point immediately before the native request, and that exact actor's HP is read
+again. Exactly 50% or higher cancels the spent attempt. This minimizes wasted
+LBs when healing races the selection, but cannot eliminate the unavoidable
+interval between the final client read, request, and server execution. The
 helper never mutates a hard, soft, or focus target and never swallows the
 original gameplay key. A client-accepted return is dispatch feedback only; it
 does not prove that Seiton
@@ -432,6 +446,37 @@ session plus per-action/per-status details. These aggregates live only in
 memory. The provided reset clears the displayed statistics and does not create
 another action or confirmation.
 
+The separate **Smart Bard Paean pressure redirect** is disabled by default and
+runs only for PvP Bard in exact Crystalline Conflict. It does not observe the
+shared generic gameplay-key generation and never casts an action by itself. It
+examines only an already incoming The Warden's Paean `29400` ability call from
+the normal manual action path or a downstream Turbo pulse.
+
+At that incoming call, selection first requires a complete, unique, stable
+exact Crystalline Conflict party view. An eligible destination must be an exact
+living, targetable, non-self party member, accepted by FFXIV's native 30-yalm
+range and line-of-sight check, without the live Warden's Paean ward `3143`, and
+with a trusted current count of at least three unique live enemies whose exact
+hard target or cast target is that ally. An unknown pressure count excludes only
+that candidate. Among eligible allies, higher incoming pressure wins, then lower
+exact HP ratio, party slot, entity ID, and game-object ID. An incomplete or
+ambiguous party view, or no exact known `3+` candidate, forwards the original
+target and ability call unchanged as vanilla behavior.
+
+The redirect may substitute only the target ID of that one incoming Paean call.
+Once that exact party slot and actor identity are frozen, final identity, local
+job, exact resolved action ID and metadata, life/targetable state, HP, live ward,
+native range/line of sight, or pressure drift suppresses that one call. There is
+deliberately no cooldown/readiness gate on this passive transform. It does not
+fall back to the original target, select another ally, or retry after this final
+gate. It never changes a hard, soft, focus, or mouseover target, initiates
+another action, substitutes an action, or stores a call for replay. A later
+Turbo pulse is an independent downstream call and is evaluated once on its own.
+A client-accepted return is dispatch feedback only, not proof that Paean applied
+or later removed or nullified crowd control.
+The existing fresh/held-key Ally Rescue behavior, including Aquaveil, remains
+unchanged and separate from this passive Bard-only option.
+
 The **Defensive utilities** module is a separate, default-off Crystalline
 Conflict helper. All of its rules require one fresh or explicitly eligible held
 physical gameplay-key generation and exact local metadata. At three or more
@@ -472,6 +517,11 @@ fails, only the proven-owned Bind2 is eligible for cleanup. A complete pair
 expires nine seconds after Guardian was accepted; cleanup tries Bind2 and then
 Bind1, each only while the same actor/sign/timestamp ownership remains exact.
 Drift is relinquished rather than cleared.
+
+FFXIV can represent an unused native marker slot as either `0` or
+`0xE0000000`. Seiton Sense accepts both only when the slot index, availability,
+and timestamp telemetry are otherwise exact; this prevents an empty slot from
+silently skipping the Bind sequence without weakening foreign-marker safety.
 
 This communication path never changes a hard, soft, focus, or mouseover target,
 initiates another combat action, selects another ally, falls back, or retries.
@@ -868,18 +918,28 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.15.0.0 specifically, source checks retain the Ninja helper's fresh-edge
-ownership, complete canonical `S1`-`S5` auto-selection and adjusted-action
-gates, strict below-50% boundary, Guard/priority suppression, and one-attempt/
-no-retry contract. The helper has no hard-target dependency. Those checks do not
-prove live client/server acceptance, execution, or a kill. Guardian communication
-checks cover accepted-episode consumption, chat-only occupied-marker behavior,
-Bind2-before-Bind1 confirmation, exact per-sign ownership, partial cleanup, and
-no post-invocation retry. Scholar checks cover Guard-only complete `S1`-`S5`
-selection, trusted-positive-pressure/HP ranking, held-generation ownership,
-native reachability, frozen-intent revalidation, and one attempt without target
-mutation or alternate. Localized Quick Chat, marker placement/cleanup, and
-Critical Strategy dispatch/effect still require current-patch live confirmation.
+For v0.16.0.0 specifically, source checks cover the Bard-only Paean action and
+metadata boundary, the exact `3+` incoming-pressure threshold, exact non-self
+party identity and native reachability, deterministic pressure/HP/identity
+ranking, unchanged vanilla fallthrough before selection, frozen-intent
+suppression after final drift, one target substitution on one already incoming
+call, and no plugin-created action, alternate, replay, or retry. Those checks do
+not prove that a manual or Turbo call was
+accepted by the live client or that Paean applied, removed, or nullified CC.
+They also retain the Ninja helper's fresh-edge ownership, complete canonical
+`S1`-`S5` auto-selection and adjusted-action gates, strict below-50% boundary,
+latest-safe frozen-actor HP re-read, exact-50% cancellation,
+Guard/priority suppression, and one-attempt/no-retry contract. The Ninja helper
+has no hard-target dependency. Guardian communication checks cover accepted-
+episode consumption, chat-only occupied-marker behavior, Bind2-before-Bind1
+confirmation, both native empty-marker representations, exact per-sign
+ownership, partial cleanup, and no post-invocation retry. Scholar checks cover
+Guard-only complete `S1`-`S5` selection, trusted-
+positive-pressure/HP ranking, held-generation ownership, native reachability,
+frozen-intent revalidation, and one attempt without target mutation or alternate.
+Localized Quick Chat, marker placement/cleanup, Critical Strategy dispatch/
+effect, and the passive Paean redirect still require current-patch live
+confirmation.
 Existing tests cover Near Help's exact self-target gate, critical-health
 override, bounded pressure window, complete-view fallback, and deterministic
 pressure/HP/distance ordering, plus the isolation debounce and

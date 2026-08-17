@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.16.0.0
+
+- Added a separate, persisted, default-off **Smart Paean target for manual /
+  Turbo calls** option under Jobs > Bard. It is passive: on PvP Bard in exact
+  Crystalline Conflict it may redirect only an already incoming The Warden's
+  Paean `29400` ability call from the normal action path or a downstream Turbo
+  pulse, and never creates an action or consumes the shared generic input.
+- Selection requires a complete, unique, stable exact party view. Eligible
+  destinations are exact living, targetable, non-self party members without the
+  live Warden's Paean ward `3143`, accepted by native 30-yalm range and line of
+  sight, and with a trusted incoming-pressure count of at least three. Unknown
+  pressure excludes only that candidate. Higher pressure wins, then lower exact
+  HP ratio, party slot, entity ID, and game-object ID.
+- With no complete exact party view or no known `3+` candidate, the original
+  target and incoming call remain unchanged as vanilla behavior. After a
+  redirect is frozen, final identity, job, exact resolved action/metadata,
+  life/targetable state, HP, live ward, native reachability, or pressure drift
+  suppresses that one call rather than falling back to its original target or
+  choosing another ally. This passive transform deliberately has no cooldown
+  or readiness gate.
+- The helper never changes a selected target, substitutes an action, replays,
+  or retries. Each later manual or Turbo call is evaluated independently, and
+  client acceptance remains dispatch feedback rather than proof that Paean
+  applied or affected crowd control. Existing Ally Rescue and Aquaveil behavior
+  remains unchanged and separate.
+- Hardened the experimental Ninja Seiton helper at its latest safe dispatch
+  boundary. Immediately before its sole native request, Seiton Sense now
+  re-resolves only the frozen `S#` actor and re-reads that exact actor's HP;
+  healing to exactly 50% or higher cancels the spent attempt with no alternate,
+  fallback, or retry. The unavoidable client-read-to-server-execution race
+  remains a live boundary.
+- Fixed the Guardian communication Bind pair not starting on clients that report
+  an unused native marker slot as `0xE0000000` instead of `0`. Both native empty
+  representations are now accepted only with otherwise exact marker telemetry;
+  occupied, ambiguous, drifted, or foreign signs retain the same fail-closed
+  ownership and cleanup rules.
+- Bumped the plugin version to 0.16.0.0 and configuration schema to 22. Smart
+  Paean remains off for new configurations, upgrades, and reset defaults;
+  current-patch routing and effect behavior still require live confirmation.
+
 ## 0.15.0.0
 
 - Added a separate, persisted, default-off **Auto Guardian Quick Chat + Bind

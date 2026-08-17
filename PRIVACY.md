@@ -386,6 +386,41 @@ statistics. No ActionEffect payload, actor identity, counter, or popup history
 is written to disk, logged as combat history, sent over the network, or
 uploaded.
 
+## Smart Bard Paean pressure redirect
+
+This separate option is disabled by default and exact-Crystalline-Conflict-only.
+On PvP Bard it transiently examines an already incoming The Warden's Paean
+ability call `29400`, its original target ID, exact local job/actor/context, and
+the current exact party view. For party candidates it reads exact native party-
+slot identity, life/targetable state, HP, position/native action reachability,
+and the current unique-enemy incoming-pressure count. It does not read a generic
+physical gameplay-key generation and never creates an action call by itself.
+
+Selection requires a complete, unique, stable party view. Only an exact living,
+targetable, non-self party member without the live Warden's Paean ward `3143`,
+in native 30-yalm range and line of sight, and with a trusted count of at least
+three unique live enemies currently hard-targeting or casting at that ally is
+eligible. Unknown pressure excludes only that actor. Known candidates rank by
+higher pressure, lower exact HP ratio, party slot, entity ID, and game-object
+ID. With no complete exact view or no known `3+` candidate, the original target
+and incoming call are forwarded unchanged.
+
+After one destination is frozen, the exact party slot and actor are revalidated.
+Final identity, local job, exact resolved action/metadata, life/targetable state,
+HP, live ward, native reachability, or pressure drift suppresses that one call
+instead of forwarding the original target, choosing another ally, replaying, or
+retrying. There is deliberately no cooldown/readiness gate on this passive
+transform. The option never changes any selected target or substitutes an
+action. Each later manual or downstream Turbo call is a separate incoming call
+and is evaluated independently. A client-accepted return is not stored or
+presented as proof that Paean applied, removed, or nullified crowd control.
+
+The transient party, pressure, action, target, selection, and result state is not
+persisted, transmitted, or uploaded. Any current diagnostic counters or last-
+decision text remain in memory and appear only when the user explicitly requests
+the existing local debug output. Existing Ally Rescue behavior and its in-memory
+confirmation path, including Aquaveil, remain unchanged.
+
 ## Experimental defensive utilities
 
 This module is disabled by default and exact-Crystalline-Conflict-only. It
@@ -435,8 +470,11 @@ ally with a new marker timestamp before Bind1 is attempted. If Bind1 then fails,
 only the proven-owned Bind2 may be cleaned. A complete pair expires nine seconds
 after Guardian acceptance; cleanup tries Bind2 and then Bind1, each only while
 the same actor, sign, and marker timestamp remain exact. Drift is relinquished
-rather than cleared, and cleanup success cannot be guaranteed. Communication
-does not change a selected target, issue another combat action, select an
+rather than cleared, and cleanup success cannot be guaranteed. The native
+unused-marker values `0` and `0xE0000000` are recognized only while the marker
+slot, availability, and timestamp telemetry are otherwise exact; these values
+are transient and are neither persisted nor transmitted. Communication does
+not change a selected target, issue another combat action, select an
 alternate, fall back, queue, replay, or retry. A command attempt and its bounded
 ownership state are not persisted as history. Client-accepted Guardian does not
 prove server-applied protection; an issued Quick Chat or marker command does not
@@ -559,7 +597,11 @@ After every gate passes, the intent and input generation are consumed before at
 most one exact native action request. A changed identity, readiness, health, or
 reachability result; a false return; or an exception is not followed by an
 additional selection, alternate target, fallback action, replay, or retry. The
-original gameplay key is neither swallowed nor replayed. The local request
+frozen S-slot and actor identity are resolved once more immediately before that
+request and the same actor's current HP is re-read. A value at exactly 50% or
+higher cancels the already-consumed attempt; this last client-side sample does
+not prove what HP the server observes when processing the request. The original
+gameplay key is neither swallowed nor replayed. The local request
 return may be kept as a bounded aggregate `client-accepted` diagnostic, but it
 is not proof that Seiton
 landed, executed the target, or caused a kill. No target, key, attempt, or result
@@ -592,15 +634,16 @@ Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the shared Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, the Near Help incoming-pressure preference,
-target-highlight settings, the Purify
-opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key opt-ins,
-isolation warning/scale, defensive master/held-key/per-rule opt-ins, WHM/BRD
+target-highlight settings, the Purify opt-in/held-key/per-debuff controls, the
+Ally Rescue master/held-key opt-ins, the separate Bard Paean pressure-redirect
+opt-in, isolation warning/scale, defensive master/held-key/per-rule opt-ins,
+WHM/BRD
 reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
 marker opt-in, the separate Guardian Quick Chat/Bind-pair opt-in, resource-aura
 surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
 thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
 held-key opt-in, and the CC-immunity-brake master plus exact per-job/per-action
-selections. Configuration schema 21 is current in v0.15.0.0
+selections. Configuration schema 22 is current in v0.16.0.0
 and does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.

@@ -126,6 +126,15 @@ public sealed class Plugin : IDalamudPlugin
             dutyState,
             dataManager,
             log);
+        var smartWardensPaean = new SmartWardensPaeanService(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            dataManager,
+            pressureTracker,
+            log);
         nearAssist = new NearAssistRedirector(
             configuration,
             clientState,
@@ -136,6 +145,7 @@ public sealed class Plugin : IDalamudPlugin
             interop,
             framework,
             pressureTracker,
+            smartWardensPaean,
             ccImmunityBrake,
             log);
         personalStatus = new PersonalStatusService(
@@ -451,6 +461,7 @@ public sealed class Plugin : IDalamudPlugin
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
+                var smartPaean = nearAssist.SmartWardensPaeanDiagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -488,6 +499,7 @@ public sealed class Plugin : IDalamudPlugin
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
+                chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
                 chatGui.Print(
                     $"[Seiton Sense] rescue[phase={rescue.Phase},decision={rescue.Decision}," +
                     $"cancel={rescue.CancelReason},trigger={rescue.InputTrigger},candidates={rescue.CandidateCount}," +
@@ -547,6 +559,10 @@ public sealed class Plugin : IDalamudPlugin
                     $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +
                     $"candidates={ninja.CandidateCount},S={ninja.EnemySlot}," +
                     $"target={ninja.TargetGameObjectId:X}/{ninja.TargetEntityId:X}," +
+                    $"hp={ninja.RevalidatedCurrentHp}/{ninja.RevalidatedMaximumHp}," +
+                    $"boundary<50={ninja.BoundaryThresholdRevalidated}," +
+                    $"threshold-cancel={ninja.ThresholdDriftCancelled}/" +
+                    $"{ninja.ThresholdDriftCancellationCount}," +
                     $"fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}," +
                     $"attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}," +
                     $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +
