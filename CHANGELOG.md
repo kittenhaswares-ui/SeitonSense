@@ -1,12 +1,85 @@
 # Changelog
 
+## 0.18.0.0
+
+- Added a separate default-off **Auto Low-MP Focus Target** option for exact
+  Crystalline Conflict. It requires one complete unique native `S1`-`S5` view,
+  150 ms of trusted MP at or below 2,000, and FFXIV's native 20-yalm range and
+  line-of-sight result. The low-MP wave clears only after 150 ms at or above
+  2,300 MP.
+- The helper can set only an empty local native Focus Target. It never clears,
+  replaces, restores, or retries one. An occupied or manually changed Focus
+  wins; confirmed external drift after a plugin-set Focus latches manual
+  override until the option is toggled off/on or a new exact match lifetime.
+  The result feeds FFXIV's Focus Target HUD and `<f>` and is independent of the
+  party-visible Attack1 sign. Because the API has no atomic compare-and-set,
+  live current-patch setter/readback behavior remains an A/B boundary.
+- Added a separate default-off **DRK Shadowbringer macro helper** for the exact
+  adjacent lines `/seitonbringer` and `/pvpac "Souleater Combo" <t>`. The quoted
+  PvP action name must match the client language. The supported setup uses both
+  ReAction Macro Queue and Turbo.
+- On exact PvP Dark Knight in Crystalline Conflict, the helper can make at most
+  one Shadowbringer attempt per proven 2.40-second Souleater Combo GCD, only in
+  the inclusive 0.60-0.80-seconds-remaining window. Missing that window skips
+  the attempt, and 0.50 seconds or less never triggers Shadowbringer; a later
+  Turbo pulse can queue the authored combo line normally.
+- Final DRK gates require the unchanged exact current canonical enemy, clear own
+  Guard/propagation and target Guard, native 5-yalm combo and 10-yalm
+  Shadowbringer range/line of sight, stable queue/action sequencing, readiness,
+  and either more than 12,000 HP or the exact Dark Arts state. The cycle's
+  one-attempt token is spent before the final request, with no target mutation,
+  alternate, replay, or retry. Client acceptance is not proof of server execution; live queue, mode,
+  recast-group, and clipping behavior still require a current-patch CC trace.
+- Added `/seitonbringer` to command help and placed both new controls in the
+  persistent Macro Helpers and Targets settings pages.
+- Bumped the plugin version to 0.18.0.0 and configuration schema to 24. Both new
+  features remain off for fresh configurations, upgrades, and reset defaults.
+
+## 0.17.0.0
+
+- Added a large fixed top-center **high-pressure warning** for exact Crystalline
+  Conflict when at least three distinct current enemies directly hard-target or
+  cast at the local player. It uses the narrow current direct-intent view rather
+  than the ordinary counter's longer recent-harmful-action union; unknown data
+  hides immediately and cannot rearm a sound episode. Only a continuously known
+  below-three separation can close and rearm that episode.
+- The red `FOCUSED xN` card pulses only its alpha and border, never its geometry.
+  When isolation is also proven, the pressure card stays centered while the
+  separate amber isolation card keeps its own top-left position. On a narrow
+  work area, actual scaled-card overlap stacks isolation below the pressure card.
+- Added a separate optional selectable built-in FFXIV system sound. It is
+  consumed once when a new high-pressure episode begins, not on every update,
+  and includes a settings test button. No external or Windows audio is used.
+- Added a separate default-off **Sprint once from a held movement key** option.
+  It listens only to WASD/arrow movement keys, does not swallow the original
+  key, and can request only the exact self Sprint action while direct pressure
+  is still at least three. It shares the existing one-physical-generation/one-action
+  coordinator, and is suppressed by own Guard. The generation is consumed
+  before the final request; drift, rejection, or an exception cannot choose an
+  alternate, replay, or retry.
+- The complete shared action priority is Self-Purify, defensive utilities,
+  pressure Sprint, Ally Rescue, reactive counter-CC, Ninja Seiton, Scholar
+  Critical Strategy, then Monk Earth's Reply. One claimed physical generation
+  cannot reach a later helper.
+- Clarified command scope: `/seiton show` and `/seiton hide` control the entire
+  plugin, while `/howmany show`/`hide` affect only the pressure counter and
+  `/howmany reset` restores only that counter's window position. Standardized
+  current feature wording to `PvP` and Smart Paean `manual or Turbo`.
+- Reorganized settings into persistent Start, Alerts, HUD & Nameplates, Action
+  Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics pages. Existing
+  settings, defaults, callbacks, ranges, and preview behavior are unchanged.
+- Bumped the plugin version to 0.17.0.0 and configuration schema to 23. The
+  visual warning is enabled for fresh and reset configurations but remains off
+  for upgrading installations to avoid a surprise overlay. Sound and Sprint
+  remain off for fresh, upgraded, and reset settings.
+
 ## 0.16.0.0
 
-- Added a separate, persisted, default-off **Smart Paean target for manual /
+- Added a separate, persisted, default-off **Smart Paean target for manual or
   Turbo calls** option under Jobs > Bard. It is passive: on PvP Bard in exact
   Crystalline Conflict it may redirect only an already incoming The Warden's
-  Paean `29400` ability call from the normal action path or a downstream Turbo
-  pulse, and never creates an action or consumes the shared generic input.
+  Paean `29400` ability call from the manual action path or a Turbo pulse, and
+  never creates an action or consumes the shared generic input.
 - Selection requires a complete, unique, stable exact party view. Eligible
   destinations are exact living, targetable, non-self party members without the
   live Warden's Paean ward `3143`, accepted by native 30-yalm range and line of

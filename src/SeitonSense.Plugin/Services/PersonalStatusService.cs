@@ -27,6 +27,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
+    private readonly PressureEscapeSprintProbe pressureEscapeSprint;
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
@@ -86,6 +87,15 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             log,
             metadata);
+        pressureEscapeSprint = new PressureEscapeSprintProbe(
+            clientState,
+            dutyState,
+            objectTable,
+            dataManager,
+            pressureTracker,
+            nearAssist,
+            defensiveUtility,
+            log);
         guardianCommunication = new GuardianCommunicationService(
             configuration,
             clientState,
@@ -131,6 +141,8 @@ internal sealed class PersonalStatusService : IDisposable
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
+    internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
+        pressureEscapeSprint.Snapshot;
     internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
         guardianCommunication.Diagnostics;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
@@ -153,6 +165,10 @@ internal sealed class PersonalStatusService : IDisposable
         machinistLimitBreakWarningSound.TryPlayPreview(
             Math.Clamp(configuration.MchLimitBreakSoundId, 1, 16),
             Environment.TickCount64);
+
+    internal bool PlayHighPressureWarningSoundPreview() =>
+        pressureEscapeSprint.PlayWarningSoundPreview(
+            Math.Clamp(configuration.HighPressureWarningSoundId, 1, 16));
 
     internal void Start()
     {
@@ -205,6 +221,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
+            pressureEscapeSprint.FailClosed(now, exception);
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
@@ -241,6 +258,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             emergencyPurify.Reset();
             defensiveUtility.Reset();
+            pressureEscapeSprint.Reset();
             guardianCommunication.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
@@ -383,6 +401,10 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ScholarCriticalStrategyVerified &&
             !guardActive &&
             localJobId == ScholarCriticalStrategyRules.ScholarJobId;
+        var pressureEscapeSprintHeldEnabled = configuration.Enabled &&
+                                              configuration.EnablePressureEscapeSprintOnHeldKey &&
+                                              isCrystallineConflict &&
+                                              !guardActive;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -395,12 +417,14 @@ internal sealed class PersonalStatusService : IDisposable
               isCrystallineConflict &&
               metadata.SeitonVerified &&
               !guardActive) ||
-             scholarCriticalStrategyHeldEnabled),
+             scholarCriticalStrategyHeldEnabled ||
+             pressureEscapeSprintHeldEnabled),
             allowPurifyHeldGameplayKey,
             defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
             miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey,
-            scholarCriticalStrategyHeldEnabled);
+            scholarCriticalStrategyHeldEnabled,
+            pressureEscapeSprintHeldEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -452,12 +476,27 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset);
         var defensiveUtilityClaimedPriority = defense.InputClaimed;
+        now = Environment.TickCount64;
+        var pressureEscape = pressureEscapeSprint.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            configuration.Enabled && configuration.ShowHighPressureWarning,
+            configuration.Enabled && configuration.PlayHighPressureWarningSound,
+            configuration.HighPressureWarningSoundId,
+            configuration.Enabled && configuration.EnablePressureEscapeSprintOnHeldKey,
+            guardActive,
+            purifyClaimedPriority || defensiveUtilityClaimedPriority,
+            emergencyInputFrame,
+            now,
+            hardReset || !alive);
+        var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;
         var rescue = allyRescue.Observe(
             localPlayer,
             isCrystallineConflict,
             allyRescueConfigurationEnabled &&
             !purifyClaimedPriority &&
-            !defensiveUtilityClaimedPriority,
+            !defensiveUtilityClaimedPriority &&
+            !pressureEscapeClaimedPriority,
             configuration.AllyRescueOnHeldGameplayKey,
             emergencyInputFrame,
             now,
@@ -478,6 +517,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ReactiveCcOnHeldKey,
             !purifyClaimedPriority &&
             !defensiveUtilityClaimedPriority &&
+            !pressureEscapeClaimedPriority &&
             !allyRescueClaimedPriority,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
@@ -500,6 +540,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             purifyClaimedPriority ||
             defensiveUtilityClaimedPriority ||
+            pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
             emergencyInputFrame.IsConsumed,
@@ -514,6 +555,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             purifyClaimedPriority ||
             defensiveUtilityClaimedPriority ||
+            pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
             ninja.InputClaimed ||
@@ -534,6 +576,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MonkEarthReplyExpirySeconds,
             purifyClaimedPriority ||
             defense.InputClaimed ||
+            pressureEscapeClaimedPriority ||
             rescue.UseActionAttempted ||
             miracle.UseActionAttempted ||
             ninja.InputClaimed ||
@@ -883,6 +926,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput.Reset();
         emergencyPurify.Reset();
         defensiveUtility.Reset();
+        pressureEscapeSprint.Reset();
         guardianCommunication.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();

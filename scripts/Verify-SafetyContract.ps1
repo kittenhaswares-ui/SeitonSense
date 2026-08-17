@@ -11,6 +11,12 @@ $pluginServicesRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\Services'
 $pluginUiRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\UI'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
 $coreSelfTestRoot = Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest'
+$autoLowMpFocusTargetServicePath = Join-Path $pluginServicesRoot 'AutoLowMpFocusTargetService.cs'
+$autoLowMpFocusTargetRulesPath = Join-Path $coreRoot 'AutoLowMpFocusTargetRules.cs'
+$autoLowMpFocusTargetSelfTestsPath = Join-Path $coreSelfTestRoot 'AutoLowMpFocusTargetSelfTests.cs'
+$darkKnightShadowbringerServicePath = Join-Path $pluginServicesRoot 'DarkKnightShadowbringerMacroService.cs'
+$darkKnightShadowbringerRulesPath = Join-Path $coreRoot 'DarkKnightShadowbringerMacroRules.cs'
+$darkKnightShadowbringerSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightShadowbringerMacroSelfTests.cs'
 $sourceFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' -File -Recurse |
     Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
 if ($sourceFiles.Count -eq 0) { throw 'No C# source files found.' }
@@ -42,6 +48,14 @@ $forbiddenChecks = [ordered]@{
 
 foreach ($check in $forbiddenChecks.GetEnumerator()) {
     $matches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern $check.Value)
+    if ($check.Key -eq 'target mutation services') {
+        # Auto Low-MP Focus owns one reviewed empty-to-exact FocusTarget write.
+        # Every other managed or native target mutation remains globally fatal.
+        $matches = @($matches | Where-Object {
+            -not ($_.Path -eq $autoLowMpFocusTargetServicePath -and
+                  $_.Line -match '^\s*targetManager\.FocusTarget\s*=\s*exactTarget;\s*$')
+        })
+    }
     if ($matches.Count -gt 0) {
         $locations = $matches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
         throw "Safety contract failed ($($check.Key)): $($locations -join ', ')"
@@ -57,6 +71,8 @@ $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionI
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
 $defensiveUtilityProbePath = Join-Path $pluginServicesRoot 'DefensiveUtilityProbe.cs'
+$pressureEscapeSprintProbePath = Join-Path $pluginServicesRoot 'PressureEscapeSprintProbe.cs'
+$highPressureWarningSoundPath = Join-Path $pluginServicesRoot 'HighPressureWarningSound.cs'
 $ninjaSeitonProbePath = Join-Path $pluginServicesRoot 'NinjaSeitonDispatchProbe.cs'
 $scholarCriticalStrategyProbePath = Join-Path $pluginServicesRoot 'ScholarCriticalStrategyProbe.cs'
 $isolationAwarenessPath = Join-Path $pluginServicesRoot 'IsolationAwarenessService.cs'
@@ -69,6 +85,8 @@ $resourceAuraAnchorPath = Join-Path $pluginServicesRoot 'ResourceAuraAnchorTrack
 $allyRescueConfirmationRulesPath = Join-Path $coreRoot 'AllyRescueConfirmationRules.cs'
 $miracleCleanseFollowupRulesPath = Join-Path $coreRoot 'MiracleCleanseFollowupRules.cs'
 $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
+$pressureEscapeRulesPath = Join-Path $coreRoot 'PressureEscapeRules.cs'
+$pressureEscapeSelfTestsPath = Join-Path $coreSelfTestRoot 'PressureEscapeSelfTests.cs'
 $ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
 $ninjaSeitonDispatchSelfTestsPath = Join-Path $coreSelfTestRoot 'NinjaSeitonDispatchSelfTests.cs'
 $isolationWarningRulesPath = Join-Path $coreRoot 'IsolationWarningRules.cs'
@@ -95,6 +113,42 @@ $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolve
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
 $targetHighlightPath = Join-Path $pluginUiRoot 'TargetHighlightRenderer.cs'
 $pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
+$settingsPartsRoot = Join-Path $pluginUiRoot 'Settings'
+$settingsSourceFiles = @()
+$settingsSourceFiles += @(Get-ChildItem -LiteralPath $pluginUiRoot -Filter 'SettingsWindow*.cs' -File)
+$settingsSourceFiles += @(Get-ChildItem -LiteralPath $settingsPartsRoot -Filter '*.cs' -File -Recurse)
+$settingsSourceFiles = @($settingsSourceFiles | Sort-Object -Property FullName -Unique)
+if ($settingsSourceFiles.Count -eq 0) {
+    throw 'No SettingsWindow source files found.'
+}
+
+$expectedSettingsRelativePaths = @(
+    'SettingsWindow.cs',
+    'Settings/SettingsWindow.Actions.cs',
+    'Settings/SettingsWindow.Alerts.cs',
+    'Settings/SettingsWindow.Diagnostics.cs',
+    'Settings/SettingsWindow.Hud.cs',
+    'Settings/SettingsWindow.Jobs.cs',
+    'Settings/SettingsWindow.Macros.cs',
+    'Settings/SettingsWindow.Start.cs',
+    'Settings/SettingsWindow.Targets.cs',
+    'Settings/SettingsWindow.Widgets.cs'
+)
+$settingsRelativePaths = @($settingsSourceFiles | ForEach-Object {
+    [System.IO.Path]::GetRelativePath($pluginUiRoot, $_.FullName).Replace('\', '/')
+})
+$settingsLayoutDifference = @(
+    Compare-Object -ReferenceObject $expectedSettingsRelativePaths -DifferenceObject $settingsRelativePaths
+)
+if ($settingsLayoutDifference.Count -ne 0) {
+    $layoutDetails = $settingsLayoutDifference | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
+    throw "SettingsWindow split layout drifted: $($layoutDetails -join ', ')"
+}
+
+$settingsWindow = ($settingsSourceFiles | ForEach-Object {
+    Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+}) -join "`n"
+$normalizedSettingsWindow = $settingsWindow -replace '\s+', ' '
 $allowedUnsafe = @(
     $slotResolverPath,
     $readinessPath,
@@ -104,6 +158,7 @@ $allowedUnsafe = @(
     $allyRescueProbePath,
     $miracleInterceptProbePath,
     $defensiveUtilityProbePath,
+    $pressureEscapeSprintProbePath,
     $ninjaSeitonProbePath,
     $scholarCriticalStrategyProbePath,
     $smartWardensPaeanServicePath,
@@ -118,7 +173,9 @@ $allowedUnsafe = @(
     $machinistLimitBreakCapturePath,
     $machinistLimitBreakWarningSoundPath,
     $targetPressureTrackerPath,
-    $ccImmunityBrakeServicePath
+    $ccImmunityBrakeServicePath,
+    $autoLowMpFocusTargetServicePath,
+    $darkKnightShadowbringerServicePath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
@@ -180,14 +237,15 @@ foreach ($allowed in $allowedUnsafe) {
 }
 
 # Target highlighting may read the current and focus targets in one dedicated renderer.
-# No other feature may acquire ITargetManager, and no target setter is permitted anywhere.
+# Auto Low-MP Focus is the only service allowed to acquire ITargetManager and owns
+# one reviewed empty-to-exact FocusTarget setter. Plugin.cs only injects the API.
 $targetManagerMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bITargetManager\b')
 $unexpectedTargetManager = @($targetManagerMatches | Where-Object {
-    $_.Path -notin @($pluginPath, $targetHighlightPath)
+    $_.Path -notin @($pluginPath, $targetHighlightPath, $autoLowMpFocusTargetServicePath)
 })
 if ($unexpectedTargetManager.Count -gt 0) {
     $locations = $unexpectedTargetManager | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "ITargetManager is allowed only for constructor injection and the dedicated read-only renderer: $($locations -join ', ')"
+    throw "ITargetManager is allowed only for constructor injection, the read-only renderer, and Auto Low-MP Focus: $($locations -join ', ')"
 }
 $targetHighlight = Read-RequiredSource $targetHighlightPath 'Target highlight renderer'
 Assert-Literals $targetHighlight @(
@@ -209,16 +267,619 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
     throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
+# There is exactly one managed target-property write in the entire source tree.
+# It must pass a non-null, frozen canonical actor to FocusTarget. Hard, soft,
+# mouse-over, GPose, null clears, and native target setters remain forbidden.
+$managedTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=')
+$reviewedFocusSetterMatches = @($managedTargetSetterMatches | Where-Object {
+    $_.Path -eq $autoLowMpFocusTargetServicePath -and
+    $_.Line -match '^\s*targetManager\.FocusTarget\s*=\s*exactTarget;\s*$'
+})
+if ($managedTargetSetterMatches.Count -ne 1 -or $reviewedFocusSetterMatches.Count -ne 1) {
+    $locations = $managedTargetSetterMatches | ForEach-Object { "$($_.Path):$($_.LineNumber):$($_.Line.Trim())" }
+    throw "Exactly one reviewed non-null FocusTarget setter is allowed: $($locations -join ', ')"
+}
+$nativeTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '(?-i:\b(?:TargetManager|TargetSystem|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetGPoseTarget)\b)|->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=')
+if ($nativeTargetSetterMatches.Count -gt 0) {
+    $locations = $nativeTargetSetterMatches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Native, hard, soft, mouse-over, and GPose target setters remain forbidden: $($locations -join ', ')"
+}
+
+# Auto Low-MP Focus is a default-off, exact-Crystalline-Conflict-only
+# empty-to-exact FocusTarget mutation. Core owns the trusted inclusive <=2,000
+# MP wave, empty-focus stability, one-attempt/rate policy, frozen intent, and
+# permanent manual-drift latch until an explicit internal reset.
+$autoLowMpFocusTargetRules = Read-RequiredSource $autoLowMpFocusTargetRulesPath 'Auto Low-MP Focus rules'
+$normalizedAutoLowMpFocusTargetRules = $autoLowMpFocusTargetRules -replace '\s+', ' '
+$autoLowMpFocusTargetService = Read-RequiredSource $autoLowMpFocusTargetServicePath 'Auto Low-MP Focus runtime'
+$normalizedAutoLowMpFocusTargetService = $autoLowMpFocusTargetService -replace '\s+', ' '
+$autoLowMpFocusTargetSelfTests = Read-RequiredSource $autoLowMpFocusTargetSelfTestsPath 'Auto Low-MP Focus self-tests'
+$autoLowMpFocusTargetProgram = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registration'
+
+Assert-Literals $autoLowMpFocusTargetRules @(
+    'public enum AutoLowMpFocusObservedState',
+    'Unknown = 0',
+    'Empty = 1',
+    'Occupied = 2',
+    'public enum AutoLowMpFocusTargetSetOutcome',
+    'TerminalFailure = 0',
+    'SetterInvokedWithoutExactReadback = 1',
+    'ExactReadbackConfirmed = 2',
+    'bool LowMpWaveActive',
+    'bool AttemptSpentForWave',
+    'bool ManualOverrideLatched',
+    'long FocusEmptySinceMilliseconds',
+    'long LastAttemptAtMilliseconds',
+    'TargetPressureActorIdentity LastConfirmedFocusTarget',
+    'public const uint ProbeActionId = 29_515',
+    'public const int ProbeRange = 20',
+    'public const int MaximumEligibleMp = LowMpRules.RecuperateCost',
+    'public const int ObservationEnterThreshold = MaximumEligibleMp + 1',
+    'public const long FocusEmptyStabilityMilliseconds = 100',
+    'public const long MinimumWriteIntervalMilliseconds = 1_000',
+    'if (observation.HardReset)',
+    'if (!observation.ConfigurationEnabled)',
+    'if (!observation.IsCrystallineConflict)',
+    'var next = ObserveConfirmedFocusDrift(state, observation)',
+    'if (next.ManualOverrideLatched)',
+    'if (!observation.LocalPlayerExactAndAlive || !observation.LocalPlayer.IsValid)',
+    'if (!observation.MetadataVerified)',
+    'if (!observation.TextInputStateKnown)',
+    'if (observation.TextInputActive)',
+    'if (observation.FocusState == AutoLowMpFocusObservedState.Unknown)',
+    'if (!observation.CompleteCanonicalEnemySet ||',
+    '!HasCompleteExactCanonicalSet(observation.Candidates))',
+    'var lowMpWaveActive = observation.Candidates.Any(IsLowMpWaveMember)',
+    'LowMpWaveActive = false',
+    'AttemptSpentForWave = false',
+    'AttemptSpentForWave = observation.FocusState != AutoLowMpFocusObservedState.Empty',
+    'if (observation.FocusState == AutoLowMpFocusObservedState.Occupied)',
+    'if (next.AttemptSpentForWave)',
+    'if (!HasStableEmptyFocus(next, observation.NowMilliseconds))',
+    'if (!CanIssueWrite(next.LastAttemptAtMilliseconds, observation.NowMilliseconds))',
+    'var selectedIndex = SelectBestCandidateIndex(observation.Candidates, observation.LocalPlayer)',
+    'AttemptSpentForWave = true',
+    'LastAttemptAtMilliseconds = observation.NowMilliseconds',
+    'AutoLowMpFocusTargetDecisionKind.SetFocus',
+    'outcome == AutoLowMpFocusTargetSetOutcome.ExactReadbackConfirmed && intent.IsValid',
+    'state with { LastConfirmedFocusTarget = intent.Target }',
+    'candidates.Count != EnemySlotRules.LastSlot',
+    '!slots.Add(candidate.EnemySlot)',
+    '!gameObjectIds.Add(candidate.Actor.GameObjectId)',
+    '!entityIds.Add(candidate.Actor.EntityId)',
+    'candidate.CurrentMp <= MaximumEligibleMp',
+    'candidate.CurrentMp <= candidate.MaximumMp',
+    'candidate.NativeTargetValid',
+    'candidate.NativeRangeAndLineOfSight',
+    'focusState == AutoLowMpFocusObservedState.Empty',
+    'intent.LocalPlayer == currentLocalPlayer',
+    'intent.EnemySlot == candidate.EnemySlot',
+    'intent.Target.Equals(candidate.Actor)',
+    'ManualOverrideLatched = true',
+    'LastConfirmedFocusTarget = default'
+) 'Pure Auto Low-MP Focus exact wave, empty-focus, and frozen-intent rules'
+if ($autoLowMpFocusTargetRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Auto Low-MP Focus Core must remain pure and cannot read time, native state, input, targets, or action/command boundaries.'
+}
+if ($normalizedAutoLowMpFocusTargetRules -notmatch 'if \(observation\.HardReset\).*?HardReset.*?if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?NotCrystallineConflict.*?var next = ObserveConfirmedFocusDrift\(state, observation\).*?if \(next\.ManualOverrideLatched\).*?ManualOverrideLatched.*?if \(!observation\.LocalPlayerExactAndAlive \|\| !observation\.LocalPlayer\.IsValid\).*?LocalPlayerInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(!observation\.TextInputStateKnown\).*?TextInputStateUnknown.*?if \(observation\.TextInputActive\).*?TextInputActive.*?if \(observation\.FocusState == AutoLowMpFocusObservedState\.Unknown\).*?FocusStateUnknown.*?if \(!observation\.CompleteCanonicalEnemySet \|\| !HasCompleteExactCanonicalSet\(observation\.Candidates\)\).*?CanonicalEnemySetIncomplete' -or
+    $normalizedAutoLowMpFocusTargetRules -notmatch 'if \(!lowMpWaveActive\).*?LowMpWaveActive = false, AttemptSpentForWave = false.*?NoTrustedLowMpWave.*?if \(!next\.LowMpWaveActive\).*?LowMpWaveActive = true, AttemptSpentForWave = observation\.FocusState != AutoLowMpFocusObservedState\.Empty.*?else if \(observation\.FocusState != AutoLowMpFocusObservedState\.Empty && !next\.AttemptSpentForWave\).*?AttemptSpentForWave = true.*?if \(observation\.FocusState == AutoLowMpFocusObservedState\.Occupied\).*?FocusOccupied.*?if \(next\.AttemptSpentForWave\).*?WaveAlreadySpent' -or
+    $normalizedAutoLowMpFocusTargetRules -notmatch 'var spent = next with \{ AttemptSpentForWave = true, LastAttemptAtMilliseconds = observation\.NowMilliseconds.*?return new AutoLowMpFocusTargetDecision\( spent, AutoLowMpFocusTargetDecisionKind\.SetFocus, AutoLowMpFocusTargetDecisionReason\.ReadyToSet') {
+    throw 'Auto Low-MP Focus must gate exact CC before one trusted wave, preserve spent state through occupancy/unknowns, and spend/rate-limit before publishing one setter intent.'
+}
+if ($normalizedAutoLowMpFocusTargetRules -notmatch 'if \(!state\.LastConfirmedFocusTarget\.IsValid \|\| observation\.FocusState == AutoLowMpFocusObservedState\.Unknown\).*?return state;.*?if \(observation\.FocusState == AutoLowMpFocusObservedState\.Occupied && observation\.FocusTarget\.Equals\(state\.LastConfirmedFocusTarget\)\).*?return state;.*?ManualOverrideLatched = true, LastConfirmedFocusTarget = default' -or
+    $normalizedAutoLowMpFocusTargetRules -notmatch 'state\.FocusEmptySinceMilliseconds >= 0 && nowMilliseconds >= state\.FocusEmptySinceMilliseconds.*?nowMilliseconds - state\.FocusEmptySinceMilliseconds >= FocusEmptyStabilityMilliseconds' -or
+    $normalizedAutoLowMpFocusTargetRules -notmatch 'lastAttemptAtMilliseconds < 0 \|\| \(nowMilliseconds >= lastAttemptAtMilliseconds && nowMilliseconds - lastAttemptAtMilliseconds >= MinimumWriteIntervalMilliseconds\)') {
+    throw 'Confirmed Focus drift must latch automation off, while empty-focus stability and the one-second write interval use only caller-provided monotonic time.'
+}
+
+$autoLowMpFocusTestMethods = @(
+    'CanonicalSetAndEligibilityAreStrict',
+    'RankingIsMpThenHpThenStableIdentity',
+    'InclusiveThresholdUsesAnIndependentTrustedLatch',
+    'EmptyFocusMustBeStableAndWaveIsOneShot',
+    'OccupiedFocusSpendsWaveWithoutDelayedMutation',
+    'ASeparatedWaveCanRearmWithoutRetryingFailure',
+    'IntermediateMpCannotRearmASpentWave',
+    'UnknownMpCannotRearmASpentWave',
+    'ConfirmedFocusDriftLatchesUntilExplicitReset',
+    'FrozenIntentRequiresEveryFinalGate'
+)
+foreach ($method in $autoLowMpFocusTestMethods) {
+    Assert-Literals $autoLowMpFocusTargetSelfTests @("public static void $method()") "Auto Low-MP Focus self-test $method"
+    Assert-Literals $autoLowMpFocusTargetProgram @("AutoLowMpFocusTargetSelfTests.$method") "Auto Low-MP Focus test registration $method"
+}
+Assert-Literals $autoLowMpFocusTargetSelfTests @(
+    'exactly 2000 MP is eligible for Auto Focus',
+    '2001 MP is above the Auto Focus entry boundary',
+    'Auto Focus enters after a trusted stable exact-2000 sample',
+    '2001 cannot enter the independent Auto Focus latch',
+    'the independent latch retains the existing 2300 exit boundary',
+    '99 ms is below the empty-focus boundary',
+    '100 ms of empty focus allows one exact intent',
+    'the wave is spent before runtime mutation',
+    'the same continuous low-MP wave cannot retry',
+    'occupied focus consumes the old wave',
+    'clearing a manual focus cannot trigger a delayed set',
+    'terminal setter failure never retries the wave',
+    'a later distinct low-MP wave can emit one new intent',
+    '2001 through 2299 remains inside the exit-hysteresis wave',
+    'unknown telemetry preserves an established low-MP wave',
+    'manual, game, or external clear latches automation off',
+    'MP recovery above 2000 at the boundary cancels the spent intent',
+    'a focus appearing at the boundary blocks without overwrite',
+    'frozen identity drift cannot choose an alternate'
+) 'Auto Low-MP Focus canonical, hysteresis, one-wave, drift, and final-gate tests'
+if ([regex]::Matches($autoLowMpFocusTargetProgram, '\bAutoLowMpFocusTargetSelfTests\.\w+').Count -ne $autoLowMpFocusTestMethods.Count) {
+    throw 'All ten Auto Low-MP Focus safety tests must remain registered exactly once.'
+}
+
+Assert-Literals $autoLowMpFocusTargetService @(
+    'private const long UpdateIntervalMilliseconds = 100',
+    'private readonly ITargetManager targetManager',
+    'metadata.RecuperateVerified && metadata.AutoLowMpFocusProbeVerified',
+    'framework.Update += OnFrameworkUpdate',
+    'if (started) framework.Update -= OnFrameworkUpdate',
+    'ResetInternal("Disposed without changing Focus Target")',
+    'configuration.Enabled && configuration.EnableAutoLowMpFocusTarget',
+    'context == SupportedPvPContext.CrystallineConflict',
+    'clientState.TerritoryType != activeTerritory',
+    '(wasCrystallineConflict && !isCrystallineConflict)',
+    '(!wasCrystallineConflict && isCrystallineConflict)',
+    '(wasConfigured && !configured)',
+    'ResolveExactCandidates(',
+    'state = decision.State',
+    'setterIntentCount++',
+    'TrySetFrozenIntentOnce(',
+    'AutoLowMpFocusTargetRules.ApplySetOutcome(state, intent, outcome)',
+    'diagnosticsBefore.SlotCapacity != EnemySlotRules.LastSlot',
+    'diagnosticsBefore.ResolvedSlots != EnemySlotRules.LastSlot',
+    '!ReferenceEquals(diagnosticsBefore, executeTracker.Diagnostics)',
+    '!ReferenceEquals(trackerEnemies, executeTracker.Enemies)',
+    'snapshotSlots.Add(snapshot.Slot)',
+    'snapshotGameObjectIds.Add(snapshot.GameObjectId)',
+    'snapshotEntityIds.Add(snapshot.EntityId)',
+    'nativeGameObjectIds.Add(player.GameObjectId)',
+    'nativeEntityIds.Add(player.EntityId)',
+    'nativeAddresses.Add(player.Address)',
+    'snapshot.GameObjectId != player.GameObjectId',
+    'snapshot.EntityId != player.EntityId',
+    'enterThreshold: AutoLowMpFocusTargetRules.ObservationEnterThreshold',
+    'exitThreshold: LowMpRules.ExitThreshold',
+    'nextLowMp.HasTrustedSample && nextLowMp.IsUnavailable',
+    'player.CurrentMp <= AutoLowMpFocusTargetRules.MaximumEligibleMp',
+    'SeitonReadinessProbe.HasRangeAndLineOfSight(',
+    'AutoLowMpFocusTargetRules.ProbeActionId',
+    'stablePlayer!.Address != player.Address',
+    'stablePlayer.GameObjectId != player.GameObjectId',
+    'stablePlayer.EntityId != player.EntityId',
+    'AutoLowMpFocusTargetRules.HasCompleteExactCanonicalSet(candidates)',
+    '!TryGetTextInputState(out var textInputActive) || textInputActive',
+    '!TryReadFocus(out var firstFocusState, out _)',
+    'firstFocusState != AutoLowMpFocusObservedState.Empty',
+    'TryResolveFrozenCandidate(',
+    'AutoLowMpFocusTargetRules.CanSetFrozenIntent(',
+    '!TryReadFocus(out var finalFocusState, out _)',
+    'finalFocusState != AutoLowMpFocusObservedState.Empty',
+    'setterInvoked = true',
+    'targetManager.FocusTarget = exactTarget',
+    'readbackState == AutoLowMpFocusObservedState.Occupied',
+    'readbackTarget == intent.Target',
+    'setter invoked without exact readback; no retry',
+    'target.GameObjectId != intent.Target.GameObjectId',
+    'target.EntityId != intent.Target.EntityId',
+    '!lowMpStates.TryGetValue(intent.Target, out var lowMpState)',
+    'exactTarget = target',
+    'tablePlayer.Address != resolved.Address',
+    'tablePlayer.GameObjectId != resolved.GameObjectId',
+    'tablePlayer.EntityId != resolved.EntityId',
+    'var focus = targetManager.FocusTarget',
+    'configuration.EnableWolvesDenTesting',
+    'private void ResetLowMpSampling() => lowMpStates.Clear()',
+    'state = AutoLowMpFocusTargetState.Initial'
+) 'Auto Low-MP Focus coherent S1-S5 capture, trusted MP, empty-focus, and sole exact setter runtime'
+$autoLowMpFocusWithoutReviewedSetter = $autoLowMpFocusTargetService -replace '(?m)^\s*targetManager\.FocusTarget\s*=\s*exactTarget;\s*$', ''
+if ($autoLowMpFocusWithoutReviewedSetter -match '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $autoLowMpFocusTargetService -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|IGameInteropProvider|SignatureAttribute|SigScanner|RaptureShellModule|ExecuteCommandInner|MarkingController|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetGPoseTarget)\b') {
+    throw 'Auto Low-MP Focus may only perform its one reviewed managed FocusTarget write; it owns no action, hook, command, marker, hard/soft/mouse-over/GPose, or native target boundary.'
+}
+if ([regex]::Matches($autoLowMpFocusTargetService, '\bTrySetFrozenIntentOnce\s*\(').Count -ne 2 -or
+    [regex]::Matches($autoLowMpFocusTargetService, '\btargetManager\.FocusTarget\s*=').Count -ne 1 -or
+    [regex]::Matches($autoLowMpFocusTargetService, '\bTryReadFocus\s*\(').Count -lt 4) {
+    throw 'Auto Low-MP Focus must have one setter call site/definition, one FocusTarget assignment, and repeated fail-closed focus reads.'
+}
+$autoLowMpFocusStateStoredIndex = $normalizedAutoLowMpFocusTargetService.IndexOf('state = decision.State;')
+$autoLowMpFocusIntentCountIndex = $normalizedAutoLowMpFocusTargetService.IndexOf('setterIntentCount++;')
+$autoLowMpFocusAttemptIndex = $normalizedAutoLowMpFocusTargetService.IndexOf('var outcome = TrySetFrozenIntentOnce(')
+if ($autoLowMpFocusStateStoredIndex -lt 0 -or
+    $autoLowMpFocusIntentCountIndex -le $autoLowMpFocusStateStoredIndex -or
+    $autoLowMpFocusAttemptIndex -le $autoLowMpFocusIntentCountIndex) {
+    throw 'Core spent/rate state must be stored before Auto Low-MP Focus records and crosses its one setter boundary.'
+}
+$autoLowMpFocusSetterBody = [regex]::Match(
+    $normalizedAutoLowMpFocusTargetService,
+    'private AutoLowMpFocusTargetSetOutcome TrySetFrozenIntentOnce\(.*?private bool TryResolveFrozenCandidate\(').Value
+if ([string]::IsNullOrWhiteSpace($autoLowMpFocusSetterBody) -or
+    $autoLowMpFocusSetterBody -notmatch 'TryReadFocus\(out var firstFocusState, out _\).*?firstFocusState != AutoLowMpFocusObservedState\.Empty.*?TryResolveFrozenCandidate\(.*?CanSetFrozenIntent\(.*?TryReadFocus\(out var finalFocusState, out _\).*?finalFocusState != AutoLowMpFocusObservedState\.Empty.*?setterInvoked = true; targetManager\.FocusTarget = exactTarget;.*?TryReadFocus\(out var readbackState, out var readbackTarget\).*?readbackTarget == intent\.Target' -or
+    $autoLowMpFocusSetterBody -cmatch '\b(foreach|for|while|SelectBestCandidateIndex|Clear|Restore|Alternate|Retry)\b') {
+    throw 'The sole Focus setter must double-read empty state, revalidate only the frozen actor, set once, and use readback only for confirmation without loops, restore, alternate, or retry.'
+}
+$autoLowMpFocusDisposeBody = [regex]::Match(
+    $normalizedAutoLowMpFocusTargetService,
+    'public void Dispose\(\).*?private void OnFrameworkUpdate\(').Value
+$autoLowMpFocusResetBody = [regex]::Match(
+    $normalizedAutoLowMpFocusTargetService,
+    'private void ResetInternal\(string reason\).*?private void Publish\(').Value
+if ([string]::IsNullOrWhiteSpace($autoLowMpFocusDisposeBody) -or
+    [string]::IsNullOrWhiteSpace($autoLowMpFocusResetBody) -or
+    $autoLowMpFocusDisposeBody -match '\.FocusTarget\s*=|TrySetFrozenIntentOnce' -or
+    $autoLowMpFocusResetBody -match '\.FocusTarget\s*=|TrySetFrozenIntentOnce') {
+    throw 'Auto Low-MP Focus dispose/reset may clear only local state and must never clear, restore, replace, or set FFXIV Focus Target.'
+}
+
+$autoLowMpFocusMetadata = Read-RequiredSource (Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'Auto Low-MP Focus metadata guard'
+Assert-Literals $autoLowMpFocusMetadata @(
+    'bool AutoLowMpFocusProbeVerified',
+    'ValidateFeature("Auto Low-MP Focus probe"',
+    'actions.TryGetRow(AutoLowMpFocusTargetRules.ProbeActionId, out var action)',
+    'action.Name.ToString() == "Seiton Tenchu"',
+    'action.Icon == EnemyCombatConstants.SeitonIconId',
+    'action.IsPvP',
+    'action.IsPlayerAction',
+    'action.ClassJob.IsValid',
+    'action.ClassJob.RowId == 30',
+    'action.Range == AutoLowMpFocusTargetRules.ProbeRange',
+    'action.EffectRange == 0',
+    'action.CanTargetHostile',
+    '!action.CanTargetSelf',
+    '!action.CanTargetParty',
+    '!action.CanTargetAlly',
+    '!action.TargetArea',
+    'action.RequiresLineOfSight',
+    'autoLowMpFocusProbeVerified)'
+) 'Auto Low-MP Focus read-only 20-yalm hostile probe metadata'
+if ([regex]::Matches($autoLowMpFocusMetadata, '\bValidateFeature\("Auto Low-MP Focus probe"').Count -ne 1) {
+    throw 'Auto Low-MP Focus must have exactly one independently fail-closed metadata feature gate.'
+}
+
+$autoLowMpFocusReadiness = Read-RequiredSource $readinessPath 'Auto Low-MP Focus native range probe'
+Assert-Literals $autoLowMpFocusReadiness @(
+    'internal const uint BaseActionId = 29515',
+    'internal const float MaximumRange = 20f',
+    'if (resolvedActionId is not (BaseActionId or FollowUpActionId)) return false',
+    'ActionManager.GetActionInRangeOrLoS(',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeStatus)'
+) 'Shared native 20-yalm range/line-of-sight probe'
+
+Assert-Literals $pluginSource @(
+    'private readonly AutoLowMpFocusTargetService autoLowMpFocusTarget',
+    'autoLowMpFocusTarget = new AutoLowMpFocusTargetService(',
+    'autoLowMpFocusTarget.Start()',
+    'autoLowMpFocusTarget.Dispose()',
+    'auto-low-mp-focus[{autoLowMpFocusTarget.Diagnostics.ToChatLine()}]'
+) 'Auto Low-MP Focus construction, lifecycle, and diagnostics'
+$autoLowMpFocusTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bAutoLowMpFocusTargetService\b')
+if ($autoLowMpFocusTypeReferences.Count -ne 4 -or
+    @($autoLowMpFocusTypeReferences | Where-Object { $_.Path -notin @($pluginPath, $autoLowMpFocusTargetServicePath) }).Count -ne 0 -or
+    $targetHighlight -match '\bAutoLowMpFocusTargetService\b') {
+    throw 'Auto Low-MP Focus runtime may be owned only by Plugin.cs; renderers remain read-only observers and cannot acquire the mutation service.'
+}
+
+# DRK Shadowbringer macro assistance is default-off and may arm only from the
+# exact /seitonbringer macro line immediately followed by a native PvP
+# Souleater-combo call. A proven native 2.40-second combo-GCD restart opens one
+# cycle. Unknown observations preserve that cycle and its spent ownership; only
+# a later exact restart plus changed LastUsedActionSequence opens another.
+$darkKnightShadowbringerRules = Read-RequiredSource $darkKnightShadowbringerRulesPath 'DRK Shadowbringer macro rules'
+$normalizedDarkKnightShadowbringerRules = $darkKnightShadowbringerRules -replace '\s+', ' '
+$darkKnightShadowbringerService = Read-RequiredSource $darkKnightShadowbringerServicePath 'DRK Shadowbringer macro runtime'
+$normalizedDarkKnightShadowbringerService = $darkKnightShadowbringerService -replace '\s+', ' '
+$darkKnightShadowbringerSelfTests = Read-RequiredSource $darkKnightShadowbringerSelfTestsPath 'DRK Shadowbringer macro self-tests'
+$darkKnightShadowbringerProgram = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registration'
+
+Assert-Literals $darkKnightShadowbringerRules @(
+    'public const uint DarkKnightJobId = 32',
+    'public const uint DarkKnightClassJobCategoryId = 98',
+    'public const uint HardSlashActionId = 29085',
+    'public const uint SyphonStrikeActionId = 29086',
+    'public const uint SouleaterActionId = 29087',
+    'public const uint ScarletDeliriumActionId = 41434',
+    'public const uint ComeuppanceActionId = 41435',
+    'public const uint TorcleaverActionId = 41436',
+    'public const uint SouleaterComboRouteId = 52',
+    'public const uint ShadowbringerActionId = 29091',
+    'public const uint DarkArtsShadowbringerActionId = 29738',
+    'public const uint DeliriumStatusId = 3033',
+    'public const uint DarkArtsStatusId = 3034',
+    'public const uint ShadowbringerIconId = 9594',
+    'public const uint DarkArtsStatusIconId = 213107',
+    'public const uint ShadowbringerHpCost = 12000',
+    'public const int ComboRecastGroupIndex = 57',
+    'public const int ShadowbringerRecastGroupIndex = 0',
+    'public const int ComboAdjustedRecastMilliseconds = 2400',
+    'public const int ShadowbringerAdjustedRecastMilliseconds = 1000',
+    'public const float ComboTotalToleranceSeconds = 0.01f',
+    'public const float CycleResetEpsilonSeconds = 0.025f',
+    'public const float MinimumNoClipRemainingSeconds = 0.6f',
+    'public const float MaximumNoClipRemainingSeconds = 0.8f',
+    'public const int MacroTokenLifetimeMilliseconds = 750',
+    'CurrentCycleToken',
+    'SpentCycleToken',
+    'public bool HasProvenCycle => CurrentCycleToken != 0',
+    'HasProvenCycle && SpentCycleToken == CurrentCycleToken',
+    'if (observation.HardReset)',
+    'DarkKnightGcdCycleState.Initial',
+    'if (!IsExactKnownCycleObservation(observation))',
+    'state,',
+    'DarkKnightGcdObservationOutcome.Unknown',
+    'observation.ElapsedSeconds + CycleResetEpsilonSeconds <',
+    'state.PreviousElapsedSeconds',
+    'observation.LastUsedActionSequence != state.PreviousLastUsedActionSequence',
+    'CurrentCycleToken = NextToken(state.CurrentCycleToken)',
+    'expectedCycleToken == 0',
+    'state.CurrentCycleToken != expectedCycleToken',
+    'state.SpentCycleToken == expectedCycleToken',
+    'spentState = state with { SpentCycleToken = expectedCycleToken }',
+    'observation.NowMilliseconds >= arm.ExpiresAtMilliseconds',
+    '!observation.MacroLocked',
+    'string.Equals(observation.MacroName, arm.MacroName, StringComparison.Ordinal)',
+    'arm.MacroLine is < 0 or >= 15',
+    'observation.MacroLine != arm.MacroLine + 1',
+    'observation.LocalAddress != arm.LocalAddress',
+    'observation.CycleToken == 0 || observation.CycleToken != arm.CycleToken',
+    'observation.ActionType != 1',
+    'observation.UseActionMode is not (0 or 100)',
+    'observation.ComboRouteId != SouleaterComboRouteId',
+    '!IsComboCarrierAction(observation.RawActionId)',
+    '!IsComboCarrierAction(observation.AdjustedActionId)',
+    'observation.ExtraParam != 0',
+    'remainingSeconds >= MinimumNoClipRemainingSeconds',
+    'remainingSeconds <= MaximumNoClipRemainingSeconds',
+    'DarkArtsShadowbringerActionId => hasDarkArts && currentHp > 0',
+    'ShadowbringerActionId => !hasDarkArts && currentHp > ShadowbringerHpCost',
+    'recastGroupIndex == ComboRecastGroupIndex',
+    'Math.Abs(totalSeconds - ComboAdjustedRecastMilliseconds / 1000f) <=',
+    'adjustedRecastMilliseconds == ComboAdjustedRecastMilliseconds',
+    'current == ulong.MaxValue ? 1UL : current + 1UL'
+) 'Pure DRK macro IDs, cycle ownership, exact adjacent pairing, no-clip window, and resource gates'
+
+if ($normalizedDarkKnightShadowbringerRules -notmatch 'if \(observation\.HardReset\).*?DarkKnightGcdCycleState\.Initial.*?if \(!IsExactKnownCycleObservation\(observation\)\).*?state, DarkKnightGcdObservationOutcome\.Unknown.*?if \(!state\.HasPreviousKnownObservation\).*?DarkKnightGcdObservationOutcome\.Primed.*?var recastRestarted = observation\.IsActive && \(!state\.PreviousActive \|\| observation\.ElapsedSeconds \+ CycleResetEpsilonSeconds < state\.PreviousElapsedSeconds\); var exactNewActionSequence = observation\.LastUsedActionSequence != state\.PreviousLastUsedActionSequence; if \(!recastRestarted \|\| !exactNewActionSequence\).*?DarkKnightGcdObservationOutcome\.Unchanged.*?CurrentCycleToken = NextToken\(state\.CurrentCycleToken\).*?DarkKnightGcdObservationOutcome\.OpenedCycle' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'if \(expectedCycleToken == 0 \|\| state\.CurrentCycleToken != expectedCycleToken \|\| state\.SpentCycleToken == expectedCycleToken\).*?return false;.*?spentState = state with \{ SpentCycleToken = expectedCycleToken \}; return true;' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'if \(!observation\.PluginEnabled \|\| !observation\.FeatureEnabled\).*?Disabled.*?if \(!observation\.MetadataVerified\).*?MetadataMismatch.*?if \(!observation\.ExactCrystallineConflict\).*?InvalidContext.*?if \(!observation\.SafeCarrierPath\).*?UnsafeCarrierPath.*?if \(!observation\.ExactCycleSnapshot \|\| !observation\.CycleActive.*?CycleUnknownOrChanged.*?if \(observation\.SpentCycleToken == observation\.ExpectedCycleToken && !observation\.CycleOwnedByThisAttempt\).*?CycleAlreadySpent.*?if \(!IsWithinNoClipWeaveWindow\(observation\.RemainingGcdSeconds\)\).*?OutsideNoClipWindow.*?if \(!observation\.NativeQueueClearAndStable\).*?NativeQueueOwned.*?if \(!observation\.ActionSequenceStable\).*?ActionSequenceChanged.*?if \(!observation\.AnimationLockClear\).*?AnimationLocked.*?if \(!observation\.NotCasting\).*?Casting.*?if \(!observation\.OwnGuardClear\).*?OwnGuardActiveOrPropagating.*?if \(!observation\.TargetIdentityStable \|\| !observation\.TargetAliveAndTargetable\).*?InvalidTarget.*?if \(!observation\.TargetGuardClear\).*?TargetGuardActive.*?if \(!observation\.ComboHasNativeRangeAndLineOfSight\).*?ComboOutOfRangeOrLineOfSight.*?if \(!observation\.ShadowbringerHasNativeRangeAndLineOfSight\).*?ShadowbringerOutOfRangeOrLineOfSight.*?if \(!observation\.ComboStructurallyReady\).*?ComboStructurallyUnavailable.*?IsShadowbringerResourceStateValid.*?InvalidShadowbringerResourceState.*?if \(!observation\.ShadowbringerCooldownReady \|\| !observation\.ShadowbringerActionReady \|\| !observation\.ShadowbringerResourcesReady\).*?ShadowbringerUnavailable.*?ShouldAttempt: true') {
+    throw 'DRK Core must preserve unknown cycle ownership, spend atomically, and require every final context/queue/lock/Guard/target/range/resource gate before one attempt.'
+}
+if ($darkKnightShadowbringerRules -cmatch '\b(Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread|ActionManager|ObjectTable|RaptureShell|UseAction|Dispatch|Retry|Replay|ITargetManager|TargetManager|SetTarget)\b') {
+    throw 'Pure DRK macro rules must own no clock, native API, target service, action call, retry, or replay.'
+}
+
+$darkKnightShadowbringerTestMethods = @(
+    'ExactIdsAndCarrierSetArePinned',
+    'CycleRequiresAProvenExactReset',
+    'UnknownPreservesSpentOwnershipAndNextResetRearms',
+    'CycleTokenWrapsToOne',
+    'PairingRequiresImmediateQueueableSouleaterLine',
+    'NoClipWindowIsInclusiveAndNeverLate',
+    'HpAndDarkArtsGateIsExact',
+    'AttemptRequiresEverySafetyGate'
+)
+foreach ($method in $darkKnightShadowbringerTestMethods) {
+    Assert-Literals $darkKnightShadowbringerSelfTests @("public static void $method()") "DRK Shadowbringer self-test $method"
+    Assert-Literals $darkKnightShadowbringerProgram @("DarkKnightShadowbringerMacroSelfTests.$method") "DRK Shadowbringer test registration $method"
+}
+if ([regex]::Matches($darkKnightShadowbringerSelfTests, '(?m)^\s*public static void\s+\w+\s*\(').Count -ne $darkKnightShadowbringerTestMethods.Count -or
+    [regex]::Matches($darkKnightShadowbringerProgram, '\bDarkKnightShadowbringerMacroSelfTests\.\w+').Count -ne $darkKnightShadowbringerTestMethods.Count) {
+    throw 'The DRK Shadowbringer Core test suite and registration must stay at the exact reviewed eight safety cases.'
+}
+Assert-Literals $darkKnightShadowbringerSelfTests @(
+    'False(DarkKnightShadowbringerMacroRules.TrySpendCycle(unknown.State, 1, out _)',
+    'True(DarkKnightShadowbringerMacroRules.TrySpendCycle(next, 2, out _)',
+    'arm with { MacroLine = 0 }',
+    'valid with { MacroLine = 1 }',
+    'valid with { UseActionMode = 2 }',
+    'valid with { UseActionMode = 1 }',
+    'valid with { MacroLine = 3 }',
+    'valid with { ComboRouteId = 0 }',
+    'valid with { NowMilliseconds = 1_750 }',
+    'IsWithinNoClipWeaveWindow(0.5f)',
+    'IsWithinNoClipWeaveWindow(0.599f)',
+    'IsWithinNoClipWeaveWindow(0.6f)',
+    'IsWithinNoClipWeaveWindow(0.8f)',
+    'IsWithinNoClipWeaveWindow(0.801f)',
+    'IsShadowbringerResourceStateValid(29091, false, 12000)',
+    'IsShadowbringerResourceStateValid(29091, false, 12001)',
+    'IsShadowbringerResourceStateValid(29738, true, 1)',
+    'valid with { NativeQueueClearAndStable = false }',
+    'valid with { AnimationLockClear = false }',
+    'valid with { OwnGuardClear = false }',
+    'valid with { TargetGuardClear = false }',
+    'valid with { ComboHasNativeRangeAndLineOfSight = false }',
+    'valid with { ShadowbringerHasNativeRangeAndLineOfSight = false }'
+) 'DRK tests for spent unknown state, exact pair modes/line, inclusive 600-800ms window, HP, queue, Guard, and dual native reachability'
+
+Assert-Literals $darkKnightShadowbringerService @(
+    'internal const string Command = "/seitonbringer"',
+    'private const ulong InvalidObjectId = 0xE0000000',
+    'private const float AnimationLockEpsilonSeconds = 0.0005f',
+    'metadataVerified = ValidateMetadata(dataManager, log)',
+    'framework.Update += OnFrameworkUpdate',
+    'ObserveCycleNow(ActionManager.Instance())',
+    'if (!string.IsNullOrWhiteSpace(arguments))',
+    '!configuration.Enabled || !configuration.EnableDarkKnightShadowbringerMacro',
+    'if (!hookAvailable)',
+    'if (!metadataVerified)',
+    'var shell = RaptureShellModule.Instance()',
+    '!shell->MacroLocked',
+    'shell->MacroCurrentLine is < 0 or >= 15',
+    'shell->MacroLineText.ToString().Trim()',
+    'StringComparison.OrdinalIgnoreCase',
+    'ResolveContext() != SupportedPvPContext.CrystallineConflict',
+    'if (!IsExactLocalDarkKnight(local))',
+    'if (!currentCycle.HasProvenCycle)',
+    'if (currentCycle.CurrentCycleSpent)',
+    'SaturatingAdd(now, DarkKnightShadowbringerMacroRules.MacroTokenLifetimeMilliseconds)',
+    'clientState.TerritoryType',
+    'local!.GameObjectId',
+    'local.EntityId',
+    'local.Address',
+    'currentCycle.CurrentCycleToken',
+    'armedMacro = null',
+    'DarkKnightShadowbringerMacroRules.EvaluatePair(',
+    'CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(targetId)',
+    'GetNativeHardTargetId(local)',
+    'CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(',
+    'TryResolveExactCanonicalEnemy(',
+    'usedDefaultTargetCarrier && GetNativeHardTargetId(local) != nativeHardTargetId',
+    'target.GameObjectId',
+    'target.EntityId',
+    'target.Address',
+    'DarkKnightShadowbringerMacroRules.TrySpendCycle(',
+    'cycleState = spentState',
+    'cycleOwnedByThisAttempt: true',
+    'accepted = dispatch()',
+    'will not retry this GCD',
+    'framework.Update -= OnFrameworkUpdate',
+    'cycleState = DarkKnightGcdCycleState.Initial',
+    'includeWolvesDenTesting: false',
+    'DarkKnightShadowbringerMacroRules.DarkKnightJobId',
+    'actionManager->LastUsedActionSequence',
+    'actionManager->ActionQueued',
+    'actionManager->AnimationLock',
+    'actionManager->CastActionId == 0',
+    'EnemyCombatConstants.GuardStatusId',
+    'EnemyCombatConstants.GuardStatusAlternateId',
+    'ActionManager.GetActionInRangeOrLoS(',
+    'SeitonRangeRules.HasNativeRangeAndLineOfSight(',
+    'checkRecastActive: false',
+    'checkRecastActive: true',
+    'actionManager->CheckActionResources(',
+    'DarkKnightShadowbringerMacroRules.ShadowbringerHpCost',
+    'DarkKnightShadowbringerMacroRules.DarkArtsStatusId'
+) 'DRK runtime macro provenance, exact context/identity, one-cycle claim, native queue/lock/Guard/range/resource gates, and lifecycle'
+
+if ([regex]::Matches($darkKnightShadowbringerService, '\bRaptureShellModule\.Instance\s*\(').Count -ne 2 -or
+    $darkKnightShadowbringerService -match '\b(ExecuteCommandInner|Utf8String|GetRaptureShellModule|SetRawValue|FireCallback)\b' -or
+    $darkKnightShadowbringerService -match '->\s*(?:ActionQueued|QueuedActionType|QueuedActionId|QueuedTargetId|QueuedExtraParam|QueueType|QueuedComboRouteId)\s*=' -or
+    $darkKnightShadowbringerService -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $darkKnightShadowbringerService -match '(?:->|\.)UseAction\s*\(') {
+    throw 'The DRK service may read two exact macro snapshots and native queue/target state, but must not write shell/queue/targets or own a native action call.'
+}
+
+$darkKnightAttemptMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)internal bool TryAttemptOnce\(.*?\r?\n    \}\r?\n\r?\n    public void Dispose')
+if (-not $darkKnightAttemptMatch.Success) {
+    throw 'The DRK one-attempt method could not be isolated for ownership review.'
+}
+$darkKnightAttempt = $darkKnightAttemptMatch.Value
+$normalizedDarkKnightAttempt = $darkKnightAttempt -replace '\s+', ' '
+if ([regex]::Matches($darkKnightAttempt, '\bdispatch\s*\(').Count -ne 1 -or
+    $normalizedDarkKnightAttempt -notmatch 'var preliminary = CaptureAttempt\(.*?baseline: null, cycleOwnedByThisAttempt: false\);.*?EvaluateAttempt\( preliminary\.Observation\).*?if \(!preliminaryDecision\.ShouldAttempt\) return false;.*?TrySpendCycle\( cycleState, pairedCarrier\.Arm\.CycleToken, out var spentState\).*?cycleState = spentState; claimedCount\+\+;.*?var final = CaptureAttempt\(.*?preliminary, cycleOwnedByThisAttempt: true\);.*?EvaluateAttempt\(final\.Observation\).*?if \(!finalDecision\.ShouldAttempt\) return false;.*?Interlocked\.Increment\(ref attemptCount\);.*?accepted = dispatch\(\);.*?if \(accepted\) Interlocked\.Increment\(ref acceptedCount\);.*?return true;' -or
+    $darkKnightAttempt -match '(?m)^\s*(?:for|foreach|while|do)\s*[({]' -or
+    $darkKnightAttempt -cmatch '\b(Task|Timer|RetryAction|RetryDispatch|ReplayAction|FallbackAction|AlternateAction)\b') {
+    throw 'DRK must claim the exact cycle before final rereads and issue one dispatch only; rejection, drift, or exception stays spent with no loop, retry, alternate, or fallback.'
+}
+
+if ($normalizedDarkKnightShadowbringerService -notmatch 'private void ObserveCycleNow\(ActionManager\* actionManager\).*?ResolveContext\(\) != SupportedPvPContext\.CrystallineConflict \|\| !IsExactLocalDarkKnight\(local\).*?HardReset\("Context, player, job, or life changed"\).*?identityChanged = hasObservedLifetime && \(observedTerritoryId != clientState\.TerritoryType \|\| observedLocalGameObjectId != local!\.GameObjectId \|\| observedLocalEntityId != local\.EntityId \|\| observedLocalAddress != local\.Address\).*?GetRecastGroup\( \(int\)ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId\).*?GetRecastGroupDetail\(groupIndex\).*?GetAdjustedRecastTime\( ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId, true\).*?DarkKnightShadowbringerMacroRules\.ObserveCycle\(cycleState, observation\).*?cycleState = result\.State' -or
+    $normalizedDarkKnightShadowbringerService -notmatch 'var queue = CaptureNativeQueue\(actionManager\); var sequence = actionManager == null \? \(ushort\)0 : actionManager->LastUsedActionSequence; var queueStable = !queue\.Active && \(baseline is null \|\| queue == baseline\.Value\.Queue\); var sequenceStable = baseline is null \|\| sequence == baseline\.Value\.Sequence;.*?animationLock <= AnimationLockEpsilonSeconds;.*?!local!\.IsCasting.*?actionManager->CastActionId == 0;' -or
+    $normalizedDarkKnightShadowbringerService -notmatch 'target\.GameObjectId == carrier\.TargetGameObjectId && target\.EntityId == carrier\.TargetEntityId && target\.Address == carrier\.TargetAddress && \(!carrier\.UsedDefaultTargetCarrier \|\| GetNativeHardTargetId\(local\) == carrier\.NativeHardTargetId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusAlternateId\)' -or
+    $normalizedDarkKnightShadowbringerService -notmatch 'currentAdjustedCarrier == carrier\.AdjustedActionId.*?GetActionInRangeOrLoS\( currentAdjustedCarrier, sourceObject, targetObject\).*?GetActionStatus\( ActionType\.Action, currentAdjustedCarrier, carrier\.EffectiveTargetId, checkRecastActive: false, checkCastingActive: true\) == 0.*?GetAdjustedActionId\( DarkKnightShadowbringerMacroRules\.ShadowbringerActionId\).*?GetActionInRangeOrLoS\( shadowAdjusted, sourceObject, targetObject\).*?shadowGroupIndex == DarkKnightShadowbringerMacroRules\.ShadowbringerRecastGroupIndex.*?!shadowDetail->IsActive.*?GetAdditionalRecastGroup\(ActionType\.Action, shadowAdjusted\) < 0.*?GetAdjustedRecastTime\( ActionType\.Action, shadowAdjusted, true\) == DarkKnightShadowbringerMacroRules\.ShadowbringerAdjustedRecastMilliseconds.*?GetActionStatus\( ActionType\.Action, shadowAdjusted, carrier\.EffectiveTargetId, checkRecastActive: true, checkCastingActive: true\) == 0.*?CheckActionResources\( ActionType\.Action, shadowAdjusted\) == 0') {
+    throw 'DRK runtime must derive each cycle from exact native recast telemetry and repeat stable queue/sequence, identity, Guard, dual range/LoS, cooldown, readiness, and resource checks at the final boundary.'
+}
+
+Assert-Literals $darkKnightShadowbringerService @(
+    'IsExpectedComboAction(hardSlash, "Hard Slash", 9142, 0, 0, preservesCombo: false)',
+    'IsExpectedComboAction(syphonStrike, "Syphon Strike", 9145, 0, 0, preservesCombo: false)',
+    'IsExpectedComboAction(souleater, "Souleater", 9146, 0, 0, preservesCombo: false)',
+    '"Scarlet Delirium"',
+    '9766',
+    '"Comeuppance"',
+    '9767',
+    '"Torcleaver"',
+    '9768',
+    'primaryCostType: 105',
+    'primaryCostValue: DarkKnightShadowbringerMacroRules.ShadowbringerHpCost',
+    'isPlayerAction: false',
+    'primaryCostType: 10',
+    'primaryCostValue: DarkKnightShadowbringerMacroRules.DarkArtsStatusId',
+    'route.Name.ToString() == "Souleater Combo"',
+    'route.Action[0].RowId == DarkKnightShadowbringerMacroRules.HardSlashActionId',
+    'route.Action[1].RowId == DarkKnightShadowbringerMacroRules.SyphonStrikeActionId',
+    'route.Action[2].RowId == DarkKnightShadowbringerMacroRules.SouleaterActionId',
+    'route.Unknown4',
+    'darkArts.Name.ToString() == "Dark Arts"',
+    'darkArts.StatusCategory == 1',
+    '!darkArts.IsPermanent',
+    '!darkArts.CanDispel',
+    '!darkArts.LockMovement',
+    'action.ActionCategory.RowId == 3',
+    'action.CastType == 1',
+    'action.Range == 5',
+    'action.EffectRange == 0',
+    'action.Recast100ms == 25',
+    'action.CooldownGroup == 58',
+    'action.ActionCategory.RowId == 4',
+    'action.CastType == 4',
+    'action.Range == 10',
+    'action.EffectRange == 10',
+    'action.Recast100ms == 10',
+    'action.CooldownGroup == 1',
+    'action.RequiresLineOfSight',
+    'action.NeedToFaceTarget',
+    'description.Contains("Consumes 12,000 HP when executed", StringComparison.Ordinal)',
+    'description.Contains("Dark Arts", StringComparison.Ordinal)'
+) 'Current-sheet DRK combo, Shadowbringer, route, cost, target, recast, range, and Dark Arts metadata'
+if ([regex]::Matches($darkKnightShadowbringerService, '\bIsExpectedComboAction\s*\(').Count -ne 7 -or
+    [regex]::Matches($darkKnightShadowbringerService, '\bIsExpectedShadowbringer\s*\(').Count -ne 3 -or
+    [regex]::Matches($darkKnightShadowbringerService, '\bValidateMetadata\s*\(').Count -ne 2) {
+    throw 'DRK metadata must validate exactly six combo rows, two Shadowbringer rows, one route, and Dark Arts behind one cached fail-closed gate.'
+}
+
+$darkKnightTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bDarkKnightShadowbringerMacroService\b')
+if (@($darkKnightTypeReferences | Where-Object {
+        $_.Path -notin @($pluginPath, $nearAssistPath, $darkKnightShadowbringerServicePath)
+    }).Count -ne 0) {
+    throw 'DRK Shadowbringer runtime may be owned only by Plugin.cs and consulted only by the existing Near Assist detour.'
+}
+Assert-Literals $pluginSource @(
+    'private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer',
+    'darkKnightShadowbringer = new DarkKnightShadowbringerMacroService(',
+    'darkKnightShadowbringerCommandRegistered = commandManager.AddHandler(',
+    'DarkKnightShadowbringerMacroService.Command',
+    'new CommandInfo(OnDarkKnightShadowbringerCommand)',
+    'AllowedInMacros = true',
+    'Exact CC DRK helper: /seitonbringer, then /pvpac \"Souleater Combo\" <t>',
+    'use the localized action name and ReAction Macro Queue + Turbo',
+    '/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in CC',
+    '/seitonbringer is already owned by another plugin',
+    'darkKnightShadowbringer.Start()',
+    'if (darkKnightShadowbringerCommandRegistered)',
+    'commandManager.RemoveHandler(DarkKnightShadowbringerMacroService.Command)',
+    'nearAssist.Dispose()',
+    'darkKnightShadowbringer.Dispose()',
+    'darkKnightShadowbringer.Arm(arguments, nearAssist.Diagnostics.HookAvailable)',
+    'shadowbringer[cmd={darkKnightShadowbringerCommandRegistered}',
+    '{darkKnightShadowbringer.Diagnostics.ToChatLine()}'
+) 'DRK /seitonbringer exact command, hook dependency, collision handling, lifecycle, and diagnostics'
+if ([regex]::Matches($pluginSource, '\bnew\s+DarkKnightShadowbringerMacroService\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*DarkKnightShadowbringerMacroService\.Command').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bdarkKnightShadowbringer\.Arm\s*\(').Count -ne 1 -or
+    $pluginSource -match '(?m)^\s*(?:private|internal|public).*?(?:SeitonbringerAlias|ShadowbringerAlias)') {
+    throw 'DRK must own exactly one macro-allowed /seitonbringer command, one arm call, no alias, and no independent hook.'
+}
+
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
 # one exact WHM/BRD reactive-CC boundary, one exact default-off NIN Seiton
 # boundary, one exact default-off SCH Critical Strategy boundary, and one exact
-# default-off Monk Earth's Reply call. Near
-# Assist/Near Help/Far Help may only forward an incoming action through their sole Original.
+# default-off Monk Earth's Reply call. Near Assist/Near Help/Far Help may
+# forward an incoming action through their sole Original. The same reviewed
+# detour may issue exactly one spent DRK Shadowbringer call before leaving the
+# original Souleater carrier unchanged; that boundary is pinned below.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
+        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
@@ -227,17 +888,23 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, PressureEscapeSprintProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
-# All party-visible commands share one closed, typed dispatcher. The dispatcher
-# is the sole raw RaptureShell boundary; the two feature services may only read
-# their exact marker telemetry and call its reviewed methods.
+# All party-visible commands share one closed, typed dispatcher. It remains the
+# sole raw RaptureShell write boundary. The DRK macro service may only read the
+# native macro cursor/name/text needed to prove the exact adjacent macro pair.
 $rawShellApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(RaptureShellModule|GetRaptureShellModule|ExecuteCommandInner|Utf8String\.FromString)\b')
-$unexpectedRawShellApis = @($rawShellApiMatches | Where-Object { $_.Path -ne $reviewedPvpCommandDispatcherPath })
+$unexpectedRawShellApis = @($rawShellApiMatches | Where-Object {
+    $reviewedDispatcherBoundary = $_.Path -eq $reviewedPvpCommandDispatcherPath
+    $reviewedDrkReadOnlyBoundary =
+        $_.Path -eq $darkKnightShadowbringerServicePath -and
+        $_.Line -match '\bRaptureShellModule\.Instance\s*\('
+    -not ($reviewedDispatcherBoundary -or $reviewedDrkReadOnlyBoundary)
+})
 if ($unexpectedRawShellApis.Count -gt 0) {
     $locations = $unexpectedRawShellApis | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only ReviewedPvpCommandDispatcher may cross the raw RaptureShell boundary: $($locations -join ', ')"
+    throw "Only ReviewedPvpCommandDispatcher may write through RaptureShell; DRK may only read its exact macro cursor: $($locations -join ', ')"
 }
 $markerTelemetryMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bMarkingController\b')
 $unexpectedMarkerTelemetry = @($markerTelemetryMatches | Where-Object {
@@ -768,9 +1435,11 @@ if ($scholarDebugStart -lt 0 -or $scholarDebugEnd -le $scholarDebugStart -or
     throw 'SCH diagnostics may report only attempted/client-accepted telemetry, never a landed effect, Guard change, or kill.'
 }
 
-# Warning audio is restricted to one bounded client-owned chat sound. External audio
-# libraries, audio-file reads, URLs, and any second native sound path fail the build.
+# Warning audio is restricted to one shared, bounded client-owned chat-sound
+# boundary. MCH and high-pressure episode services may delegate to it; external
+# audio libraries, audio-file reads, URLs, and any second native path fail the build.
 $warningSound = Read-RequiredSource $machinistLimitBreakWarningSoundPath 'Machinist limit-break warning sound'
+$highPressureWarningSound = Read-RequiredSource $highPressureWarningSoundPath 'High-pressure warning sound'
 Assert-Literals $warningSound @(
     'ThreatCooldownMilliseconds = 2_000',
     'PreviewCooldownMilliseconds = 350',
@@ -781,9 +1450,9 @@ Assert-Literals $warningSound @(
     'soundId is < 1 or > 16',
     'UIGlobals.PlayChatSoundEffect((uint)soundId)',
     'MCH warning sound failed closed'
-) 'Bounded MCH warning sound'
+) 'Bounded shared FFXIV warning-sound boundary'
 if ([regex]::Matches($warningSound, '\bUIGlobals\.PlayChatSoundEffect\s*\(').Count -ne 1) {
-    throw 'MCH warning sound must contain exactly one client-owned PlayChatSoundEffect call.'
+    throw 'The shared FFXIV warning-sound service must contain exactly one client-owned PlayChatSoundEffect call.'
 }
 $consumeThreatToken = [regex]::Match($warningSound, '\blastThreatToken\s*=\s*threatToken\s*;')
 $playThreatSound = [regex]::Match($warningSound, '\breturn\s+TryPlay\s*\(\s*soundId\s*\)\s*;')
@@ -792,7 +1461,31 @@ if (-not $consumeThreatToken.Success -or -not $playThreatSound.Success -or
     throw 'MCH threat sound must consume its one-shot token before the native sound request.'
 }
 if ($warningSound -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
-    throw 'MCH warning audio must never initiate actions or mutate input/targets.'
+    throw 'Shared FFXIV warning audio must never initiate actions or mutate input/targets.'
+}
+Assert-Literals $highPressureWarningSound @(
+    'EpisodeCooldownMilliseconds = 3_000',
+    'PreviewCooldownMilliseconds = 350',
+    'episodeToken == 0',
+    'episodeToken == consumedEpisodeToken',
+    'consumedEpisodeToken = episodeToken',
+    'if (nowMilliseconds < nextEpisodeSoundAt) return false',
+    'nextEpisodeSoundAt = SaturatingAdd(nowMilliseconds, EpisodeCooldownMilliseconds)',
+    'MachinistLimitBreakWarningSound.TryPlayShared(',
+    'high-pressure warning sound failed closed',
+    'high-pressure warning sound preview failed closed'
+) 'One-shot high-pressure FFXIV system sound'
+$consumePressureEpisodeToken = [regex]::Match($highPressureWarningSound, '\bconsumedEpisodeToken\s*=\s*episodeToken\s*;')
+$pressureEpisodeCooldown = [regex]::Match($highPressureWarningSound, '\bif\s*\(\s*nowMilliseconds\s*<\s*nextEpisodeSoundAt\s*\)\s*return\s+false\s*;')
+$playPressureEpisodeSound = [regex]::Match($highPressureWarningSound, '\breturn\s+MachinistLimitBreakWarningSound\.TryPlayShared\s*\(')
+if (-not $consumePressureEpisodeToken.Success -or -not $pressureEpisodeCooldown.Success -or
+    -not $playPressureEpisodeSound.Success -or
+    $consumePressureEpisodeToken.Index -gt $pressureEpisodeCooldown.Index -or
+    $consumePressureEpisodeToken.Index -gt $playPressureEpisodeSound.Index) {
+    throw 'High-pressure sound must consume each exact episode before cooldown/native evaluation so rejection or failure cannot retry it.'
+}
+if ($highPressureWarningSound -match '\b(UIGlobals|UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
+    throw 'High-pressure sound may only delegate to the shared FFXIV sound boundary and may never initiate actions or mutate input/targets.'
 }
 $soundApiMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UIGlobals\.PlayChatSoundEffect|SoundPlayer|MediaPlayer|PlaySound|sndPlaySound|NAudio|FMOD|XAudio2|AudioClient|WaveOut|WasapiOut)\b')
 $unexpectedSoundApis = @($soundApiMatches | Where-Object {
@@ -801,7 +1494,7 @@ $unexpectedSoundApis = @($soundApiMatches | Where-Object {
 })
 if ($unexpectedSoundApis.Count -gt 0) {
     $locations = $unexpectedSoundApis | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only the exact client-owned MCH chat sound call is permitted: $($locations -join ', ')"
+    throw "Only the exact shared client-owned FFXIV chat-sound call is permitted: $($locations -join ', ')"
 }
 $externalAudioMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(File\.(?:ReadAllBytes(?:Async)?|ReadAllText(?:Async)?|OpenRead|Open)|FileStream|SoundPlayer|MediaPlayer|PlaySound|sndPlaySound|NAudio|FMOD|XAudio2|AudioClient|WaveOut|WasapiOut|DllImport|LibraryImport|NativeLibrary\.Load|Process\.Start)\b|https?://')
 if ($externalAudioMatches.Count -gt 0) {
@@ -1061,6 +1754,7 @@ Assert-Literals $emergencyInputCoordinator @(
     'probe.ConsumeHeldGameplayKeys()',
     'FreshGameplayKeyPressed',
     'HeldGameplayKeyEligible',
+    'HeldMovementKeyEligible',
     'IsConsumed',
     'if (IsConsumed) return',
     'purifyHeldEnabled',
@@ -1071,9 +1765,12 @@ Assert-Literals $emergencyInputCoordinator @(
     'miracleInterceptHeldWasEnabled',
     'scholarCriticalStrategyHeldEnabled',
     'scholarCriticalStrategyHeldWasEnabled',
+    'pressureEscapeHeldEnabled',
+    'pressureEscapeHeldWasEnabled',
+    'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared Purify, defensive utility, Ally Rescue, reactive-CC, NIN, and SCH input ownership'
+) 'Shared Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, NIN, and SCH input ownership'
 if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
     throw 'The shared emergency input coordinator may only observe and consume physical generations.'
 }
@@ -1083,22 +1780,24 @@ $normalizedPersonalStatus = $personalStatus -replace '\s+', ' '
 $purifyObserve = [regex]::Match($personalStatus, '\bemergencyPurify\.Observe\s*\(')
 $defenseObserve = [regex]::Match($personalStatus, '\bdefensiveUtility\.Observe\s*\(')
 $guardianCommunicationObserve = [regex]::Match($personalStatus, '\bguardianCommunication\.Observe\s*\(')
+$pressureEscapeObserve = [regex]::Match($personalStatus, '\bpressureEscapeSprint\.Observe\s*\(')
 $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
 $miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
 $ninjaSeitonObserve = [regex]::Match($personalStatus, '\bninjaSeiton\.Observe\s*\(')
 $scholarCriticalStrategyObserve = [regex]::Match($personalStatus, '\bscholarCriticalStrategy\.Observe\s*\(')
 $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
-if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $rescueObserve.Success -or
+if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
     -not $miracleObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or
     $purifyObserve.Index -gt $defenseObserve.Index -or
     $defenseObserve.Index -gt $guardianCommunicationObserve.Index -or
-    $guardianCommunicationObserve.Index -gt $rescueObserve.Index -or
+    $guardianCommunicationObserve.Index -gt $pressureEscapeObserve.Index -or
+    $pressureEscapeObserve.Index -gt $rescueObserve.Index -or
     $rescueObserve.Index -gt $miracleObserve.Index -or
     $miracleObserve.Index -gt $ninjaSeitonObserve.Index -or
     $ninjaSeitonObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
     $scholarCriticalStrategyObserve.Index -gt $monkEarthReplyObserve.Index -or
-    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 6) {
-    throw 'Personal status coordination must process Purify, defense, same-frame Guardian communication, Ally Rescue, reactive CC, NIN Seiton, then Monk in exact order while action helpers share one input frame.'
+    [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
+    throw 'Personal status coordination must process Purify, defense, same-frame Guardian communication, pressure Sprint, Ally Rescue, reactive CC, NIN Seiton, SCH, then Monk in exact order while action helpers share one input frame.'
 }
 Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
@@ -1115,6 +1814,15 @@ Assert-Literals $personalStatus @(
     'guardianCommunication.TryClearOneExactOwnershipOnDispose(',
     'guardianCommunication.FailClosed(now, exception)',
     'guardianCommunication.Reset()',
+    'new PressureEscapeSprintProbe(',
+    'PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics',
+    'pressureEscapeSprint.Observe(',
+    'pressureEscapeSprint.FailClosed(now, exception)',
+    'pressureEscapeSprint.Reset()',
+    'pressureEscapeClaimedPriority',
+    'configuration.ShowHighPressureWarning',
+    'configuration.PlayHighPressureWarningSound',
+    'configuration.EnablePressureEscapeSprintOnHeldKey',
     'purify.UseActionAttempted',
     'resilienceActive',
     'guardActive',
@@ -1152,22 +1860,22 @@ Assert-Literals $personalStatus @(
     'scholarCriticalStrategy.Reset()',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
-) 'Shared self-Purify, defensive utility, Ally Rescue, reactive-CC, and NIN Seiton priority'
-if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, isCrystallineConflict, miracleInterceptConfigurationEnabled, configuration\.ReactiveCcOnHeldKey, !purifyClaimedPriority && !defensiveUtilityClaimedPriority && !allyRescueClaimedPriority,') {
-    throw 'Reactive CC must receive persistent feature/capture enablement separately from its transient Purify/defense/Rescue dispatch permission.'
+) 'Shared self-Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, and NIN Seiton priority'
+if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, isCrystallineConflict, miracleInterceptConfigurationEnabled, configuration\.ReactiveCcOnHeldKey, !purifyClaimedPriority && !defensiveUtilityClaimedPriority && !pressureEscapeClaimedPriority && !allyRescueClaimedPriority,') {
+    throw 'Reactive CC must receive persistent feature/capture enablement separately from its transient Purify/defense/pressure-Sprint/Rescue dispatch permission.'
 }
 if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimitBreak, configuration\.MiracleInterceptSamZantetsuken, configuration\.MiracleInterceptViperNest, configuration\.ReactiveCcDancerLimitBreak, configuration\.ReactiveCcAfterEnemyPurify, metadata\.MarksmanSpiteVerified, metadata\.ZantetsukenVerified, metadata\.FuriousBacklashVerified, metadata\.MiracleOfNatureActionVerified, metadata\.PurifyVerified, emergencyInputFrame') {
     throw 'Reactive MCH/SAM/VPR/DNC/Purify subtypes and metadata gates must be wired separately into the shared one-generation dispatcher.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnFreshGameplayKey;' -or
-    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
-    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/Rescue/reactive CC.'
+    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
+    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/pressure Sprint/Rescue/reactive CC.'
 }
 if ($normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyConfigurationEnabled = configuration\.Enabled && configuration\.EnableScholarCriticalStrategyOnHeldKey;' -or
     $normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyHeldEnabled = scholarCriticalStrategyConfigurationEnabled && isCrystallineConflict && metadata\.ScholarCriticalStrategyVerified && !guardActive && localJobId == ScholarCriticalStrategyRules\.ScholarJobId;' -or
-    $normalizedPersonalStatus -notmatch 'scholarCriticalStrategyHeldEnabled\); var purify = emergencyPurify\.Observe\(' -or
-    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); monkEarthReply\.Observe\(' -or
-    $normalizedPersonalStatus -notmatch 'miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
+    $normalizedPersonalStatus -notmatch 'scholarCriticalStrategyHeldEnabled, pressureEscapeSprintHeldEnabled\); var purify = emergencyPurify\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); monkEarthReply\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
     throw 'SCH Critical Strategy must be a default-off exact-CC/SCH/metadata/Guard-gated held-generation consumer after NIN and before Monk, sharing the same consumed priority chain.'
 }
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
@@ -1178,15 +1886,15 @@ if ($personalStatus -match '\bstatus\.Address\b|\bStatusAddress\b') {
     throw 'Personal status scanning must never gate on status.Address.'
 }
 if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\); var exactGuardActive = guardActive; var guardObservationNow = Math\.Max\(now, Environment\.TickCount64\); var observedGuardAttemptAt = -1L; if \(localPlayer is not null\) \{ nearAssist\.TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, localPlayer\.GameObjectId, localPlayer\.EntityId, guardObservationNow, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out observedGuardAttemptAt\); \} guardActive = defensiveUtility\.ObserveGuardSuppression\( exactGuardActive, observedGuardAttemptAt, guardObservationNow, hardReset\)\.SuppressDirectActionHelpers;' -or
-    $normalizedPersonalStatus -notmatch 'regularPurifyConfigurationEnabled = .*?!guardActive;.*?pressureStunPurifyConfigurationEnabled = .*?!guardActive;.*?allyRescueConfigurationEnabled = .*?!guardActive;.*?miracleInterceptConfigurationEnabled = .*?!guardActive;.*?configuration\.EnableMonkEarthReplyHelper && !guardActive') {
+    $normalizedPersonalStatus -notmatch 'regularPurifyConfigurationEnabled = .*?!guardActive;.*?pressureStunPurifyConfigurationEnabled = .*?!guardActive;.*?allyRescueConfigurationEnabled = .*?!guardActive;.*?miracleInterceptConfigurationEnabled = .*?!guardActive;.*?pressureEscapeSprintHeldEnabled = .*?!guardActive;.*?configuration\.EnableMonkEarthReplyHelper && !guardActive') {
     throw 'Exact live or identity-and-territory-bound propagated Guard must be computed independently of the defensive-utility master and suppress every plugin-owned direct action path.'
 }
 if ($normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.Observe\( localPlayer, isCrystallineConflict, defensiveUtilitiesConfigurationEnabled, configuration\.DefensiveUtilitiesOnHeldKey, configuration\.GuardOnStunPressure, configuration\.PreGuardOnLowHpPressure, configuration\.PaladinGuardianLowAlly, pressureKnown, incomingEnemyCount, highPressureStunObserved, purify\.UseActionAttempted, resilienceActive, hasPurifyRemovableCrowdControl, guardActive, purifyClaimedPriority, emergencyInputFrame') {
     throw 'Defensive utilities must observe after Purify with its attempted result, positive Resilience state, active-Guard state, and Purify priority on the same shared generation.'
 }
 if ([regex]::Matches($personalStatus, '\bguardianCommunication\.Observe\s*\(').Count -ne 1 -or
-    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.Observe\(.*?\);.*?now = Math\.Max\(now, Environment\.TickCount64\); guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\); var defensiveUtilityClaimedPriority = defense\.InputClaimed; var rescue = allyRescue\.Observe\(') {
-    throw 'Guardian communication must observe exactly once in the same framework frame, immediately after the automatic defense result and before any later helper.'
+    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.Observe\(.*?\);.*?now = Math\.Max\(now, Environment\.TickCount64\); guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\); var defensiveUtilityClaimedPriority = defense\.InputClaimed; now = Environment\.TickCount64; var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame, now, hardReset \|\| !alive\); var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var rescue = allyRescue\.Observe\(') {
+    throw 'Guardian communication must observe exactly once after defense, then pressure Sprint must claim only after Purify/defense and before Ally Rescue.'
 }
 if ([regex]::Matches($pluginSource, '\bnew ReviewedPvpCommandDispatcher\s*\(').Count -ne 1 -or
     $normalizedPersonalStatus -notmatch 'GuardianCommunicationService\( configuration, clientState, objectTable, dutyState, dataManager, log, commands\)' -or
@@ -2196,8 +2904,8 @@ Assert-Literals $metadataGuard @(
 $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 if (-not $monkObserve.Success -or $monkObserve.Index -lt $ninjaSeitonObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed') {
-    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/Rescue/reactive CC/NIN already claimed or attempted.'
+    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed') {
+    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/pressure Sprint/Rescue/reactive CC/NIN already claimed or attempted.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
@@ -2207,6 +2915,9 @@ if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvP
 }
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableScholarCriticalStrategyOnHeldKey \|\| configuration\.EnableAutoEnemyFocusMark') {
     throw 'Pressure tracking must remain independently active for defensive, post-Purify team-focus, SCH ranking, and automatic Attack-1 utility consumers.'
+}
+if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableAutoEnemyFocusMark \|\| configuration\.ShowHighPressureWarning \|\| configuration\.PlayHighPressureWarningSound \|\| configuration\.EnablePressureEscapeSprintOnHeldKey;') {
+    throw 'Direct pressure tracking must activate independently for each high-pressure visual, FFXIV-system-sound, or held-Sprint option.'
 }
 
 # Isolation is a warning-only exact-CC reader. It resolves one native five-member
@@ -2398,13 +3109,18 @@ if ([regex]::Matches($nearAssist, 'HookFromAddress<ActionManager\.Delegates\.Use
 if ([regex]::Matches($nearAssist, '\buseActionHook!\.Original\s*\(').Count -ne 1) {
     throw 'Near Assist must call the hook Original exactly once from its detour.'
 }
-if ($nearAssist -match '(?:->|\.)UseAction\s*\(' -or
+if ([regex]::Matches($nearAssist, '->UseAction\s*\(').Count -ne 1 -or
     $nearAssist -match '(?-i:\b(UseActionLocation|ExecuteAction|SendAction|ActionQueued|QueuedAction|QueueAction|RetryAction|RetryDispatch)\b)' -or
     $nearAssist -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Near Assist may forward one Original call but must never initiate, retry, queue, or visibly mutate a target.'
+    throw 'Near Assist may own only its one reviewed DRK nested call plus one Original; it must never retry, queue, or visibly mutate a target.'
 }
 if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*forwardedTargetId\s*,\s*extraParam\s*,\s*mode\s*,\s*comboRouteId\s*,\s*outOptAreaTargeted\s*\)') {
     throw 'Near Assist Original must preserve every native action argument except the bounded forwardedTargetId.'
+}
+if ($normalizedNearAssist -notmatch 'if \(!bypassRedirect && shadowbringerCarrier is \{ \} carrier\).*?var safeCarrierPath = !helperTokenConsumed && !targetSuppressedByRedirect && forwardedTargetId == targetId;.*?darkKnightShadowbringer\.TryAttemptOnce\( thisPtr, carrier, safeCarrierPath, IsLocalGuardActiveOrPropagating, \(\) => RunWithoutRedirect\( \(\) => thisPtr->UseAction\( ActionType\.Action, DarkKnightShadowbringerMacroRules\.ShadowbringerActionId, carrier\.EffectiveTargetId, 0, ActionManager\.UseActionMode\.None, 0, null\)\)\);.*?ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?useActionHook!\.Original\(' -or
+    [regex]::Matches($nearAssist, '\bdarkKnightShadowbringer\.TryAttemptOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($nearAssist, '\bdarkKnightShadowbringer\.TryConsumePairedCarrier\s*\(').Count -ne 1) {
+    throw 'The DRK detour boundary must spend at most one exact Shadowbringer attempt under redirect bypass, then forward the unchanged outer combo carrier through the sole Original.'
 }
 if ([regex]::Matches($nearAssist, '\bsmartWardensPaean\.Evaluate\s*\(').Count -ne 1 -or
     [regex]::Matches($nearAssist, '\bsmartWardensPaean\.RecordNativeResult\s*\(').Count -ne 1) {
@@ -2755,11 +3471,11 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 5) {
-    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression plus Near Assist, Near Help, Far Help, and passive Smart Paean without consuming any macro token or transforming the plugin-owned action.'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 7) {
+    throw 'Plugin-owned direct helper calls must bypass DRK pairing/attempt plus legacy Far Help suppression, Near Assist, Near Help, Far Help, and passive Smart Paean without consuming a macro token or recursively transforming the plugin-owned action.'
 }
 if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
-    throw 'The redirect bypass may guard only the five reviewed redirect/transform branches; it must never wrap or skip the unconditional final CC brake.'
+    throw 'The redirect bypass may guard only the seven reviewed pair/redirect/transform/attempt branches; it must never wrap or skip the unconditional final CC brake.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 $normalizedNearHelpSelection = $nearHelpSelection -replace '\s+', ' '
@@ -3254,6 +3970,296 @@ if (-not $missingGrace.Success -or
     throw 'CC-protection missing-frame grace must stay narrowly bounded between 100 and 250 milliseconds.'
 }
 
+# The urgent self-pressure path is deliberately narrower than HOWMANY: only the
+# fresh, exact, deduplicated hard/cast target union may create a warning episode,
+# system sound, or held-movement Sprint intent. Historical hits and the MCH early
+# marker remain display evidence only and must never cross this action boundary.
+$pressureEscapeRules = Read-RequiredSource $pressureEscapeRulesPath 'Pressure-escape core rules'
+$pressureEscapeSelfTests = Read-RequiredSource $pressureEscapeSelfTestsPath 'Pressure-escape core self-tests'
+$pressureEscapeSprint = Read-RequiredSource $pressureEscapeSprintProbePath 'Pressure-escape Sprint runtime'
+$normalizedPressureEscapeRules = $pressureEscapeRules -replace '\s+', ' '
+$normalizedPressureEscapeSprint = $pressureEscapeSprint -replace '\s+', ' '
+$pressureEscapeCombatConstants = Read-RequiredSource (Join-Path $pluginServicesRoot 'EnemyCombatConstants.cs') 'Pressure-escape combat constants'
+Assert-Literals $pressureEscapeRules @(
+    'RequiredDirectEnemyCount = 3',
+    'MaximumPressureAgeMilliseconds = 250',
+    'WarningClearGraceMilliseconds = 300',
+    'bool EpisodeOpen',
+    'long SafeSinceMilliseconds',
+    'ulong EpisodeToken',
+    'pressureKnown && directEnemyCount >= RequiredDirectEnemyCount',
+    'var entered = !previous.EpisodeOpen',
+    'var token = entered ? NextEpisodeToken(previous.EpisodeToken) : previous.EpisodeToken',
+    'previous.SafeSinceMilliseconds',
+    'observation.NowMilliseconds - safeSince',
+    'current == ulong.MaxValue ? 1UL : current + 1',
+    'IsSupportedMovementVirtualKey',
+    'AVirtualKey = 0x41',
+    'DVirtualKey = 0x44',
+    'SVirtualKey = 0x53',
+    'WVirtualKey = 0x57'
+) 'Exact high-pressure threshold, episode continuity, and movement-key rules'
+if ($normalizedPressureEscapeRules -notmatch 'if \(observation\.HardReset\) return Unknown\(PressureEscapeWarningState\.Initial\);' -or
+    $normalizedPressureEscapeRules -notmatch 'return Unknown\(new PressureEscapeWarningState\( false, previous\.EpisodeOpen, -1, previous\.EpisodeToken\)\);' -or
+    $normalizedPressureEscapeRules -notmatch 'var safeSince = previous\.SafeSinceMilliseconds >= 0 \? previous\.SafeSinceMilliseconds : observation\.NowMilliseconds; var insideClearGrace = observation\.NowMilliseconds - safeSince < WarningClearGraceMilliseconds;' -or
+    $normalizedPressureEscapeRules -notmatch 'insideClearGrace \? new PressureEscapeWarningState\( previous\.IsVisible, true, safeSince, previous\.EpisodeToken\) : new PressureEscapeWarningState\( false, false, -1, previous\.EpisodeToken\)') {
+    throw 'Unknown/stale pressure must hide without closing or rearming an open episode; only 300 ms of continuously known below-three pressure may close it.'
+}
+Assert-Literals $pressureEscapeSelfTests @(
+    'DirectThresholdIsInclusiveAndUnknownFailsClosed',
+    'WarningEntryIsImmediateAndClearIsDebounced',
+    'UnknownOrStalePressureClearsImmediately',
+    'unknown gap cannot rearm sound or Sprint',
+    'unknown gap retains the same episode token',
+    'SprintRequiresEveryExactGateAndMovementKey',
+    'MovementKeySetIsNarrow',
+    'WarningEpisodeTokenWrapsToANonZeroValue',
+    'two direct enemies are below threshold',
+    'three direct enemies meet threshold',
+    'Guard blocks',
+    'active Sprint blocks',
+    'spent episode blocks',
+    'action key blocks'
+) 'Executable pressure-episode and held-Sprint safety examples'
+
+Assert-Literals $targetPressureSnapshot @(
+    'TargetPressureActorIdentity LocalPlayer',
+    'long PublishedAtMilliseconds',
+    'DirectSelfPressureSnapshot(',
+    'int UniqueEnemyCount',
+    'int HardTargetEnemyCount',
+    'int CastTargetEnemyCount'
+) 'Exact immutable direct-self pressure publication'
+Assert-Literals $coreTargetPressure @(
+    'var aggregates = new Dictionary<TargetPressureActorIdentity, EnemyAggregate>()',
+    'if (ambiguousEnemyIdentities.Contains(observation.Actor)) continue',
+    'if (!aggregates.TryGetValue(observation.Actor, out var aggregate))',
+    'enemy.Actor.IsValid',
+    '!SharesEitherId(enemy.Actor, localPlayer)',
+    'enemy.IsHostile',
+    '!enemy.IsDead',
+    'enemy.IsTargetable'
+) 'Unique exact live hostile pressure actors'
+$directPressureMethod = [regex]::Match(
+    $targetPressureTracker,
+    '(?s)internal bool TryGetFreshSelfDirectIncomingPressure\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    ///')
+if (-not $directPressureMethod.Success) {
+    throw 'The exact fresh direct-self pressure reader is missing.'
+}
+$directPressureBody = $directPressureMethod.Groups['Body'].Value
+Assert-Literals $directPressureBody @(
+    'current.LocalPlayer != expectedLocalPlayer',
+    'current.PublishedAtMilliseconds < 0',
+    'nowMilliseconds < current.PublishedAtMilliseconds',
+    'nowMilliseconds - current.PublishedAtMilliseconds > maximumAgeMilliseconds',
+    'foreach (var opponent in current.Opponents)',
+    'TargetPressureEvidence.HardTarget',
+    'TargetPressureEvidence.CastTarget',
+    'if (!hardTarget && !castTarget) continue',
+    'unique++',
+    'new DirectSelfPressureSnapshot('
+) 'Fresh exact hard/cast-only self-pressure reader'
+if ($directPressureBody -match '\b(IncomingOpponents|IsIncoming|RecentHarmfulAction|MachinistLimitBreakMarker)\b') {
+    throw 'High-pressure eligibility must not use the HOWMANY incoming union, recent harmful actions, or the MCH marker.'
+}
+if ($normalizedTargetPressureTracker -notmatch 'new TargetPressureRuntimeSnapshot\( true, pressureEnabledForContext, localIdentity, Environment\.TickCount64, result\.ToArray\(\)\)') {
+    throw 'Each pressure publication must bind exact local identity and a current monotonic timestamp to one immutable opponent set.'
+}
+
+Assert-Literals $pressureEscapeCombatConstants @(
+    'PvPSprintActionId = 29057',
+    'PvPSprintIconId = 9583',
+    'PvPSprintRecast100ms = 15',
+    'PvPSprintStatusId = 1342',
+    'PvPSprintStatusIconId = 210101'
+) 'Current reviewed PvP Sprint identifiers'
+Assert-Literals $pressureEscapeSprint @(
+    'TryGetFreshSelfDirectIncomingPressure(',
+    'PressureEscapeRules.MaximumPressureAgeMilliseconds',
+    'showWarning || playWarningSound || enableSprintOnHeldMovementKey',
+    'playWarningSound && warningDecision.EnteredWarning',
+    'Math.Clamp(warningSoundId, 1, 16)',
+    'showWarning && warningDecision.WarningActive',
+    'inputFrame.HeldMovementKeyEligible',
+    'input.HeldMovementKey',
+    'warningEpisodeToken != spentSprintEpisodeToken',
+    'spentSprintEpisodeToken = warningEpisodeToken',
+    'inputFrame.Consume()',
+    'TryUseSprintOnce(',
+    'TargetPressureActorIdentity expectedLocalIdentity',
+    'uint expectedTerritoryId',
+    'ResolveCurrentContext() != SupportedPvPContext.CrystallineConflict',
+    'currentIdentity != expectedLocalIdentity',
+    'finalPressure.UniqueEnemyCount',
+    'HasActiveStatus(localPlayer!, EnemyCombatConstants.PvPSprintStatusId)',
+    'HasEscapeBlockingCrowdControl(localPlayer!)',
+    'TryGetRecentExactLocalGuardAttempt(',
+    'DefensiveUtilityRules.GuardPropagationLatchMilliseconds',
+    'guardSuppression.SuppressDirectActionHelpers',
+    'GetAdjustedActionId(EnemyCombatConstants.PvPSprintActionId)',
+    'IsActionOffCooldown(',
+    'attempted = true',
+    'nearAssist.RunWithoutRedirect(() =>',
+    'ActionManager.UseActionMode.None',
+    'PressureEscapeWarningState.Initial',
+    'warningSound.Reset()',
+    'Sprint request accepted for exact direct pressure',
+    'Movement intent consumed; Sprint rejected or final state changed'
+) 'Exact one-episode PvP Sprint runtime boundary'
+if ([regex]::Matches($pressureEscapeSprint, '\bTryGetFreshSelfDirectIncomingPressure\s*\(').Count -ne 2 -or
+    [regex]::Matches($pressureEscapeSprint, '\bUseAction\s*\(').Count -ne 1) {
+    throw 'Pressure Sprint must read exact direct pressure once for observation and once at the final boundary, with exactly one native action call site.'
+}
+$pressureSprintClaim = [regex]::Match($pressureEscapeSprint, '\binputClaimed\s*=\s*true\s*;')
+$pressureSprintSpendEpisode = [regex]::Match($pressureEscapeSprint, '\bspentSprintEpisodeToken\s*=\s*warningEpisodeToken\s*;')
+$pressureSprintConsumeInput = [regex]::Match($pressureEscapeSprint, '\binputFrame\.Consume\s*\(\s*\)\s*;')
+$pressureSprintFinalRead = [regex]::Match($pressureEscapeSprint, '\baccepted\s*=\s*TryUseSprintOnce\s*\(')
+if (-not $pressureSprintClaim.Success -or -not $pressureSprintSpendEpisode.Success -or
+    -not $pressureSprintConsumeInput.Success -or -not $pressureSprintFinalRead.Success -or
+    $pressureSprintClaim.Index -gt $pressureSprintSpendEpisode.Index -or
+    $pressureSprintSpendEpisode.Index -gt $pressureSprintConsumeInput.Index -or
+    $pressureSprintConsumeInput.Index -gt $pressureSprintFinalRead.Index) {
+    throw 'Pressure Sprint must terminally claim the shared generation and spend its one episode before any final read or native request.'
+}
+$pressureSprintFinalBoundary = [regex]::Match(
+    $pressureEscapeSprint,
+    '(?s)private unsafe bool TryUseSprintOnce\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private static unsafe bool TryGetExactLiveIdentity')
+if (-not $pressureSprintFinalBoundary.Success) {
+    throw 'Pressure Sprint final native boundary is missing.'
+}
+$pressureSprintFinalBody = $pressureSprintFinalBoundary.Groups['Body'].Value
+if ([regex]::Matches($pressureSprintFinalBody, 'clientState\.TerritoryType\s*!=\s*expectedTerritoryId').Count -ne 2 -or
+    [regex]::Matches($pressureSprintFinalBody, 'ResolveCurrentContext\(\)\s*!=\s*SupportedPvPContext\.CrystallineConflict').Count -ne 2 -or
+    $pressureSprintFinalBody -notmatch 'objectTable\.LocalPlayer' -or
+    $pressureSprintFinalBody -notmatch 'TryGetExactLiveIdentity\(localPlayer, out var currentIdentity\)' -or
+    $pressureSprintFinalBody -notmatch 'currentIdentity\s*!=\s*expectedLocalIdentity' -or
+    $pressureSprintFinalBody -notmatch 'TryGetFreshSelfDirectIncomingPressure\(' -or
+    $pressureSprintFinalBody -notmatch 'expectedLocalIdentity\.GameObjectId' -or
+    $pressureSprintFinalBody -notmatch 'ActionManager\.UseActionMode\.None') {
+    throw 'Immediately before the sole self-Sprint request, exact territory/CC context, local identity, and fresh direct pressure must all be revalidated without target substitution.'
+}
+$pressureSprintAttempt = [regex]::Match($pressureSprintFinalBody, '\battempted\s*=\s*true\s*;')
+$pressureSprintNative = [regex]::Match($pressureSprintFinalBody, '\bactionManager->UseAction\s*\(')
+if (-not $pressureSprintAttempt.Success -or -not $pressureSprintNative.Success -or
+    $pressureSprintAttempt.Index -gt $pressureSprintNative.Index -or
+    $pressureSprintFinalBody -notmatch 'actionManager->UseAction\s*\(\s*ActionType\.Action\s*,\s*EnemyCombatConstants\.PvPSprintActionId\s*,\s*expectedLocalIdentity\.GameObjectId\s*,\s*0\s*,\s*ActionManager\.UseActionMode\.None\s*,\s*0\s*\)') {
+    throw 'Pressure Sprint diagnostics must mark an attempt before one exact Action/29057/self/None native request.'
+}
+Assert-Literals $pressureEscapeSprint @(
+    'action.Name.ToString() == "Sprint"',
+    'action.Icon == EnemyCombatConstants.PvPSprintIconId',
+    'action.IsPvP',
+    'action.IsPlayerAction',
+    'action.ClassJob.IsValid',
+    'action.ClassJob.RowId == 0',
+    'action.ClassJobCategory.IsValid',
+    'action.ClassJobCategory.RowId == 85',
+    'action.ActionCategory.IsValid',
+    'action.ActionCategory.RowId == 4',
+    'action.CastType == 1',
+    'action.Range == 0',
+    'action.EffectRange == 0',
+    'action.Cast100ms == 0',
+    'action.Recast100ms == EnemyCombatConstants.PvPSprintRecast100ms',
+    'action.PrimaryCostType == 0',
+    'action.PrimaryCostValue == 0',
+    'action.SecondaryCostType == 0',
+    'action.SecondaryCostValue.RowId == 0',
+    'action.CooldownGroup == 58',
+    'action.AdditionalCooldownGroup == 0',
+    'action.MaxCharges == 0',
+    'action.StatusGainSelf.RowId == EnemyCombatConstants.PvPSprintStatusId',
+    'action.CanTargetSelf',
+    '!action.CanTargetParty',
+    '!action.CanTargetAlly',
+    '!action.CanTargetAlliance',
+    '!action.CanTargetHostile',
+    '!action.CanTargetOwnPet',
+    '!action.CanTargetPartyPet',
+    '!action.TargetArea',
+    'action.RequiresLineOfSight',
+    'action.NeedToFaceTarget',
+    'action.PreservesCombo',
+    '!action.AffectsPosition',
+    'Increases movement speed by 50%',
+    'Effect ends upon reuse or execution of another action',
+    'status.Name.ToString() == "Sprint"',
+    'status.Icon == EnemyCombatConstants.PvPSprintStatusIconId',
+    'status.StatusCategory == 1',
+    'status.IsPermanent',
+    '!status.CanDispel',
+    '!status.LockMovement',
+    'Movement speed is increased'
+) 'Fail-closed current-sheet PvP Sprint action and status metadata'
+$pressureFailClosed = [regex]::Match(
+    $pressureEscapeSprint,
+    '(?s)internal PressureEscapeSprintProbeSnapshot FailClosed\(.*?\)\s*\{(?<Body>.*?)\r?\n    \}\r?\n\r?\n    private unsafe bool TryUseSprintOnce')
+if (-not $pressureFailClosed.Success -or
+    $pressureFailClosed.Groups['Body'].Value -notmatch 'warningState\.EpisodeOpen' -or
+    $pressureFailClosed.Groups['Body'].Value -notmatch 'warningState\.EpisodeToken' -or
+    $pressureFailClosed.Groups['Body'].Value -notmatch 'spentSprintEpisodeToken' -or
+    $pressureFailClosed.Groups['Body'].Value -match 'warningSound\.Reset|spentSprintEpisodeToken\s*=\s*0|warningState\s*=\s*PressureEscapeWarningState\.Initial') {
+    throw 'A transient pressure runtime failure must hide fail-closed while preserving episode, sound ownership, and spent-Sprint ownership.'
+}
+if ($pressureEscapeSprint -match '\b(RetryAction|RetryDispatch|QueuedAction|QueueAction|ActionQueued|PendingDispatch|BufferedDispatch|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|Hook<|HookFromAddress)\b') {
+    throw 'Pressure Sprint must have no alternate, target mutation, input injection, hook, queue, replay, or retry path.'
+}
+
+$pressureEscapeOverlay = Read-RequiredSource (Join-Path $pluginUiRoot 'OverlayRenderer.cs') 'High-pressure overlay'
+$normalizedPressureEscapeOverlay = $pressureEscapeOverlay -replace '\s+', ' '
+if ($normalizedPressureEscapeOverlay -notmatch 'var highPressureWarningVisible = HighPressureWarningPreviewEnabled \|\| \(configuration\.Enabled && configuration\.ShowHighPressureWarning && pressureEscape\.WarningActive\); if \(highPressureWarningVisible\)') {
+    throw 'The live high-pressure card must be explicitly gated by the plugin master, visual option, and current warning state; preview remains separate.'
+}
+Assert-Literals $pressureEscapeOverlay @(
+    'FOCUSED x{Math.Max(3, directEnemyCount)}',
+    '3+ ENEMIES TARGETING YOU',
+    'DrawIsolationWarning(now, highPressureWarningVisible)',
+    'private static (Vector2 Minimum, Vector2 Maximum) HighPressureWarningBounds()',
+    'var cardSize = new Vector2(410f, 108f) * scale',
+    'viewport.WorkPos.X + Math.Max(0f, (viewport.WorkSize.X - cardSize.X) * 0.5f)',
+    'private void DrawIsolationWarning(long now, bool avoidHighPressureWarning)',
+    'var cardSize = new Vector2(342f, 88f) * scale',
+    'var maximumTopLeft = Vector2.Max(workMinimum, workMaximum - cardSize)',
+    'var topLeft = Vector2.Clamp(',
+    'if (RectanglesOverlap(topLeft, bottomRight, pressureMinimum, pressureMaximum))',
+    'var below = pressureMaximum.Y + gap',
+    'var above = pressureMinimum.Y - gap - cardSize.Y',
+    'topLeft.Y = maximumTopLeft.Y',
+    'private static bool RectanglesOverlap(',
+    'The card never changes position or size. Only its border and alpha'
+) 'Config-gated fixed top-center high-pressure warning with narrow-work-area isolation collision fallback'
+if ($normalizedPressureEscapeOverlay -notmatch 'if \(avoidHighPressureWarning\) \{ var \(pressureMinimum, pressureMaximum\) = HighPressureWarningBounds\(\); if \(RectanglesOverlap\(topLeft, bottomRight, pressureMinimum, pressureMaximum\)\) \{ var gap = 18f \* ImGuiHelpers\.GlobalScale; var below = pressureMaximum\.Y \+ gap; var above = pressureMinimum\.Y - gap - cardSize\.Y; if \(below <= maximumTopLeft\.Y\) topLeft\.Y = below; else if \(above >= workMinimum\.Y\) topLeft\.Y = above; else topLeft\.Y = maximumTopLeft\.Y; bottomRight = topLeft \+ cardSize; \} \}') {
+    throw 'Isolation must retain top-left placement normally and stack/clamp only when its actual scaled bounds overlap the top-center pressure card.'
+}
+Assert-Literals $settingsWindow @(
+    'Warn when 3+ enemies are directly targeting you',
+    'Play one FFXIV system sound when the focus begins',
+    'High-pressure warning sound',
+    'Test high-pressure warning sound',
+    'Sprint once while holding a movement key under 3+ enemy focus',
+    'Exact current hard/cast targets only; recent hits do not count.',
+    'visual and is one-shot per focus episode. The alert stays top-center; isolation remains top-left',
+    'It listens only to held WASD/arrow movement keys and does not swallow that key.',
+    'Self Purify and Guard/Guardian keep priority; any later manual action ends FFXIV''s native PvP Sprint.'
+) 'Truthful aggregated high-pressure warning, sound, and held-movement UI contract'
+if ($inputContext -notmatch 'PressureEscapeRules\.IsSupportedMovementVirtualKey\(\(int\)gameplayKeys\[index\]\)' -or
+    $inputContext -notmatch 'HeldMovementKeyEligible' -or
+    $emergencyInputCoordinator -notmatch 'HeldMovementKeyEligible') {
+    throw 'Pressure Sprint must use the separately derived WASD/arrow movement-key generation, never the numerically first arbitrary held gameplay key.'
+}
+$pressureDebugStart = $pluginSource.IndexOf('[Seiton Sense] pressure-escape[')
+$pressureDebugEnd = if ($pressureDebugStart -ge 0) {
+    $pluginSource.IndexOf('[Seiton Sense] guardian-comm[', $pressureDebugStart)
+} else {
+    -1
+}
+if ($pressureDebugStart -lt 0 -or $pressureDebugEnd -le $pressureDebugStart -or
+    $pluginSource.Substring($pressureDebugStart, $pressureDebugEnd - $pressureDebugStart) -notmatch 'UseActionAttempted' -or
+    $pluginSource.Substring($pressureDebugStart, $pressureDebugEnd - $pressureDebugStart) -notmatch 'UseActionAccepted' -or
+    $pluginSource.Substring($pressureDebugStart, $pressureDebugEnd - $pressureDebugStart) -match '(?i)\b(landed|server accepted|applied successfully)\b') {
+    throw 'Pressure Sprint diagnostics must report attempted/client-accepted source facts and never claim that Sprint landed or applied.'
+}
+
 # Full CC immunity is an exact metadata-verified allowlist. One-hit/ambiguous
 # wards are deliberately excluded rather than being presented as full immunity.
 $ccProtectionCatalog = Read-RequiredSource (Join-Path $coreRoot 'CcProtectionStatusCatalog.cs') 'CC protection catalog'
@@ -3581,18 +4587,80 @@ if (-not $resourceAuraPreviewMethod.Success -or
     throw 'Resource-aura preview must use exact current self-hotbar anchors and must not restore the fixed DisplaySize 430-by-58 screen rectangle.'
 }
 
-$settingsWindow = Read-RequiredSource (Join-Path $pluginUiRoot 'SettingsWindow.cs') 'Settings window'
-$normalizedSettingsWindow = $settingsWindow -replace '\s+', ' '
+$settingsPageContracts = [ordered]@{
+    Start = @('Start', 'DrawStartPage')
+    Alerts = @('Alerts', 'DrawAlertsPage')
+    HudAndNameplates = @('HUD & Nameplates', 'DrawHudAndNameplatesPage')
+    ActionHelpers = @('Action Helpers', 'DrawActionHelpersPage')
+    JobTools = @('Job Tools', 'DrawJobToolsPage')
+    MacroHelpers = @('Macro Helpers', 'DrawMacroHelpersPage')
+    Targets = @('Targets', 'DrawTargetsPage')
+    Diagnostics = @('Diagnostics', 'DrawDiagnosticsPage')
+}
 Assert-Literals $settingsWindow @(
-    'ImGui.BeginTabItem("Jobs")',
-    'DrawJobsTab()',
-    'ALL JOBS / GENERAL QUALITY OF LIFE',
+    'internal sealed partial class SettingsWindow',
+    'private SettingsPage selectedPage = SettingsPage.Start;',
+    '##SeitonSenseSettingsSidebar',
+    '##SeitonSenseSettingsContent{selectedPage}',
+    'private void DrawSidebar()',
+    'private void DrawPageChoice(SettingsPage page, string label)',
+    'private enum SettingsPage'
+) 'Split SettingsWindow shell and sidebar contract'
+if ([regex]::Matches($settingsWindow, 'internal sealed partial class SettingsWindow').Count -ne $settingsSourceFiles.Count) {
+    throw 'Every SettingsWindow source in the reviewed split must remain one partial of the same sealed window.'
+}
+
+$settingsPageEnum = [regex]::Match(
+    $settingsWindow,
+    '(?s)private enum SettingsPage\s*\{(?<Body>.*?)\}')
+if (-not $settingsPageEnum.Success) {
+    throw 'The Settings sidebar page enum is missing.'
+}
+
+$actualSettingsPages = @([regex]::Matches(
+        $settingsPageEnum.Groups['Body'].Value,
+        '(?m)^\s*(?<Name>[A-Za-z_]\w*)\s*,\s*$') | ForEach-Object { $_.Groups['Name'].Value })
+$settingsPageDifference = @(
+    Compare-Object -ReferenceObject @($settingsPageContracts.Keys) -DifferenceObject $actualSettingsPages
+)
+if ($settingsPageDifference.Count -ne 0) {
+    $pageDetails = $settingsPageDifference | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
+    throw "Settings sidebar page set drifted: $($pageDetails -join ', ')"
+}
+
+$sidebarOrderPatterns = @()
+foreach ($entry in $settingsPageContracts.GetEnumerator()) {
+    $pageName = [string]$entry.Key
+    $pageLabel = [string]$entry.Value[0]
+    $pageMethod = [string]$entry.Value[1]
+    $choicePattern = 'DrawPageChoice\(SettingsPage\.' + [regex]::Escape($pageName) +
+        ',\s*"' + [regex]::Escape($pageLabel) + '"\)'
+    $switchPattern = 'SettingsPage\.' + [regex]::Escape($pageName) +
+        '\s*=>\s*' + [regex]::Escape($pageMethod) + '\(\)'
+    $methodPattern = 'private\s+bool\s+' + [regex]::Escape($pageMethod) + '\(\)'
+    if ([regex]::Matches($settingsWindow, $choicePattern).Count -ne 1 -or
+        [regex]::Matches($settingsWindow, $switchPattern).Count -ne 1 -or
+        [regex]::Matches($settingsWindow, $methodPattern).Count -ne 1) {
+        throw "Settings page '$pageLabel' must have exactly one sidebar choice, switch route, and page renderer."
+    }
+
+    $sidebarOrderPatterns += $choicePattern
+}
+if ($normalizedSettingsWindow -notmatch ($sidebarOrderPatterns -join '.*?')) {
+    throw 'Settings sidebar order must remain Start, Alerts, HUD & Nameplates, Action Helpers, Job Tools, Macro Helpers, Targets, Diagnostics.'
+}
+if ($settingsWindow -match 'ImGui\.BeginTabItem|DrawJobsTab') {
+    throw 'The sidebar Settings structure must not silently fall back to the obsolete monolithic tab/DrawJobsTab layout.'
+}
+
+Assert-Literals $settingsWindow @(
+    'Low-resource aura',
     'DrawResourceAuraControls()',
-    'All jobs: Defensive utilities',
+    'Guard and Paladin Guardian',
     'DrawDefensiveUtilityControls()',
-    'All jobs: Team-visible enemy focus sign',
+    'Team-visible enemy focus sign',
     'DrawAutoEnemyFocusMarkControls()',
-    '"NINJA"',
+    'Ninja — Seiton',
     'Seiton on fresh gameplay key (experimental)',
     'configuration.EnableNinjaSeitonOnFreshGameplayKey',
     'Default off and exact Crystalline Conflict only.',
@@ -3602,10 +4670,11 @@ Assert-Literals $settingsWindow @(
     'selects again, chooses an alternate, falls back, replays, or retries',
     'read again at the latest safe point before the request; exactly 50% or higher cancels the spent attempt.',
     'A client-accepted return is dispatch feedback only',
-    '"SCHOLAR"',
-    '"BARD"',
+    'Scholar — Critical Strategy',
+    'configuration.EnableScholarCriticalStrategyOnHeldKey',
+    'Bard — Smart Paean target',
     'DrawBardWardensPaeanPressureRedirectControls()',
-    'Smart Paean target for manual / Turbo calls at 3+ incoming enemies',
+    'Smart Paean target for manual or Turbo calls at 3+ incoming enemies',
     'configuration.EnableBardWardensPaeanPressureRedirect',
     'already incoming The Warden''s Paean (29400) ability call',
     'complete, unique, stable exact party view is required',
@@ -3616,17 +4685,120 @@ Assert-Literals $settingsWindow @(
     'pressure drift suppresses that one call instead of using the original',
     'There is deliberately no cooldown/readiness gate.',
     'target, creates or substitutes an action, replays, or retries.',
-    '"MONK"',
+    'Monk — Earth''s Reply',
     'DrawMonkEarthReplyControls()',
-    '"BARD / WHITE MAGE"',
     'Reactive counter-CC: Silent Nocturne / Miracle of Nature',
     'DrawReactiveCcControls()',
     'Warn when no party ally is within 20y and line of sight',
     'configuration.WarnWhenIsolated',
-    'configuration.EnableAutoEnemyFocusMark'
-) 'Jobs quality-of-life settings organization'
-if ($normalizedSettingsWindow -notmatch 'private bool DrawJobsTab\(\).*?ALL JOBS / GENERAL QUALITY OF LIFE.*?DrawResourceAuraControls\(\).*?All jobs: Defensive utilities.*?DrawDefensiveUtilityControls\(\).*?All jobs: Team-visible enemy focus sign.*?DrawAutoEnemyFocusMarkControls\(\).*?"NINJA".*?Seiton on fresh gameplay key \(experimental\).*?configuration\.EnableNinjaSeitonOnFreshGameplayKey.*?"SCHOLAR".*?configuration\.EnableScholarCriticalStrategyOnHeldKey.*?"BARD".*?DrawBardWardensPaeanPressureRedirectControls\(\).*?"MONK".*?DrawMonkEarthReplyControls\(\).*?"BARD / WHITE MAGE".*?DrawReactiveCcControls\(\)') {
-    throw 'Jobs tab must keep general defensive/marker utilities before Ninja, Scholar, Smart Bard Paean, Monk, and BRD/WHM reactive controls in reviewable order.'
+    'configuration.EnableAutoEnemyFocusMark',
+    'Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Ninja > Scholar.',
+    'Monk Earth''s Reply is a separate automatic follow-up that yields after an earlier helper attempt.',
+    'Enable one Purify attempt from an eligible physical gameplay key',
+    'Also allow a key that was already held when the debuff appeared (includes WASD)',
+    'One physical key generation can produce at most one',
+    'Seiton Sense action request.'
+) 'Order-independent split Settings safety copy and feature reachability'
+
+$settingsConfigurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
+$settingsConfiguration = Read-RequiredSource $settingsConfigurationPath 'Settings binding configuration'
+$configurationPropertyMatches = [regex]::Matches(
+    $settingsConfiguration,
+    '(?m)^\s*public\s+[A-Za-z_][\w<>, ?]*\s+(?<Name>[A-Za-z_]\w*)\s*\{\s*get;\s*set;\s*\}')
+$configurationPropertyNames = @($configurationPropertyMatches | ForEach-Object { $_.Groups['Name'].Value })
+$settingsBindingExemptions = @(
+    'Version',
+    'ExperimentalPurifyBufferMilliseconds',
+    'ExperimentalMiracleInterceptOnHeldKey',
+    'MiracleInterceptAfterPurifiedStun',
+    'CcBrakeJobs',
+    'CcBrakeActions'
+)
+foreach ($exemption in $settingsBindingExemptions) {
+    if ($configurationPropertyNames -notcontains $exemption) {
+        throw "Reviewed Settings binding exemption '$exemption' no longer names a persisted configuration property."
+    }
+}
+
+$settingsBindingFailures = @()
+foreach ($propertyName in $configurationPropertyNames) {
+    if ($settingsBindingExemptions -contains $propertyName) { continue }
+    $escapedPropertyName = [regex]::Escape($propertyName)
+    $referenceCount = [regex]::Matches(
+        $settingsWindow,
+        '\bconfiguration\.' + $escapedPropertyName + '\b').Count
+    $writeCount = [regex]::Matches(
+        $settingsWindow,
+        '\bconfiguration\.' + $escapedPropertyName + '\s*=').Count
+    if ($referenceCount -lt 2 -or $writeCount -ne 1) {
+        $settingsBindingFailures += "$propertyName (references=$referenceCount, writes=$writeCount)"
+    }
+}
+if ($settingsBindingFailures.Count -ne 0) {
+    throw "Persisted Settings bindings drifted or became unreachable: $($settingsBindingFailures -join ', ')"
+}
+Assert-Literals $settingsWindow @(
+    'NATIVE FOCUS TARGET SETTER (OPT-IN)',
+    'Set an empty Focus Target to an exact enemy at 2,000 MP or lower',
+    'configuration.EnableAutoLowMpFocusTarget',
+    'Default off and exact Crystalline Conflict only',
+    'complete unique native S1-S5 view',
+    '150 ms of trusted MP at 2,000 or lower',
+    'native 20-yalm range/line-of-sight result',
+    'clears only after 150 ms at 2,300 MP or higher',
+    'fill only an empty native Focus Target and never clears, replaces, restores, or retries',
+    'occupied or manually changed Focus always wins',
+    'latches the manual override',
+    'feeds FFXIV''s Focus Target HUD and <f>',
+    'independent of the party-visible',
+    'Attack1 sign and never changes your hard or soft target',
+    'no atomic compare-and-set API',
+    'requires a live current-patch CC',
+    'A/B test.',
+    'DARK KNIGHT SHADOWBRINGER MACRO (OPT-IN)',
+    'Enable the exact two-line /seitonbringer weave helper',
+    'configuration.EnableDarkKnightShadowbringerMacro',
+    '/pvpac \"Souleater Combo\" <t>',
+    'enable both Macro Queue and Turbo for this macro',
+    'Default off, exact Crystalline Conflict, and PvP Dark Knight only',
+    'at most one Shadowbringer attempt in the inclusive 0.60-0.80',
+    '0.50 seconds or less never triggers',
+    'native 5-yalm/10-yalm range and line-of-sight checks',
+    'more than 12,000 HP or the',
+    'exact Dark Arts status/action state',
+    'one-attempt token is spent before the final native Shadowbringer request',
+    'never changes a target, chooses an alternate action or enemy, replays the macro, or retries',
+    'ACCEPTED is local dispatch feedback only',
+    'current-patch CC trace'
+) 'Schema-24 Auto Focus and DRK opt-in Settings bindings and safety copy'
+
+$settingsConfigurationMethodBindings = @(
+    'ApplyCurrentTargetHighlightPreset',
+    'ApplyFocusGlowPreset',
+    'IsCcBrakeActionEnabled',
+    'IsCcBrakeJobEnabled',
+    'ResetToDefaults',
+    'Save',
+    'SetCcBrakeActionEnabled',
+    'SetCcBrakeJobEnabled'
+)
+foreach ($methodName in $settingsConfigurationMethodBindings) {
+    $methodCallPattern = '\bconfiguration\.' + [regex]::Escape($methodName) + '\s*\('
+    if ([regex]::Matches($settingsWindow, $methodCallPattern).Count -ne 1) {
+        throw "Settings must retain exactly one reviewed configuration method binding for $methodName."
+    }
+}
+foreach ($legacyPropertyName in @(
+        'Version',
+        'ExperimentalPurifyBufferMilliseconds',
+        'ExperimentalMiracleInterceptOnHeldKey',
+        'MiracleInterceptAfterPurifiedStun')) {
+    if ($settingsWindow -match ('\bconfiguration\.' + [regex]::Escape($legacyPropertyName) + '\b')) {
+        throw "Legacy/non-UI configuration property $legacyPropertyName must not silently reappear as a Settings binding."
+    }
+}
+if ($settingsWindow -match '\bconfiguration\.CcBrake(?:Jobs|Actions)\b') {
+    throw 'CC-brake Settings must remain behind the reviewed Is/Set methods rather than binding mutable dictionaries directly.'
 }
 
 $rangeRules = Read-RequiredSource (Join-Path $coreRoot 'SeitonRangeRules.cs') 'Seiton range rules'
@@ -3895,33 +5067,59 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.16.0.0</Version>',
-    '<AssemblyVersion>0.16.0.0</AssemblyVersion>',
-    '<FileVersion>0.16.0.0</FileVersion>'
-) 'v0.16.0.0 project version'
+    '<Version>0.18.0.0</Version>',
+    '<AssemblyVersion>0.18.0.0</AssemblyVersion>',
+    '<FileVersion>0.18.0.0</FileVersion>'
+) 'v0.18.0.0 project version'
 Assert-Literals ($pluginManifest + $repositoryIndex) @(
-    'default-off Ninja and Scholar action helpers',
-    'a default-off passive Smart Bard Paean target redirect',
-    'optional Guardian team communication',
-    '"AssemblyVersion": "0.16.0.0"',
-    'The Warden''s Paean 29400 call',
-    'exact reachable non-self party ally without the live Paean ward',
-    'known incoming pressure of at least three',
-    'ranking pressure before exact HP and stable identity',
-    'leaves the original call vanilla',
-    'suppresses that one call with no original-target fallback, alternate, replay, retry, action substitution, or selected-target mutation',
-    'This passive transform has no cooldown/readiness gate.',
-    'final frozen-target HP read that cancels at exactly 50% or higher',
-    'unused native marker slot reports 0xE0000000 instead of zero',
-    'Schema 22 keeps Smart Paean off for new, upgraded, and reset settings',
-    'existing Ally Rescue and Aquaveil behavior remains unchanged.'
-) 'v0.16.0.0 manifest and repository metadata'
+    'optional set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers',
+    'focus-target',
+    'dark-knight',
+    '"AssemblyVersion": "0.18.0.0"',
+    'two separate default-off exact Crystalline Conflict helpers',
+    'set only an empty local native Focus Target',
+    'trusted exact S1-S5 enemy at 2,000 MP or lower',
+    'native 20-yalm range/line-of-sight proof',
+    'never clears, replaces, restores, or retries',
+    'manual focus changes win',
+    'DRK /seitonbringer two-line ReAction Macro Queue/Turbo helper',
+    'at most once per proven 2.40-second Souleater Combo GCD',
+    'inclusive 0.60-0.80-seconds-remaining window',
+    'exact target, Guard, resource, range, line-of-sight, queue, and readiness gates',
+    'never changes a target, substitutes, replays, or retries',
+    'Schema 24 keeps both features off for fresh, upgraded, and reset settings',
+    'live current-patch Focus setter/readback and DRK queue/clip behavior remain confirmation boundaries'
+) 'v0.18.0.0 manifest and repository metadata'
 $readme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'README'
 $changelog = Read-RequiredSource (Join-Path $resolvedRoot 'CHANGELOG.md') 'Changelog'
 $privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy documentation'
-Assert-Literals $readme @(
-    'Version 0.16.0.0 adds a',
-    'Configuration schema 22 keeps the Bard',
+$normalizedReadme = $readme -replace '\s+', ' '
+$normalizedChangelog = $changelog -replace '\s+', ' '
+$normalizedPrivacy = $privacy -replace '\s+', ' '
+Assert-Literals $normalizedReadme @(
+    'Version 0.18.0.0 adds two',
+    'set-only local native',
+    'Focus Target for a trusted reachable `S1`-`S5` enemy at 2,000 MP or lower',
+    'exact two-line DRK/ReAction macro that may weave Shadowbringer once',
+    'large fixed red `FOCUSED xN` card at the top center',
+    'Configuration schema',
+    '24 keeps Auto Low-MP Focus, the DRK macro, pressure Sprint',
+    'three or more exact current hard/cast targets',
+    'large fixed red `FOCUSED xN` card',
+    'at the top center',
+    'only on a narrow work area where the',
+    'two scaled cards would overlap is isolation stacked vertically below it',
+    'selectable built-in FFXIV system',
+    'fires once on entry rather than every frame',
+    'separate default-off option may use one held',
+    'WASD/arrow movement-key generation',
+    'movement key still reaches',
+    'any later native PvP action ends Sprint',
+    'urgent high-pressure alarm deliberately uses the narrower direct-intent',
+    'Recent harmful-action evidence',
+    'cannot start or sustain this warning, its sound, or pressure',
+    'Unknown/stale pressure hides the card immediately but cannot manufacture a new',
+    'only a continuously known below-three separation can rearm it',
     'The separate **Smart Bard Paean pressure redirect**',
     'disabled by default and',
     'runs only for PvP Bard in exact Crystalline Conflict',
@@ -3955,10 +5153,100 @@ Assert-Literals $readme @(
     'neither reranks nor switches or invalidates the frozen target',
     'not swallow the original key.',
     'current-patch live-confirmation boundaries'
-) 'v0.16 Smart Paean, NIN boundary, Guardian sentinel, and existing Scholar user contract'
+) 'v0.18 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
+Assert-Literals $normalizedReadme @(
+    '## DRK Shadowbringer two-line macro',
+    '/seitonbringer',
+    '/pvpac "Souleater Combo" <t>',
+    'ReAction Macro Queue and Turbo',
+    'recognizes a new GCD cycle only from a proven exact 2.40-second combo recast restart plus action-sequence change',
+    'at most one Shadowbringer attempt for that cycle',
+    'remaining-time window is 0.60-0.80 seconds',
+    '0.50 seconds or less never triggers Shadowbringer',
+    'paired combo call still reaches vanilla unchanged',
+    'native 5-yalm combo and 10-yalm Shadowbringer range and line of',
+    'Base Shadowbringer requires',
+    'more than 12,000 HP',
+    'adjusted Dark Arts form requires the exact Dark Arts status/action state',
+    'one-attempt token is spent before the final native Shadowbringer',
+    'cannot choose another target or action, replay the macro, or retry',
+    'never changes the visible hard, soft, or Focus Target',
+    '`CLIENT ACCEPTED` is local dispatch feedback, not proof',
+    '## Optional Auto Low-MP Focus Target',
+    'complete, unique native `S1`-`S5` set',
+    'trusted enemy MP that remains at 2,000 or lower for 150 ms',
+    'clears only after 150 ms continuously at 2,300 MP or higher',
+    'native 20-yalm',
+    'Lowest exact MP ratio wins, then lowest HP ratio, stable S-slot, and exact actor identity',
+    'native Focus Target observed stably empty',
+    'never clears, replaces, restores, or retries',
+    'manual ownership wins and latches',
+    'feeds FFXIV''s Focus Target HUD and `<f>`',
+    'independent of the party-visible Attack1 sign',
+    'no atomic compare-and-set operation for Focus Target',
+    'current-patch live A/B boundaries'
+) 'v0.18 DRK macro and set-only Auto Low-MP Focus user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.18.0.0',
+    'default-off **Auto Low-MP Focus Target**',
+    'complete unique native `S1`-`S5` view',
+    '150 ms of trusted MP at or below 2,000',
+    'native 20-yalm range and',
+    'line-of-sight result',
+    'clears only after 150 ms at or above',
+    '2,300 MP',
+    'set only an empty local native Focus Target',
+    'never clears,',
+    'replaces, restores, or retries',
+    'manually changed Focus',
+    'latches manual',
+    'no atomic compare-and-set',
+    'default-off **DRK Shadowbringer macro helper**',
+    'adjacent lines `/seitonbringer` and `/pvpac "Souleater Combo" <t>`',
+    'ReAction Macro Queue and Turbo',
+    'one Shadowbringer attempt per proven 2.40-second Souleater Combo GCD',
+    'inclusive 0.60-0.80-seconds-remaining window',
+    '0.50 seconds or less never triggers Shadowbringer',
+    'native 5-yalm combo and 10-yalm',
+    'stable queue/action sequencing',
+    'more than 12,000 HP or the exact Dark Arts state',
+    'one-attempt token is spent before the final request',
+    'no target mutation,',
+    'alternate, replay, or retry',
+    'Client acceptance is not proof of server execution',
+    'persistent Macro Helpers and Targets settings pages',
+    'Bumped the plugin version to 0.18.0.0 and configuration schema to 24',
+    'features remain off for fresh configurations, upgrades, and reset defaults'
+) 'v0.18 Auto Low-MP Focus, DRK one-cycle macro, schema, and live-boundary release notes'
+Assert-Literals $changelog @(
+    '## 0.17.0.0',
+    'large fixed top-center **high-pressure warning**',
+    'three distinct current enemies directly hard-target or',
+    'ordinary counter''s longer recent-harmful-action union',
+    'unknown data',
+    'cannot rearm a sound episode',
+    'continuously known',
+    'below-three separation',
+    'red `FOCUSED xN` card pulses only its alpha and border',
+    'pressure card stays centered while the',
+    'separate amber isolation card keeps its own top-left position',
+    'selectable built-in FFXIV system sound',
+    'No external or Windows audio is used',
+    'default-off **Sprint once from a held movement key** option',
+    'listens only to WASD/arrow movement keys',
+    'does not swallow the original',
+    'one-physical-generation/one-action',
+    'generation is consumed',
+    'alternate, replay, or retry',
+    'Bumped the plugin version to 0.17.0.0 and configuration schema to 23',
+    'visual warning is enabled for fresh and reset configurations',
+    'Sound and Sprint',
+    'remain off for fresh, upgraded, and reset settings'
+) 'v0.17 high-pressure warning, native sound, held-Sprint, and schema release notes'
 Assert-Literals $changelog @(
     '## 0.16.0.0',
-    'default-off **Smart Paean target for manual /',
+    'default-off **Smart Paean target for manual or',
+    'Turbo calls** option',
     'already incoming The Warden''s',
     'Paean `29400` ability call',
     'never creates an action or consumes the shared generic input',
@@ -3979,7 +5267,84 @@ Assert-Literals $changelog @(
     'Bumped the plugin version to 0.16.0.0 and configuration schema to 22',
     'Paean remains off for new configurations, upgrades, and reset defaults'
 ) 'v0.16 Smart Paean, NIN boundary, Guardian sentinel, and schema release notes'
+Assert-Literals $normalizedPrivacy @(
+    'separate default-off Auto Low-MP Focus helper can set only an empty local native Focus Target',
+    'when Auto Low-MP Focus is enabled, the native Focus Target''s empty/occupied state',
+    'complete exact canonical `S1`-`S5` set',
+    'trusted HP/MP samples and low-MP latches',
+    'local identity/text-input state',
+    'native 20-yalm range/line-of-sight result for the frozen candidate',
+    'when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token',
+    'native combo/Shadowbringer recast and queue state',
+    'action sequence, animation lock/cast state, HP/Dark Arts and Guard states',
+    'both actions'' native range/line-of-sight/readiness results',
+    '## Optional Auto Low-MP Focus Target',
+    'disabled by default and runs only in exact Crystalline Conflict',
+    'complete, unique canonical `S1`-`S5` set',
+    'MP must remain trusted at 2,000 or lower for 150 ms',
+    'wave clears only after 150 ms continuously at 2,300 MP or higher',
+    'Unknown MP never qualifies',
+    'native 20-yalm action range and line-of-sight probe',
+    'Lowest exact MP ratio wins, then lowest HP ratio, stable S-slot, entity ID, and game-object ID',
+    'may invoke exactly one reviewed setter only after Focus was observed stably empty',
+    'never clears, replaces, restores, or retries a Focus Target',
+    'already occupied Focus spends that low-MP wave without mutation',
+    'exact plugin-set readback',
+    'confirmed manual or external change or clear latches manual ownership',
+    'not a team-visible Attack1 sign and does not change the hard or soft target',
+    'no atomic Focus Target compare-and-set',
+    'immediately adjacent final empty read followed by an exact readback',
+    'live client race remains possible',
+    'Nothing is persisted or uploaded',
+    '## Experimental DRK Shadowbringer macro helper',
+    'disabled by default and runs only for exact PvP Dark Knight in Crystalline Conflict',
+    '`/seitonbringer` may arm only the immediately following authored Souleater Combo `<t>` macro line for at most 750 ms',
+    'macro name, line cursor, exact local identity/context, proven GCD-cycle token',
+    'incoming action/route/mode, and exact current canonical `S1`-`S5` target',
+    'ReAction setup uses both Macro Queue and Turbo',
+    'does not create a macro pulse',
+    'exact 2.40-second combo recast group restarting with a changed native action sequence',
+    'At most one Shadowbringer attempt may be claimed for that cycle',
+    'inclusive 0.60-0.80-seconds-remaining window',
+    '0.50 seconds or less never triggers Shadowbringer',
+    'paired outer Souleater Combo call continues unchanged',
+    'Before and after spending the cycle''s one-attempt token',
+    'empty stable native queue',
+    'clear cast and animation lock',
+    'clear own Guard/propagation and target Guard',
+    'native 5-yalm combo and 10-yalm Shadowbringer range/line of sight',
+    'Base Shadowbringer requires strictly more than 12,000 HP',
+    'adjusted Dark Arts action requires the exact Dark Arts status/action state',
+    'one normal exact-target Shadowbringer request before the unchanged outer combo call',
+    'never changes a hard, soft, or Focus Target',
+    'chooses another target/action, replays the macro, or retries',
+    'client-accepted return is bounded diagnostic feedback only',
+    'does not prove server execution or a clip-free weave',
+    'neither persisted nor uploaded',
+    'separate Auto Low-MP Focus Target opt-in',
+    'DRK Shadowbringer macro opt-in',
+    'Configuration schema 24 is current in v0.18.0.0',
+    'Both new v0.18 opt-ins are off for fresh, upgraded, and reset configurations'
+) 'v0.18 Auto Focus/DRK transient-data, mutation, one-cycle, persistence, and live-boundary disclosure'
 Assert-Literals $privacy @(
+    '## High-pressure warning, sound, and held Sprint',
+    'fixed local top-center warning',
+    'narrow work area stacks it below the pressure card if their actual scaled',
+    'rectangles would overlap',
+    'distinct exact enemies whose current hard target or cast',
+    'At least three are required',
+    'Recent damage/action',
+    'cannot start or sustain the warning, sound, or Sprint eligibility',
+    'selected built-in FFXIV UI/system sound once',
+    'Unknown/stale pressure hides the visual state immediately but does not rearm a',
+    'continuously known below-threshold separation',
+    'one exact ordinary',
+    'self Sprint action attempt for one physical WASD/arrow movement-key generation',
+    'original movement',
+    'key is not swallowed',
+    'generation is consumed before the final',
+    'never changes a selected target, chooses another action',
+    'retries after drift, rejection, or exception',
     '## Smart Bard Paean pressure redirect',
     'separate option is disabled by default and exact-Crystalline-Conflict-only',
     'already incoming The Warden''s Paean',
@@ -4005,14 +5370,15 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 22 is current in v0.16.0.0'
-) 'v0.16 Smart Paean, Guardian sentinel, and existing Scholar local-data/live-boundary disclosure'
+    'Configuration schema 24 is',
+    'current in v0.18.0.0'
+) 'v0.18 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 22',
+    'public int Version { get; set; } = 24',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -4084,10 +5450,20 @@ Assert-Literals $configuration @(
     'EnableScholarCriticalStrategyOnHeldKey = false',
     'if (Version < 22)',
     'EnableBardWardensPaeanPressureRedirect = false',
+    'if (Version < 23)',
+    'ShowHighPressureWarning = false',
+    'PlayHighPressureWarningSound = false',
+    'HighPressureWarningSoundId = 6',
+    'EnablePressureEscapeSprintOnHeldKey = false',
     'WarnWhenIsolated = true',
     'IsolationWarningScale = 1f',
     'EnableAutoEnemyFocusMark = false',
-    'Version = 22',
+    'if (Version < 24)',
+    'public bool EnableAutoLowMpFocusTarget { get; set; }',
+    'public bool EnableDarkKnightShadowbringerMacro { get; set; }',
+    'EnableAutoLowMpFocusTarget = false',
+    'EnableDarkKnightShadowbringerMacro = false',
+    'Version = 24',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -4095,6 +5471,7 @@ Assert-Literals $configuration @(
     'normalizedActions[29248] = gravityEnabled',
     'Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)',
     'Math.Clamp(MchLimitBreakSoundId, 1, 16)',
+    'Math.Clamp(HighPressureWarningSoundId, 1, 16)',
     'Clamp(IsolationWarningScale, 0.75f, 1.75f, 1f',
     'Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f',
     'Clamp(ResourceAuraIntensity, 0.1f, 1.5f, 0.8f',
@@ -4105,7 +5482,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-22 default-off Smart Paean, Scholar helper, Guardian communication, and prior configuration migrations'
+) 'Schema-24 Auto Focus/DRK opt-ins, high-pressure visual/sound/Sprint defaults, and prior configuration migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -4114,6 +5491,10 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ ge
     $configuration -notmatch '(?m)^\s*public bool PaladinGuardianAnnounceAndMark \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableScholarCriticalStrategyOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableBardWardensPaeanPressureRedirect \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool ShowHighPressureWarning \{ get; set; \} = true;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool PlayHighPressureWarningSound \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public int HighPressureWarningSoundId \{ get; set; \} = 6;\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool EnablePressureEscapeSprintOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableReactiveCcUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ReactiveCcDancerLimitBreak \{ get; set; \} = true;\s*$' -or
@@ -4128,22 +5509,36 @@ if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;
     [regex]::Matches($configuration, '\bPaladinGuardianAnnounceAndMark\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableScholarCriticalStrategyOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableBardWardensPaeanPressureRedirect\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bShowHighPressureWarning\s*=\s*true\s*;').Count -lt 1 -or
+    [regex]::Matches($configuration, '\bShowHighPressureWarning\s*=\s*false\s*;').Count -lt 1 -or
+    [regex]::Matches($configuration, '\bPlayHighPressureWarningSound\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bEnablePressureEscapeSprintOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bWarnWhenIsolated\s*=\s*true\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bDefensiveUtilitiesOnHeldKey\s*=\s*true\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bReactiveCcOnHeldKey\s*=\s*true\s*;').Count -lt 2) {
-    throw 'Schema 17 migration/reset defaults must preserve opt-in action/marker masters, held-key leaves, and visible-by-default isolation.'
+    throw 'Schema migrations/reset defaults must preserve opt-in action/marker/Sprint/sound masters, visible-by-default isolation, and fresh/reset-only high-pressure visuals.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool NearHelpPreferIncomingPressure \{ get; set; \} = true;\s*$' -or
     [regex]::Matches($configuration, '\bNearHelpPreferIncomingPressure\s*=\s*true\s*;').Count -lt 2) {
     throw 'Schema 18 must enable the bounded Near Help pressure preference for upgrades and reset defaults while the shared helper master remains opt-in.'
 }
+if ($configuration -notmatch '(?m)^\s*public bool EnableAutoLowMpFocusTarget \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableAutoLowMpFocusTarget\s*=\s*false\s*;').Count -lt 2 -or
+    $configuration -match '(?m)^\s*public bool EnableAutoLowMpFocusTarget \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 24 must keep Auto Low-MP Focus off for upgrades and ResetToDefaults, with a plain default-false property.'
+}
+if ($configuration -notmatch '(?m)^\s*public bool EnableDarkKnightShadowbringerMacro \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableDarkKnightShadowbringerMacro\s*=\s*false\s*;').Count -lt 2 -or
+    $configuration -match '(?m)^\s*public bool EnableDarkKnightShadowbringerMacro \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 24 must keep the action-initiating DRK macro off for upgrades and ResetToDefaults, with a plain default-false property.'
+}
 if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGameplayKey \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
     throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*22\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 22\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?Version = 22;') {
-    throw 'Schema 22 must fast-path current settings, preserve schema-17/18/19/20/21 migrations, and introduce only the default-off passive Smart Paean target redirect.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*24\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 24\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?Version = 24;') {
+    throw 'Schema 24 must fast-path current settings, preserve schema-17 through 23 migrations, keep upgrade visuals quiet, and keep sound/Sprint/Auto Focus/DRK default-off.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -4207,4 +5602,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.16.0.0 safety contract verified across $($sourceFiles.Count) source files; Smart Bard Paean is one default-off passive branch in the existing hook: exact CC/BRD/action/ward metadata, a stable complete five-member party, atomic known incoming pressure of at least three, pressure-then-HP/P-slot/EID/GOID ranking, native 30y/LoS, unchanged vanilla before selection, and frozen-call suppression without cooldown gate, action creation, target mutation, alternate, replay, or retry after selection; NIN Seiton consumes one fresh edge, freezes one exact canonical S1-S5 sub-50 actor, and re-resolves that same slot/GOID/EID/address for one latest HP read immediately before its sole native request, cancelling at exactly 50 percent or higher without hard-target dependency, alternate, or retry; Guardian accepts native marker-empty values 0 and 0xE0000000 only behind exact availability/index/timestamp telemetry while retaining Quick Chat, Bind2-then-Bind1 confirmation, exact per-sign ownership, drift relinquishment, and ownership-safe cleanup; Near Help permits exact self only for a resolved self-targetable action and uses trusted incoming pressure only inside the bounded non-critical health window; one bounded ActionEffect hook calls Original exactly once; one shared physical generation enforces Purify > Guard/Guardian > Ally Rescue > WHM/BRD reactive CC > NIN Seiton > SCH Critical Strategy > Monk priority, with exact live or identity-and-territory-bound 1500ms propagated Guard suppressing plugin-owned direct actions; SCH uses one held generation and one frozen exact guarded S1-S5 intent with selection-only pressure; isolation remains an exact-CC, exact-party, read-only native 20y/LoS warning; Team Attack-1 retains exact timestamp ownership through the shared marker reservation. Shell/action execution and target transformation remain source-level verified pending live current-patch Crystalline Conflict confirmation."
+Write-Host "Seiton Sense v0.18.0.0 safety contract verified across $($sourceFiles.Count) source files. Auto Low-MP Focus is schema-24 default-off, exact-CC-only, complete/stable S1-S5 and trusted-inclusive-<=2000 gated, and owns the sole non-null empty-to-exact FocusTarget setter; occupied/manual drift wins, one attempt is spent per wave, and no path clears, replaces, restores, alternates, or retries a focus. The default-off /seitonbringer helper accepts only the exact adjacent DRK Souleater Combo carrier, opens a token only on a proven native 2.40s GCD restart plus changed action sequence, and spends that cycle before one 0.600-0.800s Shadowbringer attempt; stable queue/sequence, animation/cast, exact identity/context/target, own/target Guard, dual native range/LoS, HP/Dark Arts, recast/readiness/resources are reread while the unchanged outer combo reaches the sole Original, with no queue/target write, alternate, replay, or retry. The urgent direct-pressure warning/sound/Sprint and all prior single-input, assist, CC, marker, isolation, geometry, UI, documentation, and one-hook contracts remain pinned. Native Focus setter/readback, Macro Queue/Turbo timing, action execution, and clip-free behavior still require live current-patch Crystalline Conflict confirmation."

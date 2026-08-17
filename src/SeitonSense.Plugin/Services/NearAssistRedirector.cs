@@ -131,6 +131,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly TargetPressureTracker pressureTracker;
     private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
+    private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
     private readonly Queue<string> recentTrace = new();
@@ -176,6 +177,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         TargetPressureTracker pressureTracker,
         SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
+        DarkKnightShadowbringerMacroService darkKnightShadowbringer,
         IPluginLog log)
     {
         this.configuration = configuration;
@@ -188,6 +190,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.pressureTracker = pressureTracker;
         this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
+        this.darkKnightShadowbringer = darkKnightShadowbringer;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
 
@@ -693,11 +696,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var targetSuppressedByRedirect = false;
         var bypassRedirect = internalRedirectBypassDepth > 0;
         var helperTokenConsumed = false;
+        DarkKnightShadowbringerPairedCarrier? shadowbringerCarrier = null;
         var smartPaeanResult = SmartWardensPaeanInterceptResult.Vanilla(
             targetId,
             "Not evaluated");
         try
         {
+            if (!bypassRedirect &&
+                darkKnightShadowbringer.TryConsumePairedCarrier(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    targetId,
+                    extraParam,
+                    mode,
+                    comboRouteId,
+                    out var pairedShadowbringerCarrier))
+            {
+                shadowbringerCarrier = pairedShadowbringerCarrier;
+            }
+
             if (!bypassRedirect &&
                 TrySuppressLegacyFarHelpFallback(thisPtr, actionType, actionId, mode))
             {
@@ -975,10 +993,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ccImmunityBrake.RecordFailedOpen(exception);
         }
 
-        // This is the only native call made by the detour. Pass and fail-open paths
-        // execute it exactly once with every argument other than an optional helper
-        // target substitution intact. A confirmed immunity block returns above and
-        // deliberately executes no downstream/original call.
+        // The DRK macro consumes only an immediately paired, exact Souleater
+        // carrier. It may add one already-spent Shadowbringer attempt before the
+        // unchanged outer carrier reaches the single Original call site. Its
+        // nested UseAction re-enters this detour under the existing redirect
+        // bypass and can therefore neither consume another token nor recurse.
+        if (!bypassRedirect && shadowbringerCarrier is { } carrier)
+        {
+            var safeCarrierPath = !helperTokenConsumed &&
+                                  !targetSuppressedByRedirect &&
+                                  forwardedTargetId == targetId;
+            darkKnightShadowbringer.TryAttemptOnce(
+                thisPtr,
+                carrier,
+                safeCarrierPath,
+                IsLocalGuardActiveOrPropagating,
+                () => RunWithoutRedirect(
+                    () => thisPtr->UseAction(
+                        ActionType.Action,
+                        DarkKnightShadowbringerMacroRules.ShadowbringerActionId,
+                        carrier.EffectiveTargetId,
+                        0,
+                        ActionManager.UseActionMode.None,
+                        0,
+                        null)));
+        }
+
+        // This remains the detour's only textual Original call site. Every outer
+        // pass/fail-open path executes it exactly once with every argument other
+        // than an optional helper target substitution intact. A confirmed immunity
+        // block returns above and deliberately executes no downstream/original call.
         ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
         var clientAccepted = useActionHook!.Original(
             thisPtr,

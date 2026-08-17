@@ -29,6 +29,7 @@ internal sealed class OverlayRenderer
     private static readonly Vector4 LowManaAuraColor = new(0.12f, 0.48f, 1f, 1f);
     private static readonly Vector4 CombinedResourceAuraColor = new(0.72f, 0.16f, 1f, 1f);
     private static readonly Vector4 IsolationColor = new(1f, 0.72f, 0.18f, 1f);
+    private static readonly Vector4 HighPressureColor = new(1f, 0.12f, 0.08f, 1f);
     private static readonly Vector4 TextColor = new(1f, 0.98f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.96f);
     private const uint WardensPaeanIconId = 9628;
@@ -86,6 +87,7 @@ internal sealed class OverlayRenderer
     public bool CcProtectionPreviewEnabled { get; set; }
     public bool ResourceAuraPreviewEnabled { get; set; }
     public bool IsolationWarningPreviewEnabled { get; set; }
+    public bool HighPressureWarningPreviewEnabled { get; set; }
     public int NativeAnchorCount => namePlateAnchors.Anchors.Count;
     public int ResourceAuraAnchorCount => resourceAuraAnchors.LastAnchorCount;
     public int ResourceAuraSelfHotbarCount => resourceAuraAnchors.LastSelfHotbarCount;
@@ -138,8 +140,21 @@ internal sealed class OverlayRenderer
         DrawPopup(previewPopup);
 
         var now = Environment.TickCount64;
+        var pressureEscape = personalStatus.PressureEscapeDiagnostics;
+        var highPressureWarningVisible = HighPressureWarningPreviewEnabled ||
+                                         (configuration.Enabled &&
+                                          configuration.ShowHighPressureWarning &&
+                                          pressureEscape.WarningActive);
+        if (highPressureWarningVisible)
+        {
+            var directEnemyCount = HighPressureWarningPreviewEnabled
+                ? Math.Max(4, pressureEscape.DirectEnemyCount)
+                : pressureEscape.DirectEnemyCount;
+            DrawHighPressureWarning(now, directEnemyCount);
+        }
+
         if (IsolationWarningPreviewEnabled || isolationAwareness.Snapshot.Visible)
-            DrawIsolationWarning(now);
+            DrawIsolationWarning(now, highPressureWarningVisible);
         DrawResourceAuras(now);
         if (!configuration.Enabled)
         {
@@ -163,13 +178,94 @@ internal sealed class OverlayRenderer
         DrawPersonalWarnings(now);
     }
 
-    private void DrawIsolationWarning(long now)
+    private void DrawHighPressureWarning(long now, int directEnemyCount)
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var (topLeft, bottomRight) = HighPressureWarningBounds();
+        var cycle = ((now % 60_000L) / 1000d) * Math.Tau * 1.25d;
+        var pulse = (float)((Math.Sin(cycle) + 1d) * 0.5d);
+        var accentAlpha = 0.78f + (pulse * 0.22f);
+        var fillAlpha = 0.76f + (pulse * 0.08f);
+        var rounding = 12f * scale;
+        var draw = ImGui.GetForegroundDrawList();
+
+        // The card never changes position or size. Only its border and alpha
+        // pulse, keeping the warning prominent without making aim references move.
+        draw.AddRectFilled(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(0.055f, 0.012f, 0.018f, fillAlpha)),
+            rounding);
+        draw.AddRectFilled(
+            topLeft,
+            new Vector2(topLeft.X + (9f * scale), bottomRight.Y),
+            Pack(new Vector4(HighPressureColor.X, HighPressureColor.Y, HighPressureColor.Z, accentAlpha)),
+            rounding);
+        draw.AddRect(
+            topLeft - new Vector2(2f * scale),
+            bottomRight + new Vector2(2f * scale),
+            Pack(new Vector4(1f, 0.28f, 0.08f, 0.3f + (pulse * 0.38f))),
+            rounding + (2f * scale),
+            ImDrawFlags.None,
+            Math.Max(3f, 4.2f * scale));
+        draw.AddRect(
+            topLeft,
+            bottomRight,
+            Pack(new Vector4(HighPressureColor.X, HighPressureColor.Y, HighPressureColor.Z, accentAlpha)),
+            rounding,
+            ImDrawFlags.None,
+            Math.Max(2f, 2.8f * scale));
+
+        var textLeft = topLeft.X + (25f * scale);
+        DrawOutlinedText(
+            draw,
+            new Vector2(textLeft, topLeft.Y + (11f * scale)),
+            $"FOCUSED x{Math.Max(3, directEnemyCount)}",
+            1.72f,
+            false,
+            1f,
+            new Vector4(1f, 0.28f, 0.12f, 1f));
+        DrawOutlinedText(
+            draw,
+            new Vector2(textLeft, topLeft.Y + (72f * scale)),
+            "3+ ENEMIES TARGETING YOU",
+            0.79f,
+            false,
+            0.96f,
+            TextColor);
+    }
+
+    private void DrawIsolationWarning(long now, bool avoidHighPressureWarning)
     {
         var configuredScale = Math.Clamp(configuration.IsolationWarningScale, 0.75f, 1.75f);
         var scale = configuredScale * ImGuiHelpers.GlobalScale;
         var viewport = ImGui.GetMainViewport();
-        var topLeft = viewport.WorkPos + (new Vector2(28f, 42f) * ImGuiHelpers.GlobalScale);
-        var bottomRight = topLeft + (new Vector2(342f, 88f) * scale);
+        var cardSize = new Vector2(342f, 88f) * scale;
+        var workMinimum = viewport.WorkPos;
+        var workMaximum = viewport.WorkPos + viewport.WorkSize;
+        var maximumTopLeft = Vector2.Max(workMinimum, workMaximum - cardSize);
+        var topLeft = Vector2.Clamp(
+            viewport.WorkPos + (new Vector2(28f, 42f) * ImGuiHelpers.GlobalScale),
+            workMinimum,
+            maximumTopLeft);
+        var bottomRight = topLeft + cardSize;
+        if (avoidHighPressureWarning)
+        {
+            var (pressureMinimum, pressureMaximum) = HighPressureWarningBounds();
+            if (RectanglesOverlap(topLeft, bottomRight, pressureMinimum, pressureMaximum))
+            {
+                var gap = 18f * ImGuiHelpers.GlobalScale;
+                var below = pressureMaximum.Y + gap;
+                var above = pressureMinimum.Y - gap - cardSize.Y;
+                if (below <= maximumTopLeft.Y)
+                    topLeft.Y = below;
+                else if (above >= workMinimum.Y)
+                    topLeft.Y = above;
+                else
+                    topLeft.Y = maximumTopLeft.Y;
+                bottomRight = topLeft + cardSize;
+            }
+        }
         var cycle = ((now % 60_000L) / 1000d) * Math.Tau * 0.55d;
         var pulse = (float)((Math.Sin(cycle) + 1d) * 0.5d);
         var accentAlpha = 0.72f + (pulse * 0.2f);
@@ -215,6 +311,27 @@ internal sealed class OverlayRenderer
             0.86f,
             new Vector4(0.9f, 0.94f, 1f, 1f));
     }
+
+    private static (Vector2 Minimum, Vector2 Maximum) HighPressureWarningBounds()
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var viewport = ImGui.GetMainViewport();
+        var cardSize = new Vector2(410f, 108f) * scale;
+        var topLeft = new Vector2(
+            viewport.WorkPos.X + Math.Max(0f, (viewport.WorkSize.X - cardSize.X) * 0.5f),
+            viewport.WorkPos.Y + (42f * scale));
+        return (topLeft, topLeft + cardSize);
+    }
+
+    private static bool RectanglesOverlap(
+        Vector2 firstMinimum,
+        Vector2 firstMaximum,
+        Vector2 secondMinimum,
+        Vector2 secondMaximum) =>
+        firstMinimum.X < secondMaximum.X &&
+        firstMaximum.X > secondMinimum.X &&
+        firstMinimum.Y < secondMaximum.Y &&
+        firstMaximum.Y > secondMinimum.Y;
 
     private void DrawResourceAuras(long now)
     {

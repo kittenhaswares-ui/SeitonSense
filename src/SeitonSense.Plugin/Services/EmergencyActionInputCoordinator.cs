@@ -5,7 +5,8 @@ namespace SeitonSense.Plugin.Services;
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
 /// by emergency self-Purify, defensive utilities, ally rescue, Miracle
-/// intercept, fresh-key Ninja Seiton, and held-key Scholar Critical Strategy.
+/// intercept, fresh-key Ninja Seiton, held-key Scholar Critical Strategy, and
+/// the exact high-pressure movement-key Sprint helper.
 /// Consumption is deliberately shared: once any helper claims a generation,
 /// every later helper sees no input.
 /// </summary>
@@ -36,6 +37,9 @@ internal sealed class EmergencyActionInputFrame
 
     internal bool HeldGameplayKeyEligible =>
         !IsConsumed && Snapshot.ProbeSucceeded && Snapshot.HeldGameplayKeyEligible;
+
+    internal bool HeldMovementKeyEligible =>
+        !IsConsumed && Snapshot.ProbeSucceeded && Snapshot.HeldMovementKeyEligible;
 }
 
 /// <summary>
@@ -51,6 +55,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
     private bool scholarCriticalStrategyHeldWasEnabled;
+    private bool pressureEscapeHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -63,7 +68,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool defensiveUtilityHeldEnabled,
         bool allyRescueHeldEnabled,
         bool miracleInterceptHeldEnabled,
-        bool scholarCriticalStrategyHeldEnabled)
+        bool scholarCriticalStrategyHeldEnabled,
+        bool pressureEscapeHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -79,12 +85,14 @@ internal sealed class EmergencyActionInputCoordinator
             (defensiveUtilityHeldEnabled && !defensiveUtilityHeldWasEnabled) ||
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
-            (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled);
+            (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
+            (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
+        pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -95,6 +103,8 @@ internal sealed class EmergencyActionInputCoordinator
             {
                 HeldGameplayKeyEligible = false,
                 HeldGameplayKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY,
+                HeldMovementKeyEligible = false,
+                HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY,
             };
         }
 
@@ -111,7 +121,8 @@ internal sealed class EmergencyActionInputCoordinator
             defensiveUtilityHeldEnabled: false,
             allyRescueHeldEnabled,
             miracleInterceptHeldEnabled: false,
-            scholarCriticalStrategyHeldEnabled: false);
+            scholarCriticalStrategyHeldEnabled: false,
+            pressureEscapeHeldEnabled: false);
 
     internal void Reset()
     {
@@ -121,5 +132,6 @@ internal sealed class EmergencyActionInputCoordinator
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
         scholarCriticalStrategyHeldWasEnabled = false;
+        pressureEscapeHeldWasEnabled = false;
     }
 }

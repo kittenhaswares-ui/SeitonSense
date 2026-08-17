@@ -130,6 +130,55 @@ internal sealed class TargetPressureTracker : IDisposable
     }
 
     /// <summary>
+    /// Captures current direct targeting of one exact local-player identity.
+    /// Recent harmful actions and early MCH markers are deliberately excluded.
+    /// Unknown, future-dated, or stale publications fail closed.
+    /// </summary>
+    internal bool TryGetFreshSelfDirectIncomingPressure(
+        TargetPressureActorIdentity expectedLocalPlayer,
+        long nowMilliseconds,
+        long maximumAgeMilliseconds,
+        out DirectSelfPressureSnapshot directPressure)
+    {
+        directPressure = default;
+        var current = Snapshot;
+        if (!expectedLocalPlayer.IsValid ||
+            !current.Active ||
+            !current.PressureActive ||
+            current.LocalPlayer != expectedLocalPlayer ||
+            current.PublishedAtMilliseconds < 0 ||
+            nowMilliseconds < current.PublishedAtMilliseconds ||
+            maximumAgeMilliseconds < 0 ||
+            nowMilliseconds - current.PublishedAtMilliseconds > maximumAgeMilliseconds)
+        {
+            return false;
+        }
+
+        var unique = 0;
+        var hard = 0;
+        var cast = 0;
+        foreach (var opponent in current.Opponents)
+        {
+            var hardTarget =
+                (opponent.IncomingEvidence & TargetPressureEvidence.HardTarget) != 0;
+            var castTarget =
+                (opponent.IncomingEvidence & TargetPressureEvidence.CastTarget) != 0;
+            if (!hardTarget && !castTarget) continue;
+            unique++;
+            if (hardTarget) hard++;
+            if (castTarget) cast++;
+        }
+
+        directPressure = new DirectSelfPressureSnapshot(
+            expectedLocalPlayer,
+            current.PublishedAtMilliseconds,
+            unique,
+            hard,
+            cast);
+        return true;
+    }
+
+    /// <summary>
     /// Returns current incoming intent for one exact party ally. False means
     /// pressure tracking is inactive or that exact identity is absent; it must
     /// not be treated as a synthetic zero-pressure observation.
@@ -199,7 +248,10 @@ internal sealed class TargetPressureTracker : IDisposable
                                        (configuration.EnableReactiveCcUtilities &&
                                         configuration.ReactiveCcAfterEnemyPurify) ||
                                        configuration.EnableScholarCriticalStrategyOnHeldKey ||
-                                       configuration.EnableAutoEnemyFocusMark;
+                                       configuration.EnableAutoEnemyFocusMark ||
+                                       configuration.ShowHighPressureWarning ||
+                                       configuration.PlayHighPressureWarningSound ||
+                                       configuration.EnablePressureEscapeSprintOnHeldKey;
         var pressureEnabledForContext = pressureFeaturesEnabled &&
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);
         var incomingAllyPressureEnabledForContext =
@@ -415,7 +467,12 @@ internal sealed class TargetPressureTracker : IDisposable
                 static pressure => pressure.UniqueEnemyCount));
         Interlocked.Exchange(ref incomingAllyPressure, publishedIncomingAllyPressure);
 
-        var published = new TargetPressureRuntimeSnapshot(true, pressureEnabledForContext, result.ToArray());
+        var published = new TargetPressureRuntimeSnapshot(
+            true,
+            pressureEnabledForContext,
+            localIdentity,
+            Environment.TickCount64,
+            result.ToArray());
         Interlocked.Exchange(ref snapshot, published);
         Volatile.Write(ref diagnostics, new TargetPressureDiagnostics(
             true,

@@ -12,11 +12,15 @@ internal readonly record struct GameInputContextSnapshot(
     bool FreshGameplayKeyPressed,
     VirtualKey FreshGameplayKey,
     bool HeldGameplayKeyEligible,
-    VirtualKey HeldGameplayKey)
+    VirtualKey HeldGameplayKey,
+    bool HeldMovementKeyEligible,
+    VirtualKey HeldMovementKey)
 {
     internal static GameInputContextSnapshot NotObserved => new(
         false,
         false,
+        false,
+        VirtualKey.NO_KEY,
         false,
         VirtualKey.NO_KEY,
         false,
@@ -25,6 +29,8 @@ internal readonly record struct GameInputContextSnapshot(
     internal static GameInputContextSnapshot FailedClosed => new(
         false,
         true,
+        false,
+        VirtualKey.NO_KEY,
         false,
         VirtualKey.NO_KEY,
         false,
@@ -85,6 +91,7 @@ internal sealed class GameInputContextProbe
                                   io.WantTextInput;
             var freshKey = VirtualKey.NO_KEY;
             var heldKey = VirtualKey.NO_KEY;
+            var heldMovementKey = VirtualKey.NO_KEY;
             for (var index = 0; index < gameplayKeys.Length; index++)
             {
                 var pressed = keyState[gameplayKeys[index]];
@@ -96,6 +103,12 @@ internal sealed class GameInputContextProbe
                     freshKey = gameplayKeys[index];
                 if (decision.IsHeldEligible && heldKey == VirtualKey.NO_KEY)
                     heldKey = gameplayKeys[index];
+                if (decision.IsHeldEligible &&
+                    heldMovementKey == VirtualKey.NO_KEY &&
+                    PressureEscapeRules.IsSupportedMovementVirtualKey((int)gameplayKeys[index]))
+                {
+                    heldMovementKey = gameplayKeys[index];
+                }
             }
 
             return new GameInputContextSnapshot(
@@ -104,7 +117,9 @@ internal sealed class GameInputContextProbe
                 !textInputActive && freshKey != VirtualKey.NO_KEY,
                 !textInputActive ? freshKey : VirtualKey.NO_KEY,
                 !textInputActive && heldKey != VirtualKey.NO_KEY,
-                !textInputActive ? heldKey : VirtualKey.NO_KEY);
+                !textInputActive ? heldKey : VirtualKey.NO_KEY,
+                !textInputActive && heldMovementKey != VirtualKey.NO_KEY,
+                !textInputActive ? heldMovementKey : VirtualKey.NO_KEY);
         }
         catch
         {

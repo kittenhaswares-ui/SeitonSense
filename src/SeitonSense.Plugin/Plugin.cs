@@ -32,9 +32,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PersonalStatusService personalStatus;
     private readonly TargetPressureTracker pressureTracker;
     private readonly AutoEnemyFocusMarkService autoEnemyFocusMark;
+    private readonly AutoLowMpFocusTargetService autoLowMpFocusTarget;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
     private readonly NearAssistRedirector nearAssist;
+    private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
@@ -46,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool nearHelpAliasRegistered;
     private readonly bool farHelpCommandRegistered;
     private readonly bool farHelpAliasRegistered;
+    private readonly bool darkKnightShadowbringerCommandRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -109,6 +112,16 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             pressureTracker,
             reviewedPvpCommands);
+        autoLowMpFocusTarget = new AutoLowMpFocusTargetService(
+            configuration,
+            clientState,
+            objectTable,
+            framework,
+            dutyState,
+            targetManager,
+            log,
+            metadata,
+            tracker);
         isolationAwareness = new IsolationAwarenessService(
             configuration,
             clientState,
@@ -135,6 +148,15 @@ public sealed class Plugin : IDalamudPlugin
             dataManager,
             pressureTracker,
             log);
+        darkKnightShadowbringer = new DarkKnightShadowbringerMacroService(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            dataManager,
+            framework,
+            log);
         nearAssist = new NearAssistRedirector(
             configuration,
             clientState,
@@ -147,6 +169,7 @@ public sealed class Plugin : IDalamudPlugin
             pressureTracker,
             smartWardensPaean,
             ccImmunityBrake,
+            darkKnightShadowbringer,
             log);
         personalStatus = new PersonalStatusService(
             clientState,
@@ -207,7 +230,9 @@ public sealed class Plugin : IDalamudPlugin
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(settingsWindow);
 
-        const string help = "Open Seiton Sense. Subcommands: show, hide, preview, flash, debug, assist, reset, help.";
+        const string help =
+            "Open Seiton Sense settings. show/hide enable or disable the entire plugin; " +
+            "other subcommands: preview, flash, debug, assist, reset, help.";
         commandManager.AddHandler(
             Command,
             new CommandInfo(OnCommand) { AllowedInMacros = true, HelpMessage = help });
@@ -294,11 +319,29 @@ public sealed class Plugin : IDalamudPlugin
                 (farHelpAliasRegistered ? "Use /ssfar meanwhile." : "Disable the conflicting plugin and reload."));
         }
 
+        darkKnightShadowbringerCommandRegistered = commandManager.AddHandler(
+            DarkKnightShadowbringerMacroService.Command,
+            new CommandInfo(OnDarkKnightShadowbringerCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "Exact CC DRK helper: /seitonbringer, then /pvpac \"Souleater Combo\" <t>; " +
+                    "use the localized action name and ReAction Macro Queue + Turbo.",
+            });
+        if (!darkKnightShadowbringerCommandRegistered)
+        {
+            log.Warning("/seitonbringer is already owned by another plugin; the DRK macro helper remains unavailable.");
+            chatGui.PrintError(
+                "[Seiton Sense] /seitonbringer is owned by another plugin. Disable the conflict and reload before using the DRK macro helper.");
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
             {
-                HelpMessage = "Open integrated pressure settings. Subcommands: show, hide, lock, unlock, preview, debug, reset.",
+                HelpMessage =
+                    "Open integrated pressure settings. show/hide affect only the counter; " +
+                    "reset restores only its position. Other subcommands: lock, unlock, preview, debug.",
             });
         if (!pressureCommandRegistered)
         {
@@ -315,7 +358,9 @@ public sealed class Plugin : IDalamudPlugin
         tracker.Start();
         pressureTracker.Start();
         autoEnemyFocusMark.Start();
+        autoLowMpFocusTarget.Start();
         isolationAwareness.Start();
+        darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
     }
@@ -331,12 +376,16 @@ public sealed class Plugin : IDalamudPlugin
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
         if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand);
         if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
+        if (darkKnightShadowbringerCommandRegistered)
+            commandManager.RemoveHandler(DarkKnightShadowbringerMacroService.Command);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
         personalStatus.Dispose();
         nearAssist.Dispose();
+        darkKnightShadowbringer.Dispose();
         isolationAwareness.Dispose();
+        autoLowMpFocusTarget.Dispose();
         autoEnemyFocusMark.Dispose();
         pressureTracker.Dispose();
         tracker.Dispose();
@@ -413,11 +462,23 @@ public sealed class Plugin : IDalamudPlugin
                 pressureCounter.ResetWindowPosition();
                 break;
             default:
-                chatGui.PrintError("[Seiton Sense] /howmany [show|hide|lock|unlock|preview|debug|reset].");
+                chatGui.PrintError(
+                    "[Seiton Sense] /howmany [show|hide|lock|unlock|preview|debug|reset]. " +
+                    "show/hide affect only the counter; reset restores only its position.");
                 return;
         }
 
         configuration.Save();
+        chatGui.Print(
+            arguments switch
+            {
+                "show" => "[Seiton Sense] Pressure counter shown; the rest of the plugin is unchanged.",
+                "hide" => "[Seiton Sense] Pressure counter hidden; pressure-dependent helpers remain enabled.",
+                "lock" => "[Seiton Sense] Pressure counter locked.",
+                "unlock" => "[Seiton Sense] Pressure counter unlocked.",
+                "reset" => "[Seiton Sense] Pressure counter position restored; no other setting was reset.",
+                _ => $"[Seiton Sense] Pressure counter {arguments} applied.",
+            });
     }
 
     private void HandleCommand(string arguments)
@@ -438,6 +499,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.CcProtectionPreviewEnabled = false;
                 overlay.ResourceAuraPreviewEnabled = false;
                 overlay.IsolationWarningPreviewEnabled = false;
+                overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 break;
             case "preview":
@@ -451,6 +513,7 @@ public sealed class Plugin : IDalamudPlugin
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
+                var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
@@ -526,6 +589,19 @@ public sealed class Plugin : IDalamudPlugin
                     $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
                     $"last={defense.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] pressure-escape[active={pressureEscape.Active}," +
+                    $"warning/sprint={pressureEscape.WarningEnabled}/{pressureEscape.SprintEnabled}," +
+                    $"direct={pressureEscape.PressureKnown}/{pressureEscape.DirectEnemyCount}" +
+                    $"(hard={pressureEscape.DirectHardTargetCount},cast={pressureEscape.DirectCastTargetCount}," +
+                    $"age={pressureEscape.PressureAgeMilliseconds}),high={pressureEscape.HighPressure}," +
+                    $"visible={pressureEscape.WarningActive},episode={pressureEscape.WarningEpisodeToken}/" +
+                    $"{pressureEscape.SprintEpisodeSpent},guard={pressureEscape.GuardSuppressed}," +
+                    $"sprint={pressureEscape.SprintActive},cc={pressureEscape.Incapacitated}," +
+                    $"meta={pressureEscape.SprintMetadataVerified},key={pressureEscape.HeldGameplayKey}," +
+                    $"claimed={pressureEscape.InputClaimed},attempt={pressureEscape.UseActionAttempted}/" +
+                    $"{pressureEscape.UseActionAccepted},count={pressureEscape.AttemptCount}/" +
+                    $"{pressureEscape.AcceptedCount},last={pressureEscape.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] guardian-comm[{guardianCommunication.ToChatLine()}]");
                 chatGui.Print(
                     $"[Seiton Sense] miracle[phase={miracle.Phase},threat={miracle.Threat}," +
@@ -586,6 +662,10 @@ public sealed class Plugin : IDalamudPlugin
                     $"count={monk.AttemptCount}/{monk.AcceptedCount}]");
                 chatGui.Print($"[Seiton Sense] isolation[{isolationAwareness.Diagnostics.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] auto-mark[{autoEnemyFocusMark.Diagnostics.ToChatLine()}]");
+                chatGui.Print($"[Seiton Sense] auto-low-mp-focus[{autoLowMpFocusTarget.Diagnostics.ToChatLine()}]");
+                chatGui.Print(
+                    $"[Seiton Sense] shadowbringer[cmd={darkKnightShadowbringerCommandRegistered}," +
+                    $"{darkKnightShadowbringer.Diagnostics.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -598,6 +678,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.CcProtectionPreviewEnabled = false;
                 overlay.ResourceAuraPreviewEnabled = false;
                 overlay.IsolationWarningPreviewEnabled = false;
+                overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
@@ -610,17 +691,26 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         configuration.Save();
-        chatGui.Print($"[Seiton Sense] {arguments} applied.");
+        chatGui.Print(
+            arguments switch
+            {
+                "show" => "[Seiton Sense] Entire plugin enabled.",
+                "hide" => "[Seiton Sense] Entire plugin disabled.",
+                "reset" => "[Seiton Sense] All plugin settings restored to defaults.",
+                _ => $"[Seiton Sense] {arguments} applied.",
+            });
     }
 
     private void PrintHelp(bool error = false)
     {
         const string text =
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
+            "show/hide enable or disable the entire plugin; reset restores all plugin settings. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
-            "Integrated pressure uses /howmany.";
+            "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in CC. " +
+            "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
     }
@@ -664,6 +754,18 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Far Help command failed closed.");
+        }
+    }
+
+    private void OnDarkKnightShadowbringerCommand(string _, string arguments)
+    {
+        try
+        {
+            darkKnightShadowbringer.Arm(arguments, nearAssist.Diagnostics.HookAvailable);
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Shadowbringer macro command failed closed.");
         }
     }
 }

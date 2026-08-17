@@ -102,4 +102,10 @@ internal static class EnemyCombatConstants
     internal const ushort PurifyRecast100ms = 40;
     internal const uint ResilienceStatusId = 3248;
     internal const uint ResilienceStatusIconId = 214891;
+
+    internal const uint PvPSprintActionId = 29057;
+    internal const uint PvPSprintIconId = 9583;
+    internal const ushort PvPSprintRecast100ms = 15;
+    internal const uint PvPSprintStatusId = 1342;
+    internal const uint PvPSprintStatusIconId = 210101;
 }
