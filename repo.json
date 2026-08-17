@@ -5,8 +5,8 @@
     "Punchline": "PvP pressure, low-MP Focus, DRK macro, warnings, assists, and target clarity.",
     "Description": "A local PvP HUD integrating optional set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers, a top-center 3+ enemy alarm with sound/Sprint options, isolation, pressure and CC-protection cues, resource auras, fail-closed assists, team communication and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.18.0.0",
-    "Changelog": "Adds two separate default-off exact Crystalline Conflict helpers. Auto Low-MP Focus may set only an empty local native Focus Target to one trusted exact S1-S5 enemy at 2,000 MP or lower after the bounded low-MP latch and native 20-yalm range/line-of-sight proof; it never clears, replaces, restores, or retries, and manual focus changes win. The DRK /seitonbringer two-line ReAction Macro Queue/Turbo helper may attempt Shadowbringer at most once per proven 2.40-second Souleater Combo GCD, only in the inclusive 0.60-0.80-seconds-remaining window with exact target, Guard, resource, range, line-of-sight, queue, and readiness gates; it never changes a target, substitutes, replays, or retries. Schema 24 keeps both features off for fresh, upgraded, and reset settings; live current-patch Focus setter/readback and DRK queue/clip behavior remain confirmation boundaries.",
+    "AssemblyVersion": "0.18.0.1",
+    "Changelog": "Hotfixes the default-off /seitonbringer helper and adds explicitly enabled Wolves' Den striking-dummy testing. The Den path requires the existing DRK and Wolves' Den options and accepts only the unchanged exact native current hard-target combat dummy with NameId 541; it never uses synthetic S1, e-list or duel-opponent resolution, another target, an alternate, or a retry, while the canonical CC path is unchanged. The current combo metadata gate now pins the exact 0/58/58/147/147/147 secondary cost types instead of failing closed on an incorrect all-zero assumption, and initial GCD observation is deferred to the framework update thread. The one-proven-GCD, inclusive 0.60-0.80-second, spend-before-request, Guard, queue, resource, readiness, and native range/line-of-sight contracts remain unchanged. Configuration schema 24 is unchanged and no setting was added; live Den and CC timing remain separate confirmation boundaries.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -27,6 +27,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1786983464"
+    "LastUpdate": "1786985927"
   }
 ]

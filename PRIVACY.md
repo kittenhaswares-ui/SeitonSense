@@ -52,10 +52,10 @@ following data already available in the local FFXIV client:
   team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
   result for the frozen candidate.
 - when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
-  local DRK and current canonical target identities, native combo/Shadowbringer
-  recast and queue state, action sequence, animation lock/cast state, HP/Dark
-  Arts and Guard states, and both actions' native range/line-of-sight/readiness
-  results.
+  local DRK and current canonical CC target identity or exact native Wolves'
+  Den striking-dummy hard-target identity, native combo/Shadowbringer recast and
+  queue state, action sequence, animation lock/cast state, HP/Dark Arts and
+  Guard states, and both actions' native range/line-of-sight/readiness results.
 
 Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
@@ -406,12 +406,23 @@ party/action data is persisted or uploaded.
 ## Experimental DRK Shadowbringer macro helper
 
 This helper is disabled by default and runs only for exact PvP Dark Knight in
-Crystalline Conflict. `/seitonbringer` may arm only the immediately following
+Crystalline Conflict or explicitly enabled Wolves' Den testing. The Den path
+requires both the existing DRK helper and Wolves' Den test options; no new
+setting was added. `/seitonbringer` may arm only the immediately following
 authored Souleater Combo `<t>` macro line for at most 750 ms. The macro name,
-line cursor, exact local identity/context, proven GCD-cycle token, incoming
-action/route/mode, and exact current canonical `S1`-`S5` target are kept only
-long enough to pair those two adjacent lines. The recommended ReAction setup
-uses both Macro Queue and Turbo; Seiton Sense does not create a macro pulse.
+line cursor, exact local identity/context, proven GCD-cycle token, and incoming
+action/route/mode are kept only long enough to pair those two adjacent lines.
+The recommended ReAction setup uses both Macro Queue and Turbo; Seiton Sense
+does not create a macro pulse.
+
+In Crystalline Conflict, the target must remain one exact current canonical
+`S1`-`S5` actor. In Wolves' Den, the plugin instead reads the local player's
+native hard-target ID and the matching object-table battle character. It accepts
+only the live, targetable combat striking dummy with NameId `541`, then freezes
+and revalidates its game-object ID, entity ID, address, object/sub-kind, NameId,
+and hard-target ownership. It does not query the synthetic `S1`/`<e1>` or native
+duel-opponent paths for this macro and cannot accept a player, another object,
+or an alternate target. Frontline and Rival Wings remain excluded.
 
 A cycle is proven only from the exact 2.40-second combo recast group restarting
 with a changed native action sequence. At most one Shadowbringer attempt may be
@@ -436,7 +447,15 @@ feedback only and does not prove server execution or a clip-free weave. Macro
 Queue/Turbo mode, native queue and recast-group timing, action effect, and
 clipping remain current-patch live-trace boundaries. All paired identities,
 cycle/queue samples, counters, and last-result diagnostics remain memory-only
-and are neither persisted nor uploaded.
+and are neither persisted nor uploaded. A Wolves' Den dummy result proves only
+that test path and is not proof of current-patch CC execution or timing.
+
+Current English game-data validation independently pins the striking-dummy
+NameId and the exact per-row combo secondary cost types
+`0/58/58/147/147/147`. A dummy metadata mismatch disables only the Den path;
+other DRK metadata mismatch fails the whole helper closed. Native GCD sampling
+starts on the framework update thread rather than performing a local-player
+lookup during synchronous plugin startup.
 
 ## Experimental Purify helper
 
@@ -762,8 +781,8 @@ surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
 thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
 held-key opt-in, the DRK Shadowbringer macro opt-in, and the CC-immunity-brake
 master plus exact per-job/per-action selections. Configuration schema 24 is
-current in v0.18.0.0. Both new v0.18 opt-ins are off for fresh, upgraded, and
-reset configurations. Configuration does not save observed actors, targets, combat events, status timers, key
+current in v0.18.0.1. The hotfix adds no setting; both v0.18 opt-ins remain off
+for fresh, upgraded, and reset configurations. Configuration does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.
 

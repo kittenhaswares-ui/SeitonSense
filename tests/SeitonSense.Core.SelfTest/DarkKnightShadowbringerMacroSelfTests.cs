@@ -9,6 +9,9 @@ internal static class DarkKnightShadowbringerMacroSelfTests
         Equal(29738u, DarkKnightShadowbringerMacroRules.DarkArtsShadowbringerActionId, "Dark Arts Shadowbringer");
         Equal(3033u, DarkKnightShadowbringerMacroRules.DeliriumStatusId, "Delirium status");
         Equal(3034u, DarkKnightShadowbringerMacroRules.DarkArtsStatusId, "Dark Arts status");
+        Equal(541u, DarkKnightShadowbringerMacroRules.WolvesDenStrikingDummyNameId, "Wolves' Den striking dummy NameId");
+        Equal((byte)58, DarkKnightShadowbringerMacroRules.StandardComboSecondaryCostType, "standard combo secondary cost type");
+        Equal((byte)147, DarkKnightShadowbringerMacroRules.DeliriumComboSecondaryCostType, "Delirium combo secondary cost type");
 
         foreach (var actionId in new uint[] { 29085, 29086, 29087, 41434, 41435, 41436 })
             True(DarkKnightShadowbringerMacroRules.IsComboCarrierAction(actionId), $"carrier {actionId}");
@@ -141,8 +144,80 @@ internal static class DarkKnightShadowbringerMacroSelfTests
 
     public static void AttemptRequiresEverySafetyGate()
     {
+        True(
+            DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+                SupportedPvPContext.CrystallineConflict,
+                wolvesDenTestingEnabled: false),
+            "exact CC remains supported independently of Den testing");
+        False(
+            DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: false),
+            "Den requires the existing global test opt-in");
+        True(
+            DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+                SupportedPvPContext.WolvesDen,
+                wolvesDenTestingEnabled: true),
+            "Den is supported only under the existing global test opt-in");
+        False(
+            DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+                SupportedPvPContext.None,
+                wolvesDenTestingEnabled: true),
+            "unrelated PvP contexts remain rejected");
+        True(
+            DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                metadataVerified: true,
+                battleNpcCombatant: true,
+                nameId: 541,
+                nativeIdentityValid: true,
+                isSelf: false,
+                aliveWithPositiveHp: true,
+                targetable: true),
+            "exact Den striking dummy is eligible");
+        False(
+            DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                metadataVerified: true,
+                battleNpcCombatant: true,
+                nameId: 13078,
+                nativeIdentityValid: true,
+                isSelf: false,
+                aliveWithPositiveHp: true,
+                targetable: true),
+            "timeworn dummy is not the exact Den test target");
+        False(
+            DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                metadataVerified: true,
+                battleNpcCombatant: false,
+                nameId: 541,
+                nativeIdentityValid: true,
+                isSelf: false,
+                aliveWithPositiveHp: true,
+                targetable: true),
+            "players and arbitrary targetable objects remain rejected");
+        False(
+            DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                metadataVerified: false,
+                battleNpcCombatant: true,
+                nameId: 541,
+                nativeIdentityValid: true,
+                isSelf: false,
+                aliveWithPositiveHp: true,
+                targetable: true),
+            "unverified Den dummy metadata fails closed without changing CC eligibility");
+        False(
+            DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                metadataVerified: true,
+                battleNpcCombatant: true,
+                nameId: 541,
+                nativeIdentityValid: true,
+                isSelf: true,
+                aliveWithPositiveHp: true,
+                targetable: true),
+            "self can never become the Den dummy target");
+
         var valid = ValidAttempt();
         True(DarkKnightShadowbringerMacroRules.EvaluateAttempt(valid).ShouldAttempt, "all exact gates permit ownership");
+        False(DarkKnightShadowbringerMacroRules.EvaluateAttempt(valid with { ExactSupportedContext = false }).ShouldAttempt, "unsupported context rejects");
         False(DarkKnightShadowbringerMacroRules.EvaluateAttempt(valid with { RemainingGcdSeconds = 0.5f }).ShouldAttempt, "late pulse skips");
         False(DarkKnightShadowbringerMacroRules.EvaluateAttempt(valid with { CycleActive = false }).ShouldAttempt, "inactive GCD skips");
         False(DarkKnightShadowbringerMacroRules.EvaluateAttempt(valid with { SpentCycleToken = 9 }).ShouldAttempt, "spent cycle rejects");
@@ -180,7 +255,7 @@ internal static class DarkKnightShadowbringerMacroSelfTests
         PluginEnabled: true,
         FeatureEnabled: true,
         MetadataVerified: true,
-        ExactCrystallineConflict: true,
+        ExactSupportedContext: true,
         LocalIdentityStable: true,
         LocalAliveAndTargetable: true,
         LocalIsDarkKnight: true,

@@ -567,9 +567,12 @@ if ($autoLowMpFocusTypeReferences.Count -ne 4 -or
 
 # DRK Shadowbringer macro assistance is default-off and may arm only from the
 # exact /seitonbringer macro line immediately followed by a native PvP
-# Souleater-combo call. A proven native 2.40-second combo-GCD restart opens one
-# cycle. Unknown observations preserve that cycle and its spent ownership; only
-# a later exact restart plus changed LastUsedActionSequence opens another.
+# Souleater-combo call. CC keeps its canonical S1-S5 resolution. The separately
+# opted-in Wolves' Den test path accepts only the exact current native hard-
+# targeted striking dummy and owns no synthetic enemy-slot or duel-opponent
+# fallback. A proven native 2.40-second combo-GCD restart opens one cycle.
+# Unknown observations preserve that cycle and its spent ownership; only a
+# later exact restart plus changed LastUsedActionSequence opens another.
 $darkKnightShadowbringerRules = Read-RequiredSource $darkKnightShadowbringerRulesPath 'DRK Shadowbringer macro rules'
 $normalizedDarkKnightShadowbringerRules = $darkKnightShadowbringerRules -replace '\s+', ' '
 $darkKnightShadowbringerService = Read-RequiredSource $darkKnightShadowbringerServicePath 'DRK Shadowbringer macro runtime'
@@ -595,6 +598,9 @@ Assert-Literals $darkKnightShadowbringerRules @(
     'public const uint ShadowbringerIconId = 9594',
     'public const uint DarkArtsStatusIconId = 213107',
     'public const uint ShadowbringerHpCost = 12000',
+    'public const uint WolvesDenStrikingDummyNameId = 541',
+    'public const byte StandardComboSecondaryCostType = 58',
+    'public const byte DeliriumComboSecondaryCostType = 147',
     'public const int ComboRecastGroupIndex = 57',
     'public const int ShadowbringerRecastGroupIndex = 0',
     'public const int ComboAdjustedRecastMilliseconds = 2400',
@@ -638,6 +644,15 @@ Assert-Literals $darkKnightShadowbringerRules @(
     'remainingSeconds <= MaximumNoClipRemainingSeconds',
     'DarkArtsShadowbringerActionId => hasDarkArts && currentHp > 0',
     'ShadowbringerActionId => !hasDarkArts && currentHp > ShadowbringerHpCost',
+    'context == SupportedPvPContext.CrystallineConflict',
+    'wolvesDenTestingEnabled && context == SupportedPvPContext.WolvesDen',
+    'metadataVerified &&',
+    'battleNpcCombatant &&',
+    'nameId == WolvesDenStrikingDummyNameId',
+    'nativeIdentityValid &&',
+    '!isSelf &&',
+    'aliveWithPositiveHp &&',
+    'targetable',
     'recastGroupIndex == ComboRecastGroupIndex',
     'Math.Abs(totalSeconds - ComboAdjustedRecastMilliseconds / 1000f) <=',
     'adjustedRecastMilliseconds == ComboAdjustedRecastMilliseconds',
@@ -646,7 +661,9 @@ Assert-Literals $darkKnightShadowbringerRules @(
 
 if ($normalizedDarkKnightShadowbringerRules -notmatch 'if \(observation\.HardReset\).*?DarkKnightGcdCycleState\.Initial.*?if \(!IsExactKnownCycleObservation\(observation\)\).*?state, DarkKnightGcdObservationOutcome\.Unknown.*?if \(!state\.HasPreviousKnownObservation\).*?DarkKnightGcdObservationOutcome\.Primed.*?var recastRestarted = observation\.IsActive && \(!state\.PreviousActive \|\| observation\.ElapsedSeconds \+ CycleResetEpsilonSeconds < state\.PreviousElapsedSeconds\); var exactNewActionSequence = observation\.LastUsedActionSequence != state\.PreviousLastUsedActionSequence; if \(!recastRestarted \|\| !exactNewActionSequence\).*?DarkKnightGcdObservationOutcome\.Unchanged.*?CurrentCycleToken = NextToken\(state\.CurrentCycleToken\).*?DarkKnightGcdObservationOutcome\.OpenedCycle' -or
     $normalizedDarkKnightShadowbringerRules -notmatch 'if \(expectedCycleToken == 0 \|\| state\.CurrentCycleToken != expectedCycleToken \|\| state\.SpentCycleToken == expectedCycleToken\).*?return false;.*?spentState = state with \{ SpentCycleToken = expectedCycleToken \}; return true;' -or
-    $normalizedDarkKnightShadowbringerRules -notmatch 'if \(!observation\.PluginEnabled \|\| !observation\.FeatureEnabled\).*?Disabled.*?if \(!observation\.MetadataVerified\).*?MetadataMismatch.*?if \(!observation\.ExactCrystallineConflict\).*?InvalidContext.*?if \(!observation\.SafeCarrierPath\).*?UnsafeCarrierPath.*?if \(!observation\.ExactCycleSnapshot \|\| !observation\.CycleActive.*?CycleUnknownOrChanged.*?if \(observation\.SpentCycleToken == observation\.ExpectedCycleToken && !observation\.CycleOwnedByThisAttempt\).*?CycleAlreadySpent.*?if \(!IsWithinNoClipWeaveWindow\(observation\.RemainingGcdSeconds\)\).*?OutsideNoClipWindow.*?if \(!observation\.NativeQueueClearAndStable\).*?NativeQueueOwned.*?if \(!observation\.ActionSequenceStable\).*?ActionSequenceChanged.*?if \(!observation\.AnimationLockClear\).*?AnimationLocked.*?if \(!observation\.NotCasting\).*?Casting.*?if \(!observation\.OwnGuardClear\).*?OwnGuardActiveOrPropagating.*?if \(!observation\.TargetIdentityStable \|\| !observation\.TargetAliveAndTargetable\).*?InvalidTarget.*?if \(!observation\.TargetGuardClear\).*?TargetGuardActive.*?if \(!observation\.ComboHasNativeRangeAndLineOfSight\).*?ComboOutOfRangeOrLineOfSight.*?if \(!observation\.ShadowbringerHasNativeRangeAndLineOfSight\).*?ShadowbringerOutOfRangeOrLineOfSight.*?if \(!observation\.ComboStructurallyReady\).*?ComboStructurallyUnavailable.*?IsShadowbringerResourceStateValid.*?InvalidShadowbringerResourceState.*?if \(!observation\.ShadowbringerCooldownReady \|\| !observation\.ShadowbringerActionReady \|\| !observation\.ShadowbringerResourcesReady\).*?ShadowbringerUnavailable.*?ShouldAttempt: true') {
+    $normalizedDarkKnightShadowbringerRules -notmatch 'if \(!observation\.PluginEnabled \|\| !observation\.FeatureEnabled\).*?Disabled.*?if \(!observation\.MetadataVerified\).*?MetadataMismatch.*?if \(!observation\.ExactSupportedContext\).*?InvalidContext.*?if \(!observation\.SafeCarrierPath\).*?UnsafeCarrierPath.*?if \(!observation\.ExactCycleSnapshot \|\| !observation\.CycleActive.*?CycleUnknownOrChanged.*?if \(observation\.SpentCycleToken == observation\.ExpectedCycleToken && !observation\.CycleOwnedByThisAttempt\).*?CycleAlreadySpent.*?if \(!IsWithinNoClipWeaveWindow\(observation\.RemainingGcdSeconds\)\).*?OutsideNoClipWindow.*?if \(!observation\.NativeQueueClearAndStable\).*?NativeQueueOwned.*?if \(!observation\.ActionSequenceStable\).*?ActionSequenceChanged.*?if \(!observation\.AnimationLockClear\).*?AnimationLocked.*?if \(!observation\.NotCasting\).*?Casting.*?if \(!observation\.OwnGuardClear\).*?OwnGuardActiveOrPropagating.*?if \(!observation\.TargetIdentityStable \|\| !observation\.TargetAliveAndTargetable\).*?InvalidTarget.*?if \(!observation\.TargetGuardClear\).*?TargetGuardActive.*?if \(!observation\.ComboHasNativeRangeAndLineOfSight\).*?ComboOutOfRangeOrLineOfSight.*?if \(!observation\.ShadowbringerHasNativeRangeAndLineOfSight\).*?ShadowbringerOutOfRangeOrLineOfSight.*?if \(!observation\.ComboStructurallyReady\).*?ComboStructurallyUnavailable.*?IsShadowbringerResourceStateValid.*?InvalidShadowbringerResourceState.*?if \(!observation\.ShadowbringerCooldownReady \|\| !observation\.ShadowbringerActionReady \|\| !observation\.ShadowbringerResourcesReady\).*?ShadowbringerUnavailable.*?ShouldAttempt: true' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'public static bool CanExecuteInContext\( SupportedPvPContext context, bool wolvesDenTestingEnabled\) => context == SupportedPvPContext\.CrystallineConflict \|\| \(wolvesDenTestingEnabled && context == SupportedPvPContext\.WolvesDen\);' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'public static bool IsExactWolvesDenStrikingDummy\( bool metadataVerified, bool battleNpcCombatant, uint nameId, bool nativeIdentityValid, bool isSelf, bool aliveWithPositiveHp, bool targetable\) => metadataVerified && battleNpcCombatant && nameId == WolvesDenStrikingDummyNameId && nativeIdentityValid && !isSelf && aliveWithPositiveHp && targetable;') {
     throw 'DRK Core must preserve unknown cycle ownership, spend atomically, and require every final context/queue/lock/Guard/target/range/resource gate before one attempt.'
 }
 if ($darkKnightShadowbringerRules -cmatch '\b(Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread|ActionManager|ObjectTable|RaptureShell|UseAction|Dispatch|Retry|Replay|ITargetManager|TargetManager|SetTarget)\b') {
@@ -694,7 +711,20 @@ Assert-Literals $darkKnightShadowbringerSelfTests @(
     'valid with { OwnGuardClear = false }',
     'valid with { TargetGuardClear = false }',
     'valid with { ComboHasNativeRangeAndLineOfSight = false }',
-    'valid with { ShadowbringerHasNativeRangeAndLineOfSight = false }'
+    'valid with { ShadowbringerHasNativeRangeAndLineOfSight = false }',
+    'CanExecuteInContext(',
+    'SupportedPvPContext.CrystallineConflict,',
+    'wolvesDenTestingEnabled: false',
+    'SupportedPvPContext.WolvesDen,',
+    'wolvesDenTestingEnabled: true',
+    'SupportedPvPContext.None,',
+    'IsExactWolvesDenStrikingDummy(',
+    'nameId: 541',
+    'nameId: 13078',
+    'battleNpcCombatant: false',
+    'metadataVerified: false',
+    'isSelf: true',
+    'valid with { ExactSupportedContext = false }'
 ) 'DRK tests for spent unknown state, exact pair modes/line, inclusive 600-800ms window, HP, queue, Guard, and dual native reachability'
 
 Assert-Literals $darkKnightShadowbringerService @(
@@ -702,8 +732,8 @@ Assert-Literals $darkKnightShadowbringerService @(
     'private const ulong InvalidObjectId = 0xE0000000',
     'private const float AnimationLockEpsilonSeconds = 0.0005f',
     'metadataVerified = ValidateMetadata(dataManager, log)',
+    'wolvesDenDummyMetadataVerified = ValidateWolvesDenDummyMetadata(dataManager, log)',
     'framework.Update += OnFrameworkUpdate',
-    'ObserveCycleNow(ActionManager.Instance())',
     'if (!string.IsNullOrWhiteSpace(arguments))',
     '!configuration.Enabled || !configuration.EnableDarkKnightShadowbringerMacro',
     'if (!hookAvailable)',
@@ -713,7 +743,10 @@ Assert-Literals $darkKnightShadowbringerService @(
     'shell->MacroCurrentLine is < 0 or >= 15',
     'shell->MacroLineText.ToString().Trim()',
     'StringComparison.OrdinalIgnoreCase',
-    'ResolveContext() != SupportedPvPContext.CrystallineConflict',
+    'DarkKnightShadowbringerMacroRules.CanExecuteInContext(',
+    'configuration.EnableWolvesDenTesting',
+    'context == SupportedPvPContext.WolvesDen && !wolvesDenDummyMetadataVerified',
+    'DarkKnightShadowbringerArmOutcome.WolvesDenDummyMetadataMismatch',
     'if (!IsExactLocalDarkKnight(local))',
     'if (!currentCycle.HasProvenCycle)',
     'if (currentCycle.CurrentCycleSpent)',
@@ -728,11 +761,16 @@ Assert-Literals $darkKnightShadowbringerService @(
     'CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(targetId)',
     'GetNativeHardTargetId(local)',
     'CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(',
+    'TryResolveExactTarget(',
     'TryResolveExactCanonicalEnemy(',
-    'usedDefaultTargetCarrier && GetNativeHardTargetId(local) != nativeHardTargetId',
+    'TryResolveExactWolvesDenHardTarget(',
+    'usedDefaultTargetCarrier || context == SupportedPvPContext.WolvesDen',
     'target.GameObjectId',
     'target.EntityId',
     'target.Address',
+    'target.ObjectKind',
+    'target.SubKind',
+    'target.NameId',
     'DarkKnightShadowbringerMacroRules.TrySpendCycle(',
     'cycleState = spentState',
     'cycleOwnedByThisAttempt: true',
@@ -740,7 +778,6 @@ Assert-Literals $darkKnightShadowbringerService @(
     'will not retry this GCD',
     'framework.Update -= OnFrameworkUpdate',
     'cycleState = DarkKnightGcdCycleState.Initial',
-    'includeWolvesDenTesting: false',
     'DarkKnightShadowbringerMacroRules.DarkKnightJobId',
     'actionManager->LastUsedActionSequence',
     'actionManager->ActionQueued',
@@ -755,7 +792,7 @@ Assert-Literals $darkKnightShadowbringerService @(
     'actionManager->CheckActionResources(',
     'DarkKnightShadowbringerMacroRules.ShadowbringerHpCost',
     'DarkKnightShadowbringerMacroRules.DarkArtsStatusId'
-) 'DRK runtime macro provenance, exact context/identity, one-cycle claim, native queue/lock/Guard/range/resource gates, and lifecycle'
+) 'DRK runtime macro provenance, exact CC/Den context and identity, one-cycle claim, native queue/lock/Guard/range/resource gates, and lifecycle'
 
 if ([regex]::Matches($darkKnightShadowbringerService, '\bRaptureShellModule\.Instance\s*\(').Count -ne 2 -or
     $darkKnightShadowbringerService -match '\b(ExecuteCommandInner|Utf8String|GetRaptureShellModule|SetRawValue|FireCallback)\b' -or
@@ -763,6 +800,68 @@ if ([regex]::Matches($darkKnightShadowbringerService, '\bRaptureShellModule\.Ins
     $darkKnightShadowbringerService -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
     $darkKnightShadowbringerService -match '(?:->|\.)UseAction\s*\(') {
     throw 'The DRK service may read two exact macro snapshots and native queue/target state, but must not write shell/queue/targets or own a native action call.'
+}
+
+$darkKnightStartMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)internal void Start\(\)\s*\{(?<Body>.*?)\r?\n    \}\r?\n\r?\n    internal DarkKnightShadowbringerArmResult Arm')
+if (-not $darkKnightStartMatch.Success) {
+    throw 'The DRK Start method could not be isolated for framework-thread review.'
+}
+$darkKnightStartBody = $darkKnightStartMatch.Groups['Body'].Value
+if ($darkKnightStartBody -notmatch 'framework\.Update \+= OnFrameworkUpdate' -or
+    $darkKnightStartBody -match '\b(ObserveCycleNow|ActionManager\.Instance|objectTable|LocalPlayer)\b') {
+    throw 'DRK Start may only subscribe cycle observation; local/native GCD reads must begin on the framework update thread.'
+}
+if ([regex]::Matches($darkKnightShadowbringerService, 'private void OnFrameworkUpdate\(IFramework _\) => ObserveCycleNow\(ActionManager\.Instance\(\)\);').Count -ne 1) {
+    throw 'DRK must perform its deferred initial/native cycle observation through exactly one framework-update callback.'
+}
+
+$darkKnightPairMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)internal bool TryConsumePairedCarrier\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    internal bool TryAttemptOnce')
+if (-not $darkKnightPairMatch.Success) {
+    throw 'The DRK exact carrier-pair method could not be isolated.'
+}
+$darkKnightPair = $darkKnightPairMatch.Groups['Body'].Value
+$normalizedDarkKnightPair = $darkKnightPair -replace '\s+', ' '
+if ($normalizedDarkKnightPair -notmatch 'armedMacro = null;.*?EvaluatePair\(.*?var context = ResolveContext\(\);.*?!CanExecuteInContext\(context\).*?var usedDefaultTargetCarrier = CcImmunityBrakeTargetRules\.IsDefaultTargetCarrier\(targetId\);.*?var nativeHardTargetId = usedDefaultTargetCarrier \|\| context == SupportedPvPContext\.WolvesDen \? GetNativeHardTargetId\(local\) : 0;.*?ResolveEffectiveTargetId\( targetId, targetId, nativeHardTargetId\);.*?TryResolveExactTarget\( context, local, effectiveTargetId, nativeHardTargetId,.*?\(\(usedDefaultTargetCarrier \|\| context == SupportedPvPContext\.WolvesDen\) && GetNativeHardTargetId\(local\) != nativeHardTargetId\).*?new DarkKnightShadowbringerPairedCarrier\( arm, context, actionId, adjustedActionId, \(uint\)mode, comboRouteId, effectiveTargetId, usedDefaultTargetCarrier, nativeHardTargetId, enemySlot, target\.GameObjectId, target\.EntityId, target\.Address, target\.ObjectKind, target\.SubKind, target\.NameId\)' -or
+    $darkKnightPair -match '\b(WolvesDenOpponentResolver|PvPDuelManager)\b') {
+    throw 'DRK pairing must consume the authored line once, require the exact supported context, capture the Den native hard target, and freeze every target identity field without a duel fallback.'
+}
+
+$darkKnightTargetRouterMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)private bool TryResolveExactTarget\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private bool TryResolveExactWolvesDenHardTarget')
+$darkKnightDenResolverMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)private bool TryResolveExactWolvesDenHardTarget\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private bool TryResolveExactCanonicalEnemy')
+$darkKnightCcResolverMatch = [regex]::Match(
+    $darkKnightShadowbringerService,
+    '(?s)private bool TryResolveExactCanonicalEnemy\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private SupportedPvPContext ResolveContext')
+if (-not $darkKnightTargetRouterMatch.Success -or
+    -not $darkKnightDenResolverMatch.Success -or
+    -not $darkKnightCcResolverMatch.Success) {
+    throw 'The DRK context router and exact CC/Den target resolvers could not be isolated.'
+}
+$darkKnightTargetRouter = $darkKnightTargetRouterMatch.Groups['Body'].Value
+$darkKnightDenResolver = $darkKnightDenResolverMatch.Groups['Body'].Value
+$darkKnightCcResolver = $darkKnightCcResolverMatch.Groups['Body'].Value
+$normalizedDarkKnightTargetRouter = $darkKnightTargetRouter -replace '\s+', ' '
+$normalizedDarkKnightDenResolver = $darkKnightDenResolver -replace '\s+', ' '
+$normalizedDarkKnightCcResolver = $darkKnightCcResolver -replace '\s+', ' '
+if ($normalizedDarkKnightTargetRouter -notmatch 'enemySlot = 0; if \(context == SupportedPvPContext\.CrystallineConflict\).*?TryResolveExactCanonicalEnemy\( localPlayer, targetId,.*?if \(context == SupportedPvPContext\.WolvesDen && CanExecuteInContext\(context\)\).*?TryResolveExactWolvesDenHardTarget\( localPlayer, targetId, nativeHardTargetId,' -or
+    [regex]::Matches($darkKnightTargetRouter, '\bTryResolveExactCanonicalEnemy\s*\(').Count -ne 1 -or
+    [regex]::Matches($darkKnightTargetRouter, '\bTryResolveExactWolvesDenHardTarget\s*\(').Count -ne 1) {
+    throw 'DRK target routing must keep the canonical CC resolver and the exact Den dummy resolver as two explicit, non-fallback branches.'
+}
+if ($normalizedDarkKnightCcResolver -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\).*?EnemySlotRules\.CanUseResolvedEnemy\(.*?if \(targetId == candidate\.GameObjectId \|\| targetId == candidate\.EntityId\).*?if \(matches\.Count != 1\).*?target = match\.Player; enemySlot = match\.Slot; resolution = "Exact canonical enemy"; return true;' -or
+    $darkKnightCcResolver -match '\b(WolvesDen|WolvesDenOpponentResolver|PvPDuelManager|BNpcName|BattleNpcKind|NameId)\b') {
+    throw 'The CC branch must remain the canonical unique S1-S5 resolver and must not inherit any Den dummy or duel-opponent logic.'
+}
+if ($normalizedDarkKnightDenResolver -notmatch 'if \(!IsNetworkObjectId\(nativeHardTargetId\)\) return false;.*?if \(!IsNetworkObjectId\(targetId\)\) return false;.*?SearchById\(nativeHardTargetId\).*?SearchByEntityId\(\(uint\)nativeHardTargetId\).*?!HasSameNativeIdentity\(byObjectId, byEntityId\).*?if \(!ActorIdMatches\(nativeHardTargetId, candidate!\)\) return false;.*?if \(!ActorIdMatches\(targetId, candidate!\)\) return false;.*?candidate is DalamudBattleNpc.*?BattleNpcKind: DalamudBattleNpcSubKind\.Combatant.*?candidate\.ObjectKind == DalamudObjectKind\.BattleNpc.*?IsExactWolvesDenStrikingDummy\( wolvesDenDummyMetadataVerified, battleNpcCombatant, candidate\.NameId, nativeIdentityValid: true, isSelf: isSelf, aliveWithPositiveHp: aliveWithPositiveHp, targetable: candidate\.IsTargetable\).*?SearchById\(candidate\.GameObjectId\).*?SearchByEntityId\(candidate\.EntityId\).*?!HasSameNativeIdentity\(candidate, canonicalByObjectId\).*?!HasSameNativeIdentity\(candidate, canonicalByEntityId\).*?GetNativeHardTargetId\(localPlayer\) != nativeHardTargetId.*?target = candidate;.*?return true;' -or
+    $darkKnightDenResolver -match '\b(EnemySlotResolver|EnemySlotRules|WolvesDenOpponentResolver|PvPDuelManager|StatusFlags\.Hostile)\b') {
+    throw 'The Den branch must accept only the exact current native hard-target NameId-541 combat BattleNpc and may not use S-slots, hostile-player, or duel-opponent fallback.'
 }
 
 $darkKnightAttemptMatch = [regex]::Match(
@@ -780,17 +879,23 @@ if ([regex]::Matches($darkKnightAttempt, '\bdispatch\s*\(').Count -ne 1 -or
     throw 'DRK must claim the exact cycle before final rereads and issue one dispatch only; rejection, drift, or exception stays spent with no loop, retry, alternate, or fallback.'
 }
 
-if ($normalizedDarkKnightShadowbringerService -notmatch 'private void ObserveCycleNow\(ActionManager\* actionManager\).*?ResolveContext\(\) != SupportedPvPContext\.CrystallineConflict \|\| !IsExactLocalDarkKnight\(local\).*?HardReset\("Context, player, job, or life changed"\).*?identityChanged = hasObservedLifetime && \(observedTerritoryId != clientState\.TerritoryType \|\| observedLocalGameObjectId != local!\.GameObjectId \|\| observedLocalEntityId != local\.EntityId \|\| observedLocalAddress != local\.Address\).*?GetRecastGroup\( \(int\)ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId\).*?GetRecastGroupDetail\(groupIndex\).*?GetAdjustedRecastTime\( ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId, true\).*?DarkKnightShadowbringerMacroRules\.ObserveCycle\(cycleState, observation\).*?cycleState = result\.State' -or
+if ($normalizedDarkKnightShadowbringerService -notmatch 'private void ObserveCycleNow\(ActionManager\* actionManager\).*?var context = ResolveContext\(\); if \(!CanExecuteInContext\(context\) \|\| !IsExactLocalDarkKnight\(local\).*?HardReset\("Context, player, job, or life changed"\).*?identityChanged = hasObservedLifetime && \(observedTerritoryId != clientState\.TerritoryType \|\| observedLocalGameObjectId != local!\.GameObjectId \|\| observedLocalEntityId != local\.EntityId \|\| observedLocalAddress != local\.Address\).*?GetRecastGroup\( \(int\)ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId\).*?GetRecastGroupDetail\(groupIndex\).*?GetAdjustedRecastTime\( ActionType\.Action, DarkKnightShadowbringerMacroRules\.HardSlashActionId, true\).*?DarkKnightShadowbringerMacroRules\.ObserveCycle\(cycleState, observation\).*?cycleState = result\.State' -or
     $normalizedDarkKnightShadowbringerService -notmatch 'var queue = CaptureNativeQueue\(actionManager\); var sequence = actionManager == null \? \(ushort\)0 : actionManager->LastUsedActionSequence; var queueStable = !queue\.Active && \(baseline is null \|\| queue == baseline\.Value\.Queue\); var sequenceStable = baseline is null \|\| sequence == baseline\.Value\.Sequence;.*?animationLock <= AnimationLockEpsilonSeconds;.*?!local!\.IsCasting.*?actionManager->CastActionId == 0;' -or
-    $normalizedDarkKnightShadowbringerService -notmatch 'target\.GameObjectId == carrier\.TargetGameObjectId && target\.EntityId == carrier\.TargetEntityId && target\.Address == carrier\.TargetAddress && \(!carrier\.UsedDefaultTargetCarrier \|\| GetNativeHardTargetId\(local\) == carrier\.NativeHardTargetId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusAlternateId\)' -or
+    $normalizedDarkKnightShadowbringerService -notmatch 'var exactContext = context == carrier\.Context && CanExecuteInContext\(context\) && clientState\.TerritoryType == carrier\.Arm\.TerritoryId;.*?target\.GameObjectId == carrier\.TargetGameObjectId && target\.EntityId == carrier\.TargetEntityId && target\.Address == carrier\.TargetAddress && \(carrier\.Context != SupportedPvPContext\.WolvesDen \|\| target\.ObjectKind == carrier\.TargetObjectKind && target\.SubKind == carrier\.TargetSubKind && target\.NameId == carrier\.TargetNameId\) && \(!\(carrier\.UsedDefaultTargetCarrier \|\| carrier\.Context == SupportedPvPContext\.WolvesDen\) \|\| GetNativeHardTargetId\(local\) == carrier\.NativeHardTargetId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusId\).*?HasActiveStatus\(target!, EnemyCombatConstants\.GuardStatusAlternateId\)' -or
     $normalizedDarkKnightShadowbringerService -notmatch 'currentAdjustedCarrier == carrier\.AdjustedActionId.*?GetActionInRangeOrLoS\( currentAdjustedCarrier, sourceObject, targetObject\).*?GetActionStatus\( ActionType\.Action, currentAdjustedCarrier, carrier\.EffectiveTargetId, checkRecastActive: false, checkCastingActive: true\) == 0.*?GetAdjustedActionId\( DarkKnightShadowbringerMacroRules\.ShadowbringerActionId\).*?GetActionInRangeOrLoS\( shadowAdjusted, sourceObject, targetObject\).*?shadowGroupIndex == DarkKnightShadowbringerMacroRules\.ShadowbringerRecastGroupIndex.*?!shadowDetail->IsActive.*?GetAdditionalRecastGroup\(ActionType\.Action, shadowAdjusted\) < 0.*?GetAdjustedRecastTime\( ActionType\.Action, shadowAdjusted, true\) == DarkKnightShadowbringerMacroRules\.ShadowbringerAdjustedRecastMilliseconds.*?GetActionStatus\( ActionType\.Action, shadowAdjusted, carrier\.EffectiveTargetId, checkRecastActive: true, checkCastingActive: true\) == 0.*?CheckActionResources\( ActionType\.Action, shadowAdjusted\) == 0') {
-    throw 'DRK runtime must derive each cycle from exact native recast telemetry and repeat stable queue/sequence, identity, Guard, dual range/LoS, cooldown, readiness, and resource checks at the final boundary.'
+    throw 'DRK runtime must derive each supported-context cycle from exact native recast telemetry and repeat stable queue/sequence, frozen CC/Den identity, Guard, dual range/LoS, cooldown, readiness, and resource checks at the final boundary.'
+}
+
+if ($normalizedDarkKnightShadowbringerService -notmatch 'private static bool HasSameNativeIdentity\( DalamudGameObject\? left, DalamudGameObject\? right\) => HasValidNativeIdentity\(left\) && HasValidNativeIdentity\(right\) && left!\.GameObjectId == right!\.GameObjectId && left\.EntityId == right\.EntityId && left\.Address == right\.Address && left\.ObjectKind == right\.ObjectKind && left\.SubKind == right\.SubKind && \(left is not DalamudBattleChara leftBattleChara \|\| right is DalamudBattleChara rightBattleChara && leftBattleChara\.NameId == rightBattleChara\.NameId\);') {
+    throw 'DRK canonical identity rereads must include game-object ID, entity ID, address, object kind, sub-kind, and battle-character NameId.'
 }
 
 Assert-Literals $darkKnightShadowbringerService @(
-    'IsExpectedComboAction(hardSlash, "Hard Slash", 9142, 0, 0, preservesCombo: false)',
-    'IsExpectedComboAction(syphonStrike, "Syphon Strike", 9145, 0, 0, preservesCombo: false)',
-    'IsExpectedComboAction(souleater, "Souleater", 9146, 0, 0, preservesCombo: false)',
+    'expectedSecondaryCostType: 0',
+    'DarkKnightShadowbringerMacroRules.StandardComboSecondaryCostType',
+    'DarkKnightShadowbringerMacroRules.DeliriumComboSecondaryCostType',
+    'action.SecondaryCostType == expectedSecondaryCostType',
+    'action.SecondaryCostValue.RowId == 0',
     '"Scarlet Delirium"',
     '9766',
     '"Comeuppance"',
@@ -827,12 +932,21 @@ Assert-Literals $darkKnightShadowbringerService @(
     'action.RequiresLineOfSight',
     'action.NeedToFaceTarget',
     'description.Contains("Consumes 12,000 HP when executed", StringComparison.Ordinal)',
-    'description.Contains("Dark Arts", StringComparison.Ordinal)'
-) 'Current-sheet DRK combo, Shadowbringer, route, cost, target, recast, range, and Dark Arts metadata'
+    'description.Contains("Dark Arts", StringComparison.Ordinal)',
+    'GetExcelSheet<BNpcName>(ClientLanguage.English)',
+    'DarkKnightShadowbringerMacroRules.WolvesDenStrikingDummyNameId',
+    'strikingDummy.Singular.ToString() == "striking dummy"',
+    'strikingDummy.Plural.ToString() == "striking dummies"',
+    'Crystalline Conflict DRK support remains available.'
+) 'Current-sheet DRK combo, Shadowbringer, route, exact secondary costs, Dark Arts, and separate Den dummy metadata'
 if ([regex]::Matches($darkKnightShadowbringerService, '\bIsExpectedComboAction\s*\(').Count -ne 7 -or
     [regex]::Matches($darkKnightShadowbringerService, '\bIsExpectedShadowbringer\s*\(').Count -ne 3 -or
-    [regex]::Matches($darkKnightShadowbringerService, '\bValidateMetadata\s*\(').Count -ne 2) {
-    throw 'DRK metadata must validate exactly six combo rows, two Shadowbringer rows, one route, and Dark Arts behind one cached fail-closed gate.'
+    [regex]::Matches($darkKnightShadowbringerService, '\bValidateMetadata\s*\(').Count -ne 2 -or
+    [regex]::Matches($darkKnightShadowbringerService, '\bValidateWolvesDenDummyMetadata\s*\(').Count -ne 2 -or
+    [regex]::Matches($darkKnightShadowbringerService, 'expectedSecondaryCostType:\s*0').Count -ne 1 -or
+    [regex]::Matches($darkKnightShadowbringerService, 'DarkKnightShadowbringerMacroRules\.StandardComboSecondaryCostType').Count -ne 2 -or
+    [regex]::Matches($darkKnightShadowbringerService, 'DarkKnightShadowbringerMacroRules\.DeliriumComboSecondaryCostType').Count -ne 3) {
+    throw 'DRK metadata must validate six combo rows with exact 0/58/58/147/147/147 secondary cost types, two Shadowbringer rows, one route, Dark Arts, and one separately cached Den dummy row.'
 }
 
 $darkKnightTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bDarkKnightShadowbringerMacroService\b')
@@ -848,9 +962,11 @@ Assert-Literals $pluginSource @(
     'DarkKnightShadowbringerMacroService.Command',
     'new CommandInfo(OnDarkKnightShadowbringerCommand)',
     'AllowedInMacros = true',
-    'Exact CC DRK helper: /seitonbringer, then /pvpac \"Souleater Combo\" <t>',
+    'Exact CC or enabled Wolves'' Den striking-dummy DRK helper: /seitonbringer, then',
+    '/pvpac \"Souleater Combo\" <t>',
     'use the localized action name and ReAction Macro Queue + Turbo',
-    '/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in CC',
+    '/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in',
+    'CC or enabled Wolves'' Den striking-dummy testing',
     '/seitonbringer is already owned by another plugin',
     'darkKnightShadowbringer.Start()',
     'if (darkKnightShadowbringerCommandRegistered)',
@@ -4758,19 +4874,30 @@ Assert-Literals $settingsWindow @(
     'DARK KNIGHT SHADOWBRINGER MACRO (OPT-IN)',
     'Enable the exact two-line /seitonbringer weave helper',
     'configuration.EnableDarkKnightShadowbringerMacro',
+    'Enable Wolves'' Den testing for Seiton, native-nameplate cues, and enabled /seitonbringer',
+    'configuration.EnableWolvesDenTesting',
+    '/seitonbringer also requires its separate Macro Helpers opt-in and',
+    'accepts only your exact current hard-target Wolves'' Den striking dummy',
+    'it never uses synthetic S1,',
+    '<e1>, or the duel opponent',
     '/pvpac \"Souleater Combo\" <t>',
     'enable both Macro Queue and Turbo for this macro',
-    'Default off, exact Crystalline Conflict, and PvP Dark Knight only',
+    'Default off and PvP Dark Knight only. Exact Crystalline Conflict is supported directly',
+    'Wolves'' Den additionally requires the existing Start-page test option and accepts only your exact current',
+    'hard-target striking dummy. Frontline and Rival Wings remain blocked',
     'at most one Shadowbringer attempt in the inclusive 0.60-0.80',
     '0.50 seconds or less never triggers',
+    'In CC, the exact current <t> must remain one canonical S1-S5 enemy',
+    'same verified native striking-dummy hard target; synthetic S1, <e1>, duel-opponent resolution',
+    'players, and other targets are never fallbacks',
     'native 5-yalm/10-yalm range and line-of-sight checks',
     'more than 12,000 HP or the',
     'exact Dark Arts status/action state',
     'one-attempt token is spent before the final native Shadowbringer request',
     'never changes a target, chooses an alternate action or enemy, replays the macro, or retries',
     'ACCEPTED is local dispatch feedback only',
-    'current-patch CC trace'
-) 'Schema-24 Auto Focus and DRK opt-in Settings bindings and safety copy'
+    'successful Den dummy test does not prove live CC behavior'
+) 'Schema-24 Auto Focus and dual-opt-in exact Den-dummy DRK Settings bindings and safety copy'
 
 $settingsConfigurationMethodBindings = @(
     'ApplyCurrentTargetHighlightPreset',
@@ -5067,29 +5194,26 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.18.0.0</Version>',
-    '<AssemblyVersion>0.18.0.0</AssemblyVersion>',
-    '<FileVersion>0.18.0.0</FileVersion>'
-) 'v0.18.0.0 project version'
+    '<Version>0.18.0.1</Version>',
+    '<AssemblyVersion>0.18.0.1</AssemblyVersion>',
+    '<FileVersion>0.18.0.1</FileVersion>'
+) 'v0.18.0.1 project version'
 Assert-Literals ($pluginManifest + $repositoryIndex) @(
     'optional set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers',
     'focus-target',
     'dark-knight',
-    '"AssemblyVersion": "0.18.0.0"',
-    'two separate default-off exact Crystalline Conflict helpers',
-    'set only an empty local native Focus Target',
-    'trusted exact S1-S5 enemy at 2,000 MP or lower',
-    'native 20-yalm range/line-of-sight proof',
-    'never clears, replaces, restores, or retries',
-    'manual focus changes win',
-    'DRK /seitonbringer two-line ReAction Macro Queue/Turbo helper',
-    'at most once per proven 2.40-second Souleater Combo GCD',
-    'inclusive 0.60-0.80-seconds-remaining window',
-    'exact target, Guard, resource, range, line-of-sight, queue, and readiness gates',
-    'never changes a target, substitutes, replays, or retries',
-    'Schema 24 keeps both features off for fresh, upgraded, and reset settings',
-    'live current-patch Focus setter/readback and DRK queue/clip behavior remain confirmation boundaries'
-) 'v0.18.0.0 manifest and repository metadata'
+    '"AssemblyVersion": "0.18.0.1"',
+    'Hotfixes the default-off /seitonbringer helper and adds explicitly enabled Wolves'' Den striking-dummy testing',
+    'requires the existing DRK and Wolves'' Den options',
+    'unchanged exact native current hard-target combat dummy with NameId 541',
+    'never uses synthetic S1, e-list or duel-opponent resolution',
+    'canonical CC path is unchanged',
+    'exact 0/58/58/147/147/147 secondary cost types',
+    'initial GCD observation is deferred to the framework update thread',
+    'one-proven-GCD, inclusive 0.60-0.80-second, spend-before-request',
+    'Configuration schema 24 is unchanged and no setting was added',
+    'live Den and CC timing remain separate confirmation boundaries'
+) 'v0.18.0.1 manifest and repository metadata'
 $readme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'README'
 $changelog = Read-RequiredSource (Join-Path $resolvedRoot 'CHANGELOG.md') 'Changelog'
 $privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy documentation'
@@ -5097,10 +5221,9 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.18.0.0 adds two',
-    'set-only local native',
-    'Focus Target for a trusted reachable `S1`-`S5` enemy at 2,000 MP or lower',
-    'exact two-line DRK/ReAction macro that may weave Shadowbringer once',
+    'Version 0.18.0.1 fixes the DRK macro''s current-data metadata and startup paths',
+    'narrow, explicitly enabled Wolves'' Den striking-dummy test path',
+    'retains v0.18''s separate default-off set-only low-MP Focus Target and exact two-line DRK/ReAction helper',
     'large fixed red `FOCUSED xN` card at the top center',
     'Configuration schema',
     '24 keeps Auto Low-MP Focus, the DRK macro, pressure Sprint',
@@ -5156,9 +5279,17 @@ Assert-Literals $normalizedReadme @(
 ) 'v0.18 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
 Assert-Literals $normalizedReadme @(
     '## DRK Shadowbringer two-line macro',
+    'supports exact PvP Dark Knight in Crystalline Conflict',
+    'supports the Wolves'' Den only when the existing **Enable Wolves'' Den testing** option on Start and this DRK helper are both enabled',
     '/seitonbringer',
     '/pvpac "Souleater Combo" <t>',
     'ReAction Macro Queue and Turbo',
+    'In Crystalline Conflict, that target must resolve to one exact canonical `S1`-`S5` enemy, exactly as before',
+    'In Wolves'' Den, it must instead remain the exact native current hard target and resolve to the live, targetable combat striking dummy with current NameId `541`',
+    'freezes and revalidates that dummy''s game-object ID, entity ID, address, object/sub-kind, NameId, and the native hard-target ID',
+    'never queries a synthetic `S1`, `<e1>`, or the duel-opponent resolver',
+    'never accepts a player, another attackable object, or an alternate target',
+    'Frontline and Rival Wings remain blocked',
     'recognizes a new GCD cycle only from a proven exact 2.40-second combo recast restart plus action-sequence change',
     'at most one Shadowbringer attempt for that cycle',
     'remaining-time window is 0.60-0.80 seconds',
@@ -5172,6 +5303,10 @@ Assert-Literals $normalizedReadme @(
     'cannot choose another target or action, replay the macro, or retry',
     'never changes the visible hard, soft, or Focus Target',
     '`CLIENT ACCEPTED` is local dispatch feedback, not proof',
+    'successful striking-dummy trace checks only the Wolves'' Den path and does not prove live CC timing or execution',
+    'exact combo-row secondary cost types `0/58/58/147/147/147`',
+    'first native GCD sample is taken from the framework update thread instead of synchronously during plugin startup',
+    'striking-dummy NameId metadata does not match, only the Den test path is disabled and canonical CC support remains available',
     '## Optional Auto Low-MP Focus Target',
     'complete, unique native `S1`-`S5` set',
     'trusted enemy MP that remains at 2,000 or lower for 150 ms',
@@ -5185,7 +5320,24 @@ Assert-Literals $normalizedReadme @(
     'independent of the party-visible Attack1 sign',
     'no atomic compare-and-set operation for Focus Target',
     'current-patch live A/B boundaries'
-) 'v0.18 DRK macro and set-only Auto Low-MP Focus user contract'
+) 'v0.18.0.1 exact Den-dummy/retained CC DRK macro and set-only Auto Low-MP Focus user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.18.0.1',
+    'Extended the separate default-off `/seitonbringer` helper to Wolves'' Den striking-dummy testing',
+    'requires both the existing DRK Macro Helpers opt-in and the existing Wolves'' Den test option',
+    'Frontline and Rival Wings remain blocked',
+    'exact live, targetable combat striking dummy with current NameId `541`',
+    'object identity and hard target are frozen and revalidated',
+    'never uses synthetic `S1`, `<e1>`, the duel-opponent resolver, a player, another attackable object, an alternate target, or a retry',
+    'canonical `S1`-`S5` Crystalline Conflict path is unchanged',
+    'Retained the proven 2.40-second GCD-cycle token, inclusive 0.60-0.80-second window, spend-before-request ownership',
+    'Corrected the cached current-data combo metadata gate to require the exact per-row secondary cost types `0/58/58/147/147/147`',
+    'previous all-zero check failed closed',
+    'Deferred the first native GCD observation from synchronous plugin startup to the framework update thread',
+    'observed off-main-thread local-player lookup failure',
+    'Bumped the plugin version to 0.18.0.1. Configuration schema 24 is unchanged',
+    'hotfix adds no setting and preserves all existing defaults and migration behavior'
+) 'v0.18.0.1 exact Den-dummy DRK hotfix, current metadata, startup thread, unchanged schema, and live boundary'
 Assert-Literals $normalizedChangelog @(
     '## 0.18.0.0',
     'default-off **Auto Low-MP Focus Target**',
@@ -5275,6 +5427,7 @@ Assert-Literals $normalizedPrivacy @(
     'local identity/text-input state',
     'native 20-yalm range/line-of-sight result for the frozen candidate',
     'when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token',
+    'local DRK and current canonical CC target identity or exact native Wolves'' Den striking-dummy hard-target identity',
     'native combo/Shadowbringer recast and queue state',
     'action sequence, animation lock/cast state, HP/Dark Arts and Guard states',
     'both actions'' native range/line-of-sight/readiness results',
@@ -5297,10 +5450,18 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     '## Experimental DRK Shadowbringer macro helper',
-    'disabled by default and runs only for exact PvP Dark Knight in Crystalline Conflict',
+    'disabled by default and runs only for exact PvP Dark Knight in Crystalline Conflict or explicitly enabled Wolves'' Den testing',
+    'requires both the existing DRK helper and Wolves'' Den test options; no new setting was added',
     '`/seitonbringer` may arm only the immediately following authored Souleater Combo `<t>` macro line for at most 750 ms',
     'macro name, line cursor, exact local identity/context, proven GCD-cycle token',
-    'incoming action/route/mode, and exact current canonical `S1`-`S5` target',
+    'action/route/mode are kept only long enough to pair those two adjacent lines',
+    'In Crystalline Conflict, the target must remain one exact current canonical `S1`-`S5` actor',
+    'In Wolves'' Den, the plugin instead reads the local player''s native hard-target ID and the matching object-table battle character',
+    'live, targetable combat striking dummy with NameId `541`',
+    'freezes and revalidates its game-object ID, entity ID, address, object/sub-kind, NameId, and hard-target ownership',
+    'does not query the synthetic `S1`/`<e1>` or native duel-opponent paths for this macro',
+    'cannot accept a player, another object, or an alternate target',
+    'Frontline and Rival Wings remain excluded',
     'ReAction setup uses both Macro Queue and Turbo',
     'does not create a macro pulse',
     'exact 2.40-second combo recast group restarting with a changed native action sequence',
@@ -5321,11 +5482,15 @@ Assert-Literals $normalizedPrivacy @(
     'client-accepted return is bounded diagnostic feedback only',
     'does not prove server execution or a clip-free weave',
     'neither persisted nor uploaded',
+    'Wolves'' Den dummy result proves only that test path and is not proof of current-patch CC execution or timing',
+    'Current English game-data validation independently pins the striking-dummy NameId and the exact per-row combo secondary cost types `0/58/58/147/147/147`',
+    'dummy metadata mismatch disables only the Den path',
+    'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 24 is current in v0.18.0.0',
-    'Both new v0.18 opt-ins are off for fresh, upgraded, and reset configurations'
-) 'v0.18 Auto Focus/DRK transient-data, mutation, one-cycle, persistence, and live-boundary disclosure'
+    'Configuration schema 24 is current in v0.18.0.1',
+    'both v0.18 opt-ins remain off for fresh, upgraded, and reset configurations'
+) 'v0.18.0.1 Auto Focus/exact Den-dummy DRK transient-data, mutation, one-cycle, persistence, and live-boundary disclosure'
 Assert-Literals $privacy @(
     '## High-pressure warning, sound, and held Sprint',
     'fixed local top-center warning',
@@ -5371,7 +5536,7 @@ Assert-Literals $privacy @(
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
     'Configuration schema 24 is',
-    'current in v0.18.0.0'
+    'current in v0.18.0.1'
 ) 'v0.18 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
@@ -5602,4 +5767,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.18.0.0 safety contract verified across $($sourceFiles.Count) source files. Auto Low-MP Focus is schema-24 default-off, exact-CC-only, complete/stable S1-S5 and trusted-inclusive-<=2000 gated, and owns the sole non-null empty-to-exact FocusTarget setter; occupied/manual drift wins, one attempt is spent per wave, and no path clears, replaces, restores, alternates, or retries a focus. The default-off /seitonbringer helper accepts only the exact adjacent DRK Souleater Combo carrier, opens a token only on a proven native 2.40s GCD restart plus changed action sequence, and spends that cycle before one 0.600-0.800s Shadowbringer attempt; stable queue/sequence, animation/cast, exact identity/context/target, own/target Guard, dual native range/LoS, HP/Dark Arts, recast/readiness/resources are reread while the unchanged outer combo reaches the sole Original, with no queue/target write, alternate, replay, or retry. The urgent direct-pressure warning/sound/Sprint and all prior single-input, assist, CC, marker, isolation, geometry, UI, documentation, and one-hook contracts remain pinned. Native Focus setter/readback, Macro Queue/Turbo timing, action execution, and clip-free behavior still require live current-patch Crystalline Conflict confirmation."
+Write-Host "Seiton Sense v0.18.0.1 safety contract verified across $($sourceFiles.Count) source files. Schema 24 is unchanged. Auto Low-MP Focus remains default-off, exact-CC-only, complete/stable S1-S5 and trusted-inclusive-<=2000 gated, and owns the sole non-null empty-to-exact FocusTarget setter; occupied/manual drift wins, one attempt is spent per wave, and no path clears, replaces, restores, alternates, or retries a focus. The default-off /seitonbringer helper retains its canonical CC S1-S5 path and may additionally use only the exact current hard-target NameId-541 striking dummy in Wolves' Den when the existing Den test option is enabled. It accepts only the exact adjacent DRK Souleater Combo carrier, opens a token only on a proven native 2.40s GCD restart plus changed action sequence, and spends that cycle before one 0.600-0.800s Shadowbringer attempt; stable queue/sequence, animation/cast, exact identity/context/target, own/target Guard, dual native range/LoS, HP/Dark Arts, recast/readiness/resources are reread while the unchanged outer combo reaches the sole Original, with no queue/target write, alternate, replay, or retry. The urgent direct-pressure warning/sound/Sprint and all prior single-input, assist, CC, marker, isolation, geometry, UI, documentation, and one-hook contracts remain pinned. Native Focus setter/readback, Macro Queue/Turbo timing, action execution, and clip-free behavior still require live current-patch validation."

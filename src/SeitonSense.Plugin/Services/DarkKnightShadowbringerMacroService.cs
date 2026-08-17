@@ -10,6 +10,11 @@ using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using Lumina.Excel.Sheets;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
+using DalamudBattleChara = Dalamud.Game.ClientState.Objects.Types.IBattleChara;
+using DalamudBattleNpc = Dalamud.Game.ClientState.Objects.Types.IBattleNpc;
+using DalamudGameObject = Dalamud.Game.ClientState.Objects.Types.IGameObject;
+using DalamudObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
+using DalamudBattleNpcSubKind = Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind;
 using GameAction = Lumina.Excel.Sheets.Action;
 using GameStatus = Lumina.Excel.Sheets.Status;
 
@@ -21,8 +26,9 @@ internal enum DarkKnightShadowbringerArmOutcome
     Disabled,
     HookUnavailable,
     MetadataMismatch,
+    WolvesDenDummyMetadataMismatch,
     NotMacroInvocation,
-    NotCrystallineConflict,
+    NotSupportedPvPContext,
     LocalDarkKnightInvalid,
     CycleUnknown,
     CycleSpent,
@@ -39,6 +45,7 @@ internal readonly record struct DarkKnightShadowbringerMacroDiagnostics(
     bool Started,
     bool Enabled,
     bool MetadataVerified,
+    bool WolvesDenDummyMetadataVerified,
     bool Armed,
     long ArmRemainingMilliseconds,
     int MacroLine,
@@ -54,6 +61,7 @@ internal readonly record struct DarkKnightShadowbringerMacroDiagnostics(
     uint LastAdjustedCarrierActionId,
     uint LastMode,
     uint LastComboRouteId,
+    SupportedPvPContext LastContext,
     int LastEnemySlot,
     ulong LastTargetGameObjectId,
     uint LastTargetEntityId,
@@ -71,21 +79,33 @@ internal readonly record struct DarkKnightShadowbringerMacroDiagnostics(
     long AcceptedCount,
     string LastEvent)
 {
-    internal string ToChatLine() =>
-        $"active={Started},enabled={Enabled},meta={MetadataVerified},armed={Armed}," +
-        $"ttl={ArmRemainingMilliseconds},line={MacroLine},cycle={CycleToken}/{SpentCycleToken}," +
-        $"gcd={RecastGroupIndex}/{RecastActionId}/{RecastElapsedSeconds:0.000}/" +
-        $"{RecastTotalSeconds:0.000}/{RecastRemainingSeconds:0.000},seq={LastUsedActionSequence}," +
-        $"carrier={LastRawCarrierActionId}/{LastAdjustedCarrierActionId}/m{LastMode}/r{LastComboRouteId}," +
-        $"target=S{LastEnemySlot}/{LastTargetGameObjectId:X}/{LastTargetEntityId:X}," +
-        $"shadow={LastShadowbringerAdjustedActionId},hp/da={LastHp}/{LastDarkArts}," +
-        $"guard={LastOwnGuardBlocked}/{LastTargetGuardBlocked},queue/lock=" +
-        $"{LastQueueOwned}/{LastAnimationLockSeconds:0.000},count=" +
-        $"{ArmedCount}/{PairedCount}/{ClaimedCount}/{AttemptCount}/{AcceptedCount},last={LastEvent}";
+    internal string ToChatLine()
+    {
+        var targetLabel = LastTargetEntityId == 0
+            ? "none"
+            : LastContext switch
+            {
+                SupportedPvPContext.CrystallineConflict when LastEnemySlot > 0 => $"CC/S{LastEnemySlot}",
+                SupportedPvPContext.WolvesDen => "Den/dummy",
+                _ => "unknown",
+            };
+        return $"active={Started},enabled={Enabled},meta={MetadataVerified}," +
+               $"denDummyMeta={WolvesDenDummyMetadataVerified},armed={Armed}," +
+               $"ttl={ArmRemainingMilliseconds},line={MacroLine},cycle={CycleToken}/{SpentCycleToken}," +
+               $"gcd={RecastGroupIndex}/{RecastActionId}/{RecastElapsedSeconds:0.000}/" +
+               $"{RecastTotalSeconds:0.000}/{RecastRemainingSeconds:0.000},seq={LastUsedActionSequence}," +
+               $"carrier={LastRawCarrierActionId}/{LastAdjustedCarrierActionId}/m{LastMode}/r{LastComboRouteId}," +
+               $"target={targetLabel}/{LastTargetGameObjectId:X}/{LastTargetEntityId:X}," +
+               $"shadow={LastShadowbringerAdjustedActionId},hp/da={LastHp}/{LastDarkArts}," +
+               $"guard={LastOwnGuardBlocked}/{LastTargetGuardBlocked},queue/lock=" +
+               $"{LastQueueOwned}/{LastAnimationLockSeconds:0.000},count=" +
+               $"{ArmedCount}/{PairedCount}/{ClaimedCount}/{AttemptCount}/{AcceptedCount},last={LastEvent}";
+    }
 }
 
 internal readonly record struct DarkKnightShadowbringerPairedCarrier(
     DarkKnightShadowbringerMacroArm Arm,
+    SupportedPvPContext Context,
     uint RawActionId,
     uint AdjustedActionId,
     uint UseActionMode,
@@ -96,7 +116,10 @@ internal readonly record struct DarkKnightShadowbringerPairedCarrier(
     int EnemySlot,
     ulong TargetGameObjectId,
     uint TargetEntityId,
-    nint TargetAddress);
+    nint TargetAddress,
+    DalamudObjectKind TargetObjectKind,
+    byte TargetSubKind,
+    uint TargetNameId);
 
 internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
 {
@@ -114,6 +137,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
     private readonly IFramework framework;
     private readonly IPluginLog log;
     private readonly bool metadataVerified;
+    private readonly bool wolvesDenDummyMetadataVerified;
     private readonly object stateGate = new();
 
     private DarkKnightGcdCycleState cycleState = DarkKnightGcdCycleState.Initial;
@@ -133,6 +157,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
     private uint lastAdjustedCarrierActionId;
     private uint lastMode;
     private uint lastComboRouteId;
+    private SupportedPvPContext lastContext;
     private int lastEnemySlot;
     private ulong lastTargetGameObjectId;
     private uint lastTargetEntityId;
@@ -172,6 +197,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         this.framework = framework;
         this.log = log;
         metadataVerified = ValidateMetadata(dataManager, log);
+        wolvesDenDummyMetadataVerified = ValidateWolvesDenDummyMetadata(dataManager, log);
     }
 
     internal DarkKnightShadowbringerMacroDiagnostics Diagnostics
@@ -188,6 +214,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                     started && !disposed,
                     configuration.Enabled && configuration.EnableDarkKnightShadowbringerMacro,
                     metadataVerified,
+                    wolvesDenDummyMetadataVerified,
                     armedMacro is not null && remaining > 0,
                     remaining,
                     armedMacro?.MacroLine ?? 0,
@@ -203,6 +230,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                     lastAdjustedCarrierActionId,
                     lastMode,
                     lastComboRouteId,
+                    lastContext,
                     lastEnemySlot,
                     lastTargetGameObjectId,
                     lastTargetEntityId,
@@ -228,8 +256,14 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         if (disposed || started) return;
         started = true;
         framework.Update += OnFrameworkUpdate;
-        lock (stateGate) lastEvent = metadataVerified ? "Ready" : "Metadata mismatch; disabled";
-        ObserveCycleNow(ActionManager.Instance());
+        lock (stateGate)
+        {
+            lastEvent = metadataVerified
+                ? wolvesDenDummyMetadataVerified
+                    ? "Ready"
+                    : "Ready for CC; Wolves' Den dummy metadata mismatch"
+                : "Metadata mismatch; disabled";
+        }
     }
 
     internal DarkKnightShadowbringerArmResult Arm(string arguments, bool hookAvailable)
@@ -258,8 +292,18 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
             }
 
             var local = objectTable.LocalPlayer;
-            if (ResolveContext() != SupportedPvPContext.CrystallineConflict)
-                return RecordArmFailure(DarkKnightShadowbringerArmOutcome.NotCrystallineConflict);
+            var context = ResolveContext();
+            if (!DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+                    context,
+                    configuration.EnableWolvesDenTesting))
+            {
+                return RecordArmFailure(DarkKnightShadowbringerArmOutcome.NotSupportedPvPContext);
+            }
+            if (context == SupportedPvPContext.WolvesDen && !wolvesDenDummyMetadataVerified)
+            {
+                return RecordArmFailure(
+                    DarkKnightShadowbringerArmOutcome.WolvesDenDummyMetadataMismatch);
+            }
             if (!IsExactLocalDarkKnight(local))
                 return RecordArmFailure(DarkKnightShadowbringerArmOutcome.LocalDarkKnightInvalid);
 
@@ -348,29 +392,35 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                     adjustedActionId,
                     (uint)mode,
                     comboRouteId,
-                    extraParam));
+                     extraParam));
             RecordCarrier(actionId, adjustedActionId, mode, comboRouteId, pair.Decision.ToString());
+            var context = ResolveContext();
             if (!pair.IsPaired ||
-                ResolveContext() != SupportedPvPContext.CrystallineConflict ||
+                !CanExecuteInContext(context) ||
                 !IsExactLocalDarkKnight(local))
             {
                 return false;
             }
 
             var usedDefaultTargetCarrier = CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(targetId);
-            var nativeHardTargetId = usedDefaultTargetCarrier ? GetNativeHardTargetId(local) : 0;
+            var nativeHardTargetId = usedDefaultTargetCarrier || context == SupportedPvPContext.WolvesDen
+                ? GetNativeHardTargetId(local)
+                : 0;
             var effectiveTargetId = CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
                 targetId,
                 targetId,
                 nativeHardTargetId);
-            if (!TryResolveExactCanonicalEnemy(
+            if (!TryResolveExactTarget(
+                    context,
                     local,
                     effectiveTargetId,
+                    nativeHardTargetId,
                     out var target,
                     out var enemySlot,
                     out var resolution) ||
                 target is null ||
-                (usedDefaultTargetCarrier && GetNativeHardTargetId(local) != nativeHardTargetId))
+                ((usedDefaultTargetCarrier || context == SupportedPvPContext.WolvesDen) &&
+                 GetNativeHardTargetId(local) != nativeHardTargetId))
             {
                 lock (stateGate) lastEvent = $"Pair target rejected: {resolution}";
                 return false;
@@ -378,6 +428,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
 
             pairedCarrier = new DarkKnightShadowbringerPairedCarrier(
                 arm,
+                context,
                 actionId,
                 adjustedActionId,
                 (uint)mode,
@@ -388,14 +439,20 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                 enemySlot,
                 target.GameObjectId,
                 target.EntityId,
-                target.Address);
+                target.Address,
+                target.ObjectKind,
+                target.SubKind,
+                target.NameId);
             lock (stateGate)
             {
                 pairedCount++;
+                lastContext = context;
                 lastEnemySlot = enemySlot;
                 lastTargetGameObjectId = target.GameObjectId;
                 lastTargetEntityId = target.EntityId;
-                lastEvent = $"Paired S{enemySlot} for cycle {arm.CycleToken}";
+                lastEvent = context == SupportedPvPContext.CrystallineConflict
+                    ? $"Paired S{enemySlot} for cycle {arm.CycleToken}"
+                    : $"Paired exact Den hard target for cycle {arm.CycleToken}";
             }
             return true;
         }
@@ -507,7 +564,8 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         try
         {
             var local = objectTable.LocalPlayer;
-            if (ResolveContext() != SupportedPvPContext.CrystallineConflict ||
+            var context = ResolveContext();
+            if (!CanExecuteInContext(context) ||
                 !IsExactLocalDarkKnight(local))
             {
                 HardReset("Context, player, job, or life changed");
@@ -600,7 +658,9 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
     {
         ObserveCycleNow(actionManager);
         var local = objectTable.LocalPlayer;
-        var exactContext = ResolveContext() == SupportedPvPContext.CrystallineConflict &&
+        var context = ResolveContext();
+        var exactContext = context == carrier.Context &&
+                           CanExecuteInContext(context) &&
                            clientState.TerritoryType == carrier.Arm.TerritoryId;
         var localIdentityStable = IsExactLocalDarkKnight(local) &&
                                   local!.GameObjectId == carrier.Arm.LocalGameObjectId &&
@@ -663,20 +723,27 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
             // Unknown Guard ownership fails closed.
         }
 
-        var exactTarget = TryResolveExactCanonicalEnemy(
+        var exactTarget = TryResolveExactTarget(
+            context,
             local,
             carrier.EffectiveTargetId,
+            carrier.NativeHardTargetId,
             out var target,
             out var enemySlot,
             out _);
         var targetIdentityStable = exactTarget &&
                                    target is not null &&
                                    enemySlot == carrier.EnemySlot &&
-                                   target.GameObjectId == carrier.TargetGameObjectId &&
-                                   target.EntityId == carrier.TargetEntityId &&
-                                   target.Address == carrier.TargetAddress &&
-                                   (!carrier.UsedDefaultTargetCarrier ||
-                                    GetNativeHardTargetId(local) == carrier.NativeHardTargetId);
+                                    target.GameObjectId == carrier.TargetGameObjectId &&
+                                    target.EntityId == carrier.TargetEntityId &&
+                                    target.Address == carrier.TargetAddress &&
+                                    (carrier.Context != SupportedPvPContext.WolvesDen ||
+                                     target.ObjectKind == carrier.TargetObjectKind &&
+                                     target.SubKind == carrier.TargetSubKind &&
+                                     target.NameId == carrier.TargetNameId) &&
+                                    (!(carrier.UsedDefaultTargetCarrier ||
+                                       carrier.Context == SupportedPvPContext.WolvesDen) ||
+                                     GetNativeHardTargetId(local) == carrier.NativeHardTargetId);
         var targetAliveAndTargetable = targetIdentityStable &&
                                        !target!.IsDead &&
                                        target.CurrentHp > 0 &&
@@ -870,6 +937,116 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         }
     }
 
+    private bool TryResolveExactTarget(
+        SupportedPvPContext context,
+        IPlayerCharacter? localPlayer,
+        ulong targetId,
+        ulong nativeHardTargetId,
+        out DalamudBattleChara? target,
+        out int enemySlot,
+        out string resolution)
+    {
+        target = null;
+        enemySlot = 0;
+        if (context == SupportedPvPContext.CrystallineConflict)
+        {
+            var resolved = TryResolveExactCanonicalEnemy(
+                localPlayer,
+                targetId,
+                out var enemy,
+                out enemySlot,
+                out resolution);
+            target = enemy;
+            return resolved;
+        }
+
+        if (context == SupportedPvPContext.WolvesDen && CanExecuteInContext(context))
+        {
+            return TryResolveExactWolvesDenHardTarget(
+                localPlayer,
+                targetId,
+                nativeHardTargetId,
+                out target,
+                out resolution);
+        }
+
+        resolution = "Unsupported PvP context";
+        return false;
+    }
+
+    private bool TryResolveExactWolvesDenHardTarget(
+        IPlayerCharacter? localPlayer,
+        ulong targetId,
+        ulong nativeHardTargetId,
+        out DalamudBattleChara? target,
+        out string resolution)
+    {
+        target = null;
+        resolution = "Local player invalid";
+        if (!HasValidNativeIdentity(localPlayer)) return false;
+        resolution = "Native hard target ID invalid";
+        if (!IsNetworkObjectId(nativeHardTargetId)) return false;
+        resolution = "Incoming macro target ID invalid";
+        if (!IsNetworkObjectId(targetId)) return false;
+
+        var byObjectId = objectTable.SearchById(nativeHardTargetId) as DalamudBattleChara;
+        var byEntityId = nativeHardTargetId <= uint.MaxValue
+            ? objectTable.SearchByEntityId((uint)nativeHardTargetId) as DalamudBattleChara
+            : null;
+        if (byObjectId is not null &&
+            byEntityId is not null &&
+            !HasSameNativeIdentity(byObjectId, byEntityId))
+        {
+            resolution = "Native hard target ID resolved ambiguously";
+            return false;
+        }
+
+        var candidate = byObjectId ?? byEntityId;
+        resolution = "Native hard target is not a battle character";
+        if (!HasValidNativeIdentity(candidate)) return false;
+        resolution = "Native hard target ID does not match the resolved object";
+        if (!ActorIdMatches(nativeHardTargetId, candidate!)) return false;
+        resolution = "Incoming macro target does not match the native hard target";
+        if (!ActorIdMatches(targetId, candidate!)) return false;
+        var isSelf = candidate!.GameObjectId == localPlayer!.GameObjectId ||
+                     candidate.EntityId == localPlayer.EntityId;
+        var battleNpcCombatant = candidate is DalamudBattleNpc
+        {
+            BattleNpcKind: DalamudBattleNpcSubKind.Combatant,
+        } && candidate.ObjectKind == DalamudObjectKind.BattleNpc;
+        var aliveWithPositiveHp = !candidate.IsDead &&
+                                  candidate.CurrentHp > 0 &&
+                                  candidate.MaxHp > 0;
+        resolution = "Den hard target is not the exact live striking dummy";
+        if (!DarkKnightShadowbringerMacroRules.IsExactWolvesDenStrikingDummy(
+                wolvesDenDummyMetadataVerified,
+                battleNpcCombatant,
+                candidate.NameId,
+                nativeIdentityValid: true,
+                isSelf: isSelf,
+                aliveWithPositiveHp: aliveWithPositiveHp,
+                targetable: candidate.IsTargetable))
+        {
+            return false;
+        }
+
+        var canonicalByObjectId = objectTable.SearchById(candidate.GameObjectId) as DalamudBattleChara;
+        var canonicalByEntityId = objectTable.SearchByEntityId(candidate.EntityId) as DalamudBattleChara;
+        resolution = "Den hard target object-table identity changed";
+        if (!HasSameNativeIdentity(candidate, canonicalByObjectId) ||
+            !HasSameNativeIdentity(candidate, canonicalByEntityId))
+        {
+            return false;
+        }
+
+        resolution = "Native hard target changed during capture";
+        if (GetNativeHardTargetId(localPlayer) != nativeHardTargetId) return false;
+
+        target = candidate;
+        resolution = "Exact native Wolves' Den striking-dummy hard target";
+        return true;
+    }
+
     private bool TryResolveExactCanonicalEnemy(
         IPlayerCharacter? localPlayer,
         ulong targetId,
@@ -967,7 +1144,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         return PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
             clientState.IsPvPExcludingDen,
-            includeWolvesDenTesting: false,
+            configuration.EnableWolvesDenTesting,
             clientState.TerritoryType,
             condition.IsValid,
             condition.IsValid && condition.Value.PvP,
@@ -975,6 +1152,12 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
             condition.IsValid && condition.Value.CrystallineConflictCasualRoulette,
             condition.IsValid && condition.Value.CrystallineConflictRankedRoulette);
     }
+
+    private bool CanExecuteInContext(SupportedPvPContext context) =>
+        DarkKnightShadowbringerMacroRules.CanExecuteInContext(
+            context,
+            configuration.EnableWolvesDenTesting) &&
+        (context != SupportedPvPContext.WolvesDen || wolvesDenDummyMetadataVerified);
 
     private static bool IsExactLocalDarkKnight(IPlayerCharacter? player) =>
         HasValidNativeIdentity(player) &&
@@ -984,24 +1167,42 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         player.ClassJob.IsValid &&
         player.ClassJob.RowId == DarkKnightShadowbringerMacroRules.DarkKnightJobId;
 
-    private static bool HasValidNativeIdentity(IPlayerCharacter? player)
+    private static bool HasValidNativeIdentity(DalamudGameObject? actor)
     {
-        if (player is null ||
-            player.Address == 0 ||
-            !IsNetworkObjectId(player.GameObjectId) ||
-            !IsNetworkEntityId(player.EntityId))
+        if (actor is null ||
+            actor.Address == 0 ||
+            !IsNetworkObjectId(actor.GameObjectId) ||
+            !IsNetworkEntityId(actor.EntityId))
         {
             return false;
         }
 
-        var native = (GameObject*)player.Address;
-        return native != null && native->EntityId == player.EntityId;
+        var native = (GameObject*)actor.Address;
+        return native != null && native->EntityId == actor.EntityId;
     }
 
-    private static GameObject* GetNativeObject(IPlayerCharacter player)
+    private static bool HasSameNativeIdentity(
+        DalamudGameObject? left,
+        DalamudGameObject? right) =>
+        HasValidNativeIdentity(left) &&
+        HasValidNativeIdentity(right) &&
+        left!.GameObjectId == right!.GameObjectId &&
+        left.EntityId == right.EntityId &&
+        left.Address == right.Address &&
+        left.ObjectKind == right.ObjectKind &&
+        left.SubKind == right.SubKind &&
+        (left is not DalamudBattleChara leftBattleChara ||
+         right is DalamudBattleChara rightBattleChara &&
+         leftBattleChara.NameId == rightBattleChara.NameId);
+
+    private static bool ActorIdMatches(ulong actorId, DalamudGameObject actor) =>
+        IsNetworkObjectId(actorId) &&
+        (actorId == actor.GameObjectId || actorId == actor.EntityId);
+
+    private static GameObject* GetNativeObject(DalamudGameObject actor)
     {
-        var native = (GameObject*)player.Address;
-        return native != null && native->EntityId == player.EntityId ? native : null;
+        var native = (GameObject*)actor.Address;
+        return native != null && native->EntityId == actor.EntityId ? native : null;
     }
 
     private static ulong GetNativeHardTargetId(IPlayerCharacter? localPlayer)
@@ -1011,9 +1212,9 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         return character == null ? 0 : character->GetTargetId().Id;
     }
 
-    private static bool HasActiveStatus(IPlayerCharacter player, uint statusId)
+    private static bool HasActiveStatus(DalamudBattleChara actor, uint statusId)
     {
-        foreach (var status in player.StatusList)
+        foreach (var status in actor.StatusList)
         {
             if (status.StatusId == statusId &&
                 float.IsFinite(status.RemainingTime) &&
@@ -1059,15 +1260,37 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                 descriptions.TryGetRow(DarkKnightShadowbringerMacroRules.DarkArtsShadowbringerActionId, out var darkShadowDescription) &&
                 statuses.TryGetRow(DarkKnightShadowbringerMacroRules.DarkArtsStatusId, out var darkArts) &&
                 routes.TryGetRow(DarkKnightShadowbringerMacroRules.SouleaterComboRouteId, out var route) &&
-                IsExpectedComboAction(hardSlash, "Hard Slash", 9142, 0, 0, preservesCombo: false) &&
-                IsExpectedComboAction(syphonStrike, "Syphon Strike", 9145, 0, 0, preservesCombo: false) &&
-                IsExpectedComboAction(souleater, "Souleater", 9146, 0, 0, preservesCombo: false) &&
+                IsExpectedComboAction(
+                    hardSlash,
+                    "Hard Slash",
+                    9142,
+                    0,
+                    0,
+                    expectedSecondaryCostType: 0,
+                    preservesCombo: false) &&
+                IsExpectedComboAction(
+                    syphonStrike,
+                    "Syphon Strike",
+                    9145,
+                    0,
+                    0,
+                    DarkKnightShadowbringerMacroRules.StandardComboSecondaryCostType,
+                    preservesCombo: false) &&
+                IsExpectedComboAction(
+                    souleater,
+                    "Souleater",
+                    9146,
+                    0,
+                    0,
+                    DarkKnightShadowbringerMacroRules.StandardComboSecondaryCostType,
+                    preservesCombo: false) &&
                 IsExpectedComboAction(
                     scarlet,
                     "Scarlet Delirium",
                     9766,
                     10,
                     DarkKnightShadowbringerMacroRules.DeliriumStatusId,
+                    DarkKnightShadowbringerMacroRules.DeliriumComboSecondaryCostType,
                     preservesCombo: true) &&
                 IsExpectedComboAction(
                     comeuppance,
@@ -1075,6 +1298,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                     9767,
                     10,
                     DarkKnightShadowbringerMacroRules.DeliriumStatusId,
+                    DarkKnightShadowbringerMacroRules.DeliriumComboSecondaryCostType,
                     preservesCombo: true) &&
                 IsExpectedComboAction(
                     torcleaver,
@@ -1082,6 +1306,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
                     9768,
                     10,
                     DarkKnightShadowbringerMacroRules.DeliriumStatusId,
+                    DarkKnightShadowbringerMacroRules.DeliriumComboSecondaryCostType,
                     preservesCombo: true) &&
                 IsExpectedShadowbringer(
                     shadowbringer,
@@ -1119,12 +1344,44 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         }
     }
 
+    private static bool ValidateWolvesDenDummyMetadata(
+        IDataManager dataManager,
+        IPluginLog log)
+    {
+        try
+        {
+            var names = dataManager.GetExcelSheet<BNpcName>(ClientLanguage.English);
+            var valid = names.TryGetRow(
+                            DarkKnightShadowbringerMacroRules.WolvesDenStrikingDummyNameId,
+                            out var strikingDummy) &&
+                        strikingDummy.Singular.ToString() == "striking dummy" &&
+                        strikingDummy.Plural.ToString() == "striking dummies";
+            if (!valid)
+            {
+                log.Warning(
+                    "Seiton Sense Wolves' Den striking-dummy metadata failed closed; " +
+                    "Crystalline Conflict DRK support remains available.");
+            }
+
+            return valid;
+        }
+        catch (Exception exception)
+        {
+            log.Warning(
+                exception,
+                "Seiton Sense Wolves' Den striking-dummy metadata lookup failed closed; " +
+                "Crystalline Conflict DRK support remains available.");
+            return false;
+        }
+    }
+
     private static bool IsExpectedComboAction(
         GameAction action,
         string name,
         uint icon,
         byte primaryCostType,
         uint primaryCostValue,
+        byte expectedSecondaryCostType,
         bool preservesCombo) =>
         action.Name.ToString() == name &&
         action.Icon == icon &&
@@ -1143,7 +1400,7 @@ internal sealed unsafe class DarkKnightShadowbringerMacroService : IDisposable
         !action.IsPlayerAction &&
         action.PrimaryCostType == primaryCostType &&
         action.PrimaryCostValue == primaryCostValue &&
-        action.SecondaryCostType == 0 &&
+        action.SecondaryCostType == expectedSecondaryCostType &&
         action.SecondaryCostValue.RowId == 0 &&
         action.CooldownGroup == 58 &&
         action.AdditionalCooldownGroup == 0 &&

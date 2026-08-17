@@ -325,7 +325,8 @@ public sealed class Plugin : IDalamudPlugin
             {
                 AllowedInMacros = true,
                 HelpMessage =
-                    "Exact CC DRK helper: /seitonbringer, then /pvpac \"Souleater Combo\" <t>; " +
+                    "Exact CC or enabled Wolves' Den striking-dummy DRK helper: /seitonbringer, then " +
+                    "/pvpac \"Souleater Combo\" <t>; " +
                     "use the localized action name and ReAction Macro Queue + Turbo.",
             });
         if (!darkKnightShadowbringerCommandRegistered)
@@ -709,7 +710,8 @@ public sealed class Plugin : IDalamudPlugin
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
-            "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in CC. " +
+            "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
+            "CC or enabled Wolves' Den striking-dummy testing. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");

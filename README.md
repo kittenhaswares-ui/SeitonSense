@@ -2,11 +2,10 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.18.0.0 adds two
-separate default-off exact Crystalline Conflict helpers: a set-only local native
-Focus Target for a trusted reachable `S1`-`S5` enemy at 2,000 MP or lower, and
-an exact two-line DRK/ReAction macro that may weave Shadowbringer once in a
-proven Souleater Combo GCD window.
+one-shot macro assistance, and target highlights. Version 0.18.0.1 fixes the
+DRK macro's current-data metadata and startup paths and adds a narrow, explicitly
+enabled Wolves' Den striking-dummy test path. It retains v0.18's separate
+default-off set-only low-MP Focus Target and exact two-line DRK/ReAction helper.
 The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
 and Super Focus Glow into one configurable custom-repository plugin.
 
@@ -91,10 +90,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
   to your target.
 - **DRK Shadowbringer macro:** the separate default-off `/seitonbringer` helper
   pairs only with the immediately following authored Souleater Combo `<t>` line
-  on exact PvP Dark Knight in Crystalline Conflict. With ReAction Macro Queue
-  and Turbo, it may attempt Shadowbringer at most once per proven 2.40-second
-  GCD, and only at 0.60-0.80 seconds remaining. It never changes a target,
-  substitutes an action, or retries.
+  on exact PvP Dark Knight. It supports canonical `S1`-`S5` enemies in
+  Crystalline Conflict and, when the existing test option is enabled, only the
+  exact current hard-target Wolves' Den striking dummy. With ReAction Macro
+  Queue and Turbo, it may attempt Shadowbringer at most once per proven
+  2.40-second GCD, and only at 0.60-0.80 seconds remaining. It never changes a
+  target, substitutes an action, or retries.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay-key generation can attempt Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -802,8 +803,10 @@ the supported Far Help macro.
 
 ## DRK Shadowbringer two-line macro
 
-This separate helper is disabled by default and supports only exact PvP Dark
-Knight in Crystalline Conflict. Author exactly two adjacent macro lines:
+This separate helper is disabled by default and supports exact PvP Dark Knight
+in Crystalline Conflict. It also supports the Wolves' Den only when the existing
+**Enable Wolves' Den testing** option on Start and this DRK helper are both
+enabled. Author exactly two adjacent macro lines:
 
 ```text
 /seitonbringer
@@ -816,14 +819,23 @@ the exact localized PvP action name. Keep `/seitonbringer`, the line order, and
 macro.
 
 The command may arm only the immediately following exact Souleater Combo route
-against your unchanged current `<t>`, which must resolve to one exact canonical
-`S1`-`S5` enemy. The helper recognizes a new GCD cycle only from a proven exact
-2.40-second combo recast restart plus action-sequence change. It may claim at
-most one Shadowbringer attempt for that cycle, and only while the inclusive
-remaining-time window is 0.60-0.80 seconds. A missed window is skipped;
-0.50 seconds or less never triggers Shadowbringer. The paired combo call still
-reaches vanilla unchanged, and a later Turbo pulse can queue the authored combo
-line inside FFXIV's normal queue window.
+against your unchanged current `<t>`. In Crystalline Conflict, that target must
+resolve to one exact canonical `S1`-`S5` enemy, exactly as before. In Wolves'
+Den, it must instead remain the exact native current hard target and resolve to
+the live, targetable combat striking dummy with current NameId `541`. The Den
+path freezes and revalidates that dummy's game-object ID, entity ID, address,
+object/sub-kind, NameId, and the native hard-target ID. It never queries a
+synthetic `S1`, `<e1>`, or the duel-opponent resolver and never accepts a player,
+another attackable object, or an alternate target. Frontline and Rival Wings
+remain blocked.
+
+The helper recognizes a new GCD cycle only from a proven exact 2.40-second combo
+recast restart plus action-sequence change. It may claim at most one
+Shadowbringer attempt for that cycle, and only while the inclusive
+remaining-time window is 0.60-0.80 seconds. A missed window is skipped; 0.50 seconds or
+less never triggers Shadowbringer. The paired combo call still reaches vanilla
+unchanged, and a later Turbo pulse can queue the authored combo line inside
+FFXIV's normal queue window.
 
 Both the preliminary and final checks require the same context, DRK identity,
 GCD token, exact target and combo route; an empty stable native queue; unchanged
@@ -839,7 +851,16 @@ action, replay the macro, or retry. Seiton Sense never changes the visible hard,
 soft, or Focus Target. `CLIENT ACCEPTED` is local dispatch feedback, not proof
 that the server executed Shadowbringer or that the weave did not clip. ReAction
 mode, native queue ownership, recast-group timing, action effect, and clipping
-remain current-patch live-trace boundaries.
+remain current-patch live-trace boundaries. A successful striking-dummy trace
+checks only the Wolves' Den path and does not prove live CC timing or execution.
+
+The current metadata gate pins the exact combo-row secondary cost types
+`0/58/58/147/147/147` rather than accepting them loosely. The first native GCD
+sample is taken from the framework update thread instead of synchronously during
+plugin startup; this avoids the observed off-main-thread local-player lookup
+failure while preserving fail-closed cycle priming. If the separately checked
+striking-dummy NameId metadata does not match, only the Den test path is disabled
+and canonical CC support remains available.
 
 ## Optional Auto Low-MP Focus Target
 
@@ -900,15 +921,17 @@ focus module to avoid drawing both over the same actor.
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Seiton fresh-key helper | Yes | No | No |
-| Optional DRK Shadowbringer two-line macro | Yes | No | No |
+| Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
 
 Wolves' Den support is explicitly a test option. Its enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
-nothing. Pressure has an additional Wolves' Den opt-in so testing does not
-create an always-on pressure display by surprise.
+nothing. The DRK macro does not use that duel-opponent path: with both existing
+options enabled, it accepts only the exact current hard-target striking dummy.
+Pressure has an additional Wolves' Den opt-in so testing does not create an
+always-on pressure display by surprise.
 
 ## Install
 
@@ -935,7 +958,8 @@ update through the same repository.
   the next reviewed friendly movement action; no valid reachable ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
 - `/seitonbringer` - arm the immediately following exact DRK Souleater Combo
-  macro line for the bounded Shadowbringer weave check
+  macro line for the bounded CC or explicitly enabled Wolves' Den striking-
+  dummy weave check
 - `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -1055,18 +1079,22 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.18.0.0 specifically, source checks cover Auto Low-MP Focus's complete
-canonical set, trusted MP hysteresis, deterministic selection, stable-empty and
-manual-override ownership, frozen final preflight, sole set-only write, exact
-readback, and no clear/replace/restore/retry contract. DRK checks cover exact
+For v0.18.0.1, the retained v0.18.0.0 source checks cover Auto Low-MP Focus's
+complete canonical set, trusted MP hysteresis, deterministic selection,
+stable-empty and manual-override ownership, frozen final preflight, sole set-only
+write, exact readback, and no clear/replace/restore/retry contract. DRK checks cover exact
 macro adjacency and carrier shape, proven 2.40-second GCD-cycle ownership, the
 inclusive 0.60-0.80 remaining-time window, the never-at-or-below-0.50 boundary,
 one token spent before one request, exact target/Guard/range/line-of-sight/
 queue/resource gates, unchanged outer combo call, and no alternate, mutation,
 replay, or retry. Those checks cannot prove the live Focus setter/HUD/`<f>`
 result, ReAction Macro Queue/Turbo mode, native queue and recast-group timing,
-server execution, or clipping; both features still require current-patch live
-CC A/B traces.
+server execution, or clipping. The hotfix additionally checks the existing
+Wolves' Den opt-in, exact hard-target striking-dummy identity and NameId `541`,
+the absence of synthetic enemy-slot or duel-opponent fallback, exact current
+combo secondary-cost metadata, and main-thread framework-update cycle priming.
+It does not turn a successful Den dummy trace into proof of live CC behavior;
+both contexts retain their own current-patch A/B boundary.
 
 The retained v0.17.0.0 source checks cover the exact direct hard/cast
 pressure threshold, warning-entry episode ownership, native-sound one-shot

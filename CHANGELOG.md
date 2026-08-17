@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.18.0.1
+
+- Extended the separate default-off `/seitonbringer` helper to Wolves' Den
+  striking-dummy testing. It requires both the existing DRK Macro Helpers
+  opt-in and the existing Wolves' Den test option; Frontline and Rival Wings
+  remain blocked.
+- The Den path accepts only the unchanged native current hard target when it is
+  the exact live, targetable combat striking dummy with current NameId `541`.
+  That object identity and hard target are frozen and revalidated. It never
+  uses synthetic `S1`, `<e1>`, the duel-opponent resolver, a player, another
+  attackable object, an alternate target, or a retry. The canonical `S1`-`S5`
+  Crystalline Conflict path is unchanged.
+- Retained the proven 2.40-second GCD-cycle token, inclusive 0.60-0.80-second
+  window, spend-before-request ownership, Guard, queue, animation-lock,
+  readiness, resource, and native dual range/line-of-sight checks. A Den dummy
+  trace validates only that test context and is not proof of live CC behavior.
+- Corrected the cached current-data combo metadata gate to require the exact
+  per-row secondary cost types `0/58/58/147/147/147` for Hard Slash, Syphon
+  Strike, Souleater, and the three Delirium forms. The previous all-zero check
+  failed closed and could leave `/seitonbringer` unavailable everywhere.
+- Deferred the first native GCD observation from synchronous plugin startup to
+  the framework update thread. This avoids the observed off-main-thread
+  local-player lookup failure while preserving the same fail-closed cycle priming.
+- Bumped the plugin version to 0.18.0.1. Configuration schema 24 is unchanged;
+  this hotfix adds no setting and preserves all existing defaults and migration
+  behavior.
+
 ## 0.18.0.0
 
 - Added a separate default-off **Auto Low-MP Focus Target** option for exact
