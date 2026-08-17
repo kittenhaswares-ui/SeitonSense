@@ -101,7 +101,7 @@ public readonly record struct DarkKnightShadowbringerAttemptObservation(
     bool PluginEnabled,
     bool FeatureEnabled,
     bool MetadataVerified,
-    bool ExactCrystallineConflict,
+    bool ExactSupportedContext,
     bool LocalIdentityStable,
     bool LocalAliveAndTargetable,
     bool LocalIsDarkKnight,
@@ -180,6 +180,9 @@ public static class DarkKnightShadowbringerMacroRules
     public const uint ShadowbringerIconId = 9594;
     public const uint DarkArtsStatusIconId = 213107;
     public const uint ShadowbringerHpCost = 12000;
+    public const uint WolvesDenStrikingDummyNameId = 541;
+    public const byte StandardComboSecondaryCostType = 58;
+    public const byte DeliriumComboSecondaryCostType = 147;
 
     public const int ComboRecastGroupIndex = 57;
     public const int ShadowbringerRecastGroupIndex = 0;
@@ -317,7 +320,7 @@ public static class DarkKnightShadowbringerMacroRules
             return Attempt(DarkKnightShadowbringerAttemptDecision.Disabled);
         if (!observation.MetadataVerified)
             return Attempt(DarkKnightShadowbringerAttemptDecision.MetadataMismatch);
-        if (!observation.ExactCrystallineConflict)
+        if (!observation.ExactSupportedContext)
             return Attempt(DarkKnightShadowbringerAttemptDecision.InvalidContext);
         if (!observation.LocalIdentityStable ||
             !observation.LocalAliveAndTargetable ||
@@ -388,6 +391,28 @@ public static class DarkKnightShadowbringerMacroRules
             ScarletDeliriumActionId or
             ComeuppanceActionId or
             TorcleaverActionId;
+
+    public static bool CanExecuteInContext(
+        SupportedPvPContext context,
+        bool wolvesDenTestingEnabled) =>
+        context == SupportedPvPContext.CrystallineConflict ||
+        (wolvesDenTestingEnabled && context == SupportedPvPContext.WolvesDen);
+
+    public static bool IsExactWolvesDenStrikingDummy(
+        bool metadataVerified,
+        bool battleNpcCombatant,
+        uint nameId,
+        bool nativeIdentityValid,
+        bool isSelf,
+        bool aliveWithPositiveHp,
+        bool targetable) =>
+        metadataVerified &&
+        battleNpcCombatant &&
+        nameId == WolvesDenStrikingDummyNameId &&
+        nativeIdentityValid &&
+        !isSelf &&
+        aliveWithPositiveHp &&
+        targetable;
 
     public static bool IsWithinNoClipWeaveWindow(float remainingSeconds) =>
         float.IsFinite(remainingSeconds) &&

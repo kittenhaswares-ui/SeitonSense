@@ -27,22 +27,28 @@ internal sealed partial class SettingsWindow
                 "localized PvP action name; keep /seitonbringer, the line order, and <t> unchanged. In ReAction, " +
                 "enable both Macro Queue and Turbo for this macro.");
             ImGui.TextDisabled(
-                "Default off, exact Crystalline Conflict, and PvP Dark Knight only. From one proven 2.40-second " +
-                "Souleater Combo GCD, it may make at most one Shadowbringer attempt in the inclusive 0.60-0.80 " +
-                "seconds-remaining window. A missed window is skipped; 0.50 seconds or less never triggers " +
-                "Shadowbringer. A later Turbo pulse can then queue the authored Souleater Combo line normally.");
+                "Default off and PvP Dark Knight only. Exact Crystalline Conflict is supported directly. " +
+                "Wolves' Den additionally requires the existing Start-page test option and accepts only your exact current " +
+                "hard-target striking dummy. Frontline and Rival Wings remain blocked. From one proven 2.40-second " +
+                "Souleater Combo GCD, the helper may make " +
+                "at most one Shadowbringer attempt in the inclusive 0.60-0.80 seconds-remaining window. " +
+                "A missed window is skipped; 0.50 seconds or less never triggers Shadowbringer. " +
+                "A later Turbo pulse can then queue the authored combo line normally.");
             ImGui.TextDisabled(
-                "The exact current <t> must remain one canonical S1-S5 enemy. Your own Guard and its propagation " +
-                "gate must be clear, the target must not have Guard, the combo and Shadowbringer must pass their " +
+                "In CC, the exact current <t> must remain one canonical S1-S5 enemy. In the Den, it must remain the " +
+                "same verified native striking-dummy hard target; synthetic S1, <e1>, duel-opponent resolution, " +
+                "players, and other targets are never fallbacks. Your own Guard and its propagation gate must be " +
+                "clear, the target must not have Guard, the combo and Shadowbringer must pass their " +
                 "native 5-yalm/10-yalm range and line-of-sight checks, and every queue, animation-lock, action, and " +
-                "readiness check must remain exact. Shadowbringer additionally requires more than 12,000 HP or the " +
-                "exact Dark Arts status/action state.");
+                "readiness check must remain exact. Shadowbringer additionally requires " +
+                "more than 12,000 HP or the exact Dark Arts status/action state.");
             ImGui.TextDisabled(
                 "This cycle's one-attempt token is spent before the final native Shadowbringer request. Seiton Sense " +
                 "never changes a target, chooses an alternate action or enemy, replays the macro, or retries a " +
                 "rejected or throwing request. CLIENT " +
                 "ACCEPTED is local dispatch feedback only; live Macro Queue/Turbo mode, recast-group timing, " +
-                "clipping, and server execution still require a current-patch CC trace.");
+                "clipping, and server execution still require a current-patch trace in the relevant context. A " +
+                "successful Den dummy test does not prove live CC behavior.");
             ImGui.PopTextWrapPos();
         }
 

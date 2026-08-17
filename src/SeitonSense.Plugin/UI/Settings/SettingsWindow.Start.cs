@@ -19,7 +19,7 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextUnformatted("Testing scope");
         changed |= Checkbox(
-            "Enable Wolves' Den testing for Seiton and native-nameplate cues",
+            "Enable Wolves' Den testing for Seiton, native-nameplate cues, and enabled /seitonbringer",
             configuration.EnableWolvesDenTesting,
             value => configuration.EnableWolvesDenTesting = value);
         changed |= Checkbox(
@@ -29,8 +29,9 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "These are independent test scopes. Seiton uses the exact hostile duel opponent as synthetic S1, " +
-            "including party-member duels; the pressure option controls only the counter. The CC <e1> macro " +
-            "placeholder may not exist in a duel.");
+            "including party-member duels. /seitonbringer also requires its separate Macro Helpers opt-in and " +
+            "accepts only your exact current hard-target Wolves' Den striking dummy; it never uses synthetic S1, " +
+            "<e1>, or the duel opponent. The pressure option controls only the counter.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
