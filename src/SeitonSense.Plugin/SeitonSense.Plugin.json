@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "PvP pressure, low-MP Focus, DRK macro, warnings, assists, and target clarity.",
-  "Description": "A local PvP HUD integrating optional set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers, a top-center 3+ enemy alarm with sound/Sprint options, isolation, pressure and CC-protection cues, resource auras, fail-closed assists, team communication and target highlights.",
+  "Punchline": "PvP pressure, Smart Kardia, low-MP Focus, DRK macro, warnings, assists, and clarity.",
+  "Description": "A local PvP HUD integrating an optional held-key Smart Kardia helper, set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers, a top-center 3+ enemy alarm with sound/Sprint options, isolation, pressure and CC-protection cues, resource auras, fail-closed assists, team communication and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",
@@ -17,6 +17,7 @@
     "assist",
     "focus-target",
     "dark-knight",
+    "sage",
     "utility"
   ]
 }

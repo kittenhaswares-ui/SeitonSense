@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 24;
+    public int Version { get; set; } = 25;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -47,6 +47,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSeitonPreparation { get; set; } = true;
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
+    public bool EnableSageKardiaOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -194,7 +195,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 24)
+        if (Version >= 25)
         {
             if (repaired) Save();
             return;
@@ -422,7 +423,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableDarkKnightShadowbringerMacro = false;
         }
 
-        Version = 24;
+        if (Version < 25)
+        {
+            // This helper can initiate one SGE Kardia action from held input,
+            // so new and upgrading installations must opt in deliberately.
+            EnableSageKardiaOnHeldKey = false;
+        }
+
+        Version = 25;
         ClampSettings();
         Save();
     }
@@ -431,7 +439,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 24;
+        Version = 25;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -443,6 +451,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowSeitonPreparation = true;
         EnableNinjaSeitonOnFreshGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
+        EnableSageKardiaOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;

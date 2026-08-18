@@ -257,7 +257,8 @@ internal sealed class TargetPressureTracker : IDisposable
         var incomingAllyPressureEnabledForContext =
             supportedContext == SupportedPvPContext.CrystallineConflict &&
             ((configuration.ExperimentalAllyRescueOnNextKey &&
-              metadata.AllyRescueStatusesVerified) ||
+             metadata.AllyRescueStatusesVerified) ||
+             configuration.EnableSageKardiaOnHeldKey ||
              configuration.EnableBardWardensPaeanPressureRedirect ||
              (configuration.EnableNearAssistMacro &&
               configuration.NearHelpPreferIncomingPressure));

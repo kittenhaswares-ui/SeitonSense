@@ -13,7 +13,7 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. One physical input generation is shared in this order: " +
-            "Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Ninja > Scholar. " +
+            "Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Kardia > Ninja > Scholar. " +
             "Monk Earth's Reply is a separate automatic follow-up that yields after an earlier helper attempt.");
 
         if (ImGui.CollapsingHeader("Self-Purify", ImGuiTreeNodeFlags.DefaultOpen))

@@ -104,7 +104,7 @@ internal sealed partial class SettingsWindow
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Ninja, and Scholar share " +
+            "Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Kardia, Ninja, and Scholar share " +
             "one physical input generation and can initiate at most one exact action attempt, in that priority order. " +
             "Guard after Purify requires a later " +
             "physical generation, and every action-request helper is blocked while your own Guard is active. Monk Earth's " +

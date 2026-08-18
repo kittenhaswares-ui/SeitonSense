@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.19.0.0
+
+- Added a separate default-off **Smart Kardia on held gameplay key** helper under
+  Job Tools > Sage. It runs only on PvP Sage in exact Crystalline Conflict and
+  requires a complete, unique, stable exact five-player party view.
+- Eligible destinations are self and exact living, targetable party members
+  with trusted direct incoming pressure from at least two unique enemies. A
+  non-self destination must also pass FFXIV's native 30-yalm Kardia range and
+  line-of-sight check. Higher pressure wins, then lower exact HP ratio, party
+  slot, network entity ID, and game-object ID.
+- If the highest-ranked candidate already has Kardion sourced by the local
+  Sage, the helper makes no attempt and never falls through to a lower-ranked
+  candidate. The frozen actor, pressure threshold, local-source Kardion state,
+  exact Kardia metadata/readiness, and native reachability are revalidated at
+  the final boundary.
+- Kept the shared physical-generation priority as Self-Purify, defensive
+  utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Kardia, Ninja
+  Seiton, Scholar Critical Strategy, then Monk Earth's Reply. The Kardia intent
+  and generation are spent before at most one native request, with no selected-
+  target mutation, alternate, fallback, substituted action, replay, or retry.
+  Client acceptance is not proof that Kardia or Kardion applied; current-patch
+  held-input, dispatch, status-source, and reachability behavior still require
+  a live Crystalline Conflict test.
+- Bumped the plugin version to 0.19.0.0 and configuration schema to 25. Smart
+  Kardia remains off for fresh configurations, upgrades, and reset defaults;
+  all existing settings and defaults migrate unchanged.
+
 ## 0.18.0.1
 
 - Extended the separate default-off `/seitonbringer` helper to Wolves' Den
