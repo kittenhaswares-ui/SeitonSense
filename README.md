@@ -2,10 +2,11 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, Ninja Seiton decisions,
-one-shot macro assistance, and target highlights. Version 0.18.0.1 fixes the
-DRK macro's current-data metadata and startup paths and adds a narrow, explicitly
-enabled Wolves' Den striking-dummy test path. It retains v0.18's separate
-default-off set-only low-MP Focus Target and exact two-line DRK/ReAction helper.
+one-shot macro assistance, and target highlights. Version 0.19.0.0 adds a
+separate default-off Smart Kardia held-key helper for PvP Sage under direct
+pressure. It retains v0.18.0.1's corrected DRK macro and narrow, explicitly
+enabled Wolves' Den striking-dummy test path plus the separate default-off
+set-only low-MP Focus Target and exact two-line DRK/ReAction helper.
 The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
 and Super Focus Glow into one configurable custom-repository plugin.
 
@@ -71,6 +72,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
   exact HP does; every target still requires native 25-yalm range/line of sight.
+- **Experimental Sage Smart Kardia helper:** a separate default-off held-key
+  option uses a complete exact five-player party view to consider self and party
+  members under trusted direct pressure from at least two enemies. Higher
+  pressure and then lower HP win; non-self candidates require native 30-yalm
+  range/line of sight. If the best candidate already has your Kardion, no lower
+  alternate is chosen and no Kardia attempt is made.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
@@ -144,9 +151,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   Nameplates, Action Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics.
   Shared-input actions are shown in their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  24 keeps Auto Low-MP Focus, the DRK macro, pressure Sprint, its native system
-  sound, the Bard Paean pressure redirect, Guardian team communication, and
-  Scholar Critical Strategy as separate default-off options;
+  25 keeps Smart Kardia, Auto Low-MP Focus, the DRK macro, pressure Sprint, its
+  native system sound, the Bard Paean pressure redirect, Guardian team
+  communication, and Scholar Critical Strategy as separate default-off options;
   every action-attempt, target-redirect, and party-visible communication feature
   remains opt-in.
 
@@ -379,8 +386,8 @@ exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
-Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
-counter-CC retain their existing higher priority over the same physical
+Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
+counter-CC, and Smart Kardia retain their existing higher priority over the same physical
 generation. Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
 helper. Once the exact intent is claimed, its state and input generation are
@@ -419,7 +426,7 @@ remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
 The exact shared priority before Scholar is Self-Purify, defensive utilities,
-pressure Sprint, Ally Rescue, reactive counter-CC, and Ninja Seiton. One shared
+pressure Sprint, Ally Rescue, reactive counter-CC, Smart Kardia, and Ninja Seiton. One shared
 held physical gameplay-key generation can produce at most one frozen
 Critical Strategy intent. The intent and generation are consumed before one
 native attempt, then the frozen enemy is revalidated only for exact identity,
@@ -430,6 +437,37 @@ chooses an alternate target/action, falls back, replays, or retries, and it does
 not swallow the original key. A client-accepted return is dispatch feedback only;
 it does not prove that Critical Strategy landed or changed Guard. Exact current-
 patch held-input timing, dispatch, and effect behavior require a live CC test.
+
+## Sage Smart Kardia held-key helper
+
+The separate **Smart Kardia on held gameplay key** experiment is disabled by
+default and runs only on PvP Sage in exact Crystalline Conflict. It requires a
+complete, unique, stable exact five-player party view before one shared held
+physical gameplay-key generation can create an intent. Candidates are the exact
+local player and exact living, targetable party members with a trusted current
+count of at least two unique live enemies directly hard-targeting or casting at
+them. Non-self candidates must additionally pass FFXIV's native 30-yalm Kardia
+range and line-of-sight check.
+
+Eligible candidates rank by higher incoming pressure, then lower exact HP ratio,
+party slot, network entity ID, and game-object ID. The highest-ranked candidate
+is authoritative: if that actor already has Kardion sourced by the local Sage,
+the helper makes no attempt and never falls through to a lower-ranked candidate.
+It does not use unknown pressure, an incomplete party view, or an alternate as a
+reason to manufacture a selection.
+
+Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
+counter-CC keep priority over Smart Kardia. Active own Guard and the bounded
+post-request Guard-propagation gate suppress it. After selection, the frozen
+actor, direct-pressure threshold, local-source Kardion state, exact Kardia action
+metadata/readiness, and native reachability are revalidated. The intent and
+physical generation are consumed before at most one native Kardia request. A
+changed or unknown final fact, false return, or exception produces no second
+selection, lower candidate, alternate target/action, fallback, replay, or retry.
+The helper never changes a hard, soft, focus, or mouseover target and does not
+swallow the original key. Client acceptance is dispatch feedback only and does
+not prove that Kardia or Kardion applied; current-patch held-input, source-status,
+reachability, and server behavior require a live Crystalline Conflict test.
 
 ## Personal warnings and job quality-of-life helpers
 
@@ -574,7 +612,7 @@ and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all of its action-request
 helpers, including Purify, defensive utilities, pressure Sprint, Ally Rescue,
-reactive counter-CC, Ninja Seiton, Critical Strategy, and Earth's Reply. The
+reactive counter-CC, Smart Kardia, Ninja Seiton, Critical Strategy, and Earth's Reply. The
 same suppression starts immediately for a bounded 1.5
 seconds after an exact local Guard request, covering the short interval before
 the live Guard status becomes visible without extending the deadline. This
@@ -645,8 +683,8 @@ default).
 The continuous resonance is marked spent before one self-targeted normal
 `29483` request. A rejected or throwing request is not retried, and `29482` is
 never used as an alternate action. The shared priority is Self-Purify,
-defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Ninja
-Seiton, Scholar Critical Strategy, then Monk Earth's Reply, so the Monk helper
+defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Smart
+Kardia, Ninja Seiton, Scholar Critical Strategy, then Monk Earth's Reply, so the Monk helper
 waits rather than competing with an earlier claim. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
 the native direct-call result and exact timer behavior still need a live test.
@@ -921,6 +959,7 @@ focus module to avoid drawing both over the same actor.
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Seiton fresh-key helper | Yes | No | No |
+| Optional SGE Smart Kardia held-key helper | Yes | No | No |
 | Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
@@ -1008,7 +1047,7 @@ each replace only the target ID of one explicitly armed, already incoming macro
 action. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
 self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
-counter-CC, Ninja Seiton, and Scholar Critical Strategy may each initiate one
+counter-CC, Smart Kardia, Ninja Seiton, and Scholar Critical Strategy may each initiate one
 exact action attempt and share one physical-generation ownership path in that
 order. Monk Earth's Reply is a separate automatic follow-up that yields after
 an earlier helper attempt. A post-Purify Guard requires a new
@@ -1060,6 +1099,11 @@ initiate one Critical Strategy action attempt against its frozen exact guarded
 enemy from one shared held-key generation. It never sends chat or markers,
 changes the selected target, chooses another enemy after drift, or retries.
 
+The Sage helper is also action-initiating and default-off. It may make one
+Kardia request for the frozen exact self/party candidate under trusted direct
+pressure. It never changes the selected target, chooses a lower candidate when
+the best already has local-source Kardion, substitutes another action, or retries.
+
 Like all third-party FFXIV modifications, use is at your own risk. Seiton Sense
 is distributed through a custom repository, not Dalamud's official plugin
 repository.
@@ -1079,7 +1123,18 @@ timing, optional action helpers, and the macro helpers with both normal macros
 and Turbo Hotbar should be rechecked in the relevant live PvP context after
 FFXIV, Dalamud, macro, network-event, or input-handling changes.
 
-For v0.18.0.1, the retained v0.18.0.0 source checks cover Auto Low-MP Focus's
+For v0.19.0.0, source checks cover Smart Kardia's exact Sage/action/status
+metadata, complete stable five-player self-plus-party view, known direct `2+`
+pressure threshold, deterministic pressure/HP/party-identity ranking, best-
+candidate local-source Kardion no-change rule, shared held-generation ownership,
+final frozen identity/pressure/status/readiness/native-reachability revalidation,
+one spent native request, and no selected-target mutation, alternate, fallback,
+replay, or retry. Those checks cannot prove live held-input timing, native action
+acceptance, Kardia/Kardion application or source attribution, or the current
+client's range/line-of-sight result, so a current-patch CC A/B test remains
+required.
+
+For retained v0.18.0.1, the v0.18.0.0 source checks cover Auto Low-MP Focus's
 complete canonical set, trusted MP hysteresis, deterministic selection,
 stable-empty and manual-override ownership, frozen final preflight, sole set-only
 write, exact readback, and no clear/replace/restore/retry contract. DRK checks cover exact

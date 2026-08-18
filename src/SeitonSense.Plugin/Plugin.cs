@@ -174,6 +174,7 @@ public sealed class Plugin : IDalamudPlugin
         personalStatus = new PersonalStatusService(
             clientState,
             objectTable,
+            partyList,
             framework,
             dutyState,
             keyState,
@@ -518,6 +519,7 @@ public sealed class Plugin : IDalamudPlugin
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
+                var kardia = personalStatus.SmartKardiaDiagnostics;
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
@@ -631,6 +633,17 @@ public sealed class Plugin : IDalamudPlugin
                     $"{miracle.CleanseFollowupPromotionCount}/" +
                     $"{miracle.CleanseFollowupCancellationCount}," +
                     $"last={miracle.CleanseFollowupLastEvent}]]");
+                chatGui.Print(
+                    $"[Seiton Sense] smart-kardia[decision={kardia.Decision},reason={kardia.Reason}," +
+                    $"ready={kardia.LocallyReady},action={kardia.ResolvedActionId}," +
+                    $"candidates={kardia.CandidateCount},P={kardia.PartySlot},self={kardia.TargetIsSelf}," +
+                    $"target={kardia.TargetGameObjectId:X}/{kardia.TargetEntityId:X}," +
+                    $"pressure={kardia.PressureKnown}/{kardia.IncomingEnemyCount}," +
+                    $"kardion={kardia.OwnKardionStateKnown}/{kardia.HasOwnKardion}," +
+                    $"held={kardia.HeldGameplayKey},claimed={kardia.InputClaimed}," +
+                    $"attempt={kardia.UseActionAttempted}/{kardia.UseActionAccepted}," +
+                    $"count={kardia.AttemptCount}/{kardia.AcceptedCount}," +
+                    $"resolve={kardia.CandidateResolution},last={kardia.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}," +
                     $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +

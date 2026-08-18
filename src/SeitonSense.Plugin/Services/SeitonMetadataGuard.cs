@@ -24,9 +24,10 @@ internal sealed record PvPMetadataValidation(
     bool FuriousBacklashVerified,
     bool MonkEarthReplyVerified,
     bool ScholarCriticalStrategyVerified,
+    bool SmartKardiaVerified,
     bool AutoLowMpFocusProbeVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -166,6 +167,78 @@ internal static class PvPMetadataGuard
                    description.Contains("Increases target's damage taken by 10%", StringComparison.Ordinal) &&
                    description.Contains(
                        "Halves the defensive bonus of Guard instead when targeting enemies under its effect.",
+                       StringComparison.Ordinal);
+        });
+
+        var smartKardiaVerified = ValidateFeature("Smart Kardia", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            if (!actions.TryGetRow(SmartKardiaRules.ActionId, out var action) ||
+                !descriptions.TryGetRow(SmartKardiaRules.ActionId, out var transient) ||
+                !statuses.TryGetRow(SmartKardiaRules.KardiaStatusId, out var kardia) ||
+                !statuses.TryGetRow(SmartKardiaRules.KardionStatusId, out var kardion))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return string.Equals(action.Name.ToString(), "Kardia", StringComparison.Ordinal) &&
+                   action.Icon == SmartKardiaProbe.KardiaIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == SmartKardiaRules.SageJobId &&
+                   action.ClassJobCategory.IsValid &&
+                   action.ClassJobCategory.RowId == 181 &&
+                   action.ActionCategory.IsValid &&
+                   action.ActionCategory.RowId == 4 &&
+                   action.Range == SmartKardiaProbe.ExpectedRange &&
+                   action.EffectRange == 0 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == SmartKardiaProbe.ExpectedRecast100ms &&
+                   action.PrimaryCostType == 0 &&
+                   action.PrimaryCostValue == 0 &&
+                   action.SecondaryCostType == 0 &&
+                   action.SecondaryCostValue.RowId == 0 &&
+                   action.CooldownGroup == 6 &&
+                   action.MaxCharges == 0 &&
+                   action.CanTargetSelf &&
+                   action.CanTargetParty &&
+                   !action.CanTargetAlliance &&
+                   !action.CanTargetHostile &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetOwnPet &&
+                   !action.CanTargetPartyPet &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   !action.NeedToFaceTarget &&
+                   !action.AffectsPosition &&
+                   action.CastType == 1 &&
+                   action.StatusGainSelf.RowId == 0 &&
+                   action.ActionProcStatus.RowId == 0 &&
+                   description.Contains(
+                       "Grants self the effect of Kardia and a selected party member or self the effect of Kardion",
+                       StringComparison.Ordinal) &&
+                   description.Contains(
+                       "additional effects of Dosis III and Eukrasian Dosis III",
+                       StringComparison.Ordinal) &&
+                   string.Equals(kardia.Name.ToString(), "Kardia", StringComparison.Ordinal) &&
+                   kardia.Icon == SmartKardiaProbe.KardiaStatusIconId &&
+                   kardia.StatusCategory == 1 &&
+                   !kardia.CanDispel &&
+                   kardia.IsPermanent &&
+                   kardia.Description.ToString().Contains(
+                       "Kardion granted by you",
+                       StringComparison.Ordinal) &&
+                   string.Equals(kardion.Name.ToString(), "Kardion", StringComparison.Ordinal) &&
+                   kardion.Icon == SmartKardiaProbe.KardionStatusIconId &&
+                   kardion.StatusCategory == 1 &&
+                   !kardion.CanDispel &&
+                   kardion.IsPermanent &&
+                   kardion.Description.ToString().Contains(
+                       "the sage who applied this status",
                        StringComparison.Ordinal);
         });
 
@@ -643,6 +716,7 @@ internal static class PvPMetadataGuard
             furiousBacklashVerified,
             monkEarthReplyVerified,
             scholarCriticalStrategyVerified,
+            smartKardiaVerified,
             autoLowMpFocusProbeVerified);
 
         log.Information(
@@ -651,7 +725,8 @@ internal static class PvPMetadataGuard
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
-            "ScholarCriticalStrategy={ScholarCriticalStrategy}, AutoLowMpFocusProbe={AutoLowMpFocusProbe}.",
+            "ScholarCriticalStrategy={ScholarCriticalStrategy}, SmartKardia={SmartKardia}, " +
+            "AutoLowMpFocusProbe={AutoLowMpFocusProbe}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.GuardianVerified,
@@ -668,6 +743,7 @@ internal static class PvPMetadataGuard
             validation.FuriousBacklashVerified,
             validation.MonkEarthReplyVerified,
             validation.ScholarCriticalStrategyVerified,
+            validation.SmartKardiaVerified,
             validation.AutoLowMpFocusProbeVerified);
 
         return validation;

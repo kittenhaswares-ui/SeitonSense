@@ -51,6 +51,11 @@ following data already available in the local FFXIV client:
   canonical `S1`-`S5` actor set, live Guard `3054`/`3673`, exact HP and trusted
   team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
   result for the frozen candidate.
+- when Smart Kardia is enabled, the exact local Sage identity and held-key
+  generation, complete unique stable five-player party view, life/targetable
+  state, exact HP, current local-source Kardion state, trusted direct incoming-
+  pressure counts, exact Kardia metadata/readiness, and FFXIV's native 30-yalm
+  range/line-of-sight result for a frozen non-self candidate;
 - when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
   local DRK and current canonical CC target identity or exact native Wolves'
   Den striking-dummy hard-target identity, native combo/Shadowbringer recast and
@@ -118,8 +123,8 @@ bounded, dropped-event counts are aggregate diagnostics, and no combat history,
 actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
-When optional Ally Rescue, Near Help pressure preference, or defensive utilities
-are enabled, the same current-frame enemy hard/cast identities are also reduced
+When optional Ally Rescue, Near Help pressure preference, defensive utilities,
+or Smart Kardia are enabled, the same current-frame enemy hard/cast identities are also reduced
 to a unique incoming-pressure count for the local player and/or exact party
 members. This drives only the documented pressure thresholds and candidate
 ordering. The data is bounded to the live snapshot and is not retained as
@@ -157,7 +162,7 @@ accepted or applied by the server.
 
 Across action-request helpers, one physical generation is offered in this exact
 order: Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
-counter-CC, Ninja Seiton, Scholar Critical Strategy, then Monk Earth's Reply.
+counter-CC, Smart Kardia, Ninja Seiton, Scholar Critical Strategy, then Monk Earth's Reply.
 Once an earlier helper claims it, no later helper can reuse that generation.
 
 ## Optional team-visible Attack1 focus sign
@@ -647,6 +652,39 @@ target, or key history or uploaded. A client-accepted request does not prove
 that Critical Strategy landed or changed Guard; exact dispatch and effect
 behavior remain current-patch live-validation boundaries.
 
+## Experimental Sage Smart Kardia held-key helper
+
+This separate persisted option is disabled by default and can run only for PvP
+Sage in exact Crystalline Conflict. It transiently reads the exact local player,
+held physical gameplay-key generation, exact Kardia metadata/readiness, and one
+complete, unique, stable exact five-player party view. For self and party
+candidates it reads exact party slot and actor identity, life/targetable state,
+HP, local-source Kardion state, and the current trusted direct incoming-pressure
+count. A non-self candidate also requires FFXIV's native 30-yalm Kardia range
+and line-of-sight result.
+
+Only candidates with known pressure from at least two unique live enemies
+currently hard-targeting or casting at them are eligible. They rank by pressure
+descending, exact HP ratio ascending, party slot, network entity ID, and game-
+object ID. The highest-ranked actor is authoritative. If that actor already has
+Kardion sourced by the local Sage, the helper returns no change and does not
+select a lower candidate.
+
+Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
+counter-CC receive the shared generation first. Active own Guard and the bounded
+post-request Guard-propagation state suppress Smart Kardia. The frozen actor,
+pressure threshold, local-source Kardion state, exact action metadata/readiness,
+and native reachability are revalidated before the intent and generation can
+produce at most one normal native Kardia request. State is consumed before that
+request. Missing or changed final proof, rejection, or exception cannot trigger
+a second selection, lower candidate, alternate target/action, fallback, replay,
+or retry. The helper never changes a hard, soft, focus, or mouseover target,
+swallows the original key, sends chat/markers, or transmits data. Its bounded
+intent, result, and diagnostics remain in memory and are not saved as combat,
+target, status, or key history. A client-accepted return does not prove Kardia
+or Kardion applied; current-patch input, dispatch, status-source, and reachability
+behavior remain live-validation boundaries.
+
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
 The same in-memory suppression begins immediately after an exact local Guard
 request and expires after 1.5 seconds unless the real Guard status takes over; the
@@ -722,7 +760,7 @@ ratio, then stable enemy slot and actor identity.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
 and its Unsealed follow-up `29516`. Self-Purify, defensive utilities, pressure
-Sprint, Ally Rescue, and reactive counter-CC retain priority over the shared
+Sprint, Ally Rescue, reactive counter-CC, and Smart Kardia retain priority over the shared
 physical input generation. Active own Guard and the bounded post-request Guard-propagation
 state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
@@ -751,8 +789,8 @@ the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
 At the configured low-HP or expiry threshold, and only after Self-Purify,
-defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Ninja
-Seiton, and Scholar Critical Strategy decline the shared generation, the
+defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Smart
+Kardia, Ninja Seiton, and Scholar Critical Strategy decline the shared generation, the
 continuous resonance state is marked spent before at most one normal
 self-targeted Earth's Reply `29483`
 request. The helper never activates Riddle of Earth `29482`, substitutes an
@@ -779,10 +817,11 @@ WHM/BRD reactive counter-CC master/held-key/per-trigger opt-ins, the team-visibl
 marker opt-in, the separate Guardian Quick Chat/Bind-pair opt-in, resource-aura
 surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
 thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
-held-key opt-in, the DRK Shadowbringer macro opt-in, and the CC-immunity-brake
-master plus exact per-job/per-action selections. Configuration schema 24 is
-current in v0.18.0.1. The hotfix adds no setting; both v0.18 opt-ins remain off
-for fresh, upgraded, and reset configurations. Configuration does not save observed actors, targets, combat events, status timers, key
+held-key opt-in, the Sage Smart Kardia held-key opt-in, the DRK Shadowbringer
+macro opt-in, and the CC-immunity-brake master plus exact per-job/per-action
+selections. Configuration schema 25 is current in v0.19.0.0. Smart Kardia remains
+off for fresh, upgraded, and reset configurations; all earlier opt-in defaults
+remain unchanged. Configuration does not save observed actors, targets, combat events, status timers, key
 state, marker ownership, pending helper state, ActionEffect confirmation state,
 or in-memory counters.
 

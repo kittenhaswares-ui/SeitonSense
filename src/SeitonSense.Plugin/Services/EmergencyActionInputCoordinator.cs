@@ -6,7 +6,7 @@ namespace SeitonSense.Plugin.Services;
 /// One framework-frame view of the shared physical gameplay-key generations used
 /// by emergency self-Purify, defensive utilities, ally rescue, Miracle
 /// intercept, fresh-key Ninja Seiton, held-key Scholar Critical Strategy, and
-/// the exact high-pressure movement-key Sprint helper.
+/// held-key Smart Kardia, plus the exact high-pressure movement-key Sprint helper.
 /// Consumption is deliberately shared: once any helper claims a generation,
 /// every later helper sees no input.
 /// </summary>
@@ -56,6 +56,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool miracleInterceptHeldWasEnabled;
     private bool scholarCriticalStrategyHeldWasEnabled;
     private bool pressureEscapeHeldWasEnabled;
+    private bool smartKardiaHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -69,7 +70,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool allyRescueHeldEnabled,
         bool miracleInterceptHeldEnabled,
         bool scholarCriticalStrategyHeldEnabled,
-        bool pressureEscapeHeldEnabled = false)
+        bool pressureEscapeHeldEnabled = false,
+        bool smartKardiaHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -86,13 +88,15 @@ internal sealed class EmergencyActionInputCoordinator
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
             (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
-            (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled);
+            (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
+            (smartKardiaHeldEnabled && !smartKardiaHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
+        smartKardiaHeldWasEnabled = smartKardiaHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -133,5 +137,6 @@ internal sealed class EmergencyActionInputCoordinator
         miracleInterceptHeldWasEnabled = false;
         scholarCriticalStrategyHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
+        smartKardiaHeldWasEnabled = false;
     }
 }

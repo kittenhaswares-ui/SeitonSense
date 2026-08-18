@@ -95,6 +95,9 @@ $guardianTeamCommunicationRulesPath = Join-Path $coreRoot 'GuardianTeamCommunica
 $guardianTeamCommunicationSelfTestsPath = Join-Path $coreSelfTestRoot 'GuardianTeamCommunicationSelfTests.cs'
 $scholarCriticalStrategyRulesPath = Join-Path $coreRoot 'ScholarCriticalStrategyRules.cs'
 $scholarCriticalStrategySelfTestsPath = Join-Path $coreSelfTestRoot 'ScholarCriticalStrategySelfTests.cs'
+$smartKardiaRulesPath = Join-Path $coreRoot 'SmartKardiaRules.cs'
+$smartKardiaProbePath = Join-Path $pluginServicesRoot 'SmartKardiaProbe.cs'
+$smartKardiaSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartKardiaSelfTests.cs'
 $smartWardensPaeanRulesPath = Join-Path $coreRoot 'SmartWardensPaeanTargetRules.cs'
 $smartWardensPaeanServicePath = Join-Path $pluginServicesRoot 'SmartWardensPaeanService.cs'
 $smartWardensPaeanSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartWardensPaeanTargetSelfTests.cs'
@@ -161,6 +164,7 @@ $allowedUnsafe = @(
     $pressureEscapeSprintProbePath,
     $ninjaSeitonProbePath,
     $scholarCriticalStrategyProbePath,
+    $smartKardiaProbePath,
     $smartWardensPaeanServicePath,
     $isolationAwarenessPath,
     $autoEnemyFocusMarkPath,
@@ -987,15 +991,15 @@ if ([regex]::Matches($pluginSource, '\bnew\s+DarkKnightShadowbringerMacroService
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
 # one exact WHM/BRD reactive-CC boundary, one exact default-off NIN Seiton
-# boundary, one exact default-off SCH Critical Strategy boundary, and one exact
-# default-off Monk Earth's Reply call. Near Assist/Near Help/Far Help may
+# boundary, one exact default-off SCH Critical Strategy boundary, one exact
+# default-off SGE Smart Kardia boundary, and one exact default-off Monk Earth's Reply call. Near Assist/Near Help/Far Help may
 # forward an incoming action through their sole Original. The same reviewed
 # detour may issue exactly one spent DRK Shadowbringer call before leaving the
 # original Souleater carrier unchanged; that boundary is pinned below.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\b')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
+        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $monkEarthReplyProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
@@ -1004,7 +1008,7 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, PressureEscapeSprintProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, PressureEscapeSprintProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, SmartKardiaProbe, MonkEarthReplyProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
 }
 
 # All party-visible commands share one closed, typed dispatcher. It remains the
@@ -1551,6 +1555,290 @@ if ($scholarDebugStart -lt 0 -or $scholarDebugEnd -le $scholarDebugStart -or
     throw 'SCH diagnostics may report only attempted/client-accepted telemetry, never a landed effect, Guard change, or kill.'
 }
 
+# Smart Kardia is one default-off held-generation action policy. It accepts
+# both the exact local player and exact party allies, but only from one stable,
+# complete five-member CC party view and known current direct pressure >=2.
+$smartKardiaRules = Read-RequiredSource $smartKardiaRulesPath 'Smart Kardia rules'
+$normalizedSmartKardiaRules = $smartKardiaRules -replace '\s+', ' '
+$smartKardiaSelfTests = Read-RequiredSource $smartKardiaSelfTestsPath 'Smart Kardia self-tests'
+Assert-Literals $smartKardiaRules @(
+    'public readonly record struct SmartKardiaCandidate(',
+    'public readonly record struct SmartKardiaIntent(',
+    'public readonly record struct SmartKardiaObservation(',
+    'public readonly record struct SmartKardiaDecision(',
+    'public bool ShouldConsumeInputGeneration => ShouldDispatch;',
+    'public const uint SageJobId = 40;',
+    'public const uint ActionId = 29_264;',
+    'public const uint KardiaStatusId = 2_871;',
+    'public const uint KardionStatusId = 2_872;',
+    'public const int MinimumIncomingEnemyCount = 2;',
+    'public const int RequiredCrystallineConflictPartySize = 5;',
+    'bool OwnKardionStateKnown,',
+    'bool HasOwnKardion);',
+    'candidate.IsSelf == (candidate.Actor == localPlayer)',
+    'candidate.NativeTargetValid &&',
+    'candidate.NativeRangeAndLineOfSight &&',
+    'candidate.PressureKnown &&',
+    'candidate.UniqueIncomingEnemyCount >= MinimumIncomingEnemyCount;',
+    'public static bool HasCompleteKnownPressureView(',
+    '!candidate.Alive ||',
+    '!candidate.Targetable ||',
+    'candidate.UniqueIncomingEnemyCount >= 0',
+    'SmartKardiaDecisionReason.IncompleteKnownPressureView',
+    'if (!candidate.OwnKardionStateKnown)',
+    'SmartKardiaDecisionReason.SelectedKardionStateUnknown',
+    'if (candidate.HasOwnKardion)',
+    'SmartKardiaDecisionReason.SelectedAlreadyHasOwnKardion',
+    'currentCandidate.OwnKardionStateKnown &&',
+    '!currentCandidate.HasOwnKardion;'
+) 'Pure Smart Kardia held-key pressure policy'
+$smartKardiaSelectionMethod = [regex]::Match(
+    $normalizedSmartKardiaRules,
+    'public static int SelectBestCandidateIndex\(.*?\) \{(?<Body>.*?)\} /// <summary> /// Final validation for only the frozen actor and action\..*?public static bool CanUseFrozenIntent')
+$smartKardiaFinalIntentMethod = [regex]::Match(
+    $normalizedSmartKardiaRules,
+    'public static bool CanUseFrozenIntent\(.*?\) =>(?<Body>.*?); private static SmartKardiaDecisionReason GetGateFailure')
+$smartKardiaSelectionBody = $smartKardiaSelectionMethod.Groups['Body'].Value
+$smartKardiaFinalIntentBody = $smartKardiaFinalIntentMethod.Groups['Body'].Value
+if (-not $smartKardiaSelectionMethod.Success -or
+    -not $smartKardiaFinalIntentMethod.Success -or
+    $normalizedSmartKardiaRules -notmatch 'if \(observation\.HardReset\).*?HardReset.*?if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(observation\.LocalJobId != SageJobId\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(observation\.ResolvedActionId != ActionId\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady.*?if \(!observation\.CompleteExactPartyView\).*?IncompleteExactPartyView' -or
+    $normalizedSmartKardiaRules -notmatch 'candidates\.Count != RequiredCrystallineConflictPartySize.*?candidate\.PartySlot is < FirstPartySlot or > LastPartySlot.*?!candidate\.ExactPartyIdentity.*?!candidate\.Actor\.IsValid.*?candidate\.IsSelf != isExactLocal.*?!occupiedSlots\.Add\(candidate\.PartySlot\).*?!occupiedGameObjectIds\.Add\(candidate\.Actor\.GameObjectId\).*?!occupiedEntityIds\.Add\(candidate\.Actor\.EntityId\).*?return localEntries == 1;' -or
+    $smartKardiaSelectionBody -notmatch 'if \(!HasCompleteExactPartyView\(candidates, localPlayer\) \|\| !HasCompleteKnownPressureView\(candidates\)\).*?return -1;.*?if \(!IsEligibleCandidate\(candidate, localPlayer\)\) continue;.*?Compare\(candidate, candidates\[bestIndex\]\)' -or
+    $normalizedSmartKardiaRules -notmatch 'var pressure = right\.UniqueIncomingEnemyCount\.CompareTo\( left\.UniqueIncomingEnemyCount\); if \(pressure != 0\) return pressure; var health = \(\(ulong\)left\.CurrentHp \* right\.MaximumHp\)\.CompareTo\( \(ulong\)right\.CurrentHp \* left\.MaximumHp\); if \(health != 0\) return health; var partySlot = left\.PartySlot\.CompareTo\(right\.PartySlot\); if \(partySlot != 0\) return partySlot; var entityId = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entityId != 0 \? entityId : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
+    $normalizedSmartKardiaRules -notmatch 'if \(!HasCompleteKnownPressureView\(observation\.Candidates\)\).*?IncompleteKnownPressureView.*?var selectedIndex = SelectBestCandidateIndex\( observation\.Candidates, observation\.LocalPlayer\); if \(selectedIndex < 0\).*?NoKnownPressureTarget.*?var candidate = observation\.Candidates!\[selectedIndex\]; if \(!candidate\.OwnKardionStateKnown\).*?SelectedKardionStateUnknown.*?if \(candidate\.HasOwnKardion\).*?SelectedAlreadyHasOwnKardion.*?var intent = new SmartKardiaIntent\(' -or
+    $smartKardiaFinalIntentBody -match '\b(SelectBestCandidateIndex|Candidates)\b' -or
+    $smartKardiaFinalIntentBody -notmatch 'currentLocalPlayer == intent\.LocalPlayer.*?resolvedActionId == intent\.ActionId.*?actionLocallyReady.*?currentCandidate\.PartySlot == intent\.PartySlot.*?currentCandidate\.Actor == intent\.Target.*?currentCandidate\.IsSelf == intent\.IsSelf.*?IsEligibleCandidate\(currentCandidate, currentLocalPlayer\).*?currentCandidate\.OwnKardionStateKnown.*?!currentCandidate\.HasOwnKardion' -or
+    $smartKardiaRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|HookFromAddress|IGameInteropProvider|ITargetManager|TargetManager|SetTarget|RaptureShellModule|ExecuteCommandInner|MarkingController|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Smart Kardia Core must require exact CC/SGE/held/action gates, one complete unique five-member self-plus-party view with known nonnegative direct pressure for every live targetable actor, threshold >=2, deterministic pressure/HP/P-slot/ID ranking, and one frozen own-Kardion-free target without dispatch, mutation, alternate, or retry state.'
+}
+
+$smartKardiaSelfTestMethods = @(
+    'ExactIdsAndCandidateEligibilityArePinned',
+    'CompletePartyViewRejectsIdentityAmbiguity',
+    'PartialLivePressureViewFailsClosed',
+    'RankingIsPressureThenExactHpThenStableSlot',
+    'BestKardionStateNeverFallsThroughToAnAlternate',
+    'DispatchRequiresEveryHeldKeyAndSafetyGate',
+    'FrozenIntentCannotRerankFallbackOrRetry',
+    'ConsumedPhysicalGenerationCannotRetry'
+)
+foreach ($method in $smartKardiaSelfTestMethods) {
+    Assert-Literals $smartKardiaSelfTests @("internal static void $method()") "Smart Kardia self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("SmartKardiaSelfTests.$method") "Smart Kardia test registration $method"
+}
+if ([regex]::Matches($smartKardiaSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartKardiaSelfTests\.\w+').Count -ne 8) {
+    throw 'All eight Smart Kardia metadata, eligibility, party, complete-pressure, ranking, status, frozen-intent, and one-generation self-tests must remain registered exactly once.'
+}
+
+# The runtime may capture candidates only for one unclaimed held generation.
+# It must consume that generation before any final read, re-resolve only the
+# frozen P-slot/actor, and cross one native Kardia boundary at most once.
+$smartKardiaProbe = Read-RequiredSource $smartKardiaProbePath 'Smart Kardia runtime probe'
+$normalizedSmartKardiaProbe = $smartKardiaProbe -replace '\s+', ' '
+$smartKardiaMetadata = Read-RequiredSource (
+    Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'Smart Kardia metadata guard'
+$normalizedSmartKardiaMetadata = $smartKardiaMetadata -replace '\s+', ' '
+Assert-Literals $smartKardiaProbe @(
+    'internal sealed record SmartKardiaProbeSnapshot(',
+    'internal sealed unsafe class SmartKardiaProbe',
+    'internal const uint KardiaIconId = 9_580;',
+    'internal const uint KardiaStatusIconId = 212_951;',
+    'internal const uint KardionStatusIconId = 212_952;',
+    'internal const ushort ExpectedRecast100ms = 10;',
+    'internal const int ExpectedRange = 30;',
+    'bool OwnKardionStateKnown,',
+    'bool HasOwnKardion,',
+    'bool InputClaimed,',
+    'bool UseActionAttempted,',
+    'bool UseActionAccepted,',
+    'internal SmartKardiaProbeSnapshot Observe(',
+    'var inputClaimed = decision.ShouldConsumeInputGeneration;',
+    'if (inputClaimed) inputFrame.Consume();',
+    'ResolveFrozenCandidate(',
+    'SmartKardiaRules.CanUseFrozenIntent(',
+    'TryUseKardiaOnce(',
+    'nearAssist.RunWithoutRedirect',
+    'actionManager->UseAction(',
+    'intent.ActionId,',
+    'intent.Target.GameObjectId,',
+    'terminal frozen-intent revalidation failed',
+    'terminal UseAction-boundary revalidation failed',
+    'attempt failed and will not be retried'
+) 'Exact one-attempt Smart Kardia runtime and truthful result diagnostics'
+
+$smartKardiaObserveMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'internal SmartKardiaProbeSnapshot Observe\(.*?\) \{(?<Body>.*?)\} internal void Reset')
+$smartKardiaCaptureMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'private ExactPartyCapture CaptureExactParty\(.*?\) \{(?<Body>.*?)\} private RuntimeCandidate BuildCandidate')
+$smartKardiaBuildMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'private RuntimeCandidate BuildCandidate\(.*?\) \{(?<Body>.*?)\} private SmartKardiaCandidate\? ResolveFrozenCandidate')
+$smartKardiaFrozenMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'private SmartKardiaCandidate\? ResolveFrozenCandidate\(.*?\) \{(?<Body>.*?)\} private bool TryUseKardiaOnce')
+$smartKardiaTryUseMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'private bool TryUseKardiaOnce\(.*?\) \{(?<Body>.*?)\} private bool PartySlotsRemainExact')
+$smartKardiaStatusMethod = [regex]::Match(
+    $normalizedSmartKardiaProbe,
+    'private static void ReadOwnKardionState\(.*?\) \{(?<Body>.*?)\} private static bool IsLivePlayer')
+$smartKardiaObserveBody = $smartKardiaObserveMethod.Groups['Body'].Value
+$smartKardiaCaptureBody = $smartKardiaCaptureMethod.Groups['Body'].Value
+$smartKardiaBuildBody = $smartKardiaBuildMethod.Groups['Body'].Value
+$smartKardiaFrozenBody = $smartKardiaFrozenMethod.Groups['Body'].Value
+$smartKardiaTryUseBody = $smartKardiaTryUseMethod.Groups['Body'].Value
+$smartKardiaStatusBody = $smartKardiaStatusMethod.Groups['Body'].Value
+if (-not $smartKardiaObserveMethod.Success -or
+    -not $smartKardiaCaptureMethod.Success -or
+    -not $smartKardiaBuildMethod.Success -or
+    -not $smartKardiaFrozenMethod.Success -or
+    -not $smartKardiaTryUseMethod.Success -or
+    -not $smartKardiaStatusMethod.Success) {
+    throw 'Smart Kardia Observe, exact-party capture, candidate, frozen-target, status-source, and sole UseAction methods must remain independently reviewable.'
+}
+
+if ($normalizedSmartKardiaProbe -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && localJobId == SmartKardiaRules\.SageJobId && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionReady = featureContextReady && localIdentity\.IsValid && TryGetReadyAction\(localPlayer!, out resolvedActionId\);' -or
+    $normalizedSmartKardiaProbe -notmatch 'var shouldResolveCandidates = actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && inputFrame\.HeldGameplayKeyEligible;.*?var capture = shouldResolveCandidates \? CaptureExactParty\(localPlayer!, resolvedActionId, out candidateResolution\) : ExactPartyCapture\.Incomplete;.*?capture\.Complete, candidates, hardReset') {
+    throw 'Smart Kardia candidate capture must remain behind exact CC/SGE/metadata/own-Guard/readiness gates and one unclaimed held non-text gameplay-key generation.'
+}
+if ($smartKardiaCaptureBody -notmatch 'var partyBefore = CaptureExactPartyEntityIds\(\); if \(partyBefore is null \|\| !partyBefore\.Contains\(localPlayer\.EntityId\)\).*?pressureTracker\.TryCaptureIncomingAllyPressure\( out var pressureCounts\).*?for \(var slot = SmartKardiaRules\.FirstPartySlot; slot <= SmartKardiaRules\.LastPartySlot; slot\+\+\).*?PartySlotResolver\.Resolve\(objectTable, slot\).*?BuildCandidate\( localPlayer, player!, slot, actionId, pressureCounts\)' -or
+    $smartKardiaCaptureBody -notmatch 'pressureTracker\.TryCaptureIncomingAllyPressure\( out var pressureCountsAfter\).*?partyBefore\.SetEquals\(partyAfter\).*?ReferenceEquals\(pressureCounts, pressureCountsAfter\).*?members\.Count == SmartKardiaRules\.RequiredCrystallineConflictPartySize.*?SetEquals\(partyBefore\).*?Distinct\(\)\.Count\(\) == members\.Count.*?members\.All\(static member => !member\.Candidate\.Alive \|\| !member\.Candidate\.Targetable \|\| member\.Candidate\.PressureKnown\).*?PartySlotsRemainExact\(members\)' -or
+    $normalizedSmartKardiaProbe -notmatch 'ids\.Length != SmartKardiaRules\.RequiredCrystallineConflictPartySize.*?ids\.Any\(static entityId => !IsNetworkEntityId\(entityId\)\).*?unique\.Count == ids\.Length \? unique : null' -or
+    $normalizedSmartKardiaProbe -notmatch 'PartySlotResolver\.Resolve\( objectTable, member\.Candidate\.PartySlot\).*?stableIdentity != member\.Candidate\.Actor.*?stablePlayer!\.Address != member\.Address.*?return false;') {
+    throw 'Smart Kardia must capture one immutable direct-pressure publication across one unchanged, duplicate-free exact five-player P-party; every live targetable actor needs an explicit known pressure count.'
+}
+if ($smartKardiaBuildBody -notmatch 'var isSelf = targetIdentity == localIdentity;.*?GetNativeObject\(localPlayer\).*?GetNativeObject\(target\).*?var nativeTargetValid = sourceObject != null && targetObject != null;.*?var rangeResult = nativeTargetValid && !isSelf && actionId == SmartKardiaRules\.ActionId \? ActionManager\.GetActionInRangeOrLoS\(actionId, sourceObject, targetObject\) : uint\.MaxValue;.*?var nativeRangeAndLineOfSight = nativeTargetValid && \(isSelf \|\| SeitonRangeRules\.HasNativeRangeAndLineOfSight\( rangeResult\)\);.*?pressureCounts\.TryGetValue\( targetIdentity, out var incomingEnemyCount\) && incomingEnemyCount >= 0; if \(!pressureKnown\) incomingEnemyCount = 0; ReadOwnKardionState\( target, localPlayer\.EntityId, out var ownKardionStateKnown, out var hasOwnKardion\);.*?nativeTargetValid, nativeRangeAndLineOfSight, pressureKnown, incomingEnemyCount, ownKardionStateKnown, hasOwnKardion' -or
+    $smartKardiaStatusBody -notmatch 'stateKnown = IsNetworkEntityId\(localEntityId\);.*?SmartKardiaRules\.IsKardionStatus\(status\.StatusId\).*?!IsNetworkEntityId\(status\.SourceId\).*?stateKnown = false;.*?status\.SourceId == localEntityId.*?localSourceCount\+\+;.*?if \(localSourceCount > 1\).*?stateKnown = false;.*?hasOwnKardion = localSourceCount == 1;' -or
+    $smartKardiaStatusBody -match '\bRemainingTime\b') {
+    throw 'Smart Kardia candidates must accept only exact native self or native 30-yalm/LoS non-self destinations, nonnegative published direct pressure, and permanent PvP Kardion 2872 owned only by the exact local EntityId; invalid or duplicate local sources fail closed.'
+}
+if ($smartKardiaFrozenBody -notmatch '!intent\.IsValid.*?actionId != intent\.ActionId.*?!ExactPartyStillContains\(intent\.LocalPlayer, intent\.Target\).*?PartySlotResolver\.Resolve\(objectTable, intent\.PartySlot\).*?targetIdentity != intent\.Target.*?target!\.Address != expectedAddress.*?!pressureTracker\.TryCaptureIncomingAllyPressure\(out var pressureCounts\).*?BuildCandidate\( localPlayer, target, intent\.PartySlot, actionId, pressureCounts\)' -or
+    $normalizedSmartKardiaProbe -notmatch 'var ids = CaptureExactPartyEntityIds\(\); return ids is not null && ids\.Contains\(localPlayer\.EntityId\) && ids\.Contains\(target\.EntityId\);') {
+    throw 'After selection Smart Kardia may re-resolve only the same frozen P-slot/address/GOID/EID while both frozen local and target remain exact party identities; it must reread only that actor pressure/status/reachability.'
+}
+
+$smartKardiaConsume = [regex]::Match($smartKardiaObserveBody, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
+$smartKardiaFrozenResolve = [regex]::Match($smartKardiaObserveBody, 'ResolveFrozenCandidate\(')
+$smartKardiaIntentRevalidation = [regex]::Match($smartKardiaObserveBody, 'SmartKardiaRules\.CanUseFrozenIntent\s*\(')
+$smartKardiaTryUse = [regex]::Match($smartKardiaObserveBody, 'TryUseKardiaOnce\s*\(')
+if (-not $smartKardiaConsume.Success -or
+    -not $smartKardiaFrozenResolve.Success -or
+    -not $smartKardiaIntentRevalidation.Success -or
+    -not $smartKardiaTryUse.Success -or
+    $smartKardiaConsume.Index -gt $smartKardiaFrozenResolve.Index -or
+    $smartKardiaFrozenResolve.Index -gt $smartKardiaIntentRevalidation.Index -or
+    $smartKardiaIntentRevalidation.Index -gt $smartKardiaTryUse.Index) {
+    throw 'Smart Kardia must consume the shared held generation before frozen-target revalidation and its sole attempt.'
+}
+$smartKardiaPostConsumeWindow = $smartKardiaObserveBody.Substring($smartKardiaConsume.Index)
+if ($smartKardiaPostConsumeWindow -match '\b(CaptureExactParty|SelectBestCandidateIndex)\s*\(') {
+    throw 'After Smart Kardia consumes input it may revalidate only the frozen intent; full-party recapture, reranking, and alternate selection are forbidden.'
+}
+if ($smartKardiaObserveBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); var finalContextReady = currentLocal is not null && configuration\.Enabled && configuration\.EnableSageKardiaOnHeldKey && IsCurrentCrystallineConflict\(\) && IsLivePlayer\(currentLocal\) && currentLocal\.ClassJob\.IsValid && currentLocal\.ClassJob\.RowId == SmartKardiaRules\.SageJobId && metadataVerified && !IsCurrentlySuppressedByGuard\( currentLocal, Environment\.TickCount64\);.*?TryGetReadyAction\(currentLocal!, out finalResolvedActionId\).*?ResolveFrozenCandidate\( currentLocal!, intent, selected\.Address, finalResolvedActionId\).*?SmartKardiaRules\.CanUseFrozenIntent\(') {
+    throw 'Smart Kardia post-consume preflight must freshly revalidate config, exact CC/local Sage, metadata, own Guard, action readiness, and only the frozen actor.'
+}
+if ($smartKardiaTryUseBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); if \(currentLocal is null\) return false;.*?var configurationEnabled = configuration\.Enabled && configuration\.EnableSageKardiaOnHeldKey; var isCrystallineConflict = IsCurrentCrystallineConflict\(\); var localAlive = IsLivePlayer\(currentLocal\); var localJobId = currentLocal\.ClassJob\.IsValid \? currentLocal\.ClassJob\.RowId : 0; var guardSuppressed = IsCurrentlySuppressedByGuard\( currentLocal, Environment\.TickCount64\); var actionReady = TryGetReadyAction\(currentLocal, out var resolvedActionId\); if \(!configurationEnabled \|\| !isCrystallineConflict \|\| !localAlive \|\| localJobId != SmartKardiaRules\.SageJobId \|\| !metadataVerified \|\| guardSuppressed \|\| !actionReady \|\| resolvedActionId != intent\.ActionId\).*?ResolveFrozenCandidate\( currentLocal, intent, expectedTargetAddress, resolvedActionId\).*?SmartKardiaRules\.CanUseFrozenIntent\(.*?attempted = true; return nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\);') {
+    throw 'The Smart Kardia native boundary must repeat exact config/context/local/action/Guard/frozen-target validation immediately before one explicit normal UseAction request.'
+}
+if ($normalizedSmartKardiaProbe -notmatch 'resolvedActionId = actionManager->GetAdjustedActionId\(SmartKardiaRules\.ActionId\); return resolvedActionId == SmartKardiaRules\.ActionId && actionManager->IsActionOffCooldown\(ActionType\.Action, resolvedActionId\);' -or
+    $normalizedSmartKardiaProbe -notmatch 'if \(DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\)\) return true; return nearAssist\.TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, localPlayer\.GameObjectId, localPlayer\.EntityId, nowMilliseconds, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out _\);') {
+    throw 'Smart Kardia must use exact adjusted/off-cooldown action 29264 readiness and suppress on live or bounded recent exact own Guard.'
+}
+if ([regex]::Matches($smartKardiaProbe, '\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartKardiaObserveBody, '\bTryUseKardiaOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartKardiaProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
+    $smartKardiaProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
+    $smartKardiaProbe -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch)\b' -or
+    $smartKardiaProbe -match '(?:->|\.)Original\s*\(') {
+    throw 'Smart Kardia must have exactly one client action boundary and no hook, shell, selected-target mutation, queue, replay, retry, or external Original path.'
+}
+
+Assert-Literals $smartKardiaMetadata @(
+    'ValidateFeature("Smart Kardia"',
+    'SmartKardiaRules.ActionId',
+    'SmartKardiaRules.KardiaStatusId',
+    'SmartKardiaRules.KardionStatusId',
+    'string.Equals(action.Name.ToString(), "Kardia", StringComparison.Ordinal)',
+    'action.Icon == SmartKardiaProbe.KardiaIconId',
+    'action.IsPvP',
+    'action.IsPlayerAction',
+    'action.ClassJob.RowId == SmartKardiaRules.SageJobId',
+    'action.ClassJobCategory.RowId == 181',
+    'action.ActionCategory.RowId == 4',
+    'action.Range == SmartKardiaProbe.ExpectedRange',
+    'action.EffectRange == 0',
+    'action.Cast100ms == 0',
+    'action.Recast100ms == SmartKardiaProbe.ExpectedRecast100ms',
+    'action.PrimaryCostType == 0',
+    'action.PrimaryCostValue == 0',
+    'action.SecondaryCostType == 0',
+    'action.SecondaryCostValue.RowId == 0',
+    'action.CooldownGroup == 6',
+    'action.MaxCharges == 0',
+    'action.CanTargetSelf',
+    'action.CanTargetParty',
+    '!action.CanTargetAlliance',
+    '!action.CanTargetHostile',
+    '!action.CanTargetAlly',
+    '!action.CanTargetOwnPet',
+    '!action.CanTargetPartyPet',
+    '!action.TargetArea',
+    'action.RequiresLineOfSight',
+    '!action.NeedToFaceTarget',
+    '!action.AffectsPosition',
+    'action.CastType == 1',
+    'action.StatusGainSelf.RowId == 0',
+    'action.ActionProcStatus.RowId == 0',
+    'Grants self the effect of Kardia and a selected party member or self the effect of Kardion',
+    'additional effects of Dosis III and Eukrasian Dosis III',
+    'string.Equals(kardia.Name.ToString(), "Kardia", StringComparison.Ordinal)',
+    'kardia.Icon == SmartKardiaProbe.KardiaStatusIconId',
+    'kardia.StatusCategory == 1',
+    '!kardia.CanDispel',
+    'kardia.IsPermanent',
+    'Kardion granted by you',
+    'string.Equals(kardion.Name.ToString(), "Kardion", StringComparison.Ordinal)',
+    'kardion.Icon == SmartKardiaProbe.KardionStatusIconId',
+    'kardion.StatusCategory == 1',
+    '!kardion.CanDispel',
+    'kardion.IsPermanent',
+    'the sage who applied this status'
+) 'Exact local SqPack PvP Kardia action and permanent status metadata'
+if (($smartKardiaRules + $smartKardiaProbe + $smartKardiaMetadata) -match '\b(?:2_604|2_605|2604|2605)\b') {
+    throw 'Production Smart Kardia paths must never accept the PvE Kardia/Kardion status rows 2604/2605.'
+}
+
+Assert-Literals $pluginSource @(
+    'personalStatus.SmartKardiaDiagnostics',
+    '[Seiton Sense] smart-kardia[decision={kardia.Decision},reason={kardia.Reason}',
+    'ready={kardia.LocallyReady},action={kardia.ResolvedActionId}',
+    'candidates={kardia.CandidateCount},P={kardia.PartySlot},self={kardia.TargetIsSelf}',
+    'target={kardia.TargetGameObjectId:X}/{kardia.TargetEntityId:X}',
+    'pressure={kardia.PressureKnown}/{kardia.IncomingEnemyCount}',
+    'kardion={kardia.OwnKardionStateKnown}/{kardia.HasOwnKardion}',
+    'held={kardia.HeldGameplayKey},claimed={kardia.InputClaimed}',
+    'attempt={kardia.UseActionAttempted}/{kardia.UseActionAccepted}',
+    'count={kardia.AttemptCount}/{kardia.AcceptedCount}',
+    'resolve={kardia.CandidateResolution},last={kardia.LastEvent}'
+) 'Truthful Smart Kardia source diagnostics'
+$smartKardiaDebugStart = $pluginSource.IndexOf('[Seiton Sense] smart-kardia[')
+$smartKardiaDebugEnd = if ($smartKardiaDebugStart -ge 0) {
+    $pluginSource.IndexOf('[Seiton Sense] ninja-seiton[', $smartKardiaDebugStart)
+} else {
+    -1
+}
+if ($smartKardiaDebugStart -lt 0 -or
+    $smartKardiaDebugEnd -le $smartKardiaDebugStart -or
+    $pluginSource.Substring(
+        $smartKardiaDebugStart,
+        $smartKardiaDebugEnd - $smartKardiaDebugStart) -match '(?i)\b(landed|applied successfully|server accepted)\b') {
+    throw 'Smart Kardia diagnostics may report only attempted/client-accepted telemetry, never Kardia/Kardion application or server acceptance.'
+}
+
 # Warning audio is restricted to one shared, bounded client-owned chat-sound
 # boundary. MCH and high-pressure episode services may delegate to it; external
 # audio libraries, audio-file reads, URLs, and any second native path fail the build.
@@ -1883,10 +2171,12 @@ Assert-Literals $emergencyInputCoordinator @(
     'scholarCriticalStrategyHeldWasEnabled',
     'pressureEscapeHeldEnabled',
     'pressureEscapeHeldWasEnabled',
+    'smartKardiaHeldEnabled',
+    'smartKardiaHeldWasEnabled',
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, NIN, and SCH input ownership'
+) 'Shared Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, Smart Kardia, NIN, and SCH input ownership'
 if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
     throw 'The shared emergency input coordinator may only observe and consume physical generations.'
 }
@@ -1899,21 +2189,23 @@ $guardianCommunicationObserve = [regex]::Match($personalStatus, '\bguardianCommu
 $pressureEscapeObserve = [regex]::Match($personalStatus, '\bpressureEscapeSprint\.Observe\s*\(')
 $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
 $miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
+$smartKardiaObserve = [regex]::Match($personalStatus, '\bsmartKardia\.Observe\s*\(')
 $ninjaSeitonObserve = [regex]::Match($personalStatus, '\bninjaSeiton\.Observe\s*\(')
 $scholarCriticalStrategyObserve = [regex]::Match($personalStatus, '\bscholarCriticalStrategy\.Observe\s*\(')
 $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 if (-not $purifyObserve.Success -or -not $defenseObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
-    -not $miracleObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or
+    -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or
     $purifyObserve.Index -gt $defenseObserve.Index -or
     $defenseObserve.Index -gt $guardianCommunicationObserve.Index -or
     $guardianCommunicationObserve.Index -gt $pressureEscapeObserve.Index -or
     $pressureEscapeObserve.Index -gt $rescueObserve.Index -or
     $rescueObserve.Index -gt $miracleObserve.Index -or
-    $miracleObserve.Index -gt $ninjaSeitonObserve.Index -or
+    $miracleObserve.Index -gt $smartKardiaObserve.Index -or
+    $smartKardiaObserve.Index -gt $ninjaSeitonObserve.Index -or
     $ninjaSeitonObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
     $scholarCriticalStrategyObserve.Index -gt $monkEarthReplyObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
-    throw 'Personal status coordination must process Purify, defense, same-frame Guardian communication, pressure Sprint, Ally Rescue, reactive CC, NIN Seiton, SCH, then Monk in exact order while action helpers share one input frame.'
+    throw 'Personal status coordination must process Purify, defense, same-frame Guardian communication, pressure Sprint, Ally Rescue, reactive CC, Smart Kardia, NIN Seiton, SCH, then Monk in exact order while action helpers share one input frame.'
 }
 Assert-Literals $personalStatus @(
     'purifyClaimedPriority',
@@ -1952,6 +2244,16 @@ Assert-Literals $personalStatus @(
     'metadata.MarksmanSpiteVerified',
     'metadata.ZantetsukenVerified',
     'metadata.FuriousBacklashVerified',
+    'configuration.EnableSageKardiaOnHeldKey',
+    'smartKardiaConfigurationEnabled',
+    'smartKardiaHeldEnabled',
+    'new SmartKardiaProbe(',
+    'SmartKardiaProbeSnapshot SmartKardiaDiagnostics',
+    'metadata.SmartKardiaVerified',
+    'smartKardia.Observe(',
+    'kardia.InputClaimed',
+    'smartKardia.FailClosed(',
+    'smartKardia.Reset()',
     'configuration.EnableReactiveCcUtilities',
     'configuration.ReactiveCcOnHeldKey',
     'configuration.ReactiveCcDancerLimitBreak',
@@ -1976,7 +2278,7 @@ Assert-Literals $personalStatus @(
     'scholarCriticalStrategy.Reset()',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
-) 'Shared self-Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, and NIN Seiton priority'
+) 'Shared self-Purify, defensive utility, pressure Sprint, Ally Rescue, reactive-CC, Smart Kardia, NIN Seiton, SCH, and Monk priority'
 if ($normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, isCrystallineConflict, miracleInterceptConfigurationEnabled, configuration\.ReactiveCcOnHeldKey, !purifyClaimedPriority && !defensiveUtilityClaimedPriority && !pressureEscapeClaimedPriority && !allyRescueClaimedPriority,') {
     throw 'Reactive CC must receive persistent feature/capture enablement separately from its transient Purify/defense/pressure-Sprint/Rescue dispatch permission.'
 }
@@ -1984,15 +2286,20 @@ if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimit
     throw 'Reactive MCH/SAM/VPR/DNC/Purify subtypes and metadata gates must be wired separately into the shared one-generation dispatcher.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnFreshGameplayKey;' -or
-    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
-    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/pressure Sprint/Rescue/reactive CC.'
+    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| kardia\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
+    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/pressure Sprint/Rescue/reactive CC/Smart Kardia.'
+}
+if ($normalizedPersonalStatus -notmatch 'var smartKardiaConfigurationEnabled = configuration\.Enabled && configuration\.EnableSageKardiaOnHeldKey;' -or
+    $normalizedPersonalStatus -notmatch 'var smartKardiaHeldEnabled = smartKardiaConfigurationEnabled && isCrystallineConflict && metadata\.SmartKardiaVerified && !guardActive && localJobId == SmartKardiaRules\.SageJobId;' -or
+    $normalizedPersonalStatus -notmatch 'scholarCriticalStrategyHeldEnabled, pressureEscapeSprintHeldEnabled, smartKardiaHeldEnabled\); var purify = emergencyPurify\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'var kardia = smartKardia\.Observe\( localPlayer, isCrystallineConflict, smartKardiaConfigurationEnabled, metadata\.SmartKardiaVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); var ninja = ninjaSeiton\.Observe\(') {
+    throw 'Smart Kardia must be a default-off exact-CC/SGE/metadata/Guard-gated held-generation consumer after reactive CC and before NIN, sharing the same consumed priority chain.'
 }
 if ($normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyConfigurationEnabled = configuration\.Enabled && configuration\.EnableScholarCriticalStrategyOnHeldKey;' -or
     $normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyHeldEnabled = scholarCriticalStrategyConfigurationEnabled && isCrystallineConflict && metadata\.ScholarCriticalStrategyVerified && !guardActive && localJobId == ScholarCriticalStrategyRules\.ScholarJobId;' -or
-    $normalizedPersonalStatus -notmatch 'scholarCriticalStrategyHeldEnabled, pressureEscapeSprintHeldEnabled\); var purify = emergencyPurify\.Observe\(' -or
-    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); monkEarthReply\.Observe\(' -or
-    $normalizedPersonalStatus -notmatch 'defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
-    throw 'SCH Critical Strategy must be a default-off exact-CC/SCH/metadata/Guard-gated held-generation consumer after NIN and before Monk, sharing the same consumed priority chain.'
+    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| kardia\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); monkEarthReply\.Observe\(' -or
+    $normalizedPersonalStatus -notmatch 'defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| kardia\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
+    throw 'SCH Critical Strategy must be a default-off exact-CC/SCH/metadata/Guard-gated held-generation consumer after Smart Kardia and NIN and before Monk, sharing the same consumed priority chain.'
 }
 $normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
 if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
@@ -3020,14 +3327,14 @@ Assert-Literals $metadataGuard @(
 $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 if (-not $monkObserve.Success -or $monkObserve.Index -lt $ninjaSeitonObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| ninja\.InputClaimed') {
-    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/pressure Sprint/Rescue/reactive CC/NIN already claimed or attempted.'
+    $normalizedPersonalStatus -notmatch 'monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defense\.InputClaimed \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| kardia\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed') {
+    throw 'Monk Earth Reply must run last, be suppressed by active Guard, and yield whenever Purify/defense/pressure Sprint/Rescue/reactive CC/Smart Kardia/NIN/SCH already claimed or attempted.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
-if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| configuration\.EnableBardWardensPaeanPressureRedirect \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
-    throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate independently for Smart Paean or the explicitly enabled Near Help pressure preference.'
+if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| configuration\.EnableSageKardiaOnHeldKey \|\| configuration\.EnableBardWardensPaeanPressureRedirect \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
+    throw 'Incoming ally-pressure tracking must remain CC-only, keep Ally Rescue behind verified metadata, and activate independently for Smart Kardia, Smart Paean, or the explicitly enabled Near Help pressure preference.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcAfterEnemyPurify\) \|\| configuration\.EnableScholarCriticalStrategyOnHeldKey \|\| configuration\.EnableAutoEnemyFocusMark') {
     throw 'Pressure tracking must remain independently active for defensive, post-Purify team-focus, SCH ranking, and automatic Attack-1 utility consumers.'
@@ -4788,6 +5095,22 @@ Assert-Literals $settingsWindow @(
     'A client-accepted return is dispatch feedback only',
     'Scholar — Critical Strategy',
     'configuration.EnableScholarCriticalStrategyOnHeldKey',
+    'Sage — Smart Kardia',
+    'Smart Kardia on held gameplay key at 2+ incoming enemies (experimental)',
+    'configuration.EnableSageKardiaOnHeldKey',
+    'Default off, PvP Sage, and exact Crystalline Conflict only.',
+    'complete, unique, stable exact five-player party view',
+    'Self and exact living, targetable party members are eligible at a trusted current count of at least',
+    'two unique enemies directly hard-targeting or casting at them',
+    'non-self candidates must also pass',
+    'FFXIV''s native 30-yalm range and line-of-sight check',
+    'Higher incoming pressure wins, then lower exact HP ratio, party slot, entity ID, and game-object ID.',
+    'highest-ranked candidate already has Kardion sourced by you',
+    'never falls through to a lower-ranked candidate',
+    'frozen actor, direct pressure, local-source',
+    'Kardion state, exact action metadata/readiness, and native reachability are revalidated',
+    'intent and shared generation are consumed before at most one native Kardia request',
+    'acceptance does not prove that Kardia or Kardion applied',
     'Bard — Smart Paean target',
     'DrawBardWardensPaeanPressureRedirectControls()',
     'Smart Paean target for manual or Turbo calls at 3+ incoming enemies',
@@ -4808,7 +5131,7 @@ Assert-Literals $settingsWindow @(
     'Warn when no party ally is within 20y and line of sight',
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark',
-    'Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Ninja > Scholar.',
+    'Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Kardia > Ninja > Scholar.',
     'Monk Earth''s Reply is a separate automatic follow-up that yields after an earlier helper attempt.',
     'Enable one Purify attempt from an eligible physical gameplay key',
     'Also allow a key that was already held when the debuff appeared (includes WASD)',
@@ -4897,7 +5220,7 @@ Assert-Literals $settingsWindow @(
     'never changes a target, chooses an alternate action or enemy, replays the macro, or retries',
     'ACCEPTED is local dispatch feedback only',
     'successful Den dummy test does not prove live CC behavior'
-) 'Schema-24 Auto Focus and dual-opt-in exact Den-dummy DRK Settings bindings and safety copy'
+) 'Schema-25 Smart Kardia plus retained Auto Focus and dual-opt-in exact Den-dummy DRK Settings bindings and safety copy'
 
 $settingsConfigurationMethodBindings = @(
     'ApplyCurrentTargetHighlightPreset',
@@ -5194,26 +5517,26 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.18.0.1</Version>',
-    '<AssemblyVersion>0.18.0.1</AssemblyVersion>',
-    '<FileVersion>0.18.0.1</FileVersion>'
-) 'v0.18.0.1 project version'
+    '<Version>0.19.0.0</Version>',
+    '<AssemblyVersion>0.19.0.0</AssemblyVersion>',
+    '<FileVersion>0.19.0.0</FileVersion>'
+) 'v0.19.0.0 project version'
 Assert-Literals ($pluginManifest + $repositoryIndex) @(
-    'optional set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers',
+    'optional held-key Smart Kardia helper, set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers',
     'focus-target',
     'dark-knight',
-    '"AssemblyVersion": "0.18.0.1"',
-    'Hotfixes the default-off /seitonbringer helper and adds explicitly enabled Wolves'' Den striking-dummy testing',
-    'requires the existing DRK and Wolves'' Den options',
-    'unchanged exact native current hard-target combat dummy with NameId 541',
-    'never uses synthetic S1, e-list or duel-opponent resolution',
-    'canonical CC path is unchanged',
-    'exact 0/58/58/147/147/147 secondary cost types',
-    'initial GCD observation is deferred to the framework update thread',
-    'one-proven-GCD, inclusive 0.60-0.80-second, spend-before-request',
-    'Configuration schema 24 is unchanged and no setting was added',
-    'live Den and CC timing remain separate confirmation boundaries'
-) 'v0.18.0.1 manifest and repository metadata'
+    '"sage"',
+    '"AssemblyVersion": "0.19.0.0"',
+    'Adds a separate default-off Smart Kardia held-key helper for PvP Sage in exact Crystalline Conflict',
+    'complete, unique, stable exact five-player party view',
+    'self or an exact living, targetable party member with trusted direct incoming pressure from at least two unique enemies',
+    'non-self candidates also require native 30-yalm range and line of sight',
+    'If the highest-ranked candidate already has local-source Kardion, no attempt is made and no lower candidate is selected',
+    'frozen actor, pressure, Kardion source, Kardia metadata/readiness, and native reachability are revalidated',
+    'one spent native request, with no selected-target mutation, alternate, fallback, replay, or retry',
+    'Configuration schema 25 keeps the option off for fresh, upgraded, and reset configurations',
+    'live dispatch and application still require current-patch confirmation'
+) 'v0.19.0.0 manifest and repository metadata'
 $readme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'README'
 $changelog = Read-RequiredSource (Join-Path $resolvedRoot 'CHANGELOG.md') 'Changelog'
 $privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy documentation'
@@ -5221,12 +5544,12 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.18.0.1 fixes the DRK macro''s current-data metadata and startup paths',
-    'narrow, explicitly enabled Wolves'' Den striking-dummy test path',
-    'retains v0.18''s separate default-off set-only low-MP Focus Target and exact two-line DRK/ReAction helper',
+    'Version 0.19.0.0 adds a separate default-off Smart Kardia held-key helper for PvP Sage under direct pressure',
+    'retains v0.18.0.1''s corrected DRK macro and narrow, explicitly enabled Wolves'' Den striking-dummy test path',
+    'separate default-off set-only low-MP Focus Target and exact two-line DRK/ReAction helper',
     'large fixed red `FOCUSED xN` card at the top center',
     'Configuration schema',
-    '24 keeps Auto Low-MP Focus, the DRK macro, pressure Sprint',
+    '25 keeps Smart Kardia, Auto Low-MP Focus, the DRK macro, pressure Sprint',
     'three or more exact current hard/cast targets',
     'large fixed red `FOCUSED xN` card',
     'at the top center',
@@ -5276,7 +5599,29 @@ Assert-Literals $normalizedReadme @(
     'neither reranks nor switches or invalidates the frozen target',
     'not swallow the original key.',
     'current-patch live-confirmation boundaries'
-) 'v0.18 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
+) 'v0.19 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
+Assert-Literals $normalizedReadme @(
+    '## Sage Smart Kardia held-key helper',
+    'separate **Smart Kardia on held gameplay key** experiment is disabled by default',
+    'runs only on PvP Sage in exact Crystalline Conflict',
+    'complete, unique, stable exact five-player party view',
+    'exact local player and exact living, targetable party members',
+    'trusted current count of at least two unique live enemies directly hard-targeting or casting at them',
+    'Non-self candidates must additionally pass FFXIV''s native 30-yalm Kardia range and line-of-sight check',
+    'higher incoming pressure, then lower exact HP ratio, party slot, network entity ID, and game-object ID',
+    'highest-ranked candidate is authoritative',
+    'already has Kardion sourced by the local Sage',
+    'never falls through to a lower-ranked candidate',
+    'does not use unknown pressure, an incomplete party view, or an alternate as a reason to manufacture a selection',
+    'Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive counter-CC keep priority over Smart Kardia',
+    'Active own Guard and the bounded post-request Guard-propagation gate suppress it',
+    'frozen actor, direct-pressure threshold, local-source Kardion state, exact Kardia action metadata/readiness, and native reachability are revalidated',
+    'intent and physical generation are consumed before at most one native Kardia request',
+    'no second selection, lower candidate, alternate target/action, fallback, replay, or retry',
+    'never changes a hard, soft, focus, or mouseover target and does not swallow the original key',
+    'Client acceptance is dispatch feedback only and does not prove that Kardia or Kardion applied',
+    'current-patch held-input, source-status, reachability, and server behavior require a live Crystalline Conflict test'
+) 'v0.19 Smart Kardia exact-party, pressure, ownership, one-generation, and live-boundary user contract'
 Assert-Literals $normalizedReadme @(
     '## DRK Shadowbringer two-line macro',
     'supports exact PvP Dark Knight in Crystalline Conflict',
@@ -5321,6 +5666,25 @@ Assert-Literals $normalizedReadme @(
     'no atomic compare-and-set operation for Focus Target',
     'current-patch live A/B boundaries'
 ) 'v0.18.0.1 exact Den-dummy/retained CC DRK macro and set-only Auto Low-MP Focus user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.19.0.0',
+    'separate default-off **Smart Kardia on held gameplay key** helper',
+    'PvP Sage in exact Crystalline Conflict',
+    'complete, unique, stable exact five-player party view',
+    'self and exact living, targetable party members',
+    'trusted direct incoming pressure from at least two unique enemies',
+    'non-self destination must also pass FFXIV''s native 30-yalm Kardia range and line-of-sight check',
+    'Higher pressure wins, then lower exact HP ratio, party slot, network entity ID, and game-object ID',
+    'highest-ranked candidate already has Kardion sourced by the local Sage',
+    'never falls through to a lower-ranked candidate',
+    'frozen actor, pressure threshold, local-source Kardion state, exact Kardia metadata/readiness, and native reachability are revalidated',
+    'Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Kardia, Ninja Seiton, Scholar Critical Strategy, then Monk Earth''s Reply',
+    'intent and generation are spent before at most one native request',
+    'target mutation, alternate, fallback, substituted action, replay, or retry',
+    'Client acceptance is not proof that Kardia or Kardion applied',
+    'Bumped the plugin version to 0.19.0.0 and configuration schema to 25',
+    'Smart Kardia remains off for fresh configurations, upgrades, and reset defaults'
+) 'v0.19 Smart Kardia release notes and schema boundary'
 Assert-Literals $normalizedChangelog @(
     '## 0.18.0.1',
     'Extended the separate default-off `/seitonbringer` helper to Wolves'' Den striking-dummy testing',
@@ -5488,9 +5852,37 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 24 is current in v0.18.0.1',
-    'both v0.18 opt-ins remain off for fresh, upgraded, and reset configurations'
-) 'v0.18.0.1 Auto Focus/exact Den-dummy DRK transient-data, mutation, one-cycle, persistence, and live-boundary disclosure'
+    'Configuration schema 25 is current in v0.19.0.0',
+    'Smart Kardia remains off for fresh, upgraded, and reset configurations',
+    'all earlier opt-in defaults remain unchanged'
+) 'v0.19 retained Auto Focus/exact Den-dummy DRK transient-data, mutation, one-cycle, persistence, and live-boundary disclosure'
+Assert-Literals $normalizedPrivacy @(
+    '## Experimental Sage Smart Kardia held-key helper',
+    'separate persisted option is disabled by default',
+    'run only for PvP Sage in exact Crystalline Conflict',
+    'held physical gameplay-key generation',
+    'exact Kardia metadata/readiness',
+    'complete, unique, stable exact five-player party view',
+    'exact local player',
+    'exact party slot and actor identity, life/targetable state, HP, local-source Kardion state',
+    'current trusted direct incoming-pressure count',
+    'non-self candidate also requires FFXIV''s native 30-yalm Kardia range and line-of-sight result',
+    'known pressure from at least two unique live enemies currently hard-targeting or casting at them',
+    'pressure descending, exact HP ratio ascending, party slot, network entity ID, and game-',
+    'object ID. The highest-ranked actor is authoritative',
+    'highest-ranked actor is authoritative',
+    'already has Kardion sourced by the local Sage',
+    'does not select a lower candidate',
+    'Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive counter-CC receive the shared generation first',
+    'Active own Guard and the bounded post-request Guard-propagation state suppress Smart Kardia',
+    'frozen actor, pressure threshold, local-source Kardion state, exact action metadata/readiness, and native reachability are revalidated',
+    'at most one normal native Kardia request',
+    'State is consumed before that request',
+    'cannot trigger a second selection, lower candidate, alternate target/action, fallback, replay, or retry',
+    'never changes a hard, soft, focus, or mouseover target, swallows the original key, sends chat/markers, or transmits data',
+    'client-accepted return does not prove Kardia or Kardion applied',
+    'current-patch input, dispatch, status-source, and reachability behavior remain live-validation boundaries'
+) 'v0.19 Smart Kardia local-data, action, status-source, one-generation, and persistence disclosure'
 Assert-Literals $privacy @(
     '## High-pressure warning, sound, and held Sprint',
     'fixed local top-center warning',
@@ -5535,15 +5927,15 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 24 is',
-    'current in v0.18.0.1'
-) 'v0.18 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
+    'Configuration schema 25 is',
+    'current in v0.19.0.0'
+) 'v0.19 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 24',
+    'public int Version { get; set; } = 25',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -5628,7 +6020,10 @@ Assert-Literals $configuration @(
     'public bool EnableDarkKnightShadowbringerMacro { get; set; }',
     'EnableAutoLowMpFocusTarget = false',
     'EnableDarkKnightShadowbringerMacro = false',
-    'Version = 24',
+    'if (Version < 25)',
+    'public bool EnableSageKardiaOnHeldKey { get; set; }',
+    'EnableSageKardiaOnHeldKey = false',
+    'Version = 25',
     'NormalizeCcBrakeSelections()',
     'IsCcBrakeJobEnabled(uint jobId)',
     'IsCcBrakeActionEnabled(uint actionId)',
@@ -5647,7 +6042,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-24 Auto Focus/DRK opt-ins, high-pressure visual/sound/Sprint defaults, and prior configuration migrations'
+) 'Schema-25 Smart Kardia, Auto Focus/DRK opt-ins, high-pressure visual/sound/Sprint defaults, and prior configuration migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -5673,6 +6068,7 @@ if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;
     [regex]::Matches($configuration, '\bEnableAutoEnemyFocusMark\s*=\s*false\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bPaladinGuardianAnnounceAndMark\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableScholarCriticalStrategyOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bEnableSageKardiaOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableBardWardensPaeanPressureRedirect\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bShowHighPressureWarning\s*=\s*true\s*;').Count -lt 1 -or
     [regex]::Matches($configuration, '\bShowHighPressureWarning\s*=\s*false\s*;').Count -lt 1 -or
@@ -5697,13 +6093,18 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableDarkKnightShadowbringerM
     $configuration -match '(?m)^\s*public bool EnableDarkKnightShadowbringerMacro \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 24 must keep the action-initiating DRK macro off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
+if ($configuration -notmatch '(?m)^\s*public bool EnableSageKardiaOnHeldKey \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableSageKardiaOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
+    $configuration -match '(?m)^\s*public bool EnableSageKardiaOnHeldKey \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 25 must keep the action-initiating Smart Kardia helper off for fresh, upgrading, and reset configurations, with a plain default-false property.'
+}
 if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGameplayKey \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
     throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*24\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 24\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?Version = 24;') {
-    throw 'Schema 24 must fast-path current settings, preserve schema-17 through 23 migrations, keep upgrade visuals quiet, and keep sound/Sprint/Auto Focus/DRK default-off.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*25\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 25\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?if \(Version < 25\).*?EnableSageKardiaOnHeldKey = false;.*?Version = 25;') {
+    throw 'Schema 25 must fast-path current settings, preserve schema-17 through 24 migrations, keep upgrade visuals quiet, and keep sound/Sprint/Auto Focus/DRK/Smart Kardia default-off.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -5767,4 +6168,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.18.0.1 safety contract verified across $($sourceFiles.Count) source files. Schema 24 is unchanged. Auto Low-MP Focus remains default-off, exact-CC-only, complete/stable S1-S5 and trusted-inclusive-<=2000 gated, and owns the sole non-null empty-to-exact FocusTarget setter; occupied/manual drift wins, one attempt is spent per wave, and no path clears, replaces, restores, alternates, or retries a focus. The default-off /seitonbringer helper retains its canonical CC S1-S5 path and may additionally use only the exact current hard-target NameId-541 striking dummy in Wolves' Den when the existing Den test option is enabled. It accepts only the exact adjacent DRK Souleater Combo carrier, opens a token only on a proven native 2.40s GCD restart plus changed action sequence, and spends that cycle before one 0.600-0.800s Shadowbringer attempt; stable queue/sequence, animation/cast, exact identity/context/target, own/target Guard, dual native range/LoS, HP/Dark Arts, recast/readiness/resources are reread while the unchanged outer combo reaches the sole Original, with no queue/target write, alternate, replay, or retry. The urgent direct-pressure warning/sound/Sprint and all prior single-input, assist, CC, marker, isolation, geometry, UI, documentation, and one-hook contracts remain pinned. Native Focus setter/readback, Macro Queue/Turbo timing, action execution, and clip-free behavior still require live current-patch validation."
+Write-Host "Seiton Sense v0.19.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 25. Smart Kardia remains default-off and exact-CC/SGE-only; it requires one complete unique stable five-player self-plus-party view, known nonnegative direct pressure for every live targetable member, a best candidate at 2+, exact local-source PvP Kardion state, and native non-self 30-yalm range/LoS. Pressure, exact HP ratio, P-slot, and actor IDs provide deterministic ranking; an unknown or already-owned best candidate never falls through. The shared held generation is consumed before frozen-actor/status/pressure/action/Guard/reachability revalidation and at most one native Kardia request, with no target mutation, alternate, replay, or retry. The exact metadata gate pins PvP action 29264, statuses 2871/2872, icons, costs, targeting, permanence, and source ownership while rejecting PvE rows 2604/2605. Auto Low-MP Focus, /seitonbringer, urgent pressure warning/sound/Sprint, and all prior single-input, assist, CC, marker, isolation, geometry, UI, documentation, and one-hook contracts remain pinned. Native status-source reporting, Focus setter/readback, Macro Queue/Turbo timing, Kardia/action execution, and clip-free behavior still require live current-patch validation."

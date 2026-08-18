@@ -136,6 +136,12 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Sage — Smart Kardia", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= DrawSageKardiaControls();
+        }
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Bard — Smart Paean target", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= DrawBardWardensPaeanPressureRedirectControls();
@@ -147,6 +153,35 @@ internal sealed partial class SettingsWindow
             changed |= DrawMonkEarthReplyControls();
         }
 
+        return changed;
+    }
+
+    private bool DrawSageKardiaControls()
+    {
+        var changed = Checkbox(
+            "Smart Kardia on held gameplay key at 2+ incoming enemies (experimental)",
+            configuration.EnableSageKardiaOnHeldKey,
+            value => configuration.EnableSageKardiaOnHeldKey = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off, PvP Sage, and exact Crystalline Conflict only. One shared held physical gameplay-key " +
+            "generation may request Kardia only after a complete, unique, stable exact five-player party view. " +
+            "Self and exact living, targetable party members are eligible at a trusted current count of at least " +
+            "two unique enemies directly hard-targeting or casting at them; non-self candidates must also pass " +
+            "FFXIV's native 30-yalm range and line-of-sight check.");
+        ImGui.TextDisabled(
+            "Higher incoming pressure wins, then lower exact HP ratio, party slot, entity ID, and game-object ID. " +
+            "If the highest-ranked candidate already has Kardion sourced by you, the helper makes no attempt and " +
+            "never falls through to a lower-ranked candidate. The frozen actor, direct pressure, local-source " +
+            "Kardion state, exact action metadata/readiness, and native reachability are revalidated at the final " +
+            "boundary.");
+        ImGui.TextDisabled(
+            "Self Purify, Guard or Guardian, pressure Sprint, Ally Rescue, and reactive counter-CC keep priority. " +
+            "The intent and shared generation are consumed before at most one native Kardia request. It never " +
+            "changes a hard, soft, focus, or mouseover target, selects an alternate after drift, falls back, " +
+            "substitutes another action, replays, or retries. The original key is not swallowed, and client " +
+            "acceptance does not prove that Kardia or Kardion applied.");
+        ImGui.PopTextWrapPos();
         return changed;
     }
 

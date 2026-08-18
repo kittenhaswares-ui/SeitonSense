@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Party;
 using Dalamud.Plugin.Services;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -31,6 +32,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
+    private readonly SmartKardiaProbe smartKardia;
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly MonkEarthReplyProbe monkEarthReply;
@@ -56,6 +58,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal PersonalStatusService(
         IClientState clientState,
         IObjectTable objectTable,
+        IPartyList partyList,
         IFramework framework,
         IDutyState dutyState,
         IKeyState keyState,
@@ -120,6 +123,15 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture,
             log,
             metadata);
+        smartKardia = new SmartKardiaProbe(
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            configuration,
+            pressureTracker,
+            nearAssist,
+            log);
         ninjaSeiton = new NinjaSeitonDispatchProbe(
             objectTable,
             executeTracker,
@@ -147,6 +159,7 @@ internal sealed class PersonalStatusService : IDisposable
         guardianCommunication.Diagnostics;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
+    internal SmartKardiaProbeSnapshot SmartKardiaDiagnostics => smartKardia.Snapshot;
     internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
@@ -225,6 +238,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
+            smartKardia.FailClosed();
             ninjaSeiton.FailClosed();
             scholarCriticalStrategy.FailClosed();
             monkEarthReply.FailClosed(now);
@@ -262,6 +276,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardianCommunication.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
+            smartKardia.Reset();
             ninjaSeiton.Reset();
             scholarCriticalStrategy.Reset();
             monkEarthReply.Reset();
@@ -390,6 +405,8 @@ internal sealed class PersonalStatusService : IDisposable
                                                      !guardActive;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                               configuration.EnableNinjaSeitonOnFreshGameplayKey;
+        var smartKardiaConfigurationEnabled = configuration.Enabled &&
+                                              configuration.EnableSageKardiaOnHeldKey;
         var scholarCriticalStrategyConfigurationEnabled = configuration.Enabled &&
                                                            configuration.EnableScholarCriticalStrategyOnHeldKey;
         var localJobId = localPlayer?.ClassJob.IsValid == true
@@ -401,6 +418,12 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ScholarCriticalStrategyVerified &&
             !guardActive &&
             localJobId == ScholarCriticalStrategyRules.ScholarJobId;
+        var smartKardiaHeldEnabled =
+            smartKardiaConfigurationEnabled &&
+            isCrystallineConflict &&
+            metadata.SmartKardiaVerified &&
+            !guardActive &&
+            localJobId == SmartKardiaRules.SageJobId;
         var pressureEscapeSprintHeldEnabled = configuration.Enabled &&
                                               configuration.EnablePressureEscapeSprintOnHeldKey &&
                                               isCrystallineConflict &&
@@ -416,7 +439,8 @@ internal sealed class PersonalStatusService : IDisposable
              (ninjaSeitonConfigurationEnabled &&
               isCrystallineConflict &&
               metadata.SeitonVerified &&
-              !guardActive) ||
+             !guardActive) ||
+             smartKardiaHeldEnabled ||
              scholarCriticalStrategyHeldEnabled ||
              pressureEscapeSprintHeldEnabled),
             allowPurifyHeldGameplayKey,
@@ -424,7 +448,8 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
             miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey,
             scholarCriticalStrategyHeldEnabled,
-            pressureEscapeSprintHeldEnabled);
+            pressureEscapeSprintHeldEnabled,
+            smartKardiaHeldEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -532,6 +557,21 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        var kardia = smartKardia.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            smartKardiaConfigurationEnabled,
+            metadata.SmartKardiaVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            defensiveUtilityClaimedPriority ||
+            pressureEscapeClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.UseActionAttempted ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
         var ninja = ninjaSeiton.Observe(
             localPlayer,
             isCrystallineConflict,
@@ -543,6 +583,7 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
+            kardia.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -558,6 +599,7 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
+            kardia.InputClaimed ||
             ninja.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
@@ -579,6 +621,7 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeClaimedPriority ||
             rescue.UseActionAttempted ||
             miracle.UseActionAttempted ||
+            kardia.InputClaimed ||
             ninja.InputClaimed ||
             scholar.InputClaimed,
             now,
@@ -930,6 +973,7 @@ internal sealed class PersonalStatusService : IDisposable
         guardianCommunication.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
+        smartKardia.Reset();
         ninjaSeiton.Reset();
         scholarCriticalStrategy.Reset();
         monkEarthReply.Reset();
