@@ -55,6 +55,10 @@ public readonly record struct MiracleGuardFollowupCandidate(
     bool TeamTargetCountKnown,
     int TeamTargetCount)
 {
+    public bool HasTrustedMp { get; init; }
+    public uint CurrentMp { get; init; }
+    public uint MaximumMp { get; init; }
+
     public bool IsValid =>
         Target.IsValid &&
         IsExactCanonicalEnemy &&
@@ -62,11 +66,23 @@ public readonly record struct MiracleGuardFollowupCandidate(
         ActiveGuardStatusCount is 0 or 1 &&
         CurrentHp > 0 &&
         MaximumHp >= CurrentHp &&
-        (!TeamTargetCountKnown || TeamTargetCount >= 0);
+        (!TeamTargetCountKnown || TeamTargetCount >= 0) &&
+        (!HasTrustedMp ||
+         (MaximumMp == CombatFrameRules.ExpectedMaximumMp && CurrentMp <= MaximumMp));
 
-    public bool HasExactTeamFocus =>
-        TeamTargetCountKnown &&
-        TeamTargetCount >= MiracleGuardFollowupRules.RequiredTeamTargetCount;
+    public MiracleProtectionEndRankCandidate RankCandidate => new(
+        MiracleInterceptThreatKind.PostGuardCrowdControl,
+        Target.EnemySlot,
+        Target.GameObjectId,
+        Target.EntityId,
+        Target.JobId,
+        TeamTargetCountKnown,
+        TeamTargetCount,
+        CurrentHp,
+        MaximumHp,
+        HasTrustedMp,
+        CurrentMp,
+        MaximumMp);
 }
 
 public readonly record struct MiracleGuardFollowupActorState(
@@ -103,12 +119,19 @@ public readonly record struct MiracleGuardFollowupIntent(
     uint MaximumHp,
     int TeamTargetCount)
 {
+    public bool TeamTargetCountKnown { get; init; }
+    public bool HasTrustedMp { get; init; }
+    public uint CurrentMp { get; init; }
+    public uint MaximumMp { get; init; }
+
     public bool IsValid =>
         Target.IsValid &&
         ReleasedAtMilliseconds >= 0 &&
         CurrentHp > 0 &&
         MaximumHp >= CurrentHp &&
-        TeamTargetCount >= MiracleGuardFollowupRules.RequiredTeamTargetCount;
+        (!TeamTargetCountKnown || TeamTargetCount >= 0) &&
+        (!HasTrustedMp ||
+         (MaximumMp == CombatFrameRules.ExpectedMaximumMp && CurrentMp <= MaximumMp));
 }
 
 public readonly record struct MiracleGuardFollowupDecision(
@@ -139,7 +162,6 @@ public static class MiracleGuardFollowupRules
     public const uint GuardStatusId = 3_054;
     public const uint GuardStatusAlternateId = 3_673;
     public const long ReleaseOpportunityMilliseconds = 500;
-    public const int RequiredTeamTargetCount = 2;
 
     public static MiracleGuardFollowupDecision Observe(
         MiracleGuardFollowupState previous,
@@ -215,13 +237,9 @@ public static class MiracleGuardFollowupRules
         }
 
         var selected = releaseReady
-            .Where(static pair => pair.Candidate.HasExactTeamFocus)
-            .OrderBy(static pair => pair.Candidate, HealthRatioComparer.Instance)
-            .ThenBy(static pair => pair.Candidate.Target.EnemySlot)
-            .ThenBy(static pair => pair.Candidate.Target.EntityId)
-            .ThenBy(static pair => pair.Candidate.Target.GameObjectId)
+            .OrderBy(static pair => pair.Candidate, ProtectionEndRankComparer.Instance)
             .FirstOrDefault();
-        if (!selected.Candidate.IsValid || !selected.Candidate.HasExactTeamFocus)
+        if (!selected.Candidate.IsValid)
         {
             return Waiting(
                 state,
@@ -240,7 +258,13 @@ public static class MiracleGuardFollowupRules
             selected.Actor.ReleasedAtMilliseconds,
             selected.Candidate.CurrentHp,
             selected.Candidate.MaximumHp,
-            selected.Candidate.TeamTargetCount);
+            selected.Candidate.TeamTargetCount)
+        {
+            TeamTargetCountKnown = selected.Candidate.TeamTargetCountKnown,
+            HasTrustedMp = selected.Candidate.HasTrustedMp,
+            CurrentMp = selected.Candidate.CurrentMp,
+            MaximumMp = selected.Candidate.MaximumMp,
+        };
         return new MiracleGuardFollowupDecision(
             new MiracleGuardFollowupState(retiredActors, observation.NowMilliseconds),
             MiracleGuardFollowupDecisionKind.ReadyForPromotion,
@@ -383,14 +407,13 @@ public static class MiracleGuardFollowupRules
             0,
             0);
 
-    private sealed class HealthRatioComparer : IComparer<MiracleGuardFollowupCandidate>
+    private sealed class ProtectionEndRankComparer : IComparer<MiracleGuardFollowupCandidate>
     {
-        internal static HealthRatioComparer Instance { get; } = new();
+        internal static ProtectionEndRankComparer Instance { get; } = new();
 
         public int Compare(
             MiracleGuardFollowupCandidate left,
             MiracleGuardFollowupCandidate right) =>
-            ((UInt128)left.CurrentHp * right.MaximumHp).CompareTo(
-                (UInt128)right.CurrentHp * left.MaximumHp);
+            MiracleProtectionEndRules.Compare(left.RankCandidate, right.RankCandidate);
     }
 }

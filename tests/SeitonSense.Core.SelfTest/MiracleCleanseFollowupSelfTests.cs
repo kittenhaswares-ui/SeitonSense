@@ -15,6 +15,26 @@ internal static class MiracleCleanseFollowupSelfTests
         False(IsExact(globalSequence: 0, sourceSequence: 0), "missing packet identity");
     }
 
+    internal static void ValidatedSignalRetiresBeforeCanonicalResolution()
+    {
+        var target = Target(9);
+        var key = Signal(target, sequence: 99, now: 1_000).Key;
+        var first = MiracleCleanseFollowupRules.RetireValidatedSignal(
+            MiracleCleanseFollowupSignalLedger.Initial,
+            key);
+        True(first.IsNewValidatedSignal, "first validated packet is terminally remembered");
+
+        // Simulate the runtime's exact canonical lookup failing: no lifecycle
+        // state is armed, but the packet retirement must already be durable.
+        var lifecycle = MiracleCleanseFollowupState.Initial;
+        var duplicate = MiracleCleanseFollowupRules.RetireValidatedSignal(
+            first.NextState,
+            key);
+        False(duplicate.IsNewValidatedSignal, "duplicate cannot retry canonical resolution");
+        True(lifecycle.ActiveSignal is null, "unresolved first observation armed no lifecycle");
+        Equal(1, duplicate.NextState.RetiredSignals.Length, "duplicate adds no second retirement");
+    }
+
     internal static void ExactLifecyclePromotesOnceAfterObservedRelease()
     {
         var target = Target(10);
@@ -183,36 +203,42 @@ internal static class MiracleCleanseFollowupSelfTests
             "priority wait cannot restart the 500ms release opportunity");
     }
 
-    internal static void ExactTeamFocusWaitsInsideOriginalOpportunity()
+    internal static void TeamPressureHasNoMinimumAndUnknownRemainsEligible()
     {
         var target = Target(45);
         var releaseState = ReachReleaseOpportunity(target, now: 1_000);
-        var unfocused = MiracleCleanseFollowupRules.Observe(
+        var unknown = MiracleCleanseFollowupRules.Observe(
             releaseState,
-            Observation(null, Candidate(target), 1_251, teamFocus: false));
-        False(unfocused.ShouldPromote, "fewer than two exact team targets cannot promote");
-        Equal(
-            MiracleCleanseFollowupPhase.ReleaseOpportunity,
-            unfocused.NextState.Phase,
-            "team-focus wait stays inside existing release opportunity");
-
-        var focused = MiracleCleanseFollowupRules.Observe(
-            unfocused.NextState,
-            Observation(null, Candidate(target), 1_252, teamFocus: true));
-        True(focused.ShouldPromote, "fresh exact total team focus of two promotes");
-        Equal(
-            1_250L,
-            focused.PromotionIntent!.Value.ReleasedAtMilliseconds,
-            "focus arrival cannot restart the release lifetime");
+            Observation(
+                null,
+                Candidate(target),
+                1_251,
+                teamPressureKnown: false));
+        True(unknown.ShouldPromote, "unknown pressure is an eligible lower-rank fallback");
 
         releaseState = ReachReleaseOpportunity(target, now: 2_000);
+        var knownZero = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(
+                null,
+                Candidate(target),
+                2_251,
+                teamPressureKnown: true,
+                teamTargetCount: 0));
+        True(knownZero.ShouldPromote, "fresh known pressure zero has no minimum gate");
+        Equal(
+            2_250L,
+            knownZero.PromotionIntent!.Value.ReleasedAtMilliseconds,
+            "pressure does not restart the release lifetime");
+
+        releaseState = ReachReleaseOpportunity(target, now: 3_000);
         var expired = MiracleCleanseFollowupRules.Observe(
             releaseState,
-            Observation(null, Candidate(target), 2_750, teamFocus: true));
+            Observation(null, Candidate(target), 3_750));
         Equal(
             MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
             expired.CancelReason,
-            "team focus at the exact deadline is too late");
+            "the exact deadline is still terminal without a pressure gate");
     }
 
     internal static void IdentityAmbiguityAndConcurrencyFailClosed()
@@ -256,6 +282,53 @@ internal static class MiracleCleanseFollowupSelfTests
             signal,
             concurrent.NextState.ActiveSignal!.Value,
             "first exact lifecycle remains authoritative");
+    }
+
+    internal static void IndependentEnemySlotsKeepDistinctPurifyEpisodes()
+    {
+        var firstTarget = Target(60);
+        var secondTarget = Target(61);
+        var first = ArmWithResilience(firstTarget, 1_000);
+        var second = ArmWithResilience(secondTarget, 1_000);
+
+        first = MiracleCleanseFollowupRules.Observe(
+            first,
+            Observation(null, Candidate(firstTarget), 1_100)).NextState;
+        second = MiracleCleanseFollowupRules.Observe(
+            second,
+            Observation(null, Candidate(secondTarget), 1_100)).NextState;
+        var firstReady = MiracleCleanseFollowupRules.Observe(
+            first,
+            Observation(null, Candidate(firstTarget), 1_250, higherPriority: true));
+        var secondReady = MiracleCleanseFollowupRules.Observe(
+            second,
+            Observation(null, Candidate(secondTarget), 1_250, higherPriority: true));
+
+        Equal(
+            MiracleCleanseFollowupPhase.ReleaseOpportunity,
+            firstReady.NextState.Phase,
+            "first exact slot keeps its own release episode");
+        Equal(
+            MiracleCleanseFollowupPhase.ReleaseOpportunity,
+            secondReady.NextState.Phase,
+            "second exact slot keeps its own release episode");
+        Equal(
+            firstTarget,
+            firstReady.NextState.ActiveSignal!.Value.Target,
+            "first identity remains frozen");
+        Equal(
+            secondTarget,
+            secondReady.NextState.ActiveSignal!.Value.Target,
+            "second identity remains frozen");
+
+        var firstPromotion = MiracleCleanseFollowupRules.Observe(
+            firstReady.NextState,
+            Observation(null, Candidate(firstTarget), 1_251));
+        var secondPromotion = MiracleCleanseFollowupRules.Observe(
+            secondReady.NextState,
+            Observation(null, Candidate(secondTarget), 1_251));
+        True(firstPromotion.ShouldPromote, "first distinct slot can yield one candidate");
+        True(secondPromotion.ShouldPromote, "second distinct slot can yield one candidate");
     }
 
     internal static void PromotionKindLabelsConfirmationWithoutBroadeningStartRules()
@@ -352,7 +425,8 @@ internal static class MiracleCleanseFollowupSelfTests
         MiracleCleanseFollowupCandidate candidate,
         long now,
         bool higherPriority = false,
-        bool teamFocus = true) =>
+        bool teamPressureKnown = true,
+        int teamTargetCount = 0) =>
         new(
             ConfigurationEnabled: true,
             IsCrystallineConflict: true,
@@ -360,7 +434,8 @@ internal static class MiracleCleanseFollowupSelfTests
             HigherPriorityClaimed: higherPriority,
             NewSignal: signal,
             Candidate: candidate,
-            HasExactTeamFocus: teamFocus,
+            TeamTargetCountKnown: teamPressureKnown,
+            TeamTargetCount: teamTargetCount,
             NowMilliseconds: now);
 
     private static bool IsExact(

@@ -69,6 +69,16 @@ public readonly record struct MiracleCleanseFollowupSignal(
     MiracleCleanseFollowupTargetIdentity Target,
     long ObservedAtMilliseconds);
 
+public readonly record struct MiracleCleanseFollowupSignalLedger(
+    ImmutableArray<MiracleCleanseFollowupSignalKey> RetiredSignals)
+{
+    public static MiracleCleanseFollowupSignalLedger Initial => new([]);
+}
+
+public readonly record struct MiracleCleanseFollowupSignalRetirementDecision(
+    MiracleCleanseFollowupSignalLedger NextState,
+    bool IsNewValidatedSignal);
+
 /// <summary>
 /// Exact no-retry action intent. The Purify ActionEffect signal, not a mutable
 /// StatusList slot or remaining-time estimate, is its identity.
@@ -123,7 +133,8 @@ public readonly record struct MiracleCleanseFollowupObservation(
     bool HigherPriorityClaimed,
     MiracleCleanseFollowupSignal? NewSignal,
     MiracleCleanseFollowupCandidate? Candidate,
-    bool HasExactTeamFocus,
+    bool TeamTargetCountKnown,
+    int TeamTargetCount,
     long NowMilliseconds,
     bool HardReset = false);
 
@@ -149,8 +160,9 @@ public readonly record struct MiracleCleanseFollowupDecision(
 /// Pure, opt-in WHM/BRD follow-up policy:
 /// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
 /// 150ms continuous live absence -> one bounded promotion into the existing
-/// reactive-CC dispatcher. A fresh exact total team hard-target count of at
-/// least two is required at release; the local player need not own the target.
+/// reactive-CC dispatcher. Fresh exact total-team pressure ranks simultaneous
+/// releases, while an unavailable sample remains an eligible lower-priority
+/// fallback and a known count of zero is preserved as known.
 /// The shared dispatcher owns fresh/held input, native
 /// range/LoS, protection checks, input consumption, and the sole action call.
 /// RemainingTime is deliberately absent; release is never predicted.
@@ -196,6 +208,40 @@ public static class MiracleCleanseFollowupRules
             SilenceStatusId or
             MiracleOfNatureStatusId or
             DeepFreezeStatusId;
+
+    /// <summary>
+    /// Terminally retires one already-validated exact Purify packet before any
+    /// mutable canonical-actor resolution. A later duplicate can never arm
+    /// merely because the first framework resolution was temporarily absent.
+    /// </summary>
+    public static MiracleCleanseFollowupSignalRetirementDecision RetireValidatedSignal(
+        MiracleCleanseFollowupSignalLedger previous,
+        MiracleCleanseFollowupSignalKey signal)
+    {
+        var retired = previous.RetiredSignals.IsDefault
+            ? ImmutableArray<MiracleCleanseFollowupSignalKey>.Empty
+            : previous.RetiredSignals;
+        if (!IsExactPurifySignal(
+                signal.CasterEntityId,
+                signal.ActionId,
+                signal.TargetEntityId,
+                signal.EffectType,
+                signal.EffectValue,
+                signal.GlobalSequence,
+                signal.SourceSequence) ||
+            retired.Contains(signal))
+        {
+            return new MiracleCleanseFollowupSignalRetirementDecision(
+                new MiracleCleanseFollowupSignalLedger(retired),
+                IsNewValidatedSignal: false);
+        }
+
+        var skip = Math.Max(0, retired.Length - MaximumObservedSignals + 1);
+        return new MiracleCleanseFollowupSignalRetirementDecision(
+            new MiracleCleanseFollowupSignalLedger(
+                retired.Skip(skip).Append(signal).ToImmutableArray()),
+            IsNewValidatedSignal: true);
+    }
 
     public static bool IsValidEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000 and not uint.MaxValue;
@@ -461,13 +507,6 @@ public static class MiracleCleanseFollowupRules
         // Immediate MCH/SAM/VPR events keep priority without destroying this
         // opportunity. Promotion remains bounded by the original release edge.
         if (observation.HigherPriorityClaimed)
-            return Waiting(state);
-
-        // Team focus is intentionally live, exact and non-sticky. The runtime
-        // supplies true only for a fresh total team hard-target count of at
-        // least two; the local player is optional. Wait inside the original
-        // 500-ms release window; never extend it.
-        if (!observation.HasExactTeamFocus)
             return Waiting(state);
 
         if (state.ActiveSignal is not { } signal)

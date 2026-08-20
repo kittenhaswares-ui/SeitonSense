@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.23.0.0
+
+- Changed held WHM Miracle and BRD Silent Nocturne post-Purify/post-Guard
+  handling from one consumed physical-key generation to one attempt for the
+  selected exact protection-end episode. A later distinct verified Resilience/
+  Guard-end release epoch can trigger on the same continuous hold; the selected
+  episode never repeats.
+- Removed the hard team-pressure-count requirement from both exact protection-
+  end paths. Known fresh exact team pressure ranks before unknown and then
+  highest-first, followed by lowest HP ratio; known trusted MP ranks before
+  unknown and then lowest-first. Stable canonical identity closes ties. Exactly one winner is
+  selected; simultaneous losers are terminal and never become fallback attempts.
+- Kept independent bounded post-Purify state for each canonical `S1`-`S5` enemy,
+  so simultaneous exact enemies can reach their own verified Resilience end
+  without replacing each other before ranking.
+- Retained Purify and Smart Recuperate priority, WHM's native 10-yalm and BRD's
+  native 20-yalm reachability/line-of-sight checks, direct exact-actor dispatch,
+  and no selected-target switch, alternate, replay, or retry.
+- Clarified in Ally Rescue settings and diagnostics that confirmation counters
+  represent server-observed cleanses rather than every attempted or accepted
+  action request.
+- Bumped the plugin version to `0.23.0.0`. Configuration schema remains `28`;
+  the existing reactive-counter master, held-key, post-Purify, and post-Guard
+  choices are preserved with no new persisted option, and the master remains
+  default-off.
+
 ## 0.22.0.0
 
 - Added an optional **post-Guard reactive counter-CC** trigger for BRD and WHM.

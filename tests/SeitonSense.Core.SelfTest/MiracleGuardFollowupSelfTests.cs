@@ -84,7 +84,7 @@ internal static class MiracleGuardFollowupSelfTests
         True(secondAbsent.ShouldPromote, "a genuinely rearmed episode may promote once");
     }
 
-    internal static void FreshTeamFocusAndPriorityWaitOnlyInsideOriginalWindow()
+    internal static void PressureHasNoMinimumAndPriorityWaitsInsideOriginalWindow()
     {
         var target = Target(slot: 3, entityId: 30);
         var present = MiracleGuardFollowupRules.Observe(
@@ -102,30 +102,44 @@ internal static class MiracleGuardFollowupSelfTests
             Find(release.NextState, 3).Phase,
             "release remains bounded to its original edge");
 
-        var belowFocus = MiracleGuardFollowupRules.Observe(
+        var unknown = MiracleGuardFollowupRules.Observe(
             release.NextState,
-            Observation(Candidate(target, guardCount: 0, teamTargetCount: 1), 1_200));
-        False(belowFocus.ShouldPromote, "one team target is insufficient");
-
-        var inside = MiracleGuardFollowupRules.Observe(
-            belowFocus.NextState,
-            Observation(Candidate(target, guardCount: 0, teamTargetCount: 2), 1_599));
-        True(inside.ShouldPromote, "fresh total team focus may promote at 499 ms");
+            Observation(
+                Candidate(target, guardCount: 0, teamTargetCountKnown: false),
+                1_200));
+        True(unknown.ShouldPromote, "unknown pressure remains an eligible fallback");
 
         present = MiracleGuardFollowupRules.Observe(
-            inside.NextState,
+            unknown.NextState,
             Observation(Candidate(target, guardCount: 1), 2_000));
         release = MiracleGuardFollowupRules.Observe(
             present.NextState,
-            Observation(Candidate(target, guardCount: 0, teamTargetCount: 1), 2_100));
+            Observation(
+                Candidate(target, guardCount: 0, teamTargetCount: 0),
+                2_100,
+                higherPriority: true));
+        var inside = MiracleGuardFollowupRules.Observe(
+            release.NextState,
+            Observation(Candidate(target, guardCount: 0, teamTargetCount: 0), 2_599));
+        True(inside.ShouldPromote, "fresh known pressure zero may promote at 499 ms");
+
+        present = MiracleGuardFollowupRules.Observe(
+            inside.NextState,
+            Observation(Candidate(target, guardCount: 1), 3_000));
+        release = MiracleGuardFollowupRules.Observe(
+            present.NextState,
+            Observation(
+                Candidate(target, guardCount: 0, teamTargetCountKnown: false),
+                3_100,
+                higherPriority: true));
         var boundary = MiracleGuardFollowupRules.Observe(
             release.NextState,
-            Observation(Candidate(target, guardCount: 0, teamTargetCount: 2), 2_600));
+            Observation(Candidate(target, guardCount: 0, teamTargetCount: 0), 3_600));
         False(boundary.ShouldPromote, "500 ms boundary is already expired");
         Equal(1, boundary.ExpiredOpportunityCount, "expiry is diagnosed exactly once");
     }
 
-    internal static void SimultaneousReleaseRanksHpThenSlotAndRetiresEveryOther()
+    internal static void SimultaneousReleaseRanksPressureThenHpAndRetiresEveryOther()
     {
         var slot1 = Target(slot: 1, entityId: 101);
         var slot2 = Target(slot: 2, entityId: 102);
@@ -141,12 +155,12 @@ internal static class MiracleGuardFollowupSelfTests
             present.NextState,
             Observation(
                 [
-                    Candidate(slot1, guardCount: 0, teamTargetCount: 2, hp: 5_000, maxHp: 10_000),
+                    Candidate(slot1, guardCount: 0, teamTargetCount: 3, hp: 5_000, maxHp: 10_000),
                     Candidate(slot2, guardCount: 0, teamTargetCount: 2, hp: 2_000, maxHp: 10_000),
                 ],
                 1_001));
         True(released.ShouldPromote, "one simultaneous opportunity promotes");
-        Equal(slot2, released.PromotionIntent!.Value.Target, "lowest exact HP ratio wins");
+        Equal(slot1, released.PromotionIntent!.Value.Target, "highest fresh exact pressure wins before HP");
         Equal(1, released.RetiredOtherOpportunityCount, "other ready opportunity is spent");
         True(
             released.NextState.Actors.All(static actor =>
@@ -177,6 +191,37 @@ internal static class MiracleGuardFollowupSelfTests
                 ],
                 2_001));
         Equal(slot1, tied.PromotionIntent!.Value.Target, "equal HP ratio uses lower S-slot");
+
+        present = MiracleGuardFollowupRules.Observe(
+            tied.NextState,
+            Observation(
+                [Candidate(slot1, guardCount: 1), Candidate(slot2, guardCount: 1)],
+                3_000));
+        var mpRanked = MiracleGuardFollowupRules.Observe(
+            present.NextState,
+            Observation(
+                [
+                    Candidate(
+                        slot1,
+                        guardCount: 0,
+                        teamTargetCount: 2,
+                        hp: 5_000,
+                        maxHp: 10_000,
+                        mpKnown: true,
+                        mp: 8_000,
+                        maxMp: CombatFrameRules.ExpectedMaximumMp),
+                    Candidate(
+                        slot2,
+                        guardCount: 0,
+                        teamTargetCount: 2,
+                        hp: 5_000,
+                        maxHp: 10_000,
+                        mpKnown: true,
+                        mp: 2_000,
+                        maxMp: CombatFrameRules.ExpectedMaximumMp),
+                ],
+                3_001));
+        Equal(slot2, mpRanked.PromotionIntent!.Value.Target, "lower trusted MP ratio wins before S-slot");
     }
 
     internal static void IdentityLifeAndStatusAmbiguityBreakTheEpisode()
@@ -268,7 +313,10 @@ internal static class MiracleGuardFollowupSelfTests
         bool teamTargetCountKnown = true,
         int teamTargetCount = 0,
         uint hp = 5_000,
-        uint maxHp = 10_000) =>
+        uint maxHp = 10_000,
+        bool mpKnown = false,
+        uint mp = 0,
+        uint maxMp = 0) =>
         new(
             target,
             IsExactCanonicalEnemy: true,
@@ -277,7 +325,12 @@ internal static class MiracleGuardFollowupSelfTests
             hp,
             maxHp,
             teamTargetCountKnown,
-            teamTargetCount);
+            teamTargetCount)
+        {
+            HasTrustedMp = mpKnown,
+            CurrentMp = mp,
+            MaximumMp = maxMp,
+        };
 
     private static MiracleGuardFollowupObservation Observation(
         MiracleGuardFollowupCandidate candidate,

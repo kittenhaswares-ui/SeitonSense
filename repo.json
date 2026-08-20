@@ -5,8 +5,8 @@
     "Punchline": "Interactive PvP combat frames, reactive counter-CC, LB cues, and survival helpers.",
     "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, fail-closed reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.22.0.0",
-    "Changelog": "Adds exact post-Guard reactive counter-CC at the first verified absent framework observation and removes the selected-target dependency from the direct post-Purify path. Schema 28 keeps the new hostile-action leaf off for existing users while fresh/reset settings preconfigure it behind the default-off reactive-counter master.",
+    "AssemblyVersion": "0.23.0.0",
+    "Changelog": "Makes held WHM Miracle and BRD Silent Nocturne react once for the selected exact post-Purify or post-Guard protection-end episode without a minimum team-pressure gate; a later distinct release epoch can trigger on the same hold. Simultaneous releases produce exactly one winner ranked by known-first fresh team pressure, HP ratio, then known-first trusted MP ratio, and losers never become fallback attempts. Distinct S1-S5 post-Purify states, native 10/20-yalm reachability, higher-priority Purify/Smart Recuperate, direct targeting, and no-retry safeguards remain.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787251981"
+    "LastUpdate": "1787258491"
   }
 ]
