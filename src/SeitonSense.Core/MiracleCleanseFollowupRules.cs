@@ -149,8 +149,9 @@ public readonly record struct MiracleCleanseFollowupDecision(
 /// Pure, opt-in WHM/BRD follow-up policy:
 /// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
 /// 150ms continuous live absence -> one bounded promotion into the existing
-/// reactive-CC dispatcher. Exact local hard target plus at least one allied hard
-/// target is required at release. The shared dispatcher owns fresh/held input, native
+/// reactive-CC dispatcher. A fresh exact total team hard-target count of at
+/// least two is required at release; the local player need not own the target.
+/// The shared dispatcher owns fresh/held input, native
 /// range/LoS, protection checks, input consumption, and the sole action call.
 /// RemainingTime is deliberately absent; release is never predicted.
 /// </summary>
@@ -463,9 +464,9 @@ public static class MiracleCleanseFollowupRules
             return Waiting(state);
 
         // Team focus is intentionally live, exact and non-sticky. The runtime
-        // supplies true only when the local hard target is this exact enemy and
-        // at least one separate valid ally hard-targets the same actor. Wait
-        // inside the original 500-ms release window; never extend it.
+        // supplies true only for a fresh total team hard-target count of at
+        // least two; the local player is optional. Wait inside the original
+        // 500-ms release window; never extend it.
         if (!observation.HasExactTeamFocus)
             return Waiting(state);
 

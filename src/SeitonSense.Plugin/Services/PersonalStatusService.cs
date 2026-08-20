@@ -626,6 +626,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MiracleInterceptViperNest,
             configuration.ReactiveCcDancerLimitBreak,
             configuration.ReactiveCcAfterEnemyPurify,
+            configuration.ReactiveCcAfterEnemyGuard,
             metadata.MarksmanSpiteVerified,
             metadata.ZantetsukenVerified,
             metadata.FuriousBacklashVerified,

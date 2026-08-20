@@ -2,10 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.21.0.0 adds optional exact Combat
-Frame interaction and evidence-only Limit Break telemetry, a default-off Dark
-Knight Hiebsprung helper, and BRD coverage for all reviewed urgent DNC/MCH/SAM/
-VPR startup signals. It retains v0.20's Smart Recuperate fix, accepted-Eukrasia
+assistance, and target highlights. Version 0.22.0.0 adds an opt-in exact
+post-Guard reactive counter-CC trigger and removes the selected-target dependency
+from the existing exact post-Purify path. It retains v0.21's optional Combat
+Frame interaction and evidence-only Limit Break telemetry, default-off Dark
+Knight Hiebsprung helper, and BRD coverage for reviewed DNC/MCH/SAM/VPR startup
+signals, plus v0.20's Smart Recuperate fix and accepted-Eukrasia
 Smart Kardia, fixed Combat Frames, removed speculative pre-Guard, and independent
 PLD Guardian Job Tool, plus v0.18.0.1's corrected DRK macro and narrow,
 explicitly enabled Wolves' Den striking-dummy test path.
@@ -148,12 +150,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
   separate default-off communication option can follow only a client-accepted
   automatic Guardian with localized CC Quick Chat row 35 and an ownership-safe
   Bind2-ally/Bind1-self pair.
-- **Experimental reactive counter-CC:** the default-off helper uses WHM Miracle
-  of Nature or BRD Silent Nocturne on exact DNC, MCH, SAM, or VPR urgent startup
-  evidence. It can
-  also follow any of the six exact Purify-removable enemy statuses only after
-  real Resilience ends and exact team focus reaches two. BRD uses native 20-yalm
-  range; an already-accepted instant LB may still win the client/server race.
+- **Experimental reactive counter-CC:** the default-off helper uses WHM Wunder
+  der Natur / Miracle of Nature or BRD Stumme Nocturne / Silent Nocturne on
+  exact DNC, MCH, SAM, or VPR urgent startup evidence. It can also follow any of
+  the six exact Purify-removable enemy statuses after real Resilience ends, or
+  an exact Guard on its first verified absent framework observation. Both
+  follow-ups bind the exact canonical `S1`-`S5` actor directly, require a fresh
+  exact team-target count of at least two, and never require or mutate the
+  selected target. BRD uses native 20-yalm range; an already-accepted instant LB
+  may still win the client/server race.
 - **Optional team focus sign:** a separate default-off module can place the real,
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
   and whose HP and/or trusted MP is low. It never overwrites an occupied Attack1,
@@ -178,7 +183,7 @@ and Super Focus Glow into one configurable custom-repository plugin.
   and Diagnostics.
   Shared-input actions are shown in their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  27 keeps Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
+  28 keeps Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
   and Scholar Critical Strategy as separate default-off options. Every action-
@@ -353,8 +358,9 @@ of sight.
 ## Optional CC-immunity brake
 
 The default-off Crystalline Conflict brake uses an exact, action-specific
-verified protection matrix. Standard Purify-removable CC and Miracle of Nature
-have separate blocker sets, including exact relevant ward statuses rather than
+verified protection matrix. Standard Purify-removable CC and Wunder der Natur /
+Miracle of Nature have separate blocker sets, including exact relevant ward
+statuses rather than
 assuming every visible protection blocks every action. It works directly on
 incoming hotbar action attempts; no macro is required. When the current job,
 action, and exact hostile target are all enabled and that target has verified
@@ -407,8 +413,8 @@ The conservative current list is:
 
 - PLD: Intervene `29065`;
 - WAR: Blota `29081`;
-- BRD: Silent Nocturne `29395` and Repelling Shot `29399`;
-- WHM: Miracle of Nature `29228`;
+- BRD: Stumme Nocturne / Silent Nocturne `29395` and Repelling Shot `29399`;
+- WHM: Wunder der Natur / Miracle of Nature `29228`;
 - BLM: Lethargy `41510`;
 - NIN: Forked Raiju `29510` and Fleeting Raiju `29707`;
 - MCH: Air Anchor `29407`;
@@ -749,8 +755,9 @@ or another plugin from cancelling Guard, and the exact live client/server orderi
 of these new rules still needs in-game validation.
 
 The **Reactive counter-CC** module is also default-off and CC-only. On WHM it
-uses Miracle of Nature `29228` at native 10-yalm range; on BRD it uses Silent
-Nocturne `29395` at native 20-yalm range. Both jobs can respond to the exact
+uses Wunder der Natur / Miracle of Nature `29228` at native 10-yalm range; on
+BRD it uses Stumme Nocturne / Silent Nocturne `29395` at native 20-yalm range.
+Both jobs can respond to the exact
 early DNC Contradance `29432`, MCH Marksman's Spite `29415`, SAM Zantetsuken
 `29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188` startup
 signals. VPR waits for live Hardened Scales `4096` to be genuinely absent, and
@@ -758,14 +765,23 @@ every path revalidates exact canonical
 enemy identity, life/targetability, action-specific CC protection, native range,
 and line of sight.
 
-The post-Purify subtype now accepts all six exact recovered statuses: Stun
+The post-Purify subtype accepts all six exact recovered statuses: Stun
 `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of Nature `3085`, and
 Deep Freeze `3219`. It requires exact enemy self-Purify `29056`, positive live
 Resilience `3248`, and then 150 ms of stable real Resilience absence rather than
-predicting its timer. Promotion also requires exact team focus of at least two:
-the enemy must be your current hard target and at least one exact ally's hard
-target. The resulting opportunity retains its original bounded release edge and
-is never extended while another threat has priority.
+predicting its timer. The signal freezes one exact canonical `S1`-`S5` actor and
+dispatches directly to that actor; it neither requires nor changes the selected
+target. Promotion requires a fresh exact team-target count of at least two. The
+resulting opportunity retains its original bounded release edge and is never
+extended while another threat has priority.
+
+The separate post-Guard subtype requires exact Guard `3054` or `3673` to be
+observed present on one canonical `S1`-`S5` actor. The first verified framework
+observation that finds Guard absent exposes one bounded fresh/held-key
+opportunity, only while a fresh exact team-target count is at least two. Dispatch
+uses the frozen actor directly at the job-specific native range and line of
+sight, without requiring or switching the selected target, choosing an alternate
+action/actor, replaying, or retrying.
 
 The current request order is **Purify > Smart Recuperate > Guard > Guardian >
 pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk >
@@ -1117,15 +1133,14 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 27 preserves an existing schema-26 user's Combat Frames
-master and helper choices. It forces only the new Hiebsprung action leaf and
-frame-interaction target-write leaf off on that migration; the two read-only LB
-detail leaves migrate on behind the user's existing Combat Frames master. A
-configuration older than schema 26 still traverses the earlier quiet Kardia/
-Guardian/pre-Guard/Combat-Frames migration first. Fresh and reset configurations
-keep the Combat Frames master and every action helper off. Their interaction and
-LB detail leaves default on only so enabling that master produces the complete
-new frame experience without extra setup.
+Configuration schema 28 preserves every existing schema-27 master and helper
+choice while forcing the new hostile post-Guard reactive-counter leaf off. A
+configuration older than schema 27 still traverses the earlier quiet Hiebsprung,
+frame-interaction/LB, Kardia, Guardian, pre-Guard, and Combat Frames migrations
+first. Fresh and reset configurations keep the Combat Frames master and every
+action-helper master off. Their new post-Guard leaf defaults on behind the
+disabled reactive-counter master; interaction and LB detail leaves likewise
+default on only behind the disabled Combat Frames master.
 
 ## Install
 
@@ -1203,7 +1218,8 @@ be read only to resolve an unchanged native target carrier of `0` or
 path is never restored. A missing hostile flag can be replaced only by the
 strict complete visible five-member party proof in a known public CC territory;
 self, party/alliance, native identity, and exact `<e1>`-`<e5>` checks remain.
-Plugin-owned Miracle and Silent Nocturne attempts receive the same final
+Plugin-owned Wunder der Natur / Miracle of Nature and Stumme Nocturne / Silent
+Nocturne attempts receive the same final
 action-specific brake after redirect bypass. The brake never stores or replays
 input and never chooses another target or action. Near Assist, Near Help, and Far
 Help can each replace only the target ID of one explicitly armed, already incoming
@@ -1307,7 +1323,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.21.0.0, source checks retain Smart Kardia's forwarding of one
+For v0.22.0.0, source checks retain Smart Kardia's forwarding of one
 exact Eukrasia call, client-accepted trigger creation, exact local Sage/territory
 ownership, two-second expiry, causal charge/status evidence, post-acceptance
 pressure publication, animation-lock-clear Kardia boundary, complete stable
@@ -1338,11 +1354,15 @@ Self gauge trust, remote `LB ?` before complete native-HUD calibration, no charg
 time estimate, live-RemainingTime-origin duration with at most 150 ms of non-
 extending last-expiry preservation, the 1.8-second instant card, and direct
 ally ActionEffect damage without HP-delta inference. Configuration checks pin
-schema 27 migration, fresh/reset defaults, and default-off action/communication/
+schema 28 migration, fresh/reset defaults, and default-off action/communication/
 Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
 30% HP, strict 10-yalm plus native reachability, local Bind, Guard/readiness gates,
 one attempt per proven cooldown epoch, and no target mutation or retry. Reactive
-CC checks include DNC/MCH/SAM/VPR BRD coverage and native 20-yalm reachability.
+CC checks include DNC/MCH/SAM/VPR BRD coverage, direct exact-actor post-Purify
+dispatch without selected-target dependence, exact Guard `3054`/`3673` presence
+followed by its first verified absent framework observation, a fresh team-target
+count of at least two, bounded fresh/held-key ownership, and job-specific native
+reachability.
 They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
 native action acceptance/effects, current client range/line of sight, Combat
 Frame appearance/calibration, native status/resource telemetry, LB packet timing,

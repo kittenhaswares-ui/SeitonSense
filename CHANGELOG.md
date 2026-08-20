@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.22.0.0
+
+- Added an optional **post-Guard reactive counter-CC** trigger for BRD and WHM.
+  It binds one exact canonical `S1`-`S5` actor only after Guard `3054` or `3673`
+  was observed present and the first verified framework observation finds it
+  absent. A fresh exact team-target count of at least two and one bounded fresh/
+  held-key opportunity are still required at the job-specific native range and
+  line of sight.
+- Corrected the post-Purify contract to dispatch directly against its frozen
+  exact `S1`-`S5` actor. It no longer requires that actor to be the selected
+  target and never mutates the selected target. Target drift, alternates,
+  replay, and retry remain fail-closed.
+- Updated the reactive-counter UI to use the client-correct bilingual names
+  **WHM Wunder der Natur / Miracle of Nature** and **BRD Stumme Nocturne /
+  Silent Nocturne**.
+- Bumped the plugin version to `0.22.0.0` and configuration schema to `28`.
+  The new post-Guard leaf defaults on only for fresh/reset configurations behind
+  the existing default-off reactive-counter master. Schema-27 and older users
+  migrate that leaf explicitly off, preserving every existing helper choice and
+  preventing an already-enabled installation from silently gaining a hostile
+  action trigger.
+
 ## 0.21.0.0
 
 - Fixed German Paladin Guardian communication to use FFXIV's canonical

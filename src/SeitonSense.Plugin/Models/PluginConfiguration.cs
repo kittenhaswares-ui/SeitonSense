@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 27;
+    public int Version { get; set; } = 28;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -117,6 +117,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ReactiveCcOnHeldKey { get; set; } = true;
     public bool ReactiveCcDancerLimitBreak { get; set; } = true;
     public bool ReactiveCcAfterEnemyPurify { get; set; } = true;
+    public bool ReactiveCcAfterEnemyGuard { get; set; } = true;
     public bool EnableMonkEarthReplyHelper { get; set; }
     public bool MonkEarthReplyOnLowHp { get; set; } = true;
     public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
@@ -215,7 +216,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 27)
+        if (Version >= 28)
         {
             if (repaired) Save();
             return;
@@ -495,7 +496,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ShowAllyLimitBreakDamageEvents = true;
         }
 
-        Version = 27;
+        if (Version < 28)
+        {
+            // This follow-up can issue one hostile BRD/WHM action after an observed
+            // enemy Guard ends, so every existing installation must opt in.
+            ReactiveCcAfterEnemyGuard = false;
+        }
+
+        Version = 28;
         ClampSettings();
         Save();
     }
@@ -504,7 +512,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 27;
+        Version = 28;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -584,6 +592,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ReactiveCcOnHeldKey = true;
         ReactiveCcDancerLimitBreak = true;
         ReactiveCcAfterEnemyPurify = true;
+        ReactiveCcAfterEnemyGuard = true;
         EnableMonkEarthReplyHelper = false;
         MonkEarthReplyOnLowHp = true;
         MonkEarthReplyBeforeExpiry = true;

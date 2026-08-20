@@ -28,6 +28,13 @@ internal sealed record TargetPressureOpponentSnapshot(
     int TeamTargetCount,
     IReadOnlyList<CcProtectionDisplay> Protections)
 {
+    /// <summary>
+    /// Exact party/alliance links plus the local player's independently
+    /// observed hard target. This is kept separate so the reactive-CC gate
+    /// cannot silently change the established team-pressure badges or ranking.
+    /// </summary>
+    internal int TotalTeamTargetCount { get; init; }
+
     internal bool IsIncoming => IncomingEvidence != TargetPressureEvidence.None;
     internal string SlotLabel => EnemySlot is >= 1 and <= 5 ? $"S{EnemySlot}" : string.Empty;
     internal bool HasDirectIncomingIntent =>

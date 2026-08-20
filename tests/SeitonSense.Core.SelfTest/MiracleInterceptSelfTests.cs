@@ -47,6 +47,11 @@ internal static class MiracleInterceptSelfTests
             MiracleInterceptRules.GetDispatchPriority(
                 MiracleInterceptThreatKind.PostPurifyCrowdControl),
             "post-Purify follow-up is lowest reactive priority");
+        Equal(
+            1,
+            MiracleInterceptRules.GetDispatchPriority(
+                MiracleInterceptThreatKind.PostGuardCrowdControl),
+            "post-Guard follow-up shares the lowest reactive priority");
     }
 
     internal static void HeldInputDispatchesAndSignalCannotRearm()

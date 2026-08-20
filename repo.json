@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Interactive PvP combat frames, LB cues, survival helpers, and target clarity.",
-    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, survival and job helpers, low-MP Focus, fail-closed assists, team communication, and target highlights.",
+    "Punchline": "Interactive PvP combat frames, reactive counter-CC, LB cues, and survival helpers.",
+    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, fail-closed reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.21.0.0",
-    "Changelog": "Adds optional exact Combat Frame targeting/mouseover, evidence-only LB gauges, activations, countdowns and direct ally LB damage, plus default-off DRK Hiebsprung and expanded BRD urgent counter-CC. Schema 27 keeps the Combat Frames master and action helpers opt-in; remote LB remains unknown until live native-HUD calibration.",
+    "AssemblyVersion": "0.22.0.0",
+    "Changelog": "Adds exact post-Guard reactive counter-CC at the first verified absent framework observation and removes the selected-target dependency from the direct post-Purify path. Schema 28 keeps the new hostile-action leaf off for existing users while fresh/reset settings preconfigure it behind the default-off reactive-counter master.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787245713"
+    "LastUpdate": "1787251981"
   }
 ]

@@ -190,7 +190,7 @@ internal static class MiracleCleanseFollowupSelfTests
         var unfocused = MiracleCleanseFollowupRules.Observe(
             releaseState,
             Observation(null, Candidate(target), 1_251, teamFocus: false));
-        False(unfocused.ShouldPromote, "local target without one allied target cannot promote");
+        False(unfocused.ShouldPromote, "fewer than two exact team targets cannot promote");
         Equal(
             MiracleCleanseFollowupPhase.ReleaseOpportunity,
             unfocused.NextState.Phase,
@@ -199,7 +199,7 @@ internal static class MiracleCleanseFollowupSelfTests
         var focused = MiracleCleanseFollowupRules.Observe(
             unfocused.NextState,
             Observation(null, Candidate(target), 1_252, teamFocus: true));
-        True(focused.ShouldPromote, "exact local plus one ally focus promotes");
+        True(focused.ShouldPromote, "fresh exact total team focus of two promotes");
         Equal(
             1_250L,
             focused.PromotionIntent!.Value.ReleasedAtMilliseconds,

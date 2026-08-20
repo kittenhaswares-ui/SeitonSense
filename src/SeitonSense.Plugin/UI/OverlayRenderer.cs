@@ -706,6 +706,8 @@ internal sealed class OverlayRenderer
             MiracleInterceptThreatKind.Contradance => $"{action}  •  DNC LB START",
             MiracleInterceptThreatKind.PostPurifyCrowdControl =>
                 $"{action}  •  AFTER PURIFY ({PurifyStatusLabel(popup.RemovedStatusId)})",
+            MiracleInterceptThreatKind.PostGuardCrowdControl =>
+                $"{action}  •  AFTER GUARD",
             _ => action,
         };
     }

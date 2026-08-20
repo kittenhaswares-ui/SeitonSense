@@ -316,12 +316,14 @@ The brake is disabled by default and runs only in Crystalline Conflict. When
 enabled, it transiently examines the local player's exact job, one already
 incoming action ID and target ID, the exact canonical opponent identity, and
 that opponent's action-specific verified CC-protection snapshot. Standard
-Purify-removable CC and Miracle of Nature use separate blocker matrices, which
+Purify-removable CC and Wunder der Natur / Miracle of Nature use separate
+blocker matrices, which
 include only verified relevant status IDs. The standard matrix contains
 `3054`, `3673`, `3248`, `1303`, `1320`, `4096`, and `3143`; Miracle's matrix
 contains `3248`, `1320`, VPR-only `4096`, `3143`, `3052`, and `3162`. Its reviewed action
-list is limited to Intervene `29065`, Blota `29081`, Silent Nocturne `29395`,
-Repelling Shot `29399`, Miracle of Nature `29228`, Lethargy `41510`, Forked
+list is limited to Intervene `29065`, Blota `29081`, Stumme Nocturne / Silent
+Nocturne `29395`, Repelling Shot `29399`, Wunder der Natur / Miracle of Nature
+`29228`, Lethargy `41510`, Forked
 Raiju `29510`, Fleeting Raiju `29707`, Air Anchor `29407`, Gravity II `29244`,
 its Double Cast form `29248`, and Mineuchi `29535`.
 
@@ -812,15 +814,26 @@ The optional post-Purify path recognizes only exact enemy self-Purify `29056`
 with one self target, a non-empty event sequence, and recovered-status effect
 `0x10` for Stun `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of
 Nature `3085`, or Deep Freeze `3219`. The source must resolve to one exact live
-canonical `<e1>`-`<e5>` enemy. The plugin then requires positive live Resilience
+canonical `S1`-`S5` enemy. The plugin then requires positive live Resilience
 `3248`, waits for 150 ms of stable real absence, and never predicts its timer.
-Promotion additionally requires the enemy to be the local player's exact hard
-target and at least one exact ally's hard target, for team focus of two or more.
+The signal freezes that exact actor and dispatches directly to it without
+requiring or changing the selected target. Promotion requires a fresh exact team-
+target count of two or more.
+
+The separate optional post-Guard path observes only exact Guard `3054` or `3673`
+present on one live canonical `S1`-`S5` enemy. The first verified framework
+observation that finds Guard absent exposes one bounded fresh/held-key
+opportunity. It retains only the frozen actor identity and bounded lifecycle in
+memory and requires a fresh exact team-target count of at least two. Any identity,
+context, protection, team-target, native range, or line-of-sight uncertainty
+fails closed. It never requires or switches the selected target, chooses an
+alternate action/actor, replays input, or retries.
 
 At dispatch, the enemy identity, expected triggering job, life/targetable state,
-and action-specific verified protection are revalidated. WHM uses only Miracle
-of Nature `29228` with native 10-yalm range/line of sight. BRD uses only Silent
-Nocturne `29395` with native 20-yalm range/line of sight. VPR requires live
+and action-specific verified protection are revalidated. WHM uses only Wunder
+der Natur / Miracle of Nature `29228` with native 10-yalm range/line of sight.
+BRD uses only Stumme Nocturne / Silent Nocturne `29395` with native 20-yalm
+range/line of sight. VPR requires live
 Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
@@ -946,7 +959,8 @@ opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
 trigger opt-ins, the separate held Smart Recuperate opt-in, the independent PLD
 Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD reactive
-counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1 marker
+counter-CC master/held-key/post-Purify/post-Guard/per-startup-trigger opt-ins,
+the team-visible Attack1 marker
 opt-in, resource-aura surfaces/thresholds/appearance, fixed Combat Frames master/
 interaction/LB information/layout options and ally LB damage-feed leaf, the Monk
 Earth's Reply master/triggers/thresholds,
@@ -955,15 +969,15 @@ the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
 opt-in, the separate DRK Hiebsprung held-key opt-in, and the CC-immunity-brake
 master plus exact per-job/per-action selections.
 
-Configuration schema 27 is current in v0.21.0.0. An existing schema-26 user's
-Combat Frames master and helper choices are preserved. The new Hiebsprung and
-frame-interaction leaves are forced off on migration, while the two read-only LB
-detail leaves migrate on behind that existing master choice. Configurations
-older than schema 26 still traverse the earlier quiet held-Kardia, pre-Guard,
-Guardian, Smart Recuperate, and Combat Frames migration first. Fresh and reset
+Configuration schema 28 is current in v0.22.0.0. An existing schema-27 user's
+master and helper choices are preserved, and the new post-Guard hostile-action
+leaf is explicitly forced off. Configurations older than schema 27 still traverse
+the earlier quiet Hiebsprung, frame-interaction/LB, held-Kardia, pre-Guard,
+Guardian, Smart Recuperate, and Combat Frames migrations first. Fresh and reset
 configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and
-all other action helpers off; interaction and both LB details default on behind
-that disabled master. Configuration does not save observed
+all other action-helper masters off; the new post-Guard leaf defaults on only
+behind the disabled reactive-counter master. Interaction and both LB details
+also default on behind the disabled frame master. Configuration does not save observed
 actors, targets, combat events, status timers, key state, marker ownership,
 pending helper state, ActionEffect confirmation state, or in-memory counters.
 
