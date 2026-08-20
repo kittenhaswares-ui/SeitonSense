@@ -2,9 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.22.0.0 adds an opt-in exact
-post-Guard reactive counter-CC trigger and removes the selected-target dependency
-from the existing exact post-Purify path. It retains v0.21's optional Combat
+assistance, and target highlights. Version 0.23.0.0 lets a continuously held key
+make one WHM/BRD counter-CC attempt for the selected exact post-Purify or
+post-Guard protection-end episode. A later distinct release epoch can trigger on
+the same hold. These paths no longer require a minimum team-pressure count, and
+simultaneous releases produce exactly one winner ranked by fresh exact pressure,
+HP ratio, then trusted MP ratio. It retains v0.22's direct exact-actor post-
+Purify/post-Guard dispatch, v0.21's optional Combat
 Frame interaction and evidence-only Limit Break telemetry, default-off Dark
 Knight Hiebsprung helper, and BRD coverage for reviewed DNC/MCH/SAM/VPR startup
 signals, plus v0.20's Smart Recuperate fix and accepted-Eukrasia
@@ -155,10 +159,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
   exact DNC, MCH, SAM, or VPR urgent startup evidence. It can also follow any of
   the six exact Purify-removable enemy statuses after real Resilience ends, or
   an exact Guard on its first verified absent framework observation. Both
-  follow-ups bind the exact canonical `S1`-`S5` actor directly, require a fresh
-  exact team-target count of at least two, and never require or mutate the
-  selected target. BRD uses native 20-yalm range; an already-accepted instant LB
-  may still win the client/server race.
+  follow-ups bind the exact canonical `S1`-`S5` actor directly and have no minimum
+  team-pressure-count gate. Simultaneous releases rank known fresh exact team
+  pressure before unknown and then highest-first, lowest HP ratio next, then
+  known trusted MP before unknown and lowest-first. Exactly one simultaneous
+  winner may make one attempt; losers are terminal, with no fallback. A later
+  distinct release epoch can trigger on the same held key without requiring or
+  mutating the selected target. WHM uses native 10-yalm range and BRD native
+  20-yalm range; an already-accepted instant LB may still win the client/server
+  race.
 - **Optional team focus sign:** a separate default-off module can place the real,
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
   and whose HP and/or trusted MP is low. It never overwrites an occupied Attack1,
@@ -771,24 +780,36 @@ Deep Freeze `3219`. It requires exact enemy self-Purify `29056`, positive live
 Resilience `3248`, and then 150 ms of stable real Resilience absence rather than
 predicting its timer. The signal freezes one exact canonical `S1`-`S5` actor and
 dispatches directly to that actor; it neither requires nor changes the selected
-target. Promotion requires a fresh exact team-target count of at least two. The
-resulting opportunity retains its original bounded release edge and is never
-extended while another threat has priority.
+target. There is no minimum team-pressure count. Each exact protection-end
+episode retains its original bounded release edge and is never extended while
+another helper has priority. Post-Purify state is tracked independently for each
+canonical `S1`-`S5` slot, so two exact enemies can reach their own verified
+Resilience end without either signal replacing the other.
 
 The separate post-Guard subtype requires exact Guard `3054` or `3673` to be
 observed present on one canonical `S1`-`S5` actor. The first verified framework
-observation that finds Guard absent exposes one bounded fresh/held-key
-opportunity, only while a fresh exact team-target count is at least two. Dispatch
-uses the frozen actor directly at the job-specific native range and line of
-sight, without requiring or switching the selected target, choosing an alternate
-action/actor, replaying, or retrying.
+observation that finds Guard absent exposes one bounded exact protection-end
+episode with no minimum team-pressure count. Dispatch uses the frozen actor
+directly at the job-specific native range and line of sight, without requiring
+or switching the selected target, choosing an alternate action/actor, replaying,
+or retrying.
+
+If multiple exact post-Purify or post-Guard releases are simultaneously eligible,
+the module ranks known fresh exact team pressure before unknown and then highest-
+first, lowest HP ratio next, then known trusted MP before unknown and lowest-
+first; stable `S1`-`S5` identity closes full ties. It selects exactly one winner.
+Every simultaneous loser is terminal and cannot become a fallback attempt. A
+continuously held eligible gameplay key can make at most one attempt for the
+selected exact protection-end episode. A later distinct release epoch may
+authorize another action on the same hold, but the selected episode cannot
+repeat.
 
 The current request order is **Purify > Smart Recuperate > Guard > Guardian >
 pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk >
 Hiebsprung**. Kardia still requires its separate accepted-Eukrasia trigger and
-Monk remains an automatic rather than physical-key claimant. At the reactive CC stage, state and input are
-consumed before one
-normal exact-target request; there is no visible selected-target change,
+Monk remains an automatic rather than physical-key claimant. At the reactive CC
+stage, the chosen opportunity is consumed before one normal exact-target request;
+there is no visible selected-target change,
 alternate action/target, fallback, replay, or retry. Plugin-owned Miracle and
 Silent Nocturne requests still pass through the final action-specific
 CC-immunity brake immediately before the native call.
@@ -1133,14 +1154,15 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 28 preserves every existing schema-27 master and helper
-choice while forcing the new hostile post-Guard reactive-counter leaf off. A
-configuration older than schema 27 still traverses the earlier quiet Hiebsprung,
-frame-interaction/LB, Kardia, Guardian, pre-Guard, and Combat Frames migrations
-first. Fresh and reset configurations keep the Combat Frames master and every
-action-helper master off. Their new post-Guard leaf defaults on behind the
-disabled reactive-counter master; interaction and LB detail leaves likewise
-default on only behind the disabled Combat Frames master.
+Configuration schema 28 remains current in v0.23.0.0. The held per-episode
+reactive-counter behavior reuses the existing master, held-key, post-Purify, and
+post-Guard choices, so no new persisted option or migration is required. The
+schema-27-to-28 migration still preserves every existing master and helper choice
+while forcing the then-new hostile post-Guard leaf off. Older configurations
+still traverse the earlier migrations first. Fresh and reset configurations keep
+the Combat Frames master and every action-helper master off; post-Guard defaults
+on only behind the disabled reactive-counter master, while interaction and LB
+detail leaves likewise default on only behind the disabled Combat Frames master.
 
 ## Install
 
@@ -1323,7 +1345,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.22.0.0, source checks retain Smart Kardia's forwarding of one
+For v0.23.0.0, source checks retain Smart Kardia's forwarding of one
 exact Eukrasia call, client-accepted trigger creation, exact local Sage/territory
 ownership, two-second expiry, causal charge/status evidence, post-acceptance
 pressure publication, animation-lock-clear Kardia boundary, complete stable
@@ -1360,9 +1382,12 @@ Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
 one attempt per proven cooldown epoch, and no target mutation or retry. Reactive
 CC checks include DNC/MCH/SAM/VPR BRD coverage, direct exact-actor post-Purify
 dispatch without selected-target dependence, exact Guard `3054`/`3673` presence
-followed by its first verified absent framework observation, a fresh team-target
-count of at least two, bounded fresh/held-key ownership, and job-specific native
-reachability.
+followed by its first verified absent framework observation, no minimum team-
+pressure gate, deterministic simultaneous ranking by fresh exact pressure/HP/
+trusted MP with known telemetry before unknown, independent per-`S1`-`S5` Purify
+tracking, one terminal winner, one attempt for the selected exact episode while
+held, a later distinct release epoch without key release, Purify/Smart Recuperate
+priority, and job-specific native reachability.
 They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
 native action acceptance/effects, current client range/line of sight, Combat
 Frame appearance/calibration, native status/resource telemetry, LB packet timing,

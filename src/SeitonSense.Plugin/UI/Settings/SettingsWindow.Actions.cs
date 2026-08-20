@@ -208,10 +208,11 @@ internal sealed partial class SettingsWindow
         ImGui.TextColored(new Vector4(0.34f, 0.82f, 1f, 1f), "ALLY RESCUE RESULTS");
         ImGui.TextUnformatted(
             $"Session: {rescue.AttemptCount} attempts  •  {rescue.AcceptedCount} client accepted  •  " +
-            $"{session.TotalConfirmed} confirmed");
-        ImGui.TextUnformatted($"This CC: {match.TotalConfirmed} confirmed");
+            $"{session.TotalConfirmed} confirmed cleanses");
+        ImGui.TextUnformatted($"This CC: {match.TotalConfirmed} confirmed cleanses");
         ImGui.TextDisabled(
-            $"Actions: Paean {session.CountForAction(AllyRescueConfirmationRules.WardensPaeanActionId)}  •  " +
+            $"Confirmed cleanses by action: Paean " +
+            $"{session.CountForAction(AllyRescueConfirmationRules.WardensPaeanActionId)}  •  " +
             $"Aquaveil {session.CountForAction(AllyRescueConfirmationRules.AquaveilActionId)}");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
@@ -238,7 +239,7 @@ internal sealed partial class SettingsWindow
             configuration.EnableReactiveCcUtilities,
             value => configuration.EnableReactiveCcUtilities = value);
         changed |= Checkbox(
-            "A held gameplay key may trigger when an opportunity appears (includes WASD)",
+            "Hold a gameplay key to react to eligible opportunities (includes WASD)",
             configuration.ReactiveCcOnHeldKey,
             value => configuration.ReactiveCcOnHeldKey = value);
         ImGui.TextColored(
@@ -247,7 +248,7 @@ internal sealed partial class SettingsWindow
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
                 ? "ON — WHM Wunder der Natur / Miracle of Nature or BRD Stumme Nocturne / " +
-                  "Silent Nocturne may claim one eligible input in CC."
+                  "Silent Nocturne may make one exact-target attempt for an eligible CC opportunity."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
 
         ImGui.TextUnformatted("WHM / BRD triggers:");
@@ -256,11 +257,11 @@ internal sealed partial class SettingsWindow
             configuration.ReactiveCcDancerLimitBreak,
             value => configuration.ReactiveCcDancerLimitBreak = value);
         changed |= Checkbox(
-            "After enemy Purify: all six removable CC types, team focus 2+",
+            "After enemy Purify: all six removable CC types, ranked exact release",
             configuration.ReactiveCcAfterEnemyPurify,
             value => configuration.ReactiveCcAfterEnemyPurify = value);
         changed |= Checkbox(
-            "After enemy Guard ends: team focus 2+",
+            "After enemy Guard ends: ranked exact release",
             configuration.ReactiveCcAfterEnemyGuard,
             value => configuration.ReactiveCcAfterEnemyGuard = value);
 
@@ -289,19 +290,22 @@ internal sealed partial class SettingsWindow
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
             "accepts Stun, Heavy, Bind, Silence, Deep " +
             "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It uses " +
-            "the exact S1-S5 actor directly, requires a fresh exact team-target count of at least 2, does not require " +
-            "that actor to be your selected target, and never changes your target. " +
+            "the exact S1-S5 actor directly, does not require that actor to be your selected target, and never changes " +
+            "your target. There is no minimum team-pressure count, and distinct S-slots are tracked independently. " +
             "Viper waits until Hardened Scales is actually absent.");
         ImGui.TextDisabled(
-            "The post-Guard rule binds one exact S1-S5 actor only after Guard 3054/3673 was observed present and the " +
-            "first verified framework observation finds it absent. It creates one bounded fresh/held-key opportunity " +
-            "at the job-specific native range and line of sight, with no selected-target switch, alternate " +
-            "action/target, replay, or retry.");
+            "For simultaneous post-Purify or post-Guard releases, known fresh exact team pressure ranks before " +
+            "unknown pressure and then highest-first, followed by lowest HP ratio, known trusted MP before unknown " +
+            "MP and then lowest-first, with stable S-slot ties. Exactly one winner is selected; simultaneous losers " +
+            "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
+            "3054/3673 was observed present and then verified absent. WHM uses its native 10-yalm range and BRD its " +
+            "native 20-yalm range; both require line of sight.");
         ImGui.TextDisabled(
-            "One already-eligible physical generation makes at most one exact-target attempt; Turbo pulses add no " +
-            "intent. Purify, Smart Recuperate, Guard, Guardian, pressure Sprint, and Ally Rescue " +
-            "have priority. Input is " +
-            "consumed before the native call, with no selected-target change, fallback, or retry. The blue AUTO CC " +
+            "While a gameplay key remains held, the selected exact post-Purify or post-Guard protection-end episode " +
+            "permits at most one attempt. A later distinct release epoch may authorize another action without a key " +
+            "release; no simultaneous loser can. Purify and Smart Recuperate keep priority. The episode is consumed " +
+            "before one direct exact-target request, with no " +
+            "selected-target change, alternate, fallback, replay, or retry. The blue AUTO CC " +
             "LANDED flash appears " +
             "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +
             "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +

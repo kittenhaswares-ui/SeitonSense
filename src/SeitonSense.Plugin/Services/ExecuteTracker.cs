@@ -260,6 +260,9 @@ internal sealed class ExecuteTracker : IDisposable
                 state.WasDead = false;
                 state.Guard = GuardCooldownRules.ObserveRevive();
                 state.LowMp = LowMpState.Initial;
+                state.TrustedMpGameObjectId = 0;
+                state.TrustedMpEntityId = 0;
+                state.TrustedMpJobId = 0;
                 state.SeitonCue = PersistentSeitonCueState.Initial;
                 state.SeitonPulseStartedAtMilliseconds = -1;
             }
@@ -279,6 +282,21 @@ internal sealed class ExecuteTracker : IDisposable
 
             var plausibleMp = player.MaxMp > 0 && player.CurrentMp <= player.MaxMp;
             var trustedMp = plausibleMp && (player.CurrentMp > 0 || state.LowMp.HasTrustedSample);
+            var playerJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
+            var exactMpIdentityPreviouslyTrusted =
+                state.TrustedMpGameObjectId == player.GameObjectId &&
+                state.TrustedMpEntityId == player.EntityId &&
+                state.TrustedMpJobId == playerJobId;
+            var rankingTrustedMp =
+                player.MaxMp == CombatFrameRules.ExpectedMaximumMp &&
+                player.CurrentMp <= player.MaxMp &&
+                (player.CurrentMp > 0 || exactMpIdentityPreviouslyTrusted);
+            if (rankingTrustedMp)
+            {
+                state.TrustedMpGameObjectId = player.GameObjectId;
+                state.TrustedMpEntityId = player.EntityId;
+                state.TrustedMpJobId = playerJobId;
+            }
             state.LowMp = metadata.RecuperateVerified
                 ? LowMpRules.Observe(
                     state.LowMp,
@@ -355,7 +373,10 @@ internal sealed class ExecuteTracker : IDisposable
                 player.MaxHp,
                 lowMp,
                 player.CurrentMp,
-                player.MaxMp));
+                player.MaxMp)
+            {
+                HasTrustedMp = rankingTrustedMp,
+            });
         }
 
         snapshots.Sort(static (left, right) => left.Slot.CompareTo(right.Slot));
@@ -432,5 +453,8 @@ internal sealed class ExecuteTracker : IDisposable
         public PersistentSeitonCueState SeitonCue { get; set; } = PersistentSeitonCueState.Initial;
         public long SeitonPulseStartedAtMilliseconds { get; set; } = -1;
         public bool WasDead { get; set; }
+        public ulong TrustedMpGameObjectId { get; set; }
+        public uint TrustedMpEntityId { get; set; }
+        public uint TrustedMpJobId { get; set; }
     }
 }

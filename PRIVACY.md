@@ -817,17 +817,30 @@ Nature `3085`, or Deep Freeze `3219`. The source must resolve to one exact live
 canonical `S1`-`S5` enemy. The plugin then requires positive live Resilience
 `3248`, waits for 150 ms of stable real absence, and never predicts its timer.
 The signal freezes that exact actor and dispatches directly to it without
-requiring or changing the selected target. Promotion requires a fresh exact team-
-target count of two or more.
+requiring or changing the selected target. There is no minimum team-pressure
+count. Each verified Resilience end creates only a bounded exact protection-end
+episode in memory. The runtime keeps at most one active post-Purify state per
+canonical `S1`-`S5` slot plus a bounded deduplication set, allowing distinct exact
+enemies to progress independently without one replacing the other's signal.
 
 The separate optional post-Guard path observes only exact Guard `3054` or `3673`
 present on one live canonical `S1`-`S5` enemy. The first verified framework
-observation that finds Guard absent exposes one bounded fresh/held-key
+observation that finds Guard absent exposes one bounded exact protection-end
 opportunity. It retains only the frozen actor identity and bounded lifecycle in
-memory and requires a fresh exact team-target count of at least two. Any identity,
-context, protection, team-target, native range, or line-of-sight uncertainty
-fails closed. It never requires or switches the selected target, chooses an
-alternate action/actor, replays input, or retries.
+memory, with no minimum team-pressure count. Any identity, context, protection,
+native range, or line-of-sight uncertainty fails closed. It never requires or
+switches the selected target, chooses an alternate action/actor, replays input,
+or retries.
+
+When multiple exact post-Purify or post-Guard releases are simultaneously
+eligible, selection reads each candidate's fresh exact team-target count,
+current/maximum HP, and trusted current/maximum MP. A known pressure sample ranks
+before unknown pressure, then higher pressure ranks first; lower HP ratio follows.
+Known trusted MP ranks before unknown MP, then lower trusted MP ratio ranks first;
+stable canonical slot/identity closes full ties. Exactly one winner is selected.
+Every simultaneous loser is terminal and cannot become a fallback attempt. These
+values and the frozen winning actor are retained only in bounded in-memory helper
+state.
 
 At dispatch, the enemy identity, expected triggering job, life/targetable state,
 and action-specific verified protection are revalidated. WHM uses only Wunder
@@ -838,14 +851,18 @@ Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
 
-The helper shares the physical-generation observer after Purify, Smart
-Recuperate, Guard, Guardian, pressure Sprint, and Ally Rescue. A
-claimed generation cannot be reused. The helper
-consumes its state and generation before at most one normal native exact-target
-request, without changing the visible target, choosing an alternate enemy/action,
-replaying input, or retrying. Its internal redirect bypass excludes only macro
-target rewriting; the final action-specific CC-immunity brake still runs at the
-native dispatch boundary.
+The helper observes held gameplay-key state only after Purify, Smart Recuperate,
+Guard, Guardian, pressure Sprint, and Ally Rescue. Its existing startup paths
+retain their physical-generation ownership. For the post-Purify and post-Guard
+paths, a continuously held eligible key permits at most one attempt for the
+selected exact protection-end episode. A later distinct release epoch may
+authorize another action without a release/repress, but the selected episode
+cannot be reused and no simultaneous loser can follow it. The helper consumes the
+chosen opportunity before at most one normal native exact-target request, without
+changing the visible target, choosing an alternate enemy/action, replaying input,
+or retrying. Its internal redirect bypass excludes only macro target rewriting;
+the final action-specific CC-immunity brake still runs at the native dispatch
+boundary.
 
 The action-effect hook also places exact local counter-status observations into
 a separate bounded in-memory queue. A 1.5-second `AUTO CC LANDED` visual is
@@ -969,17 +986,18 @@ the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
 opt-in, the separate DRK Hiebsprung held-key opt-in, and the CC-immunity-brake
 master plus exact per-job/per-action selections.
 
-Configuration schema 28 is current in v0.22.0.0. An existing schema-27 user's
-master and helper choices are preserved, and the new post-Guard hostile-action
-leaf is explicitly forced off. Configurations older than schema 27 still traverse
-the earlier quiet Hiebsprung, frame-interaction/LB, held-Kardia, pre-Guard,
-Guardian, Smart Recuperate, and Combat Frames migrations first. Fresh and reset
-configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and
-all other action-helper masters off; the new post-Guard leaf defaults on only
-behind the disabled reactive-counter master. Interaction and both LB details
-also default on behind the disabled frame master. Configuration does not save observed
-actors, targets, combat events, status timers, key state, marker ownership,
-pending helper state, ActionEffect confirmation state, or in-memory counters.
+Configuration schema 28 remains current in v0.23.0.0. The held per-episode
+reactive-counter behavior reuses the existing master, held-key, post-Purify, and
+post-Guard choices, so no new persisted option or migration is required. The
+schema-27-to-28 migration still preserves existing master/helper choices and
+forces its then-new post-Guard hostile-action leaf off. Older configurations
+still traverse the earlier migrations first. Fresh and reset configurations keep
+Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-
+helper masters off; post-Guard defaults on only behind the disabled reactive-
+counter master. Interaction and both LB details also default on behind the
+disabled frame master. Configuration does not save observed actors, targets,
+combat events, status timers, key state, marker ownership, pending helper state,
+ActionEffect confirmation state, or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

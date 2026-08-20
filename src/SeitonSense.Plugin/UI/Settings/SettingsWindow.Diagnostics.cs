@@ -23,6 +23,20 @@ internal sealed partial class SettingsWindow
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
+        var protectionEndRankPressure = !protectionEndRankPresent
+            ? "none"
+            : miracle.ProtectionEndRankTeamPressureKnown
+                ? miracle.ProtectionEndRankTeamPressure.ToString()
+                : "unknown";
+        var protectionEndRankHp = protectionEndRankPresent
+            ? $"{miracle.ProtectionEndRankCurrentHp}/{miracle.ProtectionEndRankMaximumHp}"
+            : "none";
+        var protectionEndRankMp = !protectionEndRankPresent
+            ? "none"
+            : miracle.ProtectionEndRankMpKnown
+                ? $"{miracle.ProtectionEndRankCurrentMp}/{miracle.ProtectionEndRankMaximumMp}"
+                : "unknown";
         var monk = personalStatus.MonkEarthReplyDiagnostics;
         ImGui.TextWrapped(
             $"Personal statuses={personal.Statuses.Length}, Purify={personal.Purify.Phase}/" +
@@ -67,12 +81,14 @@ internal sealed partial class SettingsWindow
             $"{recuperate.UseActionAccepted}, count={recuperate.AttemptCount}/{recuperate.AcceptedCount}, " +
             $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
-            $"Ally Rescue: {rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
+            $"Ally Rescue (confirmation counters are exact server cleanses): " +
+            $"{rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
             $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
             $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}, " +
             $"count={rescue.AttemptCount}/{rescue.AcceptedCount}, confirm-pending={rescue.ConfirmationPending}, " +
-            $"confirmed={rescue.MatchConfirmations.TotalConfirmed}/{rescue.SessionConfirmations.TotalConfirmed}, " +
+            $"confirmed-cleanses match/session={rescue.MatchConfirmations.TotalConfirmed}/" +
+            $"{rescue.SessionConfirmations.TotalConfirmed}, " +
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
         ImGui.TextWrapped(
             $"Reactive CC (WHM Wunder der Natur / Miracle of Nature; BRD Stumme Nocturne / Silent Nocturne): " +
@@ -88,11 +104,14 @@ internal sealed partial class SettingsWindow
             $"{miracle.RejectedThreatCount}, waits protection/range/input/priority=" +
             $"{miracle.ProtectionWaitCount}/{miracle.RangeWaitCount}/{miracle.NoInputWaitCount}/" +
             $"{miracle.PriorityWaitCount}, expired={miracle.ExpiredThreatCount}, " +
-            $"landed={miracle.ConfirmedLandingCount}, confirm-capture/queue/drop=" +
+            $"landed/pending={miracle.ConfirmedLandingCount}/{miracle.ConfirmationPendingCount}, " +
+            $"confirm-capture/queue/drop=" +
             $"{miracle.CapturedConfirmationCount}/{miracle.ConfirmationQueueDepth}/{miracle.DroppedConfirmationCount}, " +
             $"last={miracle.LastEvent}, last-opportunity={miracle.LastOpportunity}, " +
-            $"cleanse-followup={miracle.CleanseFollowupPhase}, removed=" +
-            $"{miracle.CleanseFollowupRemovedStatusId}, team-focus={miracle.CleanseFollowupTeamPressure}, target=" +
+            $"cleanse-followup tracked/release-ready={miracle.CleanseFollowupTrackedCount}/" +
+            $"{miracle.CleanseFollowupReleaseReadyCount}, phase={miracle.CleanseFollowupPhase}, removed=" +
+            $"{miracle.CleanseFollowupRemovedStatusId}, team-pressure-sample=" +
+            $"{miracle.CleanseFollowupTeamPressure}, target=" +
             $"{miracle.CleanseFollowupTargetGameObjectId:X}/{miracle.CleanseFollowupTargetEntityId:X}, " +
             $"resilience-seen={miracle.CleanseFollowupResilienceObserved}, signal/promote/cancel=" +
             $"{miracle.CleanseFollowupSignalCount}/{miracle.CleanseFollowupPromotionCount}/" +
@@ -100,10 +119,14 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(
             $"Reactive CC Guard follow-up: tracked/release-ready={miracle.GuardFollowupTrackedCount}/" +
             $"{miracle.GuardFollowupReleaseReadyCount}, target={miracle.GuardFollowupTargetGameObjectId:X}/" +
-            $"{miracle.GuardFollowupTargetEntityId:X}, team-focus={miracle.GuardFollowupTeamPressure}, " +
+            $"{miracle.GuardFollowupTargetEntityId:X}, team-pressure-sample={miracle.GuardFollowupTeamPressure}, " +
             $"episode/promote/expired/retired={miracle.GuardFollowupEpisodeCount}/" +
             $"{miracle.GuardFollowupPromotionCount}/{miracle.GuardFollowupExpiredCount}/" +
             $"{miracle.GuardFollowupRetiredCount}, last={miracle.GuardFollowupLastEvent}");
+        ImGui.TextWrapped(
+            $"Reactive CC protection-end hold/rank: consent={miracle.ProtectionEndHeldConsentActive}/" +
+            $"{miracle.ProtectionEndHeldConsentKey}, last-winner pressure={protectionEndRankPressure}, " +
+            $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
             $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +
