@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "Fixed PvP combat frames, pressure, survival helpers, assists, and target clarity.",
-  "Description": "A local PvP HUD with fixed overlay-only Self/S1-S5 combat frames, pressure and CC cues, optional Smart Recuperate, accepted-Eukrasia Smart Kardia, low-MP Focus, exact DRK macro helpers, fail-closed assists, team communication, and target highlights.",
+  "Punchline": "Interactive PvP combat frames, LB cues, survival helpers, and target clarity.",
+  "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, survival and job helpers, low-MP Focus, fail-closed assists, team communication, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",
@@ -19,6 +19,8 @@
     "dark-knight",
     "sage",
     "combat-frames",
+    "limit-break",
+    "targeting",
     "survival",
     "utility"
   ]

@@ -261,15 +261,12 @@ internal sealed class MiracleInterceptProbe
         }
 
         var marksmanSpiteEnabled =
-            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
             enableMarksmanSpite &&
             marksmanSpiteMetadataVerified;
         var zantetsukenEnabled =
-            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
             enableZantetsuken &&
             zantetsukenMetadataVerified;
         var furiousBacklashEnabled =
-            counterActionId == EnemyCombatConstants.MiracleOfNatureActionId &&
             enableFuriousBacklash &&
             furiousBacklashMetadataVerified &&
             verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId);
@@ -328,7 +325,7 @@ internal sealed class MiracleInterceptProbe
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
 
-        // A transient higher-priority Purify/defense/Rescue claim cannot dispatch a
+        // A transient higher-priority survival/Sprint/Rescue claim cannot dispatch a
         // second action from the same physical generation, but it also need not
         // destroy the exact threat. Retain it only inside its original deadline
         // so a genuinely fresh later generation can still act; never replay or
@@ -1266,7 +1263,7 @@ internal sealed class MiracleInterceptProbe
 
     private static string DescribeWaitReason(MiracleWaitReason reason) => reason switch
     {
-        MiracleWaitReason.HigherPriorityHelper => "Purify/defense/Ally Rescue priority",
+        MiracleWaitReason.HigherPriorityHelper => "Higher-priority helper",
         MiracleWaitReason.NoEligibleInput => "an eligible held/fresh physical key",
         MiracleWaitReason.TextInput => "text input to close",
         MiracleWaitReason.HardenedScales => "Hardened Scales to disappear",

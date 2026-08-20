@@ -947,7 +947,7 @@ internal sealed class DefensiveUtilityProbe
         if (!isCrystallineConflict) return "Outside Crystalline Conflict";
         if (!localIdentityValid) return "Local player invalid";
         if (guardActive) return "Active or propagating Guard blocks every plugin-owned action";
-        if (higherPriorityClaimed) return "Waiting behind higher-priority Purify";
+        if (higherPriorityClaimed) return "Waiting behind higher-priority survival helper";
         if (!pressureKnown) return "Pressure unknown";
         return $"Waiting; self pressure={incomingEnemyCount}";
     }

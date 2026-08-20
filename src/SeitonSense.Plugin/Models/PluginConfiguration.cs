@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 26;
+    public int Version { get; set; } = 27;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -51,6 +51,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
     public bool EnableSmartRecuperateOnHeldKey { get; set; }
+    public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -165,6 +166,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float CurrentTargetInfoScreenY { get; set; } = 0.7f;
     public float CurrentTargetInfoScale { get; set; } = 1f;
     public bool ShowCombatFrames { get; set; }
+    public bool CombatFramesEnableInteraction { get; set; } = true;
+    public bool CombatFramesShowLimitBreaks { get; set; } = true;
+    public bool ShowAllyLimitBreakDamageEvents { get; set; } = true;
     public bool CombatFramesShowNames { get; set; } = true;
     public bool CombatFramesShowExactValues { get; set; } = true;
     public bool CombatFramesShowStatuses { get; set; } = true;
@@ -211,7 +215,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 26)
+        if (Version >= 27)
         {
             if (repaired) Save();
             return;
@@ -480,7 +484,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
             CombatFramesBackgroundOpacity = 0.92f;
         }
 
-        Version = 26;
+        if (Version < 27)
+        {
+            // New action and targeting paths stay opt-in for upgrading users.
+            // The Combat Frames master remains off unless the user enabled it;
+            // its read-only LB detail toggles default on behind that master.
+            EnableDarkKnightPlungeOnHeldKey = false;
+            CombatFramesEnableInteraction = false;
+            CombatFramesShowLimitBreaks = true;
+            ShowAllyLimitBreakDamageEvents = true;
+        }
+
+        Version = 27;
         ClampSettings();
         Save();
     }
@@ -489,7 +504,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 26;
+        Version = 27;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -504,6 +519,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
+        EnableDarkKnightPlungeOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
@@ -578,6 +594,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
         ShowCombatFrames = false;
+        CombatFramesEnableInteraction = true;
+        CombatFramesShowLimitBreaks = true;
+        ShowAllyLimitBreakDamageEvents = true;
         CombatFramesShowNames = true;
         CombatFramesShowExactValues = true;
         CombatFramesShowStatuses = true;

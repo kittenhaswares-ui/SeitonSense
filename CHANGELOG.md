@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.21.0.0
+
+- Fixed German Paladin Guardian communication to use FFXIV's canonical
+  localized `/schnellchat <P#> Ziel decken` form after a live report where the
+  Guardian signs appeared but the Quick Chat message did not.
+- Added optional **Combat Frame interaction**. A fresh, living, exact canonical
+  `S1`-`S5` row can be clicked once to set that actor as the hard target, while
+  hover can publish that exact actor through FFXIV's native mouseover slots.
+  Self, preview, dead/unknown rows, stale snapshots, and gaps stay click-through;
+  every click is revalidated once with no retry, and external mouseover
+  ownership wins. The native HUD, soft target, and Focus Target are not changed.
+- Added configurable **Combat Frame Limit Break telemetry**. Self uses the exact
+  native LimitBreakController gauge. Remote `S1`-`S5` gauges remain `LB ?` until
+  the current native HUD instance proves a live calibration against Self; no
+  elapsed-time or job charge-time estimate is used. Exact activation evidence
+  opens the card, and duration countdowns originate only from a matching live
+  `RemainingTime`. One missing sample of at most 150 ms may preserve the last
+  exact expiry without extending it. Instant LBs use a fixed 1.8-second card.
+- Added an optional **ally LB damage feed** using only direct ActionEffect damage
+  attributed to an exact ally caster and reviewed LB action. It does not infer
+  damage from HP deltas and stays silent for pet, periodic, or ambiguous damage.
+- Added a separate default-off **Dark Knight Hiebsprung** held-key helper for
+  exact Crystalline Conflict. It considers canonical enemies at 30% HP or lower,
+  enforces a strict 10-yalm center-distance cap plus native range/line of sight,
+  blocks either side's Guard, and can spend only one attempt per proven ready
+  epoch. A continuous hold may repeat only after an observed not-ready-to-ready
+  cooldown transition, never from a guessed reset; target mutation, alternate,
+  replay, and retry remain forbidden.
+- Expanded BRD Silent Nocturne urgent startup coverage to DNC, MCH, SAM, and VPR
+  at the action's native 20-yalm range. The bounded startup evidence and exact
+  protection/identity checks remain fail-closed. A client/server race remains:
+  an instant LB already accepted before the reactive request may still resolve
+  even if Silence subsequently lands.
+- The current request priority is **Purify > Smart Recuperate > Guard > Guardian
+  > pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk >
+  Hiebsprung**. Kardia still requires its separate accepted-Eukrasia trigger.
+- Bumped the plugin version to `0.21.0.0` and configuration schema to `27`.
+  Schema-27 migration preserves an existing schema-26 user's Combat Frames
+  master and helper choices, forces only the new Hiebsprung and interaction
+  leaves off, and enables both read-only LB detail leaves behind that existing
+  master choice. Configurations older than schema 26 still traverse the earlier
+  quiet migration first. Fresh/reset action and Combat Frames masters remain off;
+  interaction and both LB detail leaves default on behind the disabled frame
+  master.
+
 ## 0.20.0.1
 
 - Fixed **Smart Recuperate** remaining blocked after opt-in because the current
@@ -47,8 +92,8 @@
   depends on the defensive-utility master and keeps its exact low-HP ally,
   native reachability, direct-GOID, one-attempt, communication, and marker-
   ownership safeguards.
-- The shared physical-input priority is now Self-Purify, reactive Guard, Smart
-  Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC,
+- The shared physical-input priority is now Self-Purify, Smart Recuperate,
+  reactive Guard, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC,
   Ninja Seiton, then Scholar Critical Strategy. Accepted-Eukrasia Kardia is a
   separate bounded follow-up; Monk Earth's Reply still yields after an earlier
   helper attempt.

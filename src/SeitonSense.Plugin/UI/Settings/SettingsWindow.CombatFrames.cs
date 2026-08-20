@@ -16,6 +16,10 @@ internal sealed partial class SettingsWindow
             "Show fixed Combat Frames",
             configuration.ShowCombatFrames,
             value => configuration.ShowCombatFrames = value);
+        changed |= Checkbox(
+            "Enemy rows: click to target + native <mo> on hover",
+            configuration.CombatFramesEnableInteraction,
+            value => configuration.CombatFramesEnableInteraction = value);
 
         if (ImGui.Button(combatFrames.PreviewEnabled ? "Stop Combat Frames preview" : "Preview Combat Frames"))
             combatFrames.PreviewEnabled = !combatFrames.PreviewEnabled;
@@ -28,10 +32,15 @@ internal sealed partial class SettingsWindow
 
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Display-only: no row is clickable and no hard, soft, focus, or mouseover target is changed. Unknown " +
-            "HP, MP, slot, pressure, or status data stays visibly unknown instead of being guessed. The native " +
-            "FFXIV HUD is never hidden or edited; hide its parameter/enemy-list elements manually in HUD Layout " +
-            "if you want these frames to visually replace them.");
+            "Fresh living enemy rows are interactive: left-clicking one row makes exactly that canonical S-slot " +
+            "your hard target, and hovering publishes that exact actor to FFXIV's native <mo> target slots. The " +
+            "self frame, preview, dead or unknown rows, stale snapshots, and gaps remain click-through. A click is " +
+            "revalidated and written once with no retry; external mouseover replacement always wins. No soft or " +
+            "focus target is changed.");
+        ImGui.TextDisabled(
+            "Unknown HP, MP, slot, pressure, or status data stays visibly unknown instead of being guessed. The " +
+            "native FFXIV HUD is never hidden or edited; hide its parameter/enemy-list elements manually in HUD " +
+            "Layout if you want these frames to visually replace them.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
@@ -52,9 +61,27 @@ internal sealed partial class SettingsWindow
             "Show direct pressure and team-focus badges",
             configuration.CombatFramesShowPressure,
             value => configuration.CombatFramesShowPressure = value);
+        changed |= Checkbox(
+            "Show LB gauges, activations, and live countdowns",
+            configuration.CombatFramesShowLimitBreaks,
+            value => configuration.CombatFramesShowLimitBreaks = value);
+        changed |= Checkbox(
+            "Show direct ally LB damage events",
+            configuration.ShowAllyLimitBreakDamageEvents,
+            value => configuration.ShowAllyLimitBreakDamageEvents = value);
         ImGui.TextDisabled(
             "MP bars use trusted observations and 2,000-MP divisions. Enemy order is always canonical S1-S5; " +
             "dead or temporarily unknown actors keep their row instead of making the list jump.");
+        ImGui.TextDisabled(
+            "Self uses the exact native LB controller gauge. S1-S5 stay LB ? until the current native HUD instance " +
+            "has completed live calibration against Self; charge time is never estimated. Exact activation evidence " +
+            "opens the LB card. A duration countdown originates only from a matching live RemainingTime value. One " +
+            "missing sample of at most 150 ms may preserve the last exact expiry but never extend it; instant LBs use " +
+            "a fixed 1.8-second card.");
+        ImGui.TextDisabled(
+            "The ally feed shows only direct damage amounts attributed to an exact ally caster and reviewed LB action " +
+            "in ActionEffect. It never infers damage from HP changes; pet, periodic, or ambiguous attribution stays " +
+            "silent. These detail switches do not enable the Combat Frames master.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Layout");

@@ -46,6 +46,33 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
 
+        if (ImGui.CollapsingHeader("Dark Knight — Hiebsprung", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Hiebsprung on held gameplay key at 30% HP or lower (experimental)",
+                configuration.EnableDarkKnightPlungeOnHeldKey,
+                value => configuration.EnableDarkKnightPlungeOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off, PvP Dark Knight, and exact Crystalline Conflict only. Hiebsprung / Plunge (29092) " +
+                "considers living, targetable canonical S1-S5 enemies at an exact 30% HP or lower. The nearest " +
+                "native action may reach 20 yalms, but this helper adds a strict 10-yalm center-distance cap and " +
+                "still requires FFXIV's native range and line of sight. Lowest exact HP ratio wins, then S-slot " +
+                "and stable actor identity. Your own Bind, either side's Guard, your recent Guard propagation latch, " +
+                "animation lock, typing, metadata uncertainty, or identity drift blocks the request.");
+            ImGui.TextDisabled(
+                "The first attempt consumes the shared held-key generation and freezes one target. After a " +
+                "client-accepted request, the same physical key may stay held: each later attempt requires a " +
+                "separately observed not-ready to ready cooldown epoch, such as a proven KO reset or the natural " +
+                "12-second recast. Every epoch is spent before final revalidation, with no target change, alternate, " +
+                "rerank, replay, or retry. A reset that happens entirely between two framework frames is deliberately " +
+                "missed rather than guessed. The shared order is Purify > Smart Recuperate > Guard > Guardian > " +
+                "pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk > Hiebsprung.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
+
         if (ImGui.CollapsingHeader("Ninja — Seiton", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(

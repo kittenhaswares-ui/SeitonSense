@@ -2,15 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.20.0.1 fixes Smart Recuperate's
-current action-sheet metadata validation. Version 0.20.0.0 added fixed Combat
-Frames and a separate default-off held-key Smart Recuperate helper, turned Smart
-Kardia into a bounded one-shot follow-up to a client-accepted Eukrasia, removed
-speculative pre-Guard, and listed PLD Guardian as an independent job tool. It
-retains
-v0.18.0.1's corrected DRK macro and narrow, explicitly enabled Wolves' Den
-striking-dummy test path plus the separate default-off set-only low-MP Focus
-Target and exact two-line DRK/ReAction helper.
+assistance, and target highlights. Version 0.21.0.0 adds optional exact Combat
+Frame interaction and evidence-only Limit Break telemetry, a default-off Dark
+Knight Hiebsprung helper, and BRD coverage for all reviewed urgent DNC/MCH/SAM/
+VPR startup signals. It retains v0.20's Smart Recuperate fix, accepted-Eukrasia
+Smart Kardia, fixed Combat Frames, removed speculative pre-Guard, and independent
+PLD Guardian Job Tool, plus v0.18.0.1's corrected DRK macro and narrow,
+explicitly enabled Wolves' Den striking-dummy test path.
 The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
 and Super Focus Glow into one configurable custom-repository plugin.
 
@@ -66,8 +64,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Fixed Combat Frames:** a separate default-off, Gladius-style screen-space
   overlay shows one Self frame plus stable canonical `S1`-`S5` enemy rows. It can
   show job, HP, trusted MP with 2,000-MP divisions, relevant statuses, pressure,
-  and current/focus-target accents. Rows never move with actors or disappear
-  behind obstacles, are not clickable, and never edit or hide the native HUD.
+  current/focus-target accents, exact Self LB, calibrated remote LB, activation
+  countdowns, and direct ally LB damage. Rows never move with actors or disappear
+  behind obstacles. An optional interaction leaf provides one revalidated hard-
+  target click and native `<mo>` hover for fresh exact living enemy rows; the
+  native HUD itself is never edited or hidden.
 - **Ninja Seiton decisions:** persistent job-icon cards, `S1`-`S5`, preparation
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
@@ -94,6 +95,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   cooldown or MP shortage leaves the held generation unconsumed so it may become
   eligible later, while a claimed attempt is consumed before final revalidation
   and is never redirected, replayed, or retried.
+- **Experimental Dark Knight Hiebsprung helper:** a separate default-off held-
+  key option considers only exact canonical `S1`-`S5` enemies at 30% HP or lower
+  inside a strict 10-yalm center-distance cap and native range/line of sight. A
+  continuous hold can spend at most one attempt per proven ready epoch; another
+  attempt requires an observed cooldown not-ready-to-ready transition.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
@@ -143,10 +149,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   automatic Guardian with localized CC Quick Chat row 35 and an ownership-safe
   Bind2-ally/Bind1-self pair.
 - **Experimental reactive counter-CC:** the default-off helper uses WHM Miracle
-  of Nature or BRD Silent Nocturne on an exact DNC Contradance startup. It can
+  of Nature or BRD Silent Nocturne on exact DNC, MCH, SAM, or VPR urgent startup
+  evidence. It can
   also follow any of the six exact Purify-removable enemy statuses only after
-  real Resilience ends and exact team focus reaches two. Existing urgent
-  MCH/SAM/VPR startup paths remain WHM-only.
+  real Resilience ends and exact team focus reaches two. BRD uses native 20-yalm
+  range; an already-accepted instant LB may still win the client/server race.
 - **Optional team focus sign:** a separate default-off module can place the real,
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
   and whose HP and/or trusted MP is low. It never overwrites an occupied Attack1,
@@ -171,7 +178,7 @@ and Super Focus Glow into one configurable custom-repository plugin.
   and Diagnostics.
   Shared-input actions are shown in their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  26 keeps Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
+  27 keeps Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
   and Scholar Critical Strategy as separate default-off options. Every action-
@@ -261,7 +268,7 @@ source tests cannot prove a native HUD layout.
 
 ## Fixed Combat Frames
 
-The separate **Combat Frames** page controls a default-off, overlay-only
+The separate **Combat Frames** page controls a default-off, fixed screen-space
 Crystalline Conflict view. It draws one fixed Self frame and exactly five enemy
 rows in FFXIV's canonical `S1`-`S5` order. Screen-space placement means walls,
 camera movement, actor movement, and nameplate projection cannot move or occlude
@@ -271,17 +278,36 @@ unknown rather than inferred.
 
 Each frame can show the exact job, HP bar and values, trusted MP bar and values,
 2,000-MP divisions, relevant Guard/CC/execute statuses, direct incoming evidence,
-team pressure, and current- or focus-target accents. Character-name display is
-optional. While Combat Frames are enabled, current names may be read into the
-transient frame snapshot; the display toggle controls only whether they are
-drawn. Names are never persisted or uploaded. Layout, scale, opacity, visible
-details, and a preview are configurable. The optional clean Seiton preset
-disables only older Seiton overlays that duplicate this information.
+team pressure, current- or focus-target accents, and Limit Break evidence. Self's
+LB gauge comes directly from the exact native LimitBreakController. Remote
+`S1`-`S5` gauges remain `LB ?` until the current native HUD instance has proved
+zero, full, and two separated partial samples against that exact Self gauge.
+Elapsed time and catalog charge times are never used to guess remote charge.
 
-Combat Frames have no input or targeting path: rows are not clickable and the
-overlay never changes a hard, soft, focus, or mouseover target. It neither edits
-nor hides FFXIV's parameter or enemy-list HUD. Players who want the frames to
-visually replace those native elements must hide them manually in HUD Layout.
+An exact reviewed activation opens an LB card. A duration countdown originates
+only from a matching live status's real `RemainingTime`. One missing sample of
+at most 150 ms may preserve the last exact expiry for anti-flicker but can never
+extend it; without initial live duration evidence the activation remains a
+flash. Instant LBs use a fixed 1.8-second card. The optional ally damage feed
+shows only direct ActionEffect damage whose exact caster and reviewed LB action
+attribute it to an ally. It does not infer
+damage from HP deltas, and pet, periodic, or ambiguous attribution stays silent.
+
+Character-name display is optional. While Combat Frames are enabled, current
+names may be read into the transient frame snapshot; the display toggle controls
+only whether they are drawn. Names are never persisted or uploaded. Layout,
+scale, opacity, visible details, and a preview are configurable. The optional
+clean Seiton preset disables only older Seiton overlays that duplicate this
+information.
+
+The separate interaction leaf can make a fresh, living, exact canonical enemy
+row clickable and publish its exact actor to FFXIV's native `<mo>` target slots
+while hovered. Self, preview, dead or unknown rows, stale snapshots, and gaps
+stay click-through. A click freezes and revalidates that one actor before one
+hard-target write with no retry; external mouseover replacement wins and is
+never overwritten back. No soft or Focus Target is changed. Combat Frames never
+edit or hide FFXIV's parameter or enemy-list HUD, so players who want the frames
+to visually replace those native elements must hide them manually in HUD Layout.
 
 The exact, metadata-validated protection catalog in v0.6 is:
 
@@ -431,11 +457,10 @@ exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
-Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint,
-Ally Rescue, and reactive counter-CC retain their existing higher priority over
-the same physical generation. Accepted-Eukrasia Smart Kardia is a separate
-one-shot follow-up rather than a physical-key claimant; an actual Kardia attempt
-still suppresses lower Ninja work in that frame. Active own
+The current request order before Ninja is Purify, Smart Recuperate, Guard,
+Guardian, pressure Sprint, Ally Rescue, reactive CC, then Kardia. Kardia still
+requires its separate accepted-Eukrasia trigger rather than a physical key; an
+actual Kardia attempt suppresses lower Ninja work in that frame. Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
 helper. Once the exact intent is claimed, its state and input generation are
 consumed before at most one native action request. A readiness, identity,
@@ -472,10 +497,10 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The exact shared physical priority before Scholar is Self-Purify, reactive Guard,
-Smart Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-
-CC, then Ninja Seiton. Accepted-Eukrasia Smart Kardia is separate, although an
-actual Kardia attempt suppresses lower Scholar work in that frame. One shared
+The current request order before Scholar is Purify, Smart Recuperate, Guard,
+Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, then NIN. Kardia
+still requires its separate accepted-Eukrasia trigger, although an actual Kardia
+attempt suppresses lower Scholar work in that frame. One shared
 held physical gameplay-key generation can produce at most one frozen
 Critical Strategy intent. The intent and generation are consumed before one
 native attempt, then the frozen enemy is revalidated only for exact identity,
@@ -486,6 +511,29 @@ chooses an alternate target/action, falls back, replays, or retries, and it does
 not swallow the original key. A client-accepted return is dispatch feedback only;
 it does not prove that Critical Strategy landed or changed Guard. Exact current-
 patch held-input timing, dispatch, and effect behavior require a live CC test.
+
+## Dark Knight Hiebsprung held-key helper
+
+The separate **Hiebsprung on held gameplay key** experiment is disabled by
+default and runs only on PvP Dark Knight in exact Crystalline Conflict. It
+considers living, targetable canonical `S1`-`S5` enemies at exactly 30% HP or
+lower. Your own Bind blocks the helper. Every candidate must be free of Guard,
+fit inside the helper's strict 10-yalm center-distance cap, and pass FFXIV's
+native action range and line-of-sight result. Lowest exact HP ratio wins,
+followed by stable S-slot and actor identity. Your own Guard, a candidate's
+Guard, the bounded Guard-propagation latch, animation lock, typing, metadata
+uncertainty, incomplete identity, or readiness uncertainty fails closed.
+
+The first attempt consumes the shared held-key generation and freezes one
+target before final revalidation. After a client-accepted request, that same
+physical key may remain held, but a later attempt requires the cooldown to have
+been observed not ready and then ready again. A KO reset or natural 12-second
+recast can therefore create another proven ready epoch; a reset wholly missed
+between framework samples is not guessed. Each epoch is spent before at most one
+direct exact-target Hiebsprung / Plunge `29092` request, with no visible target
+change, alternate, rerank, replay, or retry. The current order ends **Purify >
+Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive
+CC > Kardia > NIN > SCH > Monk > Hiebsprung**.
 
 ## Sage Smart Kardia after accepted Eukrasia
 
@@ -522,9 +570,10 @@ animation-lock, and native-reachability checks and before at most one direct-
 target request. Later drift, rejection, or exception cannot rerank, switch to
 self or another party member, substitute an action, replay, or retry.
 
-This follow-up has no physical-key generation and sits outside the held-helper
-priority chain. Higher-priority urgent action work and active own Guard suppress
-it; an actual Kardia attempt suppresses lower Ninja, Scholar, and Monk work in
+This follow-up has no physical-key generation and requires its own accepted-
+Eukrasia trigger. In the current request order it follows reactive CC and comes
+before NIN, SCH, Monk, and Hiebsprung. Active own Guard suppresses it; an actual
+Kardia attempt suppresses lower Ninja, Scholar, Monk, and Hiebsprung work in
 that frame. It never changes a hard, soft, focus, or mouseover target. Client
 acceptance is dispatch feedback only and does not prove that Kardia or Kardion
 applied; current-patch hook ordering, charge/status evidence, animation lock,
@@ -584,8 +633,8 @@ local cooldown-ready sample. After the exact ally, status, action, native range,
 and line of sight are revalidated, FFXIV receives one normal action request and
 decides whether it can queue or execute.
 
-Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, and pressure Sprint
-receive the shared physical generation before Ally Rescue. One input generation
+Purify, Smart Recuperate, Guard, Guardian, and pressure Sprint receive the shared
+physical generation before Ally Rescue. One input generation
 can therefore produce at most one helper attempt, and Ally Rescue stores its
 spent state before the exact Paean/Aquaveil call with no retry. The BRD metadata
 check also accepts the current lowercase leading article in `the Warden's
@@ -689,9 +738,9 @@ both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all of its action-request
-helpers, including Purify, reactive Guard, Smart Recuperate, PLD Guardian,
-pressure Sprint, Ally Rescue, reactive counter-CC, accepted-Eukrasia Smart
-Kardia, Ninja Seiton, Critical Strategy, and Earth's Reply. The same suppression
+helpers, including Purify, Smart Recuperate, Guard, Guardian, pressure Sprint,
+Ally Rescue, reactive CC, accepted-Eukrasia Kardia, NIN, SCH, Monk, and
+Hiebsprung. The same suppression
 starts immediately for a bounded 1.5 seconds after an exact local Guard request,
 covering the short interval before
 the live Guard status becomes visible without extending the deadline. This
@@ -702,10 +751,10 @@ of these new rules still needs in-game validation.
 The **Reactive counter-CC** module is also default-off and CC-only. On WHM it
 uses Miracle of Nature `29228` at native 10-yalm range; on BRD it uses Silent
 Nocturne `29395` at native 20-yalm range. Both jobs can respond to the exact
-early DNC Contradance `29432` startup signal. The existing urgent Marksman's
-Spite `29415`, Zantetsuken `29537`, and VPR Furious Backlash / Nest der
-Blutschuppen `39188` startup paths remain WHM-only. VPR waits for live Hardened
-Scales `4096` to be genuinely absent, and every path revalidates exact canonical
+early DNC Contradance `29432`, MCH Marksman's Spite `29415`, SAM Zantetsuken
+`29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188` startup
+signals. VPR waits for live Hardened Scales `4096` to be genuinely absent, and
+every path revalidates exact canonical
 enemy identity, life/targetability, action-specific CC protection, native range,
 and line of sight.
 
@@ -718,11 +767,10 @@ the enemy must be your current hard target and at least one exact ally's hard
 target. The resulting opportunity retains its original bounded release edge and
 is never extended while another threat has priority.
 
-The exact shared physical-generation order is Self-Purify, reactive Guard, Smart
-Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC,
-Ninja Seiton, then Scholar Critical Strategy. Smart Kardia is a separate
-accepted-Eukrasia follow-up and Monk Earth's Reply is automatic rather than a
-physical-key claimant. At the reactive counter-CC stage, state and input are
+The current request order is **Purify > Smart Recuperate > Guard > Guardian >
+pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk >
+Hiebsprung**. Kardia still requires its separate accepted-Eukrasia trigger and
+Monk remains an automatic rather than physical-key claimant. At the reactive CC stage, state and input are
 consumed before one
 normal exact-target request; there is no visible selected-target change,
 alternate action/target, fallback, replay, or retry. Plugin-owned Miracle and
@@ -734,7 +782,9 @@ ActionEffect observer captures the matching status on that exact pending enemy:
 Miracle `3085` for WHM or Silence `1347` for BRD. A local client-accepted request
 does not count. Even an exact landed popup proves only that the counter-CC status
 landed; it does not conclusively prove that Contradance, another limit break, or
-its damage was interrupted. All startup timing, Purify/Resilience release
+its damage was interrupted. In particular, an instant LB already accepted by
+the server can resolve before the reactive request arrives. All startup timing,
+Purify/Resilience release
 ordering, BRD/WHM dispatch, and claimed interruption outcomes remain explicit
 current-patch live-validation boundaries.
 
@@ -764,11 +814,10 @@ default).
 
 The continuous resonance is marked spent before one self-targeted normal
 `29483` request. A rejected or throwing request is not retried, and `29482` is
-never used as an alternate action. Monk yields to any earlier action claim from
-the physical chain—Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian,
-pressure Sprint, Ally Rescue, reactive counter-CC, Ninja Seiton, then Scholar
-Critical Strategy—and also to an actual separate accepted-Eukrasia Kardia
-attempt. The helper
+never used as an alternate action. Monk follows Purify, Smart Recuperate, Guard,
+Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, NIN, and SCH in the
+current request order, and remains ahead of Hiebsprung. Kardia still requires
+its separate accepted-Eukrasia trigger. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
 the native direct-call result and exact timer behavior still need a live test.
 
@@ -1034,7 +1083,7 @@ focus module to avoid drawing both over the same actor.
 | Personal warnings and optional self-Purify | Yes | Yes | No |
 | Urgent isolation warning | Yes | No | No |
 | Native-HUD low-resource aura | Yes | Yes | Yes, without CC team rows |
-| Fixed Combat Frames | Yes | No | No |
+| Fixed Combat Frames, optional interaction, and LB telemetry | Yes | No | No |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
 | Optional held Smart Recuperate | Yes | No | No |
 | Optional reactive defensive utilities | Yes | No | No |
@@ -1043,6 +1092,7 @@ focus module to avoid drawing both over the same actor.
 | Optional team-visible Attack1 focus sign | Yes | No | No |
 | Optional local Auto Low-MP Focus Target | Yes | No | No |
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
+| Optional DRK Hiebsprung held-key helper | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Seiton fresh-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
@@ -1067,14 +1117,15 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 26 converts an explicitly enabled schema-25 held-key Kardia
-option into the accepted-Eukrasia option and disables the obsolete held path. It
-preserves PLD Guardian only when the old defensive master and Guardian leaf were
-both effectively enabled, carries over that held-key choice, and then separates
-Guardian from the defensive master. Smart Recuperate and Combat Frames remain
-off after migration, and the removed pre-Guard compatibility field is forced
-off. Fresh and reset configurations likewise keep every new action and Combat
-Frames master disabled until explicitly enabled.
+Configuration schema 27 preserves an existing schema-26 user's Combat Frames
+master and helper choices. It forces only the new Hiebsprung action leaf and
+frame-interaction target-write leaf off on that migration; the two read-only LB
+detail leaves migrate on behind the user's existing Combat Frames master. A
+configuration older than schema 26 still traverses the earlier quiet Kardia/
+Guardian/pre-Guard/Combat-Frames migration first. Fresh and reset configurations
+keep the Combat Frames master and every action helper off. Their interaction and
+LB detail leaves default on only so enabling that master produces the complete
+new frame experience without extra setup.
 
 ## Install
 
@@ -1108,8 +1159,9 @@ update through the same repository.
 - `/seiton flash` - preview the Seiton popup
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
   selected-target CC-brake resolution, isolation/reactive-defense state, Smart
-  Recuperate, accepted-Eukrasia Smart Kardia, Combat Frames, Auto Low-MP Focus,
-  DRK Shadowbringer, and retained reactive counter-CC opportunity results
+  Recuperate, accepted-Eukrasia Smart Kardia, Combat Frames interaction/LB
+  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, and retained
+  reactive counter-CC opportunity results
 - `/seiton reset` - restore defaults
 - `/howmany show` / `/howmany hide` - show or hide only the integrated pressure
   counter; these do not disable pressure-dependent helpers
@@ -1137,10 +1189,11 @@ Quick Chat and marker commands, so enabling it creates the described party-
 visible in-game side effect through FFXIV. Transient observations and the exact
 one-shot action boundary are documented in [PRIVACY.md](PRIVACY.md).
 
-Display-only features, including the resource aura and fixed Combat Frames,
-never target, press actions, accept clicks, or mutate native UI. Combat Frames
-do not automatically hide FFXIV's parameter or enemy-list HUD; that remains a
-manual HUD Layout choice. Auto Low-MP Focus is a separate explicit setter, and
+Display-only features such as the resource aura never target, press actions,
+accept clicks, or mutate native UI. Combat Frames do not automatically hide or
+edit FFXIV's parameter/enemy-list HUD; their separate interaction leaf can only
+set one revalidated exact living enemy row as hard target or expose it through
+native `<mo>` while hovered. Auto Low-MP Focus is a separate explicit setter, and
 the DRK macro is a separate explicit action helper; both are default-off and
 bounded as described above. For one already incoming, enabled CC action attempt
 against an exact protected enemy, the optional brake can return `false` without
@@ -1156,13 +1209,11 @@ input and never chooses another target or action. Near Assist, Near Help, and Fa
 Help can each replace only the target ID of one explicitly armed, already incoming
 macro action. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint,
-Ally Rescue, reactive counter-CC, Ninja Seiton, and Scholar Critical Strategy
-may each initiate one exact action attempt and share one physical-generation
-ownership path in that order. Smart Kardia is a separate accepted-Eukrasia
-follow-up and never consumes that physical generation. Monk Earth's Reply is a
-separate automatic follow-up that yields after an earlier physical-chain claim
-or actual Kardia attempt. A post-Purify reactive Guard requires a genuinely new
+action helpers use this current request priority: **Purify > Smart Recuperate >
+Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN >
+SCH > Monk > Hiebsprung**. Kardia requires its separate accepted-Eukrasia trigger
+and does not consume the physical-key generation; Monk is an automatic follow-
+up. A post-Purify reactive Guard requires a genuinely new
 physical generation; there is no HP/pressure pre-Guard. While your own Guard is
 active, all Seiton action-request helpers are blocked; the same gate applies for
 the bounded 1.5-second status-propagation interval after an exact local Guard
@@ -1187,6 +1238,13 @@ a client-accepted return is not a landed-action or kill claim.
 The separate default-off Monk helper may initiate at most one exact Earth's
 Reply attempt per continuously observed Earth Resonance after every earlier
 helper in the listed priority declines; it has no alternate action or retry.
+
+The separate default-off Hiebsprung helper may initiate at most one exact DRK
+`29092` request per proven ready epoch against a frozen canonical enemy at 30%
+HP or lower within its strict 10-yalm cap and native reachability. It is last in
+the listed request order. A continuous hold repeats only after an observed
+cooldown not-ready-to-ready transition, never from a guessed reset, and it has
+no selected-target mutation, alternate, replay, or retry.
 
 The separate DRK macro does not use that physical-input priority chain. It may
 add only one already-spent Shadowbringer attempt to the exact authored
@@ -1249,7 +1307,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.20.0.1, source checks cover Smart Kardia's unchanged forwarding of one
+For v0.21.0.0, source checks retain Smart Kardia's forwarding of one
 exact Eukrasia call, client-accepted trigger creation, exact local Sage/territory
 ownership, two-second expiry, causal charge/status evidence, post-acceptance
 pressure publication, animation-lock-clear Kardia boundary, complete stable
@@ -1265,20 +1323,31 @@ unconsumed waiting for MP/readiness, Guard and higher-priority suppression,
 consumption before terminal revalidation, one request, and no alternate target,
 action, replay, or retry. Defensive checks pin the removal of HP/pressure pre-
 Guard, the positive-Resilience-to-new-generation reactive Guard path, independent
-PLD Guardian job-tool gating, and this exact shared physical priority: Self-
-Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, Ally
-Rescue, reactive counter-CC, Ninja Seiton, then Scholar Critical Strategy.
+PLD Guardian job-tool gating, and this exact current request priority: Purify >
+Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive
+CC > Kardia > NIN > SCH > Monk > Hiebsprung.
 
 Combat Frame checks cover one fixed Self row plus canonical stable `S1`-`S5`,
 dead/unknown row preservation, exact HP, trusted MP and 2,000-MP divisions,
 bounded relevant statuses, pressure/current/focus display, transient optional
-names, freshness, fixed screen-space drawing, and the absence of click handling,
-world projection, target writes, or native-HUD mutation. Configuration checks pin
-schema 26 migration and default-off action/communication/Combat Frame masters.
-They cannot prove live Eukrasia hook/charge/status ordering, MP-tick and held-input
-timing, native action acceptance/effects, current client range/line of sight,
-Combat Frame appearance, native status/resource telemetry, or server behavior;
-current-patch Crystalline Conflict A/B tests remain required.
+names, freshness, and fixed screen-space drawing. Interaction checks require a
+fresh exact living canonical enemy row, one frozen/revalidated click write,
+bounded native mouseover ownership, external-owner precedence, and no preview/
+self/dead/unknown/stale hit region or native-HUD mutation. LB checks pin exact
+Self gauge trust, remote `LB ?` before complete native-HUD calibration, no charge-
+time estimate, live-RemainingTime-origin duration with at most 150 ms of non-
+extending last-expiry preservation, the 1.8-second instant card, and direct
+ally ActionEffect damage without HP-delta inference. Configuration checks pin
+schema 27 migration, fresh/reset defaults, and default-off action/communication/
+Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
+30% HP, strict 10-yalm plus native reachability, local Bind, Guard/readiness gates,
+one attempt per proven cooldown epoch, and no target mutation or retry. Reactive
+CC checks include DNC/MCH/SAM/VPR BRD coverage and native 20-yalm reachability.
+They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
+native action acceptance/effects, current client range/line of sight, Combat
+Frame appearance/calibration, native status/resource telemetry, LB packet timing,
+or server interruption behavior; current-patch Crystalline Conflict A/B tests
+remain required.
 
 For retained v0.18.0.1, the v0.18.0.0 source checks cover Auto Low-MP Focus's
 complete canonical set, trusted MP hysteresis, deterministic selection,

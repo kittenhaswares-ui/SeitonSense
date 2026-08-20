@@ -71,6 +71,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
+    private readonly CombatLimitBreakCaptureBuffer combatLimitBreakCaptureBuffer = new();
     private readonly ConcurrentQueue<MachinistLimitBreakWarning> pendingWarnings = new();
     private readonly ConcurrentQueue<AllyRescueCleanseEffect> pendingAllyRescueCleanses = new();
     private readonly ConcurrentQueue<MiracleInterceptThreatEvent> pendingMiracleInterceptThreats = new();
@@ -132,6 +133,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public long CapturedMiracleInterceptConfirmations => Interlocked.Read(ref capturedMiracleInterceptConfirmations);
     public long DroppedMiracleInterceptConfirmations => Interlocked.Read(ref droppedMiracleInterceptConfirmations);
     public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
+    internal CombatLimitBreakCaptureBuffer CombatLimitBreakCaptureBuffer => combatLimitBreakCaptureBuffer;
 
     public void Start()
     {
@@ -283,6 +285,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Interlocked.Exchange(ref miracleCleanseFollowupLocalEntityIdBits, 0);
         Interlocked.Increment(ref miracleCleanseFollowupGeneration);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
+        combatLimitBreakCaptureBuffer.SetEnabled(false);
         actionEffectHook?.Dispose();
         IsRunning = false;
         ClearWarnings();
@@ -326,6 +329,11 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                     effects,
                     targetEntityIds);
                 capturedPressure = TryCapturePressure(casterEntityId, header, effects, targetEntityIds);
+                combatLimitBreakCaptureBuffer.Capture(
+                    casterEntityId,
+                    header,
+                    effects,
+                    targetEntityIds);
             }
         }
         catch (Exception exception)

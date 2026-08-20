@@ -107,19 +107,21 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
-            "cooldowns are never guessed. Only the separate default-off Auto Low-MP Focus setter may fill an empty " +
-            "native Focus Target; it never clears, replaces, restores, or retries one. Every other module leaves " +
-            "selected hard, soft, and Focus Targets unchanged. Seiton Sense uploads no gameplay data to an external " +
+            "cooldowns are never guessed. The separate default-off Auto Low-MP Focus setter may fill an empty " +
+            "native Focus Target; it never clears, replaces, restores, or retries one. When its explicit interaction " +
+            "option is enabled, a fresh living Combat Frame enemy row may write that exact S-slot once as the hard " +
+            "target on click and publish it through the two native mouseover slots while hovered; external replacement " +
+            "wins, cleanup is ownership-checked, and soft and Focus Targets remain unchanged. Every other module leaves " +
+            "selected hard, soft, Focus, and mouseover targets unchanged. Seiton Sense uploads no gameplay data to an external " +
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC, " +
-            "Ninja, and Scholar share one physical input generation and can initiate at most one exact action attempt, " +
-            "in that priority order. Eukrasia-triggered Kardia is a separate bounded follow-up. " +
+            "Purify, Smart Recuperate, Guard, Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, NIN, SCH, " +
+            "Monk, and Hiebsprung share the current request priority in that order. Kardia still requires its separate " +
+            "accepted-Eukrasia trigger. " +
             "Guard after Purify requires a later " +
-            "physical generation, and every action-request helper is blocked while your own Guard is active. Monk Earth's " +
-            "Reply is a separate automatic follow-up that yields whenever an earlier helper already attempted an action " +
-            "in the same update. The separate DRK macro may make one exact Shadowbringer attempt from its authored " +
+            "physical generation, and every action-request helper is blocked while your own Guard is active. The " +
+            "separate DRK macro may make one exact Shadowbringer attempt from its authored " +
             "two-line macro but does not join the physical-generation chain or mutate a selected target. Automatic " +
             "action helpers, Auto Low-MP Focus, and the team-visible Attack1 marker are disabled by default. " +
             "Like all third-party modifications, use " +

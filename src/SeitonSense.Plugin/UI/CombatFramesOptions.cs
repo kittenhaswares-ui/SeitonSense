@@ -8,6 +8,7 @@ namespace SeitonSense.Plugin.UI;
 internal readonly record struct CombatFramesOptions(
     bool Enabled,
     bool PreviewEnabled,
+    bool EnableInteraction,
     float EnemyScreenX,
     float EnemyScreenY,
     float SelfScreenX,
@@ -17,17 +18,22 @@ internal readonly record struct CombatFramesOptions(
     bool ShowNames,
     bool ShowExactValues,
     bool ShowStatuses,
-    bool ShowPressure)
+    bool ShowPressure,
+    bool ShowLimitBreaks,
+    bool ShowAllyLimitBreakDamageEvents)
 {
     internal static CombatFramesOptions Default => new(
         false,
         false,
+        true,
         0.82f,
         0.48f,
         0.5f,
         0.78f,
         1f,
         0.92f,
+        true,
+        true,
         true,
         true,
         true,

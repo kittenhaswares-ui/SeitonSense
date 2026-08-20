@@ -25,9 +25,10 @@ internal sealed record PvPMetadataValidation(
     bool MonkEarthReplyVerified,
     bool ScholarCriticalStrategyVerified,
     bool SmartKardiaVerified,
-    bool AutoLowMpFocusProbeVerified)
+    bool AutoLowMpFocusProbeVerified,
+    bool DarkKnightPlungeVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -305,6 +306,66 @@ internal static class PvPMetadataGuard
                    eukrasiaStatus.Description.ToString().Contains(
                        "Certain actions are being augmented",
                        StringComparison.Ordinal);
+        });
+
+        var darkKnightPlungeVerified = ValidateFeature("Dark Knight Plunge", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(DarkKnightPlungeRules.ActionId, out var action) ||
+                !descriptions.TryGetRow(DarkKnightPlungeRules.ActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return guardVerified &&
+                   string.Equals(action.Name.ToString(), "Plunge", StringComparison.Ordinal) &&
+                   action.Icon == DarkKnightPlungeRules.IconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == DarkKnightPlungeRules.DarkKnightJobId &&
+                   action.ClassJobCategory.IsValid &&
+                   action.ClassJobCategory.RowId ==
+                   DarkKnightPlungeRules.DarkKnightClassJobCategoryId &&
+                   action.ActionCategory.IsValid &&
+                   action.ActionCategory.RowId == 4 &&
+                   action.Range == 20 &&
+                   action.EffectRange == 0 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == 120 &&
+                   action.PrimaryCostType == 0 &&
+                   action.PrimaryCostValue == 0 &&
+                   action.SecondaryCostType == 0 &&
+                   action.SecondaryCostValue.RowId == 0 &&
+                   action.CooldownGroup == 2 &&
+                   action.AdditionalCooldownGroup == 0 &&
+                   action.MaxCharges == 0 &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlliance &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetOwnPet &&
+                   !action.CanTargetPartyPet &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.NeedToFaceTarget &&
+                   action.PreservesCombo &&
+                   action.AffectsPosition &&
+                   action.CastType == 1 &&
+                   action.StatusGainSelf.RowId == 0 &&
+                   action.ActionProcStatus.RowId == 0 &&
+                   description.Contains(
+                       "Rushes target and delivers an attack with a potency of 2,000.",
+                       StringComparison.Ordinal) &&
+                   description.Contains("Afflicts target with Sole Survivor", StringComparison.Ordinal) &&
+                   description.Contains("Duration: 12s", StringComparison.Ordinal) &&
+                   description.Contains(
+                       "the recast time of Plunge will be reset.",
+                       StringComparison.Ordinal) &&
+                   description.Contains("Cannot be executed while bound.", StringComparison.Ordinal);
         });
 
         var recuperateVerified = ValidateFeature("Recuperate", log, () =>
@@ -822,7 +883,8 @@ internal static class PvPMetadataGuard
             monkEarthReplyVerified,
             scholarCriticalStrategyVerified,
             smartKardiaVerified,
-            autoLowMpFocusProbeVerified);
+            autoLowMpFocusProbeVerified,
+            darkKnightPlungeVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
@@ -831,7 +893,7 @@ internal static class PvPMetadataGuard
             "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
             "ScholarCriticalStrategy={ScholarCriticalStrategy}, SmartKardia={SmartKardia}, " +
-            "AutoLowMpFocusProbe={AutoLowMpFocusProbe}.",
+            "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}.",
             validation.SeitonVerified,
             validation.GuardVerified,
             validation.GuardianVerified,
@@ -849,7 +911,8 @@ internal static class PvPMetadataGuard
             validation.MonkEarthReplyVerified,
             validation.ScholarCriticalStrategyVerified,
             validation.SmartKardiaVerified,
-            validation.AutoLowMpFocusProbeVerified);
+            validation.AutoLowMpFocusProbeVerified,
+            validation.DarkKnightPlungeVerified);
 
         return validation;
     }
