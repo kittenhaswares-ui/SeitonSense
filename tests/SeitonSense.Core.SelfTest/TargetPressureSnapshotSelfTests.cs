@@ -171,6 +171,20 @@ internal static class TargetPressureSnapshotSelfTests
         Equal(2, snapshot.Opponents[0].AllyTargetCount, "unique exact allies on enemy A");
         Equal(2, snapshot.GetAllyTargetCount(enemyA), "enemy A lookup");
         Equal(1, snapshot.GetAllyTargetCount(enemyB), "non-opponent enemy B is reusable by Near Assist");
+        Equal(
+            2,
+            snapshot.GetTotalTeamTargetCount(enemyA, localHardTarget: null),
+            "two allies satisfy total team focus without a local hard target");
+        Equal(
+            3,
+            snapshot.GetTotalTeamTargetCount(enemyA, enemyA),
+            "an exact local hard target contributes without being required");
+        Equal(
+            2,
+            snapshot.GetTotalTeamTargetCount(
+                enemyA,
+                enemyA with { EntityId = enemyA.EntityId + 1 }),
+            "partial local target identity cannot contribute");
         Equal(2, snapshot.AllyTargetCounts.Count, "both exact enemy team counts are exposed");
         Equal(enemyA, snapshot.AllyTargetCounts[0].Enemy, "team counts use deterministic CC order");
         Equal(enemyB, snapshot.AllyTargetCounts[1].Enemy, "second CC enemy");

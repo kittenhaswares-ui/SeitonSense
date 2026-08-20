@@ -21,7 +21,8 @@ public readonly record struct MiracleInterceptPendingAttempt(
             MiracleInterceptThreatKind.Zantetsuken or
             MiracleInterceptThreatKind.FuriousBacklash or
             MiracleInterceptThreatKind.Contradance or
-            MiracleInterceptThreatKind.PostPurifyCrowdControl) &&
+            MiracleInterceptThreatKind.PostPurifyCrowdControl or
+            MiracleInterceptThreatKind.PostGuardCrowdControl) &&
         (Threat != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
          MiracleCleanseFollowupRules.IsPurifyRemovableStatus(RemovedStatusId)) &&
         AttemptedAtMilliseconds >= 0;

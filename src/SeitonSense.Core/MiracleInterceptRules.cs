@@ -10,6 +10,7 @@ public enum MiracleInterceptThreatKind
     FuriousBacklash = 3,
     PostPurifyCrowdControl = 4,
     Contradance = 5,
+    PostGuardCrowdControl = 6,
 }
 
 public enum MiracleInterceptDecisionKind
@@ -259,7 +260,8 @@ public static class MiracleInterceptRules
             MiracleInterceptThreatKind.Zantetsuken or
             MiracleInterceptThreatKind.FuriousBacklash => 3,
             MiracleInterceptThreatKind.Contradance => 2,
-            MiracleInterceptThreatKind.PostPurifyCrowdControl => 1,
+            MiracleInterceptThreatKind.PostPurifyCrowdControl or
+            MiracleInterceptThreatKind.PostGuardCrowdControl => 1,
             _ => 0,
         };
 

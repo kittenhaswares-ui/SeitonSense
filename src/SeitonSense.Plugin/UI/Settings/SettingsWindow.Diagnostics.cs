@@ -75,7 +75,8 @@ internal sealed partial class SettingsWindow
             $"confirmed={rescue.MatchConfirmations.TotalConfirmed}/{rescue.SessionConfirmations.TotalConfirmed}, " +
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
         ImGui.TextWrapped(
-            $"Reactive CC: {miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
+            $"Reactive CC (WHM Wunder der Natur / Miracle of Nature; BRD Stumme Nocturne / Silent Nocturne): " +
+            $"{miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
             $"target={miracle.TargetGameObjectId:X}/" +
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
             $"blocker scales/other={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
@@ -96,6 +97,13 @@ internal sealed partial class SettingsWindow
             $"resilience-seen={miracle.CleanseFollowupResilienceObserved}, signal/promote/cancel=" +
             $"{miracle.CleanseFollowupSignalCount}/{miracle.CleanseFollowupPromotionCount}/" +
             $"{miracle.CleanseFollowupCancellationCount}, cleanse-last={miracle.CleanseFollowupLastEvent}");
+        ImGui.TextWrapped(
+            $"Reactive CC Guard follow-up: tracked/release-ready={miracle.GuardFollowupTrackedCount}/" +
+            $"{miracle.GuardFollowupReleaseReadyCount}, target={miracle.GuardFollowupTargetGameObjectId:X}/" +
+            $"{miracle.GuardFollowupTargetEntityId:X}, team-focus={miracle.GuardFollowupTeamPressure}, " +
+            $"episode/promote/expired/retired={miracle.GuardFollowupEpisodeCount}/" +
+            $"{miracle.GuardFollowupPromotionCount}/{miracle.GuardFollowupExpiredCount}/" +
+            $"{miracle.GuardFollowupRetiredCount}, last={miracle.GuardFollowupLastEvent}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
             $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +

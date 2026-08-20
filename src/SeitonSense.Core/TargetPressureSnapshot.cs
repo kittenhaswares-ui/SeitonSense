@@ -146,6 +146,23 @@ public sealed class TargetPressureSnapshot
             ? count
             : 0;
 
+    /// <summary>
+    /// Counts exact live team hard targets without requiring the local player
+    /// to own one. A matching local hard target contributes one alongside any
+    /// independently deduplicated allies; null or partial identity adds none.
+    /// </summary>
+    public int GetTotalTeamTargetCount(
+        TargetPressureActorIdentity enemy,
+        TargetPressureActorIdentity? localHardTarget)
+    {
+        if (!enemy.IsValid) return 0;
+        var count = GetAllyTargetCount(enemy);
+        return localHardTarget is { IsValid: true } exactLocalTarget &&
+               exactLocalTarget == enemy
+            ? count + 1
+            : count;
+    }
+
     public bool TryGetIncomingAllyPressure(
         TargetPressureActorIdentity ally,
         out int uniqueEnemyCount)

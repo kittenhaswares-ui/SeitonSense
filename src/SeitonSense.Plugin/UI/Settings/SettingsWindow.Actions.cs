@@ -43,7 +43,8 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader(
-                "Reactive counter-CC: Silent Nocturne / Miracle of Nature",
+                "Reactive counter-CC: WHM Wunder der Natur / Miracle of Nature · " +
+                "BRD Stumme Nocturne / Silent Nocturne",
                 ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= DrawReactiveCcControls();
@@ -245,10 +246,11 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
-                ? "ON — WHM Miracle or BRD Silent Nocturne may claim one eligible input in CC."
+                ? "ON — WHM Wunder der Natur / Miracle of Nature or BRD Stumme Nocturne / " +
+                  "Silent Nocturne may claim one eligible input in CC."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
 
-        ImGui.TextUnformatted("BRD / WHM triggers:");
+        ImGui.TextUnformatted("WHM / BRD triggers:");
         changed |= Checkbox(
             "DNC Contradance startup",
             configuration.ReactiveCcDancerLimitBreak,
@@ -257,8 +259,12 @@ internal sealed partial class SettingsWindow
             "After enemy Purify: all six removable CC types, team focus 2+",
             configuration.ReactiveCcAfterEnemyPurify,
             value => configuration.ReactiveCcAfterEnemyPurify = value);
+        changed |= Checkbox(
+            "After enemy Guard ends: team focus 2+",
+            configuration.ReactiveCcAfterEnemyGuard,
+            value => configuration.ReactiveCcAfterEnemyGuard = value);
 
-        ImGui.TextUnformatted("Additional BRD / WHM urgent startup triggers:");
+        ImGui.TextUnformatted("Additional WHM / BRD urgent startup triggers:");
         changed |= Checkbox(
             "MCH Marksman's Spite",
             configuration.MiracleInterceptMchLimitBreak,
@@ -276,14 +282,21 @@ internal sealed partial class SettingsWindow
             overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Experimental, CC-only, and disabled by default. WHM uses Miracle of Nature at its native 10-yalm range; " +
-            "BRD uses Silent Nocturne at its native 20-yalm range. The enemy must remain the exact canonical opponent, " +
+            "Experimental, CC-only, and disabled by default. WHM Wunder der Natur / Miracle of Nature uses its " +
+            "native 10-yalm range; BRD Stumme Nocturne / Silent Nocturne uses its native 20-yalm range. The enemy " +
+            "must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
             "accepts Stun, Heavy, Bind, Silence, Deep " +
-            "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It also " +
-            "requires that enemy to be your exact hard target and at least one ally's hard target (team focus 2+). " +
+            "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It uses " +
+            "the exact S1-S5 actor directly, requires a fresh exact team-target count of at least 2, does not require " +
+            "that actor to be your selected target, and never changes your target. " +
             "Viper waits until Hardened Scales is actually absent.");
+        ImGui.TextDisabled(
+            "The post-Guard rule binds one exact S1-S5 actor only after Guard 3054/3673 was observed present and the " +
+            "first verified framework observation finds it absent. It creates one bounded fresh/held-key opportunity " +
+            "at the job-specific native range and line of sight, with no selected-target switch, alternate " +
+            "action/target, replay, or retry.");
         ImGui.TextDisabled(
             "One already-eligible physical generation makes at most one exact-target attempt; Turbo pulses add no " +
             "intent. Purify, Smart Recuperate, Guard, Guardian, pressure Sprint, and Ally Rescue " +
@@ -318,9 +331,12 @@ internal sealed partial class SettingsWindow
         changed |= DrawCcBrakeJob(
             23,
             "BARD",
-            (29395, "Silent Nocturne"),
+            (29395, "Stumme Nocturne / Silent Nocturne"),
             (29399, "Repelling Shot"));
-        changed |= DrawCcBrakeJob(24, "WHITE MAGE", (29228, "Miracle of Nature"));
+        changed |= DrawCcBrakeJob(
+            24,
+            "WHITE MAGE",
+            (29228, "Wunder der Natur / Miracle of Nature"));
         changed |= DrawCcBrakeJob(25, "BLACK MAGE", (41510, "Lethargy"));
         changed |= DrawCcBrakeJob(
             30,
@@ -336,7 +352,8 @@ internal sealed partial class SettingsWindow
             "Crystalline Conflict only. This works directly from a hotbar; no macro is required. For the reviewed " +
             "single/primary-target list above, an enabled action aimed at an exactly identified enemy with verified " +
             "protection against that exact CC is stopped before the downstream game action for that one incoming " +
-            "attempt. Miracle uses its own verified matrix, including VPR-only Hardened Scales. The action, target and " +
+            "attempt. Wunder der Natur / Miracle of Nature uses its own verified matrix, including VPR-only Hardened " +
+            "Scales. The action, target and " +
             "input are never stored, replayed, changed to an alternative, or retried by Seiton Sense.");
         ImGui.TextDisabled(
             "A later real press or Turbo Hotbar pulse is checked again and can pass as soon as protection is gone. " +

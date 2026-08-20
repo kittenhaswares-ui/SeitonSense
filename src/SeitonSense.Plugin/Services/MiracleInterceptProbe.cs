@@ -2,7 +2,6 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
 
@@ -53,6 +52,16 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal uint CounterActionId { get; init; }
     internal uint CleanseFollowupRemovedStatusId { get; init; }
     internal int CleanseFollowupTeamPressure { get; init; }
+    internal int GuardFollowupTrackedCount { get; init; }
+    internal int GuardFollowupReleaseReadyCount { get; init; }
+    internal ulong GuardFollowupTargetGameObjectId { get; init; }
+    internal uint GuardFollowupTargetEntityId { get; init; }
+    internal int GuardFollowupTeamPressure { get; init; }
+    internal long GuardFollowupEpisodeCount { get; init; }
+    internal long GuardFollowupPromotionCount { get; init; }
+    internal long GuardFollowupExpiredCount { get; init; }
+    internal long GuardFollowupRetiredCount { get; init; }
+    internal string GuardFollowupLastEvent { get; init; } = "None observed";
 
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
@@ -88,6 +97,7 @@ internal sealed record MiracleInterceptProbeSnapshot(
 internal sealed class MiracleInterceptProbe
 {
     private const int MaximumRememberedSignals = 128;
+    private const long MaximumTeamFocusAgeMilliseconds = 250;
     private static readonly uint[] RequiredMiracleProtectionStatusIds =
         CcImmunityBrakeActionCatalog
             .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle)
@@ -116,6 +126,8 @@ internal sealed class MiracleInterceptProbe
         MiracleInterceptConfirmationState.Initial;
     private MiracleCleanseFollowupState cleanseFollowupState =
         MiracleCleanseFollowupState.Initial;
+    private MiracleGuardFollowupState guardFollowupState =
+        MiracleGuardFollowupState.Initial;
     private MiracleInterceptProbeSnapshot snapshot = MiracleInterceptProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
@@ -130,6 +142,10 @@ internal sealed class MiracleInterceptProbe
     private long cleanseFollowupSignalCount;
     private long cleanseFollowupPromotionCount;
     private long cleanseFollowupCancellationCount;
+    private long guardFollowupEpisodeCount;
+    private long guardFollowupPromotionCount;
+    private long guardFollowupExpiredCount;
+    private long guardFollowupRetiredCount;
     private MiracleWaitReason activeWaitReason;
     private bool priorityWaitRecorded;
     private bool noInputWaitRecorded;
@@ -140,6 +156,11 @@ internal sealed class MiracleInterceptProbe
     private uint counterActionId;
     private uint cleanseFollowupRemovedStatusId;
     private int cleanseFollowupTeamPressure;
+    private ulong guardFollowupTargetGameObjectId;
+    private uint guardFollowupTargetEntityId;
+    private int guardFollowupTeamPressure;
+    private uint guardFollowupLocalJobId;
+    private string guardFollowupLastEvent = "None observed";
     private long nextErrorLogAt;
 
     internal MiracleInterceptProbe(
@@ -176,6 +197,7 @@ internal sealed class MiracleInterceptProbe
         bool enableFuriousBacklash,
         bool enableContradance,
         bool enablePostPurifyCrowdControl,
+        bool enablePostGuardCrowdControl,
         bool marksmanSpiteMetadataVerified,
         bool zantetsukenMetadataVerified,
         bool furiousBacklashMetadataVerified,
@@ -207,6 +229,23 @@ internal sealed class MiracleInterceptProbe
         var cleanseFollowupEnabled = enabled &&
                                      enablePostPurifyCrowdControl &&
                                      purifyMetadataVerified;
+        var guardFollowupEnabled = enabled &&
+                                   enablePostGuardCrowdControl &&
+                                   verifiedProtectionStatusIds.Contains(
+                                       MiracleGuardFollowupRules.GuardStatusId) &&
+                                   verifiedProtectionStatusIds.Contains(
+                                       MiracleGuardFollowupRules.GuardStatusAlternateId);
+        if (guardFollowupEnabled &&
+            guardFollowupLocalJobId != 0 &&
+            guardFollowupLocalJobId != localJobId)
+        {
+            guardFollowupState = MiracleGuardFollowupState.Initial;
+            if (activeThreat?.Kind == MiracleInterceptThreatKind.PostGuardCrowdControl)
+                activeThreat = null;
+            guardFollowupLastEvent = "GuardEndCC: local counter job changed; episodes cleared";
+        }
+
+        guardFollowupLocalJobId = guardFollowupEnabled ? localJobId : 0;
         var confirmationPendingForLocalCaster = enabled &&
             confirmationState.Pending is { } pending &&
             pending.LocalCasterEntityId == localPlayer!.EntityId;
@@ -225,6 +264,11 @@ internal sealed class MiracleInterceptProbe
             capture.ClearMiracleInterceptConfirmations();
             activeThreat = null;
             cleanseFollowupState = MiracleCleanseFollowupState.Initial;
+            guardFollowupState = MiracleGuardFollowupState.Initial;
+            guardFollowupTargetGameObjectId = 0;
+            guardFollowupTargetEntityId = 0;
+            guardFollowupTeamPressure = 0;
+            guardFollowupLocalJobId = 0;
             confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
                 confirmationState,
                 nowMilliseconds,
@@ -242,6 +286,11 @@ internal sealed class MiracleInterceptProbe
             capture.ClearMiracleInterceptThreats();
             activeThreat = null;
             cleanseFollowupState = MiracleCleanseFollowupState.Initial;
+            guardFollowupState = MiracleGuardFollowupState.Initial;
+            guardFollowupTargetGameObjectId = 0;
+            guardFollowupTargetEntityId = 0;
+            guardFollowupTeamPressure = 0;
+            guardFollowupLocalJobId = 0;
             if (confirmationPendingForLocalCaster)
                 DrainConfirmations(nowMilliseconds);
             else
@@ -299,28 +348,64 @@ internal sealed class MiracleInterceptProbe
                 zantetsukenEnabled,
                 furiousBacklashEnabled,
                 contradanceEnabled,
-                cleanseFollowupEnabled))
+                cleanseFollowupEnabled,
+                guardFollowupEnabled))
         {
             lastOpportunity = $"{disabledThreat.Kind}: retired because its trigger was disabled";
             activeThreat = null;
         }
 
+        var followupPromotions = new List<MiracleFollowupPromotion>(2);
         foreach (var cleanseSignal in cleanseSignals)
         {
-            ObserveCleanseFollowup(
+            var promotion = ObserveCleanseFollowup(
                 localPlayer!,
                 cleanseFollowupEnabled,
                 !dispatchAllowed || activeThreat is not null,
                 cleanseSignal,
                 nowMilliseconds);
+            if (promotion is { } ready) followupPromotions.Add(ready);
         }
 
-        ObserveCleanseFollowup(
+        var cleansePromotion = ObserveCleanseFollowup(
             localPlayer!,
             cleanseFollowupEnabled,
             !dispatchAllowed || activeThreat is not null,
             null,
             nowMilliseconds);
+        if (cleansePromotion is { } cleanseReady) followupPromotions.Add(cleanseReady);
+
+        var guardPromotion = ObserveGuardFollowup(
+            localPlayer!,
+            guardFollowupEnabled,
+            !dispatchAllowed || activeThreat is not null,
+            nowMilliseconds);
+        if (guardPromotion is { } guardReady) followupPromotions.Add(guardReady);
+
+        if (activeThreat is null && followupPromotions.Count > 0)
+        {
+            var selected = SelectFollowupPromotion(followupPromotions);
+            activeThreat = selected.Threat;
+            ResetWaitDiagnostics();
+            lastOpportunity =
+                $"{selected.Threat.Kind}: exact threat armed from release opportunity";
+            foreach (var retired in followupPromotions)
+            {
+                if (retired == selected) continue;
+                Interlocked.Increment(ref rejectedThreatCount);
+                if (retired.Threat.Kind == MiracleInterceptThreatKind.PostPurifyCrowdControl)
+                {
+                    cleanseFollowupLastEvent =
+                        $"PostPurifyCC: simultaneous release retired behind {selected.Threat.Kind}";
+                }
+                else if (retired.Threat.Kind == MiracleInterceptThreatKind.PostGuardCrowdControl)
+                {
+                    guardFollowupLastEvent =
+                        $"GuardEndCC: simultaneous release retired behind {selected.Threat.Kind}";
+                    Interlocked.Increment(ref guardFollowupRetiredCount);
+                }
+            }
+        }
 
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
@@ -347,17 +432,26 @@ internal sealed class MiracleInterceptProbe
 
         var blockerFamily = BlockerFamilyForAction(counterActionId);
         var anyProtection = HasAnyVerifiedCcProtection(candidate, blockerFamily);
+        var guardReappeared =
+            threat.Kind == MiracleInterceptThreatKind.PostGuardCrowdControl &&
+            CountActiveGuardStatuses(candidate) != 0;
         var hardenedScales = threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
                              HasVerifiedActiveStatus(
                                  candidate,
                                  EnemyCombatConstants.HardenedScalesStatusId);
-        var otherProtection = anyProtection && !hardenedScales;
+        var otherProtection = (anyProtection && !hardenedScales) || guardReappeared;
         var rangeAndLineOfSight = HasActionRangeAndLineOfSight(
             counterActionId,
             localPlayer!,
             candidate);
-        var teamFocus = threat.Kind != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
-                        HasExactTeamFocus(localPlayer!, candidate, out cleanseFollowupTeamPressure);
+        var teamTargetCount = 0;
+        var teamFocus = !RequiresFreshTeamFocus(threat.Kind) ||
+                        HasFreshExactTeamFocus(
+                            localPlayer!,
+                            candidate,
+                            nowMilliseconds,
+                            out teamTargetCount);
+        UpdateTeamFocusDiagnostics(threat.Kind, teamTargetCount);
         var locallyReady = !hardenedScales &&
                            !otherProtection &&
                            rangeAndLineOfSight &&
@@ -439,19 +533,34 @@ internal sealed class MiracleInterceptProbe
                                       EnemyCombatConstants.HardenedScalesStatusId);
         var revalidatedProtection = revalidated is not null &&
                                     HasAnyVerifiedCcProtection(revalidated, blockerFamily);
+        var revalidatedGuardAbsent = revalidated is not null &&
+            (threat.Kind != MiracleInterceptThreatKind.PostGuardCrowdControl ||
+             CountActiveGuardStatuses(revalidated) == 0);
         var revalidatedRange = revalidated is not null &&
                                HasActionRangeAndLineOfSight(
                                    counterActionId,
                                    localPlayer!,
                                    revalidated);
+        var revalidationNow = Math.Max(nowMilliseconds, Environment.TickCount64);
+        var revalidatedTeamTargetCount = 0;
         var revalidatedTeamFocus = revalidated is not null &&
-            (threat.Kind != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
-             HasExactTeamFocus(localPlayer!, revalidated, out cleanseFollowupTeamPressure));
+            (!RequiresFreshTeamFocus(threat.Kind) ||
+             HasFreshExactTeamFocus(
+                 localPlayer!,
+                 revalidated,
+                 revalidationNow,
+                 out revalidatedTeamTargetCount));
+        UpdateTeamFocusDiagnostics(threat.Kind, revalidatedTeamTargetCount);
+        var revalidatedInsideWindow =
+            revalidationNow >= threat.ObservedAtMilliseconds &&
+            revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat.Kind);
         if (revalidated is not null &&
             !revalidatedHardened &&
             !revalidatedProtection &&
+            revalidatedGuardAbsent &&
             revalidatedRange &&
-            revalidatedTeamFocus)
+            revalidatedTeamFocus &&
+            revalidatedInsideWindow)
         {
             try
             {
@@ -671,6 +780,7 @@ internal sealed class MiracleInterceptProbe
                 canonical.GameObjectId,
                 canonical.EntityId,
                 canonical.JobId,
+                canonical.Slot,
                 signal.ObservedAtMilliseconds,
                 identity,
                 RemovedStatusId: 0);
@@ -682,7 +792,7 @@ internal sealed class MiracleInterceptProbe
         return cleanseSignals;
     }
 
-    private void ObserveCleanseFollowup(
+    private MiracleFollowupPromotion? ObserveCleanseFollowup(
         IPlayerCharacter localPlayer,
         bool configurationEnabled,
         bool higherPriorityClaimed,
@@ -692,12 +802,15 @@ internal sealed class MiracleInterceptProbe
         var previous = cleanseFollowupState;
         var target = newSignal?.Target ?? previous.ActiveSignal?.Target;
         MiracleCleanseFollowupCandidate? candidate = null;
+        EnemyHudSnapshot? canonical = null;
+        IPlayerCharacter? player = null;
         var hasExactTeamFocus = false;
         cleanseFollowupTeamPressure = 0;
         if (target is { } targetIdentity)
         {
-            var player = ResolveCleanseFollowupCandidate(localPlayer, targetIdentity);
-            if (player is not null)
+            canonical = ResolveCanonicalEnemy(targetIdentity);
+            player = ResolveCleanseFollowupCandidate(localPlayer, targetIdentity);
+            if (canonical is not null && player is not null)
             {
                 candidate = new MiracleCleanseFollowupCandidate(
                     targetIdentity,
@@ -706,9 +819,10 @@ internal sealed class MiracleInterceptProbe
                     ActiveResilienceStatusCount: CountActiveStatuses(
                         player,
                         EnemyCombatConstants.ResilienceStatusId));
-                hasExactTeamFocus = HasExactTeamFocus(
+                hasExactTeamFocus = HasFreshExactTeamFocus(
                     localPlayer,
                     player,
+                    nowMilliseconds,
                     out cleanseFollowupTeamPressure);
             }
         }
@@ -782,24 +896,33 @@ internal sealed class MiracleInterceptProbe
         };
 
         if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
-            return;
+            return null;
 
         Interlocked.Increment(ref cleanseFollowupPromotionCount);
-        if (activeThreat is not null)
+        canonical = ResolveCanonicalEnemy(promotion.Target);
+        player = ResolveCleanseFollowupCandidate(localPlayer, promotion.Target);
+        if (canonical is null ||
+            player is null ||
+            !HasFreshExactTeamFocus(
+                localPlayer,
+                player,
+                nowMilliseconds,
+                out cleanseFollowupTeamPressure))
         {
-            // Defensive only: HigherPriorityClaimed prevents Core promotion
-            // whenever another reactive-CC opportunity already owns this path.
             Interlocked.Increment(ref cleanseFollowupCancellationCount);
-            cleanseFollowupLastEvent = "PostPurifyCC: promotion retired while another threat owned dispatch";
-            return;
+            Interlocked.Increment(ref rejectedThreatCount);
+            cleanseFollowupLastEvent =
+                "PostPurifyCC: promotion retired because exact actor/fresh team focus changed";
+            return null;
         }
 
         var promotionSignal = promotion.Signal;
-        activeThreat = new MiracleThreatState(
+        var threat = new MiracleThreatState(
             MiracleInterceptThreatKind.PostPurifyCrowdControl,
             promotion.Target.GameObjectId,
             promotion.Target.EntityId,
             promotion.Target.JobId,
+            canonical.Slot,
             promotion.ReleasedAtMilliseconds,
             new MiracleSignalIdentity(
                 promotionSignal.Key.CasterEntityId,
@@ -808,8 +931,121 @@ internal sealed class MiracleInterceptProbe
                 promotionSignal.Key.SourceSequence),
             promotionSignal.Key.EffectValue);
         cleanseFollowupRemovedStatusId = promotionSignal.Key.EffectValue;
-        ResetWaitDiagnostics();
-        lastOpportunity = "PostPurifyCC: exact threat armed after verified Resilience absence and team focus";
+        return new MiracleFollowupPromotion(
+            threat,
+            canonical.Slot,
+            player.CurrentHp,
+            player.MaxHp,
+            cleanseFollowupTeamPressure);
+    }
+
+    private MiracleFollowupPromotion? ObserveGuardFollowup(
+        IPlayerCharacter localPlayer,
+        bool configurationEnabled,
+        bool higherPriorityClaimed,
+        long nowMilliseconds)
+    {
+        var candidates = BuildGuardFollowupCandidates(localPlayer, nowMilliseconds);
+        var decision = MiracleGuardFollowupRules.Observe(
+            guardFollowupState,
+            new MiracleGuardFollowupObservation(
+                configurationEnabled,
+                IsCrystallineConflict: true,
+                IsLocalCounterJobValid: true,
+                higherPriorityClaimed,
+                candidates,
+                nowMilliseconds));
+        guardFollowupState = decision.NextState;
+
+        if (decision.NewGuardEpisodeCount > 0)
+        {
+            Interlocked.Add(ref guardFollowupEpisodeCount, decision.NewGuardEpisodeCount);
+            Interlocked.Add(ref recognizedThreatCount, decision.NewGuardEpisodeCount);
+            Interlocked.Add(ref armedThreatCount, decision.NewGuardEpisodeCount);
+        }
+
+        if (decision.ExpiredOpportunityCount > 0)
+        {
+            Interlocked.Add(ref guardFollowupExpiredCount, decision.ExpiredOpportunityCount);
+            Interlocked.Add(ref expiredThreatCount, decision.ExpiredOpportunityCount);
+        }
+
+        if (decision.RetiredOtherOpportunityCount > 0)
+        {
+            Interlocked.Add(
+                ref guardFollowupRetiredCount,
+                decision.RetiredOtherOpportunityCount);
+            Interlocked.Add(
+                ref rejectedThreatCount,
+                decision.RetiredOtherOpportunityCount);
+        }
+
+        UpdateGuardFollowupTargetDiagnostics(candidates, decision.PromotionIntent);
+        guardFollowupLastEvent = decision.Kind switch
+        {
+            MiracleGuardFollowupDecisionKind.ReadyForPromotion =>
+                "GuardEndCC: first verified Guard-absent frame and fresh team focus >=2; promoted",
+            MiracleGuardFollowupDecisionKind.Waiting when
+                decision.NewReleaseOpportunityCount > 0 && higherPriorityClaimed =>
+                "GuardEndCC: first verified Guard-absent frame; waiting behind higher-priority helper/threat",
+            MiracleGuardFollowupDecisionKind.Waiting when
+                decision.NewReleaseOpportunityCount > 0 =>
+                $"GuardEndCC: first verified Guard-absent frame; waiting for fresh team focus >=2 (now {guardFollowupTeamPressure})",
+            MiracleGuardFollowupDecisionKind.Waiting when
+                decision.NextState.Actors.Any(static actor =>
+                    actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity) &&
+                higherPriorityClaimed =>
+                "GuardEndCC: release ready; waiting behind higher-priority helper/threat",
+            MiracleGuardFollowupDecisionKind.Waiting when
+                decision.NextState.Actors.Any(static actor =>
+                    actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity) =>
+                $"GuardEndCC: release ready; waiting for fresh team focus >=2 (now {guardFollowupTeamPressure})",
+            MiracleGuardFollowupDecisionKind.Waiting when
+                decision.NewGuardEpisodeCount > 0 =>
+                "GuardEndCC: exact Guard present; episode armed",
+            MiracleGuardFollowupDecisionKind.Cancelled when
+                decision.CancelReason != MiracleGuardFollowupCancelReason.None =>
+                $"GuardEndCC: cleared ({decision.CancelReason})",
+            _ => guardFollowupLastEvent,
+        };
+
+        if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
+            return null;
+
+        Interlocked.Increment(ref guardFollowupPromotionCount);
+        var canonical = ResolveCanonicalEnemy(promotion.Target);
+        var player = ResolveGuardFollowupCandidate(localPlayer, promotion.Target);
+        if (canonical is null ||
+            player is null ||
+            CountActiveGuardStatuses(player) != 0 ||
+            !HasFreshExactTeamFocus(
+                localPlayer,
+                player,
+                nowMilliseconds,
+                out guardFollowupTeamPressure))
+        {
+            Interlocked.Increment(ref guardFollowupRetiredCount);
+            Interlocked.Increment(ref rejectedThreatCount);
+            guardFollowupLastEvent =
+                "GuardEndCC: promotion retired because Guard/identity/fresh team focus changed";
+            return null;
+        }
+
+        var threat = new MiracleThreatState(
+            MiracleInterceptThreatKind.PostGuardCrowdControl,
+            promotion.Target.GameObjectId,
+            promotion.Target.EntityId,
+            promotion.Target.JobId,
+            promotion.Target.EnemySlot,
+            promotion.ReleasedAtMilliseconds,
+            default,
+            RemovedStatusId: 0);
+        return new MiracleFollowupPromotion(
+            threat,
+            canonical.Slot,
+            player.CurrentHp,
+            player.MaxHp,
+            guardFollowupTeamPressure);
     }
 
     private void DrainConfirmations(long nowMilliseconds)
@@ -868,10 +1104,142 @@ internal sealed class MiracleInterceptProbe
             .Where(enemy =>
                 enemy.EntityId == casterEntityId &&
                 enemy.JobId != 0 &&
+                EnemySlotRules.IsValidSlot(enemy.Slot) &&
                 TargetHighlightRules.IsValidGameObjectId(enemy.GameObjectId))
             .Take(2)
             .ToArray();
         return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private EnemyHudSnapshot? ResolveCanonicalEnemy(
+        MiracleCleanseFollowupTargetIdentity target) =>
+        ResolveCanonicalEnemy(
+            target.GameObjectId,
+            target.EntityId,
+            target.JobId,
+            enemySlot: null);
+
+    private EnemyHudSnapshot? ResolveCanonicalEnemy(
+        MiracleGuardFollowupTargetIdentity target) =>
+        ResolveCanonicalEnemy(
+            target.GameObjectId,
+            target.EntityId,
+            target.JobId,
+            target.EnemySlot);
+
+    private EnemyHudSnapshot? ResolveCanonicalEnemy(
+        ulong gameObjectId,
+        uint entityId,
+        uint jobId,
+        int? enemySlot)
+    {
+        var enemies = executeTracker.Enemies
+            .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
+            .ToArray();
+        var matches = enemies
+            .Where(enemy =>
+                (!enemySlot.HasValue || enemy.Slot == enemySlot.Value) &&
+                enemy.GameObjectId == gameObjectId &&
+                enemy.EntityId == entityId &&
+                enemy.JobId == jobId)
+            .Take(2)
+            .ToArray();
+        if (matches.Length != 1) return null;
+        var match = matches[0];
+        return enemies.Count(enemy => enemy.Slot == match.Slot) == 1 &&
+               enemies.Count(enemy => enemy.GameObjectId == match.GameObjectId) == 1 &&
+               enemies.Count(enemy => enemy.EntityId == match.EntityId) == 1
+            ? match
+            : null;
+    }
+
+    private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates(
+        IPlayerCharacter localPlayer,
+        long nowMilliseconds)
+    {
+        if (!executeTracker.IsActive) return [];
+        var enemies = executeTracker.Enemies
+            .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
+            .ToArray();
+        if (enemies.Length == 0) return [];
+
+        var ambiguousSlots = enemies
+            .GroupBy(static enemy => enemy.Slot)
+            .Where(static group => group.Count() != 1)
+            .Select(static group => group.Key)
+            .ToHashSet();
+        var ambiguousGameObjectIds = enemies
+            .GroupBy(static enemy => enemy.GameObjectId)
+            .Where(static group => group.Count() != 1)
+            .Select(static group => group.Key)
+            .ToHashSet();
+        var ambiguousEntityIds = enemies
+            .GroupBy(static enemy => enemy.EntityId)
+            .Where(static group => group.Count() != 1)
+            .Select(static group => group.Key)
+            .ToHashSet();
+        var candidates = new List<MiracleGuardFollowupCandidate>(enemies.Length);
+
+        foreach (var enemy in enemies.OrderBy(static enemy => enemy.Slot))
+        {
+            var target = new MiracleGuardFollowupTargetIdentity(
+                enemy.Slot,
+                enemy.GameObjectId,
+                enemy.EntityId,
+                enemy.JobId);
+            var exactCanonical = target.IsValid &&
+                                 !ambiguousSlots.Contains(enemy.Slot) &&
+                                 !ambiguousGameObjectIds.Contains(enemy.GameObjectId) &&
+                                 !ambiguousEntityIds.Contains(enemy.EntityId);
+            var player = exactCanonical
+                ? ResolveGuardFollowupCandidate(localPlayer, target)
+                : null;
+            var live = player is not null;
+            var teamTargetCount = 0;
+            var teamTargetCountKnown = live &&
+                TryGetFreshTeamTargetCount(
+                    localPlayer,
+                    player!,
+                    nowMilliseconds,
+                    out teamTargetCount);
+            candidates.Add(new MiracleGuardFollowupCandidate(
+                target,
+                exactCanonical,
+                live,
+                live ? CountActiveGuardStatuses(player!) : -1,
+                live ? player!.CurrentHp : 0,
+                live ? player!.MaxHp : 0,
+                teamTargetCountKnown,
+                teamTargetCountKnown ? teamTargetCount : 0));
+        }
+
+        return candidates;
+    }
+
+    private void UpdateGuardFollowupTargetDiagnostics(
+        IReadOnlyList<MiracleGuardFollowupCandidate> candidates,
+        MiracleGuardFollowupIntent? promotion)
+    {
+        var target = promotion?.Target ?? guardFollowupState.Actors
+            .Where(static actor => actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity)
+            .OrderBy(static actor => actor.Target.EnemySlot)
+            .Select(static actor => (MiracleGuardFollowupTargetIdentity?)actor.Target)
+            .FirstOrDefault() ?? guardFollowupState.Actors
+            .Where(static actor => actor.Phase == MiracleGuardFollowupPhase.GuardPresent)
+            .OrderBy(static actor => actor.Target.EnemySlot)
+            .Select(static actor => (MiracleGuardFollowupTargetIdentity?)actor.Target)
+            .FirstOrDefault();
+        guardFollowupTargetGameObjectId = target?.GameObjectId ?? 0;
+        guardFollowupTargetEntityId = target?.EntityId ?? 0;
+        guardFollowupTeamPressure = 0;
+        if (target is not { } exactTarget) return;
+
+        var matches = candidates
+            .Where(candidate => candidate.Target == exactTarget)
+            .Take(2)
+            .ToArray();
+        if (matches.Length == 1 && matches[0].TeamTargetCountKnown)
+            guardFollowupTeamPressure = matches[0].TeamTargetCount;
     }
 
     private IPlayerCharacter? ResolveCleanseFollowupCandidate(
@@ -904,12 +1272,36 @@ internal sealed class MiracleInterceptProbe
             : null;
     }
 
+    private IPlayerCharacter? ResolveGuardFollowupCandidate(
+        IPlayerCharacter localPlayer,
+        MiracleGuardFollowupTargetIdentity target)
+    {
+        if (ResolveCanonicalEnemy(target) is null) return null;
+        var players = objectTable.PlayerObjects
+            .OfType<IPlayerCharacter>()
+            .Where(player =>
+                player.GameObjectId == target.GameObjectId &&
+                player.EntityId == target.EntityId &&
+                player.GameObjectId != localPlayer.GameObjectId &&
+                player.ClassJob.IsValid &&
+                player.ClassJob.RowId == target.JobId)
+            .Take(2)
+            .ToArray();
+        return players.Length == 1 &&
+               IsLivePlayer(players[0]) &&
+               HasValidNativeIdentity(players[0])
+            ? players[0]
+            : null;
+    }
+
     private IPlayerCharacter? ResolveCandidate(
         IPlayerCharacter localPlayer,
         MiracleThreatState threat)
     {
         var canonical = executeTracker.Enemies
             .Where(enemy =>
+                EnemySlotRules.IsValidSlot(threat.EnemySlot) &&
+                enemy.Slot == threat.EnemySlot &&
                 enemy.GameObjectId == threat.GameObjectId &&
                 enemy.EntityId == threat.EntityId &&
                 enemy.JobId == threat.JobId)
@@ -982,6 +1374,19 @@ internal sealed class MiracleInterceptProbe
         return count;
     }
 
+    private static int CountActiveGuardStatuses(IPlayerCharacter player)
+    {
+        var count = 0;
+        foreach (var status in player.StatusList)
+        {
+            if (!MiracleGuardFollowupRules.IsExactGuardStatus(status.StatusId)) continue;
+            count++;
+            if (count > 1) return count;
+        }
+
+        return count;
+    }
+
     private static unsafe bool HasActionRangeAndLineOfSight(
         uint actionId,
         IPlayerCharacter localPlayer,
@@ -1000,38 +1405,81 @@ internal sealed class MiracleInterceptProbe
         return SeitonRangeRules.HasNativeRangeAndLineOfSight(result);
     }
 
-    private static unsafe bool HasExactTeamFocus(
+    private bool TryGetFreshTeamTargetCount(
         IPlayerCharacter localPlayer,
         IPlayerCharacter candidate,
-        TargetPressureTracker pressureTracker,
-        out int totalTargetCount)
+        long nowMilliseconds,
+        out int teamTargetCount)
     {
-        totalTargetCount = 0;
+        teamTargetCount = 0;
         if (!HasValidNativeIdentity(localPlayer) ||
             !HasValidNativeIdentity(candidate))
         {
             return false;
         }
 
-        var targetId = ((Character*)localPlayer.Address)->GetTargetId();
-        if (targetId.Id != candidate.GameObjectId ||
-            targetId.ObjectId != candidate.EntityId)
-        {
-            return false;
-        }
-
-        var alliedTargetCount = pressureTracker.GetTeamTargetCount(
-            candidate.GameObjectId,
-            candidate.EntityId);
-        totalTargetCount = 1 + Math.Max(0, alliedTargetCount);
-        return alliedTargetCount >= 1;
+        return pressureTracker.TryGetFreshTeamTargetCount(
+            new TargetPressureActorIdentity(localPlayer.GameObjectId, localPlayer.EntityId),
+            new TargetPressureActorIdentity(candidate.GameObjectId, candidate.EntityId),
+            nowMilliseconds,
+            MaximumTeamFocusAgeMilliseconds,
+            out teamTargetCount);
     }
 
-    private bool HasExactTeamFocus(
+    private bool HasFreshExactTeamFocus(
         IPlayerCharacter localPlayer,
         IPlayerCharacter candidate,
-        out int totalTargetCount) =>
-        HasExactTeamFocus(localPlayer, candidate, pressureTracker, out totalTargetCount);
+        long nowMilliseconds,
+        out int teamTargetCount) =>
+        TryGetFreshTeamTargetCount(
+            localPlayer,
+            candidate,
+            nowMilliseconds,
+            out teamTargetCount) &&
+        teamTargetCount >= MiracleGuardFollowupRules.RequiredTeamTargetCount;
+
+    private static bool RequiresFreshTeamFocus(MiracleInterceptThreatKind kind) =>
+        kind is MiracleInterceptThreatKind.PostPurifyCrowdControl or
+            MiracleInterceptThreatKind.PostGuardCrowdControl;
+
+    private void UpdateTeamFocusDiagnostics(
+        MiracleInterceptThreatKind kind,
+        int teamTargetCount)
+    {
+        if (kind == MiracleInterceptThreatKind.PostPurifyCrowdControl)
+            cleanseFollowupTeamPressure = teamTargetCount;
+        else if (kind == MiracleInterceptThreatKind.PostGuardCrowdControl)
+            guardFollowupTeamPressure = teamTargetCount;
+    }
+
+    private static MiracleFollowupPromotion SelectFollowupPromotion(
+        IReadOnlyList<MiracleFollowupPromotion> promotions)
+    {
+        var selected = promotions[0];
+        for (var index = 1; index < promotions.Count; index++)
+        {
+            if (CompareFollowupPromotions(promotions[index], selected) < 0)
+                selected = promotions[index];
+        }
+
+        return selected;
+    }
+
+    private static int CompareFollowupPromotions(
+        MiracleFollowupPromotion left,
+        MiracleFollowupPromotion right)
+    {
+        var ratio = ((UInt128)left.CurrentHp * right.MaximumHp).CompareTo(
+            (UInt128)right.CurrentHp * left.MaximumHp);
+        if (ratio != 0) return ratio;
+        var slot = left.EnemySlot.CompareTo(right.EnemySlot);
+        if (slot != 0) return slot;
+        var kind = left.Threat.Kind.CompareTo(right.Threat.Kind);
+        if (kind != 0) return kind;
+        var entity = left.Threat.EntityId.CompareTo(right.Threat.EntityId);
+        if (entity != 0) return entity;
+        return left.Threat.GameObjectId.CompareTo(right.Threat.GameObjectId);
+    }
 
     private unsafe bool TryUseCounterCcOnce(
         uint actionId,
@@ -1173,9 +1621,14 @@ internal sealed class MiracleInterceptProbe
     {
         activeThreat = null;
         cleanseFollowupState = MiracleCleanseFollowupState.Initial;
+        guardFollowupState = MiracleGuardFollowupState.Initial;
         counterActionId = 0;
         cleanseFollowupRemovedStatusId = 0;
         cleanseFollowupTeamPressure = 0;
+        guardFollowupTargetGameObjectId = 0;
+        guardFollowupTargetEntityId = 0;
+        guardFollowupTeamPressure = 0;
+        guardFollowupLocalJobId = 0;
         ResetWaitDiagnostics();
         rememberedSignals.Clear();
         rememberedSignalOrder.Clear();
@@ -1217,6 +1670,18 @@ internal sealed class MiracleInterceptProbe
                                              activeThreat?.RemovedStatusId ??
                                              cleanseFollowupRemovedStatusId,
             CleanseFollowupTeamPressure = cleanseFollowupTeamPressure,
+            GuardFollowupTrackedCount = guardFollowupState.Actors.Count(static actor =>
+                actor.Phase != MiracleGuardFollowupPhase.WaitingForGuard),
+            GuardFollowupReleaseReadyCount = guardFollowupState.Actors.Count(static actor =>
+                actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity),
+            GuardFollowupTargetGameObjectId = guardFollowupTargetGameObjectId,
+            GuardFollowupTargetEntityId = guardFollowupTargetEntityId,
+            GuardFollowupTeamPressure = guardFollowupTeamPressure,
+            GuardFollowupEpisodeCount = Interlocked.Read(ref guardFollowupEpisodeCount),
+            GuardFollowupPromotionCount = Interlocked.Read(ref guardFollowupPromotionCount),
+            GuardFollowupExpiredCount = Interlocked.Read(ref guardFollowupExpiredCount),
+            GuardFollowupRetiredCount = Interlocked.Read(ref guardFollowupRetiredCount),
+            GuardFollowupLastEvent = guardFollowupLastEvent,
         };
 
     private void RecordWait(MiracleThreatState threat, MiracleWaitReason reason)
@@ -1269,14 +1734,18 @@ internal sealed class MiracleInterceptProbe
         MiracleWaitReason.HardenedScales => "Hardened Scales to disappear",
         MiracleWaitReason.OtherProtection => "a verified counter-CC blocker to disappear",
         MiracleWaitReason.RangeOrLineOfSight => "native action range/line of sight",
-        MiracleWaitReason.TeamFocus => "exact local-plus-one-ally team focus",
+        MiracleWaitReason.TeamFocus => "fresh exact team target count >=2",
         _ => "the next runtime evaluation",
     };
 
-    private static long ThreatLifetime(MiracleInterceptThreatKind kind) =>
-        kind == MiracleInterceptThreatKind.PostPurifyCrowdControl
-            ? MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds
-            : MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
+    private static long ThreatLifetime(MiracleInterceptThreatKind kind) => kind switch
+    {
+        MiracleInterceptThreatKind.PostPurifyCrowdControl =>
+            MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds,
+        MiracleInterceptThreatKind.PostGuardCrowdControl =>
+            MiracleGuardFollowupRules.ReleaseOpportunityMilliseconds,
+        _ => MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind),
+    };
 
     private static bool IsThreatKindEnabled(
         MiracleInterceptThreatKind kind,
@@ -1284,7 +1753,8 @@ internal sealed class MiracleInterceptProbe
         bool zantetsukenEnabled,
         bool furiousBacklashEnabled,
         bool contradanceEnabled,
-        bool postPurifyEnabled) =>
+        bool postPurifyEnabled,
+        bool postGuardEnabled) =>
         kind switch
         {
             MiracleInterceptThreatKind.MarksmanSpite => marksmanSpiteEnabled,
@@ -1292,6 +1762,7 @@ internal sealed class MiracleInterceptProbe
             MiracleInterceptThreatKind.FuriousBacklash => furiousBacklashEnabled,
             MiracleInterceptThreatKind.Contradance => contradanceEnabled,
             MiracleInterceptThreatKind.PostPurifyCrowdControl => postPurifyEnabled,
+            MiracleInterceptThreatKind.PostGuardCrowdControl => postGuardEnabled,
             _ => false,
         };
 
@@ -1339,9 +1810,17 @@ internal sealed class MiracleInterceptProbe
         ulong GameObjectId,
         uint EntityId,
         uint JobId,
+        int EnemySlot,
         long ObservedAtMilliseconds,
         MiracleSignalIdentity Signal,
         uint RemovedStatusId);
+
+    private readonly record struct MiracleFollowupPromotion(
+        MiracleThreatState Threat,
+        int EnemySlot,
+        uint CurrentHp,
+        uint MaximumHp,
+        int TeamTargetCount);
 
     private enum MiracleWaitReason : byte
     {

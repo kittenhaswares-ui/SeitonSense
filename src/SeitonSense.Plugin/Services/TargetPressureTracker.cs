@@ -147,6 +147,39 @@ internal sealed class TargetPressureTracker : IDisposable
     }
 
     /// <summary>
+    /// Returns one exact enemy's total team hard-target count only from the current
+    /// local player's active, bounded-age pressure publication. False is
+    /// unknown and must never be treated as a synthetic zero or stale focus.
+    /// </summary>
+    internal bool TryGetFreshTeamTargetCount(
+        TargetPressureActorIdentity expectedLocalPlayer,
+        TargetPressureActorIdentity expectedEnemy,
+        long nowMilliseconds,
+        long maximumAgeMilliseconds,
+        out int teamTargetCount)
+    {
+        teamTargetCount = 0;
+        var current = Snapshot;
+        if (!expectedLocalPlayer.IsValid ||
+            !expectedEnemy.IsValid ||
+            !current.Active ||
+            !current.PressureActive ||
+            current.LocalPlayer != expectedLocalPlayer ||
+            current.PublishedAtMilliseconds < 0 ||
+            nowMilliseconds < current.PublishedAtMilliseconds ||
+            maximumAgeMilliseconds < 0 ||
+            nowMilliseconds - current.PublishedAtMilliseconds > maximumAgeMilliseconds)
+        {
+            return false;
+        }
+
+        var opponent = current.Find(expectedEnemy.GameObjectId, expectedEnemy.EntityId);
+        if (opponent is null || opponent.TotalTeamTargetCount < 0) return false;
+        teamTargetCount = opponent.TotalTeamTargetCount;
+        return true;
+    }
+
+    /// <summary>
     /// Returns the existing HOWMANY union for the exact local player. False is
     /// unknown/inactive and must never be treated as a synthetic zero.
     /// </summary>
@@ -306,9 +339,10 @@ internal sealed class TargetPressureTracker : IDisposable
                                        configuration.NearAssistPreferTeamPressure ||
                                        configuration.ShowCurrentTargetInfoHud ||
                                        configuration.EnableDefensiveUtilities ||
-                                       (isReactiveCounterCcJob &&
-                                        configuration.EnableReactiveCcUtilities &&
-                                        configuration.ReactiveCcAfterEnemyPurify) ||
+                                        (isReactiveCounterCcJob &&
+                                         configuration.EnableReactiveCcUtilities &&
+                                         (configuration.ReactiveCcAfterEnemyPurify ||
+                                          configuration.ReactiveCcAfterEnemyGuard)) ||
                                        (isScholar &&
                                         configuration.EnableScholarCriticalStrategyOnHeldKey) ||
                                        configuration.EnableAutoEnemyFocusMark ||
@@ -402,6 +436,9 @@ internal sealed class TargetPressureTracker : IDisposable
             .GroupBy(static player => player.EntityId)
             .Where(static group => group.Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.Single());
+        var localHardTarget = pressureEnabledForContext
+            ? ResolveNativeHardTarget(localPlayer, playerByEntityId)
+            : null;
 
         var enemies = new List<(IPlayerCharacter Player, TargetPressureEnemyObservation Observation)>();
         var allies = new List<TargetPressureAllyObservation>();
@@ -511,7 +548,12 @@ internal sealed class TargetPressureTracker : IDisposable
                 pressureEnabledForContext
                     ? core.GetAllyTargetCount(observation.Actor)
                     : 0,
-                displays));
+                displays)
+            {
+                TotalTeamTargetCount = pressureEnabledForContext
+                    ? core.GetTotalTeamTargetCount(observation.Actor, localHardTarget)
+                    : 0,
+            });
         }
 
         foreach (var stale in protectionStates.Keys.Where(identity => !liveIdentities.Contains(identity)).ToArray())
