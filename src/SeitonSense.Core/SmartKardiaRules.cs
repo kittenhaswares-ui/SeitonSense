@@ -2,8 +2,8 @@ namespace SeitonSense.Core;
 
 /// <summary>
 /// One exact Crystalline Conflict party-list actor considered by the optional
-/// held-key Smart Kardia helper. Incoming pressure must be the current unique
-/// hard/cast target union; historical action hints are not an eligible source.
+/// Eukrasia-triggered Smart Kardia helper. Incoming pressure must be the current
+/// unique hard/cast target union; historical action hints are not eligible.
 /// </summary>
 public readonly record struct SmartKardiaCandidate(
     int PartySlot,
@@ -22,9 +22,46 @@ public readonly record struct SmartKardiaCandidate(
     bool HasOwnKardion);
 
 /// <summary>
-/// The one action and exact party actor selected for the current physical-key
-/// generation. Runtime code must never rerank or substitute another actor
-/// after this intent has been created.
+/// One exact observation of the local Sage's PvP Eukrasia state. Both the
+/// adjusted action identity and the source-owned status state must be known.
+/// </summary>
+public readonly record struct SmartKardiaEukrasiaEvidence(
+    uint AdjustedActionId,
+    uint CurrentCharges,
+    bool OwnStatusStateKnown,
+    bool HasOwnEukrasia)
+{
+    public bool IsValid =>
+        AdjustedActionId == SmartKardiaRules.EukrasiaActionId &&
+        CurrentCharges <= SmartKardiaRules.EukrasiaMaximumCharges &&
+        OwnStatusStateKnown;
+}
+
+/// <summary>
+/// A bounded, one-shot opportunity created only after the existing native hook
+/// forwarded one exact incoming Eukrasia call and the client accepted it.
+/// </summary>
+public readonly record struct SmartKardiaEukrasiaTrigger(
+    long Token,
+    long AcceptedAtMilliseconds,
+    long ExpiresAtMilliseconds,
+    uint TerritoryId,
+    TargetPressureActorIdentity LocalPlayer,
+    SmartKardiaEukrasiaEvidence Before)
+{
+    public bool IsValid =>
+        Token > 0 &&
+        AcceptedAtMilliseconds >= 0 &&
+        ExpiresAtMilliseconds > AcceptedAtMilliseconds &&
+        TerritoryId != 0 &&
+        LocalPlayer.IsValid &&
+        Before.IsValid &&
+        Before.CurrentCharges > 0;
+}
+
+/// <summary>
+/// The one action and exact party actor selected for the accepted Eukrasia
+/// opportunity. Runtime code must never rerank or substitute another actor.
 /// </summary>
 public readonly record struct SmartKardiaIntent(
     uint ActionId,
@@ -41,8 +78,10 @@ public readonly record struct SmartKardiaIntent(
         LocalPlayer.IsValid &&
         Target.IsValid &&
         IsSelf == (Target == LocalPlayer) &&
-        SelectedIncomingEnemyCount >=
-            SmartKardiaRules.MinimumIncomingEnemyCount;
+        SelectedIncomingEnemyCount >= 0 &&
+        (IsSelf ||
+         SelectedIncomingEnemyCount >=
+             SmartKardiaRules.MinimumIncomingEnemyCount);
 }
 
 public readonly record struct SmartKardiaObservation(
@@ -54,11 +93,12 @@ public readonly record struct SmartKardiaObservation(
     bool MetadataVerified,
     bool ActionHelpersSuppressedByGuard,
     bool HigherPriorityClaimed,
-    bool InputProbeSucceeded,
-    bool IsTextInputActive,
-    bool HeldGameplayKeyEligible,
+    bool TriggerAvailable,
+    bool TriggerEvidenceConfirmed,
+    bool FreshPressurePublicationAvailable,
     uint ResolvedActionId,
     bool ActionLocallyReady,
+    bool AnimationLockClear,
     bool CompleteExactPartyView,
     IReadOnlyList<SmartKardiaCandidate>? Candidates,
     bool HardReset = false);
@@ -82,16 +122,17 @@ public enum SmartKardiaDecisionReason
     MetadataUnverified = 7,
     GuardSuppressed = 8,
     HigherPriorityClaimed = 9,
-    InputProbeUnavailable = 10,
-    TextInputActive = 11,
-    NoHeldGameplayKey = 12,
     ResolvedActionInvalid = 13,
     ActionNotReady = 14,
     IncompleteExactPartyView = 15,
-    NoKnownPressureTarget = 16,
     SelectedKardionStateUnknown = 17,
     SelectedAlreadyHasOwnKardion = 18,
     IncompleteKnownPressureView = 19,
+    NoEligiblePressureOrSelfTarget = 22,
+    EukrasiaTriggerUnavailable = 23,
+    EukrasiaEvidencePending = 24,
+    PressurePublicationPending = 25,
+    AnimationLockActive = 26,
 }
 
 public readonly record struct SmartKardiaDecision(
@@ -103,33 +144,87 @@ public readonly record struct SmartKardiaDecision(
     public bool ShouldDispatch =>
         Kind == SmartKardiaDecisionKind.Dispatch &&
         Intent is { IsValid: true };
-
-    /// <summary>
-    /// The shared physical input generation must be consumed before final
-    /// revalidation or the sole native action request. Failure after that point
-    /// is terminal: there is no alternate target, fallback, or retry.
-    /// </summary>
-    public bool ShouldConsumeInputGeneration => ShouldDispatch;
 }
 
 /// <summary>
-/// Pure policy for the default-off Sage PvP Smart Kardia helper. It requires a
-/// complete, unambiguous five-member CC party view and one held gameplay-key
-/// generation. Self and exact party allies are eligible at known direct
-/// incoming pressure from at least two unique enemies. Selection is stable,
-/// freezes one exact actor, and never navigates, changes the hard target,
-/// substitutes, buffers, or retries.
+/// Pure policy for the default-off Sage PvP Smart Kardia helper. One accepted
+/// Eukrasia call creates at most one short-lived opportunity. The helper then
+/// requires causal charge/status evidence and a fresh, coherent five-member CC
+/// party-pressure view. Pressure-qualified actors (including self) are ranked
+/// by pressure, exact HP ratio, party slot, EntityId, and GOID. If none qualifies,
+/// exact self is the sole fallback. No hard/focus target is involved.
 /// </summary>
 public static class SmartKardiaRules
 {
     public const uint SageJobId = 40;
     public const uint ActionId = 29_264;
+    public const uint EukrasiaActionId = 29_258;
     public const uint KardiaStatusId = 2_871;
     public const uint KardionStatusId = 2_872;
+    public const uint EukrasiaStatusId = 3_107;
     public const int MinimumIncomingEnemyCount = 2;
+    public const uint EukrasiaMaximumCharges = 2;
+    public const long TriggerLifetimeMilliseconds = 2_000;
     public const int RequiredCrystallineConflictPartySize = 5;
     public const int FirstPartySlot = 1;
     public const int LastPartySlot = 8;
+
+    public static bool TryCreateAcceptedTrigger(
+        long token,
+        long acceptedAtMilliseconds,
+        uint territoryId,
+        TargetPressureActorIdentity localPlayer,
+        SmartKardiaEukrasiaEvidence before,
+        out SmartKardiaEukrasiaTrigger trigger)
+    {
+        trigger = default;
+        if (token <= 0 ||
+            acceptedAtMilliseconds < 0 ||
+            acceptedAtMilliseconds >= long.MaxValue ||
+            territoryId == 0 ||
+            !localPlayer.IsValid ||
+            !before.IsValid ||
+            before.CurrentCharges == 0)
+        {
+            return false;
+        }
+
+        var expiresAt = acceptedAtMilliseconds >
+                        long.MaxValue - TriggerLifetimeMilliseconds
+            ? long.MaxValue
+            : acceptedAtMilliseconds + TriggerLifetimeMilliseconds;
+        trigger = new SmartKardiaEukrasiaTrigger(
+            token,
+            acceptedAtMilliseconds,
+            expiresAt,
+            territoryId,
+            localPlayer,
+            before);
+        return trigger.IsValid;
+    }
+
+    public static bool IsTriggerCurrent(
+        SmartKardiaEukrasiaTrigger trigger,
+        long nowMilliseconds,
+        uint territoryId,
+        TargetPressureActorIdentity localPlayer) =>
+        trigger.IsValid &&
+        nowMilliseconds >= trigger.AcceptedAtMilliseconds &&
+        nowMilliseconds < trigger.ExpiresAtMilliseconds &&
+        trigger.TerritoryId == territoryId &&
+        trigger.LocalPlayer == localPlayer;
+
+    /// <summary>
+    /// The accepted call is causal only after either its charge has disappeared
+    /// or a previously absent, exact local-source Eukrasia status has appeared.
+    /// </summary>
+    public static bool HasCausalEukrasiaEvidence(
+        SmartKardiaEukrasiaTrigger trigger,
+        SmartKardiaEukrasiaEvidence current) =>
+        trigger.IsValid &&
+        current.IsValid &&
+        (current.CurrentCharges < trigger.Before.CurrentCharges ||
+         (!trigger.Before.HasOwnEukrasia && current.HasOwnEukrasia));
 
     public static SmartKardiaDecision Observe(SmartKardiaObservation observation)
     {
@@ -156,7 +251,10 @@ public static class SmartKardiaRules
             observation.Candidates,
             observation.LocalPlayer);
         if (selectedIndex < 0)
-            return None(SmartKardiaDecisionReason.NoKnownPressureTarget);
+        {
+            return None(
+                SmartKardiaDecisionReason.NoEligiblePressureOrSelfTarget);
+        }
 
         // Status ownership is deliberately inspected only after ranking. If
         // the one best actor is unknown or already owns our Kardion, do not
@@ -190,16 +288,10 @@ public static class SmartKardiaRules
             intent);
     }
 
-    public static bool IsKardiaStatus(uint statusId) =>
-        statusId == KardiaStatusId;
+    public static bool IsKardiaStatus(uint statusId) => statusId == KardiaStatusId;
+    public static bool IsKardionStatus(uint statusId) => statusId == KardionStatusId;
+    public static bool IsEukrasiaStatus(uint statusId) => statusId == EukrasiaStatusId;
 
-    public static bool IsKardionStatus(uint statusId) =>
-        statusId == KardionStatusId;
-
-    /// <summary>
-    /// A complete CC party view contains five exact unique actors, exactly one
-    /// exact local-player entry, and no partial P-slot/GOID/EntityId collision.
-    /// </summary>
     public static bool HasCompleteExactPartyView(
         IReadOnlyList<SmartKardiaCandidate>? candidates,
         TargetPressureActorIdentity localPlayer)
@@ -235,11 +327,6 @@ public static class SmartKardiaRules
         return localEntries == 1;
     }
 
-    /// <summary>
-    /// Every living, targetable party actor must have an explicit current
-    /// pressure count, including known zero. Unknown pressure on a dead or
-    /// untargetable actor cannot affect selection and is allowed.
-    /// </summary>
     public static bool HasCompleteKnownPressureView(
         IReadOnlyList<SmartKardiaCandidate>? candidates) =>
         candidates is not null &&
@@ -267,6 +354,24 @@ public static class SmartKardiaRules
         candidate.PressureKnown &&
         candidate.UniqueIncomingEnemyCount >= MinimumIncomingEnemyCount;
 
+    public static bool IsEligibleSelfFallback(
+        SmartKardiaCandidate candidate,
+        TargetPressureActorIdentity localPlayer) =>
+        localPlayer.IsValid &&
+        candidate.PartySlot is >= FirstPartySlot and <= LastPartySlot &&
+        candidate.ExactPartyIdentity &&
+        candidate.Actor == localPlayer &&
+        candidate.IsSelf &&
+        candidate.Alive &&
+        candidate.Targetable &&
+        candidate.CurrentHp > 0 &&
+        candidate.MaximumHp > 0 &&
+        candidate.CurrentHp <= candidate.MaximumHp &&
+        candidate.NativeTargetValid &&
+        candidate.NativeRangeAndLineOfSight &&
+        candidate.PressureKnown &&
+        candidate.UniqueIncomingEnemyCount >= 0;
+
     public static int SelectBestCandidateIndex(
         IReadOnlyList<SmartKardiaCandidate>? candidates,
         TargetPressureActorIdentity localPlayer)
@@ -287,15 +392,17 @@ public static class SmartKardiaRules
                 bestIndex = index;
         }
 
-        return bestIndex;
+        if (bestIndex >= 0) return bestIndex;
+
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (IsEligibleSelfFallback(candidates[index], localPlayer))
+                return index;
+        }
+
+        return -1;
     }
 
-    /// <summary>
-    /// Final validation for only the frozen actor and action. Current pressure
-    /// must remain known at threshold and the selected actor must still be
-    /// proven not to own our Kardion. Callers must not invoke the selector
-    /// again after consuming the physical-key generation.
-    /// </summary>
     public static bool CanUseFrozenIntent(
         SmartKardiaIntent intent,
         SmartKardiaCandidate currentCandidate,
@@ -307,7 +414,9 @@ public static class SmartKardiaRules
         bool metadataVerified,
         bool actionHelpersSuppressedByGuard,
         uint resolvedActionId,
-        bool actionLocallyReady) =>
+        bool actionLocallyReady,
+        bool animationLockClear,
+        bool triggerEvidenceConfirmed) =>
         intent.IsValid &&
         configurationEnabled &&
         isCrystallineConflict &&
@@ -318,46 +427,36 @@ public static class SmartKardiaRules
         !actionHelpersSuppressedByGuard &&
         resolvedActionId == intent.ActionId &&
         actionLocallyReady &&
+        animationLockClear &&
+        triggerEvidenceConfirmed &&
         currentCandidate.PartySlot == intent.PartySlot &&
         currentCandidate.Actor == intent.Target &&
         currentCandidate.IsSelf == intent.IsSelf &&
-        IsEligibleCandidate(currentCandidate, currentLocalPlayer) &&
+        (intent.IsSelf
+            ? IsEligibleSelfFallback(currentCandidate, currentLocalPlayer)
+            : IsEligibleCandidate(currentCandidate, currentLocalPlayer)) &&
         currentCandidate.OwnKardionStateKnown &&
         !currentCandidate.HasOwnKardion;
 
     private static SmartKardiaDecisionReason GetGateFailure(
         SmartKardiaObservation observation)
     {
-        if (observation.HardReset)
-            return SmartKardiaDecisionReason.HardReset;
-        if (!observation.ConfigurationEnabled)
-            return SmartKardiaDecisionReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
-            return SmartKardiaDecisionReason.OutsideCrystallineConflict;
-        if (!observation.LocalPlayer.IsValid)
-            return SmartKardiaDecisionReason.LocalPlayerIdentityInvalid;
-        if (!observation.IsLocalPlayerAlive)
-            return SmartKardiaDecisionReason.LocalPlayerDead;
-        if (observation.LocalJobId != SageJobId)
-            return SmartKardiaDecisionReason.LocalJobInvalid;
-        if (!observation.MetadataVerified)
-            return SmartKardiaDecisionReason.MetadataUnverified;
-        if (observation.ActionHelpersSuppressedByGuard)
-            return SmartKardiaDecisionReason.GuardSuppressed;
-        if (observation.HigherPriorityClaimed)
-            return SmartKardiaDecisionReason.HigherPriorityClaimed;
-        if (!observation.InputProbeSucceeded)
-            return SmartKardiaDecisionReason.InputProbeUnavailable;
-        if (observation.IsTextInputActive)
-            return SmartKardiaDecisionReason.TextInputActive;
-        if (!observation.HeldGameplayKeyEligible)
-            return SmartKardiaDecisionReason.NoHeldGameplayKey;
-        if (observation.ResolvedActionId != ActionId)
-            return SmartKardiaDecisionReason.ResolvedActionInvalid;
-        if (!observation.ActionLocallyReady)
-            return SmartKardiaDecisionReason.ActionNotReady;
-        if (!observation.CompleteExactPartyView)
-            return SmartKardiaDecisionReason.IncompleteExactPartyView;
+        if (observation.HardReset) return SmartKardiaDecisionReason.HardReset;
+        if (!observation.ConfigurationEnabled) return SmartKardiaDecisionReason.ConfigurationDisabled;
+        if (!observation.IsCrystallineConflict) return SmartKardiaDecisionReason.OutsideCrystallineConflict;
+        if (!observation.LocalPlayer.IsValid) return SmartKardiaDecisionReason.LocalPlayerIdentityInvalid;
+        if (!observation.IsLocalPlayerAlive) return SmartKardiaDecisionReason.LocalPlayerDead;
+        if (observation.LocalJobId != SageJobId) return SmartKardiaDecisionReason.LocalJobInvalid;
+        if (!observation.MetadataVerified) return SmartKardiaDecisionReason.MetadataUnverified;
+        if (observation.ActionHelpersSuppressedByGuard) return SmartKardiaDecisionReason.GuardSuppressed;
+        if (observation.HigherPriorityClaimed) return SmartKardiaDecisionReason.HigherPriorityClaimed;
+        if (!observation.TriggerAvailable) return SmartKardiaDecisionReason.EukrasiaTriggerUnavailable;
+        if (!observation.TriggerEvidenceConfirmed) return SmartKardiaDecisionReason.EukrasiaEvidencePending;
+        if (!observation.FreshPressurePublicationAvailable) return SmartKardiaDecisionReason.PressurePublicationPending;
+        if (observation.ResolvedActionId != ActionId) return SmartKardiaDecisionReason.ResolvedActionInvalid;
+        if (!observation.ActionLocallyReady) return SmartKardiaDecisionReason.ActionNotReady;
+        if (!observation.AnimationLockClear) return SmartKardiaDecisionReason.AnimationLockActive;
+        if (!observation.CompleteExactPartyView) return SmartKardiaDecisionReason.IncompleteExactPartyView;
 
         return SmartKardiaDecisionReason.None;
     }

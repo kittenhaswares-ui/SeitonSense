@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.20.0.0
+
+- Added default-off **fixed Combat Frames** for exact Crystalline Conflict: one
+  Self frame and stable `S1`-`S5` enemy rows with job icons, HP, trusted MP and
+  2,000-MP divisions, relevant Guard/CC/execute states, direct pressure, team
+  focus, and read-only current/focus accents. They are non-clickable screen-space
+  overlays; no world projection, target mutation, or native FFXIV HUD edit is
+  performed. Native parameter/enemy-list elements must be hidden manually if
+  the user wants the overlay to visually replace them.
+- Added default-off **Smart Recuperate on held gameplay key** for exact
+  Crystalline Conflict. At exactly 16,000 or more missing HP and at least 2,000
+  observed MP, one eligible held generation may request self-targeted PvP
+  Recuperate `29711`. Missing MP or native readiness leaves the generation
+  unspent so a real MP/readiness update can make it eligible. The generation is
+  consumed before final identity, HP, MP, Guard, context, metadata, and readiness
+  revalidation; drift, rejection, or exception never retries.
+- Replaced the frame-driven held-key **Smart Kardia** scanner and six-second
+  throttle with one short-lived opportunity after an incoming PvP Eukrasia
+  `29258` call is forwarded unchanged and returns client-accepted. A real local
+  charge decrease or newly observed own-source Eukrasia status must causally
+  confirm that call. Kardia waits for animation lock to clear and requires a
+  fresh complete pressure publication created after acceptance.
+- Smart Kardia still ranks exact living, targetable self/party candidates at
+  two or more direct incoming enemies by pressure, exact HP ratio, party slot,
+  and actor identity; exact self is the sole initial fallback when nobody meets
+  the threshold. The frozen trigger and actor are spent before at most one
+  direct-GOID request. Unknown Kardion state, drift, or failure cannot rerank,
+  select an alternate, switch target, replay, or retry.
+- Removed the speculative low-HP **pre-Guard** rule. The verified reactive path
+  remains: after a high-pressure Stun Purify attempt, live Resilience, removal
+  of the cleansable CC, and a genuinely new physical generation are required
+  before Guard may be requested.
+- Moved **Paladin Guardian** to an independent default-off Job Tool. It no longer
+  depends on the defensive-utility master and keeps its exact low-HP ally,
+  native reachability, direct-GOID, one-attempt, communication, and marker-
+  ownership safeguards.
+- The shared physical-input priority is now Self-Purify, reactive Guard, Smart
+  Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC,
+  Ninja Seiton, then Scholar Critical Strategy. Accepted-Eukrasia Kardia is a
+  separate bounded follow-up; Monk Earth's Reply still yields after an earlier
+  helper attempt.
+- Bumped the plugin version to `0.20.0.0` and configuration schema to `26`.
+  Smart Recuperate and Combat Frames remain off for fresh, upgrading, and reset
+  configurations. A prior explicit Smart Kardia opt-in migrates to the new
+  Eukrasia-triggered mode, speculative pre-Guard is disabled, and only a
+  previously effective Guardian opt-in migrates to the independent Job Tool.
+  Source/build validation does not replace current-patch live Crystalline
+  Conflict checks for action ordering, telemetry, rendering, or native effects.
+
 ## 0.19.0.0
 
 - Added a separate default-off **Smart Kardia on held gameplay key** helper under

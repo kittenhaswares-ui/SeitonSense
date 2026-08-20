@@ -21,28 +21,6 @@ internal static class DefensiveUtilitySelfTests
             "large health values remain overflow safe");
     }
 
-    public static void PreGuardRiskRequiresEveryExactGate()
-    {
-        True(
-            DefensiveUtilityRules.IsPreGuardRisk(true, 3, 50, 100, false, false),
-            "exact low-health high-pressure risk");
-        False(
-            DefensiveUtilityRules.IsPreGuardRisk(false, 3, 50, 100, false, false),
-            "unknown pressure");
-        False(
-            DefensiveUtilityRules.IsPreGuardRisk(true, 2, 50, 100, false, false),
-            "insufficient pressure");
-        False(
-            DefensiveUtilityRules.IsPreGuardRisk(true, 3, 51, 100, false, false),
-            "health above threshold");
-        False(
-            DefensiveUtilityRules.IsPreGuardRisk(true, 3, 50, 100, true, false),
-            "Purify-removable CC gives Purify priority");
-        False(
-            DefensiveUtilityRules.IsPreGuardRisk(true, 3, 50, 100, false, true),
-            "active Guard cannot be reused");
-    }
-
     public static void PostPurifyGuardRequiresPositiveConfirmation()
     {
         True(
@@ -191,7 +169,7 @@ internal static class DefensiveUtilitySelfTests
             previous: null,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guard,
-            DefensiveUtilityTrigger.PreGuardLowHpPressure,
+            DefensiveUtilityTrigger.ReservedRemovedPreGuard,
             useActionAttempted: true,
             useActionAccepted: true,
             selectedPartySlot: 3,
@@ -202,7 +180,7 @@ internal static class DefensiveUtilitySelfTests
             previous: null,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guardian,
-            DefensiveUtilityTrigger.PreGuardLowHpPressure,
+            DefensiveUtilityTrigger.ReservedRemovedPreGuard,
             useActionAttempted: true,
             useActionAccepted: true,
             selectedPartySlot: 3,

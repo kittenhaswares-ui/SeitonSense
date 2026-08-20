@@ -4,9 +4,9 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
-/// by emergency self-Purify, defensive utilities, ally rescue, Miracle
-/// intercept, fresh-key Ninja Seiton, held-key Scholar Critical Strategy, and
-/// held-key Smart Kardia, plus the exact high-pressure movement-key Sprint helper.
+/// by emergency self-Purify, reactive Guard, Smart Recuperate, PLD Guardian,
+/// ally rescue, Miracle intercept, fresh-key Ninja Seiton, held-key Scholar
+/// Critical Strategy, and the exact high-pressure movement-key Sprint helper.
 /// Consumption is deliberately shared: once any helper claims a generation,
 /// every later helper sees no input.
 /// </summary>
@@ -52,11 +52,12 @@ internal sealed class EmergencyActionInputCoordinator
     private readonly GameInputContextProbe probe;
     private bool purifyHeldWasEnabled;
     private bool defensiveUtilityHeldWasEnabled;
+    private bool paladinGuardianHeldWasEnabled;
+    private bool smartRecuperateHeldWasEnabled;
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
     private bool scholarCriticalStrategyHeldWasEnabled;
     private bool pressureEscapeHeldWasEnabled;
-    private bool smartKardiaHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -67,11 +68,12 @@ internal sealed class EmergencyActionInputCoordinator
         bool shouldObserve,
         bool purifyHeldEnabled,
         bool defensiveUtilityHeldEnabled,
+        bool paladinGuardianHeldEnabled,
+        bool smartRecuperateHeldEnabled,
         bool allyRescueHeldEnabled,
         bool miracleInterceptHeldEnabled,
         bool scholarCriticalStrategyHeldEnabled,
-        bool pressureEscapeHeldEnabled = false,
-        bool smartKardiaHeldEnabled = false)
+        bool pressureEscapeHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -85,18 +87,20 @@ internal sealed class EmergencyActionInputCoordinator
         var heldOptionJustEnabled =
             (purifyHeldEnabled && !purifyHeldWasEnabled) ||
             (defensiveUtilityHeldEnabled && !defensiveUtilityHeldWasEnabled) ||
+            (paladinGuardianHeldEnabled && !paladinGuardianHeldWasEnabled) ||
+            (smartRecuperateHeldEnabled && !smartRecuperateHeldWasEnabled) ||
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
             (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
-            (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
-            (smartKardiaHeldEnabled && !smartKardiaHeldWasEnabled);
+            (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
+        paladinGuardianHeldWasEnabled = paladinGuardianHeldEnabled;
+        smartRecuperateHeldWasEnabled = smartRecuperateHeldEnabled;
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
-        smartKardiaHeldWasEnabled = smartKardiaHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -123,6 +127,8 @@ internal sealed class EmergencyActionInputCoordinator
             shouldObserve,
             purifyHeldEnabled,
             defensiveUtilityHeldEnabled: false,
+            paladinGuardianHeldEnabled: false,
+            smartRecuperateHeldEnabled: false,
             allyRescueHeldEnabled,
             miracleInterceptHeldEnabled: false,
             scholarCriticalStrategyHeldEnabled: false,
@@ -133,10 +139,11 @@ internal sealed class EmergencyActionInputCoordinator
         probe.Reset();
         purifyHeldWasEnabled = false;
         defensiveUtilityHeldWasEnabled = false;
+        paladinGuardianHeldWasEnabled = false;
+        smartRecuperateHeldWasEnabled = false;
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
         scholarCriticalStrategyHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
-        smartKardiaHeldWasEnabled = false;
     }
 }

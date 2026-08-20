@@ -573,7 +573,6 @@ internal sealed class GuardianCommunicationService
 
     private bool IsCommunicationConfigured() =>
         configuration.Enabled &&
-        configuration.EnableDefensiveUtilities &&
         configuration.PaladinGuardianLowAlly &&
         configuration.PaladinGuardianAnnounceAndMark &&
         metadata.Verified &&

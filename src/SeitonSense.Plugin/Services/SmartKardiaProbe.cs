@@ -1,4 +1,3 @@
-using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Plugin.Services;
@@ -23,8 +22,7 @@ internal sealed record SmartKardiaProbeSnapshot(
     bool OwnKardionStateKnown,
     bool HasOwnKardion,
     bool LocallyReady,
-    VirtualKey HeldGameplayKey,
-    bool InputClaimed,
+    bool TriggerConsumed,
     bool UseActionAttempted,
     bool UseActionAccepted,
     long AttemptCount,
@@ -46,30 +44,32 @@ internal sealed record SmartKardiaProbeSnapshot(
         false,
         false,
         false,
-        VirtualKey.NO_KEY,
         false,
         false,
         false,
         0,
         0,
         "Not evaluated",
-        "Waiting");
+        "Waiting for accepted Eukrasia");
 }
 
 /// <summary>
-/// Converts one unclaimed held physical gameplay-key generation into at most
-/// one exact PvP Kardia request. Selection requires one coherent, complete CC
-/// party view. After the generation is consumed, only the frozen party slot
-/// and actor may be revalidated; there is no alternate, fallback, or retry.
+/// Converts one client-accepted, causally confirmed Eukrasia call into at most
+/// one exact PvP Kardia request. It never reads or changes selected-target state,
+/// never scans continuously while idle, and never retries a spent trigger.
 /// </summary>
 internal sealed unsafe class SmartKardiaProbe
 {
     internal const uint KardiaIconId = 9_580;
+    internal const uint EukrasiaIconId = 9_573;
     internal const uint KardiaStatusIconId = 212_951;
     internal const uint KardionStatusIconId = 212_952;
+    internal const uint EukrasiaStatusIconId = 212_953;
     internal const ushort ExpectedRecast100ms = 10;
+    internal const ushort ExpectedEukrasiaRecast100ms = 120;
     internal const int ExpectedRange = 30;
 
+    private const float AnimationLockEpsilonSeconds = 0.0005f;
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
@@ -82,7 +82,7 @@ internal sealed unsafe class SmartKardiaProbe
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
-    private string lastEvent = "Waiting";
+    private string lastEvent = "Waiting for accepted Eukrasia";
 
     internal SmartKardiaProbe(
         IClientState clientState,
@@ -113,10 +113,11 @@ internal sealed unsafe class SmartKardiaProbe
         bool metadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
-        EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
         bool hardReset = false)
     {
+        if (hardReset) nearAssist.ClearSmartKardiaTrigger();
+
         var localAlive = IsLivePlayer(localPlayer);
         var localIdentity = TryGetExactIdentity(localPlayer, out var exactLocalIdentity)
             ? exactLocalIdentity
@@ -131,21 +132,58 @@ internal sealed unsafe class SmartKardiaProbe
                                   metadataVerified &&
                                   !actionHelpersSuppressedByGuard &&
                                   !hardReset;
+
+        var trigger = default(SmartKardiaEukrasiaTrigger);
+        var triggerAvailable = featureContextReady &&
+                               localIdentity.IsValid &&
+                               nearAssist.TryPeekSmartKardiaTrigger(
+                                   nowMilliseconds,
+                                   clientState.TerritoryType,
+                                   localIdentity,
+                                   out trigger);
+        var currentEvidence = default(SmartKardiaEukrasiaEvidence);
+        var currentEvidenceKnown = triggerAvailable &&
+                                   TryReadExactEukrasiaEvidence(
+                                       localPlayer!,
+                                       out currentEvidence);
+        var triggerEvidenceConfirmed = currentEvidenceKnown &&
+                                       SmartKardiaRules.HasCausalEukrasiaEvidence(
+                                           trigger,
+                                           currentEvidence);
+        var freshPressurePublicationAvailable = triggerAvailable &&
+                                                pressureTracker.TryCaptureIncomingAllyPressure(
+                                                    out _,
+                                                    out var pressurePublishedAt) &&
+                                                pressurePublishedAt >= trigger.AcceptedAtMilliseconds &&
+                                                pressurePublishedAt <= nowMilliseconds;
         var resolvedActionId = 0u;
+        var animationLockClear = false;
         var actionReady = featureContextReady &&
                           localIdentity.IsValid &&
-                          TryGetReadyAction(localPlayer!, out resolvedActionId);
+                          TryGetReadyAction(
+                              localPlayer!,
+                              out resolvedActionId,
+                              out animationLockClear);
         if (!actionReady) resolvedActionId = 0;
+        if (!featureContextReady) animationLockClear = false;
 
-        var input = inputFrame.Snapshot;
-        var shouldResolveCandidates = actionReady &&
-                                      !higherPriorityClaimed &&
-                                      input.ProbeSucceeded &&
-                                      !input.IsTextInputActive &&
-                                      inputFrame.HeldGameplayKeyEligible;
-        var candidateResolution = "Not evaluated: no eligible held input";
+        var shouldResolveCandidates = featureContextReady &&
+                                      triggerAvailable &&
+                                      triggerEvidenceConfirmed &&
+                                      freshPressurePublicationAvailable &&
+                                      actionReady &&
+                                      animationLockClear &&
+                                      !higherPriorityClaimed;
+        var candidateResolution = triggerAvailable
+            ? "Waiting for causal evidence, fresh pressure, readiness, or priority"
+            : "No accepted Eukrasia trigger";
         var capture = shouldResolveCandidates
-            ? CaptureExactParty(localPlayer!, resolvedActionId, out candidateResolution)
+            ? CaptureExactParty(
+                localPlayer!,
+                resolvedActionId,
+                trigger.AcceptedAtMilliseconds,
+                nowMilliseconds,
+                out candidateResolution)
             : ExactPartyCapture.Incomplete;
         var candidates = capture.Members
             .Select(static member => member.Candidate)
@@ -160,24 +198,34 @@ internal sealed unsafe class SmartKardiaProbe
                 metadataVerified,
                 actionHelpersSuppressedByGuard,
                 higherPriorityClaimed,
-                input.ProbeSucceeded,
-                input.IsTextInputActive,
-                inputFrame.HeldGameplayKeyEligible,
+                triggerAvailable,
+                triggerEvidenceConfirmed,
+                freshPressurePublicationAvailable,
                 resolvedActionId,
                 actionReady,
+                animationLockClear,
                 capture.Complete,
                 candidates,
                 hardReset));
 
-        // This physical generation becomes terminal before any final native
-        // reads. Drift, rejection, or an exception cannot select another actor
-        // or allow a lower-priority helper to reuse the same generation.
-        var inputClaimed = decision.ShouldConsumeInputGeneration;
-        if (inputClaimed) inputFrame.Consume();
+        // Transiently incomplete party/pressure capture keeps waiting inside the
+        // bounded token. Once one complete exact view reaches actual selection,
+        // the opportunity is terminal regardless of status ownership, target
+        // drift, native rejection, or exception.
+        var selectionEvaluated = shouldResolveCandidates && capture.Complete;
+        var triggerConsumed = selectionEvaluated &&
+                              nearAssist.TryConsumeSmartKardiaTrigger(trigger.Token);
+        if (selectionEvaluated && !triggerConsumed)
+        {
+            decision = new SmartKardiaDecision(
+                SmartKardiaDecisionKind.Cancelled,
+                SmartKardiaDecisionReason.EukrasiaTriggerUnavailable);
+        }
 
         var attempted = false;
         var accepted = false;
-        if (decision.ShouldDispatch &&
+        if (triggerConsumed &&
+            decision.ShouldDispatch &&
             decision.Intent is { } intent &&
             decision.SelectedCandidateIndex >= 0 &&
             decision.SelectedCandidateIndex < capture.Members.Count)
@@ -185,76 +233,30 @@ internal sealed unsafe class SmartKardiaProbe
             var selected = capture.Members[decision.SelectedCandidateIndex];
             try
             {
-                var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer);
-                var finalContextReady = currentLocal is not null &&
-                                        configuration.Enabled &&
-                                        configuration.EnableSageKardiaOnHeldKey &&
-                                        IsCurrentCrystallineConflict() &&
-                                        IsLivePlayer(currentLocal) &&
-                                        currentLocal.ClassJob.IsValid &&
-                                        currentLocal.ClassJob.RowId == SmartKardiaRules.SageJobId &&
-                                        metadataVerified &&
-                                        !IsCurrentlySuppressedByGuard(
-                                            currentLocal,
-                                            Environment.TickCount64);
-                var finalResolvedActionId = 0u;
-                var finalActionReady = finalContextReady &&
-                                       TryGetReadyAction(currentLocal!, out finalResolvedActionId);
-                if (!finalActionReady) finalResolvedActionId = 0;
-                var finalCandidate = finalContextReady
-                    ? ResolveFrozenCandidate(
-                        currentLocal!,
-                        intent,
-                        selected.Address,
-                        finalResolvedActionId)
-                    : null;
-                var currentLocalIdentity = currentLocal is not null
-                    ? new TargetPressureActorIdentity(
-                        currentLocal.GameObjectId,
-                        currentLocal.EntityId)
-                    : default;
-                if (finalCandidate is { } exactCandidate &&
-                    SmartKardiaRules.CanUseFrozenIntent(
-                        intent,
-                        exactCandidate,
-                        configuration.Enabled && configuration.EnableSageKardiaOnHeldKey,
-                        IsCurrentCrystallineConflict(),
-                        currentLocal!.ClassJob.RowId,
-                        currentLocalIdentity,
-                        IsLivePlayer(currentLocal),
-                        metadataVerified,
-                        IsCurrentlySuppressedByGuard(
-                            currentLocal,
-                            Environment.TickCount64),
-                        finalResolvedActionId,
-                        finalActionReady))
-                {
-                    accepted = TryUseKardiaOnce(
-                        intent,
-                        selected.Address,
-                        metadataVerified,
-                        out attempted);
-                    if (attempted) Interlocked.Increment(ref attemptCount);
-                    if (accepted) Interlocked.Increment(ref acceptedCount);
-                    lastEvent = attempted
-                        ? $"P{intent.PartySlot} action {intent.ActionId} attempted (accepted={accepted})"
-                        : $"P{intent.PartySlot} terminal UseAction-boundary revalidation failed";
-                }
-                else
-                {
-                    lastEvent = $"P{intent.PartySlot} terminal frozen-intent revalidation failed";
-                }
+                accepted = TryUseKardiaOnce(
+                    intent,
+                    selected.Address,
+                    trigger,
+                    metadataVerified,
+                    out attempted);
+                if (attempted) Interlocked.Increment(ref attemptCount);
+                if (accepted) Interlocked.Increment(ref acceptedCount);
+                lastEvent = attempted
+                    ? $"P{intent.PartySlot} Kardia attempted after accepted Eukrasia (accepted={accepted})"
+                    : $"P{intent.PartySlot} trigger spent; terminal revalidation failed";
             }
             catch (Exception exception)
             {
                 if (attempted) Interlocked.Increment(ref attemptCount);
-                lastEvent = $"P{intent.PartySlot} terminal action exception";
+                lastEvent = $"P{intent.PartySlot} trigger spent; terminal action exception";
                 LogAttemptFailure(exception, nowMilliseconds);
             }
         }
         else
         {
-            lastEvent = decision.Reason.ToString();
+            lastEvent = triggerConsumed
+                ? $"Eukrasia trigger spent: {decision.Reason}"
+                : decision.Reason.ToString();
         }
 
         var selectedCandidate = decision.SelectedCandidateIndex >= 0 &&
@@ -274,9 +276,8 @@ internal sealed unsafe class SmartKardiaProbe
             selectedCandidate?.UniqueIncomingEnemyCount ?? 0,
             selectedCandidate?.OwnKardionStateKnown ?? false,
             selectedCandidate?.HasOwnKardion ?? false,
-            actionReady,
-            input.HeldGameplayKey,
-            inputClaimed,
+            actionReady && animationLockClear,
+            TriggerConsumed: triggerConsumed,
             attempted,
             accepted,
             Interlocked.Read(ref attemptCount),
@@ -289,6 +290,7 @@ internal sealed unsafe class SmartKardiaProbe
 
     internal void Reset()
     {
+        nearAssist.ClearSmartKardiaTrigger();
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, SmartKardiaProbeSnapshot.Initial with
         {
@@ -300,6 +302,7 @@ internal sealed unsafe class SmartKardiaProbe
 
     internal SmartKardiaProbeSnapshot FailClosed()
     {
+        nearAssist.ClearSmartKardiaTrigger();
         lastEvent = "Failed closed";
         var result = SmartKardiaProbeSnapshot.Initial with
         {
@@ -316,6 +319,8 @@ internal sealed unsafe class SmartKardiaProbe
     private ExactPartyCapture CaptureExactParty(
         IPlayerCharacter localPlayer,
         uint actionId,
+        long minimumPressurePublicationAt,
+        long nowMilliseconds,
         out string resolution)
     {
         var partyBefore = CaptureExactPartyEntityIds();
@@ -326,10 +331,13 @@ internal sealed unsafe class SmartKardiaProbe
         }
 
         var pressureViewActive = pressureTracker.TryCaptureIncomingAllyPressure(
-            out var pressureCounts);
-        if (!pressureViewActive)
+            out var pressureCounts,
+            out var pressurePublishedAt);
+        if (!pressureViewActive ||
+            pressurePublishedAt < minimumPressurePublicationAt ||
+            pressurePublishedAt > nowMilliseconds)
         {
-            resolution = "Incoming-pressure view unavailable";
+            resolution = "Fresh incoming-pressure view unavailable";
             return ExactPartyCapture.Incomplete;
         }
 
@@ -350,12 +358,14 @@ internal sealed unsafe class SmartKardiaProbe
         }
 
         var pressureStillActive = pressureTracker.TryCaptureIncomingAllyPressure(
-            out var pressureCountsAfter);
+            out var pressureCountsAfter,
+            out var pressurePublishedAtAfter);
         var partyAfter = CaptureExactPartyEntityIds();
         var complete = partyAfter is not null &&
                        partyBefore.SetEquals(partyAfter) &&
                        pressureStillActive &&
                        ReferenceEquals(pressureCounts, pressureCountsAfter) &&
+                       pressurePublishedAtAfter == pressurePublishedAt &&
                        members.Count == SmartKardiaRules.RequiredCrystallineConflictPartySize &&
                        members.Select(static member => member.Candidate.Actor.EntityId)
                            .ToHashSet()
@@ -368,8 +378,8 @@ internal sealed unsafe class SmartKardiaProbe
                            member.Candidate.PressureKnown) &&
                        PartySlotsRemainExact(members);
         resolution = complete
-            ? "Exact coherent P-party with one pressure publication"
-            : "Party identity changed during capture";
+            ? "Exact coherent P-party with fresh one-shot pressure publication"
+            : "Party identity or pressure publication changed during capture";
         return complete
             ? new ExactPartyCapture(true, members)
             : ExactPartyCapture.Incomplete;
@@ -433,7 +443,9 @@ internal sealed unsafe class SmartKardiaProbe
         IPlayerCharacter localPlayer,
         SmartKardiaIntent intent,
         nint expectedAddress,
-        uint actionId)
+        uint actionId,
+        long minimumPressurePublicationAt,
+        long nowMilliseconds)
     {
         if (!intent.IsValid ||
             actionId != intent.ActionId ||
@@ -446,7 +458,11 @@ internal sealed unsafe class SmartKardiaProbe
         if (!TryGetExactIdentity(target, out var targetIdentity) ||
             targetIdentity != intent.Target ||
             target!.Address != expectedAddress ||
-            !pressureTracker.TryCaptureIncomingAllyPressure(out var pressureCounts))
+            !pressureTracker.TryCaptureIncomingAllyPressure(
+                out var pressureCounts,
+                out var pressurePublishedAt) ||
+            pressurePublishedAt < minimumPressurePublicationAt ||
+            pressurePublishedAt > nowMilliseconds)
         {
             return null;
         }
@@ -462,15 +478,25 @@ internal sealed unsafe class SmartKardiaProbe
     private bool TryUseKardiaOnce(
         SmartKardiaIntent intent,
         nint expectedTargetAddress,
+        SmartKardiaEukrasiaTrigger trigger,
         bool metadataVerified,
         out bool attempted)
     {
         attempted = false;
+        var boundaryNow = Environment.TickCount64;
         var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer);
-        if (currentLocal is null) return false;
+        if (currentLocal is null ||
+            !SmartKardiaRules.IsTriggerCurrent(
+                trigger,
+                boundaryNow,
+                clientState.TerritoryType,
+                intent.LocalPlayer))
+        {
+            return false;
+        }
 
         var configurationEnabled = configuration.Enabled &&
-                                   configuration.EnableSageKardiaOnHeldKey;
+                                   configuration.EnableSageKardiaAfterEukrasia;
         var isCrystallineConflict = IsCurrentCrystallineConflict();
         var localAlive = IsLivePlayer(currentLocal);
         var localJobId = currentLocal.ClassJob.IsValid
@@ -478,8 +504,14 @@ internal sealed unsafe class SmartKardiaProbe
             : 0;
         var guardSuppressed = IsCurrentlySuppressedByGuard(
             currentLocal,
-            Environment.TickCount64);
-        var actionReady = TryGetReadyAction(currentLocal, out var resolvedActionId);
+            boundaryNow);
+        var actionReady = TryGetReadyAction(
+            currentLocal,
+            out var resolvedActionId,
+            out var animationLockClear);
+        var triggerEvidenceConfirmed =
+            TryReadExactEukrasiaEvidence(currentLocal, out var currentEvidence) &&
+            SmartKardiaRules.HasCausalEukrasiaEvidence(trigger, currentEvidence);
         if (!configurationEnabled ||
             !isCrystallineConflict ||
             !localAlive ||
@@ -487,6 +519,8 @@ internal sealed unsafe class SmartKardiaProbe
             !metadataVerified ||
             guardSuppressed ||
             !actionReady ||
+            !animationLockClear ||
+            !triggerEvidenceConfirmed ||
             resolvedActionId != intent.ActionId)
         {
             return false;
@@ -496,7 +530,9 @@ internal sealed unsafe class SmartKardiaProbe
             currentLocal,
             intent,
             expectedTargetAddress,
-            resolvedActionId);
+            resolvedActionId,
+            trigger.AcceptedAtMilliseconds,
+            boundaryNow);
         var localIdentity = new TargetPressureActorIdentity(
             currentLocal.GameObjectId,
             currentLocal.EntityId);
@@ -512,7 +548,9 @@ internal sealed unsafe class SmartKardiaProbe
                 metadataVerified,
                 actionHelpersSuppressedByGuard: guardSuppressed,
                 resolvedActionId,
-                actionLocallyReady: actionReady))
+                actionLocallyReady: actionReady,
+                animationLockClear,
+                triggerEvidenceConfirmed))
         {
             return false;
         }
@@ -656,7 +694,6 @@ internal sealed unsafe class SmartKardiaProbe
             if (!IsNetworkEntityId(status.SourceId))
             {
                 stateKnown = false;
-                hasOwnKardion = false;
                 return;
             }
 
@@ -670,6 +707,47 @@ internal sealed unsafe class SmartKardiaProbe
         }
 
         hasOwnKardion = localSourceCount == 1;
+    }
+
+    private static bool TryReadExactEukrasiaEvidence(
+        IPlayerCharacter localPlayer,
+        out SmartKardiaEukrasiaEvidence evidence)
+    {
+        evidence = default;
+        if (!localPlayer.ClassJob.IsValid ||
+            localPlayer.ClassJob.RowId != SmartKardiaRules.SageJobId ||
+            GetNativeObject(localPlayer) == null)
+        {
+            return false;
+        }
+
+        var localSourceCount = 0;
+        foreach (var status in localPlayer.StatusList)
+        {
+            if (!SmartKardiaRules.IsEukrasiaStatus(status.StatusId)) continue;
+            if (!IsNetworkEntityId(status.SourceId) ||
+                status.SourceId != localPlayer.EntityId ||
+                !float.IsFinite(status.RemainingTime) ||
+                status.RemainingTime <= 0f ||
+                ++localSourceCount > 1)
+            {
+                return false;
+            }
+        }
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null) return false;
+        var adjustedActionId = actionManager->GetAdjustedActionId(
+            SmartKardiaRules.EukrasiaActionId);
+        if (adjustedActionId != SmartKardiaRules.EukrasiaActionId)
+            return false;
+        var currentCharges = actionManager->GetCurrentCharges(adjustedActionId);
+        evidence = new SmartKardiaEukrasiaEvidence(
+            adjustedActionId,
+            currentCharges,
+            OwnStatusStateKnown: true,
+            HasOwnEukrasia: localSourceCount == 1);
+        return evidence.IsValid;
     }
 
     private static bool IsLivePlayer(IPlayerCharacter? player) =>
@@ -695,9 +773,11 @@ internal sealed unsafe class SmartKardiaProbe
 
     private static bool TryGetReadyAction(
         IPlayerCharacter localPlayer,
-        out uint resolvedActionId)
+        out uint resolvedActionId,
+        out bool animationLockClear)
     {
         resolvedActionId = 0;
+        animationLockClear = false;
         if (!localPlayer.ClassJob.IsValid ||
             localPlayer.ClassJob.RowId != SmartKardiaRules.SageJobId ||
             GetNativeObject(localPlayer) == null)
@@ -707,6 +787,10 @@ internal sealed unsafe class SmartKardiaProbe
 
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return false;
+        var animationLock = actionManager->AnimationLock;
+        animationLockClear = float.IsFinite(animationLock) &&
+                             animationLock >= 0f &&
+                             animationLock <= AnimationLockEpsilonSeconds;
         resolvedActionId = actionManager->GetAdjustedActionId(SmartKardiaRules.ActionId);
         return resolvedActionId == SmartKardiaRules.ActionId &&
                actionManager->IsActionOffCooldown(ActionType.Action, resolvedActionId);

@@ -11,7 +11,7 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Seiton Sense combines pressure awareness, personal alerts, native-nameplate cues, target clarity, " +
-            "macro helpers, and explicitly enabled PvP target/action helpers.");
+            "fixed Combat Frames, macro helpers, and explicitly enabled PvP target/action helpers.");
         ImGui.TextWrapped(
             "Crystalline Conflict is supported directly. Wolves' Den support is an explicit testing option; " +
             "Frontline and Rival Wings remain excluded from the original Seiton slot tracker.");
@@ -60,6 +60,7 @@ internal sealed partial class SettingsWindow
             overlay.IsolationWarningPreviewEnabled = false;
             overlay.HighPressureWarningPreviewEnabled = false;
             pressureCounter.PreviewEnabled = false;
+            combatFrames.PreviewEnabled = false;
             pressureCounter.ResetWindowPosition();
             changed = true;
         }

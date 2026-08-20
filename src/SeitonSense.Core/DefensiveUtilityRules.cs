@@ -11,7 +11,7 @@ public enum DefensiveUtilityTrigger
 {
     None = 0,
     PostPurifyHighPressureStun = 1,
-    PreGuardLowHpPressure = 2,
+    ReservedRemovedPreGuard = 2,
     PaladinGuardianLowAlly = 3,
 }
 
@@ -74,7 +74,6 @@ public readonly record struct GuardPropagationDecision(
 public static class DefensiveUtilityRules
 {
     public const int RequiredIncomingEnemyCount = 3;
-    public const int PreGuardHpPercent = 50;
     public const int GuardianAllyHpPercent = 20;
     public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
@@ -142,18 +141,6 @@ public static class DefensiveUtilityRules
         var threshold = Math.Clamp(thresholdPercent, 1, 100);
         return (ulong)currentHp * 100UL <= (ulong)maximumHp * (ulong)threshold;
     }
-
-    public static bool IsPreGuardRisk(
-        bool pressureKnown,
-        int incomingEnemyCount,
-        uint currentHp,
-        uint maximumHp,
-        bool hasPurifyRemovableCrowdControl,
-        bool guardActive) =>
-        !guardActive &&
-        !hasPurifyRemovableCrowdControl &&
-        IsHighPressure(pressureKnown, incomingEnemyCount) &&
-        IsAtOrBelowHpPercent(currentHp, maximumHp, PreGuardHpPercent);
 
     public static GuardianTriggerPopup? ObserveGuardianTriggerPopup(
         GuardianTriggerPopup? previous,

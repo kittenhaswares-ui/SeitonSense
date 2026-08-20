@@ -7,8 +7,9 @@ helper can set only an empty local native Focus Target. In particular, the separ
 communication option can send one standardized Crystalline Conflict Quick Chat
 and party-visible marker commands through the normal FFXIV service after an
 automatic Guardian request is client-accepted. It embeds no character name or
-free text. The plugin does not otherwise persist or transmit character names,
-Home Worlds, combat, target, status, or key history. Ally Rescue attempt,
+free text. Fixed Combat Frames may display character names read from the live
+client, but the plugin does not persist or transmit those names, Home Worlds,
+combat, target, status, or key history. Ally Rescue attempt,
 client-accepted, and confirmed-cleanse counters exist only in memory for the
 current match/plugin session and are never uploaded.
 
@@ -29,6 +30,10 @@ following data already available in the local FFXIV client:
   transiently for equality with the resolved actor and is not retained;
 - when its optional visual module is enabled, your current hard/Focus Target and
   locally available job, HP, distance, CC slot, and pressure state;
+- when fixed Combat Frames are enabled, the exact local player and canonical
+  `S1`-`S5` identities, transient character names, jobs, HP, trusted MP, relevant
+  Guard/CC/execute states, direct pressure and team-focus counts, and read-only
+  current/Focus Target identity needed to draw the six stable screen-space rows;
 - when Auto Low-MP Focus is enabled, the native Focus Target's empty/occupied
   state, the complete exact canonical `S1`-`S5` set, trusted HP/MP samples and
   low-MP latches, local identity/text-input state, and FFXIV's native 20-yalm
@@ -50,11 +55,15 @@ following data already available in the local FFXIV client:
   generation, Critical Strategy `29716` readiness/metadata, the complete unique
   canonical `S1`-`S5` actor set, live Guard `3054`/`3673`, exact HP and trusted
   team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
-  result for the frozen candidate.
-- when Smart Kardia is enabled, the exact local Sage identity and held-key
-  generation, complete unique stable five-player party view, life/targetable
-  state, exact HP, current local-source Kardion state, trusted direct incoming-
-  pressure counts, exact Kardia metadata/readiness, and FFXIV's native 30-yalm
+  result for the frozen candidate;
+- when Smart Recuperate is enabled, the exact local identity, life/targetable
+  state, current/maximum HP and MP, held-key generation, own Guard state, and
+  exact PvP Recuperate `29711` metadata/readiness needed for one self request;
+- when Smart Kardia is enabled, the exact local Sage identity, one accepted PvP
+  Eukrasia call and its before/current charge or own-source status evidence, a
+  short-lived trigger token, one fresh complete stable five-player party and
+  pressure publication, life/targetable state, exact HP, local-source Kardion
+  state, Kardia readiness and animation lock, and FFXIV's native 30-yalm
   range/line-of-sight result for a frozen non-self candidate;
 - when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
   local DRK and current canonical CC target identity or exact native Wolves'
@@ -106,6 +115,27 @@ slot or UI node. Actor identities, row names, bounds, and resource samples are
 not logged, persisted, transmitted, or uploaded. Exact current-patch native row
 placement remains a live-validation boundary.
 
+## Fixed Combat Frames
+
+The separate default-off Combat Frames feature runs only in exact Crystalline
+Conflict. It builds one local Self frame and exactly five stable canonical
+`S1`-`S5` rows from the live client. Each row may display the transient character
+name, job icon, current/maximum HP, trusted current/maximum MP with 2,000-MP
+divisions, relevant Guard/CC/execute states, direct incoming pressure, team
+focus, and whether the exact actor is the current hard or Focus Target. Unknown,
+stale, duplicate, or ambiguous identity/resource data remains visibly unknown;
+dead or temporarily unresolved actors keep their assigned row instead of moving
+another actor into it.
+
+The frames are drawn as fixed screen-space background overlays. They do not use
+world projection or native nameplate placement, accept mouse/input interaction,
+set or change any hard, soft, Focus, or mouseover target, or read/write native
+HUD nodes. The plugin never hides or edits FFXIV's parameter bar or enemy list;
+users must hide those elements manually in HUD Layout if they want the overlay
+to visually replace them. Names, actor identities, resource/status samples,
+pressure, target accents, and layout snapshots remain in memory only and are not
+logged, persisted, transmitted, or uploaded.
+
 ## Pressure tracking
 
 The pressure counter transiently observes enemy hard targets and cast targets,
@@ -123,12 +153,14 @@ bounded, dropped-event counts are aggregate diagnostics, and no combat history,
 actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
-When optional Ally Rescue, Near Help pressure preference, defensive utilities,
-or Smart Kardia are enabled, the same current-frame enemy hard/cast identities are also reduced
-to a unique incoming-pressure count for the local player and/or exact party
-members. This drives only the documented pressure thresholds and candidate
-ordering. The data is bounded to the live snapshot and is not retained as
-combat history.
+When optional Ally Rescue, Near Help pressure preference, reactive Guard,
+Paladin Guardian, Smart Paean, or Combat Frames are enabled, the same current-
+frame enemy hard/cast identities can also be reduced to unique incoming-pressure
+counts for the local player and/or exact party members. Smart Kardia does not
+keep this ally scan running while idle: one client-accepted Eukrasia trigger
+requests only the fresh publication needed for that bounded opportunity and its
+exact self-fallback proof. The data is bounded to the live snapshot and is not
+retained as combat history.
 
 ## High-pressure warning, sound, and held Sprint
 
@@ -160,10 +192,13 @@ stores or replays the key, or retries after drift, rejection, or exception.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-Across action-request helpers, one physical generation is offered in this exact
-order: Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive
-counter-CC, Smart Kardia, Ninja Seiton, Scholar Critical Strategy, then Monk Earth's Reply.
-Once an earlier helper claims it, no later helper can reuse that generation.
+Across held/fresh action-request helpers, one physical generation is offered in
+this exact order: Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian,
+pressure Sprint, Ally Rescue, reactive counter-CC, Ninja Seiton, then Scholar
+Critical Strategy. Once an earlier helper claims it, no later physical-input
+helper can reuse that generation. Accepted-Eukrasia Kardia is a separate bounded
+follow-up that yields to urgent survival and counter-CC helpers; Monk Earth's
+Reply remains an automatic follow-up that yields after any earlier attempt.
 
 ## Optional team-visible Attack1 focus sign
 
@@ -499,9 +534,9 @@ and native range/line-of-sight result are still revalidated. FFXIV receives one
 normal native request and remains the authority on whether it queues or
 executes.
 
-Self-Purify, defensive utilities, and pressure Sprint receive the shared
-physical input generation before Ally Rescue. Ally Rescue consumes its state
-and that generation before at most one exact native action attempt. A false return,
+Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, and pressure Sprint
+receive the shared physical input generation before Ally Rescue. Ally Rescue
+consumes its state and that generation before at most one exact native action attempt. A false return,
 exception, vanished status, or changed target is not retried. The original key
 is still neither swallowed nor replayed, and no observed ally/status/input data
 is logged, persisted, or transmitted.
@@ -559,32 +594,54 @@ decision text remain in memory and appear only when the user explicitly requests
 the existing local debug output. Existing Ally Rescue behavior and its in-memory
 confirmation path, including Aquaveil, remain unchanged.
 
-## Experimental defensive utilities
+## Experimental reactive Purify to Guard
 
-This module is disabled by default and exact-Crystalline-Conflict-only. It
-transiently reads the local player's exact identity, job, HP, Stun and Resilience
-status membership, own Guard state/cooldown, current unique incoming-enemy count,
-and current physical gameplay-key generation. PLD Guardian selection additionally
-reads exact party identity, life/targetable state, HP, position, incoming pressure,
-and native Guardian range/line-of-sight result.
+This separate module is disabled by default and exact-Crystalline-Conflict-only.
+It transiently reads the local player's exact identity, job, Stun and Resilience
+status membership, own Guard state/readiness, current unique incoming-enemy
+count, and physical gameplay-key generation. At known pressure from at least
+three unique enemies, an exact Stun can permit one normal Purify `29056` request.
+The same physical generation can never also request Guard `29054`.
 
-At known pressure from at least three unique enemies, an exact Stun can permit
-one normal Purify `29056` request. The same physical generation can never also
-request Guard `29054`. A later Guard request requires a genuinely new release/
-repress generation, positive live Resilience `3248`, no remaining
-Purify-removable CC, and the bounded post-Purify opportunity. The optional
-pre-Guard rule requires HP at or below 50%, the same known pressure threshold,
-no removable CC, and Guard available.
+There is no speculative low-HP pre-Guard rule. A later Guard request requires a
+genuinely new release/repress generation, positive live Resilience `3248`, no
+remaining Purify-removable CC, the bounded post-Purify opportunity, and repeated
+exact Guard/context/identity validation. The generation is consumed before at
+most one self Guard request, with no alternate action, replay, or retry.
 
-The PLD-only rule requires an exact living, targetable, non-self party member at
-or below 20% HP, FFXIV's native 20-yalm Guardian range/line-of-sight acceptance,
-and both own Guard and Guardian `29066` available. No custom center-distance cap
-is applied; the 10-yalm condition governs staying close enough for protection
-after the jump. Candidate ranking uses exact HP ratio, known incoming pressure,
-distance, and stable party identity. The helper
-consumes its selected state and physical generation before at most one normal
-native action request. It does not change the visible target, select an alternate
-action after failure, replay input, or retry.
+## Experimental Smart Recuperate held-key helper
+
+This independent persisted option is disabled by default and can run only in
+exact Crystalline Conflict. It reads the exact local identity, life/targetable
+state, current/maximum HP and MP, held gameplay-key generation, own Guard state,
+and verified PvP Recuperate `29711` metadata/readiness. Exactly 16,000 or more
+missing HP and at least 2,000 observed MP are required.
+
+If HP, MP, or native readiness is not yet eligible, the held generation remains
+unspent so a real client update such as an MP tick can satisfy the gate. Once
+eligible, the generation is consumed before final identity, context, life,
+targetability, Guard, metadata/readiness, HP, and MP revalidation and at most one
+self-targeted native request. No selected target is read or changed; drift, a
+false return, or an exception never selects another action, replays, or retries.
+The transient observations and aggregate diagnostics are not stored or uploaded.
+
+## Experimental Paladin Guardian Job Tool
+
+This independent persisted option is disabled by default and runs only on PvP
+Paladin in exact Crystalline Conflict. It transiently reads exact local and party
+identity, life/targetable state, HP, position, incoming pressure, own Guard and
+Guardian readiness, physical gameplay-key generation, and FFXIV's native
+Guardian range/line-of-sight result. It does not depend on the reactive-Guard
+module's master setting.
+
+The exact living, targetable, non-self party member must be at or below 20% HP,
+pass FFXIV's native 20-yalm Guardian range/line-of-sight check, and remain exact.
+No custom center-distance cap is applied; the 10-yalm condition governs staying
+close enough for protection after the jump. Candidate ranking uses exact HP
+ratio, known incoming pressure, distance, and stable party identity. Smart
+Recuperate keeps priority. Guardian consumes its selected state and physical
+generation before at most one direct native `29066` request. It does not change
+the visible target, select an alternate action/ally, replay input, or retry.
 
 An accepted automatic Guardian request creates a local in-memory notification
 containing only the selected party slot and its start/end timestamps. The
@@ -652,38 +709,48 @@ target, or key history or uploaded. A client-accepted request does not prove
 that Critical Strategy landed or changed Guard; exact dispatch and effect
 behavior remain current-patch live-validation boundaries.
 
-## Experimental Sage Smart Kardia held-key helper
+## Experimental Sage Smart Kardia after accepted Eukrasia
 
 This separate persisted option is disabled by default and can run only for PvP
-Sage in exact Crystalline Conflict. It transiently reads the exact local player,
-held physical gameplay-key generation, exact Kardia metadata/readiness, and one
-complete, unique, stable exact five-player party view. For self and party
-candidates it reads exact party slot and actor identity, life/targetable state,
-HP, local-source Kardion state, and the current trusted direct incoming-pressure
-count. A non-self candidate also requires FFXIV's native 30-yalm Kardia range
-and line-of-sight result.
+Sage in exact Crystalline Conflict. It does not scan held keys or continuously
+rank the party while idle. When one incoming exact PvP Eukrasia `29258` request
+is observed, the plugin records exact local identity, territory, and the Sage's
+before-call charge/own-source Eukrasia status evidence, then forwards that
+original request exactly once without changing its action or target.
 
-Only candidates with known pressure from at least two unique live enemies
-currently hard-targeting or casting at them are eligible. They rank by pressure
-descending, exact HP ratio ascending, party slot, network entity ID, and game-
-object ID. The highest-ranked actor is authoritative. If that actor already has
-Kardion sourced by the local Sage, the helper returns no change and does not
-select a lower candidate.
+Only a client-accepted Eukrasia request may create a trigger, and the trigger is
+valid for at most two seconds. A real local causal transition must then be
+observed: either available Eukrasia charges decreased, or the exact local-source
+PvP Eukrasia `3107` status appeared when it was previously absent. Unknown,
+unchanged, regressing, wrong-player, or wrong-territory evidence fails closed.
+The accepted trigger requests one fresh incoming-party-pressure publication
+created no earlier than the accepted call; there is no idle Kardia pressure scan
+and no separate six-second throttle.
 
-Self-Purify, defensive utilities, pressure Sprint, Ally Rescue, and reactive
-counter-CC receive the shared generation first. Active own Guard and the bounded
-post-request Guard-propagation state suppress Smart Kardia. The frozen actor,
-pressure threshold, local-source Kardion state, exact action metadata/readiness,
-and native reachability are revalidated before the intent and generation can
-produce at most one normal native Kardia request. State is consumed before that
-request. Missing or changed final proof, rejection, or exception cannot trigger
-a second selection, lower candidate, alternate target/action, fallback, replay,
-or retry. The helper never changes a hard, soft, focus, or mouseover target,
-swallows the original key, sends chat/markers, or transmits data. Its bounded
-intent, result, and diagnostics remain in memory and are not saved as combat,
-target, status, or key history. A client-accepted return does not prove Kardia
-or Kardion applied; current-patch input, dispatch, status-source, and reachability
-behavior remain live-validation boundaries.
+One complete, unique, stable exact five-player view supplies exact party slot
+and actor identity, life/targetable state, HP, current local-source Kardion state,
+and trusted direct incoming-pressure counts. Candidates under pressure from at
+least two unique live enemies rank by pressure descending, exact HP ratio
+ascending, party slot, network entity ID, and game-object ID. If nobody reaches
+the threshold, exact self is the sole initial fallback. An incomplete/unknown
+view cannot manufacture that fallback, and an unknown or already-owned Kardion
+state on the chosen actor ends the opportunity without selecting another actor.
+
+Smart Kardia waits for the current animation lock to clear while the trigger
+remains valid. Urgent survival and reactive counter-CC helpers win the update.
+Before at most one direct-GOID Kardia `29264` request, the trigger and frozen
+actor are spent and exact configuration, context, local Sage, causal Eukrasia,
+fresh pressure, Kardia readiness, own Guard, frozen identity, Kardion state, and
+non-self native 30-yalm range/line-of-sight evidence are revalidated. Drift,
+rejection, or exception cannot rerank, choose a lower candidate, switch to self
+or another ally, mutate a hard/soft/Focus/mouseover target, replay, or retry.
+
+The trigger token, timestamps, Eukrasia evidence, pressure publication, frozen
+actor, result, and aggregate diagnostics remain in memory only and are not saved
+as combat, target, status, or key history or uploaded. Client acceptance does
+not prove that Kardia or Kardion applied; current-patch Eukrasia charge/status,
+animation-lock, dispatch, and reachability behavior remain live-validation
+boundaries.
 
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
 The same in-memory suppression begins immediately after an exact local Guard
@@ -723,9 +790,9 @@ Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
 
-The helper shares the physical-generation observer after Self-Purify, defensive
-utilities, pressure Sprint, and Ally Rescue. A claimed generation cannot be
-reused. The helper
+The helper shares the physical-generation observer after Self-Purify, reactive
+Guard, Smart Recuperate, PLD Guardian, pressure Sprint, and Ally Rescue. A
+claimed generation cannot be reused. The helper
 consumes its state and generation before at most one normal native exact-target
 request, without changing the visible target, choosing an alternate enemy/action,
 replaying input, or retrying. Its internal redirect bypass excludes only macro
@@ -759,10 +826,11 @@ native action range and line-of-sight check. Selection uses the lowest exact HP
 ratio, then stable enemy slot and actor identity.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Self-Purify, defensive utilities, pressure
-Sprint, Ally Rescue, reactive counter-CC, and Smart Kardia retain priority over the shared
-physical input generation. Active own Guard and the bounded post-request Guard-propagation
-state suppress the helper. The already-selected target is never changed, and
+and its Unsealed follow-up `29516`. Self-Purify, reactive Guard, Smart
+Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, and reactive counter-CC
+retain priority over the shared physical input generation. Accepted-Eukrasia
+Kardia is separate but also wins the update if its bounded opportunity attempts.
+Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
 
 After every gate passes, the intent and input generation are consumed before at
@@ -789,8 +857,9 @@ the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
 At the configured low-HP or expiry threshold, and only after Self-Purify,
-defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Smart
-Kardia, Ninja Seiton, and Scholar Critical Strategy decline the shared generation, the
+reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, Ally Rescue,
+reactive counter-CC, Ninja Seiton, Scholar Critical Strategy, and any separate
+accepted-Eukrasia Kardia opportunity decline or make no earlier attempt, the
 continuous resonance state is marked spent before at most one normal
 self-targeted Earth's Reply `29483`
 request. The helper never activates Riddle of Earth `29482`, substitutes an
@@ -812,18 +881,24 @@ Near Assist search/preferences, the Near Help incoming-pressure preference,
 target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
 Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
 opt-ins, the separate Bard Paean pressure-redirect
-opt-in, isolation warning/scale, defensive master/held-key/per-rule opt-ins,
-WHM/BRD reactive counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1
-marker opt-in, the separate Guardian Quick Chat/Bind-pair opt-in, resource-aura
-surfaces/thresholds/appearance, the Monk Earth's Reply master/triggers/
-thresholds, the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy
-held-key opt-in, the Sage Smart Kardia held-key opt-in, the DRK Shadowbringer
-macro opt-in, and the CC-immunity-brake master plus exact per-job/per-action
-selections. Configuration schema 25 is current in v0.19.0.0. Smart Kardia remains
-off for fresh, upgraded, and reset configurations; all earlier opt-in defaults
-remain unchanged. Configuration does not save observed actors, targets, combat events, status timers, key
-state, marker ownership, pending helper state, ActionEffect confirmation state,
-or in-memory counters.
+opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
+trigger opt-ins, the separate held Smart Recuperate opt-in, the independent PLD
+Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD reactive
+counter-CC master/held-key/per-trigger opt-ins, the team-visible Attack1 marker
+opt-in, resource-aura surfaces/thresholds/appearance, fixed Combat Frames master/
+information/layout options, the Monk Earth's Reply master/triggers/thresholds,
+the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy held-key opt-in,
+the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
+opt-in, and the CC-immunity-brake master plus exact per-job/per-action selections.
+
+Configuration schema 26 is current in v0.20.0.0. Smart Recuperate and Combat
+Frames remain off for fresh, upgrading, and reset configurations. A previously
+explicit Smart Kardia held-key opt-in migrates once to the accepted-Eukrasia
+option; the obsolete held field is cleared. The removed pre-Guard option is
+cleared, and only a previously effective Guardian opt-in migrates to the
+independent Job Tool. Configuration does not save observed
+actors, targets, combat events, status timers, key state, marker ownership,
+pending helper state, ActionEffect confirmation state, or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

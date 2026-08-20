@@ -13,6 +13,39 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. Cross-job survival and counter-CC tools are grouped under Action Helpers.");
 
+        if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Guardian for an exact ally at 20% HP or lower",
+                configuration.PaladinGuardianLowAlly,
+                value => configuration.PaladinGuardianLowAlly = value);
+            changed |= Checkbox(
+                "A held gameplay key may supply the Guardian input (includes WASD)",
+                configuration.PaladinGuardianOnHeldKey,
+                value => configuration.PaladinGuardianOnHeldKey = value);
+            changed |= Checkbox(
+                "After accepted Auto Guardian: Quick Chat + Bind pair (party-visible)",
+                configuration.PaladinGuardianAnnounceAndMark,
+                value => configuration.PaladinGuardianAnnounceAndMark = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and exact Crystalline Conflict only. The exact non-self party ally must be alive, " +
+                "targetable, at 20% HP or lower, and accepted by FFXIV's native 20-yalm range/line-of-sight check; " +
+                "both your own Guard state and Guardian readiness are revalidated. Lowest exact HP ratio wins, then " +
+                "known higher incoming pressure, shorter distance, party slot, and stable actor identity.");
+            ImGui.TextDisabled(
+                "Smart Recuperate keeps priority over this Guardian helper. One physical key generation can produce at " +
+                "most one frozen direct-GOID Guardian request, with no selected-target change, alternate, fallback, " +
+                "replay, or retry. CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
+            ImGui.TextDisabled(
+                "The separate communication opt-in uses localized CC Quick Chat row 35 for the frozen party slot, " +
+                "then attempts Bind2 on that ally and Bind1 on self with exact ownership checks and bounded cleanup. " +
+                "Occupied, unknown, or drifting marker state is relinquished rather than overwritten or cleared.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
+
         if (ImGui.CollapsingHeader("Ninja — Seiton", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
@@ -159,27 +192,26 @@ internal sealed partial class SettingsWindow
     private bool DrawSageKardiaControls()
     {
         var changed = Checkbox(
-            "Smart Kardia on held gameplay key at 2+ incoming enemies (experimental)",
-            configuration.EnableSageKardiaOnHeldKey,
-            value => configuration.EnableSageKardiaOnHeldKey = value);
+            "After accepted Eukrasia: one Smart Kardia opportunity (experimental)",
+            configuration.EnableSageKardiaAfterEukrasia,
+            value => configuration.EnableSageKardiaAfterEukrasia = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off, PvP Sage, and exact Crystalline Conflict only. One shared held physical gameplay-key " +
-            "generation may request Kardia only after a complete, unique, stable exact five-player party view. " +
-            "Self and exact living, targetable party members are eligible at a trusted current count of at least " +
-            "two unique enemies directly hard-targeting or casting at them; non-self candidates must also pass " +
-            "FFXIV's native 30-yalm range and line-of-sight check.");
+            "Default off, PvP Sage, and exact Crystalline Conflict only. Seiton never alters or suppresses the " +
+            "incoming Eukrasia (29258) call. Only after that call is client-accepted and a real local Eukrasia " +
+            "charge/status transition is observed does one short-lived Kardia opportunity open. Kardia waits for " +
+            "animation lock to clear instead of being fired unreliably inside the Eukrasia call.");
         ImGui.TextDisabled(
-            "Higher incoming pressure wins, then lower exact HP ratio, party slot, entity ID, and game-object ID. " +
-            "If the highest-ranked candidate already has Kardion sourced by you, the helper makes no attempt and " +
-            "never falls through to a lower-ranked candidate. The frozen actor, direct pressure, local-source " +
-            "Kardion state, exact action metadata/readiness, and native reachability are revalidated at the final " +
-            "boundary.");
+            "A fresh complete exact five-player party/pressure publication selects living, targetable candidates at " +
+            "2+ direct pressure by highest pressure, then lowest exact HP ratio and stable party/actor identity. If " +
+            "nobody qualifies, the exact local Sage is the sole initial self fallback. A non-self target must also " +
+            "pass native 30-yalm range and line of sight. An unknown or already-own Kardion state on the selected " +
+            "actor ends the opportunity; it never falls through to another ally or self.");
         ImGui.TextDisabled(
-            "Self Purify, Guard or Guardian, pressure Sprint, Ally Rescue, and reactive counter-CC keep priority. " +
-            "The intent and shared generation are consumed before at most one native Kardia request. It never " +
-            "changes a hard, soft, focus, or mouseover target, selects an alternate after drift, falls back, " +
-            "substitutes another action, replays, or retries. The original key is not swallowed, and client " +
+            "The opportunity and frozen actor are spent before at most one direct-GOID Kardia request. Urgent " +
+            "survival/counter-CC helpers still win the frame. Kardia never changes a hard, soft, focus, or mouseover " +
+            "target, reranks after commitment, selects an alternate, replays, or retries. 'Incoming Eukrasia' may " +
+            "include another plugin's or Turbo's call because the native hook cannot prove a physical origin. Client " +
             "acceptance does not prove that Kardia or Kardion applied.");
         ImGui.PopTextWrapPos();
         return changed;

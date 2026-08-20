@@ -177,13 +177,17 @@ internal static class PvPMetadataGuard
             var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
             if (!actions.TryGetRow(SmartKardiaRules.ActionId, out var action) ||
                 !descriptions.TryGetRow(SmartKardiaRules.ActionId, out var transient) ||
+                !actions.TryGetRow(SmartKardiaRules.EukrasiaActionId, out var eukrasiaAction) ||
+                !descriptions.TryGetRow(SmartKardiaRules.EukrasiaActionId, out var eukrasiaTransient) ||
                 !statuses.TryGetRow(SmartKardiaRules.KardiaStatusId, out var kardia) ||
-                !statuses.TryGetRow(SmartKardiaRules.KardionStatusId, out var kardion))
+                !statuses.TryGetRow(SmartKardiaRules.KardionStatusId, out var kardion) ||
+                !statuses.TryGetRow(SmartKardiaRules.EukrasiaStatusId, out var eukrasiaStatus))
             {
                 return false;
             }
 
             var description = transient.Description.ToString();
+            var eukrasiaDescription = eukrasiaTransient.Description.ToString();
             return string.Equals(action.Name.ToString(), "Kardia", StringComparison.Ordinal) &&
                    action.Icon == SmartKardiaProbe.KardiaIconId &&
                    action.IsPvP &&
@@ -239,18 +243,120 @@ internal static class PvPMetadataGuard
                    kardion.IsPermanent &&
                    kardion.Description.ToString().Contains(
                        "the sage who applied this status",
+                       StringComparison.Ordinal) &&
+                   string.Equals(
+                       eukrasiaAction.Name.ToString(),
+                       "Eukrasia",
+                       StringComparison.Ordinal) &&
+                   eukrasiaAction.Icon == SmartKardiaProbe.EukrasiaIconId &&
+                   eukrasiaAction.IsPvP &&
+                   eukrasiaAction.IsPlayerAction &&
+                   eukrasiaAction.ClassJob.IsValid &&
+                   eukrasiaAction.ClassJob.RowId == SmartKardiaRules.SageJobId &&
+                   eukrasiaAction.ClassJobCategory.IsValid &&
+                   eukrasiaAction.ClassJobCategory.RowId == 181 &&
+                   eukrasiaAction.ActionCategory.IsValid &&
+                   eukrasiaAction.ActionCategory.RowId == 2 &&
+                   eukrasiaAction.Range == 0 &&
+                   eukrasiaAction.EffectRange == 0 &&
+                   eukrasiaAction.Cast100ms == 0 &&
+                   eukrasiaAction.Recast100ms ==
+                   SmartKardiaProbe.ExpectedEukrasiaRecast100ms &&
+                   eukrasiaAction.PrimaryCostType == 0 &&
+                   eukrasiaAction.PrimaryCostValue == 0 &&
+                   eukrasiaAction.SecondaryCostType == 0 &&
+                   eukrasiaAction.SecondaryCostValue.RowId == 0 &&
+                   eukrasiaAction.CooldownGroup == 9 &&
+                   eukrasiaAction.AdditionalCooldownGroup == 58 &&
+                   eukrasiaAction.MaxCharges ==
+                   SmartKardiaRules.EukrasiaMaximumCharges &&
+                   eukrasiaAction.CanTargetSelf &&
+                   !eukrasiaAction.CanTargetParty &&
+                   !eukrasiaAction.CanTargetAlliance &&
+                   !eukrasiaAction.CanTargetHostile &&
+                   !eukrasiaAction.CanTargetAlly &&
+                   !eukrasiaAction.CanTargetOwnPet &&
+                   !eukrasiaAction.CanTargetPartyPet &&
+                   !eukrasiaAction.TargetArea &&
+                   eukrasiaAction.RequiresLineOfSight &&
+                   eukrasiaAction.NeedToFaceTarget &&
+                   !eukrasiaAction.AffectsPosition &&
+                   eukrasiaAction.CastType == 1 &&
+                   eukrasiaAction.StatusGainSelf.RowId == 0 &&
+                   eukrasiaAction.ActionProcStatus.RowId == 0 &&
+                   eukrasiaDescription.Contains(
+                       "Upgrades Dosis III to Eukrasian Dosis III",
+                       StringComparison.Ordinal) &&
+                   eukrasiaDescription.Contains(
+                       "Duration: 10s",
+                       StringComparison.Ordinal) &&
+                   eukrasiaDescription.Contains(
+                       "Maximum Charges: 2",
+                       StringComparison.Ordinal) &&
+                   string.Equals(
+                       eukrasiaStatus.Name.ToString(),
+                       "Eukrasia",
+                       StringComparison.Ordinal) &&
+                   eukrasiaStatus.Icon == SmartKardiaProbe.EukrasiaStatusIconId &&
+                   eukrasiaStatus.StatusCategory == 1 &&
+                   !eukrasiaStatus.CanDispel &&
+                   !eukrasiaStatus.IsPermanent &&
+                   eukrasiaStatus.CanStatusOff &&
+                   eukrasiaStatus.Description.ToString().Contains(
+                       "Certain actions are being augmented",
                        StringComparison.Ordinal);
         });
 
         var recuperateVerified = ValidateFeature("Recuperate", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
 
-            return actions.TryGetRow(EnemyCombatConstants.RecuperateActionId, out var recuperate) &&
-                   recuperate.Name.ToString() == "Recuperate" &&
+            if (!actions.TryGetRow(EnemyCombatConstants.RecuperateActionId, out var recuperate) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.RecuperateActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return string.Equals(recuperate.Name.ToString(), "Recuperate", StringComparison.Ordinal) &&
                    recuperate.Icon == EnemyCombatConstants.RecuperateIconId &&
                    recuperate.IsPvP &&
-                   recuperate.PrimaryCostValue == EnemyCombatConstants.RecuperateMpCost;
+                   recuperate.IsPlayerAction &&
+                   !recuperate.ClassJob.IsValid &&
+                   recuperate.ClassJob.RowId == 0 &&
+                   recuperate.ClassJobCategory.IsValid &&
+                   recuperate.ClassJobCategory.RowId == 85 &&
+                   recuperate.ActionCategory.IsValid &&
+                   recuperate.ActionCategory.RowId == 4 &&
+                   recuperate.Range == 0 &&
+                   recuperate.EffectRange == 0 &&
+                   recuperate.Cast100ms == 0 &&
+                   recuperate.Recast100ms == 10 &&
+                   recuperate.PrimaryCostType == 51 &&
+                   recuperate.PrimaryCostValue == EnemyCombatConstants.RecuperateMpCost &&
+                   recuperate.SecondaryCostType == 0 &&
+                   recuperate.SecondaryCostValue.RowId == 0 &&
+                   recuperate.CooldownGroup == 29 &&
+                   recuperate.AdditionalCooldownGroup == 0 &&
+                   recuperate.MaxCharges == 0 &&
+                   recuperate.CastType == 1 &&
+                   recuperate.CanTargetSelf &&
+                   !recuperate.CanTargetParty &&
+                   !recuperate.CanTargetAlliance &&
+                   !recuperate.CanTargetHostile &&
+                   !recuperate.CanTargetAlly &&
+                   !recuperate.CanTargetOwnPet &&
+                   !recuperate.CanTargetPartyPet &&
+                   !recuperate.TargetArea &&
+                   recuperate.RequiresLineOfSight &&
+                   recuperate.NeedToFaceTarget &&
+                   recuperate.PreservesCombo &&
+                   !recuperate.AffectsPosition &&
+                   recuperate.StatusGainSelf.RowId == 0 &&
+                   recuperate.ActionProcStatus.RowId == 0 &&
+                   description.Contains("Restores own HP.", StringComparison.Ordinal) &&
+                   description.Contains("Cure Potency: 16,000", StringComparison.Ordinal);
         });
 
         var wildfireVerified = ValidateFeature("Wildfire", log, () =>

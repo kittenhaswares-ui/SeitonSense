@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 25;
+    public int Version { get; set; } = 26;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -47,7 +47,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSeitonPreparation { get; set; } = true;
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
+    // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
+    public bool EnableSageKardiaAfterEukrasia { get; set; }
+    public bool EnableSmartRecuperateOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -104,8 +107,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableDefensiveUtilities { get; set; }
     public bool DefensiveUtilitiesOnHeldKey { get; set; } = true;
     public bool GuardOnStunPressure { get; set; } = true;
-    public bool PreGuardOnLowHpPressure { get; set; } = true;
-    public bool PaladinGuardianLowAlly { get; set; } = true;
+    // Schema-25 compatibility only. The pre-Guard rule is no longer used.
+    public bool PreGuardOnLowHpPressure { get; set; }
+    public bool PaladinGuardianLowAlly { get; set; }
+    public bool PaladinGuardianOnHeldKey { get; set; } = true;
     public bool PaladinGuardianAnnounceAndMark { get; set; }
     public bool EnableReactiveCcUtilities { get; set; }
     public bool ReactiveCcOnHeldKey { get; set; } = true;
@@ -159,6 +164,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float CurrentTargetInfoScreenX { get; set; } = 0.5f;
     public float CurrentTargetInfoScreenY { get; set; } = 0.7f;
     public float CurrentTargetInfoScale { get; set; } = 1f;
+    public bool ShowCombatFrames { get; set; }
+    public bool CombatFramesShowNames { get; set; } = true;
+    public bool CombatFramesShowExactValues { get; set; } = true;
+    public bool CombatFramesShowStatuses { get; set; } = true;
+    public bool CombatFramesShowPressure { get; set; } = true;
+    public float CombatFramesEnemyScreenX { get; set; } = 0.82f;
+    public float CombatFramesEnemyScreenY { get; set; } = 0.48f;
+    public float CombatFramesSelfScreenX { get; set; } = 0.5f;
+    public float CombatFramesSelfScreenY { get; set; } = 0.78f;
+    public float CombatFramesScale { get; set; } = 1f;
+    public float CombatFramesBackgroundOpacity { get; set; } = 0.92f;
     public bool EnableNearAssistMacro { get; set; }
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
     public bool NearAssistPreferDamageRoles { get; set; } = true;
@@ -195,7 +211,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 25)
+        if (Version >= 26)
         {
             if (repaired) Save();
             return;
@@ -430,7 +446,41 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableSageKardiaOnHeldKey = false;
         }
 
-        Version = 25;
+        if (Version < 26)
+        {
+            // The former broad defensive master implicitly gated Guardian. Preserve
+            // only the previously effective opt-in when moving PLD to Job Tools.
+            var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;
+            PaladinGuardianLowAlly = guardianWasEnabled;
+            PaladinGuardianOnHeldKey = DefensiveUtilitiesOnHeldKey;
+
+            // The frame-driven held Kardia helper is replaced by one bounded
+            // opportunity following an accepted Eukrasia call. Preserve an explicit
+            // prior opt-in without leaving the obsolete held path armed.
+            EnableSageKardiaAfterEukrasia = EnableSageKardiaOnHeldKey;
+            EnableSageKardiaOnHeldKey = false;
+
+            // Generated healing and the removed speculative pre-Guard behavior never
+            // turn on silently for an upgrading installation.
+            EnableSmartRecuperateOnHeldKey = false;
+            PreGuardOnLowHpPressure = false;
+
+            // The fixed screen-space combat frames are a substantial visual
+            // addition, so upgrades remain quiet until the user enables them.
+            ShowCombatFrames = false;
+            CombatFramesShowNames = true;
+            CombatFramesShowExactValues = true;
+            CombatFramesShowStatuses = true;
+            CombatFramesShowPressure = true;
+            CombatFramesEnemyScreenX = 0.82f;
+            CombatFramesEnemyScreenY = 0.48f;
+            CombatFramesSelfScreenX = 0.5f;
+            CombatFramesSelfScreenY = 0.78f;
+            CombatFramesScale = 1f;
+            CombatFramesBackgroundOpacity = 0.92f;
+        }
+
+        Version = 26;
         ClampSettings();
         Save();
     }
@@ -439,7 +489,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 25;
+        Version = 26;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -452,6 +502,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNinjaSeitonOnFreshGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
+        EnableSageKardiaAfterEukrasia = false;
+        EnableSmartRecuperateOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
@@ -508,8 +560,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableDefensiveUtilities = false;
         DefensiveUtilitiesOnHeldKey = true;
         GuardOnStunPressure = true;
-        PreGuardOnLowHpPressure = true;
-        PaladinGuardianLowAlly = true;
+        PreGuardOnLowHpPressure = false;
+        PaladinGuardianLowAlly = false;
+        PaladinGuardianOnHeldKey = true;
         PaladinGuardianAnnounceAndMark = false;
         EnableReactiveCcUtilities = false;
         ReactiveCcOnHeldKey = true;
@@ -524,6 +577,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableAutoLowMpFocusTarget = false;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
+        ShowCombatFrames = false;
+        CombatFramesShowNames = true;
+        CombatFramesShowExactValues = true;
+        CombatFramesShowStatuses = true;
+        CombatFramesShowPressure = true;
+        CombatFramesEnemyScreenX = 0.82f;
+        CombatFramesEnemyScreenY = 0.48f;
+        CombatFramesSelfScreenX = 0.5f;
+        CombatFramesSelfScreenY = 0.78f;
+        CombatFramesScale = 1f;
+        CombatFramesBackgroundOpacity = 0.92f;
         EnableNearAssistMacro = false;
         NearAssistMaxAllyDistance = 25f;
         NearAssistPreferDamageRoles = true;
@@ -572,6 +636,30 @@ public sealed class PluginConfiguration : IPluginConfiguration
         CurrentTargetInfoScreenX = infoScreenX;
         CurrentTargetInfoScreenY = infoScreenY;
         CurrentTargetInfoScale = infoScale;
+    }
+
+    public void ApplyCombatFramesLayoutDefaults()
+    {
+        CombatFramesEnemyScreenX = 0.82f;
+        CombatFramesEnemyScreenY = 0.48f;
+        CombatFramesSelfScreenX = 0.5f;
+        CombatFramesSelfScreenY = 0.78f;
+        CombatFramesScale = 1f;
+        CombatFramesBackgroundOpacity = 0.92f;
+    }
+
+    public void ApplyCombatFramesCleanPreset()
+    {
+        ShowPressureCounter = false;
+        ShowNameplateSeiton = false;
+        ShowGuardUnavailable = false;
+        ShowGuardCountdown = false;
+        ShowLowMp = false;
+        ShowIncomingPressureOnNameplates = false;
+        ShowTeamPressureOnNameplates = false;
+        ShowCcProtection = false;
+        EnableResourceAura = false;
+        ShowCurrentTargetInfoHud = false;
     }
 
     private void ApplyFocusGlowDefaults(bool enabled)
@@ -639,6 +727,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(IsolationWarningScale, 0.75f, 1.75f, 1f, value => IsolationWarningScale = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
         changed |= Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f, value => CcProtectionEmblemScale = value);
+        changed |= Clamp(CombatFramesEnemyScreenX, 0.02f, 0.98f, 0.82f, value => CombatFramesEnemyScreenX = value);
+        changed |= Clamp(CombatFramesEnemyScreenY, 0.02f, 0.98f, 0.48f, value => CombatFramesEnemyScreenY = value);
+        changed |= Clamp(CombatFramesSelfScreenX, 0.02f, 0.98f, 0.5f, value => CombatFramesSelfScreenX = value);
+        changed |= Clamp(CombatFramesSelfScreenY, 0.02f, 0.98f, 0.78f, value => CombatFramesSelfScreenY = value);
+        changed |= Clamp(CombatFramesScale, 0.55f, 1.8f, 1f, value => CombatFramesScale = value);
+        changed |= Clamp(CombatFramesBackgroundOpacity, 0.35f, 1f, 0.92f, value => CombatFramesBackgroundOpacity = value);
         changed |= Clamp(ResourceAuraIntensity, 0.1f, 1.5f, 0.8f, value => ResourceAuraIntensity = value);
         changed |= Clamp(ResourceAuraPulseSpeed, 0.2f, 2f, 0.75f, value => ResourceAuraPulseSpeed = value);
         changed |= Clamp(
