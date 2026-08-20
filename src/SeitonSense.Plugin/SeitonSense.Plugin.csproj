@@ -1,12 +1,12 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.20.0.1</Version>
-    <AssemblyVersion>0.20.0.1</AssemblyVersion>
-    <FileVersion>0.20.0.1</FileVersion>
+    <Version>0.21.0.0</Version>
+    <AssemblyVersion>0.21.0.0</AssemblyVersion>
+    <FileVersion>0.21.0.0</FileVersion>
     <AssemblyName>SeitonSense.Plugin</AssemblyName>
     <RootNamespace>SeitonSense.Plugin</RootNamespace>
     <Authors>kittenhaswares-ui</Authors>
-    <Description>Fixed overlay-only PvP combat frames, pressure and CC cues, optional survival and job helpers, low-MP Focus, exact DRK macro support, fail-closed assists, team communication, and target clarity.</Description>
+    <Description>Fixed PvP combat frames with optional exact interaction and LB telemetry, pressure and CC cues, survival and job helpers, low-MP Focus, fail-closed assists, team communication, and target clarity.</Description>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

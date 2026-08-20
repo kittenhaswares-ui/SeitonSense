@@ -142,6 +142,24 @@ internal sealed class GameInputContextProbe
         }
     }
 
+    /// <summary>
+    /// Reports only the already-observed physical level for one exact supported
+    /// gameplay key. Consumption deliberately does not erase IsDown, allowing a
+    /// feature with an explicit continuous-hold contract to retain that exact
+    /// key without making the shared generation eligible again.
+    /// </summary>
+    internal bool IsGameplayKeyPhysicallyDown(VirtualKey key)
+    {
+        if (key == VirtualKey.NO_KEY) return false;
+        for (var index = 0; index < gameplayKeys.Length; index++)
+        {
+            if (gameplayKeys[index] != key) continue;
+            return keyGenerations[index].IsPrimed && keyGenerations[index].IsDown;
+        }
+
+        return false;
+    }
+
     private static HashSet<int> BuildCandidateVirtualKeyCodes()
     {
         var keys = new HashSet<int>

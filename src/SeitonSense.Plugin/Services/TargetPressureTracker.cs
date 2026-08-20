@@ -275,6 +275,15 @@ internal sealed class TargetPressureTracker : IDisposable
         }
         var local = objectTable.LocalPlayer;
         var localIdentity = CreateIdentity(local);
+        var localJobId = local?.ClassJob.IsValid == true
+            ? local.ClassJob.RowId
+            : 0;
+        var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
+            EnemyCombatConstants.BardJobId;
+        var isReactiveCounterCcJob = isAllyRescueJob;
+        var isScholar = localJobId == EnemyCombatConstants.ScholarJobId;
+        var isBard = localJobId == EnemyCombatConstants.BardJobId;
+        var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
         var condition = dutyState.ContentFinderCondition;
         var supportedContext = PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
@@ -297,9 +306,11 @@ internal sealed class TargetPressureTracker : IDisposable
                                        configuration.NearAssistPreferTeamPressure ||
                                        configuration.ShowCurrentTargetInfoHud ||
                                        configuration.EnableDefensiveUtilities ||
-                                       (configuration.EnableReactiveCcUtilities &&
+                                       (isReactiveCounterCcJob &&
+                                        configuration.EnableReactiveCcUtilities &&
                                         configuration.ReactiveCcAfterEnemyPurify) ||
-                                       configuration.EnableScholarCriticalStrategyOnHeldKey ||
+                                       (isScholar &&
+                                        configuration.EnableScholarCriticalStrategyOnHeldKey) ||
                                        configuration.EnableAutoEnemyFocusMark ||
                                        configuration.ShowHighPressureWarning ||
                                        configuration.PlayHighPressureWarningSound ||
@@ -308,11 +319,12 @@ internal sealed class TargetPressureTracker : IDisposable
                                         (!isWolvesDen || configuration.PressureIncludeWolvesDen);
         var incomingAllyPressureEnabledForContext =
             supportedContext == SupportedPvPContext.CrystallineConflict &&
-            ((configuration.ExperimentalAllyRescueOnNextKey &&
+            ((isAllyRescueJob &&
+              configuration.ExperimentalAllyRescueOnNextKey &&
              metadata.AllyRescueStatusesVerified) ||
              oneShotAllyPressureRequested ||
-             configuration.EnableBardWardensPaeanPressureRedirect ||
-             configuration.PaladinGuardianLowAlly ||
+             (isBard && configuration.EnableBardWardensPaeanPressureRedirect) ||
+             (isPaladin && configuration.PaladinGuardianLowAlly) ||
              (configuration.EnableNearAssistMacro &&
               configuration.NearHelpPreferIncomingPressure));
         var pressureStateTrackingEnabled =

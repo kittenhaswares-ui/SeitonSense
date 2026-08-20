@@ -12,21 +12,22 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "All action-initiating helpers are opt-in. One physical input generation is shared in this order: " +
-            "Self Purify > reactive Guard > Smart Recuperate > PLD Guardian > pressure Sprint > Ally Rescue > " +
-            "reactive counter-CC > Ninja > Scholar. Eukrasia-triggered Kardia is a separate bounded follow-up, " +
-            "and Monk Earth's Reply yields after an earlier helper attempt.");
+            "All action-initiating helpers are opt-in. The current request priority is: " +
+            "Purify > Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia > " +
+            "NIN > SCH > Monk > Hiebsprung. Kardia still requires its separate accepted-Eukrasia trigger; the order " +
+            "states which ready request wins when helpers meet in one update. Input-driven helpers share one physical " +
+            "generation, while Monk remains an automatic follow-up.");
 
         if (ImGui.CollapsingHeader("Self-Purify", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPurifyControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawDefensiveUtilityControls();
-
-        ImGui.Separator();
         if (ImGui.CollapsingHeader("Smart Recuperate", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawSmartRecuperateControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawDefensiveUtilityControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Pressure escape Sprint", ImGuiTreeNodeFlags.DefaultOpen))
@@ -68,7 +69,7 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Self Purify, reactive Guard, Smart Recuperate, and PLD Guardian keep priority; any later manual action " +
+            "Purify, Smart Recuperate, Guard, and Guardian keep priority; any later manual action " +
             "ends FFXIV's native PvP Sprint.");
         return changed;
     }
@@ -161,8 +162,9 @@ internal sealed partial class SettingsWindow
             "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
             "is not ready, the held generation waits unspent for the real game state to become eligible.");
         ImGui.TextDisabled(
-            "Purify and the confirmed reactive Guard chain keep priority. Active Guard and its short propagation " +
-            "latch block Recuperate so the helper cannot cancel Guard. The generation is consumed before final " +
+            "Purify keeps priority. Smart Recuperate is evaluated before the confirmed reactive Guard chain, while " +
+            "active Guard and its short propagation latch block Recuperate so the helper cannot cancel Guard. The " +
+            "generation is consumed before final " +
             "HP, MP, identity, context, action-readiness, and Guard revalidation. Rejection or drift is terminal: " +
             "release and press again for another attempt. The original key is not swallowed.");
         ImGui.PopTextWrapPos();
@@ -256,7 +258,7 @@ internal sealed partial class SettingsWindow
             configuration.ReactiveCcAfterEnemyPurify,
             value => configuration.ReactiveCcAfterEnemyPurify = value);
 
-        ImGui.TextUnformatted("Additional WHM-only urgent startup triggers:");
+        ImGui.TextUnformatted("Additional BRD / WHM urgent startup triggers:");
         changed |= Checkbox(
             "MCH Marksman's Spite",
             configuration.MiracleInterceptMchLimitBreak,
@@ -277,18 +279,20 @@ internal sealed partial class SettingsWindow
             "Experimental, CC-only, and disabled by default. WHM uses Miracle of Nature at its native 10-yalm range; " +
             "BRD uses Silent Nocturne at its native 20-yalm range. The enemy must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
-            "Contradance uses its exact startup signal. The post-Purify rule accepts Stun, Heavy, Bind, Silence, Deep " +
+            "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
+            "accepts Stun, Heavy, Bind, Silence, Deep " +
             "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It also " +
             "requires that enemy to be your exact hard target and at least one ally's hard target (team focus 2+). " +
             "Viper waits until Hardened Scales is actually absent.");
         ImGui.TextDisabled(
             "One already-eligible physical generation makes at most one exact-target attempt; Turbo pulses add no " +
-            "intent. Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, and Ally Rescue " +
+            "intent. Purify, Smart Recuperate, Guard, Guardian, pressure Sprint, and Ally Rescue " +
             "have priority. Input is " +
             "consumed before the native call, with no selected-target change, fallback, or retry. The blue AUTO CC " +
             "LANDED flash appears " +
             "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +
-            "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted.");
+            "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +
+            "particular, an instant LB already accepted by the server may be too late to stop even when Silence lands.");
         ImGui.PopTextWrapPos();
         return changed;
     }

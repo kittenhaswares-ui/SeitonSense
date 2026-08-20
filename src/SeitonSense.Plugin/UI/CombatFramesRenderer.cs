@@ -11,15 +11,30 @@ namespace SeitonSense.Plugin.UI;
 /// <summary>
 /// Draws one fixed self frame and a fixed S1-S5 stack in screen space above the
 /// game world but behind regular ImGui windows. It never projects world
-/// positions, acquires targets, handles input, or reads/writes native UI nodes.
+/// positions or reads/writes native UI nodes. Only fresh, exact, alive enemy
+/// rows expose bounded click and native-mouseover hit regions.
 /// </summary>
-internal sealed class CombatFramesRenderer
+internal sealed partial class CombatFramesRenderer
 {
+    private const ImGuiWindowFlags InteractionWindowFlags =
+        ImGuiWindowFlags.NoTitleBar |
+        ImGuiWindowFlags.NoResize |
+        ImGuiWindowFlags.NoMove |
+        ImGuiWindowFlags.NoScrollbar |
+        ImGuiWindowFlags.NoScrollWithMouse |
+        ImGuiWindowFlags.NoCollapse |
+        ImGuiWindowFlags.NoBackground |
+        ImGuiWindowFlags.NoSavedSettings |
+        ImGuiWindowFlags.NoFocusOnAppearing |
+        ImGuiWindowFlags.NoBringToFrontOnFocus |
+        ImGuiWindowFlags.NoNav |
+        ImGuiWindowFlags.NoDocking;
+
     private const float EnemyWidth = 420f;
-    private const float EnemyHeight = 74f;
+    private const float EnemyHeight = 86f;
     private const float EnemyGap = 6f;
     private const float SelfWidth = 460f;
-    private const float SelfHeight = 92f;
+    private const float SelfHeight = 104f;
     private const int MaximumStatusIcons = 3;
 
     private static readonly Vector4 BackgroundColor = new(0.008f, 0.012f, 0.025f, 1f);
@@ -44,21 +59,31 @@ internal sealed class CombatFramesRenderer
             .ToArray();
 
     private readonly CombatFramesSnapshotService snapshots;
+    private readonly CombatFramesTargetingService targeting;
+    private readonly CombatLimitBreakRuntimeService limitBreaks;
+    private readonly CombatFrameLimitGaugeService limitGauges;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
     private readonly IPluginLog log;
     private readonly Func<CombatFramesOptions> optionsProvider;
     private long nextErrorLogAtMilliseconds;
+    private CombatFrameTargetIntent pressedTargetIntent;
     private int previewEnabled;
 
     internal CombatFramesRenderer(
         CombatFramesSnapshotService snapshots,
+        CombatFramesTargetingService targeting,
+        CombatLimitBreakRuntimeService limitBreaks,
+        CombatFrameLimitGaugeService limitGauges,
         IGameGui gameGui,
         ITextureProvider textureProvider,
         IPluginLog log,
         Func<CombatFramesOptions> optionsProvider)
     {
         this.snapshots = snapshots;
+        this.targeting = targeting;
+        this.limitBreaks = limitBreaks;
+        this.limitGauges = limitGauges;
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
         this.log = log;
@@ -77,27 +102,46 @@ internal sealed class CombatFramesRenderer
 
     internal void Draw()
     {
-        if (gameGui.GameUiHidden) return;
+        if (gameGui.GameUiHidden)
+        {
+            ResetInteractions();
+            return;
+        }
 
         try
         {
             var options = Sanitize(optionsProvider());
             if (PreviewEnabled) options = options with { PreviewEnabled = true };
-            if (!options.Enabled && !options.PreviewEnabled) return;
+            if (!options.Enabled && !options.PreviewEnabled)
+            {
+                ResetInteractions();
+                return;
+            }
 
             var now = Environment.TickCount64;
             var snapshot = options.PreviewEnabled ? BuildPreview(now) : snapshots.Snapshot;
-            if (!snapshot.Active) return;
+            if (!snapshot.Active)
+            {
+                ResetInteractions();
+                return;
+            }
 
             var fresh = CombatFrameRules.IsSnapshotFresh(snapshot.PublishedAtMilliseconds, now);
             var self = fresh
                 ? snapshot.Self
                 : CombatFrameActorSnapshot.Unknown(CombatFrameRules.SelfSlot);
             var enemies = fresh ? snapshot.Enemies : UnknownEnemies;
-            DrawFrames(self, enemies, options, now);
+            DrawFrames(
+                self,
+                enemies,
+                options,
+                now,
+                snapshot.PublishedAtMilliseconds,
+                fresh && options.Enabled && options.EnableInteraction && !options.PreviewEnabled);
         }
         catch (Exception exception)
         {
+            ResetInteractions();
             var now = Environment.TickCount64;
             if (now < nextErrorLogAtMilliseconds) return;
             nextErrorLogAtMilliseconds = now + 10_000;
@@ -109,12 +153,18 @@ internal sealed class CombatFramesRenderer
         CombatFrameActorSnapshot self,
         IReadOnlyList<CombatFrameActorSnapshot> enemies,
         CombatFramesOptions options,
-        long nowMilliseconds)
+        long nowMilliseconds,
+        long snapshotPublishedAtMilliseconds,
+        bool interactionsEnabled)
     {
         var uiScale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
         var scale = options.Scale * uiScale;
         var screen = ImGui.GetIO().DisplaySize;
-        if (screen.X <= 0f || screen.Y <= 0f) return;
+        if (screen.X <= 0f || screen.Y <= 0f)
+        {
+            ResetInteractions();
+            return;
+        }
 
         var draw = ImGui.GetBackgroundDrawList();
         var enemySize = new Vector2(EnemyWidth, EnemyHeight) * scale;
@@ -126,11 +176,66 @@ internal sealed class CombatFramesRenderer
             new Vector2(options.EnemyScreenX, options.EnemyScreenY),
             new Vector2(enemySize.X, stackHeight),
             8f * uiScale);
+        var hoveredIntent = default(CombatFrameTargetIntent);
+        var limitBreakSnapshot = limitBreaks.Snapshot;
+        var limitGaugeSnapshot = limitGauges.Snapshot;
+        var limitBreakRuntimeFresh = limitBreakSnapshot.Active &&
+                                     CombatFrameRules.IsSnapshotFresh(
+                                         limitBreakSnapshot.PublishedAtMilliseconds,
+                                         nowMilliseconds);
+        var limitBreakFresh = options.ShowLimitBreaks && limitBreakRuntimeFresh;
+        var limitGaugeFresh = options.ShowLimitBreaks &&
+                              limitGaugeSnapshot.Active &&
+                              CombatFrameRules.IsSnapshotFresh(
+                                  limitGaugeSnapshot.PublishedAtMilliseconds,
+                                  nowMilliseconds);
         for (var index = 0; index < CombatFrameRules.EnemySlotCount; index++)
         {
             var topLeft = PixelSnap(enemyTopLeft + new Vector2(0f, index * (enemySize.Y + enemyGap)));
-            DrawActorFrame(draw, enemies[index], topLeft, enemySize, false, options, scale, nowMilliseconds);
+            var enemy = enemies[index];
+            var enemyLimitBreak = ResolveLimitBreakState(
+                enemy,
+                self: false,
+                options.PreviewEnabled,
+                limitBreakFresh ? limitBreakSnapshot : null,
+                nowMilliseconds);
+            var enemyGauge = ResolveLimitGauge(
+                enemy.Frame.Slot,
+                self: false,
+                options.PreviewEnabled,
+                limitGaugeFresh ? limitGaugeSnapshot : null);
+            DrawActorFrame(
+                draw,
+                enemy,
+                topLeft,
+                enemySize,
+                false,
+                options,
+                scale,
+                nowMilliseconds,
+                enemyLimitBreak,
+                enemyGauge);
+            if (interactionsEnabled &&
+                CombatFrameInteractionRules.TryCreateIntent(
+                    snapshotActive: true,
+                    preview: false,
+                    enemy.Frame,
+                    snapshotPublishedAtMilliseconds,
+                    nowMilliseconds,
+                    out var intent) &&
+                DrawEnemyInteraction(draw, intent, topLeft, enemySize, scale, nowMilliseconds))
+            {
+                hoveredIntent = intent;
+            }
         }
+
+        if (hoveredIntent.IsValid)
+            targeting.TouchMouseover(hoveredIntent, nowMilliseconds);
+        else
+            targeting.ReleaseOwnedMouseover();
+
+        if (pressedTargetIntent.IsValid && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            pressedTargetIntent = default;
 
         var selfSize = new Vector2(SelfWidth, SelfHeight) * scale;
         var selfTopLeft = CenteredTopLeft(
@@ -138,7 +243,98 @@ internal sealed class CombatFramesRenderer
             new Vector2(options.SelfScreenX, options.SelfScreenY),
             selfSize,
             8f * uiScale);
-        DrawActorFrame(draw, self, PixelSnap(selfTopLeft), selfSize, true, options, scale, nowMilliseconds);
+        var selfLimitBreak = ResolveLimitBreakState(
+            self,
+            self: true,
+            options.PreviewEnabled,
+            limitBreakFresh ? limitBreakSnapshot : null,
+            nowMilliseconds);
+        var selfGauge = ResolveLimitGauge(
+            CombatFrameLimitGaugeRules.SelfSlot,
+            self: true,
+            options.PreviewEnabled,
+            limitGaugeFresh ? limitGaugeSnapshot : null);
+        DrawActorFrame(
+            draw,
+            self,
+            PixelSnap(selfTopLeft),
+            selfSize,
+            true,
+            options,
+            scale,
+            nowMilliseconds,
+            selfLimitBreak,
+            selfGauge);
+
+        if (options.ShowAllyLimitBreakDamageEvents)
+        {
+            DrawAllyLimitBreakDamageCards(
+                draw,
+                options,
+                scale,
+                nowMilliseconds,
+                enemyTopLeft,
+                options.PreviewEnabled || !limitBreakRuntimeFresh ? null : limitBreakSnapshot);
+        }
+    }
+
+    private bool DrawEnemyInteraction(
+        ImDrawListPtr draw,
+        CombatFrameTargetIntent intent,
+        Vector2 topLeft,
+        Vector2 size,
+        float scale,
+        long nowMilliseconds)
+    {
+        ImGui.SetNextWindowPos(topLeft, ImGuiCond.Always);
+        ImGui.SetNextWindowSize(size, ImGuiCond.Always);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+
+        var hovered = false;
+        if (ImGui.Begin($"###SeitonSenseCombatFrameS{intent.EnemySlot}", InteractionWindowFlags))
+        {
+            ImGui.SetCursorPos(Vector2.Zero);
+            var releasedInside = ImGui.InvisibleButton(
+                $"##SeitonSenseCombatFrameTargetS{intent.EnemySlot}",
+                size);
+            hovered = ImGui.IsItemHovered();
+
+            if (ImGui.IsItemActivated()) pressedTargetIntent = intent;
+            if (releasedInside)
+            {
+                if (CombatFrameInteractionRules.IsSameFrozenTarget(pressedTargetIntent, intent))
+                    targeting.TrySetHardTargetOnce(intent, nowMilliseconds);
+                pressedTargetIntent = default;
+            }
+            else if (ImGui.IsItemDeactivated() &&
+                     pressedTargetIntent.EnemySlot == intent.EnemySlot)
+            {
+                pressedTargetIntent = default;
+            }
+        }
+
+        ImGui.End();
+        ImGui.PopStyleVar(2);
+
+        if (hovered)
+        {
+            draw.AddRect(
+                topLeft + new Vector2(2f * scale),
+                topLeft + size - new Vector2(2f * scale),
+                Pack(CurrentTargetColor, 0.78f),
+                7f * scale,
+                ImDrawFlags.None,
+                Math.Max(1f, 1.5f * scale));
+        }
+
+        return hovered;
+    }
+
+    private void ResetInteractions()
+    {
+        pressedTargetIntent = default;
+        targeting.ReleaseOwnedMouseover();
     }
 
     private void DrawActorFrame(
@@ -149,7 +345,9 @@ internal sealed class CombatFramesRenderer
         bool self,
         CombatFramesOptions options,
         float scale,
-        long nowMilliseconds)
+        long nowMilliseconds,
+        CombatLimitBreakActorState? limitBreak,
+        CombatFrameLimitGaugeReading limitGauge)
     {
         var bottomRight = topLeft + size;
         var frame = actor.Frame;
@@ -202,6 +400,8 @@ internal sealed class CombatFramesRenderer
                 label,
                 0.9f * options.Scale,
                 frame.Availability == CombatFrameAvailability.Dead ? DeadColor : UnknownColor);
+            if (options.ShowLimitBreaks && limitBreak is { } unavailableLimitBreak)
+                DrawLimitBreakActivation(draw, unavailableLimitBreak, topLeft, bottomRight, scale, options.Scale, nowMilliseconds);
             return;
         }
 
@@ -242,6 +442,12 @@ internal sealed class CombatFramesRenderer
         }
 
         DrawRightBadges(draw, actor, topLeft, bottomRight, self, options, scale, nowMilliseconds);
+        if (options.ShowLimitBreaks)
+        {
+            DrawLimitBreakGauge(draw, contentLeft, contentRight, bottomRight.Y, self, limitGauge, scale, options.Scale);
+            if (limitBreak is { } activeLimitBreak)
+                DrawLimitBreakActivation(draw, activeLimitBreak, topLeft, bottomRight, scale, options.Scale, nowMilliseconds);
+        }
     }
 
     private void DrawRightBadges(

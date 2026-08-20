@@ -43,6 +43,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly CombatFramesSnapshotService combatFramesSnapshots;
+    private readonly CombatLimitBreakRuntimeService combatLimitBreakRuntime;
+    private readonly CombatFrameLimitGaugeService combatFrameLimitGauge;
+    private readonly CombatFramesTargetingService combatFramesTargeting;
     private readonly CombatFramesRenderer combatFrames;
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
@@ -81,6 +84,7 @@ public sealed class Plugin : IDalamudPlugin
         configuration.Initialize(pluginInterface);
 
         var metadata = PvPMetadataGuard.Validate(dataManager, log);
+        var combatLimitBreakMetadata = CombatLimitBreakMetadataGuard.Validate(dataManager, log);
         var machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
         tracker = new ExecuteTracker(
             clientState,
@@ -91,6 +95,20 @@ public sealed class Plugin : IDalamudPlugin
             log,
             configuration,
             metadata);
+        combatLimitBreakRuntime = new CombatLimitBreakRuntimeService(
+            clientState,
+            objectTable,
+            framework,
+            partyList,
+            log,
+            tracker,
+            machinistLimitBreakCapture.CombatLimitBreakCaptureBuffer,
+            combatLimitBreakMetadata,
+            () => configuration.Enabled &&
+                  configuration.ShowCombatFrames &&
+                  (configuration.CombatFramesShowLimitBreaks ||
+                   configuration.ShowAllyLimitBreakDamageEvents),
+            () => configuration.ShowAllyLimitBreakDamageEvents);
         pressureTracker = new TargetPressureTracker(
             clientState,
             objectTable,
@@ -235,16 +253,37 @@ public sealed class Plugin : IDalamudPlugin
                         : default,
                     focus is not null && focus.Address != nint.Zero && focus.IsValid()
                         ? new TargetPressureActorIdentity(focus.GameObjectId, focus.EntityId)
-                        : default);
+                     : default);
             });
+        combatFrameLimitGauge = new CombatFrameLimitGaugeService(
+            clientState,
+            objectTable,
+            framework,
+            gameGui,
+            tracker,
+            log,
+            () => configuration.Enabled &&
+                  configuration.ShowCombatFrames &&
+                  configuration.CombatFramesShowLimitBreaks);
+        combatFramesTargeting = new CombatFramesTargetingService(
+            clientState,
+            objectTable,
+            targetManager,
+            framework,
+            tracker,
+            log);
         combatFrames = new CombatFramesRenderer(
             combatFramesSnapshots,
+            combatFramesTargeting,
+            combatLimitBreakRuntime,
+            combatFrameLimitGauge,
             gameGui,
             textureProvider,
             log,
             () => new CombatFramesOptions(
                 configuration.Enabled && configuration.ShowCombatFrames,
                 false,
+                configuration.CombatFramesEnableInteraction,
                 configuration.CombatFramesEnemyScreenX,
                 configuration.CombatFramesEnemyScreenY,
                 configuration.CombatFramesSelfScreenX,
@@ -254,7 +293,9 @@ public sealed class Plugin : IDalamudPlugin
                 configuration.CombatFramesShowNames,
                 configuration.CombatFramesShowExactValues,
                 configuration.CombatFramesShowStatuses,
-                configuration.CombatFramesShowPressure));
+                configuration.CombatFramesShowPressure,
+                configuration.CombatFramesShowLimitBreaks,
+                configuration.ShowAllyLimitBreakDamageEvents));
         pressureCounter = new PressureCounterWindow(
             configuration,
             pressureTracker,
@@ -407,7 +448,10 @@ public sealed class Plugin : IDalamudPlugin
         darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
+        combatLimitBreakRuntime.Start();
+        combatFrameLimitGauge.Start();
         combatFramesSnapshots.Start();
+        combatFramesTargeting.Start();
     }
 
     public void Dispose()
@@ -426,7 +470,10 @@ public sealed class Plugin : IDalamudPlugin
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        combatFramesTargeting.Dispose();
         combatFramesSnapshots.Dispose();
+        combatFrameLimitGauge.Dispose();
+        combatLimitBreakRuntime.Dispose();
         personalStatus.Dispose();
         nearAssist.Dispose();
         darkKnightShadowbringer.Dispose();
@@ -442,10 +489,12 @@ public sealed class Plugin : IDalamudPlugin
 
     private void Draw()
     {
+        // Submit transparent combat-frame hit regions before ordinary windows so
+        // settings and other plugin windows retain normal input priority.
+        combatFrames.Draw();
         windowSystem.Draw();
         targetHighlights.Draw();
         overlay.Draw();
-        combatFrames.Draw();
     }
 
     private void OpenSettings() => settingsWindow.IsOpen = true;
@@ -570,6 +619,9 @@ public sealed class Plugin : IDalamudPlugin
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
+                var plunge = personalStatus.DarkKnightPlungeDiagnostics;
+                var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
+                var limitBreakGauge = combatFrameLimitGauge.Diagnostics;
                 var assist = nearAssist.Diagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
@@ -706,6 +758,24 @@ public sealed class Plugin : IDalamudPlugin
                     $"active={combatFrameSnapshot.Active},published={combatFrameSnapshot.PublishedAtMilliseconds}," +
                     $"enemies={combatFrameSnapshot.Enemies.Count},preview={combatFrames.PreviewEnabled}]");
                 chatGui.Print(
+                    $"[Seiton Sense] combat-lb[meta={limitBreakRuntime.MetadataVerified}," +
+                    $"activations={limitBreakRuntime.VerifiedActivationActions}/" +
+                    $"{limitBreakRuntime.ExpectedActivationActions},damage-actions=" +
+                    $"{limitBreakRuntime.VerifiedDamageActions}/" +
+                    $"{limitBreakRuntime.ExpectedDamageActions},statuses={limitBreakRuntime.VerifiedStatuses}/" +
+                    $"{limitBreakRuntime.ExpectedStatuses},active={limitBreakRuntime.Active}," +
+                    $"roster={limitBreakRuntime.ExactRosterActors},episodes={limitBreakRuntime.ActiveEpisodes}," +
+                    $"damage={limitBreakRuntime.VisibleAllyDamageEvents}," +
+                    $"q={limitBreakRuntime.ActivationQueueDepth}/{limitBreakRuntime.DamageQueueDepth}," +
+                    $"capture={limitBreakRuntime.CapturedActivations}/{limitBreakRuntime.CapturedDamageEvents}," +
+                    $"drop={limitBreakRuntime.CaptureDroppedActivations}/" +
+                    $"{limitBreakRuntime.CaptureDroppedDamageEvents}," +
+                    $"accepted={limitBreakRuntime.AcceptedActivations}/" +
+                    $"{limitBreakRuntime.AcceptedAllyDamageEvents}," +
+                    $"rejected={limitBreakRuntime.RejectedActivations}/" +
+                    $"{limitBreakRuntime.RejectedDamageEvents}]");
+                chatGui.Print($"[Seiton Sense] combat-lb-gauge[{limitBreakGauge.ToTraceLine()}]");
+                chatGui.Print(
                     $"[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}," +
                     $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +
                     $"candidates={ninja.CandidateCount},S={ninja.EnemySlot}," +
@@ -735,6 +805,20 @@ public sealed class Plugin : IDalamudPlugin
                     $"adjusted={monk.AdjustedActionId},priority={monk.HigherPriorityClaimed}," +
                     $"attempt={monk.UseActionAttempted}/{monk.UseActionAccepted}," +
                     $"count={monk.AttemptCount}/{monk.AcceptedCount}]");
+                chatGui.Print(
+                    $"[Seiton Sense] dark-knight-plunge[decision={plunge.Decision},reason={plunge.Reason}," +
+                    $"hold={plunge.HoldOutcome}/{plunge.OwnsContinuousHold}," +
+                    $"saw-not-ready={plunge.CooldownUnavailableObserved},key={plunge.HeldGameplayKey}," +
+                    $"epoch={plunge.CurrentReadyEpochToken}/{plunge.SpentReadyEpochToken}," +
+                    $"ready={plunge.CooldownStateKnown}/{plunge.CooldownReady}/{plunge.StructurallyReady}," +
+                    $"action={plunge.ResolvedActionId},candidates={plunge.CandidateCount},S={plunge.EnemySlot}," +
+                    $"target={plunge.TargetGameObjectId:X}/{plunge.TargetEntityId:X}," +
+                    $"hp={plunge.RevalidatedCurrentHp}/{plunge.RevalidatedMaximumHp}," +
+                    $"distance={plunge.RevalidatedCenterDistanceYalms:0.00}," +
+                    $"target-guard={plunge.RevalidatedTargetGuardActive},claimed={plunge.InputClaimed}," +
+                    $"attempt={plunge.UseActionAttempted}/{plunge.UseActionAccepted}," +
+                    $"count={plunge.AttemptCount}/{plunge.AcceptedCount}," +
+                    $"resolve={plunge.CandidateResolution},last={plunge.LastEvent}]");
                 chatGui.Print($"[Seiton Sense] isolation[{isolationAwareness.Diagnostics.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] auto-mark[{autoEnemyFocusMark.Diagnostics.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] auto-low-mp-focus[{autoLowMpFocusTarget.Diagnostics.ToChatLine()}]");

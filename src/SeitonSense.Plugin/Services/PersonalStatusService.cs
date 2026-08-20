@@ -37,6 +37,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly MonkEarthReplyProbe monkEarthReply;
+    private readonly DarkKnightPlungeProbe darkKnightPlunge;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
@@ -154,6 +155,13 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             log);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
+        darkKnightPlunge = new DarkKnightPlungeProbe(
+            clientState,
+            dutyState,
+            objectTable,
+            executeTracker,
+            nearAssist,
+            log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
@@ -172,6 +180,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
+    internal DarkKnightPlungeProbeSnapshot DarkKnightPlungeDiagnostics =>
+        darkKnightPlunge.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
@@ -251,6 +261,7 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaSeiton.FailClosed();
             scholarCriticalStrategy.FailClosed();
             monkEarthReply.FailClosed(now);
+            darkKnightPlunge.FailClosed();
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
                 SupportedPvPContext.None,
@@ -290,18 +301,31 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaSeiton.Reset();
             scholarCriticalStrategy.Reset();
             monkEarthReply.Reset();
+            darkKnightPlunge.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
         var isCrystallineConflict = context == SupportedPvPContext.CrystallineConflict;
         var alive = IsAlive(localPlayer);
+        var localJobId = localPlayer?.ClassJob.IsValid == true
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
+        var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
+            EnemyCombatConstants.BardJobId;
+        var isNinja = ExecuteThreshold.IsNinja(localJobId);
+        var isSage = localJobId == SmartKardiaRules.SageJobId;
+        var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;
+        var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
+        var isDarkKnight = localJobId == DarkKnightPlungeRules.DarkKnightJobId;
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
         var defensiveUtilitiesConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableDefensiveUtilities &&
                                                      isCrystallineConflict;
         var paladinGuardianConfigurationEnabled = configuration.Enabled &&
                                                   configuration.PaladinGuardianLowAlly &&
-                                                  isCrystallineConflict;
+                                                  isCrystallineConflict &&
+                                                  isPaladin;
         var pressureKnown = pressureTracker.TryGetSelfIncomingPressure(out var incomingEnemyCount);
         var highPressure = DefensiveUtilityRules.IsHighPressure(
             pressureKnown,
@@ -411,26 +435,31 @@ internal sealed class PersonalStatusService : IDisposable
                                              configuration.ExperimentalAllyRescueOnNextKey &&
                                              metadata.AllyRescueStatusesVerified &&
                                              isCrystallineConflict &&
+                                             isAllyRescueJob &&
                                              !guardActive;
         var miracleInterceptConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableReactiveCcUtilities &&
                                                      isCrystallineConflict &&
+                                                     isAllyRescueJob &&
                                                      !guardActive;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
-                                              configuration.EnableNinjaSeitonOnFreshGameplayKey;
+                                              configuration.EnableNinjaSeitonOnFreshGameplayKey &&
+                                              isCrystallineConflict &&
+                                              isNinja;
         var smartKardiaConfigurationEnabled = configuration.Enabled &&
-                                               configuration.EnableSageKardiaAfterEukrasia;
+                                               configuration.EnableSageKardiaAfterEukrasia &&
+                                               isCrystallineConflict &&
+                                               isSage;
         var scholarCriticalStrategyConfigurationEnabled = configuration.Enabled &&
-                                                           configuration.EnableScholarCriticalStrategyOnHeldKey;
-        var localJobId = localPlayer?.ClassJob.IsValid == true
-            ? localPlayer.ClassJob.RowId
-            : 0;
+                                                           configuration.EnableScholarCriticalStrategyOnHeldKey &&
+                                                           isCrystallineConflict &&
+                                                           isScholar;
         var scholarCriticalStrategyHeldEnabled =
             scholarCriticalStrategyConfigurationEnabled &&
             isCrystallineConflict &&
             metadata.ScholarCriticalStrategyVerified &&
             !guardActive &&
-            localJobId == ScholarCriticalStrategyRules.ScholarJobId;
+            isScholar;
         var pressureEscapeSprintHeldEnabled = configuration.Enabled &&
                                               configuration.EnablePressureEscapeSprintOnHeldKey &&
                                               isCrystallineConflict &&
@@ -440,6 +469,13 @@ internal sealed class PersonalStatusService : IDisposable
                                          isCrystallineConflict &&
                                          metadata.RecuperateVerified &&
                                          !guardActive;
+        var darkKnightPlungeConfigurationEnabled = configuration.Enabled &&
+                                                    configuration.EnableDarkKnightPlungeOnHeldKey;
+        var darkKnightPlungeHeldEnabled = darkKnightPlungeConfigurationEnabled &&
+                                          isCrystallineConflict &&
+                                          metadata.DarkKnightPlungeVerified &&
+                                          !guardActive &&
+                                          isDarkKnight;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -449,13 +485,11 @@ internal sealed class PersonalStatusService : IDisposable
              paladinGuardianConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
              miracleInterceptConfigurationEnabled ||
-             (ninjaSeitonConfigurationEnabled &&
-              isCrystallineConflict &&
-              metadata.SeitonVerified &&
-             !guardActive) ||
+             (ninjaSeitonConfigurationEnabled && metadata.SeitonVerified && !guardActive) ||
              scholarCriticalStrategyHeldEnabled ||
              smartRecuperateHeldEnabled ||
-             pressureEscapeSprintHeldEnabled),
+             pressureEscapeSprintHeldEnabled ||
+             darkKnightPlungeHeldEnabled),
             allowPurifyHeldGameplayKey,
             defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
             paladinGuardianConfigurationEnabled && configuration.PaladinGuardianOnHeldKey,
@@ -463,7 +497,8 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
             miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey,
             scholarCriticalStrategyHeldEnabled,
-            pressureEscapeSprintHeldEnabled);
+            pressureEscapeSprintHeldEnabled,
+            darkKnightPlungeHeldEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -484,6 +519,20 @@ internal sealed class PersonalStatusService : IDisposable
             EmergencyActionPriorityRules.SelfPurifyClaimsPriority(
                 purify.Decision,
                 purify.InputTrigger);
+        // Smart Recuperate is the first helper after Purify. It may keep the
+        // exact held generation waiting for a real MP tick; Guard and every
+        // targeted/job helper remain behind that reservation.
+        var recuperate = smartRecuperate.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
+            metadata.RecuperateVerified,
+            guardActive,
+            purifyClaimedPriority || emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
             isCrystallineConflict,
@@ -497,23 +546,12 @@ internal sealed class PersonalStatusService : IDisposable
             resilienceActive,
             hasPurifyRemovableCrowdControl,
             guardActive,
-            purifyClaimedPriority,
+            purifyClaimedPriority ||
+            smartRecuperateClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
             hardReset);
-        // Deliberately separate pass boundary: Smart Recuperate belongs here,
-        // after the verified post-Purify Guard follow-up but before ally Guardian.
-        var recuperate = smartRecuperate.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
-            metadata.RecuperateVerified,
-            guardActive,
-            purifyClaimedPriority || guardDefense.InputClaimed || emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset);
-        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         var defense = defensiveUtility.ObserveGuardian(
             localPlayer,
             isCrystallineConflict,
@@ -537,8 +575,8 @@ internal sealed class PersonalStatusService : IDisposable
             defense.LastAcceptedGuardianEpisode,
             now,
             hardReset);
-        var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||
-                                               smartRecuperateClaimedPriority ||
+        var defensiveUtilityClaimedPriority = smartRecuperateClaimedPriority ||
+                                               guardDefense.InputClaimed ||
                                                defense.InputClaimed;
         now = Environment.TickCount64;
         var pressureEscape = pressureEscapeSprint.Observe(
@@ -643,11 +681,12 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
-        monkEarthReply.Observe(
+        var monk = monkEarthReply.Observe(
             localPlayer,
             isSupportedPvPContext,
             configuration.Enabled &&
             configuration.EnableMonkEarthReplyHelper &&
+            isMonk &&
             !guardActive,
             metadata.MonkEarthReplyVerified,
             configuration.MonkEarthReplyOnLowHp,
@@ -662,6 +701,26 @@ internal sealed class PersonalStatusService : IDisposable
             kardia.UseActionAttempted ||
             ninja.InputClaimed ||
             scholar.InputClaimed,
+            now,
+            hardReset);
+        darkKnightPlunge.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            darkKnightPlungeConfigurationEnabled,
+            metadata.DarkKnightPlungeVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            defensiveUtilityClaimedPriority ||
+            pressureEscapeClaimedPriority ||
+            allyRescueClaimedPriority ||
+            rescue.UseActionAttempted ||
+            miracle.UseActionAttempted ||
+            kardia.UseActionAttempted ||
+            ninja.InputClaimed ||
+            scholar.InputClaimed ||
+            monk.UseActionAttempted ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
             now,
             hardReset);
 
@@ -1016,6 +1075,7 @@ internal sealed class PersonalStatusService : IDisposable
         ninjaSeiton.Reset();
         scholarCriticalStrategy.Reset();
         monkEarthReply.Reset();
+        darkKnightPlunge.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }
 
