@@ -891,7 +891,7 @@ the Ninja Seiton fresh-key opt-in, the Scholar Critical Strategy held-key opt-in
 the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
 opt-in, and the CC-immunity-brake master plus exact per-job/per-action selections.
 
-Configuration schema 26 is current in v0.20.0.0. Smart Recuperate and Combat
+Configuration schema 26 is current in v0.20.0.1. Smart Recuperate and Combat
 Frames remain off for fresh, upgrading, and reset configurations. A previously
 explicit Smart Kardia held-key opt-in migrates once to the accepted-Eukrasia
 option; the obsolete held field is cleared. The removed pre-Guard option is
