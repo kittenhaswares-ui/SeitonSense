@@ -2,6 +2,7 @@ using SeitonSense.Core;
 
 internal static class SmartRecuperateSelfTests
 {
+    private const int HeldKey = 65;
     private static readonly TargetPressureActorIdentity LocalPlayer =
         new(10_001, 1_001);
 
@@ -11,192 +12,208 @@ internal static class SmartRecuperateSelfTests
         Equal(16_000u, SmartRecuperateRules.MinimumMissingHp, "missing HP threshold");
         Equal(2_000u, SmartRecuperateRules.MpCost, "exact MP cost");
 
-        var belowHealth = SmartRecuperateRules.Observe(
-            Observation() with { CurrentHp = 84_001 });
-        None(
-            belowHealth,
-            SmartRecuperateDecisionReason.MissingHealthBelowThreshold,
-            "15,999 missing HP");
+        var below = Observe(Observation() with { CurrentHp = 84_001 });
+        None(below, SmartRecuperateDecisionReason.MissingHealthBelowThreshold, "15,999 missing");
 
-        var exact = SmartRecuperateRules.Observe(Observation());
-        Dispatch(exact, "16,000 missing HP and 2,000 MP are inclusive");
-        True(exact.ShouldConsumeInputGeneration, "dispatch owns the held generation");
-        var intent = exact.Intent ??
-            throw new InvalidOperationException("dispatch did not freeze an intent");
-        Equal(SmartRecuperateRules.ActionId, intent.ActionId, "frozen exact action");
-        Equal(LocalPlayer, intent.LocalPlayer, "frozen exact self identity");
-
-        var above = SmartRecuperateRules.Observe(
-            Observation() with { CurrentHp = 1, CurrentMp = 10_000 });
-        Dispatch(above, "health and MP above their thresholds");
-
-        True(
-            SmartRecuperateRules.HasMinimumMissingHp(
-                uint.MaxValue - SmartRecuperateRules.MinimumMissingHp,
-                uint.MaxValue),
-            "large HP values remain overflow safe");
+        var exact = Observe(Observation());
+        Dispatch(exact, "inclusive HP and MP thresholds");
+        var intent = exact.Intent ?? throw new InvalidOperationException("missing intent");
+        Equal(SmartRecuperateRules.ActionId, intent.ActionId, "frozen action");
+        Equal(LocalPlayer, intent.LocalPlayer, "frozen self");
+        Equal(HeldKey, intent.FrozenKeyCode, "frozen exact key");
+        Equal(84_000u, intent.TriggerCurrentHp, "frozen HP event");
+        Equal(100_000u, intent.TriggerMaximumHp, "frozen max HP");
+        Equal(1UL, intent.HealthEventToken, "first event token");
     }
 
     public static void MpTickWaitDoesNotConsumeTheHold()
     {
-        var beforeTick = SmartRecuperateRules.Observe(
-            Observation() with { CurrentMp = 1_999 });
-        None(
-            beforeTick,
-            SmartRecuperateDecisionReason.InsufficientMp,
-            "one MP below the exact action cost");
-        False(
-            beforeTick.ShouldConsumeInputGeneration,
-            "insufficient MP keeps this physical hold eligible");
+        var before = Observe(Observation() with { CurrentMp = 1_999 });
+        None(before, SmartRecuperateDecisionReason.InsufficientMp, "insufficient MP");
+        False(before.InputClaimed, "own resource wait does not starve lower helpers");
 
-        // This models the same still-held, still-unconsumed physical generation
-        // on the first frame after a real server MP tick.
-        var afterTick = SmartRecuperateRules.Observe(
-            Observation() with { CurrentMp = 2_000 });
-        Dispatch(afterTick, "the real MP tick may release the same hold");
-        True(
-            afterTick.ShouldConsumeInputGeneration,
-            "the generation becomes terminal only when dispatchable");
+        var after = SmartRecuperateRules.Observe(
+            before.NextState,
+            Observation() with { NowMilliseconds = 1_001 });
+        Dispatch(after, "same hold becomes eligible on the real MP tick");
 
-        var noReserve = SmartRecuperateRules.Observe(
-            Observation() with { CurrentMp = 2_000, MaximumMp = 2_000 });
-        Dispatch(noReserve, "there is deliberately no extra Purify MP reserve");
+        var cooldown = Observe(Observation() with
+        {
+            ActionLocallyReady = false,
+            ActionCooldownReady = false,
+        });
+        None(cooldown, SmartRecuperateDecisionReason.ActionNotReady, "own cooldown wait");
+        False(cooldown.InputClaimed, "own cooldown does not starve lower helpers");
     }
 
     public static void EveryInitialSafetyGateFailsClosed()
     {
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { ConfigurationEnabled = false }),
-            SmartRecuperateDecisionReason.ConfigurationDisabled,
-            "configuration");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { IsCrystallineConflict = false }),
-            SmartRecuperateDecisionReason.OutsideCrystallineConflict,
-            "exact CC context");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { LocalPlayer = default }),
-            SmartRecuperateDecisionReason.LocalPlayerIdentityInvalid,
-            "exact local identity");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { IsLocalPlayerAlive = false }),
-            SmartRecuperateDecisionReason.LocalPlayerDead,
-            "live self");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { IsLocalPlayerTargetable = false }),
-            SmartRecuperateDecisionReason.LocalPlayerUntargetable,
-            "targetable self");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { MetadataVerified = false }),
-            SmartRecuperateDecisionReason.MetadataUnverified,
-            "current metadata");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { ActionHelpersSuppressedByGuard = true }),
-            SmartRecuperateDecisionReason.GuardSuppressed,
-            "active Guard or propagation latch");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { HigherPriorityClaimed = true }),
-            SmartRecuperateDecisionReason.HigherPriorityClaimed,
-            "higher-priority owner");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { InputProbeSucceeded = false }),
-            SmartRecuperateDecisionReason.InputProbeUnavailable,
-            "physical input probe");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { IsTextInputActive = true }),
-            SmartRecuperateDecisionReason.TextInputActive,
-            "text input");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { HeldGameplayKeyEligible = false }),
-            SmartRecuperateDecisionReason.NoHeldGameplayKey,
-            "held generation");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { ResolvedActionId = 1 }),
-            SmartRecuperateDecisionReason.ResolvedActionInvalid,
-            "adjusted exact action");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { ActionLocallyReady = false }),
-            SmartRecuperateDecisionReason.ActionNotReady,
-            "local readiness");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { CurrentHp = 0 }),
-            SmartRecuperateDecisionReason.HealthTelemetryInvalid,
-            "dead health telemetry");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { MaximumHp = 0 }),
-            SmartRecuperateDecisionReason.HealthTelemetryInvalid,
-            "zero maximum HP");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { CurrentHp = 100_001 }),
-            SmartRecuperateDecisionReason.HealthTelemetryInvalid,
-            "HP above maximum");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { MaximumMp = 0 }),
-            SmartRecuperateDecisionReason.MpTelemetryInvalid,
-            "zero maximum MP");
-        None(
-            SmartRecuperateRules.Observe(
-                Observation() with { CurrentMp = 10_001 }),
-            SmartRecuperateDecisionReason.MpTelemetryInvalid,
-            "MP above maximum");
+        Gate(Observation() with { ConfigurationEnabled = false }, SmartRecuperateDecisionReason.ConfigurationDisabled);
+        Gate(Observation() with { IsCrystallineConflict = false }, SmartRecuperateDecisionReason.OutsideCrystallineConflict);
+        Gate(Observation() with { LocalPlayer = default }, SmartRecuperateDecisionReason.LocalPlayerIdentityInvalid);
+        Gate(Observation() with { IsLocalPlayerAlive = false }, SmartRecuperateDecisionReason.LocalPlayerDead);
+        Gate(Observation() with { IsLocalPlayerTargetable = false }, SmartRecuperateDecisionReason.LocalPlayerUntargetable);
+        Gate(Observation() with { MetadataVerified = false }, SmartRecuperateDecisionReason.MetadataUnverified);
+        Gate(Observation() with { ActionHelpersSuppressedByGuard = true }, SmartRecuperateDecisionReason.GuardSuppressed);
+        Gate(Observation() with { HigherPriorityClaimed = true }, SmartRecuperateDecisionReason.HigherPriorityClaimed);
+        Gate(Observation() with { InputProbeSucceeded = false }, SmartRecuperateDecisionReason.InputProbeUnavailable);
+        Gate(Observation() with { IsTextInputActive = true }, SmartRecuperateDecisionReason.TextInputActive);
+        Gate(Observation() with { HeldGameplayKeyEligible = false }, SmartRecuperateDecisionReason.NoHeldGameplayKey);
+        Gate(Observation() with { HeldGameplayKeyCode = 0 }, SmartRecuperateDecisionReason.NoHeldGameplayKey);
+        Gate(Observation() with { ResolvedActionId = 1 }, SmartRecuperateDecisionReason.ResolvedActionInvalid);
+        Gate(Observation() with { ActionLocallyReady = false }, SmartRecuperateDecisionReason.ActionNotReady);
+        Gate(Observation() with { CurrentHp = 0 }, SmartRecuperateDecisionReason.HealthTelemetryInvalid);
+        Gate(Observation() with { MaximumHp = 0 }, SmartRecuperateDecisionReason.HealthTelemetryInvalid);
+        Gate(Observation() with { CurrentHp = 100_001 }, SmartRecuperateDecisionReason.HealthTelemetryInvalid);
+        Gate(Observation() with { MaximumMp = 0 }, SmartRecuperateDecisionReason.MpTelemetryInvalid);
+        Gate(Observation() with { CurrentMp = 10_001 }, SmartRecuperateDecisionReason.MpTelemetryInvalid);
 
-        var reset = SmartRecuperateRules.Observe(
-            Observation() with { HardReset = true });
-        Equal(
-            SmartRecuperateDecisionKind.Cancelled,
-            reset.Kind,
-            "hard reset is explicitly cancelled");
-        Equal(
-            SmartRecuperateDecisionReason.HardReset,
-            reset.Reason,
-            "hard reset reason");
-        False(reset.ShouldConsumeInputGeneration, "every failed gate preserves input");
+        var reset = Observe(Observation() with { HardReset = true });
+        Equal(SmartRecuperateDecisionKind.Cancelled, reset.Kind, "hard reset");
+        Equal(SmartRecuperateState.Initial, reset.NextState, "reset state");
     }
 
     public static void FrozenIntentRequiresEveryTerminalGate()
     {
-        var intent = new SmartRecuperateIntent(
-            SmartRecuperateRules.ActionId,
-            LocalPlayer);
-        True(CanUse(intent), "exact frozen self intent");
-
+        var intent = Intent();
+        True(CanUse(intent), "exact frozen intent");
         False(CanUse(intent, configurationEnabled: false), "configuration drift");
         False(CanUse(intent, isCrystallineConflict: false), "context drift");
-        False(
-            CanUse(
-                intent,
-                currentLocalPlayer: new TargetPressureActorIdentity(10_002, 1_002)),
-            "local identity drift");
+        False(CanUse(intent, currentLocalPlayer: new(10_002, 1_002)), "identity drift");
         False(CanUse(intent, isLocalPlayerAlive: false), "death drift");
         False(CanUse(intent, isLocalPlayerTargetable: false), "targetability drift");
         False(CanUse(intent, metadataVerified: false), "metadata drift");
-        False(
-            CanUse(intent, actionHelpersSuppressedByGuard: true),
-            "Guard or propagation latch appears");
-        False(CanUse(intent, higherPriorityClaimed: true), "priority ownership drift");
-        False(CanUse(intent, resolvedActionId: 1), "adjusted action drift");
-        False(CanUse(intent, actionLocallyReady: false), "cooldown drift");
-        False(CanUse(intent, currentHp: 84_001), "health rises below threshold");
-        False(CanUse(intent, currentMp: 1_999), "MP drops below exact cost");
-        False(CanUse(intent with { ActionId = 1 }), "frozen action is not exact");
-        False(CanUse(default), "missing frozen intent");
+        False(CanUse(intent, actionHelpersSuppressedByGuard: true), "Guard drift");
+        False(CanUse(intent, higherPriorityClaimed: true), "Purify priority drift");
+        False(CanUse(intent, resolvedActionId: 1), "action drift");
+        False(CanUse(intent, actionLocallyReady: false), "readiness drift");
+        False(CanUse(intent, currentHp: 84_001), "health event ended");
+        False(CanUse(intent, maximumHp: 100_001), "max HP identity drift");
+        False(CanUse(intent, currentMp: 1_999), "MP drift");
+        False(CanUse(intent, currentHeldKeyCode: 66), "key substitution");
+        False(CanUse(intent, frozenKeyStillDown: false), "key released");
+        False(CanUse(default), "missing intent");
     }
+
+    public static void CleanFalseRetriesAreBounded()
+    {
+        var decision = Observe(Observation());
+        var state = decision.NextState;
+        for (var attempt = 1; attempt <= HeldActionRetryRules.MaximumNativeAttempts; attempt++)
+        {
+            var now = 1_000L + ((attempt - 1) * HeldActionRetryRules.NativeRetryThrottleMilliseconds);
+            var completion = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+                state,
+                ClientActionAttemptOutcome.ClientRejected,
+                now);
+            state = completion.NextState;
+            if (attempt < HeldActionRetryRules.MaximumNativeAttempts)
+            {
+                True(completion.RetryScheduled, $"retry {attempt} scheduled");
+                var early = SmartRecuperateRules.Observe(
+                    state,
+                    Observation() with { NowMilliseconds = now + 49 });
+                Equal(SmartRecuperateDecisionKind.Armed, early.Kind, $"retry {attempt} throttled");
+                True(early.InputClaimed, "short retry throttle owns only this frame");
+                decision = SmartRecuperateRules.Observe(
+                    early.NextState,
+                    Observation() with { NowMilliseconds = now + 50 });
+                Dispatch(decision, $"retry {attempt} released at 50 ms");
+                state = decision.NextState;
+            }
+            else
+            {
+                True(completion.Terminal, "eighth clean false is terminal");
+                Equal(SmartRecuperatePhase.SpentUntilKeyRelease, state.Phase, "spent phase");
+            }
+        }
+
+        var sameHold = SmartRecuperateRules.Observe(
+            state,
+            Observation() with { NowMilliseconds = 1_500, FrozenKeyStillDown = true });
+        False(sameHold.ShouldDispatch, "same exact episode cannot start another retry batch");
+    }
+
+    public static void SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat()
+    {
+        var first = Observe(Observation());
+        var soft = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.SoftUnavailable,
+            1_000);
+        True(soft.SoftWait, "known boundary wait exposed");
+        Equal(0, soft.NextState.Retry.NativeAttemptCount, "soft wait spends zero calls");
+
+        var ready = SmartRecuperateRules.Observe(
+            soft.NextState,
+            Observation() with { NowMilliseconds = 1_001 });
+        Dispatch(ready, "first ready frame retries immediately");
+        var accepted = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            ready.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_001);
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable,
+            accepted.NextState.Phase,
+            "accepted request awaits negative cooldown evidence");
+
+        var stillReady = SmartRecuperateRules.Observe(
+            accepted.NextState,
+            Observation() with { NowMilliseconds = 1_002 });
+        False(stillReady.ShouldDispatch, "propagation delay cannot duplicate acceptance");
+        False(stillReady.InputClaimed, "accepted cooldown tracking does not starve lower helpers");
+
+        var unavailable = SmartRecuperateRules.Observe(
+            stillReady.NextState,
+            Observation() with
+            {
+                ActionLocallyReady = false,
+                ActionCooldownReady = false,
+                NowMilliseconds = 1_003,
+            });
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            unavailable.NextState.Phase,
+            "accepted cooldown unavailable edge observed");
+
+        var second = SmartRecuperateRules.Observe(
+            unavailable.NextState,
+            Observation() with
+            {
+                HeldGameplayKeyCode = 66,
+                NowMilliseconds = 1_004,
+            });
+        Dispatch(second, "same hold may authorize the distinct ready cooldown epoch");
+        Equal(2UL, second.Intent!.Value.HealthEventToken, "distinct event token");
+        Equal(HeldKey, second.Intent.Value.FrozenKeyCode, "repeat retains original exact hold key");
+    }
+
+    public static void PurifyPriorityNeverGetsStarved()
+    {
+        var first = Observe(Observation());
+        var rejected = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientRejected,
+            1_000);
+        var blocked = SmartRecuperateRules.Observe(
+            rejected.NextState,
+            Observation() with
+            {
+                HigherPriorityClaimed = true,
+                NowMilliseconds = 1_050,
+            });
+        False(blocked.ShouldDispatch, "active Purify prevents Recup native work");
+        False(blocked.InputClaimed, "Recup never steals Purify's frame");
+        Equal(rejected.NextState.Intent!.Value, blocked.NextState.Intent!.Value, "exact Recup intent retained");
+    }
+
+    private static SmartRecuperateIntent Intent() => new(
+        SmartRecuperateRules.ActionId,
+        LocalPlayer,
+        HeldKey,
+        84_000,
+        100_000,
+        1);
 
     private static SmartRecuperateObservation Observation() => new(
         ConfigurationEnabled: true,
@@ -215,7 +232,15 @@ internal static class SmartRecuperateSelfTests
         CurrentHp: 84_000,
         MaximumHp: 100_000,
         CurrentMp: 2_000,
-        MaximumMp: 10_000);
+        MaximumMp: 10_000,
+        HeldGameplayKeyCode: HeldKey,
+        FrozenKeyStillDown: true,
+        NativeBoundaryReady: true,
+        ActionCooldownReady: true,
+        NowMilliseconds: 1_000);
+
+    private static SmartRecuperateDecision Observe(SmartRecuperateObservation observation) =>
+        SmartRecuperateRules.Observe(SmartRecuperateState.Initial, observation);
 
     private static bool CanUse(
         SmartRecuperateIntent intent,
@@ -232,7 +257,9 @@ internal static class SmartRecuperateSelfTests
         uint currentHp = 84_000,
         uint maximumHp = 100_000,
         uint currentMp = 2_000,
-        uint maximumMp = 10_000) =>
+        uint maximumMp = 10_000,
+        int currentHeldKeyCode = HeldKey,
+        bool frozenKeyStillDown = true) =>
         SmartRecuperateRules.CanUseFrozenIntent(
             intent,
             configurationEnabled,
@@ -248,15 +275,21 @@ internal static class SmartRecuperateSelfTests
             currentHp,
             maximumHp,
             currentMp,
-            maximumMp);
+            maximumMp,
+            currentHeldKeyCode,
+            frozenKeyStillDown);
 
-    private static void Dispatch(
-        SmartRecuperateDecision decision,
-        string label)
+    private static void Gate(
+        SmartRecuperateObservation observation,
+        SmartRecuperateDecisionReason reason) =>
+        None(Observe(observation), reason, reason.ToString());
+
+    private static void Dispatch(SmartRecuperateDecision decision, string label)
     {
         Equal(SmartRecuperateDecisionKind.Dispatch, decision.Kind, label);
         Equal(SmartRecuperateDecisionReason.None, decision.Reason, $"{label} reason");
-        True(decision.ShouldDispatch, $"{label} dispatch flag");
+        True(decision.ShouldDispatch, $"{label} dispatch");
+        True(decision.InputClaimed, $"{label} frame claim");
     }
 
     private static void None(
@@ -266,8 +299,7 @@ internal static class SmartRecuperateSelfTests
     {
         Equal(SmartRecuperateDecisionKind.None, decision.Kind, label);
         Equal(reason, decision.Reason, $"{label} reason");
-        False(decision.ShouldDispatch, $"{label} dispatch flag");
-        False(decision.ShouldConsumeInputGeneration, $"{label} consume flag");
+        False(decision.ShouldDispatch, $"{label} dispatch");
     }
 
     private static void True(bool condition, string label)
@@ -281,7 +313,6 @@ internal static class SmartRecuperateSelfTests
         where T : notnull
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
-            throw new InvalidOperationException(
-                $"{label}: expected {expected}, got {actual}");
+            throw new InvalidOperationException($"{label}: expected {expected}, got {actual}");
     }
 }

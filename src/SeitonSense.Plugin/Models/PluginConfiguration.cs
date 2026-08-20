@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 28;
+    public int Version { get; set; } = 29;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -45,7 +45,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSeitonPopup { get; set; } = true;
     public bool ShowPersistentSeitonCue { get; set; } = true;
     public bool ShowSeitonPreparation { get; set; } = true;
+    // Schema-28 compatibility only. Runtime and UI use continuous held consent.
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
+    public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
@@ -216,7 +218,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 28)
+        if (Version >= 29)
         {
             if (repaired) Save();
             return;
@@ -503,7 +505,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ReactiveCcAfterEnemyGuard = false;
         }
 
-        Version = 28;
+        if (Version < 29)
+        {
+            // Preserve only an explicit prior NIN opt-in while replacing its
+            // fresh-edge contract with the shared continuous-hold scheduler.
+            EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;
+            EnableNinjaSeitonOnFreshGameplayKey = false;
+        }
+
+        Version = 29;
         ClampSettings();
         Save();
     }
@@ -512,7 +522,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 28;
+        Version = 29;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -523,6 +533,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowPersistentSeitonCue = true;
         ShowSeitonPreparation = true;
         EnableNinjaSeitonOnFreshGameplayKey = false;
+        EnableNinjaSeitonOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;

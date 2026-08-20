@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Interactive PvP combat frames, reactive counter-CC, LB cues, and survival helpers.",
-    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, fail-closed reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
+    "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
+    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.23.0.0",
-    "Changelog": "Makes held WHM Miracle and BRD Silent Nocturne react once for the selected exact post-Purify or post-Guard protection-end episode without a minimum team-pressure gate; a later distinct release epoch can trigger on the same hold. Simultaneous releases produce exactly one winner ranked by known-first fresh team pressure, HP ratio, then known-first trusted MP ratio, and losers never become fallback attempts. Distinct S1-S5 post-Purify states, native 10/20-yalm reachability, higher-priority Purify/Smart Recuperate, direct targeting, and no-retry safeguards remain.",
+    "AssemblyVersion": "0.24.0.0",
+    "Changelog": "Replaces global one-use held-key consumption with a shared per-frame scheduler: Purify, Recuperate, ally cleanse, counter-CC, and every other held helper may react in priority order from one continuous hold. Exact intents wait through known cooldown, resource, cast, queue, and animation-lock blocks; only explicit client rejection permits a bounded same-intent retry, while acceptance or ambiguity is terminal. NIN Seiton now joins held scheduling, Combat Frames expose disabled interaction clearly, and LB activation no longer covers HP/MP bars.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787258491"
+    "LastUpdate": "1787267460"
   }
 ]

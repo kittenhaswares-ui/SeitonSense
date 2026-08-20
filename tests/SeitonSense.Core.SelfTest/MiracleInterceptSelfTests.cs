@@ -154,50 +154,6 @@ internal static class MiracleInterceptSelfTests
         False(invalidIdentity.ShouldConsumeInputGeneration, "cancel does not consume");
     }
 
-    internal static void SharedPriorityIsPurifyThenRescueThenMiracle()
-    {
-        True(
-            EmergencyActionPriorityRules.AllyRescueClaimsPriority(
-                AllyRescueBufferDecisionKind.Armed,
-                AllyRescueInputTrigger.HeldKeyAtCandidateEntry),
-            "rescue arm owns the generation");
-        False(
-            EmergencyActionPriorityRules.AllyRescueClaimsPriority(
-                AllyRescueBufferDecisionKind.CandidateObserved,
-                AllyRescueInputTrigger.None),
-            "mere rescue candidate does not claim it");
-
-        var purify = new EmergencyPurifyBufferDecision(
-            EmergencyPurifyBufferState.Initial,
-            EmergencyPurifyBufferDecisionKind.Dispatch,
-            EmergencyPurifyBufferCancelReason.None,
-            EmergencyPurifyInputTrigger.FreshKeyPress);
-        var rescue = new AllyRescueBufferDecision(
-            AllyRescueBufferState.Initial,
-            AllyRescueBufferDecisionKind.None,
-            AllyRescueBufferCancelReason.None);
-        False(EmergencyActionPriorityRules.AllowMiracleIntercept(purify, rescue), "Purify wins");
-
-        purify = purify with
-        {
-            Kind = EmergencyPurifyBufferDecisionKind.None,
-            InputTrigger = EmergencyPurifyInputTrigger.None,
-        };
-        rescue = rescue with
-        {
-            Kind = AllyRescueBufferDecisionKind.Dispatch,
-            InputTrigger = AllyRescueInputTrigger.FreshKeyPress,
-        };
-        False(EmergencyActionPriorityRules.AllowMiracleIntercept(purify, rescue), "Rescue wins second");
-
-        rescue = rescue with
-        {
-            Kind = AllyRescueBufferDecisionKind.None,
-            InputTrigger = AllyRescueInputTrigger.None,
-        };
-        True(EmergencyActionPriorityRules.AllowMiracleIntercept(purify, rescue), "Miracle receives only unused input");
-    }
-
     internal static void FreshPressWinsAndTypingNeverTriggers()
     {
         var threat = Threat(MiracleInterceptThreatKind.MarksmanSpite, 50, 3_000);

@@ -26,6 +26,15 @@ internal sealed record SmartRecuperateProbeSnapshot(
     long AcceptedCount,
     string LastEvent)
 {
+    internal SmartRecuperatePhase Phase { get; init; }
+    internal ulong HealthEventToken { get; init; }
+    internal int FrozenKeyCode { get; init; }
+    internal int NativeAttemptCount { get; init; }
+    internal ClientActionAttemptOutcome LastNativeOutcome { get; init; }
+    internal long RejectedCount { get; init; }
+    internal long UnknownCount { get; init; }
+    internal long SoftWaitCount { get; init; }
+
     internal static SmartRecuperateProbeSnapshot Initial { get; } = new(
         Decision: SmartRecuperateDecisionKind.None,
         Reason: SmartRecuperateDecisionReason.None,
@@ -47,11 +56,9 @@ internal sealed record SmartRecuperateProbeSnapshot(
 }
 
 /// <summary>
-/// Converts one unclaimed held physical gameplay-key generation into at most
-/// one exact self-targeted PvP Recuperate request. Insufficient HP loss, MP, or
-/// readiness does not consume the generation, allowing the same physical hold
-/// to become eligible on a later real MP tick. Once an intent is dispatchable,
-/// input is consumed before terminal revalidation and no failure is retried.
+/// Runs the exact self-only held Recuperate policy. The same physical hold may
+/// authorize a later distinct accepted cooldown epoch, but never substitutes
+/// another action, actor, key, or health event for a frozen retry.
 /// </summary>
 internal sealed unsafe class SmartRecuperateProbe
 {
@@ -60,10 +67,14 @@ internal sealed unsafe class SmartRecuperateProbe
     private readonly IDutyState dutyState;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
+    private SmartRecuperateState state = SmartRecuperateState.Initial;
     private SmartRecuperateProbeSnapshot snapshot =
         SmartRecuperateProbeSnapshot.Initial;
     private long attemptCount;
     private long acceptedCount;
+    private long rejectedCount;
+    private long unknownCount;
+    private long softWaitCount;
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
 
@@ -95,9 +106,7 @@ internal sealed unsafe class SmartRecuperateProbe
         bool hardReset = false)
     {
         var effectiveHardReset = hardReset || nowMilliseconds < 0;
-        var localIdentityValid = TryGetExactIdentity(
-            localPlayer,
-            out var localIdentity);
+        var localIdentityValid = TryGetExactIdentity(localPlayer, out var localIdentity);
         var localAlive = localIdentityValid && IsAlive(localPlayer);
         var localTargetable = localIdentityValid && localPlayer!.IsTargetable;
         var currentHp = localIdentityValid ? localPlayer!.CurrentHp : 0;
@@ -105,64 +114,90 @@ internal sealed unsafe class SmartRecuperateProbe
         var currentMp = localIdentityValid ? localPlayer!.CurrentMp : 0;
         var maximumMp = localIdentityValid ? localPlayer!.MaxMp : 0;
         var resolvedActionId = 0u;
-        var actionReady = localIdentityValid &&
-                          TryGetActionState(
-                              localPlayer!,
-                              out resolvedActionId);
+        var cooldownReady = false;
+        var resourcesReady = false;
+        var nativeBoundaryReady = false;
+        var actionStateReadable = localIdentityValid && TryGetActionState(
+            localPlayer!,
+            out resolvedActionId,
+            out cooldownReady,
+            out resourcesReady,
+            out nativeBoundaryReady);
+        var actionReady = actionStateReadable && cooldownReady && resourcesReady;
 
         var input = inputFrame.Snapshot;
+        var frozenKeyStillDown = state.Intent is { IsValid: true } frozen &&
+                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                     (VirtualKey)frozen.FrozenKeyCode);
         var decision = SmartRecuperateRules.Observe(
+            state,
             new SmartRecuperateObservation(
-                configurationEnabled,
-                isCrystallineConflict,
-                localIdentity,
-                localAlive,
-                localTargetable,
-                metadataVerified,
-                actionHelpersSuppressedByGuard,
-                higherPriorityClaimed,
-                input.ProbeSucceeded,
-                input.IsTextInputActive,
-                inputFrame.HeldGameplayKeyEligible,
-                resolvedActionId,
-                actionReady,
-                currentHp,
-                maximumHp,
-                currentMp,
-                maximumMp,
-                effectiveHardReset));
+                ConfigurationEnabled: configurationEnabled,
+                IsCrystallineConflict: isCrystallineConflict,
+                LocalPlayer: localIdentity,
+                IsLocalPlayerAlive: localAlive,
+                IsLocalPlayerTargetable: localTargetable,
+                MetadataVerified: metadataVerified,
+                ActionHelpersSuppressedByGuard: actionHelpersSuppressedByGuard,
+                HigherPriorityClaimed: higherPriorityClaimed,
+                InputProbeSucceeded: input.ProbeSucceeded,
+                IsTextInputActive: input.IsTextInputActive,
+                HeldGameplayKeyEligible: inputFrame.HeldGameplayKeyEligible,
+                ResolvedActionId: resolvedActionId,
+                ActionLocallyReady: actionReady,
+                CurrentHp: currentHp,
+                MaximumHp: maximumHp,
+                CurrentMp: currentMp,
+                MaximumMp: maximumMp,
+                HardReset: effectiveHardReset,
+                HeldGameplayKeyCode: (int)input.HeldGameplayKey,
+                FrozenKeyStillDown: frozenKeyStillDown,
+                NativeBoundaryReady: nativeBoundaryReady,
+                ActionCooldownReady: actionStateReadable && cooldownReady,
+                NowMilliseconds: nowMilliseconds));
+        state = decision.NextState;
 
-        // This physical generation is terminal before any repeated native
-        // reads. Drift, rejection, or an exception cannot retry Recuperate or
-        // allow a lower-priority helper to reuse this generation.
         var inputClaimed = decision.ShouldConsumeInputGeneration;
         if (inputClaimed) inputFrame.Consume();
 
         var attempted = false;
         var accepted = false;
+        var nativeOutcome = ClientActionAttemptOutcome.None;
         if (decision.ShouldDispatch && decision.Intent is { } intent)
         {
             try
             {
-                accepted = TryUseRecuperateOnce(
+                nativeOutcome = TryUseRecuperate(
                     intent,
                     localPlayer!.Address,
                     configurationEnabled,
                     metadataVerified,
                     higherPriorityClaimed,
+                    inputFrame,
                     out attempted);
-                if (attempted) Interlocked.Increment(ref attemptCount);
-                if (accepted) Interlocked.Increment(ref acceptedCount);
-                lastEvent = attempted
-                    ? $"Self action {intent.ActionId} attempted (accepted={accepted})"
-                    : "Terminal frozen-intent revalidation failed";
             }
             catch (Exception exception)
             {
-                if (attempted) Interlocked.Increment(ref attemptCount);
-                lastEvent = "Terminal action exception";
+                nativeOutcome = ClientActionAttemptOutcome.AcceptanceUnknown;
                 LogAttemptFailure(exception, nowMilliseconds);
             }
+
+            if (attempted) Interlocked.Increment(ref attemptCount);
+            if (nativeOutcome == ClientActionAttemptOutcome.ClientAccepted)
+                Interlocked.Increment(ref acceptedCount);
+            if (nativeOutcome == ClientActionAttemptOutcome.ClientRejected)
+                Interlocked.Increment(ref rejectedCount);
+            if (nativeOutcome == ClientActionAttemptOutcome.AcceptanceUnknown)
+                Interlocked.Increment(ref unknownCount);
+
+            var completion = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+                state,
+                nativeOutcome,
+                nowMilliseconds);
+            state = completion.NextState;
+            accepted = completion.ClientAccepted;
+            if (completion.SoftWait) Interlocked.Increment(ref softWaitCount);
+            lastEvent = DescribeNativeResult(nativeOutcome, completion);
         }
         else
         {
@@ -178,7 +213,7 @@ internal sealed unsafe class SmartRecuperateProbe
             SmartRecuperateRules.GetMissingHp(currentHp, maximumHp),
             currentMp,
             maximumMp,
-            actionReady,
+            actionReady && nativeBoundaryReady,
             actionHelpersSuppressedByGuard,
             input.HeldGameplayKey,
             inputClaimed,
@@ -186,24 +221,41 @@ internal sealed unsafe class SmartRecuperateProbe
             accepted,
             Interlocked.Read(ref attemptCount),
             Interlocked.Read(ref acceptedCount),
-            lastEvent);
+            lastEvent)
+        {
+            Phase = state.Phase,
+            HealthEventToken = state.Intent?.HealthEventToken ?? 0,
+            FrozenKeyCode = state.Intent?.FrozenKeyCode ?? 0,
+            NativeAttemptCount = state.Retry.NativeAttemptCount,
+            LastNativeOutcome = nativeOutcome != ClientActionAttemptOutcome.None
+                ? nativeOutcome
+                : state.LastNativeOutcome,
+            RejectedCount = Interlocked.Read(ref rejectedCount),
+            UnknownCount = Interlocked.Read(ref unknownCount),
+            SoftWaitCount = Interlocked.Read(ref softWaitCount),
+        };
         Volatile.Write(ref snapshot, result);
         return result;
     }
 
     internal void Reset()
     {
+        state = SmartRecuperateState.Initial;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, SmartRecuperateProbeSnapshot.Initial with
         {
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
+            RejectedCount = Interlocked.Read(ref rejectedCount),
+            UnknownCount = Interlocked.Read(ref unknownCount),
+            SoftWaitCount = Interlocked.Read(ref softWaitCount),
             LastEvent = lastEvent,
         });
     }
 
     internal SmartRecuperateProbeSnapshot FailClosed()
     {
+        state = SmartRecuperateState.Initial;
         lastEvent = "Failed closed";
         var result = SmartRecuperateProbeSnapshot.Initial with
         {
@@ -211,65 +263,75 @@ internal sealed unsafe class SmartRecuperateProbe
             Reason = SmartRecuperateDecisionReason.HardReset,
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
+            RejectedCount = Interlocked.Read(ref rejectedCount),
+            UnknownCount = Interlocked.Read(ref unknownCount),
+            SoftWaitCount = Interlocked.Read(ref softWaitCount),
             LastEvent = lastEvent,
         };
         Volatile.Write(ref snapshot, result);
         return result;
     }
 
-    private bool TryUseRecuperateOnce(
+    private ClientActionAttemptOutcome TryUseRecuperate(
         SmartRecuperateIntent intent,
         nint expectedLocalAddress,
         bool configurationEnabled,
         bool metadataVerified,
         bool higherPriorityClaimed,
+        EmergencyActionInputFrame inputFrame,
         out bool attempted)
     {
         attempted = false;
-        var currentLocal = ResolveExactLocalPlayer(
-            intent.LocalPlayer,
-            expectedLocalAddress);
-        if (currentLocal is null) return false;
+        var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer, expectedLocalAddress);
+        if (currentLocal is null) return ClientActionAttemptOutcome.NotInvoked;
 
-        var isCrystallineConflict = IsCurrentCrystallineConflict();
-        var localAlive = IsAlive(currentLocal);
-        var localTargetable = currentLocal.IsTargetable;
         var guardSuppressed = IsCurrentlySuppressedByGuard(
             currentLocal,
             Environment.TickCount64);
-        var actionReady = TryGetActionState(
+        var actionStateReadable = TryGetActionState(
             currentLocal,
-            out var resolvedActionId);
+            out var resolvedActionId,
+            out var cooldownReady,
+            out var resourcesReady,
+            out var nativeBoundaryReady);
         var currentIdentity = new TargetPressureActorIdentity(
             currentLocal.GameObjectId,
             currentLocal.EntityId);
-        if (!SmartRecuperateRules.CanUseFrozenIntent(
+        var frozenKeyStillDown = inputFrame.IsGameplayKeyPhysicallyDown(
+            (VirtualKey)intent.FrozenKeyCode);
+        if (!actionStateReadable ||
+            !SmartRecuperateRules.CanUseFrozenIntent(
                 intent,
                 configurationEnabled,
-                isCrystallineConflict,
+                IsCurrentCrystallineConflict(),
                 currentIdentity,
-                localAlive,
-                localTargetable,
+                IsAlive(currentLocal),
+                currentLocal.IsTargetable,
                 metadataVerified,
                 guardSuppressed,
                 higherPriorityClaimed,
                 resolvedActionId,
-                actionReady,
+                true,
                 currentLocal.CurrentHp,
                 currentLocal.MaxHp,
                 currentLocal.CurrentMp,
-                currentLocal.MaxMp))
+                currentLocal.MaxMp,
+                intent.FrozenKeyCode,
+                frozenKeyStillDown))
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return false;
+        if (actionManager == null) return ClientActionAttemptOutcome.NotInvoked;
+        if (!cooldownReady || !resourcesReady || !nativeBoundaryReady)
+            return ClientActionAttemptOutcome.SoftUnavailable;
 
+        var boundaryBefore = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            intent.ActionId);
         attempted = true;
-        // Recuperate is self-only. Passing the frozen exact local GOID directly
-        // leaves hard, soft, focus, and mouseover targets untouched.
-        return nearAssist.RunWithoutRedirect(() =>
+        var accepted = nearAssist.RunWithoutRedirect(() =>
             actionManager->UseAction(
                 ActionType.Action,
                 intent.ActionId,
@@ -277,6 +339,11 @@ internal sealed unsafe class SmartRecuperateProbe
                 0,
                 ActionManager.UseActionMode.None,
                 0));
+        return ClientActionAttemptBoundaryRules.Classify(
+            accepted,
+            intent.ActionId,
+            boundaryBefore,
+            ClientActionAttemptBoundary.Capture(actionManager, intent.ActionId));
     }
 
     private bool TryGetExactIdentity(
@@ -294,8 +361,7 @@ internal sealed unsafe class SmartRecuperateProbe
 
         var native = (GameObject*)player.Address;
         if (native == null || native->EntityId != player.EntityId) return false;
-        var tablePlayer = objectTable.SearchByEntityId(player.EntityId) as
-            IPlayerCharacter;
+        var tablePlayer = objectTable.SearchByEntityId(player.EntityId) as IPlayerCharacter;
         if (tablePlayer is null ||
             tablePlayer.Address != player.Address ||
             tablePlayer.GameObjectId != player.GameObjectId ||
@@ -304,9 +370,7 @@ internal sealed unsafe class SmartRecuperateProbe
             return false;
         }
 
-        identity = new TargetPressureActorIdentity(
-            player.GameObjectId,
-            player.EntityId);
+        identity = new TargetPressureActorIdentity(player.GameObjectId, player.EntityId);
         return identity.IsValid;
     }
 
@@ -334,10 +398,8 @@ internal sealed unsafe class SmartRecuperateProbe
                    conditionValid,
                    conditionValid && condition.Value.PvP,
                    conditionValid ? condition.Value.ContentUICategory.RowId : 0,
-                   conditionValid &&
-                       condition.Value.CrystallineConflictCasualRoulette,
-                   conditionValid &&
-                       condition.Value.CrystallineConflictRankedRoulette) ==
+                   conditionValid && condition.Value.CrystallineConflictCasualRoulette,
+                   conditionValid && condition.Value.CrystallineConflictRankedRoulette) ==
                SupportedPvPContext.CrystallineConflict;
     }
 
@@ -357,9 +419,15 @@ internal sealed unsafe class SmartRecuperateProbe
 
     private static bool TryGetActionState(
         IPlayerCharacter localPlayer,
-        out uint resolvedActionId)
+        out uint resolvedActionId,
+        out bool cooldownReady,
+        out bool resourcesReady,
+        out bool nativeBoundaryReady)
     {
         resolvedActionId = 0;
+        cooldownReady = false;
+        resourcesReady = false;
+        nativeBoundaryReady = false;
         if (!localPlayer.ClassJob.IsValid ||
             localPlayer.ClassJob.RowId == 0 ||
             GetNativeObject(localPlayer) == null)
@@ -371,10 +439,18 @@ internal sealed unsafe class SmartRecuperateProbe
         if (actionManager == null) return false;
         resolvedActionId = actionManager->GetAdjustedActionId(
             SmartRecuperateRules.ActionId);
-        return resolvedActionId == SmartRecuperateRules.ActionId &&
-               actionManager->IsActionOffCooldown(
-                   ActionType.Action,
-                   resolvedActionId);
+        if (resolvedActionId != SmartRecuperateRules.ActionId) return false;
+        var fingerprint = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            resolvedActionId);
+        cooldownReady = fingerprint.Captured && fingerprint.IsActionOffCooldown;
+        resourcesReady = fingerprint.Captured && fingerprint.ResourceStatus == 0;
+        nativeBoundaryReady = HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued);
+        return true;
     }
 
     private static bool IsAlive(IPlayerCharacter? player) =>
@@ -396,6 +472,24 @@ internal sealed unsafe class SmartRecuperateProbe
     private static bool IsNetworkObjectId(ulong gameObjectId) =>
         gameObjectId is not 0 and not 0xE0000000 and not ulong.MaxValue;
 
+    private static string DescribeNativeResult(
+        ClientActionAttemptOutcome outcome,
+        SmartRecuperateNativeAttemptDecision completion) =>
+        outcome switch
+        {
+            ClientActionAttemptOutcome.ClientAccepted =>
+                "Recuperate client-accepted; awaiting cooldown epoch",
+            ClientActionAttemptOutcome.ClientRejected when completion.RetryScheduled =>
+                "Recuperate client-rejected; exact intent retained for bounded retry",
+            ClientActionAttemptOutcome.ClientRejected =>
+                "Recuperate retry limit reached",
+            ClientActionAttemptOutcome.SoftUnavailable =>
+                "Recuperate waiting without spending retry budget",
+            ClientActionAttemptOutcome.AcceptanceUnknown =>
+                "Recuperate acceptance ambiguous; exact intent terminal",
+            _ => completion.Reason.ToString(),
+        };
+
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {
         if (nowMilliseconds >= 0 && nowMilliseconds < nextErrorLogAt) return;
@@ -406,6 +500,6 @@ internal sealed unsafe class SmartRecuperateProbe
                 : nowMilliseconds + 10_000;
         log.Error(
             exception,
-            "Seiton Sense Smart Recuperate attempt failed and will not be retried.");
+            "Seiton Sense Smart Recuperate acceptance became ambiguous and will not be retried.");
     }
 }

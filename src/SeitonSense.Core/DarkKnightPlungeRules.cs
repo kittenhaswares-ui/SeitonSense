@@ -220,10 +220,9 @@ public static class DarkKnightPlungeRules
     }
 
     /// <summary>
-    /// Spends a proven repeat epoch before final actor/action validation. Any
-    /// drift, false return, exception, or server rejection is terminal for that
-    /// epoch; it cannot be attempted again until another false-to-true cooldown
-    /// transition is observed.
+    /// Spends one exact repeat epoch only after client acceptance, or when the
+    /// caller deliberately terminalizes its bounded frozen retry. Selection and
+    /// final validation never mutate this state on their own.
     /// </summary>
     public static bool TrySpendReadyEpoch(
         DarkKnightPlungeHoldState state,

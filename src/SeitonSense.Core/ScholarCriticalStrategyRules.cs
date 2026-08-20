@@ -30,6 +30,21 @@ public readonly record struct ScholarCriticalStrategyIntent(
         LocalPlayer != Target;
 }
 
+public readonly record struct ScholarCriticalStrategyHoldState(
+    bool OwnsHold,
+    int HeldKeyCode,
+    bool ObservedCooldownUnavailable,
+    ulong CurrentReadyEpochToken,
+    ulong SpentReadyEpochToken)
+{
+    public static ScholarCriticalStrategyHoldState Initial => default;
+
+    public bool HasAvailableReadyEpoch =>
+        OwnsHold &&
+        CurrentReadyEpochToken != 0 &&
+        CurrentReadyEpochToken != SpentReadyEpochToken;
+}
+
 public readonly record struct ScholarCriticalStrategyObservation(
     bool ConfigurationEnabled,
     bool IsCrystallineConflict,
@@ -108,6 +123,51 @@ public static class ScholarCriticalStrategyRules
     public const uint ActionId = 29_716;
     public const uint GuardStatusId = 3_054;
     public const uint GuardStatusLargeScaleId = 3_673;
+
+    public static ScholarCriticalStrategyHoldState BeginAcceptedHold(int heldKeyCode) =>
+        heldKeyCode <= 0
+            ? ScholarCriticalStrategyHoldState.Initial
+            : new ScholarCriticalStrategyHoldState(true, heldKeyCode, false, 1, 1);
+
+    public static ScholarCriticalStrategyHoldState ObserveAcceptedHold(
+        ScholarCriticalStrategyHoldState state,
+        bool hardReset,
+        bool ownershipContextValid,
+        bool exactHeldKeyStillDown,
+        bool cooldownStateKnown,
+        bool cooldownReady)
+    {
+        if (!state.OwnsHold) return state;
+        if (hardReset || !ownershipContextValid || !exactHeldKeyStillDown)
+            return ScholarCriticalStrategyHoldState.Initial;
+        if (!cooldownStateKnown) return state;
+        if (!cooldownReady)
+            return state with { ObservedCooldownUnavailable = true };
+        if (!state.ObservedCooldownUnavailable) return state;
+
+        return state with
+        {
+            ObservedCooldownUnavailable = false,
+            CurrentReadyEpochToken = NextToken(state.CurrentReadyEpochToken),
+        };
+    }
+
+    public static bool TrySpendReadyEpoch(
+        ScholarCriticalStrategyHoldState state,
+        ulong expectedToken,
+        out ScholarCriticalStrategyHoldState spent)
+    {
+        spent = state;
+        if (!state.HasAvailableReadyEpoch ||
+            expectedToken == 0 ||
+            state.CurrentReadyEpochToken != expectedToken)
+        {
+            return false;
+        }
+
+        spent = state with { SpentReadyEpochToken = expectedToken };
+        return true;
+    }
 
     public static ScholarCriticalStrategyDecision Observe(
         ScholarCriticalStrategyObservation observation)
@@ -337,4 +397,7 @@ public static class ScholarCriticalStrategyRules
         uint rightMaximum) =>
         ((ulong)leftCurrent * rightMaximum).CompareTo(
             (ulong)rightCurrent * leftMaximum);
+
+    private static ulong NextToken(ulong current) =>
+        current == ulong.MaxValue ? 1UL : current + 1UL;
 }

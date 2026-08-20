@@ -34,9 +34,10 @@ internal sealed partial class SettingsWindow
                 "both your own Guard state and Guardian readiness are revalidated. Lowest exact HP ratio wins, then " +
                 "known higher incoming pressure, shorter distance, party slot, and stable actor identity.");
             ImGui.TextDisabled(
-                "Smart Recuperate keeps priority over this Guardian helper. One physical key generation can produce at " +
-                "most one frozen direct-GOID Guardian request, with no selected-target change, alternate, fallback, " +
-                "replay, or retry. CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
+                "Purify, Smart Recuperate, Ally Rescue, reactive CC, and reactive Guard keep priority. Continuous " +
+                "held consent freezes one exact Guardian intent; only a clean client rejection may use the common " +
+                "bounded same-intent retry. There is no selected-target change, alternate, fallback, or replay. " +
+                "CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
             ImGui.TextDisabled(
                 "The separate communication opt-in uses localized CC Quick Chat row 35 for the frozen party slot, " +
                 "then attempts Bind2 on that ally and Bind1 on self with exact ownership checks and bounded cleanup. " +
@@ -61,13 +62,14 @@ internal sealed partial class SettingsWindow
                 "and stable actor identity. Your own Bind, either side's Guard, your recent Guard propagation latch, " +
                 "animation lock, typing, metadata uncertainty, or identity drift blocks the request.");
             ImGui.TextDisabled(
-                "The first attempt consumes the shared held-key generation and freezes one target. After a " +
+                "The first eligible epoch freezes one target. After a " +
                 "client-accepted request, the same physical key may stay held: each later attempt requires a " +
                 "separately observed not-ready to ready cooldown epoch, such as a proven KO reset or the natural " +
-                "12-second recast. Every epoch is spent before final revalidation, with no target change, alternate, " +
-                "rerank, replay, or retry. A reset that happens entirely between two framework frames is deliberately " +
-                "missed rather than guessed. The shared order is Purify > Smart Recuperate > Guard > Guardian > " +
-                "pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk > Hiebsprung.");
+                "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
+                "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
+                "two framework frames is deliberately " +
+                "missed rather than guessed. The shared order is Purify > Smart Recuperate > Ally Rescue > reactive " +
+                "CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung.");
             ImGui.PopTextWrapPos();
         }
 
@@ -76,21 +78,24 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Ninja — Seiton", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Seiton on fresh gameplay key (experimental)",
-                configuration.EnableNinjaSeitonOnFreshGameplayKey,
-                value => configuration.EnableNinjaSeitonOnFreshGameplayKey = value);
+                "Seiton on held gameplay key (experimental)",
+                configuration.EnableNinjaSeitonOnHeldGameplayKey,
+                value => configuration.EnableNinjaSeitonOnHeldGameplayKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and exact Crystalline Conflict only. On PvP Ninja, one fresh physical gameplay-key down " +
-                "edge can request the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
+                "Default off and exact Crystalline Conflict only. On PvP Ninja, continuous held-key consent can request " +
+                "the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
                 "exact canonical S1-S5 enemies that are living, targetable, below 50% HP, and accepted by FFXIV's native " +
                 "range/line-of-sight check; the lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
                 "its bounded propagation gate blocks the helper, and existing higher-priority helpers win the shared " +
-                "input generation.");
+                "scheduler frame.");
             ImGui.TextDisabled(
-                "State and input are consumed before at most one native attempt. Seiton Sense never changes the target, " +
-                "selects again, chooses an alternate, falls back, replays, or retries. The frozen actor and its HP are " +
-                "read again at the latest safe point before the request; exactly 50% or higher cancels the spent attempt. " +
+                "Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same " +
+                "intent after a short delay while every gate and the same key remain valid; client acceptance ends the " +
+                "epoch immediately. A later genuine 29515-to-29516 follow-up epoch may use the continuing hold, but a " +
+                "rejected base action is never replaced by the follow-up. Seiton Sense never changes the target, selects " +
+                "again inside an epoch, chooses an alternate, falls back, or replays. The frozen actor and its HP are " +
+                "read again at the latest safe point before every request; exactly 50% or higher cancels the intent. " +
                 "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
                 "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
             ImGui.PopTextWrapPos();
@@ -175,8 +180,8 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableScholarCriticalStrategyOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off, PvP Scholar, and exact Crystalline Conflict only. One shared held physical gameplay-key " +
-                "generation may request Critical Strategy (29716) only against a living, targetable exact canonical " +
+                "Default off, PvP Scholar, and exact Crystalline Conflict only. Continuous held physical gameplay-key " +
+                "consent may request Critical Strategy (29716) only against a living, targetable exact canonical " +
                 "S1-S5 enemy with live Guard (3054 or 3673), verified readiness, and FFXIV's native 25-yalm range/line " +
                 "of sight. It is never spent as the ordinary 10% damage-taken debuff: on Guard, the current official " +
                 "effect instead halves Guard's defensive bonus for 10 seconds.");
@@ -187,10 +192,11 @@ internal sealed partial class SettingsWindow
                 "HP-first. Stable S-slot, entity ID, and game-object ID break exact ties. Pressure is selection-only and " +
                 "is not revalidated as a final dispatch gate.");
             ImGui.TextDisabled(
-                "The frozen intent and shared held-key generation are consumed before at most one native attempt. It " +
-                "then revalidates only exact identity, action readiness, live Guard, and native range/line of sight. It " +
+                "The frozen intent is revalidated before every possible bounded call for exact identity, action " +
+                "readiness, live Guard, and native range/line of sight. Only an explicit client rejection may retry " +
+                "that same target. It " +
                 "never changes a hard, soft, focus, or mouseover target, reranks, selects an alternate after drift, " +
-                "substitutes another action, falls back, replays, or retries. The original key is not swallowed, and " +
+                "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.PopTextWrapPos();
         }

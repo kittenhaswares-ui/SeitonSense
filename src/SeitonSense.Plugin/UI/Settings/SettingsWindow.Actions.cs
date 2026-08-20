@@ -13,10 +13,10 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia > " +
+            "Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > " +
             "NIN > SCH > Monk > Hiebsprung. Kardia still requires its separate accepted-Eukrasia trigger; the order " +
-            "states which ready request wins when helpers meet in one update. Input-driven helpers share one physical " +
-            "generation, while Monk remains an automatic follow-up.");
+            "states which usable request wins one scheduler frame. A continuously held key remains consent for later " +
+            "distinct exact episodes; Kardia and Monk retain their separate event-driven origins.");
 
         if (ImGui.CollapsingHeader("Self-Purify", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPurifyControls();
@@ -24,14 +24,6 @@ internal sealed partial class SettingsWindow
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Smart Recuperate", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawSmartRecuperateControls();
-
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawDefensiveUtilityControls();
-
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader("Pressure escape Sprint", ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawPressureEscapeSprintControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Ally Rescue: Paean / Aquaveil", ImGuiTreeNodeFlags.DefaultOpen))
@@ -49,6 +41,14 @@ internal sealed partial class SettingsWindow
         {
             changed |= DrawReactiveCcControls();
         }
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawDefensiveUtilityControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Pressure escape Sprint", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawPressureEscapeSprintControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("CC-immunity action brake", ImGuiTreeNodeFlags.DefaultOpen))
@@ -70,8 +70,9 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Purify, Smart Recuperate, Guard, and Guardian keep priority; any later manual action " +
-            "ends FFXIV's native PvP Sprint.");
+            "Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, and Guardian keep priority. Known " +
+            "unavailability waits for free; only an explicit client rejection may retry the same exact Sprint " +
+            "episode. Any later manual action ends FFXIV's native PvP Sprint.");
         return changed;
     }
 
@@ -79,7 +80,7 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Enable one Purify attempt from an eligible physical gameplay key",
+            "Enable held-key Purify for enabled removable CC",
             configuration.ExperimentalPurifyOnNextKey,
             value => configuration.ExperimentalPurifyOnNextKey = value);
         changed |= Checkbox(
@@ -105,12 +106,14 @@ internal sealed partial class SettingsWindow
             value => configuration.PurifyOnMiracleOfNature = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only the exact enabled debuff types can trigger this. By default, the helper waits for a fresh physical " +
+            "Only the exact enabled debuff types can trigger this. By default, the helper accepts a fresh physical " +
             "gameplay-key press after the debuff appears. Enable the separate held-key option if a key pressed before " +
-            "the debuff should count once. " +
+            "the debuff should remain continuous consent. " +
             "ReAction Turbo pulses do not create new physical presses. The original key is not swallowed. Seiton Sense " +
-            "sends one native Purify attempt immediately, and FFXIV decides whether it can queue or execute it. " +
-            "The same physical hold cannot trigger again until released, and there is no retry after rejection. Disable " +
+            "keeps Purify at absolute priority while the exact enabled CC remains active. Cooldown, resource, cast, " +
+            "queue, and animation-lock blocks wait without spending an attempt. Only an explicit client rejection may " +
+            "retry the same frozen self intent after 50 ms, at most eight native calls total; acceptance or ambiguity " +
+            "ends that CC episode. Disable " +
             "rules in other plugins that rewrite Purify or its target while testing.");
         ImGui.PopTextWrapPos();
         return changed;
@@ -124,7 +127,7 @@ internal sealed partial class SettingsWindow
             configuration.EnableDefensiveUtilities,
             value => configuration.EnableDefensiveUtilities = value);
         changed |= Checkbox(
-            "A held gameplay key may supply the one physical input generation (includes WASD)",
+            "A held gameplay key supplies continuous scheduler consent (includes WASD)",
             configuration.DefensiveUtilitiesOnHeldKey,
             value => configuration.DefensiveUtilitiesOnHeldKey = value);
         ImGui.TextColored(
@@ -132,18 +135,18 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableDefensiveUtilities
-                ? "ON — the exact reactive Guard chain may claim one eligible physical input in CC."
+                ? "ON — the exact reactive Guard chain may claim one scheduler frame in CC."
                 : "OFF — this group adds no pressure-triggered Purify or later Guard request.");
         changed |= Checkbox(
-            "At 3+ incoming enemies and Stun: Purify, then Guard on a later input",
+            "At 3+ incoming enemies and Stun: Purify, then Guard as a later exact episode",
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Crystalline Conflict only and disabled by default. One physical key generation can produce at most one " +
-            "Seiton Sense action request. If high-pressure Stun triggers Purify, Guard is allowed only after live " +
-            "Resilience confirms the cleanse, the removable CC is gone, and you release/repress for a new physical " +
-            "generation; Purify and Guard never fire from the same generation. The former speculative 50%-HP " +
+            "Crystalline Conflict only and disabled by default. If high-pressure Stun triggers Purify, Guard is " +
+            "allowed only after live Resilience confirms the cleanse and the removable CC is gone. The same held " +
+            "key may authorize that later distinct Guard episode; client acceptance of Purify remains terminal for " +
+            "the Purify episode. The former speculative 50%-HP " +
             "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
             "every Seiton Sense action-request helper is blocked so none can cancel it.");
         ImGui.PopTextWrapPos();
@@ -153,21 +156,23 @@ internal sealed partial class SettingsWindow
     private bool DrawSmartRecuperateControls()
     {
         var changed = Checkbox(
-            "Use Recuperate once from a held gameplay key at 16,000+ missing HP",
+            "Use Recuperate from a held gameplay key at 16,000+ missing HP",
             configuration.EnableSmartRecuperateOnHeldKey,
             value => configuration.EnableSmartRecuperateOnHeldKey = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Default off and exact Crystalline Conflict only. Like held-key Purify, this listens to the shared " +
-            "physical gameplay-key generation, including WASD. At exactly 16,000 or more missing HP and at least " +
+            "continuous physical gameplay-key consent, including WASD. At exactly 16,000 or more missing HP and at least " +
             "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
-            "is not ready, the held generation waits unspent for the real game state to become eligible.");
+            "is not ready, it waits without blocking a currently usable lower-priority helper.");
         ImGui.TextDisabled(
-            "Purify keeps priority. Smart Recuperate is evaluated before the confirmed reactive Guard chain, while " +
+            "Purify keeps priority. Smart Recuperate is evaluated before Ally Rescue and reactive counter-CC, while " +
             "active Guard and its short propagation latch block Recuperate so the helper cannot cancel Guard. The " +
-            "generation is consumed before final " +
-            "HP, MP, identity, context, action-readiness, and Guard revalidation. Rejection or drift is terminal: " +
-            "release and press again for another attempt. The original key is not swallowed.");
+            "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms, up " +
+            "to eight calls total. Temporary readiness/MP, higher-priority, and Guard states wait without spending " +
+            "a call; dropping below the HP threshold cancels the current intent. Acceptance ends that epoch, and a " +
+            "later one requires an observed cooldown unavailable-to-ready transition. Retry exhaustion or an " +
+            "ambiguous/invalid exact outcome latches only this helper until the frozen key is released.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -176,7 +181,7 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Use Paean/Aquaveil once on the next fresh gameplay key",
+            "Use Paean/Aquaveil on eligible gameplay-key consent",
             configuration.ExperimentalAllyRescueOnNextKey,
             value => configuration.ExperimentalAllyRescueOnNextKey = value);
         changed |= Checkbox(
@@ -189,10 +194,12 @@ internal sealed partial class SettingsWindow
             "CC-only and self-excluding. BRD uses The Warden's Paean; WHM uses Aquaveil, independent of client " +
             "language. The target must be an exact party member in the action's native range and line of sight. " +
             "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
-            "distance and stable party order. Self Purify wins if both helpers could claim the same physical input. " +
-            "There is no extra local cooldown gate: after these checks, FFXIV's native action call decides whether " +
-            "the attempt can queue or execute. One input generation makes at most one attempt; it is consumed before " +
-            "the call and is never retried. A blue CLEANSED card and the counters advance only for the exact server " +
+            "distance and stable party order. Self Purify and Smart Recuperate win the current scheduler frame. " +
+            "Known action-specific cooldown, resource, and reachability blocks wait in the background without " +
+            "starving a usable lower helper. Global cast, occupied-queue, blocking-animation-lock waits and the " +
+            "brief explicit-false throttle retain the scheduler frame; none spends the retry budget. A clean client " +
+            "rejection may retry only the frozen " +
+            "actor/status intent after 50 ms, up to eight calls; acceptance is terminal. A blue CLEANSED card and the counters advance only for the exact server " +
             "RecoveredFromStatusEffect result (effect type 0x10). Heavy and Bind intentionally do not trigger this " +
             "experiment.");
         ImGui.PopTextWrapPos();
@@ -248,7 +255,7 @@ internal sealed partial class SettingsWindow
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
                 ? "ON — WHM Wunder der Natur / Miracle of Nature or BRD Stumme Nocturne / " +
-                  "Silent Nocturne may make one exact-target attempt for an eligible CC opportunity."
+                  "Silent Nocturne may schedule one frozen exact-target intent for an eligible CC opportunity."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
 
         ImGui.TextUnformatted("WHM / BRD triggers:");
@@ -301,11 +308,12 @@ internal sealed partial class SettingsWindow
             "3054/3673 was observed present and then verified absent. WHM uses its native 10-yalm range and BRD its " +
             "native 20-yalm range; both require line of sight.");
         ImGui.TextDisabled(
-            "While a gameplay key remains held, the selected exact post-Purify or post-Guard protection-end episode " +
-            "permits at most one attempt. A later distinct release epoch may authorize another action without a key " +
-            "release; no simultaneous loser can. Purify and Smart Recuperate keep priority. The episode is consumed " +
-            "before one direct exact-target request, with no " +
-            "selected-target change, alternate, fallback, replay, or retry. The blue AUTO CC " +
+            "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
+            "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
+            "simultaneous loser can. Purify, Smart Recuperate, and Ally Rescue keep priority. Known action-specific " +
+            "unavailability waits without blocking a usable lower helper; only a clean client rejection may retry " +
+            "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
+            "change, alternate, fallback, or replay. The blue AUTO CC " +
             "LANDED flash appears " +
             "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +
             "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +

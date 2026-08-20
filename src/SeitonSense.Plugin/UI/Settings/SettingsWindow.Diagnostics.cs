@@ -43,8 +43,18 @@ internal sealed partial class SettingsWindow
             $"{personal.Purify.Decision}, cancel={personal.Purify.CancelReason}, " +
             $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
             $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
+            $"frozen-key={personal.Purify.FrozenKeyCode}, claim={personal.Purify.InputClaimed}, " +
             $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}, " +
-            $"buffered={personal.Purify.BufferRemainingMilliseconds} ms");
+            $"native={personal.Purify.NativeAttemptCount}/{personal.Purify.LastNativeOutcome}, " +
+            $"count attempt/rejected/accepted/unknown/soft/retry=" +
+            $"{personal.Purify.TotalNativeAttempts}/{personal.Purify.TotalClientRejected}/" +
+            $"{personal.Purify.TotalClientAccepted}/{personal.Purify.TotalAcceptanceUnknown}/" +
+            $"{personal.Purify.TotalStructuralSoftWaits}/{personal.Purify.TotalNativeRetriesScheduled}, " +
+            $"lease={(personal.Purify.FrozenKeyCode > 0 &&
+                personal.Purify.Phase != EmergencyPurifyBufferPhase.WaitingForStatus
+                    ? "status+key"
+                    : "none")}, " +
+            $"last={personal.Purify.LastEvent}");
         ImGui.TextWrapped(
             $"MCH LB capture: hook={mchLimitBreak.CaptureRunning}, queue={mchLimitBreak.QueueDepth}, " +
             $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
@@ -73,15 +83,20 @@ internal sealed partial class SettingsWindow
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
         ImGui.TextWrapped(
-            $"Smart Recuperate: {recuperate.Decision}/{recuperate.Reason}, action={recuperate.ResolvedActionId}, " +
+            $"Smart Recuperate: {recuperate.Phase}/{recuperate.Decision}/{recuperate.Reason}, " +
+            $"action={recuperate.ResolvedActionId}, " +
             $"HP={recuperate.CurrentHp}/{recuperate.MaximumHp}, missing={recuperate.MissingHp}, " +
             $"MP={recuperate.CurrentMp}/{recuperate.MaximumMp}, ready/guard=" +
             $"{recuperate.LocallyReady}/{recuperate.GuardSuppressed}, key={recuperate.HeldGameplayKey}, " +
-            $"claim={recuperate.InputClaimed}, attempt={recuperate.UseActionAttempted}/" +
+            $"frozen-key/event={recuperate.FrozenKeyCode}/{recuperate.HealthEventToken}, " +
+            $"claim={recuperate.InputClaimed}, native={recuperate.NativeAttemptCount}/" +
+            $"{recuperate.LastNativeOutcome}, attempt={recuperate.UseActionAttempted}/" +
             $"{recuperate.UseActionAccepted}, count={recuperate.AttemptCount}/{recuperate.AcceptedCount}, " +
+            $"rejected/unknown/soft={recuperate.RejectedCount}/{recuperate.UnknownCount}/" +
+            $"{recuperate.SoftWaitCount}, " +
             $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
-            $"Ally Rescue (confirmation counters are exact server cleanses): " +
+            $"Ally Rescue (confirmation counters are captured exact status-removal ActionEffects): " +
             $"{rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
             $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
@@ -147,11 +162,12 @@ internal sealed partial class SettingsWindow
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "Purify, Smart Recuperate, Guard, Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, NIN, SCH, " +
+            "Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, Guardian, pressure Sprint, Kardia, NIN, SCH, " +
             "Monk, and Hiebsprung share the current request priority in that order. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. " +
-            "Guard after Purify requires a later " +
-            "physical generation, and every action-request helper is blocked while your own Guard is active. The " +
+            "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
+            "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
+            "blocked while your own Guard is active. The " +
             "separate DRK macro may make one exact Shadowbringer attempt from its authored " +
             "two-line macro but does not join the physical-generation chain or mutate a selected target. Automatic " +
             "action helpers, Auto Low-MP Focus, and the team-visible Attack1 marker are disabled by default. " +

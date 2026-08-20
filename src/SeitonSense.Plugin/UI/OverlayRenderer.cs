@@ -951,7 +951,7 @@ internal sealed class OverlayRenderer
         {
             EmergencyPurifyBufferPhase.WaitingForFreshKey => $"PRESS A KEY → PURIFY  •  {countdown}",
             EmergencyPurifyBufferPhase.Buffered =>
-                $"PURIFY PENDING {Math.Max(0, purify.BufferRemainingMilliseconds) / 1000f:0.0}s  •  {countdown}",
+                $"HOLD → PURIFY  •  {countdown}",
             EmergencyPurifyBufferPhase.SpentUntilStatusGone => $"PURIFY ATTEMPTED  •  {countdown}",
             _ => $"PURIFY!  •  {countdown}",
         };

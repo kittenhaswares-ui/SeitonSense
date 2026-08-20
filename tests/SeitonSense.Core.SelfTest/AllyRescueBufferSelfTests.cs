@@ -14,7 +14,7 @@ internal static class AllyRescueBufferSelfTests
         instanceToken: 2,
         partySlot: 3);
 
-    public static void SameFrameFreshDispatchConsumesBeforeCallAndNeverRetries()
+    public static void NativeFalseRetriesOnlyTheExactLeaseUntilAccepted()
     {
         var dispatched = Observe(
             AllyRescueBufferState.Initial,
@@ -24,60 +24,135 @@ internal static class AllyRescueBufferSelfTests
             now: 1_000);
 
         True(dispatched.ShouldDispatch, "same-frame status and fresh key dispatch");
-        True(dispatched.ShouldConsumeInputGeneration, "the owning input generation is consumed");
+        True(dispatched.ShouldConsumeInputGeneration, "the dispatch claims its framework frame");
         Equal(CandidateA.Intent, dispatched.DispatchIntent!.Value, "exact actor and status are dispatched");
-        True(dispatched.NextState.HasSpent(CandidateA.Intent), "intent is spent before native action call");
+        False(dispatched.NextState.HasSpent(CandidateA.Intent), "intent is not spent before native result");
 
-        var afterFalseOrException = Observe(
+        var rejected = AllyRescueBufferRules.CompleteNativeAttempt(
             dispatched.NextState,
-            [CandidateA],
-            freshKey: true,
-            locallyReady: true,
-            now: 1_001);
-        False(afterFalseOrException.ShouldDispatch, "false or throwing native call is not retried");
+            CandidateA.Intent,
+            nowMilliseconds: 1_000,
+            ClientActionAttemptOutcome.ClientRejected);
+        Equal(AllyRescueNativeAttemptOutcome.RetryScheduled, rejected.Outcome, "native false schedules retry");
+        False(rejected.NextState.HasSpent(CandidateA.Intent), "native false does not spend exact intent");
 
-        var missing = Observe(afterFalseOrException.NextState, [], now: 1_002);
-        var sameInstanceReturns = Observe(
-            missing.NextState,
-            [CandidateA],
-            freshKey: true,
+        var throttled = Observe(
+            rejected.NextState,
+            [CandidateB, CandidateA],
             locallyReady: true,
-            now: 1_003);
-        False(sameInstanceReturns.ShouldDispatch, "an observation gap cannot rearm the exact spent instance");
+            now: 1_000 + AllyRescueBufferRules.NativeRetryThrottleMilliseconds - 1);
+        False(throttled.ShouldDispatch, "retry respects the shared throttle");
+
+        var retry = Observe(
+            throttled.NextState,
+            [CandidateB, CandidateA],
+            locallyReady: true,
+            now: 1_000 + AllyRescueBufferRules.NativeRetryThrottleMilliseconds);
+        True(retry.ShouldDispatch, "same exact lease retries at throttle boundary");
+        Equal(CandidateA.Intent, retry.DispatchIntent!.Value, "reranking cannot drift retry to replacement");
+
+        var accepted = AllyRescueBufferRules.CompleteNativeAttempt(
+            retry.NextState,
+            CandidateA.Intent,
+            nowMilliseconds: 1_000 + AllyRescueBufferRules.NativeRetryThrottleMilliseconds,
+            ClientActionAttemptOutcome.ClientAccepted);
+        Equal(AllyRescueNativeAttemptOutcome.AcceptedTerminal, accepted.Outcome, "first true is terminal");
+        True(accepted.NextState.HasSpent(CandidateA.Intent), "accepted exact intent is spent");
+        True(accepted.NextState.TrackedIntent is null, "accepted lease is cleared");
     }
 
-    public static void BufferWaitsForReadinessAndExpiresAt750Milliseconds()
+    public static void NativeRetriesAreBoundedAndExceptionsAreTerminal()
     {
-        Equal(750L, AllyRescueBufferRules.DefaultBufferMilliseconds, "default buffer");
-        Equal(100L, AllyRescueBufferRules.NormalizeBufferMilliseconds(-1), "minimum clamp");
-        Equal(750L, AllyRescueBufferRules.NormalizeBufferMilliseconds(50_000), "750 ms maximum clamp");
+        var dispatched = Observe(
+            AllyRescueBufferState.Initial,
+            [CandidateA],
+            freshKey: true,
+            locallyReady: true,
+            now: 1_000);
+        var current = dispatched.NextState;
+        for (var attempt = 1; attempt <= AllyRescueBufferRules.MaximumNativeAttempts; attempt++)
+        {
+            var completed = AllyRescueBufferRules.CompleteNativeAttempt(
+                current,
+                CandidateA.Intent,
+                1_000 + ((attempt - 1) * AllyRescueBufferRules.NativeRetryThrottleMilliseconds),
+                ClientActionAttemptOutcome.ClientRejected);
+            if (attempt < AllyRescueBufferRules.MaximumNativeAttempts)
+            {
+                Equal(AllyRescueNativeAttemptOutcome.RetryScheduled, completed.Outcome, $"false {attempt} retries");
+                current = completed.NextState;
+            }
+            else
+            {
+                Equal(AllyRescueNativeAttemptOutcome.RejectedTerminal, completed.Outcome, "final retry-budget false is terminal");
+                True(completed.NextState.HasSpent(CandidateA.Intent), "bounded rejection spends exact instance");
+                current = completed.NextState;
+            }
+        }
+
+        var second = Observe(
+            AllyRescueBufferState.Initial,
+            [CandidateB],
+            freshKey: true,
+            locallyReady: true,
+            now: 2_000);
+        var ambiguous = AllyRescueBufferRules.CompleteNativeAttempt(
+            second.NextState,
+            CandidateB.Intent,
+            nowMilliseconds: 2_000,
+            ClientActionAttemptOutcome.AcceptanceUnknown);
+        Equal(AllyRescueNativeAttemptOutcome.AmbiguousTerminal, ambiguous.Outcome, "throw after native boundary is terminal");
+        True(ambiguous.NextState.HasSpent(CandidateB.Intent), "ambiguous boundary cannot retry");
+
+        var notInvoked = AllyRescueBufferRules.CompleteNativeAttempt(
+            second.NextState,
+            CandidateB.Intent,
+            nowMilliseconds: 2_000,
+            ClientActionAttemptOutcome.NotInvoked);
+        Equal(AllyRescueNativeAttemptOutcome.Cancelled, notInvoked.Outcome, "pre-boundary cancellation is terminal");
+        True(notInvoked.NextState.HasSpent(CandidateB.Intent), "only a proven native false may retain the lease");
+
+        var softWait = AllyRescueBufferRules.CompleteNativeAttempt(
+            second.NextState,
+            CandidateB.Intent,
+            nowMilliseconds: 5_500,
+            ClientActionAttemptOutcome.SoftUnavailable);
+        Equal(AllyRescueNativeAttemptOutcome.SoftWait, softWait.Outcome, "known unavailability retains exact lease");
+        Equal(0, softWait.NextState.NativeAttemptCount, "soft wait after 3s spends no attempt");
+        Equal(CandidateB.Intent, softWait.NextState.TrackedIntent!.Value, "soft wait stays exact");
+    }
+
+    public static void StatusBoundLeaseSurvivesLongSoftWaits()
+    {
+        Equal(-1L, AllyRescueBufferRules.DefaultBufferMilliseconds, "status-bound sentinel");
+        Equal(-1L, AllyRescueBufferRules.NormalizeBufferMilliseconds(50_000), "old durations cannot restore a timeout");
 
         var armed = Observe(
             AllyRescueBufferState.Initial,
             [CandidateA],
             freshKey: true,
             locallyReady: false,
-            now: 1_000,
-            bufferMilliseconds: 50_000);
-        Equal(AllyRescueBufferDecisionKind.Armed, armed.Kind, "locked action buffers one intent");
-        True(armed.ShouldConsumeInputGeneration, "input is consumed when armed, not when later ready");
-        Equal(1_750L, armed.NextState.ExpiresAtMilliseconds, "buffer is capped at 750 ms");
+            now: 1_000);
+        Equal(AllyRescueBufferDecisionKind.Armed, armed.Kind, "unavailable action freezes one intent");
+        Equal(-1L, armed.NextState.ExpiresAtMilliseconds, "lease has no wall-clock deadline");
 
-        var waiting = Observe(armed.NextState, [CandidateA], locallyReady: false, now: 1_749);
-        False(waiting.ShouldDispatch, "inside buffer waits");
+        var waiting = Observe(armed.NextState, [CandidateA], locallyReady: false, now: 4_500);
+        False(waiting.ShouldDispatch, "same status/key survives beyond three seconds");
+        Equal(0, waiting.NextState.NativeAttemptCount, "soft wait spends no native attempts");
 
-        var timeout = Observe(waiting.NextState, [CandidateA], locallyReady: true, now: 1_750);
-        Equal(AllyRescueBufferCancelReason.TimedOut, timeout.CancelReason, "deadline is exclusive");
-        False(timeout.ShouldDispatch, "readiness at the expired boundary does not dispatch");
-        False(timeout.NextState.HasSpent(CandidateA.Intent), "timeout without attempt is not marked spent");
-
-        var rearmed = Observe(
-            timeout.NextState,
-            [CandidateA],
-            freshKey: true,
+        var outOfRange = Observe(
+            waiting.NextState,
+            [CandidateA with { HasNativeRangeAndLineOfSight = false }],
             locallyReady: true,
-            now: 1_751);
-        True(rearmed.ShouldDispatch, "a genuinely new physical generation may rearm after no attempt");
+            now: 8_000);
+        False(outOfRange.ShouldDispatch, "temporary range loss remains a soft wait");
+        Equal(0, outOfRange.NextState.NativeAttemptCount, "range wait spends no attempt");
+
+        var ready = Observe(outOfRange.NextState, [CandidateA], locallyReady: true, now: 8_001);
+        True(ready.ShouldDispatch, "same exact status/key dispatches whenever it becomes ready");
+
+        var statusGone = Observe(armed.NextState, [], locallyReady: true, now: 4_501);
+        Equal(AllyRescueBufferCancelReason.CandidateGone, statusGone.CancelReason, "status disappearance ends lease");
     }
 
     public static void HeldInputOnlyCountsAtCandidateAppearanceOrReplacement()
@@ -124,54 +199,35 @@ internal static class AllyRescueBufferSelfTests
             "held entry trigger is explicit");
     }
 
-    public static void OnePhysicalGenerationCannotCrossActorOrStatusReplacement()
+    public static void ContinuousHoldCanAuthorizeLaterDistinctIntents()
     {
-        var keyState = PhysicalGameplayKeyRules.Observe(
-            PhysicalGameplayKeyState.Initial,
-            new PhysicalGameplayKeyObservation(IsDown: false, IsTextInputActive: false)).NextState;
-        var press = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(IsDown: true, IsTextInputActive: false));
-
         var first = Observe(
             AllyRescueBufferState.Initial,
             [CandidateA],
-            freshKey: press.IsFreshPress,
-            heldKeyEligible: press.IsHeldEligible,
+            heldKeyEligible: true,
             allowHeldKey: true,
             locallyReady: true,
             now: 1_000);
-        True(first.ShouldDispatch, "first actor owns the press");
-        keyState = PhysicalGameplayKeyRules.Consume(press.NextState);
-
-        var stillHeld = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(IsDown: true, IsTextInputActive: false));
-        var replacement = Observe(
+        var firstAccepted = AllyRescueBufferRules.CompleteNativeAttempt(
             first.NextState,
+            CandidateA.Intent,
+            1_000,
+            ClientActionAttemptOutcome.ClientAccepted);
+
+        var second = Observe(
+            firstAccepted.NextState,
             [CandidateB],
-            freshKey: stillHeld.IsFreshPress,
-            heldKeyEligible: stillHeld.IsHeldEligible,
+            heldKeyEligible: true,
             allowHeldKey: true,
             locallyReady: true,
             now: 1_001);
-        False(replacement.ShouldDispatch, "same held generation cannot jump to a new actor");
+        True(second.ShouldDispatch, "same continuous hold may authorize a distinct actor/status intent");
 
-        keyState = PhysicalGameplayKeyRules.Observe(
-            stillHeld.NextState,
-            new PhysicalGameplayKeyObservation(IsDown: false, IsTextInputActive: false)).NextState;
-        var newPress = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(IsDown: true, IsTextInputActive: false));
-        var second = Observe(
-            replacement.NextState,
-            [CandidateB],
-            freshKey: newPress.IsFreshPress,
-            heldKeyEligible: newPress.IsHeldEligible,
-            allowHeldKey: true,
-            locallyReady: true,
-            now: 1_002);
-        True(second.ShouldDispatch, "release and repress may rescue a new actor");
+        var secondAccepted = AllyRescueBufferRules.CompleteNativeAttempt(
+            second.NextState,
+            CandidateB.Intent,
+            1_001,
+            ClientActionAttemptOutcome.ClientAccepted);
 
         var refreshedStatus = CandidateB with
         {
@@ -179,13 +235,14 @@ internal static class AllyRescueBufferSelfTests
                 AllyRescueStatusRules.StunStatusId,
                 InstanceToken: 3),
         };
-        var withoutNewGeneration = Observe(
-            second.NextState,
+        var third = Observe(
+            secondAccepted.NextState,
             [refreshedStatus],
+            heldKeyEligible: true,
             allowHeldKey: true,
             locallyReady: true,
-            now: 1_003);
-        False(withoutNewGeneration.ShouldDispatch, "new status application still requires a new physical generation");
+            now: 1_002);
+        True(third.ShouldDispatch, "new status instance is a distinct held-authorized intent");
     }
 
     public static void CandidateChangesCancelBufferedIntentWithoutTargetDrift()
@@ -196,15 +253,23 @@ internal static class AllyRescueBufferSelfTests
             freshKey: true,
             locallyReady: false,
             now: 1_000);
-        var changed = Observe(
+        var temporarilyOutOfRange = Observe(
             armed.NextState,
-            [CandidateB],
+            [CandidateA with { HasNativeRangeAndLineOfSight = false }],
             locallyReady: true,
             now: 1_001);
+        False(temporarilyOutOfRange.ShouldDispatch, "temporarily unreachable exact target waits in background");
+        Equal(CandidateA.Intent, temporarilyOutOfRange.NextState.TrackedIntent!.Value, "unreachable target cannot drift");
 
-        Equal(AllyRescueBufferCancelReason.CandidateChanged, changed.CancelReason, "target change cancels old buffer");
+        var changed = Observe(
+            temporarilyOutOfRange.NextState,
+            [CandidateB],
+            locallyReady: true,
+            now: 1_002);
+
+        Equal(AllyRescueBufferCancelReason.CandidateGone, changed.CancelReason, "target change cancels old buffer");
         False(changed.ShouldDispatch, "old input never drifts onto replacement actor");
-        Equal(CandidateB.Intent, changed.NextState.TrackedIntent!.Value, "replacement waits for its own key");
+        True(changed.NextState.TrackedIntent is null, "replacement is not selected in the cancelled lease frame");
     }
 
     public static void RankingIsResolvedBeforeTheInputIsOwned()
@@ -275,24 +340,6 @@ internal static class AllyRescueBufferSelfTests
 
     public static void SelfPurifyOwnsTheSharedInputBeforeAllyRescue()
     {
-        var armedPurify = new EmergencyPurifyBufferDecision(
-            EmergencyPurifyBufferState.Initial,
-            EmergencyPurifyBufferDecisionKind.Armed,
-            EmergencyPurifyBufferCancelReason.None,
-            EmergencyPurifyInputTrigger.FreshKeyPress);
-        False(
-            EmergencyActionPriorityRules.AllowAllyRescue(armedPurify),
-            "a newly armed self-Purify blocks Ally Rescue in the same frame");
-
-        var bufferedPurifyDispatch = new EmergencyPurifyBufferDecision(
-            EmergencyPurifyBufferState.Initial,
-            EmergencyPurifyBufferDecisionKind.Dispatch,
-            EmergencyPurifyBufferCancelReason.None,
-            EmergencyPurifyInputTrigger.None);
-        False(
-            EmergencyActionPriorityRules.AllowAllyRescue(bufferedPurifyDispatch),
-            "an older buffered self-Purify dispatch still blocks Ally Rescue");
-
         var bufferedRescue = Observe(
             AllyRescueBufferState.Initial,
             [CandidateA],
@@ -303,24 +350,49 @@ internal static class AllyRescueBufferSelfTests
             bufferedRescue.NextState,
             ValidObservation([CandidateA], now: 1_001) with
             {
-                ConfigurationEnabled = EmergencyActionPriorityRules.AllowAllyRescue(
-                    bufferedPurifyDispatch),
+                DispatchAllowed = false,
                 ActionLocallyReady = true,
+                TrackedGameplayKeyPhysicallyDown = true,
             });
         False(cancelledRescue.ShouldDispatch, "a buffered rescue cannot dispatch beside self-Purify");
-        Equal(
-            AllyRescueBufferCancelReason.ConfigurationDisabled,
-            cancelledRescue.CancelReason,
-            "self-Purify cancels the older rescue intent for that frame");
+        Equal(AllyRescueBufferCancelReason.None, cancelledRescue.CancelReason, "same-frame priority pauses the lease");
+        Equal(CandidateA.Intent, cancelledRescue.NextState.TrackedIntent!.Value, "priority does not destroy exact lease");
 
-        var purifyWaiting = new EmergencyPurifyBufferDecision(
-            EmergencyPurifyBufferState.Initial,
-            EmergencyPurifyBufferDecisionKind.StatusObserved,
-            EmergencyPurifyBufferCancelReason.None,
-            EmergencyPurifyInputTrigger.None);
-        True(
-            EmergencyActionPriorityRules.AllowAllyRescue(purifyWaiting),
-            "a status observation without input ownership does not steal another generation");
+        var releasedBehindPriority = Observe(
+            bufferedRescue.NextState,
+            [CandidateA],
+            locallyReady: false,
+            now: 1_001,
+            trackedKeyDown: false,
+            dispatchAllowed: false);
+        Equal(
+            AllyRescueBufferCancelReason.HeldKeyReleased,
+            releasedBehindPriority.CancelReason,
+            "priority wait still revalidates the exact physical key");
+
+        var afterPurify = Observe(
+            cancelledRescue.NextState,
+            [CandidateA],
+            locallyReady: true,
+            now: 1_001);
+        True(afterPurify.ShouldDispatch, "the same hold may dispatch rescue on a later frame");
+
+        var backgroundArmed = Observe(
+            AllyRescueBufferState.Initial,
+            [CandidateA],
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 2_000,
+            dispatchAllowed: false);
+        Equal(AllyRescueBufferDecisionKind.Armed, backgroundArmed.Kind, "same hold arms exact rescue behind Purify");
+        False(backgroundArmed.ShouldDispatch, "higher priority prevents same-frame rescue");
+        var sequential = Observe(
+            backgroundArmed.NextState,
+            [CandidateA],
+            locallyReady: true,
+            now: 2_001);
+        True(sequential.ShouldDispatch, "same physical hold may rescue on the next free frame");
     }
 
     private static AllyRescueBufferDecision Observe(
@@ -331,7 +403,9 @@ internal static class AllyRescueBufferSelfTests
         bool allowHeldKey = false,
         bool locallyReady = false,
         long now = 0,
-        long bufferMilliseconds = AllyRescueBufferRules.DefaultBufferMilliseconds) =>
+        long bufferMilliseconds = AllyRescueBufferRules.DefaultBufferMilliseconds,
+        bool? trackedKeyDown = null,
+        bool dispatchAllowed = true) =>
         AllyRescueBufferRules.Observe(
             state,
             ValidObservation(candidates, now) with
@@ -341,6 +415,11 @@ internal static class AllyRescueBufferSelfTests
                 AllowHeldKeyAtCandidateEntry = allowHeldKey,
                 ActionLocallyReady = locallyReady,
                 BufferMilliseconds = bufferMilliseconds,
+                FreshGameplayKeyToken = freshKey ? 65 : 0,
+                HeldGameplayKeyToken = heldKeyEligible ? 65 : 0,
+                TrackedGameplayKeyPhysicallyDown = trackedKeyDown ??
+                    state.Phase == AllyRescueBufferPhase.Buffered,
+                DispatchAllowed = dispatchAllowed,
             });
 
     private static AllyRescueBufferObservation ValidObservation(

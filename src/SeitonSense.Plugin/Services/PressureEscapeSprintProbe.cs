@@ -81,6 +81,8 @@ internal sealed class PressureEscapeSprintProbe
     private PressureEscapeWarningState warningState = PressureEscapeWarningState.Initial;
     private PressureEscapeSprintProbeSnapshot snapshot = PressureEscapeSprintProbeSnapshot.Initial;
     private ulong spentSprintEpisodeToken;
+    private FrozenSprintRetry? frozenSprintRetry;
+    private VirtualKey terminalSprintKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -128,7 +130,15 @@ internal sealed class PressureEscapeSprintProbe
         {
             warningState = PressureEscapeWarningState.Initial;
             spentSprintEpisodeToken = 0;
+            frozenSprintRetry = null;
+            terminalSprintKey = VirtualKey.NO_KEY;
             warningSound.Reset();
+        }
+
+        if (terminalSprintKey != VirtualKey.NO_KEY &&
+            !inputFrame.IsGameplayKeyPhysicallyDown(terminalSprintKey))
+        {
+            terminalSprintKey = VirtualKey.NO_KEY;
         }
 
         var localIdentityValid = TryGetExactLiveIdentity(localPlayer, out var localIdentity);
@@ -173,7 +183,11 @@ internal sealed class PressureEscapeSprintProbe
         var heldMovementKey = enableSprintOnHeldMovementKey && inputFrame.HeldMovementKeyEligible
             ? input.HeldMovementKey
             : VirtualKey.NO_KEY;
-        var sprintReady = sprintMetadataVerified && IsSprintLocallyReady();
+        var sprintActionSpecificReady = sprintMetadataVerified &&
+                                        IsSprintActionSpecificallyReady();
+        var sprintNearQueueable = localIdentityValid &&
+                                  IsNativeBoundaryNearQueueable(localPlayer!);
+        var sprintReady = sprintActionSpecificReady && sprintNearQueueable;
         var warningEpisodeToken = warningDecision.NextState.EpisodeToken;
         var sprintEpisodeAvailable = warningDecision.HighPressure &&
                                      warningEpisodeToken != 0 &&
@@ -192,7 +206,7 @@ internal sealed class PressureEscapeSprintProbe
             sprintEpisodeAvailable,
             heldMovementKey != VirtualKey.NO_KEY,
             (int)heldMovementKey,
-            sprintReady);
+            sprintReady && sprintNearQueueable);
 
         var inputClaimed = false;
         var attempted = false;
@@ -211,23 +225,84 @@ internal sealed class PressureEscapeSprintProbe
             higherPriorityClaimed || inputFrame.IsConsumed,
             sprintEpisodeAvailable,
             heldMovementKey,
-            sprintReady);
+            sprintReady && sprintNearQueueable);
 
-        if (PressureEscapeRules.CanDispatchSprint(sprintObservation))
+        var retry = frozenSprintRetry;
+        if (retry is { } frozen)
         {
-            // This movement generation is terminal before any final read or
-            // native boundary. Identity/pressure/status drift consumes intent;
-            // it never selects another action, target, or retry.
+            var exactRetryContext = enableSprintOnHeldMovementKey &&
+                                    isCrystallineConflict &&
+                                    localIdentityValid &&
+                                    localIdentity == frozen.LocalPlayer &&
+                                    input.ProbeSucceeded &&
+                                    !input.IsTextInputActive &&
+                                    inputFrame.IsGameplayKeyPhysicallyDown(frozen.HeldKey) &&
+                                    warningDecision.HighPressure &&
+                                    warningEpisodeToken == frozen.WarningEpisodeToken &&
+                                    !guardSuppressed &&
+                                    !sprintActive &&
+                                    !incapacitated &&
+                                    sprintMetadataVerified &&
+                                    clientState.TerritoryType == frozen.TerritoryId;
+            if (!exactRetryContext)
+            {
+                frozenSprintRetry = null;
+                spentSprintEpisodeToken = frozen.WarningEpisodeToken;
+                lastEvent = "Frozen Sprint retry cancelled by exact context/key drift";
+            }
+            else if (!higherPriorityClaimed &&
+                     !inputFrame.IsConsumed &&
+                     HeldActionRetryRules.RetainsSchedulerFrame(
+                         frozen.Retry,
+                         nowMilliseconds,
+                         exactRetryContext,
+                         sprintActionSpecificReady))
+            {
+                inputClaimed = true;
+                inputFrame.Consume();
+                if (!sprintNearQueueable)
+                {
+                    lastEvent = "Frozen Sprint waiting for global native boundary";
+                }
+                else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                             frozen.Retry,
+                             nowMilliseconds))
+                {
+                    lastEvent = "Frozen Sprint retaining retry throttle priority";
+                }
+                else
+                {
+                    var outcome = TryUseSprintOnce(
+                        frozen.LocalPlayer,
+                        frozen.TerritoryId,
+                        out attempted);
+                    accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+                    CompleteSprintAttempt(frozen, outcome, nowMilliseconds);
+                    lastEvent = DescribeSprintAttempt(
+                        "retry",
+                        frozen.Retry.NativeAttemptCount + 1,
+                        outcome);
+                }
+            }
+        }
+        else if (terminalSprintKey == VirtualKey.NO_KEY &&
+                 PressureEscapeRules.CanDispatchSprint(sprintObservation))
+        {
             inputClaimed = true;
-            spentSprintEpisodeToken = warningEpisodeToken;
             inputFrame.Consume();
-            accepted = TryUseSprintOnce(
+            var initialIntent = new FrozenSprintRetry(
                 localIdentity,
                 clientState.TerritoryType,
+                warningEpisodeToken,
+                heldMovementKey,
+                HeldActionRetryState.Initial);
+            var outcome = TryUseSprintOnce(
+                initialIntent.LocalPlayer,
+                initialIntent.TerritoryId,
                 out attempted);
-            lastEvent = accepted
-                ? "Sprint request accepted for exact direct pressure"
-                : "Movement intent consumed; Sprint rejected or final state changed";
+            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+            CompleteSprintAttempt(initialIntent, outcome, nowMilliseconds);
+            lastEvent = DescribeSprintAttempt("initial", 1, outcome);
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -266,6 +341,8 @@ internal sealed class PressureEscapeSprintProbe
     {
         warningState = PressureEscapeWarningState.Initial;
         spentSprintEpisodeToken = 0;
+        frozenSprintRetry = null;
+        terminalSprintKey = VirtualKey.NO_KEY;
         warningSound.Reset();
         Volatile.Write(ref snapshot, PressureEscapeSprintProbeSnapshot.Initial with
         {
@@ -281,11 +358,14 @@ internal sealed class PressureEscapeSprintProbe
         // A transient runtime exception is unknown pressure, not proof that the
         // enemy-focus episode ended. Hide immediately while retaining the open
         // episode, spent Sprint token, and consumed sound token.
+        if (frozenSprintRetry is { } frozen)
+            terminalSprintKey = frozen.HeldKey;
         warningState = new PressureEscapeWarningState(
             false,
             warningState.EpisodeOpen,
             -1,
             warningState.EpisodeToken);
+        frozenSprintRetry = null;
         if (exception is not null) LogFailure(exception, nowMilliseconds);
         var failed = PressureEscapeSprintProbeSnapshot.Initial with
         {
@@ -301,7 +381,7 @@ internal sealed class PressureEscapeSprintProbe
         return failed;
     }
 
-    private unsafe bool TryUseSprintOnce(
+    private unsafe ClientActionAttemptOutcome TryUseSprintOnce(
         TargetPressureActorIdentity expectedLocalIdentity,
         uint expectedTerritoryId,
         out bool attempted)
@@ -310,14 +390,14 @@ internal sealed class PressureEscapeSprintProbe
         if (clientState.TerritoryType != expectedTerritoryId ||
             ResolveCurrentContext() != SupportedPvPContext.CrystallineConflict)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var localPlayer = objectTable.LocalPlayer;
         if (!TryGetExactLiveIdentity(localPlayer, out var currentIdentity) ||
             currentIdentity != expectedLocalIdentity)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var finalNow = Environment.TickCount64;
@@ -330,7 +410,7 @@ internal sealed class PressureEscapeSprintProbe
             HasActiveStatus(localPlayer!, EnemyCombatConstants.PvPSprintStatusId) ||
             HasEscapeBlockingCrowdControl(localPlayer!))
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var observedGuardAttemptAt = -1L;
@@ -345,30 +425,39 @@ internal sealed class PressureEscapeSprintProbe
             DefensiveUtilityProbe.HasActiveGuard(localPlayer),
             observedGuardAttemptAt,
             finalNow);
-        if (guardSuppression.SuppressDirectActionHelpers) return false;
+        if (guardSuppression.SuppressDirectActionHelpers)
+            return ClientActionAttemptOutcome.NotInvoked;
 
         var actionManager = ActionManager.Instance();
         if (!sprintMetadataVerified ||
             actionManager == null ||
             actionManager->GetAdjustedActionId(EnemyCombatConstants.PvPSprintActionId) !=
-            EnemyCombatConstants.PvPSprintActionId ||
-            !actionManager->IsActionOffCooldown(
-                ActionType.Action,
-                EnemyCombatConstants.PvPSprintActionId))
+            EnemyCombatConstants.PvPSprintActionId)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
+        }
+
+        if (!ClientActionAttemptBoundary.IsExactActionReady(
+                actionManager,
+                EnemyCombatConstants.PvPSprintActionId) ||
+            !IsNativeBoundaryNearQueueable(localPlayer!, actionManager))
+        {
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
         if (clientState.TerritoryType != expectedTerritoryId ||
             ResolveCurrentContext() != SupportedPvPContext.CrystallineConflict)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
+        var boundaryBefore = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.PvPSprintActionId);
         attempted = true;
         try
         {
-            return nearAssist.RunWithoutRedirect(() =>
+            var accepted = nearAssist.RunWithoutRedirect(() =>
                 actionManager->UseAction(
                     ActionType.Action,
                     EnemyCombatConstants.PvPSprintActionId,
@@ -376,13 +465,48 @@ internal sealed class PressureEscapeSprintProbe
                     0,
                     ActionManager.UseActionMode.None,
                     0));
+            return ClientActionAttemptBoundaryRules.Classify(
+                accepted,
+                EnemyCombatConstants.PvPSprintActionId,
+                boundaryBefore,
+                ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    EnemyCombatConstants.PvPSprintActionId));
         }
         catch (Exception exception)
         {
             LogFailure(exception, finalNow);
-            return false;
+            return ClientActionAttemptOutcome.AcceptanceUnknown;
         }
     }
+
+    private void CompleteSprintAttempt(
+        FrozenSprintRetry frozen,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        var completion = HeldActionRetryRules.Complete(
+            frozen.Retry,
+            Math.Max(0, nowMilliseconds),
+            outcome);
+        if (completion.RetryScheduled ||
+            completion.Disposition == HeldActionRetryDisposition.SoftWait)
+        {
+            frozenSprintRetry = frozen with { Retry = completion.NextState };
+            return;
+        }
+
+        frozenSprintRetry = null;
+        if (HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(completion.Disposition))
+            terminalSprintKey = frozen.HeldKey;
+        spentSprintEpisodeToken = frozen.WarningEpisodeToken;
+    }
+
+    private static string DescribeSprintAttempt(
+        string phase,
+        int attempt,
+        ClientActionAttemptOutcome outcome) =>
+        $"Sprint {phase} attempt {attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
 
     private static unsafe bool TryGetExactLiveIdentity(
         IPlayerCharacter? player,
@@ -443,16 +567,36 @@ internal sealed class PressureEscapeSprintProbe
         return false;
     }
 
-    private static unsafe bool IsSprintLocallyReady()
+    private static unsafe bool IsSprintActionSpecificallyReady()
     {
         var actionManager = ActionManager.Instance();
         return actionManager != null &&
-               actionManager->GetAdjustedActionId(EnemyCombatConstants.PvPSprintActionId) ==
+               actionManager->GetAdjustedActionId(
+                   EnemyCombatConstants.PvPSprintActionId) ==
                EnemyCombatConstants.PvPSprintActionId &&
                actionManager->IsActionOffCooldown(
                    ActionType.Action,
-                   EnemyCombatConstants.PvPSprintActionId);
+                   EnemyCombatConstants.PvPSprintActionId) &&
+               actionManager->CheckActionResources(
+                   ActionType.Action,
+                   EnemyCombatConstants.PvPSprintActionId) == 0;
     }
+
+    private static unsafe bool IsNativeBoundaryNearQueueable(IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               IsNativeBoundaryNearQueueable(localPlayer, actionManager);
+    }
+
+    private static unsafe bool IsNativeBoundaryNearQueueable(
+        IPlayerCharacter localPlayer,
+        ActionManager* actionManager) =>
+        HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued);
 
     private static bool ValidateMetadata(IDataManager dataManager, IPluginLog log)
     {
@@ -578,4 +722,11 @@ internal sealed class PressureEscapeSprintProbe
             : nowMilliseconds + 10_000;
         log.Warning(exception, "Seiton Sense pressure-escape Sprint failed closed.");
     }
+
+    private readonly record struct FrozenSprintRetry(
+        TargetPressureActorIdentity LocalPlayer,
+        uint TerritoryId,
+        ulong WarningEpisodeToken,
+        VirtualKey HeldKey,
+        HeldActionRetryState Retry);
 }

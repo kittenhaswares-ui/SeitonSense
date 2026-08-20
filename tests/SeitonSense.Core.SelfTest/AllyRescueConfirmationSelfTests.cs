@@ -17,14 +17,22 @@ internal static class AllyRescueConfirmationSelfTests
             accepted.NextState,
             Attempt(accepted: false, now: 1_100),
             1_100);
-        True(rejected.PendingRegistered, "local false still registers a real call for server correlation");
+        False(rejected.PendingRegistered, "local false is not server-correlation evidence");
         False(rejected.Confirmed, "local false never confirms either");
-        False(rejected.NextState.Pending!.Value.UseActionAccepted, "diagnostic accepted bit is preserved");
+        True(rejected.NextState.Pending!.Value.UseActionAccepted, "rejected retry cannot overwrite accepted pending evidence");
+        Equal(1_000L, rejected.NextState.Pending!.Value.AttemptedAtMilliseconds, "accepted pending timestamp is preserved");
+
+        var malformedRejected = AllyRescueConfirmationRules.RegisterAttempt(
+            rejected.NextState,
+            Attempt(accepted: false, now: 1_200) with { LocalCasterEntityId = 0 },
+            1_200);
+        False(malformedRejected.PendingRegistered, "malformed rejected diagnostics are ignored");
+        Equal(1_000L, malformedRejected.NextState.Pending!.Value.AttemptedAtMilliseconds, "no rejected record can erase accepted evidence");
     }
 
     public static void ExactRecoveredEffectConfirmsOnce()
     {
-        var pending = Register(accepted: false, now: 1_000).NextState;
+        var pending = Register(accepted: true, now: 1_000).NextState;
         var confirmed = AllyRescueConfirmationRules.ObserveActionEffect(
             pending,
             Effect(statusId: AllyRescueConfirmationRules.StunStatusId, now: 1_120));

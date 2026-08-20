@@ -279,6 +279,44 @@ internal static class ScholarCriticalStrategySelfTests
         Equal(ScholarCriticalStrategyDecisionReason.NoHeldGameplayKey, retry.Reason, "spent reason");
     }
 
+    internal static void AcceptedHoldRepeatsOnlyAfterCooldownEpoch()
+    {
+        var hold = ScholarCriticalStrategyRules.BeginAcceptedHold(0x57);
+        True(hold.OwnsHold, "accepted initial request owns the exact key");
+        False(hold.HasAvailableReadyEpoch, "accepted initial epoch starts spent");
+
+        hold = ScholarCriticalStrategyRules.ObserveAcceptedHold(
+            hold,
+            hardReset: false,
+            ownershipContextValid: true,
+            exactHeldKeyStillDown: true,
+            cooldownStateKnown: true,
+            cooldownReady: false);
+        False(hold.HasAvailableReadyEpoch, "cooldown-unavailable observation only arms transition");
+        hold = ScholarCriticalStrategyRules.ObserveAcceptedHold(
+            hold,
+            hardReset: false,
+            ownershipContextValid: true,
+            exactHeldKeyStillDown: true,
+            cooldownStateKnown: true,
+            cooldownReady: true);
+        True(hold.HasAvailableReadyEpoch, "unavailable-to-ready opens one repeat epoch");
+        var epoch = hold.CurrentReadyEpochToken;
+        True(ScholarCriticalStrategyRules.TrySpendReadyEpoch(hold, epoch, out hold), "accepted repeat spends exact epoch");
+        False(hold.HasAvailableReadyEpoch, "same ready level cannot repeat again");
+
+        Equal(
+            ScholarCriticalStrategyHoldState.Initial,
+            ScholarCriticalStrategyRules.ObserveAcceptedHold(
+                hold,
+                hardReset: false,
+                ownershipContextValid: true,
+                exactHeldKeyStillDown: false,
+                cooldownStateKnown: true,
+                cooldownReady: true),
+            "exact key release ends ownership");
+    }
+
     private static ScholarCriticalStrategyObservation Observation()
     {
         var candidates = Candidates();

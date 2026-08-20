@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.24.0.0
+
+- Replaced global one-use held-key consumption with continuous physical-key
+  consent and a shared per-frame priority scheduler. The same hold may authorize
+  later distinct exact held episodes. The overall request order is **Purify >
+  Smart Recuperate > Ally Rescue > reactive counter-CC > Guard > Guardian >
+  pressure Sprint > Kardia > NIN > SCH > Monk > DRK Hiebsprung**; Kardia and
+  Monk keep their separate event-driven origins, and at most one held helper
+  crosses the native action boundary in one framework frame.
+- Added a common bounded pre-acceptance contract to every held-action helper.
+  Known cooldown, resource, cast, queued-action, and animation-lock blocks wait
+  without spending the attempt budget. Only an explicit client rejection may
+  retry the same frozen intent after 50 ms, with eight native attempts maximum;
+  client acceptance and ambiguous/exceptional outcomes are terminal.
+- Kept exact actor, action, status/episode, physical key, context, range, line of
+  sight, and Guard revalidation for every retry. No helper may rerank after
+  freezing, select an alternate, mutate the selected target, or retry an action
+  already accepted by the client.
+- Changed NIN Seiton from a fresh-edge-only helper to the same held scheduler.
+  An explicit prior opt-in migrates to the new held option; base Seiton and its
+  verified follow-up remain separate adjusted-action epochs and a rejected base
+  call can never substitute the follow-up.
+- Preserved accepted Ally Rescue confirmation evidence across later rejected
+  calls, and separated soft waits, explicit client rejections, accepted calls,
+  and exact server-observed cleanses in diagnostics.
+- Changed Limit Break activation in Combat Frames to a pulsing outer border and
+  compact icon/name/countdown banner so HP, MP, LB gauge, and status badges stay
+  visible. When Combat Frames are enabled while interaction is off, Settings now
+  shows a prominent state label and a one-click enable button.
+- Bumped the plugin version to `0.24.0.0` and configuration schema to `29` for
+  the explicit NIN fresh-edge-to-held migration. Existing action-helper opt-ins
+  otherwise remain unchanged; new and reset action helpers remain default-off.
+
 ## 0.23.0.0
 
 - Changed held WHM Miracle and BRD Silent Nocturne post-Purify/post-Guard

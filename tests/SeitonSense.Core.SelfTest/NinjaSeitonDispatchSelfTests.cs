@@ -69,7 +69,7 @@ internal static class NinjaSeitonDispatchSelfTests
         Equal(-1, NinjaSeitonDispatchRules.SelectBestCandidateIndex([], LocalPlayer), "empty candidates");
     }
 
-    public static void DispatchRequiresEveryGateAndFreshPress()
+    public static void DispatchRequiresEveryGateAndHeldInput()
     {
         var valid = Observation();
         Dispatch(valid, NinjaSeitonDispatchRules.BaseActionId, "base Seiton");
@@ -85,7 +85,7 @@ internal static class NinjaSeitonDispatchSelfTests
         Cancel(valid with { HigherPriorityClaimed = true }, NinjaSeitonDispatchDecisionReason.HigherPriorityClaimed);
         Cancel(valid with { InputProbeSucceeded = false }, NinjaSeitonDispatchDecisionReason.InputProbeUnavailable);
         Cancel(valid with { IsTextInputActive = true }, NinjaSeitonDispatchDecisionReason.TextInputActive);
-        Cancel(valid with { FreshGameplayKeyPressed = false }, NinjaSeitonDispatchDecisionReason.NoFreshGameplayKey);
+        Cancel(valid with { HeldGameplayKeyEligible = false }, NinjaSeitonDispatchDecisionReason.NoHeldGameplayKey);
         Cancel(valid with { ResolvedActionId = 0 }, NinjaSeitonDispatchDecisionReason.ResolvedActionInvalid);
         Cancel(valid with { ActionLocallyReady = false }, NinjaSeitonDispatchDecisionReason.ActionNotReady);
 
@@ -183,36 +183,41 @@ internal static class NinjaSeitonDispatchSelfTests
             "readiness drift");
     }
 
-    public static void OnePhysicalGenerationCannotRetry()
+    public static void HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime()
     {
-        var keyState = PhysicalGameplayKeyRules.Observe(
-            PhysicalGameplayKeyState.Initial,
-            new PhysicalGameplayKeyObservation(IsDown: false, IsTextInputActive: false)).NextState;
-        var pressed = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(IsDown: true, IsTextInputActive: false));
-        True(pressed.IsFreshPress, "fresh physical generation");
+        True(NinjaSeitonDispatchRules.Observe(Observation()).ShouldDispatch, "held level dispatches");
 
-        var first = NinjaSeitonDispatchRules.Observe(Observation() with
-        {
-            FreshGameplayKeyPressed = pressed.IsFreshPress,
-        });
-        True(first.ShouldDispatch, "one terminal attempt planned");
+        var acceptedBase = NinjaSeitonDispatchRules.BeginAcceptedHold(
+            0x57,
+            NinjaSeitonDispatchRules.BaseActionId);
+        True(acceptedBase.OwnsHold, "accepted base owns exact key");
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                acceptedBase,
+                NinjaSeitonDispatchRules.BaseActionId),
+            "same accepted base epoch cannot repeat");
+        True(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                acceptedBase,
+                NinjaSeitonDispatchRules.FollowUpActionId),
+            "adjusted follow-up is one distinct epoch");
 
-        keyState = PhysicalGameplayKeyRules.Consume(pressed.NextState);
-        var stillHeld = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(IsDown: true, IsTextInputActive: false));
-        False(stillHeld.IsFreshPress, "holding cannot create a retry edge");
-        False(stillHeld.IsHeldEligible, "consumed generation stays consumed");
-
-        var retry = NinjaSeitonDispatchRules.Observe(Observation() with
-        {
-            FreshGameplayKeyPressed = stillHeld.IsFreshPress,
-        });
-        False(retry.ShouldDispatch, "no retry after false or throwing native call");
-        False(retry.ShouldConsumeInputGeneration, "no second consumption");
-        Equal(NinjaSeitonDispatchDecisionReason.NoFreshGameplayKey, retry.Reason, "retry reason");
+        var acceptedFollowUp = NinjaSeitonDispatchRules.BeginAcceptedHold(
+            0x57,
+            NinjaSeitonDispatchRules.FollowUpActionId);
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                acceptedFollowUp,
+                NinjaSeitonDispatchRules.FollowUpActionId),
+            "accepted follow-up cannot repeat");
+        Equal(
+            NinjaSeitonAcceptedHoldState.Initial,
+            NinjaSeitonDispatchRules.ObserveAcceptedHold(
+                acceptedBase,
+                hardReset: false,
+                ownershipContextValid: true,
+                exactHeldKeyStillDown: false),
+            "key release ends accepted ownership");
     }
 
     private static NinjaSeitonDispatchObservation Observation() => new(
@@ -226,7 +231,7 @@ internal static class NinjaSeitonDispatchSelfTests
         HigherPriorityClaimed: false,
         InputProbeSucceeded: true,
         IsTextInputActive: false,
-        FreshGameplayKeyPressed: true,
+        HeldGameplayKeyEligible: true,
         ResolvedActionId: NinjaSeitonDispatchRules.BaseActionId,
         ActionLocallyReady: true,
         Candidates: [Candidate(1, 20_001, 2_001, 49, 100)]);

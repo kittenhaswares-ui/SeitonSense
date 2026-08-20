@@ -2,13 +2,16 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.23.0.0 lets a continuously held key
-make one WHM/BRD counter-CC attempt for the selected exact post-Purify or
-post-Guard protection-end episode. A later distinct release epoch can trigger on
-the same hold. These paths no longer require a minimum team-pressure count, and
-simultaneous releases produce exactly one winner ranked by fresh exact pressure,
-HP ratio, then trusted MP ratio. It retains v0.22's direct exact-actor post-
-Purify/post-Guard dispatch, v0.21's optional Combat
+assistance, and target highlights. Version 0.24.0.0 replaces global one-use held-
+key consumption with a common priority scheduler. One continuous physical hold
+can authorize later distinct exact helper episodes; known cooldown, resource,
+cast, queued-action, and animation-lock blocks wait without spending the bounded
+native-attempt budget. Only an explicit client rejection may retry the same
+frozen intent, while client acceptance or an ambiguous outcome is terminal. It
+also moves NIN Seiton onto held consent, keeps Combat Frame HP/MP visible during
+Limit Break activation, and makes disabled frame interaction obvious in
+Settings. It retains v0.23's exact ranked post-Purify/post-Guard dispatch,
+v0.21's optional Combat
 Frame interaction and evidence-only Limit Break telemetry, default-off Dark
 Knight Hiebsprung helper, and BRD coverage for reviewed DNC/MCH/SAM/VPR startup
 signals, plus v0.20's Smart Recuperate fix and accepted-Eukrasia
@@ -32,11 +35,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   two scaled cards would overlap is isolation stacked vertically below it. Both
   pulse only their border/alpha, never their screen position or size. The
   optional sound is a selectable built-in FFXIV system sound and fires once on entry rather than every frame.
-- **Optional pressure Sprint:** a separate default-off option may use one held
-  WASD/arrow movement-key generation for one exact self Sprint attempt while
+- **Optional pressure Sprint:** a separate default-off option may use continuous
+  held WASD/arrow movement-key consent for an exact self Sprint episode while
   the same direct-enemy count is at least three. The movement key still reaches
-  FFXIV. It shares the existing single-action input boundary and never
-  substitutes another action or retries; any later native PvP action ends Sprint.
+  FFXIV. Known unavailability waits, explicit client rejection permits only the
+  bounded same-intent retry, and any later native PvP action ends Sprint.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
   the enemy is directly targeting/casting at you, recently hit you, or placed
@@ -79,11 +82,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
 - **Experimental Ninja Seiton helper:** a separate default-off option can use
-  one fresh physical gameplay-key down edge for one Seiton attempt. It selects
+  continuous held-key consent for exact adjusted-action Seiton epochs. It selects
   the lowest exact HP ratio among canonical `S1`-`S5` enemies that are strictly
   below 50% and natively reachable. Exact CC context, Ninja job, adjusted action
   readiness, own-Guard safety, and the shared higher-priority helper boundary
-  all fail closed.
+  all fail closed. Base Seiton and the verified Unsealed follow-up are distinct
+  epochs; a rejected base request can never substitute the follow-up.
 - **Experimental Scholar Critical Strategy helper:** a separate default-off
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
@@ -96,16 +100,17 @@ and Super Focus Glow into one configurable custom-repository plugin.
   two ranks first, with exact self as the sole no-pressure fallback. It makes at
   most one direct-target Kardia attempt without switching the selected target.
 - **Experimental Smart Recuperate helper:** a separate default-off held-key
-  option can make one exact self Recuperate `29711` attempt when at least 16,000
+  option can use exact self Recuperate `29711` when at least 16,000
   HP is missing and at least 2,000 MP is available. The thresholds are inclusive;
-  cooldown or MP shortage leaves the held generation unconsumed so it may become
-  eligible later, while a claimed attempt is consumed before final revalidation
-  and is never redirected, replayed, or retried.
+  cooldown, MP, cast, queue, or animation-lock shortage waits without consuming
+  the held consent. An explicit client rejection may retry only the same exact
+  self epoch; acceptance is terminal and is never redirected or replayed.
 - **Experimental Dark Knight Hiebsprung helper:** a separate default-off held-
   key option considers only exact canonical `S1`-`S5` enemies at 30% HP or lower
   inside a strict 10-yalm center-distance cap and native range/line of sight. A
-  continuous hold can spend at most one attempt per proven ready epoch; another
-  attempt requires an observed cooldown not-ready-to-ready transition.
+  continuous hold can authorize one frozen intent per proven ready epoch; an
+  accepted later request requires an observed cooldown not-ready-to-ready
+  transition, while clean rejection uses only the shared bounded retry.
 - **One-shot Near Assist:** an opt-in, CC-only macro helper can redirect one
   already incoming PvP macro action to the exact `<e1>`-`<e5>` hard target of a
   nearby ally. It does not visibly switch your selected target.
@@ -132,11 +137,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
   2.40-second GCD, and only at 0.60-0.80 seconds remaining. It never changes a
   target, substitutes an action, or retries.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
-  held gameplay-key generation can attempt Paean or Aquaveil on an exact party
+  held gameplay key can keep consent active for Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
   uses HP, incoming pressure, trusted MP, and distance in that order. A matching
-  successful status-removal effect produces a blue `CLEANSED` popup and feeds
-  resettable, in-memory match/session counters.
+  explicit client rejection retains only that frozen status/actor intent for a
+  bounded retry; acceptance is terminal. A matching successful status-removal
+  effect produces a blue `CLEANSED` popup and feeds resettable, in-memory match/
+  session counters.
 - **Smart Bard Paean target:** a separate default-off exact-CC option examines
   only an already incoming manual or Turbo Warden's Paean call. It
   may redirect that call to an exact reachable non-self party ally with trusted
@@ -144,8 +151,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   preserves vanilla; drift after one exact redirect is frozen suppresses only
   that call. It never initiates an action or selects an alternate.
 - **Experimental reactive defensive utilities:** the default-off CC helper can
-  use one physical generation for a high-pressure Stun Purify and only a later,
-  genuinely new generation for Guard after positive Resilience. It does not
+  use continuous held consent for a high-pressure Stun Purify and a distinct
+  later Guard episode after positive Resilience. It does not
   pre-Guard from HP/pressure prediction. Active own Guard and the bounded
   1.5-second status-propagation window after an exact Guard request block all
   plugin action helpers.
@@ -163,8 +170,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   team-pressure-count gate. Simultaneous releases rank known fresh exact team
   pressure before unknown and then highest-first, lowest HP ratio next, then
   known trusted MP before unknown and lowest-first. Exactly one simultaneous
-  winner may make one attempt; losers are terminal, with no fallback. A later
-  distinct release epoch can trigger on the same held key without requiring or
+  winner freezes one exact intent; losers are terminal, with no fallback. A
+  clean rejection may retry only that intent, and a later distinct release epoch
+  can trigger on the same held key without requiring or
   mutating the selected target. WHM uses native 10-yalm range and BRD native
   20-yalm range; an already-accepted instant LB may still win the client/server
   race.
@@ -192,12 +200,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
   and Diagnostics.
   Shared-input actions are shown in their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  28 keeps Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
+  29 migrates an explicitly enabled legacy NIN fresh-edge option to the replacement
+  held-key option and preserves the other existing Combat Frames and helper
+  choices. Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
-  and Scholar Critical Strategy as separate default-off options. Every action-
-  attempt, target-redirect, and party-visible communication feature remains
-  opt-in.
+  and Scholar Critical Strategy remain separate opt-ins. Every action-attempt,
+  target-redirect, and party-visible communication feature remains opt-in.
 
 ## Pressure and team focus
 
@@ -462,28 +471,29 @@ In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
 
-The separate **Seiton on fresh gameplay key** experiment is disabled by default
-and runs only in exact Crystalline Conflict on PvP Ninja. One genuinely fresh
-physical gameplay-key down edge considers the exact canonical `S1`-`S5` enemy
-actors; a key that was already held before the opportunity is not a trigger.
+The separate **Seiton on held gameplay key** experiment is disabled by default
+and runs only in exact Crystalline Conflict on PvP Ninja. Continuous physical-
+key consent considers the exact canonical `S1`-`S5` enemy actors whenever a new
+eligible adjusted-action epoch is available.
 Every candidate must remain living, targetable, hostile, strictly below 50% HP,
 and accepted by FFXIV's native action range and line-of-sight result. The lowest
 exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
-The current request order before Ninja is Purify, Smart Recuperate, Guard,
-Guardian, pressure Sprint, Ally Rescue, reactive CC, then Kardia. Kardia still
+The current request order before Ninja is Purify, Smart Recuperate, Ally Rescue,
+reactive CC, Guard, Guardian, pressure Sprint, then Kardia. Kardia still
 requires its separate accepted-Eukrasia trigger rather than a physical key; an
 actual Kardia attempt suppresses lower Ninja work in that frame. Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
-helper. Once the exact intent is claimed, its state and input generation are
-consumed before at most one native action request. A readiness, identity,
-health, or reachability race; a false return; or an exception produces no
-second selection, alternate target, fallback action, replay, or retry. The
-same frozen S-slot and actor identity are resolved again at the latest safe
-point immediately before the native request, and that exact actor's HP is read
-again. Exactly 50% or higher cancels the spent attempt. This minimizes wasted
+helper. One exact adjusted-action epoch freezes one target. Known unavailable
+states wait without consuming the common retry budget. Only an explicit client
+rejection may call that same intent again after 50 ms, with eight native calls
+maximum; acceptance or ambiguity is terminal. A genuine accepted base-to-
+Unsealed action transition can create a later distinct epoch on the same hold,
+but rejected base Seiton can never substitute the follow-up. The same frozen
+S-slot and actor identity are resolved before every possible request, and that
+exact actor's HP is read again. Exactly 50% or higher cancels the intent. This minimizes wasted
 LBs when healing races the selection, but cannot eliminate the unavoidable
 interval between the final client read, request, and server execution. The
 helper never mutates a hard, soft, or focus target and never swallows the
@@ -512,17 +522,18 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar is Purify, Smart Recuperate, Guard,
-Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, then NIN. Kardia
+The current request order before Scholar is Purify, Smart Recuperate, Ally
+Rescue, reactive CC, Guard, Guardian, pressure Sprint, Kardia, then NIN. Kardia
 still requires its separate accepted-Eukrasia trigger, although an actual Kardia
-attempt suppresses lower Scholar work in that frame. One shared
-held physical gameplay-key generation can produce at most one frozen
-Critical Strategy intent. The intent and generation are consumed before one
-native attempt, then the frozen enemy is revalidated only for exact identity,
-action readiness, live Guard, and native range/line of sight. Pressure drift
+attempt suppresses lower Scholar work in that frame. Continuous held consent
+can produce a frozen Critical Strategy intent for a distinct eligible episode.
+The frozen enemy is revalidated for exact identity, action readiness, live Guard,
+and native range/line of sight before every possible bounded call. Pressure drift
 neither reranks nor switches or invalidates the frozen target. The helper never
 mutates a hard, soft, focus, or mouseover target, makes a second selection,
-chooses an alternate target/action, falls back, replays, or retries, and it does
+chooses an alternate target/action, falls back, or replays. Only an explicit
+client rejection may retry the same frozen intent under the shared 50-ms/eight-
+call policy, and it does
 not swallow the original key. A client-accepted return is dispatch feedback only;
 it does not prove that Critical Strategy landed or changed Guard. Exact current-
 patch held-input timing, dispatch, and effect behavior require a live CC test.
@@ -539,16 +550,15 @@ followed by stable S-slot and actor identity. Your own Guard, a candidate's
 Guard, the bounded Guard-propagation latch, animation lock, typing, metadata
 uncertainty, incomplete identity, or readiness uncertainty fails closed.
 
-The first attempt consumes the shared held-key generation and freezes one
-target before final revalidation. After a client-accepted request, that same
+The first eligible epoch freezes one target before final revalidation. After a client-accepted request, that same
 physical key may remain held, but a later attempt requires the cooldown to have
 been observed not ready and then ready again. A KO reset or natural 12-second
 recast can therefore create another proven ready epoch; a reset wholly missed
-between framework samples is not guessed. Each epoch is spent before at most one
-direct exact-target Hiebsprung / Plunge `29092` request, with no visible target
-change, alternate, rerank, replay, or retry. The current order ends **Purify >
-Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive
-CC > Kardia > NIN > SCH > Monk > Hiebsprung**.
+between framework samples is not guessed. Each epoch can use only the common
+bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
+target, with no visible target change, alternate, rerank, or replay. The current
+order ends **Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard >
+Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung**.
 
 ## Sage Smart Kardia after accepted Eukrasia
 
@@ -605,14 +615,15 @@ It never presses Guard or another action.
 Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature receive urgent
 Purify warnings. The experimental **Self-Purify physical-key helper** is disabled
 by default. Each debuff type has its own automation toggle, and a separate
-default-off option allows an already-held gameplay key such as WASD to trigger
-once when the enabled debuff appears.
+default-off option allows an already-held gameplay key such as WASD to remain
+continuous consent when the enabled debuff appears.
 
-The original key is never swallowed, delayed, or replayed. One physical
-press/hold generation permits at most one normal native Purify attempt and is
-consumed before dispatch. ReAction Turbo repeat pulses do not create new
-physical key generations. A failed or rejected attempt is never retried; FFXIV
-still decides whether the action can queue or execute.
+The original key is never swallowed, delayed, or replayed. Purify has absolute
+priority while the exact enabled CC is active. Known cooldown, resource, cast,
+queue, or animation-lock blocks wait without spending an attempt. Only an
+explicit client rejection may retry the same frozen self intent after 50 ms,
+with eight native calls maximum; acceptance or ambiguity ends that CC episode.
+ReAction Turbo repeat pulses do not create physical consent.
 
 The separate **Smart Recuperate on held gameplay key** experiment is disabled by
 default and runs only in exact Crystalline Conflict. It freezes only PvP
@@ -622,16 +633,20 @@ targetable, the action and metadata must be exact and locally ready, at least
 Both boundaries are inclusive: exactly 16,000 missing HP and exactly 2,000 MP are
 eligible.
 
-An eligible held generation may wait unconsumed while Recuperate is not ready or
-MP is below 2,000, so the same hold can become eligible after the cooldown or an
-MP tick. Once all gates pass, the exact self intent and physical generation are
-consumed before terminal revalidation and at most one normal native request.
-Later identity, HP, MP, readiness, metadata, Guard, or priority drift cancels the
-spent attempt. The helper never changes a target, buffers MP, substitutes another
-action or actor, replays, or retries, and client acceptance is not a healing-
-effect claim.
+Held consent may wait while Recuperate is not ready or MP is below 2,000, so the
+same hold can become eligible after the cooldown or an MP tick without starving
+a currently usable lower-priority helper. Once all gates pass, the exact self
+intent is revalidated before every possible call. Only an explicit client
+rejection may retry that epoch under the common bound. Temporary readiness/MP,
+higher-priority, and Guard states wait without spending a call; dropping below
+the HP threshold cancels the current intent. Acceptance ends that epoch, and a
+later one requires an observed cooldown unavailable-to-ready transition. Retry
+exhaustion or an ambiguous/invalid exact outcome latches only this helper until
+the frozen key is released. The helper never changes a target, buffers MP,
+substitutes another action or actor, or replays input, and client acceptance is
+not a healing-effect claim.
 
-The separate **Ally Rescue on next gameplay key** experiment is also disabled
+The separate **Ally Rescue on gameplay-key consent** experiment is also disabled
 by default and runs only in Crystalline Conflict. It is available on BRD with
 The Warden's Paean and on WHM with Aquaveil, using current action IDs rather
 than localized names. Only Stun, Silence, Deep Freeze, and Miracle of Nature on
@@ -644,24 +659,25 @@ exact HP percentage, then most unique enemies currently hard-targeting or
 casting at that ally, then lowest trusted MP percentage, distance, and stable
 party identity. Hotfix 0.7.0.1 no longer rejects a valid status because an
 internal status-slot address is unavailable and no longer requires an early
-local cooldown-ready sample. After the exact ally, status, action, native range,
-and line of sight are revalidated, FFXIV receives one normal action request and
-decides whether it can queue or execute.
+local cooldown-ready sample. The helper freezes that exact ally, status, action,
+and physical key. Every permitted native call revalidates the same frozen intent,
+range, and line of sight; it never selects another actor or status.
 
-Purify, Smart Recuperate, Guard, Guardian, and pressure Sprint receive the shared
-physical generation before Ally Rescue. One input generation
-can therefore produce at most one helper attempt, and Ally Rescue stores its
-spent state before the exact Paean/Aquaveil call with no retry. The BRD metadata
+Purify and Smart Recuperate receive the scheduler frame before Ally Rescue.
+Action-specific cooldown/resource or reachability waits do not block a usable
+lower helper. The exact ally/status intent may use only the common bounded
+explicit-false retry; acceptance or ambiguity is terminal. The BRD metadata
 check also accepts the current lowercase leading article in `the Warden's
 Paean`; numeric action identity still drives runtime behavior.
 
 A client-accepted action request is not presented as a successful cleanse.
-For up to 2.5 seconds after the one attempt, Seiton Sense instead correlates an
+For up to 2.5 seconds after a client-accepted call, Seiton Sense instead correlates an
 exact local-caster, action, and ally-target ActionEffect result of type `0x10`
 (`RecoveredFromStatusEffect`). Only the six known Purify-removable PvP statuses
 can confirm it: Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature.
 Heavy and Bind remain confirmation-only here and still never activate Ally
-Rescue. One exact confirmation shows a blue `CLEANSED` popup for 1.5 seconds.
+Rescue. A later rejected call neither creates nor erases the pending accepted
+correlation. One exact confirmation shows a blue `CLEANSED` popup for 1.5 seconds.
 
 The Action Helpers page separates attempts, client-accepted requests, and exact
 confirmed removals, with confirmed totals for the current match and plugin
@@ -697,22 +713,22 @@ another action, substitutes an action, or stores a call for replay. A later
 Turbo pulse is an independent downstream call and is evaluated once on its own.
 A client-accepted return is dispatch feedback only, not proof that Paean applied
 or later removed or nullified crowd control.
-The existing fresh/held-key Ally Rescue behavior, including Aquaveil, remains
+The existing held-key Ally Rescue behavior, including Aquaveil, remains
 unchanged and separate from this passive Bard-only option.
 
 The **Reactive defensive utilities** module is a separate, default-off
-Crystalline Conflict helper. Its self-only rules require one fresh or explicitly
-eligible held physical gameplay-key generation and exact local metadata. At
+Crystalline Conflict helper. Its self-only rules require fresh or continuous
+eligible held physical gameplay-key consent and exact local metadata. At
 three or more unique enemies currently pressuring you, an exact Stun can enable
-one Purify attempt even if the ordinary Purify helper is off. Guard is never
-attempted from that same physical generation: the helper must positively observe
-live Resilience `3248`, see the removable CC gone, and receive a genuinely new
-release/repress generation inside its bounded follow-up window. It does not
+one Purify episode even if the ordinary Purify helper is off. Guard remains a
+distinct later episode: the helper must positively observe live Resilience
+`3248` and see the removable CC gone inside its bounded follow-up window. The
+same continuous hold may authorize it. It does not
 pre-Guard merely because HP is low or pressure is high.
 
 The independent **Paladin Guardian job tool** is separately default-off under
-Job Tools and does not depend on the reactive defensive-utilities master. One
-fresh or explicitly eligible held generation can attempt Guardian `29066` for an
+Job Tools and does not depend on the reactive defensive-utilities master.
+Continuous held consent can create one frozen Guardian `29066` intent for an
 exact living, targetable, non-self party member at or below 20% HP when FFXIV's
 native 20-yalm action-range and line-of-sight check accepts that target. There is
 no custom center-distance cap: native reachability remains authoritative and
@@ -791,30 +807,31 @@ observed present on one canonical `S1`-`S5` actor. The first verified framework
 observation that finds Guard absent exposes one bounded exact protection-end
 episode with no minimum team-pressure count. Dispatch uses the frozen actor
 directly at the job-specific native range and line of sight, without requiring
-or switching the selected target, choosing an alternate action/actor, replaying,
-or retrying.
+or switching the selected target, choosing an alternate action/actor, or
+replaying. Only an explicit client rejection may retry that same frozen intent
+under the common bound.
 
 If multiple exact post-Purify or post-Guard releases are simultaneously eligible,
 the module ranks known fresh exact team pressure before unknown and then highest-
 first, lowest HP ratio next, then known trusted MP before unknown and lowest-
 first; stable `S1`-`S5` identity closes full ties. It selects exactly one winner.
 Every simultaneous loser is terminal and cannot become a fallback attempt. A
-continuously held eligible gameplay key can make at most one attempt for the
-selected exact protection-end episode. A later distinct release epoch may
-authorize another action on the same hold, but the selected episode cannot
-repeat.
+continuously held eligible gameplay key keeps consent for the selected frozen
+episode and may also authorize a later distinct episode. Only an explicit
+client rejection may retry the same intent under the common bound; acceptance
+or ambiguity is terminal.
 
-The current request order is **Purify > Smart Recuperate > Guard > Guardian >
-pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk >
+The current request order is **Purify > Smart Recuperate > Ally Rescue >
+reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk >
 Hiebsprung**. Kardia still requires its separate accepted-Eukrasia trigger and
 Monk remains an automatic rather than physical-key claimant. At the reactive CC
-stage, the chosen opportunity is consumed before one normal exact-target request;
+stage, the chosen opportunity freezes one exact-target intent;
 there is no visible selected-target change,
-alternate action/target, fallback, replay, or retry. Plugin-owned Miracle and
+alternate action/target, fallback, or replay. Plugin-owned Miracle and
 Silent Nocturne requests still pass through the final action-specific
 CC-immunity brake immediately before the native call.
 
-After the sole request, a blue `AUTO CC LANDED` popup appears only if the bounded
+After a client-accepted request, a blue `AUTO CC LANDED` popup appears only if the bounded
 ActionEffect observer captures the matching status on that exact pending enemy:
 Miracle `3085` for WHM or Silence `1347` for BRD. A local client-accepted request
 does not count. Even an exact landed popup proves only that the counter-CC status
@@ -851,8 +868,8 @@ default).
 
 The continuous resonance is marked spent before one self-targeted normal
 `29483` request. A rejected or throwing request is not retried, and `29482` is
-never used as an alternate action. Monk follows Purify, Smart Recuperate, Guard,
-Guardian, pressure Sprint, Ally Rescue, reactive CC, Kardia, NIN, and SCH in the
+never used as an alternate action. Monk follows Purify, Smart Recuperate, Ally
+Rescue, reactive CC, Guard, Guardian, pressure Sprint, Kardia, NIN, and SCH in the
 current request order, and remains ahead of Hiebsprung. Kardia still requires
 its separate accepted-Eukrasia trigger. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
@@ -1131,7 +1148,7 @@ focus module to avoid drawing both over the same actor.
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Optional DRK Hiebsprung held-key helper | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
-| Optional NIN Seiton fresh-key helper | Yes | No | No |
+| Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
 | Near Assist | Yes | No | No |
@@ -1154,12 +1171,11 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 28 remains current in v0.23.0.0. The held per-episode
-reactive-counter behavior reuses the existing master, held-key, post-Purify, and
-post-Guard choices, so no new persisted option or migration is required. The
-schema-27-to-28 migration still preserves every existing master and helper choice
-while forcing the then-new hostile post-Guard leaf off. Older configurations
-still traverse the earlier migrations first. Fresh and reset configurations keep
+Configuration schema 29 is current in v0.24.0.0. An explicitly enabled NIN
+fresh-edge helper migrates to the replacement held-key option; the obsolete
+compatibility field is then cleared. Every other existing master and helper
+choice is preserved. Older configurations still traverse the earlier migrations
+first, including schema 28's default-off post-Guard migration. Fresh and reset configurations keep
 the Combat Frames master and every action-helper master off; post-Guard defaults
 on only behind the disabled reactive-counter master, while interaction and LB
 detail leaves likewise default on only behind the disabled Combat Frames master.
@@ -1248,30 +1264,34 @@ Help can each replace only the target ID of one explicitly armed, already incomi
 macro action. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
 action helpers use this current request priority: **Purify > Smart Recuperate >
-Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN >
+Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN >
 SCH > Monk > Hiebsprung**. Kardia requires its separate accepted-Eukrasia trigger
-and does not consume the physical-key generation; Monk is an automatic follow-
-up. A post-Purify reactive Guard requires a genuinely new
-physical generation; there is no HP/pressure pre-Guard. While your own Guard is
+and does not originate from the physical key; Monk is an automatic follow-up.
+The same continuous hold can authorize later distinct exact held episodes; a
+post-Purify reactive Guard no longer requires release/repress. There is no HP/
+pressure pre-Guard. While your own Guard is
 active, all Seiton action-request helpers are blocked; the same gate applies for
 the bounded 1.5-second status-propagation interval after an exact local Guard
 request. Manual game actions remain outside that protection. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-The separate default-off Smart Recuperate helper may initiate at most one exact
-self Recuperate `29711` request when missing HP is at least 16,000 and MP is at
-least 2,000. Readiness or insufficient MP leaves the held generation unconsumed;
-once claimed, terminal drift remains spent with no target change, alternate,
-replay, or retry.
+The separate default-off Smart Recuperate helper may freeze an exact self
+Recuperate `29711` epoch when missing HP is at least 16,000 and MP is at least
+2,000. Readiness or insufficient MP waits without starving a currently usable
+lower helper. Only an explicit client rejection may use the common bounded
+same-intent retry; acceptance or ambiguity is terminal with no target change,
+alternate, or replay.
 
-The separate default-off Ninja helper follows those higher-priority helpers. It
-can initiate at most one adjusted Seiton `29515`/`29516` attempt from a fresh
-physical down edge against the lowest exact HP-ratio candidate among the
-canonical, reachable `S1`-`S5` enemies below 50%. Its selected intent and input
-are consumed before dispatch, and it has no target mutation, second selection,
-alternate, fallback, replay, or retry. The original key is not swallowed, and
-a client-accepted return is not a landed-action or kill claim.
+The separate default-off Ninja helper follows those higher-priority helpers. A
+continuous held gameplay key can authorize one frozen target for each exact
+adjusted-action epoch of Seiton `29515`/`29516`, selected by lowest exact HP ratio
+among canonical, reachable `S1`-`S5` enemies below 50%. A clean explicit client
+rejection may retry only that frozen action/target after at least 50 ms, with
+eight native calls maximum. Only an accepted base `29515` can open one distinct
+later adjusted `29516` epoch on the same hold. It never mutates a selected target,
+selects twice, substitutes an alternate, falls back, reranks, replays input, or
+claims that client acceptance proves a landed action or kill.
 
 The separate default-off Monk helper may initiate at most one exact Earth's
 Reply attempt per continuously observed Earth Resonance after every earlier
@@ -1282,7 +1302,9 @@ The separate default-off Hiebsprung helper may initiate at most one exact DRK
 HP or lower within its strict 10-yalm cap and native reachability. It is last in
 the listed request order. A continuous hold repeats only after an observed
 cooldown not-ready-to-ready transition, never from a guessed reset, and it has
-no selected-target mutation, alternate, replay, or retry.
+no selected-target mutation, alternate, rerank, or replay. A clean explicit
+client rejection may use only the shared bounded retry for that same frozen
+ready epoch.
 
 The separate DRK macro does not use that physical-input priority chain. It may
 add only one already-spent Shadowbringer attempt to the exact authored
@@ -1310,10 +1332,13 @@ Bind1; a later Bind1 failure can clean only the proven-owned Bind2, and every
 cleanup remains exact per sign. It does not issue another combat action or
 retry a failed command.
 
-The Scholar helper is not display-only either. When explicitly enabled, it may
-initiate one Critical Strategy action attempt against its frozen exact guarded
-enemy from one shared held-key generation. It never sends chat or markers,
-changes the selected target, chooses another enemy after drift, or retries.
+The Scholar helper is not display-only either. When explicitly enabled, a
+continuous hold may authorize one Critical Strategy intent for each distinct
+exact guarded-target episode. The frozen target can use only the shared bounded
+explicit-false retry; retry exhaustion or an ambiguous/invalid terminal outcome
+latches only the Scholar helper until that exact key is released. It never sends
+chat or markers, changes the selected target, reranks after drift, chooses an
+alternate enemy, or replays input.
 
 The Sage helper is also action-initiating and default-off, but it is not a held-
 key scanner. One client-accepted Eukrasia forwarded unchanged creates one two-
@@ -1345,25 +1370,25 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.23.0.0, source checks retain Smart Kardia's forwarding of one
-exact Eukrasia call, client-accepted trigger creation, exact local Sage/territory
-ownership, two-second expiry, causal charge/status evidence, post-acceptance
-pressure publication, animation-lock-clear Kardia boundary, complete stable
-five-player view, known direct `2+` threshold, deterministic pressure/HP/party-
-identity ranking, exact initial self fallback, and authoritative best-candidate
-Kardion rule. They also pin consumption before terminal revalidation, one direct-
-target Kardia attempt, and no held-key scan, idle pressure scan, selected-target
-mutation, rerank, fallback, alternate, replay, or retry.
+For v0.24.0.0, source checks pin one shared held-action policy: the physical hold
+remains consent across later distinct episodes, a per-frame claim allows at most
+one held native boundary, known cooldown/resource/cast/queue/full-animation-lock
+states spend no attempt, and only a clean explicit client rejection can retry
+the same frozen intent after 50 ms with eight calls maximum. Client acceptance,
+exceptions, uncertain queue/sequence transitions, key release, context/job/
+identity drift, and other ambiguity are terminal. Tests cover exact action,
+actor, status/episode and key freezing, no rerank/alternate/target mutation, and
+the priority **Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard >
+Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung**. Kardia
+and Monk retain their separate event-driven origins.
 
-The same release checks Smart Recuperate's exact self-only PvP action `29711`,
-inclusive 16,000-missing-HP and 2,000-MP boundaries, held-generation eligibility,
-unconsumed waiting for MP/readiness, Guard and higher-priority suppression,
-consumption before terminal revalidation, one request, and no alternate target,
-action, replay, or retry. Defensive checks pin the removal of HP/pressure pre-
-Guard, the positive-Resilience-to-new-generation reactive Guard path, independent
-PLD Guardian job-tool gating, and this exact current request priority: Purify >
-Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive
-CC > Kardia > NIN > SCH > Monk > Hiebsprung.
+The same release checks Purify's absolute active-CC priority, Smart Recuperate's
+inclusive 16,000-missing-HP/2,000-MP gates, Ally Rescue confirmation preservation,
+all reviewed WHM/BRD reactive trigger families, accepted-only Guard propagation,
+Guardian, pressure Sprint, SCH, DRK cooldown epochs, and NIN base/follow-up as
+separate adjusted-action epochs. It also retains Smart Kardia's accepted-
+Eukrasia trigger, causal charge/status evidence, exact pressure selection and
+direct target without a held-key scanner.
 
 Combat Frame checks cover one fixed Self row plus canonical stable `S1`-`S5`,
 dead/unknown row preservation, exact HP, trusted MP and 2,000-MP divisions,
@@ -1376,18 +1401,19 @@ Self gauge trust, remote `LB ?` before complete native-HUD calibration, no charg
 time estimate, live-RemainingTime-origin duration with at most 150 ms of non-
 extending last-expiry preservation, the 1.8-second instant card, and direct
 ally ActionEffect damage without HP-delta inference. Configuration checks pin
-schema 28 migration, fresh/reset defaults, and default-off action/communication/
+schema 29 migration, fresh/reset defaults, and default-off action/communication/
 Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
 30% HP, strict 10-yalm plus native reachability, local Bind, Guard/readiness gates,
-one attempt per proven cooldown epoch, and no target mutation or retry. Reactive
+one accepted action per proven cooldown epoch, and no target mutation. Reactive
 CC checks include DNC/MCH/SAM/VPR BRD coverage, direct exact-actor post-Purify
 dispatch without selected-target dependence, exact Guard `3054`/`3673` presence
 followed by its first verified absent framework observation, no minimum team-
 pressure gate, deterministic simultaneous ranking by fresh exact pressure/HP/
 trusted MP with known telemetry before unknown, independent per-`S1`-`S5` Purify
-tracking, one terminal winner, one attempt for the selected exact episode while
-held, a later distinct release epoch without key release, Purify/Smart Recuperate
-priority, and job-specific native reachability.
+tracking, one terminal winner, bounded retry for only the selected exact episode,
+a later distinct release epoch without key release, the full priority chain, and
+job-specific native reachability. Configuration checks pin schema 29 and the
+explicit prior NIN opt-in migration to held consent.
 They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
 native action acceptance/effects, current client range/line of sight, Combat
 Frame appearance/calibration, native status/resource telemetry, LB packet timing,
@@ -1418,6 +1444,8 @@ suppression, final pressure revalidation, and one consumed self action attempt
 without alternate, replay, or retry. Those checks cannot prove live enemy-target
 telemetry, the chosen FFXIV system sound, or Sprint acceptance/effect in the
 current client and therefore still require a live CC A/B test.
+Their historical one-consumed-attempt assertion is superseded by v0.24's shared
+continuous-hold scheduler and bounded same-intent pre-acceptance retry.
 
 The retained v0.16.0.0 source checks cover the Bard-only Paean action and
 metadata boundary, the exact `3+` incoming-pressure threshold, exact non-self
@@ -1427,17 +1455,20 @@ suppression after final drift, one target substitution on one already incoming
 call, and no plugin-created action, alternate, replay, or retry. Those checks do
 not prove that a manual or Turbo call was
 accepted by the live client or that Paean applied, removed, or nullified CC.
-They also retain the Ninja helper's fresh-edge ownership, complete canonical
+They also retain the then-current Ninja helper's fresh-edge ownership, complete canonical
 `S1`-`S5` auto-selection and adjusted-action gates, strict below-50% boundary,
 latest-safe frozen-actor HP re-read, exact-50% cancellation,
 Guard/priority suppression, and one-attempt/no-retry contract. The Ninja helper
-has no hard-target dependency. Guardian communication checks cover accepted-
+has no hard-target dependency. Those historical NIN assertions are superseded
+by v0.24's held-consent, adjusted-epoch, and bounded retry contract. Guardian communication checks cover accepted-
 episode consumption, chat-only occupied-marker behavior, Bind2-before-Bind1
 confirmation, both native empty-marker representations, exact per-sign
 ownership, partial cleanup, and no post-invocation retry. Scholar checks cover
 Guard-only complete `S1`-`S5` selection, trusted-
 positive-pressure/HP ranking, held-generation ownership, native reachability,
 frozen-intent revalidation, and one attempt without target mutation or alternate.
+That historical Scholar ownership assertion is likewise superseded by v0.24's
+exact episode lease and shared bounded retry.
 Localized Quick Chat, marker placement/cleanup, Critical Strategy dispatch/
 effect, and the passive Paean redirect still require current-patch live
 confirmation.

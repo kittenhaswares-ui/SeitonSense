@@ -67,6 +67,9 @@ internal sealed class ScholarCriticalStrategyProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private ScholarCriticalStrategyProbeSnapshot snapshot = ScholarCriticalStrategyProbeSnapshot.Initial;
+    private ScholarCriticalStrategyHoldState acceptedHold = ScholarCriticalStrategyHoldState.Initial;
+    private FrozenScholarRetry? frozenRetry;
+    private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -105,6 +108,19 @@ internal sealed class ScholarCriticalStrategyProbe
         long nowMilliseconds,
         bool hardReset = false)
     {
+        if (hardReset)
+        {
+            acceptedHold = ScholarCriticalStrategyHoldState.Initial;
+            frozenRetry = null;
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
+        if (terminalHeldKey != VirtualKey.NO_KEY &&
+            !inputFrame.IsGameplayKeyPhysicallyDown(terminalHeldKey))
+        {
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
         var localAlive = IsLivePlayer(localPlayer);
         var localIdentity = HasValidNativeIdentity(localPlayer)
             ? new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId)
@@ -119,18 +135,60 @@ internal sealed class ScholarCriticalStrategyProbe
                                   metadataVerified &&
                                   !actionHelpersSuppressedByGuard &&
                                   !hardReset;
-        var resolvedActionId = 0u;
-        var actionReady = featureContextReady &&
-                          localIdentity.IsValid &&
-                          TryGetReadyAction(localPlayer!, out resolvedActionId);
-        if (!actionReady) resolvedActionId = 0;
-
         var input = inputFrame.Snapshot;
-        var shouldResolveCandidates = actionReady &&
+        var resolvedActionId = 0u;
+        var cooldownReady = false;
+        var resourcesReady = false;
+        var nativeBoundaryReady = false;
+        var actionStateKnown = featureContextReady &&
+                               localIdentity.IsValid &&
+                               TryObserveActionState(
+                                   localPlayer!,
+                                   out resolvedActionId,
+                                   out cooldownReady,
+                                   out resourcesReady,
+                                   out nativeBoundaryReady);
+        if (!actionStateKnown)
+        {
+            resolvedActionId = 0;
+            cooldownReady = false;
+            resourcesReady = false;
+            nativeBoundaryReady = false;
+        }
+
+        var ownedKey = acceptedHold.OwnsHold
+            ? (VirtualKey)acceptedHold.HeldKeyCode
+            : VirtualKey.NO_KEY;
+        var exactOwnedKeyStillDown = acceptedHold.OwnsHold &&
+                                     inputFrame.IsGameplayKeyPhysicallyDown(ownedKey);
+        acceptedHold = ScholarCriticalStrategyRules.ObserveAcceptedHold(
+            acceptedHold,
+            hardReset,
+            featureContextReady &&
+            input.ProbeSucceeded &&
+            !input.IsTextInputActive,
+            exactOwnedKeyStillDown,
+            actionStateKnown,
+            cooldownReady);
+        ownedKey = acceptedHold.OwnsHold
+            ? (VirtualKey)acceptedHold.HeldKeyCode
+            : VirtualKey.NO_KEY;
+        exactOwnedKeyStillDown = acceptedHold.OwnsHold &&
+                                 inputFrame.IsGameplayKeyPhysicallyDown(ownedKey);
+        var actionReady = actionStateKnown &&
+                          cooldownReady &&
+                          resourcesReady &&
+                          nativeBoundaryReady;
+        var hasReadyEpoch = acceptedHold.OwnsHold
+            ? acceptedHold.HasAvailableReadyEpoch && exactOwnedKeyStillDown
+            : inputFrame.HeldGameplayKeyEligible;
+        var shouldResolveCandidates = frozenRetry is null &&
+                                      terminalHeldKey == VirtualKey.NO_KEY &&
+                                      actionReady &&
                                       !higherPriorityClaimed &&
                                       input.ProbeSucceeded &&
                                       !input.IsTextInputActive &&
-                                      inputFrame.HeldGameplayKeyEligible;
+                                      hasReadyEpoch;
         var candidateResolution = "Not evaluated: no eligible held input";
         var candidates = shouldResolveCandidates
             ? ResolveExactCandidates(localPlayer!, resolvedActionId, out candidateResolution)
@@ -148,23 +206,20 @@ internal sealed class ScholarCriticalStrategyProbe
                 higherPriorityClaimed,
                 input.ProbeSucceeded,
                 input.IsTextInputActive,
-                inputFrame.HeldGameplayKeyEligible,
+                hasReadyEpoch,
                 resolvedActionId,
                 actionReady,
                 completeCanonicalSet,
                 candidates,
                 hardReset));
 
-        // Spend the shared physical generation before any final native reads.
-        // Every later drift or client rejection is terminal for this hold.
-        var inputClaimed = decision.ShouldConsumeInputGeneration;
-        if (inputClaimed) inputFrame.Consume();
-
+        var inputClaimed = false;
         var attempted = false;
         var accepted = false;
-        if (decision.ShouldDispatch && decision.Intent is { } intent)
+        ScholarCriticalStrategyCandidate? observedCandidate = null;
+        if (frozenRetry is { } retry)
         {
-            var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer);
+            var currentLocal = ResolveExactLocalPlayer(retry.Intent.LocalPlayer);
             var finalContextReady = currentLocal is not null &&
                                     IsCurrentCrystallineConflict() &&
                                     IsLivePlayer(currentLocal) &&
@@ -174,56 +229,107 @@ internal sealed class ScholarCriticalStrategyProbe
                                     !actionHelpersSuppressedByGuard &&
                                     !IsCurrentlySuppressedByGuard(currentLocal, Environment.TickCount64);
             var finalResolvedActionId = 0u;
-            var finalActionReady = finalContextReady &&
-                                   TryGetReadyAction(currentLocal!, out finalResolvedActionId);
-            if (!finalActionReady) finalResolvedActionId = 0;
-
-            // Pressure is intentionally not sampled here. The frozen values in
-            // the intent remain diagnostic-only after the input was consumed.
-            var finalCandidate = finalContextReady
-                ? ResolveFrozenIntent(currentLocal!, intent, finalResolvedActionId)
+            var finalCooldownReady = false;
+            var finalResourcesReady = false;
+            var finalNativeBoundaryReady = false;
+            var finalActionKnown = finalContextReady &&
+                                   TryObserveActionState(
+                                       currentLocal!,
+                                       out finalResolvedActionId,
+                                       out finalCooldownReady,
+                                       out finalResourcesReady,
+                                       out finalNativeBoundaryReady);
+            var finalCandidate = finalActionKnown
+                ? ResolveFrozenIntent(currentLocal!, retry.Intent, finalResolvedActionId)
                 : null;
+            observedCandidate = finalCandidate;
             var currentLocalIdentity = currentLocal is not null
                 ? new TargetPressureActorIdentity(currentLocal.GameObjectId, currentLocal.EntityId)
                 : default;
-            if (finalCandidate is { } exactCandidate &&
-                ScholarCriticalStrategyRules.CanUseExactIntent(
-                    intent,
-                    exactCandidate,
-                    currentLocalIdentity,
-                    finalResolvedActionId,
-                    finalActionReady))
+            var exactRetryContext = finalContextReady &&
+                                    input.ProbeSucceeded &&
+                                    !input.IsTextInputActive &&
+                                    inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey) &&
+                                    finalCandidate is { } exactCandidate &&
+                                    ScholarCriticalStrategyRules.CanUseExactIntent(
+                                        retry.Intent,
+                                        exactCandidate,
+                                        currentLocalIdentity,
+                                        finalResolvedActionId,
+                                        actionLocallyReady: true);
+            if (!exactRetryContext)
             {
-                try
+                SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                lastEvent = $"S{retry.Intent.EnemySlot} frozen retry cancelled by exact target/context/key drift";
+            }
+            else if (!higherPriorityClaimed &&
+                     !inputFrame.IsConsumed &&
+                     HeldActionRetryRules.RetainsSchedulerFrame(
+                         retry.Retry,
+                         nowMilliseconds,
+                         exactRetryContext,
+                         finalCooldownReady && finalResourcesReady))
+            {
+                inputClaimed = true;
+                inputFrame.Consume();
+                if (!finalNativeBoundaryReady)
                 {
-                    accepted = TryUseCriticalStrategyOnce(
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen retry waiting for global native boundary";
+                }
+                else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                             retry.Retry,
+                             nowMilliseconds))
+                {
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen retry retaining throttle priority";
+                }
+                else
+                {
+                    var outcome = TryUseCriticalStrategyOnce(
                         currentLocal!,
-                        intent,
+                        retry.Intent,
                         metadataVerified,
                         out attempted);
-                    if (attempted) Interlocked.Increment(ref attemptCount);
-                    if (accepted) Interlocked.Increment(ref acceptedCount);
-                    lastEvent = attempted
-                        ? $"S{intent.EnemySlot} action {intent.ActionId} attempted (accepted={accepted})"
-                        : $"S{intent.EnemySlot} terminal exact-intent revalidation failed";
+                    accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+                    CompleteAttempt(retry, outcome, nowMilliseconds);
+                    lastEvent = DescribeAttempt(
+                        retry.Intent,
+                        retry.Retry.NativeAttemptCount + 1,
+                        outcome);
                 }
-                catch (Exception exception)
-                {
-                    if (attempted) Interlocked.Increment(ref attemptCount);
-                    lastEvent = $"S{intent.EnemySlot} terminal action exception";
-                    LogAttemptFailure(exception, nowMilliseconds);
-                }
-            }
-            else
-            {
-                lastEvent = $"S{intent.EnemySlot} terminal exact-intent revalidation failed";
             }
         }
+        else if (terminalHeldKey == VirtualKey.NO_KEY &&
+                 decision.ShouldDispatch &&
+                 decision.Intent is { } intent)
+        {
+            var heldKey = acceptedHold.OwnsHold
+                ? (VirtualKey)acceptedHold.HeldKeyCode
+                : input.HeldGameplayKey;
+            var retryIntent = new FrozenScholarRetry(
+                intent,
+                heldKey,
+                acceptedHold.OwnsHold,
+                acceptedHold.OwnsHold ? acceptedHold.CurrentReadyEpochToken : 0,
+                HeldActionRetryState.Initial);
+            inputClaimed = true;
+            inputFrame.Consume();
+            var outcome = TryUseCriticalStrategyOnce(
+                localPlayer!,
+                intent,
+                metadataVerified,
+                out attempted);
+            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+            CompleteAttempt(retryIntent, outcome, nowMilliseconds);
+            lastEvent = DescribeAttempt(intent, 1, outcome);
+        }
 
-        var selectedCandidate = decision.SelectedCandidateIndex >= 0 &&
+        if (attempted) Interlocked.Increment(ref attemptCount);
+        if (accepted) Interlocked.Increment(ref acceptedCount);
+
+        var selectedCandidate = observedCandidate ?? (decision.SelectedCandidateIndex >= 0 &&
                                 decision.SelectedCandidateIndex < candidates.Count
             ? candidates[decision.SelectedCandidateIndex]
-            : (ScholarCriticalStrategyCandidate?)null;
+            : (ScholarCriticalStrategyCandidate?)null);
         var result = new ScholarCriticalStrategyProbeSnapshot(
             decision.Kind,
             decision.Reason,
@@ -235,7 +341,8 @@ internal sealed class ScholarCriticalStrategyProbe
             selectedCandidate?.PressureKnown ?? false,
             selectedCandidate?.TeamTargetCount ?? 0,
             actionReady,
-            input.HeldGameplayKey,
+            frozenRetry?.HeldKey ??
+            (acceptedHold.OwnsHold ? (VirtualKey)acceptedHold.HeldKeyCode : input.HeldGameplayKey),
             inputClaimed,
             attempted,
             accepted,
@@ -249,6 +356,9 @@ internal sealed class ScholarCriticalStrategyProbe
 
     internal void Reset()
     {
+        acceptedHold = ScholarCriticalStrategyHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = VirtualKey.NO_KEY;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, ScholarCriticalStrategyProbeSnapshot.Initial with
         {
@@ -260,6 +370,13 @@ internal sealed class ScholarCriticalStrategyProbe
 
     internal ScholarCriticalStrategyProbeSnapshot FailClosed()
     {
+        var failedKey = frozenRetry?.HeldKey ??
+                        (acceptedHold.OwnsHold
+                            ? (VirtualKey)acceptedHold.HeldKeyCode
+                            : terminalHeldKey);
+        acceptedHold = ScholarCriticalStrategyHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = failedKey;
         lastEvent = "Failed closed";
         var result = ScholarCriticalStrategyProbeSnapshot.Initial with
         {
@@ -539,7 +656,7 @@ internal sealed class ScholarCriticalStrategyProbe
             teamTargetCount);
     }
 
-    private unsafe bool TryUseCriticalStrategyOnce(
+    private unsafe ClientActionAttemptOutcome TryUseCriticalStrategyOnce(
         IPlayerCharacter localPlayer,
         ScholarCriticalStrategyIntent intent,
         bool metadataVerified,
@@ -555,12 +672,25 @@ internal sealed class ScholarCriticalStrategyProbe
             !IsCurrentCrystallineConflict() ||
             !metadataVerified ||
             IsCurrentlySuppressedByGuard(currentLocal, Environment.TickCount64) ||
-            !intent.IsValid ||
-            !TryGetReadyAction(currentLocal, out var resolvedActionId) ||
+            !intent.IsValid)
+        {
+            return ClientActionAttemptOutcome.NotInvoked;
+        }
+
+
+        if (!TryObserveActionState(
+                currentLocal,
+                out var resolvedActionId,
+                out var cooldownReady,
+                out var resourcesReady,
+                out var nativeBoundaryReady) ||
             resolvedActionId != intent.ActionId)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
+
+        if (!cooldownReady || !resourcesReady || !nativeBoundaryReady)
+            return ClientActionAttemptOutcome.SoftUnavailable;
 
         var exactCandidate = ResolveFrozenIntent(currentLocal, intent, resolvedActionId);
         var currentLocalIdentity = new TargetPressureActorIdentity(
@@ -574,28 +704,50 @@ internal sealed class ScholarCriticalStrategyProbe
                 resolvedActionId,
                 actionLocallyReady: true))
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return false;
+        if (actionManager == null) return ClientActionAttemptOutcome.NotInvoked;
 
+        var boundaryBefore = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            intent.ActionId);
         attempted = true;
-        return nearAssist.RunWithoutRedirect(() =>
-            actionManager->UseAction(
-                ActionType.Action,
+        try
+        {
+            var accepted = nearAssist.RunWithoutRedirect(() =>
+                actionManager->UseAction(
+                    ActionType.Action,
+                    intent.ActionId,
+                    intent.Target.GameObjectId,
+                    0,
+                    ActionManager.UseActionMode.None,
+                    0));
+            return ClientActionAttemptBoundaryRules.Classify(
+                accepted,
                 intent.ActionId,
-                intent.Target.GameObjectId,
-                0,
-                ActionManager.UseActionMode.None,
-                0));
+                boundaryBefore,
+                ClientActionAttemptBoundary.Capture(actionManager, intent.ActionId));
+        }
+        catch (Exception exception)
+        {
+            LogAttemptFailure(exception, Environment.TickCount64);
+            return ClientActionAttemptOutcome.AcceptanceUnknown;
+        }
     }
 
-    private unsafe bool TryGetReadyAction(
+    private unsafe bool TryObserveActionState(
         IPlayerCharacter localPlayer,
-        out uint resolvedActionId)
+        out uint resolvedActionId,
+        out bool cooldownReady,
+        out bool resourcesReady,
+        out bool nativeBoundaryReady)
     {
         resolvedActionId = 0;
+        cooldownReady = false;
+        resourcesReady = false;
+        nativeBoundaryReady = false;
         if (!HasValidNativeIdentity(localPlayer) ||
             !localPlayer.ClassJob.IsValid ||
             localPlayer.ClassJob.RowId != ScholarCriticalStrategyRules.ScholarJobId)
@@ -609,8 +761,20 @@ internal sealed class ScholarCriticalStrategyProbe
 
         resolvedActionId = actionManager->GetAdjustedActionId(
             EnemyCombatConstants.ScholarCriticalStrategyActionId);
-        return resolvedActionId == ScholarCriticalStrategyRules.ActionId &&
-               actionManager->IsActionOffCooldown(ActionType.Action, resolvedActionId);
+        if (resolvedActionId != ScholarCriticalStrategyRules.ActionId) return false;
+
+        cooldownReady = actionManager->IsActionOffCooldown(
+            ActionType.Action,
+            resolvedActionId);
+        resourcesReady = actionManager->CheckActionResources(
+            ActionType.Action,
+            resolvedActionId) == 0;
+        nativeBoundaryReady = HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued);
+        return true;
     }
 
     private static unsafe bool HasRangeAndLineOfSight(
@@ -726,12 +890,87 @@ internal sealed class ScholarCriticalStrategyProbe
     private static bool IsValidGameObjectId(ulong gameObjectId) =>
         gameObjectId is not 0 and not 0xE0000000;
 
+    private void CompleteAttempt(
+        FrozenScholarRetry frozen,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        var completion = HeldActionRetryRules.Complete(
+            frozen.Retry,
+            Math.Max(0, nowMilliseconds),
+            outcome);
+        if (completion.RetryScheduled ||
+            completion.Disposition == HeldActionRetryDisposition.SoftWait)
+        {
+            frozenRetry = frozen with { Retry = completion.NextState };
+            return;
+        }
+
+        frozenRetry = null;
+        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            if (frozen.IsRepeat)
+            {
+                if (!ScholarCriticalStrategyRules.TrySpendReadyEpoch(
+                        acceptedHold,
+                        frozen.ReadyEpochToken,
+                        out acceptedHold))
+                {
+                    acceptedHold = ScholarCriticalStrategyHoldState.Initial;
+                }
+            }
+            else
+            {
+                acceptedHold = ScholarCriticalStrategyRules.BeginAcceptedHold(
+                    (int)frozen.HeldKey);
+            }
+
+            return;
+        }
+
+        SpendFrozenEpisode(
+            frozen,
+            HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(
+                completion.Disposition));
+    }
+
+    private void SpendFrozenEpisode(
+        FrozenScholarRetry frozen,
+        bool latchCircuitBreaker)
+    {
+        frozenRetry = null;
+        if (latchCircuitBreaker)
+            terminalHeldKey = frozen.HeldKey;
+        if (frozen.IsRepeat &&
+            ScholarCriticalStrategyRules.TrySpendReadyEpoch(
+                acceptedHold,
+                frozen.ReadyEpochToken,
+                out var spent))
+        {
+            acceptedHold = spent;
+        }
+    }
+
+    private static string DescribeAttempt(
+        ScholarCriticalStrategyIntent intent,
+        int attempt,
+        ClientActionAttemptOutcome outcome) =>
+        $"S{intent.EnemySlot} action {intent.ActionId} attempt " +
+        $"{attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
+
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {
         if (nowMilliseconds < nextErrorLogAt) return;
         nextErrorLogAt = nowMilliseconds + 10_000;
         log.Error(
             exception,
-            "Seiton Sense Scholar Critical Strategy attempt failed and will not be retried.");
+            "Seiton Sense Scholar Critical Strategy attempt ended with ambiguous acceptance.");
     }
+
+    private readonly record struct FrozenScholarRetry(
+        ScholarCriticalStrategyIntent Intent,
+        VirtualKey HeldKey,
+        bool IsRepeat,
+        ulong ReadyEpochToken,
+        HeldActionRetryState Retry);
 }

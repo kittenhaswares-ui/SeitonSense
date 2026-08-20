@@ -37,6 +37,8 @@ internal sealed record AllyRescueProbeSnapshot(
     long ConfirmationDropCount,
     string LastEvent)
 {
+    internal bool InputClaimed { get; init; }
+
     internal static AllyRescueProbeSnapshot Initial { get; } = new(
         AllyRescueBufferPhase.WaitingForCandidate,
         null,
@@ -152,7 +154,8 @@ internal sealed class AllyRescueProbe
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
         long bufferMilliseconds,
-        bool hardReset = false)
+        bool hardReset = false,
+        bool dispatchAllowed = true)
     {
         if (hardReset) ResetRuntime(nowMilliseconds);
 
@@ -166,12 +169,15 @@ internal sealed class AllyRescueProbe
         var localAlive = IsLivePlayer(localPlayer);
         var localIdentityValid = localAlive && HasValidNativeIdentity(localPlayer!);
         var actionId = localIdentityValid ? ResolveActionId(localPlayer!) : 0;
-        var actionManager = ActionManager.Instance();
+        var structurallyReady = actionId != 0 &&
+                                HasStructuralActionReadiness(actionId);
+        var globallyQueueReady = structurallyReady &&
+                                 HasGlobalQueueReadiness(localPlayer, actionId);
         var locallyReady = configurationEnabled &&
+                           dispatchAllowed &&
                            isCrystallineConflict &&
                            localIdentityValid &&
-                           actionId != 0 &&
-                           actionManager != null;
+                           globallyQueueReady;
 
         actionEffectCapture.SetAllyRescueLocalEntityId(
             configurationEnabled &&
@@ -193,12 +199,15 @@ internal sealed class AllyRescueProbe
             : [];
 
         var input = inputFrame.Snapshot;
-        var rescueFreshKey = inputFrame.FreshGameplayKeyPressed
+        var rescueFreshKey = input.ProbeSucceeded && input.FreshGameplayKeyPressed
             ? input.FreshGameplayKey
             : VirtualKey.NO_KEY;
-        var rescueHeldKey = inputFrame.HeldGameplayKeyEligible
+        var rescueHeldKey = input.ProbeSucceeded && input.HeldGameplayKeyEligible
             ? input.HeldGameplayKey
             : VirtualKey.NO_KEY;
+        var trackedKeyPhysicallyDown =
+            IsExactVirtualKeyToken(state.GameplayKeyToken) &&
+            inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)state.GameplayKeyToken);
         var decision = AllyRescueBufferRules.Observe(
             state,
             new AllyRescueBufferObservation(
@@ -208,24 +217,74 @@ internal sealed class AllyRescueProbe
                 localIdentityValid,
                 input.IsTextInputActive,
                 candidates,
-                inputFrame.FreshGameplayKeyPressed,
-                inputFrame.HeldGameplayKeyEligible,
+                rescueFreshKey != VirtualKey.NO_KEY,
+                rescueHeldKey != VirtualKey.NO_KEY,
                 allowHeldKeyAtCandidateEntry,
                 locallyReady,
                 nowMilliseconds,
                 hardReset,
-                bufferMilliseconds));
+                bufferMilliseconds,
+                FreshGameplayKeyToken: rescueFreshKey == VirtualKey.NO_KEY
+                    ? 0
+                    : (int)rescueFreshKey,
+                HeldGameplayKeyToken: rescueHeldKey == VirtualKey.NO_KEY
+                    ? 0
+                    : (int)rescueHeldKey,
+                TrackedGameplayKeyPhysicallyDown: trackedKeyPhysicallyDown,
+                DispatchAllowed: dispatchAllowed));
 
-        // Commit and consume before validation or native dispatch. A false return,
-        // exception, or last-moment actor/status loss can therefore never retry.
+        // Commit and claim this framework frame before validation/native dispatch.
+        // A rejected native request retains only this exact actor/status/key lease.
         state = decision.NextState;
-        if (decision.ShouldConsumeInputGeneration) inputFrame.Consume();
+        var exactLeaseCanProgress = state.TrackedIntent is { } claimedIntent &&
+                                    candidates.Any(candidate =>
+                                        candidate.Intent == claimedIntent &&
+                                        AllyRescueSelectionRules.IsEligible(candidate));
+        var inputClaimed = dispatchAllowed &&
+                           !input.IsTextInputActive &&
+                           structurallyReady &&
+                           exactLeaseCanProgress &&
+                           state.Phase == AllyRescueBufferPhase.Buffered &&
+                           IsExactVirtualKeyToken(state.GameplayKeyToken) &&
+                           inputFrame.IsGameplayKeyPhysicallyDown(
+                               (VirtualKey)state.GameplayKeyToken);
+        if (inputClaimed) inputFrame.Consume();
 
         var attempted = false;
         var accepted = false;
         var targetGameObjectId = 0UL;
         var targetStatusId = 0U;
         var lastEvent = DescribeDecision(decision, actionId, candidates.Count);
+        if (!decision.ShouldDispatch &&
+            state.Phase == AllyRescueBufferPhase.Buffered &&
+            exactLeaseCanProgress &&
+            globallyQueueReady &&
+            state.NextNativeAttemptAtMilliseconds > nowMilliseconds)
+        {
+            lastEvent =
+                $"Proven-false retry throttle: {state.NativeAttemptCount}/{AllyRescueBufferRules.MaximumNativeAttempts}";
+        }
+        else if (!decision.ShouldDispatch &&
+                 state.Phase == AllyRescueBufferPhase.Buffered &&
+                 exactLeaseCanProgress &&
+                 structurallyReady &&
+                 !globallyQueueReady)
+        {
+            lastEvent = "Soft wait: global animation/cast/action queue busy";
+        }
+        else if (!decision.ShouldDispatch &&
+                 state.Phase == AllyRescueBufferPhase.Buffered &&
+                 exactLeaseCanProgress &&
+                 !structurallyReady)
+        {
+            lastEvent = "Background wait: action cooldown/resources unavailable";
+        }
+        else if (!decision.ShouldDispatch &&
+                 state.Phase == AllyRescueBufferPhase.Buffered &&
+                 !exactLeaseCanProgress)
+        {
+            lastEvent = "Background wait: exact target/status/range unavailable";
+        }
         if (decision.ShouldDispatch &&
             decision.DispatchIntent is { } dispatchIntent)
         {
@@ -238,26 +297,56 @@ internal sealed class AllyRescueProbe
                     nowMilliseconds,
                     out var revalidated))
             {
+                var outcome = ClientActionAttemptOutcome.NotInvoked;
                 try
                 {
-                    accepted = TryUseRescueOnce(
+                    outcome = TryUseRescueOnce(
+                        localPlayer!,
                         actionId,
                         revalidated.GameObjectId,
                         out attempted);
+                    accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     if (attempted) Interlocked.Increment(ref attemptCount);
                     if (accepted) Interlocked.Increment(ref acceptedCount);
-                    lastEvent = accepted
-                        ? $"Accepted action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}"
-                        : $"Attempt rejected action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}";
+                    lastEvent = outcome switch
+                    {
+                        ClientActionAttemptOutcome.ClientAccepted =>
+                            $"Accepted action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
+                        ClientActionAttemptOutcome.ClientRejected =>
+                            $"Attempt rejected action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
+                        ClientActionAttemptOutcome.AcceptanceUnknown =>
+                            $"Attempt ambiguous action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
+                        ClientActionAttemptOutcome.SoftUnavailable =>
+                            $"Soft wait action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
+                        _ =>
+                            $"Attempt cancelled before native boundary action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
+                    };
                 }
                 catch (Exception exception)
                 {
+                    outcome = attempted
+                        ? ClientActionAttemptOutcome.AcceptanceUnknown
+                        : ClientActionAttemptOutcome.NotInvoked;
                     if (attempted) Interlocked.Increment(ref attemptCount);
                     lastEvent = $"Attempt threw action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}";
                     LogAttemptFailure(exception, nowMilliseconds);
                 }
 
-                if (attempted)
+                var completedAt = Math.Max(nowMilliseconds, Environment.TickCount64);
+                var completion = AllyRescueBufferRules.CompleteNativeAttempt(
+                    state,
+                    dispatchIntent,
+                    completedAt,
+                    outcome);
+                state = completion.NextState;
+                if (completion.Outcome == AllyRescueNativeAttemptOutcome.RetryScheduled)
+                {
+                    lastEvent +=
+                        $"; retry {state.NativeAttemptCount + 1}/{AllyRescueBufferRules.MaximumNativeAttempts} " +
+                        $"after {AllyRescueBufferRules.NativeRetryThrottleMilliseconds} ms";
+                }
+
+                if (attempted && accepted)
                 {
                     var attemptedAt = Math.Max(confirmationNow, Environment.TickCount64);
                     confirmationState = AllyRescueConfirmationRules.RegisterAttempt(
@@ -275,14 +364,16 @@ internal sealed class AllyRescueProbe
             }
             else
             {
+                state = AllyRescueBufferRules.CancelNativeAttempt(
+                    state,
+                    dispatchIntent,
+                    Math.Max(nowMilliseconds, Environment.TickCount64));
                 lastEvent =
-                    $"Consumed without action: target/status/range changed for {dispatchIntent.GameObjectId:X}/{targetStatusId}";
+                    $"Cancelled without action: target/status/range changed for {dispatchIntent.GameObjectId:X}/{targetStatusId}";
             }
         }
 
-        var remaining = state.Phase == AllyRescueBufferPhase.Buffered
-            ? Math.Max(0, state.ExpiresAtMilliseconds - nowMilliseconds)
-            : 0;
+        const long remaining = AllyRescueBufferRules.StatusBoundBufferMilliseconds;
         var result = new AllyRescueProbeSnapshot(
             state.Phase,
             state.TrackedIntent,
@@ -307,7 +398,10 @@ internal sealed class AllyRescueProbe
             confirmationState.Pending is not null,
             actionEffectCapture.CapturedAllyRescueCleanses,
             actionEffectCapture.DroppedAllyRescueCleanses,
-            lastEvent);
+            lastEvent)
+        {
+            InputClaimed = inputClaimed,
+        };
         Volatile.Write(ref snapshot, result);
         return result;
     }
@@ -545,7 +639,8 @@ internal sealed class AllyRescueProbe
             ? uniqueEnemyCount
             : null;
 
-    private unsafe bool TryUseRescueOnce(
+    private unsafe ClientActionAttemptOutcome TryUseRescueOnce(
+        IPlayerCharacter localPlayer,
         uint actionId,
         ulong targetGameObjectId,
         out bool attempted)
@@ -554,14 +649,22 @@ internal sealed class AllyRescueProbe
         if (actionId is not (WardensPaeanActionId or AquaveilActionId) ||
             targetGameObjectId is 0 or 0xE0000000)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return false;
+        if (actionManager == null ||
+            !HasStructuralActionReadiness(actionId) ||
+            !HasGlobalQueueReadiness(localPlayer, actionId))
+        {
+            return actionManager == null
+                ? ClientActionAttemptOutcome.NotInvoked
+                : ClientActionAttemptOutcome.SoftUnavailable;
+        }
 
+        var boundaryBefore = ClientActionAttemptBoundary.Capture(actionManager, actionId);
         attempted = true;
-        return nearAssist.RunWithoutRedirect(() =>
+        var accepted = nearAssist.RunWithoutRedirect(() =>
             actionManager->UseAction(
                 ActionType.Action,
                 actionId,
@@ -569,6 +672,56 @@ internal sealed class AllyRescueProbe
                 0,
                 ActionManager.UseActionMode.None,
                 0));
+        return ClientActionAttemptBoundaryRules.Classify(
+            accepted,
+            actionId,
+            boundaryBefore,
+            ClientActionAttemptBoundary.Capture(actionManager, actionId));
+    }
+
+    private static unsafe bool HasStructuralActionReadiness(uint actionId)
+    {
+        if (actionId is not (WardensPaeanActionId or AquaveilActionId))
+            return false;
+
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               actionManager->GetAdjustedActionId(actionId) == actionId &&
+               actionManager->IsActionOffCooldown(ActionType.Action, actionId) &&
+               actionManager->CheckActionResources(ActionType.Action, actionId) == 0;
+    }
+
+    private static unsafe bool HasGlobalQueueReadiness(
+        IPlayerCharacter? localPlayer,
+        uint actionId)
+    {
+        if (!HasValidNativeIdentity(localPlayer) ||
+            actionId is not (WardensPaeanActionId or AquaveilActionId))
+        {
+            return false;
+        }
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null ||
+            actionManager->ActionQueued ||
+            localPlayer!.IsCasting ||
+            actionManager->CastActionId != 0)
+        {
+            return false;
+        }
+
+        return HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer!.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued);
+    }
+
+    private static bool IsExactVirtualKeyToken(int token)
+    {
+        if (token <= 0) return false;
+        var key = (VirtualKey)token;
+        return key != VirtualKey.NO_KEY && Enum.IsDefined(typeof(VirtualKey), key);
     }
 
     private ulong ObserveStatusInstance(

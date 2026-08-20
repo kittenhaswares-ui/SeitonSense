@@ -38,14 +38,14 @@ internal static class MiracleProtectionEndSelfTests
             False(cleared.IsLatched, $"gate clears consent: {clearingObservation}");
         }
 
-        True(
+        False(
             MiracleProtectionEndRules.DispatchConsumesHeldConsent(
                 MiracleInterceptThreatKind.MarksmanSpite),
-            "startup reactive dispatch keeps its one-generation contract");
-        True(
+            "startup reactive dispatch keeps the continuous hold available");
+        False(
             MiracleProtectionEndRules.DispatchConsumesHeldConsent(
                 MiracleInterceptThreatKind.Contradance),
-            "all startup markers clear protection-end consent");
+            "all reactive families leave the same hold available for later actions");
         False(
             MiracleProtectionEndRules.DispatchConsumesHeldConsent(
                 MiracleInterceptThreatKind.PostPurifyCrowdControl),
@@ -147,6 +147,113 @@ internal static class MiracleProtectionEndSelfTests
             MiracleInterceptConfirmationRules.ExpectedStatusForAction(
                 MiracleInterceptConfirmationRules.SilentNocturneActionId),
             "BRD retains its exact landing status");
+    }
+
+    internal static void HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound()
+    {
+        const long observedAt = 1_000;
+        Equal(1_500L, MiracleProtectionEndRules.HeldLeaseMilliseconds, "held episode lease");
+        True(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 1_600),
+            "a higher-priority accepted action may finish before exact counter-CC dispatch");
+        False(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 2_500),
+            "the 1500 ms deadline remains exclusive");
+        True(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 1_249,
+                leaseMilliseconds: MiracleInterceptRules.FuriousBacklashThreatLifetimeMilliseconds),
+            "startup Viper retry remains inside its original short window");
+        False(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 1_250,
+                leaseMilliseconds: MiracleInterceptRules.FuriousBacklashThreatLifetimeMilliseconds),
+            "startup threat window is not extended");
+        foreach (var kind in new[]
+                 {
+                     MiracleInterceptThreatKind.MarksmanSpite,
+                     MiracleInterceptThreatKind.Zantetsuken,
+                     MiracleInterceptThreatKind.FuriousBacklash,
+                     MiracleInterceptThreatKind.Contradance,
+                 })
+        {
+            var lifetime = MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind);
+            True(
+                MiracleProtectionEndRules.CanAttempt(
+                    HeldActionRetryState.Initial,
+                    observedAt,
+                    observedAt + lifetime - 1,
+                    lifetime),
+                $"{kind} remains eligible immediately before its original deadline");
+            False(
+                MiracleProtectionEndRules.CanAttempt(
+                    HeldActionRetryState.Initial,
+                    observedAt,
+                    observedAt + lifetime,
+                    lifetime),
+                $"{kind} keeps its original exclusive deadline");
+        }
+
+        var state = HeldActionRetryState.Initial;
+        for (var attempt = 1; attempt <= MiracleProtectionEndRules.MaximumNativeAttempts; attempt++)
+        {
+            var now = observedAt +
+                      ((attempt - 1) * MiracleProtectionEndRules.NativeRetryThrottleMilliseconds);
+            True(
+                MiracleProtectionEndRules.CanAttempt(state, observedAt, now),
+                $"attempt {attempt} is eligible at its throttle boundary");
+            var rejected = MiracleProtectionEndRules.CompleteNativeAttempt(
+                state,
+                observedAt,
+                now,
+                ClientActionAttemptOutcome.ClientRejected);
+            if (attempt < MiracleProtectionEndRules.MaximumNativeAttempts)
+            {
+                Equal(MiracleProtectionEndAttemptOutcome.RetryScheduled, rejected.Outcome, $"false {attempt} retries");
+                False(
+                    MiracleProtectionEndRules.CanAttempt(
+                        rejected.NextState,
+                        observedAt,
+                        now + MiracleProtectionEndRules.NativeRetryThrottleMilliseconds - 1),
+                    "retry cannot run before the shared throttle");
+                state = rejected.NextState;
+            }
+            else
+            {
+                Equal(MiracleProtectionEndAttemptOutcome.RejectedTerminal, rejected.Outcome, "final retry-budget false is terminal");
+            }
+        }
+
+        var accepted = MiracleProtectionEndRules.CompleteNativeAttempt(
+            HeldActionRetryState.Initial,
+            observedAt,
+            nowMilliseconds: 1_600,
+            ClientActionAttemptOutcome.ClientAccepted);
+        Equal(MiracleProtectionEndAttemptOutcome.AcceptedTerminal, accepted.Outcome, "first true is terminal");
+
+        var ambiguous = MiracleProtectionEndRules.CompleteNativeAttempt(
+            HeldActionRetryState.Initial,
+            observedAt,
+            nowMilliseconds: 1_600,
+            ClientActionAttemptOutcome.AcceptanceUnknown);
+        Equal(MiracleProtectionEndAttemptOutcome.AmbiguousTerminal, ambiguous.Outcome, "native exception is terminal");
+
+        var notInvoked = MiracleProtectionEndRules.CompleteNativeAttempt(
+            HeldActionRetryState.Initial,
+            observedAt,
+            nowMilliseconds: 1_600,
+            ClientActionAttemptOutcome.NotInvoked);
+        Equal(MiracleProtectionEndAttemptOutcome.CancelledTerminal, notInvoked.Outcome, "pre-boundary cancellation cannot retry");
     }
 
     private static MiracleProtectionEndHeldConsentObservation Observation(
