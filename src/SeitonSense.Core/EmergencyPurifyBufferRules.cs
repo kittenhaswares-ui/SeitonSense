@@ -44,6 +44,9 @@ public enum EmergencyPurifyBufferCancelReason
     ClockMovedBackwards = 10,
     LocalPlayerIdentityInvalid = 11,
     ResilienceActive = 12,
+    ExactKeyReleased = 13,
+    NativeRetryLimitReached = 14,
+    NativeAcceptanceUnknown = 15,
 }
 
 public readonly record struct EmergencyPurifyBufferState(
@@ -52,7 +55,12 @@ public readonly record struct EmergencyPurifyBufferState(
     long StatusObservedAtMilliseconds,
     long ArmedAtMilliseconds,
     long ExpiresAtMilliseconds,
-    long LastObservedAtMilliseconds)
+    long LastObservedAtMilliseconds,
+    int FrozenKeyCode,
+    EmergencyPurifyInputTrigger FrozenInputTrigger,
+    int NativeAttemptCount,
+    long NextNativeAttemptAtMilliseconds,
+    ClientActionAttemptOutcome LastNativeOutcome)
 {
     public static EmergencyPurifyBufferState Initial => new(
         EmergencyPurifyBufferPhase.WaitingForStatus,
@@ -60,7 +68,12 @@ public readonly record struct EmergencyPurifyBufferState(
         -1,
         -1,
         -1,
-        -1);
+        -1,
+        0,
+        EmergencyPurifyInputTrigger.None,
+        0,
+        -1,
+        ClientActionAttemptOutcome.None);
 }
 
 public readonly record struct EmergencyPurifyBufferObservation(
@@ -77,7 +90,10 @@ public readonly record struct EmergencyPurifyBufferObservation(
     bool PurifyLocallyReady,
     long NowMilliseconds,
     bool HardReset = false,
-    long BufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds);
+    long BufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds,
+    int FreshKeyCode = 0,
+    int HeldKeyCode = 0,
+    bool FrozenKeyStillDown = true);
 
 public readonly record struct EmergencyPurifyBufferDecision(
     EmergencyPurifyBufferState NextState,
@@ -85,23 +101,42 @@ public readonly record struct EmergencyPurifyBufferDecision(
     EmergencyPurifyBufferCancelReason CancelReason,
     EmergencyPurifyInputTrigger InputTrigger = EmergencyPurifyInputTrigger.None)
 {
-    // The caller must store NextState before attempting the action. Dispatch decisions
-    // already carry a spent state, so a failed or rejected attempt cannot be retried.
     public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch;
 
-    // Consume every currently-down physical key generation as soon as one input
-    // owns this intent. This prevents one continuous ReAction hold from becoming
-    // a second Purify after a timeout or status replacement.
-    public bool ShouldConsumeInputGeneration =>
+    /// <summary>
+    /// Claims only the current shared-helper frame. The physical key generation
+    /// deliberately remains eligible while it is still held.
+    /// </summary>
+    public bool ShouldClaimInputFrame =>
         InputTrigger != EmergencyPurifyInputTrigger.None &&
         Kind is EmergencyPurifyBufferDecisionKind.Armed or EmergencyPurifyBufferDecisionKind.Dispatch;
+
+    // Compatibility name retained for existing callers. This no longer means
+    // consuming the physical generation through release.
+    public bool ShouldConsumeInputGeneration => ShouldClaimInputFrame;
 }
+
+public readonly record struct EmergencyPurifyNativeAttemptDecision(
+    EmergencyPurifyBufferState NextState,
+    EmergencyPurifyBufferCancelReason CancelReason,
+    bool RetryScheduled,
+    bool ClientAccepted,
+    bool Terminal,
+    bool SoftWait = false);
 
 public static class EmergencyPurifyBufferRules
 {
     public const long DefaultBufferMilliseconds = 750;
     public const long MinimumBufferMilliseconds = 100;
     public const long MaximumBufferMilliseconds = 1_000;
+    // Compatibility constant retained for older diagnostics. Once an exact
+    // key and exact CC instance are frozen, the status/key lifecycle itself is
+    // the bounded lease; no arbitrary timer may strand the player in CC.
+    public const long HeldStatusLeaseMilliseconds = long.MaxValue;
+    public const long NativeRetryIntervalMilliseconds =
+        HeldActionRetryRules.NativeRetryThrottleMilliseconds;
+    public const int MaximumNativeAttempts =
+        HeldActionRetryRules.MaximumNativeAttempts;
 
     public static EmergencyPurifyBufferDecision Observe(
         EmergencyPurifyBufferState previous,
@@ -160,7 +195,7 @@ public static class EmergencyPurifyBufferRules
         if (previous.Phase == EmergencyPurifyBufferPhase.WaitingForStatus)
         {
             var waiting = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
-            var entryTrigger = ResolveStatusEntryTrigger(observation);
+            var entryTrigger = ResolveStatusEntryTrigger(observation, out var keyCode);
             if (entryTrigger == EmergencyPurifyInputTrigger.None)
             {
                 return new EmergencyPurifyBufferDecision(
@@ -169,15 +204,15 @@ public static class EmergencyPurifyBufferRules
                     EmergencyPurifyBufferCancelReason.None);
             }
 
-            return ArmOrDispatch(waiting, observation, entryTrigger);
+            return ArmOrDispatch(waiting, observation, entryTrigger, keyCode);
         }
 
         if (previous.StatusInstance != status)
         {
             var replacement = WaitingForFreshKey(status.Value, observation.NowMilliseconds);
-            var replacementTrigger = ResolveStatusEntryTrigger(observation);
+            var replacementTrigger = ResolveStatusEntryTrigger(observation, out var keyCode);
             if (replacementTrigger != EmergencyPurifyInputTrigger.None)
-                return ArmOrDispatch(replacement, observation, replacementTrigger);
+                return ArmOrDispatch(replacement, observation, replacementTrigger, keyCode);
 
             return Cancelled(
                 replacement,
@@ -190,35 +225,159 @@ public static class EmergencyPurifyBufferRules
 
         if (current.Phase == EmergencyPurifyBufferPhase.Buffered)
         {
-            if (observation.NowMilliseconds >= current.ExpiresAtMilliseconds)
+            if (current.FrozenKeyCode <= 0 || !observation.FrozenKeyStillDown)
             {
                 return Cancelled(
                     WaitingForFreshKey(status.Value, observation.NowMilliseconds),
-                    EmergencyPurifyBufferCancelReason.TimedOut);
+                    EmergencyPurifyBufferCancelReason.ExactKeyReleased);
             }
 
-            if (observation.PurifyLocallyReady)
+            if (current.NativeAttemptCount >= MaximumNativeAttempts)
             {
-                return new EmergencyPurifyBufferDecision(
-                    Spend(current, observation.NowMilliseconds),
-                    EmergencyPurifyBufferDecisionKind.Dispatch,
-                    EmergencyPurifyBufferCancelReason.None);
+                return Cancelled(
+                    WaitingForFreshKey(status.Value, observation.NowMilliseconds),
+                    EmergencyPurifyBufferCancelReason.NativeRetryLimitReached);
             }
 
-            return NoDecision(current);
+            if (!observation.PurifyLocallyReady ||
+                observation.NowMilliseconds < current.NextNativeAttemptAtMilliseconds)
+            {
+                return Armed(current);
+            }
+
+            return Dispatch(current);
         }
 
-        if (!observation.FreshKeyPressed)
+        if (!observation.FreshKeyPressed || observation.FreshKeyCode <= 0)
             return NoDecision(current);
 
         return ArmOrDispatch(
             current,
             observation,
-            EmergencyPurifyInputTrigger.FreshKeyPress);
+            EmergencyPurifyInputTrigger.FreshKeyPress,
+            observation.FreshKeyCode);
+    }
+
+    public static EmergencyPurifyNativeAttemptDecision ApplyNativeAttemptOutcome(
+        EmergencyPurifyBufferState current,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        if (current.Phase != EmergencyPurifyBufferPhase.Buffered ||
+            current.StatusInstance is not { IsValid: true } ||
+            current.FrozenKeyCode <= 0 ||
+            nowMilliseconds < 0 ||
+            (current.LastObservedAtMilliseconds >= 0 &&
+             nowMilliseconds < current.LastObservedAtMilliseconds))
+        {
+            return new EmergencyPurifyNativeAttemptDecision(
+                MarkTerminal(
+                    current,
+                    nowMilliseconds,
+                    ClientActionAttemptOutcome.AcceptanceUnknown),
+                EmergencyPurifyBufferCancelReason.NativeAcceptanceUnknown,
+                false,
+                false,
+                true);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
+        {
+            var softWait = current with
+            {
+                LastObservedAtMilliseconds = nowMilliseconds,
+                LastNativeOutcome = outcome,
+            };
+            return new EmergencyPurifyNativeAttemptDecision(
+                softWait,
+                EmergencyPurifyBufferCancelReason.None,
+                false,
+                false,
+                false,
+                true);
+        }
+
+        if (outcome is ClientActionAttemptOutcome.None or
+            ClientActionAttemptOutcome.NotInvoked)
+        {
+            return new EmergencyPurifyNativeAttemptDecision(
+                MarkTerminal(
+                    current,
+                    nowMilliseconds,
+                    outcome == ClientActionAttemptOutcome.None
+                        ? ClientActionAttemptOutcome.AcceptanceUnknown
+                        : outcome),
+                EmergencyPurifyBufferCancelReason.NativeAcceptanceUnknown,
+                false,
+                false,
+                true);
+        }
+
+        var retry = HeldActionRetryRules.Complete(
+            new HeldActionRetryState(
+                current.NativeAttemptCount,
+                current.NextNativeAttemptAtMilliseconds),
+            nowMilliseconds,
+            outcome);
+        if (retry.Disposition == HeldActionRetryDisposition.AcceptedTerminal)
+        {
+            return new EmergencyPurifyNativeAttemptDecision(
+                MarkTerminal(current, nowMilliseconds, outcome),
+                EmergencyPurifyBufferCancelReason.None,
+                false,
+                true,
+                true);
+        }
+
+        if (retry.Disposition == HeldActionRetryDisposition.RetryScheduled)
+        {
+            var pending = current with
+            {
+                NativeAttemptCount = retry.NextState.NativeAttemptCount,
+                NextNativeAttemptAtMilliseconds =
+                    retry.NextState.NextNativeAttemptAtMilliseconds,
+                LastObservedAtMilliseconds = nowMilliseconds,
+                LastNativeOutcome = outcome,
+            };
+            return new EmergencyPurifyNativeAttemptDecision(
+                pending,
+                EmergencyPurifyBufferCancelReason.None,
+                true,
+                false,
+                false);
+        }
+
+        var cancelReason = retry.Disposition ==
+            HeldActionRetryDisposition.RejectedTerminal
+            ? EmergencyPurifyBufferCancelReason.NativeRetryLimitReached
+            : EmergencyPurifyBufferCancelReason.NativeAcceptanceUnknown;
+        return new EmergencyPurifyNativeAttemptDecision(
+            MarkTerminal(current, nowMilliseconds, outcome),
+            cancelReason,
+            false,
+            false,
+            true);
     }
 
     public static long NormalizeBufferMilliseconds(long requestedMilliseconds) =>
         Math.Clamp(requestedMilliseconds, MinimumBufferMilliseconds, MaximumBufferMilliseconds);
+
+    /// <summary>
+    /// Keeps Purify above every lower held helper while the exact frozen CC and
+    /// exact consent key both remain present. This intentionally remains true
+    /// after client acceptance, without permitting a second Purify call.
+    /// </summary>
+    public static bool ClaimsSchedulerPriority(
+        EmergencyPurifyBufferState state,
+        PurifyCcStatusInstance? observedStatus,
+        bool exactStatusCurrentlyObserved,
+        bool exactFrozenKeyStillDown) =>
+        state.Phase != EmergencyPurifyBufferPhase.WaitingForStatus &&
+        state.StatusInstance is { IsValid: true } frozenStatus &&
+        observedStatus == frozenStatus &&
+        exactStatusCurrentlyObserved &&
+        state.FrozenKeyCode > 0 &&
+        exactFrozenKeyStillDown;
 
     private static EmergencyPurifyBufferCancelReason GetGateFailure(
         EmergencyPurifyBufferObservation observation)
@@ -253,36 +412,46 @@ public static class EmergencyPurifyBufferRules
     private static EmergencyPurifyBufferDecision ArmOrDispatch(
         EmergencyPurifyBufferState current,
         EmergencyPurifyBufferObservation observation,
-        EmergencyPurifyInputTrigger inputTrigger)
+        EmergencyPurifyInputTrigger inputTrigger,
+        int keyCode)
     {
-        var bufferMilliseconds = NormalizeBufferMilliseconds(observation.BufferMilliseconds);
+        if (keyCode <= 0) return NoDecision(current);
+
         var buffered = current with
         {
             Phase = EmergencyPurifyBufferPhase.Buffered,
             ArmedAtMilliseconds = observation.NowMilliseconds,
-            ExpiresAtMilliseconds = SaturatingAdd(observation.NowMilliseconds, bufferMilliseconds),
+            ExpiresAtMilliseconds = long.MaxValue,
+            FrozenKeyCode = keyCode,
+            FrozenInputTrigger = inputTrigger,
+            NativeAttemptCount = 0,
+            NextNativeAttemptAtMilliseconds = observation.NowMilliseconds,
+            LastNativeOutcome = ClientActionAttemptOutcome.None,
         };
 
         return observation.PurifyLocallyReady
-            ? new EmergencyPurifyBufferDecision(
-                Spend(buffered, observation.NowMilliseconds),
-                EmergencyPurifyBufferDecisionKind.Dispatch,
-                EmergencyPurifyBufferCancelReason.None,
-                inputTrigger)
-            : new EmergencyPurifyBufferDecision(
-                buffered,
-                EmergencyPurifyBufferDecisionKind.Armed,
-                EmergencyPurifyBufferCancelReason.None,
-                inputTrigger);
+            ? Dispatch(buffered)
+            : Armed(buffered);
     }
 
     private static EmergencyPurifyInputTrigger ResolveStatusEntryTrigger(
-        EmergencyPurifyBufferObservation observation)
+        EmergencyPurifyBufferObservation observation,
+        out int keyCode)
     {
-        if (observation.FreshKeyPressed)
+        keyCode = 0;
+        if (observation.FreshKeyPressed && observation.FreshKeyCode > 0)
+        {
+            keyCode = observation.FreshKeyCode;
             return EmergencyPurifyInputTrigger.FreshKeyPress;
-        if (observation.AllowHeldKeyAtStatusEntry && observation.HeldKeyEligible)
+        }
+
+        if (observation.AllowHeldKeyAtStatusEntry &&
+            observation.HeldKeyEligible &&
+            observation.HeldKeyCode > 0)
+        {
+            keyCode = observation.HeldKeyCode;
             return EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry;
+        }
 
         return EmergencyPurifyInputTrigger.None;
     }
@@ -296,16 +465,26 @@ public static class EmergencyPurifyBufferRules
             nowMilliseconds,
             -1,
             -1,
-            nowMilliseconds);
+            nowMilliseconds,
+            0,
+            EmergencyPurifyInputTrigger.None,
+            0,
+            -1,
+            ClientActionAttemptOutcome.None);
 
-    private static EmergencyPurifyBufferState Spend(
-        EmergencyPurifyBufferState state,
-        long nowMilliseconds) =>
-        state with
-        {
-            Phase = EmergencyPurifyBufferPhase.SpentUntilStatusGone,
-            LastObservedAtMilliseconds = nowMilliseconds,
-        };
+    private static EmergencyPurifyBufferDecision Armed(EmergencyPurifyBufferState state) =>
+        new(
+            state,
+            EmergencyPurifyBufferDecisionKind.Armed,
+            EmergencyPurifyBufferCancelReason.None,
+            state.FrozenInputTrigger);
+
+    private static EmergencyPurifyBufferDecision Dispatch(EmergencyPurifyBufferState state) =>
+        new(
+            state,
+            EmergencyPurifyBufferDecisionKind.Dispatch,
+            EmergencyPurifyBufferCancelReason.None,
+            state.FrozenInputTrigger);
 
     private static EmergencyPurifyBufferDecision NoDecision(EmergencyPurifyBufferState state) =>
         new(
@@ -318,6 +497,30 @@ public static class EmergencyPurifyBufferRules
         EmergencyPurifyBufferCancelReason reason) =>
         new(state, EmergencyPurifyBufferDecisionKind.Cancelled, reason);
 
-    private static long SaturatingAdd(long left, long right) =>
-        left > long.MaxValue - right ? long.MaxValue : left + right;
+    private static EmergencyPurifyBufferState MarkTerminal(
+        EmergencyPurifyBufferState current,
+        long nowMilliseconds,
+        ClientActionAttemptOutcome outcome)
+    {
+        if (current.StatusInstance is not { IsValid: true })
+            return EmergencyPurifyBufferState.Initial;
+
+        return current with
+        {
+            Phase = EmergencyPurifyBufferPhase.SpentUntilStatusGone,
+            NativeAttemptCount = outcome is
+                ClientActionAttemptOutcome.ClientAccepted or
+                ClientActionAttemptOutcome.ClientRejected or
+                ClientActionAttemptOutcome.AcceptanceUnknown
+                    ? SaturatingIncrement(current.NativeAttemptCount)
+                    : current.NativeAttemptCount,
+            NextNativeAttemptAtMilliseconds = -1,
+            LastObservedAtMilliseconds = Math.Max(0, nowMilliseconds),
+            LastNativeOutcome = outcome,
+        };
+    }
+
+    private static int SaturatingIncrement(int value) =>
+        value == int.MaxValue ? int.MaxValue : value + 1;
+
 }

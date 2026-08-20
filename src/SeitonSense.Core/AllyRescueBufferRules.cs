@@ -38,42 +38,18 @@ public enum AllyRescueBufferCancelReason
     TimedOut = 8,
     HardReset = 9,
     InvalidClock = 10,
+    HeldKeyReleased = 11,
 }
 
-/// <summary>
-/// Gives the self-Purify decision first ownership of the shared physical input
-/// before an Ally Rescue decision is observed in the same frame.
-/// </summary>
-public static class EmergencyActionPriorityRules
+public enum AllyRescueNativeAttemptOutcome
 {
-    public static bool SelfPurifyClaimsPriority(EmergencyPurifyBufferDecision decision) =>
-        SelfPurifyClaimsPriority(decision.Kind, decision.InputTrigger);
-
-    public static bool SelfPurifyClaimsPriority(
-        EmergencyPurifyBufferDecisionKind kind,
-        EmergencyPurifyInputTrigger inputTrigger) =>
-        kind == EmergencyPurifyBufferDecisionKind.Dispatch ||
-        (kind == EmergencyPurifyBufferDecisionKind.Armed &&
-         inputTrigger != EmergencyPurifyInputTrigger.None);
-
-    public static bool AllowAllyRescue(EmergencyPurifyBufferDecision decision) =>
-        !SelfPurifyClaimsPriority(decision);
-
-    public static bool AllyRescueClaimsPriority(AllyRescueBufferDecision decision) =>
-        AllyRescueClaimsPriority(decision.Kind, decision.InputTrigger);
-
-    public static bool AllyRescueClaimsPriority(
-        AllyRescueBufferDecisionKind kind,
-        AllyRescueInputTrigger inputTrigger) =>
-        kind == AllyRescueBufferDecisionKind.Dispatch ||
-        (kind == AllyRescueBufferDecisionKind.Armed &&
-         inputTrigger != AllyRescueInputTrigger.None);
-
-    public static bool AllowMiracleIntercept(
-        EmergencyPurifyBufferDecision purifyDecision,
-        AllyRescueBufferDecision rescueDecision) =>
-        !SelfPurifyClaimsPriority(purifyDecision) &&
-        !AllyRescueClaimsPriority(rescueDecision);
+    None = 0,
+    RetryScheduled = 1,
+    AcceptedTerminal = 2,
+    RejectedTerminal = 3,
+    AmbiguousTerminal = 4,
+    Cancelled = 5,
+    SoftWait = 6,
 }
 
 public readonly record struct AllyRescueBufferState(
@@ -83,7 +59,10 @@ public readonly record struct AllyRescueBufferState(
     long ArmedAtMilliseconds,
     long ExpiresAtMilliseconds,
     long LastObservedAtMilliseconds,
-    ImmutableArray<AllyRescueIntent> SpentIntents)
+    ImmutableArray<AllyRescueIntent> SpentIntents,
+    int GameplayKeyToken,
+    int NativeAttemptCount,
+    long NextNativeAttemptAtMilliseconds)
 {
     public static AllyRescueBufferState Initial => new(
         AllyRescueBufferPhase.WaitingForCandidate,
@@ -92,7 +71,10 @@ public readonly record struct AllyRescueBufferState(
         -1,
         -1,
         -1,
-        ImmutableArray<AllyRescueIntent>.Empty);
+        ImmutableArray<AllyRescueIntent>.Empty,
+        0,
+        0,
+        -1);
 
     public bool HasSpent(AllyRescueIntent intent) =>
         !SpentIntents.IsDefaultOrEmpty && SpentIntents.Contains(intent);
@@ -111,7 +93,11 @@ public readonly record struct AllyRescueBufferObservation(
     bool ActionLocallyReady,
     long NowMilliseconds,
     bool HardReset = false,
-    long BufferMilliseconds = AllyRescueBufferRules.DefaultBufferMilliseconds);
+    long BufferMilliseconds = AllyRescueBufferRules.DefaultBufferMilliseconds,
+    int FreshGameplayKeyToken = 0,
+    int HeldGameplayKeyToken = 0,
+    bool TrackedGameplayKeyPhysicallyDown = false,
+    bool DispatchAllowed = true);
 
 public readonly record struct AllyRescueBufferDecision(
     AllyRescueBufferState NextState,
@@ -123,25 +109,38 @@ public readonly record struct AllyRescueBufferDecision(
     public bool ShouldDispatch => Kind == AllyRescueBufferDecisionKind.Dispatch;
 
     public bool ShouldConsumeInputGeneration =>
-        InputTrigger != AllyRescueInputTrigger.None &&
-        Kind is AllyRescueBufferDecisionKind.Armed or AllyRescueBufferDecisionKind.Dispatch;
+        Kind == AllyRescueBufferDecisionKind.Dispatch ||
+        (InputTrigger != AllyRescueInputTrigger.None &&
+         Kind == AllyRescueBufferDecisionKind.Armed);
 
     public AllyRescueIntent? DispatchIntent => ShouldDispatch
-        ? NextState.SpentIntents[^1]
+        ? NextState.TrackedIntent
         : null;
 }
 
+public readonly record struct AllyRescueNativeAttemptDecision(
+    AllyRescueBufferState NextState,
+    AllyRescueNativeAttemptOutcome Outcome)
+{
+    public bool IsTerminal => Outcome is
+        AllyRescueNativeAttemptOutcome.AcceptedTerminal or
+        AllyRescueNativeAttemptOutcome.RejectedTerminal or
+        AllyRescueNativeAttemptOutcome.AmbiguousTerminal or
+        AllyRescueNativeAttemptOutcome.Cancelled;
+}
+
 /// <summary>
-/// Converts one physical gameplay-key generation into at most one ally rescue
-/// action attempt. A Dispatch decision already records the exact actor/status
-/// intent as spent; callers must store NextState before invoking native code.
-/// A rejected, false, or throwing action call is therefore never retried.
+/// Freezes one exact actor/status/key lease for the lifetime of that status and
+/// physical hold. Structural/range/queue waits have no wall-clock timeout and
+/// consume no retry budget. A proven native false may retry only this lease.
 /// </summary>
 public static class AllyRescueBufferRules
 {
-    public const long DefaultBufferMilliseconds = 750;
-    public const long MinimumBufferMilliseconds = 100;
-    public const long MaximumBufferMilliseconds = 750;
+    public const long StatusBoundBufferMilliseconds = -1;
+    public const long DefaultBufferMilliseconds = StatusBoundBufferMilliseconds;
+    public const long NativeRetryThrottleMilliseconds =
+        HeldActionRetryRules.NativeRetryThrottleMilliseconds;
+    public const int MaximumNativeAttempts = HeldActionRetryRules.MaximumNativeAttempts;
 
     public static AllyRescueBufferDecision Observe(
         AllyRescueBufferState previous,
@@ -171,6 +170,40 @@ public static class AllyRescueBufferRules
             return Cancelled(
                 StopTracking(previous, observation.NowMilliseconds),
                 gateFailure);
+        }
+
+        if (previous.Phase == AllyRescueBufferPhase.Buffered &&
+            previous.TrackedIntent is { } leasedIntent)
+        {
+            var leasedState = previous with
+            {
+                LastObservedAtMilliseconds = observation.NowMilliseconds,
+            };
+            if (leasedState.GameplayKeyToken <= 0 ||
+                !observation.TrackedGameplayKeyPhysicallyDown)
+            {
+                return Cancelled(
+                    StopTracking(leasedState, observation.NowMilliseconds),
+                    AllyRescueBufferCancelReason.HeldKeyReleased);
+            }
+
+            var leasedIndex = FindExactCandidateIndex(observation.Candidates, leasedIntent);
+            if (leasedIndex < 0)
+            {
+                return Cancelled(
+                    StopTracking(leasedState, observation.NowMilliseconds),
+                    AllyRescueBufferCancelReason.CandidateGone);
+            }
+
+            if (!AllyRescueSelectionRules.IsEligible(observation.Candidates![leasedIndex]) ||
+                !observation.DispatchAllowed ||
+                !observation.ActionLocallyReady ||
+                observation.NowMilliseconds < leasedState.NextNativeAttemptAtMilliseconds)
+            {
+                return NoDecision(leasedState, leasedIndex);
+            }
+
+            return Dispatch(leasedState, observation.NowMilliseconds, leasedIndex);
         }
 
         var spent = previous.SpentIntents.ToHashSet();
@@ -212,22 +245,6 @@ public static class AllyRescueBufferRules
         {
             LastObservedAtMilliseconds = observation.NowMilliseconds,
         };
-        if (current.Phase == AllyRescueBufferPhase.Buffered)
-        {
-            if (observation.NowMilliseconds >= current.ExpiresAtMilliseconds)
-            {
-                return Cancelled(
-                    WaitingForFreshKey(current, intent, observation.NowMilliseconds),
-                    AllyRescueBufferCancelReason.TimedOut,
-                    selectedIndex);
-            }
-
-            if (observation.ActionLocallyReady)
-                return Dispatch(current, intent, observation.NowMilliseconds, selectedIndex);
-
-            return NoDecision(current, selectedIndex);
-        }
-
         // A held level is intentionally ignored after the exact candidate-entry
         // observation. Only a real later down-edge may create a new intent.
         if (!observation.FreshKeyPressed)
@@ -241,7 +258,84 @@ public static class AllyRescueBufferRules
     }
 
     public static long NormalizeBufferMilliseconds(long requestedMilliseconds) =>
-        Math.Clamp(requestedMilliseconds, MinimumBufferMilliseconds, MaximumBufferMilliseconds);
+        StatusBoundBufferMilliseconds;
+
+    public static AllyRescueNativeAttemptDecision CompleteNativeAttempt(
+        AllyRescueBufferState previous,
+        AllyRescueIntent intent,
+        long nowMilliseconds,
+        ClientActionAttemptOutcome outcome)
+    {
+        previous = Normalize(previous);
+        if (previous.Phase != AllyRescueBufferPhase.Buffered ||
+            previous.TrackedIntent != intent ||
+            nowMilliseconds < previous.LastObservedAtMilliseconds)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                StopTracking(previous, nowMilliseconds),
+                AllyRescueNativeAttemptOutcome.Cancelled);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.AcceptanceUnknown)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                Finish(previous, intent, nowMilliseconds),
+                AllyRescueNativeAttemptOutcome.AmbiguousTerminal);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                Finish(previous, intent, nowMilliseconds),
+                AllyRescueNativeAttemptOutcome.AcceptedTerminal);
+        }
+
+        var shared = HeldActionRetryRules.Complete(
+            new HeldActionRetryState(
+                previous.NativeAttemptCount,
+                previous.NextNativeAttemptAtMilliseconds),
+            nowMilliseconds,
+            outcome);
+        if (shared.Disposition == HeldActionRetryDisposition.SoftWait)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                previous with { LastObservedAtMilliseconds = nowMilliseconds },
+                AllyRescueNativeAttemptOutcome.SoftWait);
+        }
+
+        if (shared.Disposition == HeldActionRetryDisposition.CancelledTerminal)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                Finish(previous, intent, nowMilliseconds),
+                AllyRescueNativeAttemptOutcome.Cancelled);
+        }
+
+        if (!shared.RetryScheduled)
+        {
+            return new AllyRescueNativeAttemptDecision(
+                Finish(previous, intent, nowMilliseconds),
+                AllyRescueNativeAttemptOutcome.RejectedTerminal);
+        }
+
+        return new AllyRescueNativeAttemptDecision(
+            previous with
+            {
+                NativeAttemptCount = shared.NextState.NativeAttemptCount,
+                NextNativeAttemptAtMilliseconds =
+                    shared.NextState.NextNativeAttemptAtMilliseconds,
+                LastObservedAtMilliseconds = nowMilliseconds,
+            },
+            AllyRescueNativeAttemptOutcome.RetryScheduled);
+    }
+
+    public static AllyRescueBufferState CancelNativeAttempt(
+        AllyRescueBufferState previous,
+        AllyRescueIntent intent,
+        long nowMilliseconds) =>
+        previous.Phase == AllyRescueBufferPhase.Buffered &&
+        previous.TrackedIntent == intent
+            ? Finish(previous, intent, nowMilliseconds)
+            : previous;
 
     private static AllyRescueBufferCancelReason GetGateFailure(
         AllyRescueBufferObservation observation)
@@ -266,23 +360,28 @@ public static class AllyRescueBufferRules
         int selectedIndex,
         AllyRescueInputTrigger trigger)
     {
+        var keyToken = trigger switch
+        {
+            AllyRescueInputTrigger.FreshKeyPress => observation.FreshGameplayKeyToken,
+            AllyRescueInputTrigger.HeldKeyAtCandidateEntry => observation.HeldGameplayKeyToken,
+            _ => 0,
+        };
+        if (keyToken <= 0)
+            return NoDecision(current, selectedIndex);
+
         var buffered = current with
         {
             Phase = AllyRescueBufferPhase.Buffered,
             ArmedAtMilliseconds = observation.NowMilliseconds,
-            ExpiresAtMilliseconds = SaturatingAdd(
-                observation.NowMilliseconds,
-                NormalizeBufferMilliseconds(observation.BufferMilliseconds)),
+            ExpiresAtMilliseconds = StatusBoundBufferMilliseconds,
             LastObservedAtMilliseconds = observation.NowMilliseconds,
+            GameplayKeyToken = keyToken,
+            NativeAttemptCount = 0,
+            NextNativeAttemptAtMilliseconds = observation.NowMilliseconds,
         };
 
-        return observation.ActionLocallyReady
-            ? Dispatch(
-                buffered,
-                current.TrackedIntent!.Value,
-                observation.NowMilliseconds,
-                selectedIndex,
-                trigger)
+        return observation.DispatchAllowed && observation.ActionLocallyReady
+            ? Dispatch(buffered, observation.NowMilliseconds, selectedIndex, trigger)
             : new AllyRescueBufferDecision(
                 buffered,
                 AllyRescueBufferDecisionKind.Armed,
@@ -293,27 +392,17 @@ public static class AllyRescueBufferRules
 
     private static AllyRescueBufferDecision Dispatch(
         AllyRescueBufferState current,
-        AllyRescueIntent intent,
         long nowMilliseconds,
         int selectedIndex,
         AllyRescueInputTrigger trigger = AllyRescueInputTrigger.None)
     {
-        var spent = current.HasSpent(intent)
-            ? current.SpentIntents
-            : current.SpentIntents.Add(intent);
-        var consumed = current with
+        var attempting = current with
         {
-            Phase = AllyRescueBufferPhase.WaitingForCandidate,
-            TrackedIntent = null,
-            CandidateObservedAtMilliseconds = -1,
-            ArmedAtMilliseconds = -1,
-            ExpiresAtMilliseconds = -1,
             LastObservedAtMilliseconds = nowMilliseconds,
-            SpentIntents = spent,
         };
 
         return new AllyRescueBufferDecision(
-            consumed,
+            attempting,
             AllyRescueBufferDecisionKind.Dispatch,
             AllyRescueBufferCancelReason.None,
             selectedIndex,
@@ -323,9 +412,11 @@ public static class AllyRescueBufferRules
     private static AllyRescueInputTrigger ResolveCandidateEntryTrigger(
         AllyRescueBufferObservation observation)
     {
-        if (observation.FreshKeyPressed)
+        if (observation.FreshKeyPressed && observation.FreshGameplayKeyToken > 0)
             return AllyRescueInputTrigger.FreshKeyPress;
-        if (observation.AllowHeldKeyAtCandidateEntry && observation.HeldKeyEligible)
+        if (observation.AllowHeldKeyAtCandidateEntry &&
+            observation.HeldKeyEligible &&
+            observation.HeldGameplayKeyToken > 0)
             return AllyRescueInputTrigger.HeldKeyAtCandidateEntry;
 
         return AllyRescueInputTrigger.None;
@@ -343,6 +434,9 @@ public static class AllyRescueBufferRules
             ArmedAtMilliseconds = -1,
             ExpiresAtMilliseconds = -1,
             LastObservedAtMilliseconds = nowMilliseconds,
+            GameplayKeyToken = 0,
+            NativeAttemptCount = 0,
+            NextNativeAttemptAtMilliseconds = -1,
         };
 
     private static AllyRescueBufferState StopTracking(
@@ -356,7 +450,35 @@ public static class AllyRescueBufferRules
             ArmedAtMilliseconds = -1,
             ExpiresAtMilliseconds = -1,
             LastObservedAtMilliseconds = nowMilliseconds,
+            GameplayKeyToken = 0,
+            NativeAttemptCount = 0,
+            NextNativeAttemptAtMilliseconds = -1,
         };
+
+    private static AllyRescueBufferState Finish(
+        AllyRescueBufferState previous,
+        AllyRescueIntent intent,
+        long nowMilliseconds)
+    {
+        var spent = previous.HasSpent(intent)
+            ? previous.SpentIntents
+            : previous.SpentIntents.Add(intent);
+        return StopTracking(previous with { SpentIntents = spent }, nowMilliseconds);
+    }
+
+    private static int FindExactCandidateIndex(
+        IReadOnlyList<AllyRescueSelectionCandidate>? candidates,
+        AllyRescueIntent intent)
+    {
+        if (candidates is null) return -1;
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (candidates[index].Intent == intent)
+                return index;
+        }
+
+        return -1;
+    }
 
     private static AllyRescueBufferState Normalize(AllyRescueBufferState state) =>
         state.SpentIntents.IsDefault
@@ -382,6 +504,4 @@ public static class AllyRescueBufferRules
             reason,
             selectedIndex);
 
-    private static long SaturatingAdd(long left, long right) =>
-        left > long.MaxValue - right ? long.MaxValue : left + right;
 }

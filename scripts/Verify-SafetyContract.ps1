@@ -80,6 +80,10 @@ $namePlateAnchorPath = Join-Path $pluginServicesRoot 'NamePlateAnchorTracker.cs'
 $inputContextPath = Join-Path $pluginServicesRoot 'GameInputContextProbe.cs'
 $purifyProbePath = Join-Path $pluginServicesRoot 'EmergencyPurifyProbe.cs'
 $emergencyInputCoordinatorPath = Join-Path $pluginServicesRoot 'EmergencyActionInputCoordinator.cs'
+$clientActionAttemptBoundaryPath = Join-Path $pluginServicesRoot 'ClientActionAttemptBoundary.cs'
+$clientActionAttemptOutcomePath = Join-Path $coreRoot 'ClientActionAttemptOutcome.cs'
+$heldActionRetryRulesPath = Join-Path $coreRoot 'HeldActionRetryRules.cs'
+$heldActionRetrySelfTestsPath = Join-Path $coreSelfTestRoot 'HeldActionRetrySelfTests.cs'
 $allyRescueProbePath = Join-Path $pluginServicesRoot 'AllyRescueProbe.cs'
 $miracleInterceptProbePath = Join-Path $pluginServicesRoot 'MiracleInterceptProbe.cs'
 $defensiveUtilityProbePath = Join-Path $pluginServicesRoot 'DefensiveUtilityProbe.cs'
@@ -198,6 +202,7 @@ $allowedUnsafe = @(
     $namePlateAnchorPath,
     $inputContextPath,
     $purifyProbePath,
+    $clientActionAttemptBoundaryPath,
     $allyRescueProbePath,
     $miracleInterceptProbePath,
     $defensiveUtilityProbePath,
@@ -1073,7 +1078,10 @@ $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
         $_.Line -match '^\s*///.*\bUseAction\b'
-    -not ($reviewedActionBoundary -or $reviewedBrakeDocumentation)
+    $reviewedAttemptDocumentation =
+        $_.Path -eq $clientActionAttemptOutcomePath -and
+        $_.Line -match '^\s*///.*\bUseAction\b'
+    -not ($reviewedActionBoundary -or $reviewedBrakeDocumentation -or $reviewedAttemptDocumentation)
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
@@ -1290,7 +1298,9 @@ Assert-Literals $defensiveUtilityGuardianSource @(
     'AcceptedAutoGuardianEpisode? LastAcceptedGuardianEpisode,',
     'private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;',
     'private long guardianEpisodeToken;',
-    'accepted = TryUseGuardianOnce(localPlayer!, selected, out attempted);',
+    'var outcome = TryUseGuardianOnce(localPlayer!, selected, out attempted);',
+    'accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;',
+    'CompleteGuardianAttempt(frozen, outcome, nowMilliseconds);',
     'if (attempted && accepted)',
     'lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode(',
     'NextGuardianEpisodeToken()',
@@ -1306,14 +1316,15 @@ $acceptedGuardianConstructors = @(Select-String -LiteralPath $sourceFiles.FullNa
 $resetRuntimeMethod = [regex]::Match(
     $normalizedDefensiveUtilityGuardianSource,
     'private void ResetRuntime\(\) \{(?<Body>.*?)\} private void ResetOpportunityRuntime').Groups['Body'].Value
-if ($acceptedGuardianConstructors.Count -ne 1 -or
-    $acceptedGuardianConstructors[0].Path -ne $defensiveUtilityProbePath -or
-    $normalizedDefensiveUtilityGuardianSource -notmatch 'action = DefensiveUtilityActionKind\.Guardian; trigger = DefensiveUtilityTrigger\.PaladinGuardianLowAlly;.*?selectedGuardianPartySlot = selected\.PartySlot;.*?guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce\(localPlayer!, selected, out attempted\); if \(attempted && accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), new TargetPressureActorIdentity\( localPlayer!\.GameObjectId, localPlayer\.EntityId\), selected\.Actor, selected\.PartySlot\); \}' -or
+if ($acceptedGuardianConstructors.Count -ne 2 -or
+    @($acceptedGuardianConstructors | Where-Object { $_.Path -ne $defensiveUtilityProbePath }).Count -ne 0 -or
+    $normalizedDefensiveUtilityGuardianSource -notmatch 'inputClaimed = true; inputFrame\.Consume\(\); var frozen = new FrozenGuardianRetry\(.*?var outcome = TryUseGuardianOnce\(localPlayer!, selected, out attempted\); accepted = outcome == ClientActionAttemptOutcome\.ClientAccepted; CompleteGuardianAttempt\(frozen, outcome, nowMilliseconds\); if \(attempted && accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), new TargetPressureActorIdentity\( localPlayer!\.GameObjectId, localPlayer\.EntityId\), selected\.Actor, selected\.PartySlot\); \}' -or
+    $normalizedDefensiveUtilityGuardianSource -notmatch 'if \(frozenGuardianRetry is \{ \} frozenGuardian\).*?var outcome = TryUseGuardianOnce\( localPlayer!, frozenGuardian\.Intent, out attempted\); accepted = outcome == ClientActionAttemptOutcome\.ClientAccepted; CompleteGuardianAttempt\(frozenGuardian, outcome, nowMilliseconds\); if \(accepted\) \{ lastAcceptedGuardianEpisode = new AcceptedAutoGuardianEpisode\( NextGuardianEpisodeToken\(\), Math\.Max\(nowMilliseconds, Environment\.TickCount64\), frozenGuardian\.LocalPlayer, frozenGuardian\.Intent\.Actor, frozenGuardian\.Intent\.PartySlot\); \}' -or
     $normalizedDefensiveUtilityGuardianSource -notmatch 'private long NextGuardianEpisodeToken\(\) \{ while \(true\) \{ var current = Volatile\.Read\(ref guardianEpisodeToken\); if \(current == long\.MaxValue\) return long\.MaxValue; var next = current \+ 1; if \(Interlocked\.CompareExchange\(ref guardianEpisodeToken, next, current\) == current\) return next; \} \}' -or
     [string]::IsNullOrWhiteSpace($resetRuntimeMethod) -or
     $resetRuntimeMethod -notmatch 'lastAcceptedGuardianEpisode = null;' -or
     $resetRuntimeMethod -match 'guardianEpisodeToken') {
-    throw 'Only the consumed, frozen automatic Guardian branch may publish a monotonically tokened event after attempted-and-client-accepted; hard reset clears the event but never rewinds the token.'
+    throw 'Only client-accepted initial or frozen-retry Guardian boundaries may publish a monotonically tokened confirmation event; reset clears the event but never rewinds the token.'
 }
 
 $guardianCommunicationMetadataGuard = Read-RequiredSource $guardianCommunicationMetadataGuardPath 'Guardian communication metadata guard'
@@ -1404,9 +1415,9 @@ if (-not $guardianObserveMethod.Success -or
     throw 'Guardian runtime must revalidate exact CC/local/P-slot/text/config/metadata/marker ownership, issue at most one typed command per Observe tick, map only marker reservation to pre-invocation deferral, and never initiate combat, retarget, write marker memory, or own a raw shell boundary.'
 }
 
-# Scholar Critical Strategy is a pure, immediate held-generation policy. It
-# requires a complete exact S1-S5 set, uses pressure only wholesale for initial
-# ranking, and exposes one frozen intent for post-consumption revalidation.
+# Scholar Critical Strategy freezes one exact S-slot intent. A clean client
+# false may retry that same intent through the shared policy; acceptance can
+# reuse the continuous hold only after a distinct observed cooldown epoch.
 $scholarCriticalStrategyRules = Read-RequiredSource $scholarCriticalStrategyRulesPath 'Scholar Critical Strategy rules'
 $normalizedScholarCriticalStrategyRules = $scholarCriticalStrategyRules -replace '\s+', ' '
 $scholarCriticalStrategySelfTests = Read-RequiredSource $scholarCriticalStrategySelfTestsPath 'Scholar Critical Strategy self-tests'
@@ -1470,21 +1481,21 @@ $scholarSelfTestMethods = @(
     'UnknownOrAllZeroPressureFallsBackToHp',
     'DispatchRequiresEveryGateAndHeldGeneration',
     'DispatchFreezesOneIntentWithoutPressureRevalidation',
-    'ConsumedHeldGenerationCannotRetry'
+    'ConsumedHeldGenerationCannotRetry',
+    'AcceptedHoldRepeatsOnlyAfterCooldownEpoch'
 )
 foreach ($method in $scholarSelfTestMethods) {
     Assert-Literals $scholarCriticalStrategySelfTests @("internal static void $method()") "Scholar Critical Strategy self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("ScholarCriticalStrategySelfTests.$method") "Scholar Critical Strategy test registration $method"
 }
-if ([regex]::Matches($scholarCriticalStrategySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bScholarCriticalStrategySelfTests\.\w+').Count -ne 7) {
-    throw 'All seven Scholar Critical Strategy gate, ranking, intent, and one-generation self-tests must remain registered exactly once.'
+if ([regex]::Matches($scholarCriticalStrategySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bScholarCriticalStrategySelfTests\.\w+').Count -ne 8) {
+    throw 'All eight Scholar Critical Strategy gate, ranking, frozen-intent, and accepted-cooldown-epoch tests must remain registered exactly once.'
 }
 
-# The SCH runtime may resolve candidates only for one eligible held generation.
-# It must capture the full canonical S1-S5 view, consume before every final
-# native read, and issue one frozen exact request through the internal redirect
-# bypass. Pressure is selection-only and must never be sampled after consume.
+# The runtime keeps initial selection separate from the frozen retry boundary.
+# Its retry and first-attempt branches are mutually exclusive, claim only the
+# current frame, and use the same exact action/target without reranking.
 $scholarCriticalStrategyProbe = Read-RequiredSource $scholarCriticalStrategyProbePath 'Scholar Critical Strategy runtime probe'
 $normalizedScholarCriticalStrategyProbe = $scholarCriticalStrategyProbe -replace '\s+', ' '
 Assert-Literals $scholarCriticalStrategyProbe @(
@@ -1496,111 +1507,33 @@ Assert-Literals $scholarCriticalStrategyProbe @(
     'bool UseActionAccepted,',
     'string CandidateResolution,',
     'internal ScholarCriticalStrategyProbeSnapshot Observe(',
-    'var shouldResolveCandidates = actionReady &&',
-    'inputFrame.HeldGameplayKeyEligible;',
-    '? ResolveExactCandidates(localPlayer!, resolvedActionId, out candidateResolution)',
-    'var completeCanonicalSet = candidates.Count == EnemySlotRules.LastSlot;',
-    'var inputClaimed = decision.ShouldConsumeInputGeneration;',
-    'if (inputClaimed) inputFrame.Consume();',
-    'var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer);',
-    'IsCurrentCrystallineConflict()',
-    '!IsCurrentlySuppressedByGuard(currentLocal, Environment.TickCount64)',
-    'ResolveFrozenIntent(currentLocal!, intent, finalResolvedActionId)',
-    'ScholarCriticalStrategyRules.CanUseExactIntent(',
+    'private ScholarCriticalStrategyHoldState acceptedHold = ScholarCriticalStrategyHoldState.Initial;',
+    'private FrozenScholarRetry? frozenRetry;',
+    'private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;',
+    'if (frozenRetry is { } retry)',
+    'else if (terminalHeldKey == VirtualKey.NO_KEY &&',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
+    'ScholarCriticalStrategyRules.ObserveAcceptedHold(',
+    'ScholarCriticalStrategyRules.BeginAcceptedHold(',
+    'ScholarCriticalStrategyRules.TrySpendReadyEpoch(',
+    'inputFrame.Consume();',
     'TryUseCriticalStrategyOnce(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
     'nearAssist.RunWithoutRedirect',
     'actionManager->UseAction(',
     'intent.ActionId,',
-    'intent.Target.GameObjectId,',
-    'attempted (accepted={accepted})',
-    'terminal exact-intent revalidation failed',
-    'failed and will not be retried'
-) 'Exact one-attempt SCH Critical Strategy runtime and truthful diagnostics'
-
-$scholarObserveMethod = [regex]::Match(
-    $normalizedScholarCriticalStrategyProbe,
-    'internal ScholarCriticalStrategyProbeSnapshot Observe\(.*?\) \{(?<Body>.*?)\} internal void Reset')
-$scholarCandidateCaptureMethod = [regex]::Match(
-    $normalizedScholarCriticalStrategyProbe,
-    'private IReadOnlyList<ScholarCriticalStrategyCandidate> ResolveExactCandidates\(.*?\) \{(?<Body>.*?)\} private ScholarCriticalStrategyCandidate\? ResolveFrozenIntent')
-$scholarTryUseMethod = [regex]::Match(
-    $normalizedScholarCriticalStrategyProbe,
-    'private unsafe bool TryUseCriticalStrategyOnce\(.*?\) \{(?<Body>.*?)\} private unsafe bool TryGetReadyAction')
-$scholarObserveBody = $scholarObserveMethod.Groups['Body'].Value
-$scholarCandidateCaptureBody = $scholarCandidateCaptureMethod.Groups['Body'].Value
-$scholarTryUseBody = $scholarTryUseMethod.Groups['Body'].Value
-if (-not $scholarObserveMethod.Success -or
-    -not $scholarCandidateCaptureMethod.Success -or
-    -not $scholarTryUseMethod.Success) {
-    throw 'SCH runtime Observe, complete-set capture, and sole UseAction methods must remain independently reviewable.'
-}
-
-if ($normalizedScholarCriticalStrategyProbe -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && localJobId == ScholarCriticalStrategyRules\.ScholarJobId && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionReady = featureContextReady && localIdentity\.IsValid && TryGetReadyAction\(localPlayer!, out resolvedActionId\);' -or
-    $normalizedScholarCriticalStrategyProbe -notmatch 'var shouldResolveCandidates = actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && inputFrame\.HeldGameplayKeyEligible;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?var completeCanonicalSet = candidates\.Count == EnemySlotRules\.LastSlot;.*?HeldGameplayKeyEligible, resolvedActionId, actionReady, completeCanonicalSet, candidates, hardReset') {
-    throw 'SCH candidate capture must remain behind exact CC/SCH/metadata/own-Guard/readiness gates and one unclaimed held non-text gameplay-key generation.'
-}
-
-if ($scholarCandidateCaptureBody -notmatch 'var diagnosticsBefore = executeTracker\.Diagnostics; var trackerEnemies = executeTracker\.Enemies; if \(!diagnosticsBefore\.Active \|\| !diagnosticsBefore\.IsCrystallineConflict \|\| !diagnosticsBefore\.GuardMetadataVerified\).*?if \(diagnosticsBefore\.SlotCapacity != EnemySlotRules\.LastSlot \|\| diagnosticsBefore\.ResolvedSlots != EnemySlotRules\.LastSlot\).*?var snapshots = trackerEnemies\.ToArray\(\); if \(!ReferenceEquals\(diagnosticsBefore, executeTracker\.Diagnostics\) \|\| !ReferenceEquals\(trackerEnemies, executeTracker\.Enemies\)\).*?if \(snapshots\.Length > EnemySlotRules\.LastSlot \|\| snapshots\.Length != diagnosticsBefore\.ValidEnemySlots\)' -or
-    $scholarCandidateCaptureBody -notmatch 'foreach \(var trackerEnemy in snapshots\).*?!snapshotSlots\.Add\(trackerEnemy\.Slot\).*?!snapshotGameObjectIds\.Add\(trackerEnemy\.GameObjectId\).*?!snapshotEntityIds\.Add\(trackerEnemy\.EntityId\).*?return \[\];.*?snapshotsBySlot\.Add\(trackerEnemy\.Slot, trackerEnemy\);') {
-    throw 'SCH must require stable exact-CC Guard metadata and a duplicate-free tracker snapshot inside a complete five-slot frame.'
-}
-if ($scholarCandidateCaptureBody -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?EnemySlotResolver\.Resolve\(objectTable, slot\).*?objectTable\.SearchByEntityId\(player!\.EntityId\) as IPlayerCharacter.*?tablePlayer\.Address != player\.Address.*?tablePlayer\.GameObjectId != player\.GameObjectId.*?tablePlayer\.EntityId != player\.EntityId.*?!nativeGameObjectIds\.Add\(player\.GameObjectId\).*?!nativeEntityIds\.Add\(player\.EntityId\).*?!nativeAddresses\.Add\(player\.Address\).*?return \[\];.*?currentSlots\.Add\(\(slot, player\)\);') {
-    throw 'SCH must resolve all native e1-e5 slots to unique object-table address/GOID/EID identities; one unresolved, mismatched, or duplicate actor aborts the full capture.'
-}
-if ($scholarCandidateCaptureBody -notmatch 'var trackerEligibleSlots = currentSlots \.Where\(static entry => IsLivePlayer\(entry\.Player\) && entry\.Player\.IsTargetable && ExecuteThreshold\.HasValidHp\(entry\.Player\.CurrentHp, entry\.Player\.MaxHp\)\) \.ToArray\(\); if \(trackerEligibleSlots\.Length != diagnosticsBefore\.ValidEnemySlots \|\| trackerEligibleSlots\.Length != snapshots\.Length\).*?foreach \(var \(slot, player\) in trackerEligibleSlots\).*?!snapshotsBySlot\.TryGetValue\(slot, out var trackerEnemy\).*?trackerEnemy\.GameObjectId != player\.GameObjectId.*?trackerEnemy\.EntityId != player\.EntityId.*?return \[\];') {
-    throw 'Every live targetable valid-HP native enemy must exactly match the current tracker slot and IDs; incomplete or stale eligible sets must fail closed as a whole.'
-}
-if ($scholarCandidateCaptureBody -notmatch 'var pressureSnapshot = pressureTracker\.Snapshot; var pressureSnapshotUsable = pressureSnapshot\.Active && pressureSnapshot\.PressureActive;.*?pressureSnapshot\.Find\(actor\.GameObjectId, actor\.EntityId\).*?pressure\.EnemySlot == slot && pressure\.TeamTargetCount >= 0;.*?var candidate = BuildExactSlotCandidate\( localPlayer, actionId, slot, actor, pressureKnown, pressureKnown \? pressure!\.TeamTargetCount : 0\); if \(candidate is not \{ \} exact\).*?return \[\];.*?candidates\.Add\(exact\);') {
-    throw 'SCH may attach team pressure only from one active exact-slot nonnegative snapshot, while every S-slot must still pass native action validation.'
-}
-if ($scholarCandidateCaptureBody -notmatch 'if \(!ReferenceEquals\(pressureSnapshot, pressureTracker\.Snapshot\)\).*?candidates = candidates \.Select\(static candidate => candidate with \{ PressureKnown = false, TeamTargetCount = 0, \}\) \.ToList\(\); pressureSnapshotUsable = false;' -or
-    $scholarCandidateCaptureBody -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?if \(!ReferenceEquals\(diagnosticsBefore, executeTracker\.Diagnostics\) \|\| !ReferenceEquals\(trackerEnemies, executeTracker\.Enemies\)\).*?return \[\];') {
-    throw 'Pressure snapshot drift must degrade every SCH candidate to HP fallback, and the full native/tracker identity view must remain unchanged before selection.'
-}
-
-$scholarConsume = [regex]::Match($scholarObserveBody, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
-$scholarFrozenResolve = [regex]::Match($scholarObserveBody, 'ResolveFrozenIntent\(currentLocal!, intent, finalResolvedActionId\)')
-$scholarIntentRevalidation = [regex]::Match($scholarObserveBody, 'ScholarCriticalStrategyRules\.CanUseExactIntent\s*\(')
-$scholarTryUse = [regex]::Match($scholarObserveBody, 'TryUseCriticalStrategyOnce\s*\(')
-if (-not $scholarConsume.Success -or -not $scholarFrozenResolve.Success -or
-    -not $scholarIntentRevalidation.Success -or -not $scholarTryUse.Success -or
-    $scholarConsume.Index -gt $scholarFrozenResolve.Index -or
-    $scholarFrozenResolve.Index -gt $scholarIntentRevalidation.Index -or
-    $scholarIntentRevalidation.Index -gt $scholarTryUse.Index) {
-    throw 'SCH must consume the shared held generation before frozen-target revalidation and its sole attempt.'
-}
-$scholarPostConsumeWindow = $scholarObserveBody.Substring($scholarConsume.Index)
-if ($scholarPostConsumeWindow -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(' -or
-    $scholarPostConsumeWindow -match '\b(pressureTracker|pressureSnapshot|executeTracker\.Enemies)\b') {
-    throw 'After SCH consumes input it may revalidate only the frozen intent; pressure rereads, reranking, and alternate capture are forbidden.'
-}
-
-if ($normalizedScholarCriticalStrategyProbe -notmatch 'BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target, intent\.PressureKnown, intent\.TeamTargetCount\)' -or
-    $normalizedScholarCriticalStrategyProbe -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\).*?HasLiveGuard\(target\)' -or
-    $normalizedScholarCriticalStrategyProbe -notmatch 'rangeStatus = ActionManager\.GetActionInRangeOrLoS\( actionId, sourceObject, targetObject\); return SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeStatus\);') {
-    throw 'Initial and final SCH candidates must re-resolve only the frozen canonical S-slot/IDs and require live Guard plus FFXIV native range/line of sight.'
-}
-if ($scholarObserveBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); var finalContextReady = currentLocal is not null && IsCurrentCrystallineConflict\(\) && IsLivePlayer\(currentLocal\) && currentLocal\.ClassJob\.IsValid && currentLocal\.ClassJob\.RowId == ScholarCriticalStrategyRules\.ScholarJobId && metadataVerified && !actionHelpersSuppressedByGuard && !IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\);.*?TryGetReadyAction\(currentLocal!, out finalResolvedActionId\).*?ResolveFrozenIntent\(currentLocal!, intent, finalResolvedActionId\).*?ScholarCriticalStrategyRules\.CanUseExactIntent\( intent, exactCandidate, currentLocalIdentity, finalResolvedActionId, finalActionReady\)') {
-    throw 'SCH post-consume preflight must freshly revalidate exact local SCH/CC/metadata/own-Guard state, adjusted readiness, and only the frozen target.'
-}
-if ($scholarTryUseBody -notmatch 'var currentLocal = ResolveExactLocalPlayer\(intent\.LocalPlayer\); if \(currentLocal is null \|\| currentLocal\.Address != localPlayer\.Address \|\| !IsLivePlayer\(currentLocal\) \|\| !currentLocal\.ClassJob\.IsValid \|\| currentLocal\.ClassJob\.RowId != ScholarCriticalStrategyRules\.ScholarJobId \|\| !IsCurrentCrystallineConflict\(\) \|\| !metadataVerified \|\| IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\) \|\| !intent\.IsValid \|\| !TryGetReadyAction\(currentLocal, out var resolvedActionId\) \|\| resolvedActionId != intent\.ActionId\).*?var exactCandidate = ResolveFrozenIntent\(currentLocal, intent, resolvedActionId\).*?ScholarCriticalStrategyRules\.CanUseExactIntent\( intent, currentCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?attempted = true; return nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\);') {
-    throw 'The SCH native boundary must repeat exact local/context/action/frozen-target validation immediately before one explicit UseAction request.'
-}
-if ($normalizedScholarCriticalStrategyProbe -notmatch 'resolvedActionId = actionManager->GetAdjustedActionId\( EnemyCombatConstants\.ScholarCriticalStrategyActionId\); return resolvedActionId == ScholarCriticalStrategyRules\.ActionId && actionManager->IsActionOffCooldown\(ActionType\.Action, resolvedActionId\);' -or
-    $normalizedScholarCriticalStrategyProbe -notmatch 'if \(DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\)\) return true; return nearAssist\.TryGetRecentExactLocalGuardAttempt\( clientState\.TerritoryType, localPlayer\.GameObjectId, localPlayer\.EntityId, nowMilliseconds, DefensiveUtilityRules\.GuardPropagationLatchMilliseconds, out _\);' -or
-    $normalizedScholarCriticalStrategyProbe -notmatch 'ScholarCriticalStrategyRules\.IsExactGuardStatus\(status\.StatusId\) && float\.IsFinite\(status\.RemainingTime\) && status\.RemainingTime > 0f') {
-    throw 'SCH must use exact adjusted/off-cooldown 29716 readiness, suppress on live or recent exact own Guard, and accept only positive finite exact Guard 3054/3673 on the enemy.'
-}
+    'intent.Target.GameObjectId,'
+) 'Exact retryable SCH Critical Strategy runtime and truthful diagnostics'
 if ([regex]::Matches($scholarCriticalStrategyProbe, '\bUseAction\s*\(').Count -ne 1 -or
-    [regex]::Matches($scholarObserveBody, '\bTryUseCriticalStrategyOnce\s*\(').Count -ne 1 -or
-    [regex]::Matches($scholarCriticalStrategyProbe, '\bResolveFrozenIntent\s*\(').Count -ne 3 -or
-    [regex]::Matches($scholarCriticalStrategyProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
-    $scholarObserveBody -match '\b(pressureTracker|pressureSnapshot)\b' -or
-    $scholarTryUseBody -match '\b(pressureTracker|pressureSnapshot|TeamTargetCount|PressureKnown)\b' -or
-    $scholarCriticalStrategyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
-    $scholarCriticalStrategyProbe -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch)\b' -or
-    $scholarCriticalStrategyProbe -match '(?:->|\.)Original\s*\(') {
-    throw 'SCH must have exactly one client action boundary and no hook, shell, target mutation, queue, replay, retry, pressure-gated final check, or external redirect path.'
+    [regex]::Matches($scholarCriticalStrategyProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 2 -or
+    [regex]::Matches($scholarCriticalStrategyProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
+    [regex]::Matches($scholarCriticalStrategyProbe, '\bHeldActionRetryRules\.Complete\s*\(').Count -ne 1 -or
+    $normalizedScholarCriticalStrategyProbe -notmatch 'if \(frozenRetry is \{ \} retry\).*?else if \(terminalHeldKey == VirtualKey\.NO_KEY && decision\.ShouldDispatch' -or
+    $scholarCriticalStrategyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|RaptureShellModule|ExecuteCommandInner|MarkingController)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|(?:->|\.)Original\s*\(') {
+    throw 'SCH must keep one exact direct-GOID native boundary, mutually exclusive first/retry branches, shared outcome classification, and no hook, alternate, replay, or target mutation.'
 }
 
 Assert-Literals $pluginSource @(
@@ -1773,10 +1706,10 @@ if (($smartKardiaRules + $smartKardiaProbe + $smartKardiaMetadata) -match '\b(?:
     throw 'Production Smart Kardia paths must never accept PvE Kardia, Kardion, or Eukrasia rows 2604/2605/2606.'
 }
 
-# Smart Recuperate is the shared any-held-gameplay-key self-heal. It waits
-# without consuming while HP loss is below 16,000, observed MP is below 2,000,
-# or the action is not ready. Once dispatchable it consumes first and makes at
-# most one exact self request for that physical generation.
+# Smart Recuperate is the shared held-key self-heal. It soft-waits without
+# spending native budget, retries only a proven clean false, and after accepted
+# use requires a real unavailable-to-ready cooldown epoch before the same hold
+# may authorize a distinct health event.
 $smartRecuperateRules = Read-RequiredSource $smartRecuperateRulesPath 'Smart Recuperate rules'
 $normalizedSmartRecuperateRules = $smartRecuperateRules -replace '\s+', ' '
 $smartRecuperateProbe = Read-RequiredSource $smartRecuperateProbePath 'Smart Recuperate runtime probe'
@@ -1784,64 +1717,66 @@ $normalizedSmartRecuperateProbe = $smartRecuperateProbe -replace '\s+', ' '
 $smartRecuperateSelfTests = Read-RequiredSource $smartRecuperateSelfTestsPath 'Smart Recuperate self-tests'
 Assert-Literals $smartRecuperateRules @(
     'public readonly record struct SmartRecuperateIntent(',
+    'public readonly record struct SmartRecuperateState(',
     'public readonly record struct SmartRecuperateObservation(',
-    'public bool ShouldConsumeInputGeneration => ShouldDispatch;',
+    'HeldActionRetryState Retry,',
+    'public bool ShouldConsumeInputGeneration => InputClaimed;',
     'public const uint ActionId = 29_711;',
     'public const uint MinimumMissingHp = 16_000;',
     'public const uint MpCost = 2_000;',
     '(ulong)maximumHp - currentHp >= MinimumMissingHp;',
     'currentMp >= MpCost;',
+    'SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable',
+    'SmartRecuperatePhase.WaitingForAcceptedCooldownReady',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'HeldActionRetryRules.Complete(',
+    'public static SmartRecuperateNativeAttemptDecision ApplyNativeAttemptOutcome(',
     'SmartRecuperateDecisionReason.MissingHealthBelowThreshold',
     'SmartRecuperateDecisionReason.InsufficientMp',
     'public static bool CanUseFrozenIntent('
-) 'Exact inclusive Smart Recuperate policy'
-if ($normalizedSmartRecuperateRules -notmatch 'if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(observation\.ResolvedActionId != ActionId\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady.*?if \(!HasValidHealth.*?HealthTelemetryInvalid.*?if \(!HasMinimumMissingHp.*?MissingHealthBelowThreshold.*?if \(!HasValidMp.*?MpTelemetryInvalid.*?if \(!HasMinimumMp.*?InsufficientMp' -or
-    $normalizedSmartRecuperateRules -notmatch 'currentLocalPlayer == intent\.LocalPlayer.*?resolvedActionId == intent\.ActionId.*?actionLocallyReady.*?HasMinimumMissingHp.*?HasMinimumMp' -or
-    $smartRecuperateRules -match '\b(?:TargetManager|PartySlot|Candidate|PressureTracker|RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch|Timer|Stopwatch)\b') {
-    throw 'Smart Recuperate Core must be exact self-only CC held input with inclusive 16,000 missing HP and 2,000 observed MP, full terminal revalidation, and no target selection or retry state.'
+) 'Exact inclusive and retryable Smart Recuperate policy'
+if ($smartRecuperateRules -match '\b(?:TargetManager|PartySlot|Candidate|PressureTracker|QueueAction|PendingDispatch|BufferedDispatch|Timer|Stopwatch)\b') {
+    throw 'Smart Recuperate Core must remain exact self-only policy with no target selection, alternate, queue, or timer ownership.'
 }
 $smartRecuperateTestMethods = @(
     'ExactIdsAndInclusiveThresholdsArePinned',
     'MpTickWaitDoesNotConsumeTheHold',
     'EveryInitialSafetyGateFailsClosed',
-    'FrozenIntentRequiresEveryTerminalGate'
+    'FrozenIntentRequiresEveryTerminalGate',
+    'CleanFalseRetriesAreBounded',
+    'SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat',
+    'PurifyPriorityNeverGetsStarved'
 )
 foreach ($method in $smartRecuperateTestMethods) {
     Assert-Literals $smartRecuperateSelfTests @("public static void $method()") "Smart Recuperate self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("SmartRecuperateSelfTests.$method") "Smart Recuperate test registration $method"
 }
-if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 4 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 4) {
-    throw 'All four Smart Recuperate threshold, MP-tick, gate, and frozen-intent tests must remain registered exactly once.'
+if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 7 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 7) {
+    throw 'All seven Smart Recuperate threshold, frozen-intent, retry, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
 }
 Assert-Literals $smartRecuperateProbe @(
-    'one exact self-targeted PvP Recuperate request',
-    'Insufficient HP loss, MP, or',
-    'readiness does not consume the generation',
     'var inputClaimed = decision.ShouldConsumeInputGeneration;',
     'if (inputClaimed) inputFrame.Consume();',
-    'TryUseRecuperateOnce(',
+    'TryUseRecuperate(',
+    'SmartRecuperateRules.Observe(',
+    'SmartRecuperateRules.ApplyNativeAttemptOutcome(',
     'SmartRecuperateRules.CanUseFrozenIntent(',
+    'HeldActionRetryRules.IsNativeBoundaryNearQueueable(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
     'intent.LocalPlayer.GameObjectId,',
-    'attempt failed and will not be retried.'
-) 'One-generation Smart Recuperate runtime'
-$smartRecuperateObserveMethod = [regex]::Match(
-    $normalizedSmartRecuperateProbe,
-    'internal SmartRecuperateProbeSnapshot Observe\(.*?\) \{(?<Body>.*?)\} internal void Reset')
-$smartRecuperateObserveBody = $smartRecuperateObserveMethod.Groups['Body'].Value
-$smartRecuperateConsume = [regex]::Match($smartRecuperateObserveBody, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
-$smartRecuperateAttempt = [regex]::Match($smartRecuperateObserveBody, 'TryUseRecuperateOnce\s*\(')
-if (-not $smartRecuperateObserveMethod.Success -or
-    -not $smartRecuperateConsume.Success -or
-    -not $smartRecuperateAttempt.Success -or
-    $smartRecuperateConsume.Index -gt $smartRecuperateAttempt.Index -or
-    $normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperateOnce' -or
-    $normalizedSmartRecuperateProbe -notmatch 'resolvedActionId = actionManager->GetAdjustedActionId\( SmartRecuperateRules\.ActionId\); return resolvedActionId == SmartRecuperateRules\.ActionId && actionManager->IsActionOffCooldown' -or
-    $normalizedSmartRecuperateProbe -notmatch 'SmartRecuperateRules\.CanUseFrozenIntent\( intent, configurationEnabled, isCrystallineConflict, currentIdentity, localAlive, localTargetable, metadataVerified, guardSuppressed, higherPriorityClaimed, resolvedActionId, actionReady, currentLocal\.CurrentHp, currentLocal\.MaxHp, currentLocal\.CurrentMp, currentLocal\.MaxMp\).*?attempted = true;.*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.LocalPlayer\.GameObjectId' -or
+    'Recuperate client-accepted; awaiting cooldown epoch',
+    'Recuperate client-rejected; exact intent retained for bounded retry',
+    'Recuperate waiting without spending retry budget'
+) 'Shared-policy Smart Recuperate runtime'
+if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
     [regex]::Matches($smartRecuperateProbe, '\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -lt 2 -or
+    [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
-    $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueuedAction|PendingDispatch|RetryAction)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Smart Recuperate must leave an ineligible hold unconsumed, consume before terminal reads when dispatchable, and issue exactly one frozen self-GOID request with no retarget, queue, alternate, replay, or retry.'
+    $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueueAction|PendingDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Smart Recuperate must claim only dispatchable frames and issue one exact frozen self-GOID boundary using shared classification, with no retarget, alternate, or replay.'
 }
 
 Assert-Literals $smartKardiaMetadata @(
@@ -2232,19 +2167,17 @@ Assert-Literals $miracleProtectionEndRules @(
     'previous.IsLatched && observation.LatchedKeyPhysicallyDown',
     'observation.UnconsumedEligibleGameplayKeyToken > 0',
     'DispatchConsumesHeldConsent',
-    'MiracleInterceptThreatKind.MarksmanSpite',
-    'MiracleInterceptThreatKind.Zantetsuken',
-    'MiracleInterceptThreatKind.FuriousBacklash',
-    'MiracleInterceptThreatKind.Contradance',
+    'MiracleInterceptThreatKind.PostPurifyCrowdControl',
+    'MiracleInterceptThreatKind.PostGuardCrowdControl',
     'TeamTargetCountKnown',
     '(!TeamTargetCountKnown || TeamTargetCount >= 0)',
     'CombatFrameRules.ExpectedMaximumMp',
     'UInt128',
     'SelectBestIndex'
 ) 'Shared protection-end exact held consent and ranking policy'
-if ($normalizedMiracleProtectionEndRules -notmatch 'DispatchConsumesHeldConsent\(MiracleInterceptThreatKind threat\) => threat is MiracleInterceptThreatKind\.MarksmanSpite or MiracleInterceptThreatKind\.Zantetsuken or MiracleInterceptThreatKind\.FuriousBacklash or MiracleInterceptThreatKind\.Contradance;' -or
+if ($normalizedMiracleProtectionEndRules -notmatch 'DispatchConsumesHeldConsent\(MiracleInterceptThreatKind threat\) => false;' -or
     $normalizedMiracleProtectionEndRules -notmatch 'if \(observation\.HardReset \|\| !observation\.Enabled \|\| observation\.IsTextInputActive\).*?MiracleProtectionEndHeldConsentState\.Initial.*?if \(previous\.IsLatched && observation\.LatchedKeyPhysicallyDown\) return previous;.*?observation\.UnconsumedEligibleGameplayKeyToken > 0.*?MiracleProtectionEndHeldConsentState\.Initial') {
-    throw 'Only the four startup marker dispatches may clear the protection-end latch; the exact shared eligible key persists only while physically held and clears on release/text/disable/reset.'
+    throw 'No dispatch may globally consume continuous held consent; exact consent persists only while physically held and clears on release/text/disable/reset.'
 }
 if ($normalizedMiracleProtectionEndRules -notmatch 'pressureTrust = right\.TeamTargetCountKnown\.CompareTo\(left\.TeamTargetCountKnown\).*?if \(left\.TeamTargetCountKnown\).*?right\.TeamTargetCount\.CompareTo\(left\.TeamTargetCount\).*?hpRatio = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\).*?mpTrust = right\.HasTrustedMp\.CompareTo\(left\.HasTrustedMp\).*?if \(left\.HasTrustedMp\).*?mpRatio = CompareRatio\( left\.CurrentMp, left\.MaximumMp, right\.CurrentMp, right\.MaximumMp\).*?left\.EnemySlot\.CompareTo\(right\.EnemySlot\).*?left\.EntityId\.CompareTo\(right\.EntityId\).*?left\.GameObjectId\.CompareTo\(right\.GameObjectId\).*?left\.JobId\.CompareTo\(right\.JobId\).*?left\.Threat\.CompareTo\(right\.Threat\)' -or
     $normalizedMiracleProtectionEndRules -notmatch 'for \(var index = 0; index < candidates\.Count; index\+\+\).*?if \(!candidates\[index\]\.IsValid\) continue;.*?Compare\(candidates\[index\], candidates\[selected\]\) < 0.*?return selected') {
@@ -2289,7 +2222,8 @@ foreach ($method in $miracleGuardTestMethods) {
 $miracleProtectionEndTestMethods = @(
     'HeldConsentRequiresOneExactUnconsumedGeneration',
     'RankingIsPressureThenHealthThenTrustedMpThenIdentity',
-    'WhiteMageAndBardShareProtectionEndSemantics'
+    'WhiteMageAndBardShareProtectionEndSemantics',
+    'HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound'
 )
 foreach ($method in $miracleProtectionEndTestMethods) {
     Assert-Literals $miracleProtectionEndSelfTests @("internal static void $method()") "Protection-end self-test $method"
@@ -2301,10 +2235,10 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
     [regex]::Matches($miracleGuardProgram, '\bMiracleGuardFollowupSelfTests\.\w+').Count -ne 6) {
     throw 'All ten post-Purify and six post-Guard lifecycle tests must remain registered exactly once.'
 }
-if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 3 -or
-    [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 3 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 317) {
-    throw 'All three shared protection-end tests and the exact 317-test Core registry must remain pinned.'
+if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
+    [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 330) {
+    throw 'All four shared protection-end tests and the exact 330-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -2341,9 +2275,12 @@ Assert-Literals $miracleProtectionEndSelfTests @(
     'the exact key token is frozen',
     'shared consumption does not erase a proven hold',
     'physical release clears exact consent',
-    'startup reactive dispatch keeps its one-generation contract',
+    'startup reactive dispatch keeps the continuous hold available',
+    'all reactive families leave the same hold available for later actions',
     'post-Purify dispatch retains consent for a later distinct episode',
     'post-Guard dispatch retains consent for a later distinct episode',
+    'a higher-priority accepted action may finish before exact counter-CC dispatch',
+    'retry cannot run before the shared throttle',
     'known zero pressure ranks ahead of unknown',
     'higher pressure ranks before HP',
     'lower exact HP ratio ranks next',
@@ -2371,26 +2308,29 @@ if ($normalizedPurifyProbe -notmatch 'UseAction\s*\(\s*ActionType\.Action\s*,\s*
 }
 Assert-Literals $purifyProbe @(
     'EmergencyPurifyBufferRules.Observe',
+    'EmergencyPurifyBufferRules.ClaimsSchedulerPriority(',
+    'EmergencyPurifyBufferRules.ApplyNativeAttemptOutcome(',
     'ActionManager.Instance',
     'configurationEnabled',
     'localPlayerIdentityValid',
     'statusCurrentlyObserved',
     'resilienceActive',
     'allowHeldKeyAtStatusEntry',
-    'decision.ShouldConsumeInputGeneration',
+    'decision.ShouldClaimInputFrame',
     'inputFrame.Consume()',
-    'state = decision.NextState'
-) 'Emergency Purify probe'
-if ($purifyProbe -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMp|PurifyMpCost|CurrentMount|IsTargetable|GetGameObjectId)\b') {
-    throw 'Emergency Purify must not restore the fragile local readiness filters removed by the reliability hotfix.'
-}
-if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3) {
-    throw 'Emergency Purify must require a currently observed exact status for edge authorization and dispatch readiness.'
-}
-if ($purifyProbe -match '\b(for|foreach|while)\s*\(|\bdo\s*\{' -or
-    $purifyProbe -match '\b(Retry|QueuedAction|ActionQueued|Enqueue|Dequeue)\b|\bQueue\s*[<(]' -or
-    $purifyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget)\b') {
-    throw 'Emergency Purify probe must not loop, retry, queue, hook, scan signatures, or access target mutation APIs.'
+    'ClientActionAttemptBoundary.IsExactActionReady(',
+    'HeldActionRetryRules.IsNativeBoundaryNearQueueable(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'Purify waiting without spending retry budget',
+    'Purify client-rejected; exact intent retained for bounded retry',
+    'InputClaimed = inputClaimed'
+) 'Emergency Purify shared retry boundary and absolute scheduler claim'
+if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3 -or
+    [regex]::Matches($purifyProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 2 -or
+    [regex]::Matches($purifyProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
+    $purifyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|QueueAction|AlternateAction|AlternateTarget)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
+    throw 'Emergency Purify must freeze the exact current CC/self intent, classify one direct self-GOID boundary, and never hook, retarget, or select an alternate.'
 }
 
 $emergencyInputCoordinator = Read-RequiredSource $emergencyInputCoordinatorPath 'Shared emergency-action input coordinator'
@@ -2420,6 +2360,8 @@ Assert-Literals $emergencyInputCoordinator @(
     'pressureEscapeHeldWasEnabled',
     'darkKnightPlungeHeldEnabled',
     'darkKnightPlungeHeldWasEnabled',
+    'ninjaSeitonHeldEnabled',
+    'ninjaSeitonHeldWasEnabled',
     'IsGameplayKeyPhysicallyDown(VirtualKey key)',
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
@@ -2435,6 +2377,139 @@ if ($emergencyInputCoordinator -match '\bsmartKardiaHeld(?:Enabled|WasEnabled)\b
 }
 if ($emergencyInputCoordinator -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|ITargetManager|TargetManager)\b') {
     throw 'The shared emergency input coordinator may only observe and consume physical generations.'
+}
+
+$frameConsumeMethod = [regex]::Match(
+    $normalizedEmergencyInputCoordinator,
+    'internal void Consume\(\) \{(?<Body>.*?)\} internal bool FreshGameplayKeyPressed')
+$enableEdgeMethod = [regex]::Match(
+    $normalizedEmergencyInputCoordinator,
+    'if \(heldOptionJustEnabled\) \{(?<Body>.*?)\} return new EmergencyActionInputFrame')
+if (-not $frameConsumeMethod.Success -or
+    $frameConsumeMethod.Groups['Body'].Value -notmatch 'if \(IsConsumed\) return; IsConsumed = true;' -or
+    $frameConsumeMethod.Groups['Body'].Value -match '\bprobe\b|ConsumeHeldGameplayKeys' -or
+    -not $enableEdgeMethod.Success -or
+    $enableEdgeMethod.Groups['Body'].Value -notmatch 'probe\.ConsumeHeldGameplayKeys\(\)' -or
+    $normalizedEmergencyInputCoordinator -notmatch '\(ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled\).*?ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;.*?if \(heldOptionJustEnabled\)') {
+    throw 'Shared input consumption must be frame-local; physical generation priming is allowed only on a held-option enable edge and must include NIN.'
+}
+
+# One common held-action contract owns native classification and bounded retry.
+$clientActionAttemptOutcome = Read-RequiredSource $clientActionAttemptOutcomePath 'Client action attempt outcome rules'
+$normalizedClientActionAttemptOutcome = $clientActionAttemptOutcome -replace '\s+', ' '
+$clientActionAttemptBoundary = Read-RequiredSource $clientActionAttemptBoundaryPath 'Client action attempt boundary'
+$heldActionRetryRules = Read-RequiredSource $heldActionRetryRulesPath 'Held action retry rules'
+$normalizedHeldActionRetryRules = $heldActionRetryRules -replace '\s+', ' '
+$heldActionRetrySelfTests = Read-RequiredSource $heldActionRetrySelfTestsPath 'Held action retry self-tests'
+Assert-Literals $clientActionAttemptOutcome @(
+    'ClientRejected = 2',
+    'ClientAccepted = 3',
+    'AcceptanceUnknown = 4',
+    'SoftUnavailable = 5',
+    'bool ActionQueued,',
+    'uint QueuedActionType,',
+    'uint QueuedActionId,',
+    'ulong QueuedTargetId,',
+    'uint QueuedExtraParam,',
+    'uint QueueMode,',
+    'uint QueuedComboRouteId,',
+    'ushort LastUsedActionSequence,',
+    'float AnimationLockSeconds,',
+    'uint CastActionId,',
+    'uint AdjustedActionId,',
+    'bool IsActionOffCooldown,',
+    'uint ResourceStatus',
+    'before == after',
+    '? ClientActionAttemptOutcome.ClientRejected',
+    ': ClientActionAttemptOutcome.AcceptanceUnknown'
+) 'Complete native attempt fingerprint and clean-false-only classification'
+Assert-Literals $clientActionAttemptBoundary @(
+    'actionManager->ActionQueued',
+    '(uint)actionManager->QueuedActionType',
+    'actionManager->QueuedActionId',
+    '(ulong)actionManager->QueuedTargetId',
+    'actionManager->QueuedExtraParam',
+    '(uint)actionManager->QueueType',
+    'actionManager->QueuedComboRouteId',
+    'actionManager->LastUsedActionSequence',
+    'actionManager->AnimationLock',
+    'actionManager->CastActionId',
+    'actionManager->GetAdjustedActionId(actionId)',
+    'actionManager->IsActionOffCooldown(ActionType.Action, actionId)',
+    'actionManager->CheckActionResources(ActionType.Action, actionId)'
+) 'Complete runtime native attempt fingerprint capture'
+Assert-Literals $heldActionRetryRules @(
+    'NativeRetryThrottleMilliseconds = 50',
+    'MaximumNativeAttempts = 8',
+    'MaximumNearQueueableAnimationLockSeconds = 0.050f',
+    'ClientActionAttemptOutcome.ClientAccepted =>',
+    'Terminal(HeldActionRetryDisposition.AcceptedTerminal)',
+    'ClientActionAttemptOutcome.AcceptanceUnknown =>',
+    'Terminal(HeldActionRetryDisposition.AmbiguousTerminal)',
+    'ClientActionAttemptOutcome.ClientRejected =>',
+    'CompleteRejected(previous, nowMilliseconds)',
+    'ClientActionAttemptOutcome.SoftUnavailable =>',
+    'new HeldActionRetryDecision(previous, HeldActionRetryDisposition.SoftWait)',
+    'public static bool RetainsSchedulerFrame(',
+    'bool actionSpecificReady,',
+    'bool targetSpecificReady = true',
+    'actionSpecificReady &&',
+    'targetSpecificReady &&',
+    'disposition is HeldActionRetryDisposition.RejectedTerminal or',
+    'HeldActionRetryDisposition.AmbiguousTerminal'
+) 'Shared 50-ms/eight-attempt retry, zero-budget soft wait, priority retention, and circuit breaker'
+if ($normalizedClientActionAttemptOutcome -notmatch 'if \(clientReturnedAccepted\) return ClientActionAttemptOutcome\.ClientAccepted; return before\.IsExactActionReady\(expectedActionId\) && after\.IsExactActionReady\(expectedActionId\) && before == after \? ClientActionAttemptOutcome\.ClientRejected : ClientActionAttemptOutcome\.AcceptanceUnknown;' -or
+    $normalizedHeldActionRetryRules -notmatch 'public static bool ShouldLatchHeldKeyUntilRelease\( HeldActionRetryDisposition disposition\) => disposition is HeldActionRetryDisposition\.RejectedTerminal or HeldActionRetryDisposition\.AmbiguousTerminal;' -or
+    $heldActionRetryRules -match 'ShouldLatchHeldKeyUntilRelease[\s\S]{0,300}(?:AcceptedTerminal|CancelledTerminal)') {
+    throw 'True and ambiguous native outcomes must be terminal; only exhaustion or ambiguity may latch the exact held key until release.'
+}
+$heldActionRetryTestMethods = @(
+    'ProvenFalseRetriesAreThrottledAndBounded',
+    'OnlyProvenFalseCanRetainTheFrozenIntent',
+    'NativeFalseRequiresAStableReadyBoundaryFingerprint',
+    'AcceptedEpisodeDoesNotLatchAContinuousHeldKey',
+    'FrozenThrottleAndGlobalWaitRetainOnlyEligiblePriority'
+)
+foreach ($method in $heldActionRetryTestMethods) {
+    Assert-Literals $heldActionRetrySelfTests @("internal static void $method()") "Held action retry self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("HeldActionRetrySelfTests.$method") "Held action retry test registration $method"
+}
+if ([regex]::Matches($heldActionRetrySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 5 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldActionRetrySelfTests\.\w+').Count -ne 5) {
+    throw 'All five shared retry/classification/priority-retention tests must remain registered exactly once.'
+}
+$heldNativeRetryProbePaths = @(
+    $purifyProbePath,
+    $smartRecuperateProbePath,
+    $allyRescueProbePath,
+    $miracleInterceptProbePath,
+    $defensiveUtilityProbePath,
+    $pressureEscapeSprintProbePath,
+    $ninjaSeitonProbePath,
+    $scholarCriticalStrategyProbePath,
+    $darkKnightPlungeProbePath
+)
+foreach ($path in $heldNativeRetryProbePaths) {
+    $heldProbe = Read-RequiredSource $path "Held native action probe $path"
+    if ($heldProbe -notmatch '\bClientActionAttemptBoundary\.Capture\s*\(' -or
+        $heldProbe -notmatch '\bClientActionAttemptBoundaryRules\.Classify\s*\(' -or
+        $heldProbe -notmatch '\bUseAction\s*\(' -or
+        $heldProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
+        throw "Every held native helper must use the shared fingerprint/classifier for one frozen exact action/target with no alternate or target mutation: $path"
+    }
+}
+$priorityRetainingProbePaths = @(
+    $defensiveUtilityProbePath,
+    $pressureEscapeSprintProbePath,
+    $ninjaSeitonProbePath,
+    $scholarCriticalStrategyProbePath,
+    $darkKnightPlungeProbePath
+)
+foreach ($path in $priorityRetainingProbePaths) {
+    $heldProbe = Read-RequiredSource $path "Held priority-retaining probe $path"
+    if ($heldProbe -notmatch '\bHeldActionRetryRules\.RetainsSchedulerFrame\s*\(') {
+        throw "Frozen throttle/global-boundary waits must retain the scheduler frame in $path"
+    }
 }
 
 $personalStatus = Read-RequiredSource $personalStatusPath 'Personal status coordinator'
@@ -2455,19 +2530,19 @@ $darkKnightPlungeObserve = [regex]::Match($personalStatus, '\bdarkKnightPlunge\.
 if (-not $purifyObserve.Success -or -not $guardObserve.Success -or -not $smartRecuperateObserve.Success -or -not $guardianObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
     -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or -not $darkKnightPlungeObserve.Success -or
     $purifyObserve.Index -gt $smartRecuperateObserve.Index -or
-    $smartRecuperateObserve.Index -gt $guardObserve.Index -or
+    $smartRecuperateObserve.Index -gt $rescueObserve.Index -or
+    $rescueObserve.Index -gt $miracleObserve.Index -or
+    $miracleObserve.Index -gt $guardObserve.Index -or
     $guardObserve.Index -gt $guardianObserve.Index -or
     $guardianObserve.Index -gt $guardianCommunicationObserve.Index -or
     $guardianCommunicationObserve.Index -gt $pressureEscapeObserve.Index -or
-    $pressureEscapeObserve.Index -gt $rescueObserve.Index -or
-    $rescueObserve.Index -gt $miracleObserve.Index -or
-    $miracleObserve.Index -gt $smartKardiaObserve.Index -or
+    $pressureEscapeObserve.Index -gt $smartKardiaObserve.Index -or
     $smartKardiaObserve.Index -gt $ninjaSeitonObserve.Index -or
     $ninjaSeitonObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
     $scholarCriticalStrategyObserve.Index -gt $monkEarthReplyObserve.Index -or
     $monkEarthReplyObserve.Index -gt $darkKnightPlungeObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
-    throw 'Personal status coordination must process Purify, Smart Recuperate, reactive Guard, PLD Guardian, same-frame Guardian communication, pressure Sprint, Ally Rescue, reactive CC, accepted-trigger Kardia, NIN, SCH, Monk, then DRK Plunge in exact order.'
+    throw 'Personal status coordination must process Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, Guardian, same-frame Guardian communication, pressure Sprint, Kardia, NIN, SCH, Monk, then DRK Plunge in exact order.'
 }
 Assert-Literals $personalStatus @(
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;',
@@ -2509,10 +2584,8 @@ Assert-Literals $personalStatus @(
     'purify.UseActionAttempted',
     'resilienceActive',
     'guardActive',
-    'EmergencyActionPriorityRules.AllyRescueClaimsPriority(',
     'miracleInterceptConfigurationEnabled,',
     '!purifyClaimedPriority &&',
-    '!defensiveUtilityClaimedPriority &&',
     '!allyRescueClaimedPriority',
     'metadata.AllyRescueStatusesVerified',
     'metadata.MiracleOfNatureActionVerified',
@@ -2533,7 +2606,7 @@ Assert-Literals $personalStatus @(
     'configuration.ReactiveCcDancerLimitBreak',
     'configuration.ReactiveCcAfterEnemyPurify',
     'configuration.ReactiveCcAfterEnemyGuard',
-    'configuration.EnableNinjaSeitonOnFreshGameplayKey',
+    'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'ninjaSeitonConfigurationEnabled',
     'new NinjaSeitonDispatchProbe(',
     'NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics',
@@ -2543,7 +2616,7 @@ Assert-Literals $personalStatus @(
     'ninjaSeiton.Observe(',
     'ninja.InputClaimed',
     'configuration.EnableScholarCriticalStrategyOnHeldKey',
-    'scholarCriticalStrategyHeldEnabled',
+    'scholarCriticalStrategyHeldInputEnabled',
     'new ScholarCriticalStrategyProbe(',
     'ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics',
     'metadata.ScholarCriticalStrategyVerified',
@@ -2553,59 +2626,71 @@ Assert-Literals $personalStatus @(
     'scholarCriticalStrategy.Reset()',
     'configuration.EnableDarkKnightPlungeOnHeldKey',
     'darkKnightPlungeConfigurationEnabled',
-    'darkKnightPlungeHeldEnabled',
+    'darkKnightPlungeHeldInputEnabled',
     'metadata.DarkKnightPlungeVerified',
     'darkKnightPlunge.Observe(',
     'darkKnightPlunge.Reset()',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
 ) 'Exact-job shared priority from self-Purify through lowest-priority DRK Plunge'
-if ($normalizedPersonalStatus -notmatch 'var miracleInterceptConfigurationEnabled = configuration\.Enabled && configuration\.EnableReactiveCcUtilities && isCrystallineConflict && isAllyRescueJob && !guardActive;' -or
-    $normalizedPersonalStatus -notmatch 'miracleIntercept\.Observe\( localPlayer, isCrystallineConflict, miracleInterceptConfigurationEnabled, configuration\.ReactiveCcOnHeldKey, !purifyClaimedPriority && !defensiveUtilityClaimedPriority && !pressureEscapeClaimedPriority && !allyRescueClaimedPriority,') {
-    throw 'Reactive CC must receive persistent feature/capture enablement separately from its transient Purify/defense/pressure-Sprint/Rescue dispatch permission.'
+Assert-Literals $personalStatus @(
+    'var purifyHeldInputEnabled = configuration.Enabled &&',
+    'var defensiveUtilityHeldInputEnabled = defensiveUtilitiesConfigurationEnabled &&',
+    'var paladinGuardianHeldInputEnabled = paladinGuardianConfigurationEnabled &&',
+    'var smartRecuperateHeldInputEnabled = configuration.Enabled &&',
+    'var allyRescueHeldInputEnabled = configuration.Enabled &&',
+    'var miracleInterceptHeldInputEnabled = configuration.Enabled &&',
+    'var scholarCriticalStrategyHeldInputEnabled =',
+    'var pressureEscapeSprintHeldInputEnabled = configuration.Enabled &&',
+    'var darkKnightPlungeHeldInputEnabled = darkKnightPlungeConfigurationEnabled &&',
+    'var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&',
+    'var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||',
+    'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled'
+) 'Guard-independent persistent physical held-input observation gates'
+$persistentHeldGateBlock = [regex]::Match(
+    $normalizedPersonalStatus,
+    'var purifyHeldInputEnabled =(?<Body>.*?)var emergencyInputFrame = emergencyInput\.Observe')
+$guardHoldSelfTests = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'PhysicalGameplayKeySelfTests.cs') 'Physical gameplay key self-tests'
+if (-not $persistentHeldGateBlock.Success -or
+    $persistentHeldGateBlock.Groups['Body'].Value -match '\bguardActive\b' -or
+    $guardHoldSelfTests -notmatch '\bpublic static void GuardSuppressionPreservesObservedHold\s*\(' -or
+    $coreSelfTestProgramForGuardian -notmatch '\bPhysicalGameplayKeySelfTests\.GuardSuppressionPreservesObservedHold\b') {
+    throw 'Own Guard may suppress action eligibility but must not reset or re-prime any already-observed physical hold.'
 }
-if ($normalizedPersonalStatus -notmatch 'configuration\.MiracleInterceptMchLimitBreak, configuration\.MiracleInterceptSamZantetsuken, configuration\.MiracleInterceptViperNest, configuration\.ReactiveCcDancerLimitBreak, configuration\.ReactiveCcAfterEnemyPurify, configuration\.ReactiveCcAfterEnemyGuard, metadata\.MarksmanSpiteVerified, metadata\.ZantetsukenVerified, metadata\.FuriousBacklashVerified, metadata\.MiracleOfNatureActionVerified, metadata\.PurifyVerified, emergencyInputFrame') {
-    throw 'Reactive MCH/SAM/VPR/DNC/Purify/Guard subtypes and metadata gates must be wired separately into the shared one-generation dispatcher.'
+Assert-Literals $personalStatus @(
+    'var purifyClaimedPriority = purify.InputClaimed;',
+    'hasPurifyRemovableCrowdControl ||',
+    'var smartRecuperateClaimedPriority = recuperate.InputClaimed;',
+    'var allyRescueClaimedPriority = rescue.InputClaimed;',
+    'miracle.InputClaimed ||',
+    'var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||',
+    'defense.InputClaimed;',
+    'var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;',
+    'configuration.EnableNinjaSeitonOnHeldGameplayKey',
+    'ninjaSeitonHeldEnabled:',
+    'ninja.InputClaimed ||',
+    'scholar.InputClaimed ||',
+    'emergencyInputFrame.IsConsumed'
+) 'Frame-local absolute priority claims across every held helper'
+if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !smartRecuperateClaimedPriority && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !smartRecuperateClaimedPriority && !allyRescueClaimedPriority && !emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| smartRecuperateClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var defense = defensiveUtility\.ObserveGuardian\(.*?miracle\.InputClaimed \|\| guardDefense\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?miracle\.InputClaimed \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
+    throw 'Purify, Recup, Rescue, reactive CC, Guard, Guardian, and Sprint must propagate frame-local priority in exact order; removable CC must absolutely block Recup.'
 }
-if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnFreshGameplayKey && isCrystallineConflict && isNinja;' -or
-    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\( localPlayer, isCrystallineConflict, ninjaSeitonConfigurationEnabled, metadata\.SeitonVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
-    throw 'NIN Seiton must remain an exact-CC, verified-metadata, Guard-suppressed fresh-key consumer after Purify/defense/pressure Sprint/Rescue/reactive CC/Smart Kardia.'
-}
-if ($normalizedPersonalStatus -notmatch 'var smartKardiaConfigurationEnabled = configuration\.Enabled && configuration\.EnableSageKardiaAfterEukrasia && isCrystallineConflict && isSage;' -or
+if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
     $normalizedPersonalStatus -match '\bsmartKardiaHeldEnabled\b' -or
-    $normalizedPersonalStatus -notmatch 'var kardia = smartKardia\.Observe\( localPlayer, isCrystallineConflict, smartKardiaConfigurationEnabled, metadata\.SmartKardiaVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, now, hardReset\); var ninja = ninjaSeiton\.Observe\(') {
-    throw 'Smart Kardia must be event-driven after reactive CC, use no held-input slot, and yield to every earlier action attempt before NIN.'
-}
-if ($normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyConfigurationEnabled = configuration\.Enabled && configuration\.EnableScholarCriticalStrategyOnHeldKey && isCrystallineConflict && isScholar;' -or
-    $normalizedPersonalStatus -notmatch 'var scholarCriticalStrategyHeldEnabled = scholarCriticalStrategyConfigurationEnabled && isCrystallineConflict && metadata\.ScholarCriticalStrategyVerified && !guardActive && isScholar;' -or
-    $normalizedPersonalStatus -notmatch 'var scholar = scholarCriticalStrategy\.Observe\( localPlayer, isCrystallineConflict, scholarCriticalStrategyConfigurationEnabled, metadata\.ScholarCriticalStrategyVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.UseActionAttempted \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); var monk = monkEarthReply\.Observe\(' -or
-    $normalizedPersonalStatus -notmatch 'defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed, now, hardReset\);') {
-    throw 'SCH Critical Strategy must be a default-off exact-CC/SCH/metadata/Guard-gated held-generation consumer after Smart Kardia and NIN and before Monk, sharing the same consumed priority chain.'
-}
-$normalizedEmergencyPriority = (Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Emergency action priority rules') -replace '\s+', ' '
-if ($normalizedEmergencyPriority -notmatch 'AllowMiracleIntercept\( EmergencyPurifyBufferDecision purifyDecision, AllyRescueBufferDecision rescueDecision\)\s*=>\s*!SelfPurifyClaimsPriority\(purifyDecision\)\s*&&\s*!AllyRescueClaimsPriority\(rescueDecision\)') {
-    throw 'Core emergency-action priority must permit Miracle only after both self-Purify and Ally Rescue decline the generation.'
+    $normalizedPersonalStatus -notmatch 'var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var kardia = smartKardia\.Observe\(.*?var ninja = ninjaSeiton\.Observe\(.*?kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var scholar = scholarCriticalStrategy\.Observe\(.*?ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var monk = monkEarthReply\.Observe\(.*?scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?darkKnightPlunge\.Observe\(.*?monk\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
+    throw 'Kardia, held NIN, held SCH, Monk, and held DRK must remain in exact lower-priority order with no held-Kardia slot and no consumed-frame overtake.'
 }
 if ($personalStatus -match '\bstatus\.Address\b|\bStatusAddress\b') {
     throw 'Personal status scanning must never gate on status.Address.'
 }
-if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\); var exactGuardActive = guardActive; var guardObservationNow = Math\.Max\(now, Environment\.TickCount64\);.*?guardActive = defensiveUtility\.ObserveGuardSuppression\( exactGuardActive, observedGuardAttemptAt, guardObservationNow, hardReset\)\.SuppressDirectActionHelpers;' -or
-    $normalizedPersonalStatus -notmatch 'regularPurifyConfigurationEnabled = .*?!guardActive;.*?pressureStunPurifyConfigurationEnabled = .*?!guardActive;.*?allyRescueConfigurationEnabled = .*?!guardActive;.*?miracleInterceptConfigurationEnabled = .*?!guardActive;.*?pressureEscapeSprintHeldEnabled = .*?!guardActive;.*?smartRecuperateHeldEnabled = .*?!guardActive;.*?darkKnightPlungeHeldEnabled = .*?!guardActive && isDarkKnight;.*?configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive') {
-    throw 'Exact live or identity-and-territory-bound propagated Guard must be computed independently of the defensive-utility master and suppress every plugin-owned direct action path.'
-}
-if ($normalizedPersonalStatus -notmatch 'var recuperate = smartRecuperate\.Observe\( localPlayer, isCrystallineConflict, configuration\.Enabled && configuration\.EnableSmartRecuperateOnHeldKey, metadata\.RecuperateVerified, guardActive, purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\); var smartRecuperateClaimedPriority = recuperate\.InputClaimed; var guardDefense = defensiveUtility\.ObserveGuard\(' -or
-    $normalizedPersonalStatus -notmatch 'var guardDefense = defensiveUtility\.ObserveGuard\( localPlayer, isCrystallineConflict, defensiveUtilitiesConfigurationEnabled, configuration\.DefensiveUtilitiesOnHeldKey, configuration\.GuardOnStunPressure, pressureKnown, incomingEnemyCount, highPressureStunObserved, purify\.UseActionAttempted, resilienceActive, hasPurifyRemovableCrowdControl, guardActive, purifyClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame' -or
-    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\( localPlayer, isCrystallineConflict, paladinGuardianConfigurationEnabled, configuration\.PaladinGuardianOnHeldKey, guardActive, purifyClaimedPriority \|\| guardDefense\.InputClaimed \|\| smartRecuperateClaimedPriority, emergencyInputFrame') {
-    throw 'Smart Recuperate, reactive Guard, and independent PLD Guardian must observe in exact order after Purify on one consumed generation; no pre-Guard argument may remain.'
+if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\); var exactGuardActive = guardActive; var guardObservationNow = Math\.Max\(now, Environment\.TickCount64\);.*?guardActive = defensiveUtility\.ObserveGuardSuppression\( exactGuardActive, observedGuardAttemptAt, guardObservationNow, hardReset\)\.SuppressDirectActionHelpers;') {
+    throw 'Exact live or identity-and-territory-bound propagated Guard must be computed independently of the defensive-utility master before every direct-action probe.'
 }
 if ([regex]::Matches($personalStatus, '\bguardianCommunication\.Observe\s*\(').Count -ne 1 -or
-    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\(.*?\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\); var defensiveUtilityClaimedPriority = smartRecuperateClaimedPriority \|\| guardDefense\.InputClaimed \|\| defense\.InputClaimed;.*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame, now, hardReset \|\| !alive\);') {
-    throw 'Guardian communication must observe once after the independent PLD pass; later helpers must yield to reactive Guard, Smart Recuperate, or Guardian consumption.'
-}
-if ($normalizedPersonalStatus -notmatch 'var darkKnightPlungeConfigurationEnabled = configuration\.Enabled && configuration\.EnableDarkKnightPlungeOnHeldKey;' -or
-    $normalizedPersonalStatus -notmatch 'var darkKnightPlungeHeldEnabled = darkKnightPlungeConfigurationEnabled && isCrystallineConflict && metadata\.DarkKnightPlungeVerified && !guardActive && isDarkKnight;' -or
-    $normalizedPersonalStatus -notmatch 'darkKnightPlunge\.Observe\( localPlayer, isCrystallineConflict, darkKnightPlungeConfigurationEnabled, metadata\.DarkKnightPlungeVerified, guardActive, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| monk\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame, now, hardReset\);') {
-    throw 'DRK Plunge must remain the lowest-priority exact-CC/DRK/metadata/Guard-gated held helper and yield to every earlier action or claimed input.'
+    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\(.*?\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed \|\| defense\.InputClaimed;') {
+    throw 'Guardian communication must observe once after the independent PLD pass without becoming a separate held scheduler claim.'
 }
 if (($personalStatus -replace '(?s)//.*?\r?\n', '') -match '\bconfiguration\.PreGuardOnLowHpPressure\b|\bEnableSageKardiaOnHeldKey\b') {
     throw 'Legacy pre-Guard and held-Kardia configuration fields may not be read by the PersonalStatus runtime.'
@@ -2695,14 +2780,22 @@ if ([regex]::Matches($defensiveUtility, '(?:->|\.)UseAction\s*\(').Count -ne 2) 
 Assert-Literals $defensiveUtility @(
     'EnemyCombatConstants.GuardActionId',
     'EnemyCombatConstants.GuardianActionId',
-    'EnemyCombatConstants.GuardianActionId',
     'purifyUseActionAttempted',
     'awaitingPostPurifyConfirmation = true',
     'resilienceActive &&',
     '!hasPurifyRemovableCrowdControl',
-    'guardianSpentActors.Add(selected.Actor)',
+    'private FrozenGuardRetry? frozenGuardRetry;',
+    'private FrozenGuardianRetry? frozenGuardianRetry;',
+    'private VirtualKey terminalGuardKey = VirtualKey.NO_KEY;',
+    'private VirtualKey terminalGuardianKey = VirtualKey.NO_KEY;',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
     'inputFrame.Consume()',
     'nearAssist.RunWithoutRedirect',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
     'ActionManager.UseActionMode.None',
     'PartySlotResolver.Resolve',
     'GetActionInRangeOrLoS',
@@ -2711,45 +2804,30 @@ Assert-Literals $defensiveUtility @(
     'selectedGuardianPartySlot = selected.PartySlot',
     'ObserveGuardianTriggerPopup(',
     'HasActiveGuard(localPlayer)',
-    'IsActionOffCooldown(EnemyCombatConstants.GuardActionId)',
-    'IsActionOffCooldown(EnemyCombatConstants.GuardianActionId)',
-    'will not be retried for this intent'
-) 'One-generation exact Guard and Guardian runtime'
-if ($normalizedDefensiveUtility -notmatch 'if \(highPressureStunObserved && purifyUseActionAttempted\) \{ awaitingPostPurifyConfirmation = true; postPurifyGuardExpiresAt = SaturatingAdd\( nowMilliseconds, DefensiveUtilityRules\.PostPurifyGuardWindowMilliseconds\); \}.*?if \(awaitingPostPurifyConfirmation && resilienceActive && !hasPurifyRemovableCrowdControl\) \{ awaitingPostPurifyConfirmation = false;' -or
-    $normalizedDefensiveUtility -notmatch 'trigger = DefensiveUtilityTrigger\.PostPurifyHighPressureStun; postPurifyGuardExpiresAt = -1; awaitingPostPurifyConfirmation = false; inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardOnce' -or
-    $normalizedDefensiveUtility -notmatch 'guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce') {
-    throw 'Each reactive Guard or separate Guardian intent must retire and consume its shared physical generation before the sole native request; Guard requires the later Resilience-confirmed generation.'
-}
-if ([regex]::Matches($defensiveUtility, '\bObserveGuardianTriggerPopup\s*\(').Count -ne 1 -or
-    $normalizedDefensiveUtility -notmatch 'action = DefensiveUtilityActionKind\.Guardian; trigger = DefensiveUtilityTrigger\.PaladinGuardianLowAlly; targetGameObjectId = selected\.GameObjectId; targetEntityId = selected\.EntityId; selectedGuardianPartySlot = selected\.PartySlot; guardianSpentActors\.Add\(selected\.Actor\); inputClaimed = true; inputFrame\.Consume\(\); accepted = TryUseGuardianOnce\(localPlayer!, selected, out attempted\);' -or
-    $normalizedDefensiveUtility -notmatch 'guardianPopup = DefensiveUtilityRules\.ObserveGuardianTriggerPopup\( guardianPopup, guardianConfigurationEnabled && isCrystallineConflict && localIdentityValid && IsPaladin\(localPlayer!\), action, trigger, attempted, accepted, selectedGuardianPartySlot, nowMilliseconds, hardReset\);' -or
-    $normalizedDefensiveUtility -notmatch 'internal unsafe DefensiveUtilityProbeSnapshot ObserveGuard\(.*?internal unsafe DefensiveUtilityProbeSnapshot ObserveGuardian\(' -or
-    $normalizedDefensiveUtility -notmatch 'private void ResetGuardOpportunityRuntime\(\).*?private void ResetGuardianOpportunityRuntime\(\)') {
-    throw 'Only the attempted-and-client-accepted PLD Guardian helper branch may feed the popup, and disable, CC-context loss, fail-closed, or reset must clear it.'
+    'CaptureLocalGuardAttemptGeneration()',
+    'if (outcome == ClientActionAttemptOutcome.ClientRejected)',
+    'TryRetractClientRejectedLocalGuardAttempt(',
+    'if (outcome == ClientActionAttemptOutcome.ClientAccepted)',
+    'ObserveGuardSuppression('
+) 'Shared retry exact Guard and Guardian runtime'
+if ([regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 4 -or
+    [regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 2 -or
+    [regex]::Matches($defensiveUtility, '\bHeldActionRetryRules\.Complete\s*\(').Count -ne 2 -or
+    [regex]::Matches($defensiveUtility, '\bHeldActionRetryRules\.RetainsSchedulerFrame\s*\(').Count -ne 2 -or
+    $normalizedDefensiveUtility -notmatch 'var generationBeforeCall = nearAssist\.CaptureLocalGuardAttemptGeneration\(\);.*?var outcome = ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\) \{ nearAssist\.TryRetractClientRejectedLocalGuardAttempt\( localPlayer\.GameObjectId, localPlayer\.EntityId, generationBeforeCall\); \}.*?if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\) \{ ObserveGuardSuppression\(' -or
+    $normalizedDefensiveUtility -match 'AcceptanceUnknown.*?TryRetractClientRejectedLocalGuardAttempt') {
+    throw 'Guard and Guardian must use the shared classifier; only a proven clean client false may roll back the local Guard attempt, while accepted/ambiguous evidence stays preserved.'
 }
 if ($normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
     throw 'Defensive native calls must be exact Action 29054 to self and exact Action 29066 to the revalidated ally.'
 }
-$guardUseMethod = [regex]::Match(
-    $defensiveUtility,
-    '(?s)private unsafe bool TryUseGuardOnce\(.*?\r?\n    \}\r?\n\r?\n    private unsafe bool TryUseGuardianOnce').Value
-$normalizedGuardUseMethod = $guardUseMethod -replace '\s+', ' '
-$guardAttemptCommitIndex = $normalizedGuardUseMethod.IndexOf('ObserveGuardSuppression(')
-$guardNativeRequestIndex = $normalizedGuardUseMethod.IndexOf('actionManager->UseAction(')
-if ([string]::IsNullOrWhiteSpace($guardUseMethod) -or
-    [regex]::Matches($guardUseMethod, '\bObserveGuardSuppression\s*\(').Count -ne 1 -or
-    $guardAttemptCommitIndex -lt 0 -or
-    $guardNativeRequestIndex -le $guardAttemptCommitIndex -or
-    $normalizedGuardUseMethod -notmatch 'attempted = true;.*?ObserveGuardSuppression\( exactGuardActive: false, observedGuardAttemptAtMilliseconds: Environment\.TickCount64, nowMilliseconds: Environment\.TickCount64\);.*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(') {
-    throw 'Plugin-owned Guard must commit global propagation suppression after accepting the attempt but before its sole native UseAction request.'
-}
 if ($normalizedDefensiveUtility -notmatch 'var canDispatch = guardConfigurationEnabled && isCrystallineConflict && localIdentityValid && input\.ProbeSucceeded && !input\.IsTextInputActive && inputEligible && !guardActive && !higherPriorityClaimed;' -or
     $normalizedDefensiveUtility -notmatch 'var canDispatch = guardianConfigurationEnabled && isCrystallineConflict && localIdentityValid && input\.ProbeSucceeded && !input\.IsTextInputActive && inputEligible && !guardActive && !higherPriorityClaimed;') {
     throw 'Reactive Guard and independent PLD Guardian must each retain their own config gate while both honor the effective live-or-propagated Guard suppression and shared priority.'
 }
-if ($defensiveUtility -match '(?-i:\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction)\b)|(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=|\bstatus\.Address\b') {
-    throw 'Defensive utilities must never retry, custom-queue, mutate a target, or depend on status-slot addresses.'
+if ($defensiveUtility -match '(?-i:\b(RetryAction|RetryDispatch|QueueAction)\b)|(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)|\bstatus\.Address\b') {
+    throw 'Defensive utilities must never own a custom action queue, mutate a target, or depend on status-slot addresses.'
 }
 
 $allyRescue = Read-RequiredSource $allyRescueProbePath 'Ally Rescue probe'
@@ -2783,14 +2861,18 @@ Assert-Literals $allyRescue @(
     'GetActionInRangeOrLoS',
     'SeitonRangeRules.HasNativeRangeAndLineOfSight',
     'state = decision.NextState',
-    'if (decision.ShouldConsumeInputGeneration) inputFrame.Consume()',
+    'var inputClaimed = dispatchAllowed &&',
+    'if (inputClaimed) inputFrame.Consume()',
     'TryRevalidateCandidate',
+    'AllyRescueBufferRules.CompleteNativeAttempt(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
     'nearAssist.RunWithoutRedirect',
     'ActionType.Action',
     'ActionManager.UseActionMode.None'
 ) 'Bounded Ally Rescue runtime'
-if ($allyRescue -match '\bstatus\.Address\b|\bIsActionOffCooldown\b') {
-    throw 'Ally Rescue must not restore the fragile status-address or local cooldown prefilters removed by the reliability hotfix.'
+if ($allyRescue -match '\bstatus\.Address\b') {
+    throw 'Ally Rescue must never depend on a native status-slot address.'
 }
 if ([regex]::Matches($allyRescue, 'ValidateRescueActionMetadata\s*\(').Count -lt 3 -or
     $allyRescue -notmatch 'catch\s*\(Exception exception\)' -or
@@ -2843,11 +2925,14 @@ if ($normalizedAllyRescue -notmatch 'actionManager->UseAction\s*\(\s*ActionType\
 $rescueCommit = [regex]::Match($allyRescue, 'state\s*=\s*decision\.NextState\s*;')
 $rescueCall = [regex]::Match($allyRescue, 'actionManager->UseAction\s*\(')
 if (-not $rescueCommit.Success -or -not $rescueCall.Success -or $rescueCommit.Index -gt $rescueCall.Index) {
-    throw 'Ally Rescue must commit its spent state before the sole native action attempt.'
+    throw 'Ally Rescue must commit its frozen buffer state before the native action boundary.'
 }
 if ($allyRescue -match '\b(for|while|do)\s*\([^)]*UseAction' -or
-    $allyRescue -match '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|ITargetManager|TargetManager|SetTarget)\b') {
-    throw 'Ally Rescue must never retry, queue, loop action calls, or mutate visible targets.'
+    $allyRescue -match '\b(RetryAction|RetryDispatch|QueueAction|ITargetManager|TargetManager|SetTarget)\b') {
+    throw 'Ally Rescue must never own a custom queue, loop native calls inside one frame, or mutate visible targets.'
+}
+if ($normalizedAllyRescue -notmatch 'if \(attempted && accepted\) \{.*?confirmationState = AllyRescueConfirmationRules\.RegisterAttempt\(') {
+    throw 'Ally Rescue landing confirmation must be registered only after a client-accepted exact boundary and preserved for exact server ActionEffect correlation.'
 }
 
 $allyRescueSelection = Read-RequiredSource (Join-Path $coreRoot 'AllyRescueSelectionRules.cs') 'Ally Rescue selection rules'
@@ -2954,7 +3039,6 @@ Assert-Literals $miracleIntercept @(
     'inputFrame.IsGameplayKeyPhysicallyDown(',
     'ObserveProtectionEndHeldConsent(',
     'MiracleProtectionEndRules.ObserveHeldConsent(',
-    'MiracleProtectionEndRules.DispatchConsumesHeldConsent(threat.Kind)',
     'protectionEndJobChanged',
     'protectionEndLocalJobId',
     'ClearProtectionEndHeldConsent()',
@@ -2964,8 +3048,7 @@ Assert-Literals $miracleIntercept @(
     'decision.PromotionIntent',
     'MiracleInterceptThreatKind.PostPurifyCrowdControl',
     'MiracleInterceptThreatKind.PostGuardCrowdControl',
-    'MiracleCleanseFollowupRules.ReleaseOpportunityMilliseconds',
-    'MiracleGuardFollowupRules.ReleaseOpportunityMilliseconds',
+    'MiracleProtectionEndRules.HeldLeaseMilliseconds',
     'ObserveGuardFollowup(',
     'BuildGuardFollowupCandidates(',
     'CountActiveGuardStatuses(',
@@ -3019,8 +3102,8 @@ if ($normalizedMiracleIntercept -notmatch 'var guardFollowupEnabled = enabled &&
 if ($normalizedMiracleIntercept -notmatch 'ObserveProtectionEndHeldConsent\( allowHeldGameplayKey && localAlive && \(cleanseFollowupEnabled \|\| guardFollowupEnabled\), dispatchAllowed, inputFrame, hardReset \|\| protectionEndJobChanged\);' -or
     $normalizedMiracleIntercept -notmatch 'var latchedKeyPhysicallyDown = TryGetLatchedProtectionEndKey\(out var previousKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(previousKey\); var eligibleKey = VirtualKey\.NO_KEY; if \(enabled && dispatchAllowed && !input\.IsTextInputActive\).*?inputFrame\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : inputFrame\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(observedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(observedKey\).*?MiracleProtectionEndRules\.ObserveHeldConsent\( protectionEndHeldConsent, new MiracleProtectionEndHeldConsentObservation\( enabled, input\.IsTextInputActive, eligibleKey == VirtualKey\.NO_KEY \? 0 : \(int\)eligibleKey, latchedKeyPhysicallyDown, hardReset\)\)' -or
     $normalizedMiracleIntercept -notmatch 'if \(triggerKey == VirtualKey\.NO_KEY && isProtectionEndThreat && TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(latchedKey\)\).*?triggerKey = latchedKey;' -or
-    $normalizedMiracleIntercept -notmatch 'activeThreat = null; inputFrame\.Consume\(\); if \(MiracleProtectionEndRules\.DispatchConsumesHeldConsent\(threat\.Kind\)\) ClearProtectionEndHeldConsent\(\);') {
-    throw 'Protection-end consent must originate only from an unconsumed shared fresh/held eligible exact physical key, persist by that exact key level, clear for startup dispatch, and remain available only for later distinct protection-end epochs.'
+    $normalizedMiracleProtectionEndRules -notmatch 'public static bool DispatchConsumesHeldConsent\(MiracleInterceptThreatKind threat\) => false;') {
+    throw 'Protection-end consent must originate only from an unconsumed shared fresh/held eligible exact physical key, persist by that exact key level, and remain available across distinct startup and protection-end episodes while the same physical hold remains valid.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(!enabled\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
@@ -3051,9 +3134,9 @@ if ($normalizedExecuteTracker -notmatch 'var exactMpIdentityPreviouslyTrusted = 
 if ($normalizedMiracleIntercept -notmatch 'private IPlayerCharacter\? ResolveCleanseFollowupCandidate\( IPlayerCharacter localPlayer, MiracleCleanseFollowupTargetIdentity target\).*?enemy\.GameObjectId == target\.GameObjectId && enemy\.EntityId == target\.EntityId && enemy\.JobId == target\.JobId.*?Take\(2\).*?if \(canonical\.Length != 1\) return null;.*?player\.GameObjectId == target\.GameObjectId && player\.EntityId == target\.EntityId && player\.GameObjectId != localPlayer\.GameObjectId && player\.ClassJob\.IsValid && player\.ClassJob\.RowId == target\.JobId.*?Take\(2\).*?return players\.Length == 1 && IsLivePlayer\(players\[0\]\) && HasValidNativeIdentity\(players\[0\]\)') {
     throw 'Post-Purify status observation must resolve exactly one unchanged canonical e1-e5 and exactly one matching live native player actor.'
 }
-if ($normalizedMiracleIntercept -notmatch 'var blockerFamily = BlockerFamilyForAction\(threat\.CounterActionId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate, blockerFamily\); var guardReappeared = threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl && CountActiveGuardStatuses\(candidate\) != 0;.*?var otherProtection = \(anyProtection && !hardenedScales\) \|\| guardReappeared;.*?var rangeAndLineOfSight = HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, candidate\); var locallyReady = !hardenedScales && !otherProtection && rangeAndLineOfSight && ActionManager\.Instance\(\) != null;' -or
-    $normalizedMiracleIntercept -notmatch 'var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated, blockerFamily\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && \(!isProtectionEndThreat \|\| \(TryGetLatchedOrEligibleProtectionEndKey\(triggerKey, out var exactHeldKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(exactHeldKey\)\)\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\.Kind\); if \(revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedGuardAbsent && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow\)') {
-    throw 'Reactive CC must freeze and finally revalidate counter action/local job, exact actor/life, action-specific blockers, post-Guard absence, range/LoS, exact physical key, and the strict original window before its sole call.'
+if ($normalizedMiracleIntercept -notmatch 'var blockerFamily = BlockerFamilyForAction\(threat\.CounterActionId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate, blockerFamily\); var guardReappeared = threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl && CountActiveGuardStatuses\(candidate\) != 0;.*?var otherProtection = \(anyProtection && !hardenedScales\) \|\| guardReappeared;.*?var rangeAndLineOfSight = HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, candidate\); var structurallyReady = HasStructuralActionReadiness\(threat\.CounterActionId\); var exactIntentCanProgress = !hardenedScales && !otherProtection && rangeAndLineOfSight && structurallyReady; var globallyQueueReady = exactIntentCanProgress && HasGlobalQueueReadiness\( localPlayer!, threat\.CounterActionId\);' -or
+    $normalizedMiracleIntercept -notmatch 'var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated, blockerFamily\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && IsExactVirtualKey\(triggerKey\) && threat\.GameplayKeyToken == \(int\)triggerKey && inputFrame\.IsGameplayKeyPhysicallyDown\(triggerKey\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\.Kind\); var finalValidationPassed = revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedGuardAbsent && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow;') {
+    throw 'Reactive CC must freeze and finally revalidate counter action/local job, exact actor/life, action-specific blockers, post-Guard absence, range/LoS, exact physical key, and the strict original window before every bounded native call.'
 }
 if ($normalizedMiracleIntercept -notmatch 'return pressureTracker\.TryGetFreshTeamTargetCount\( new TargetPressureActorIdentity\(localPlayer\.GameObjectId, localPlayer\.EntityId\), new TargetPressureActorIdentity\(candidate\.GameObjectId, candidate\.EntityId\), nowMilliseconds, MaximumTeamPressureAgeMilliseconds, out teamTargetCount\);' -or
     $normalizedMiracleIntercept -notmatch 'teamTargetCountKnown = TryGetFreshTeamTargetCount\( localPlayer, player, nowMilliseconds, out cleanseFollowupTeamPressure\);.*?new MiracleProtectionEndRankCandidate\( MiracleInterceptThreatKind\.PostPurifyCrowdControl, canonical\.Slot, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, teamTargetCountKnown, cleanseFollowupTeamPressure, player\.CurrentHp, player\.MaxHp, canonical\.HasTrustedMp, canonical\.CurrentMp, canonical\.MaxMp\)' -or
@@ -3084,22 +3167,26 @@ if ($normalizedMiracleIntercept -notmatch 'ResolveCounterActionId\(.*?EnemyComba
     $normalizedMiracleIntercept -notmatch 'if \(MiracleInterceptConfirmationRules\.ExpectedStatusForAction\(actionId\) == 0 \|\| !TargetHighlightRules\.IsValidGameObjectId\(targetGameObjectId\)\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, actionId, targetGameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\)') {
     throw 'Reactive CC may resolve only WHM 29228 or BRD 29395 and issue that exact action once to the revalidated enemy.'
 }
-$miracleConsumeState = [regex]::Match($miracleIntercept, 'activeThreat\s*=\s*null\s*;\s*\r?\n\s*inputFrame\.Consume\s*\(\s*\)\s*;')
-$miracleTryUse = [regex]::Match($miracleIntercept, '\bTryUseCounterCcOnce\s*\(\s*threat\.CounterActionId\s*,\s*revalidated\.GameObjectId')
+$miracleFrameClaim = [regex]::Match($miracleIntercept, 'inputClaimedThisFrame\s*=\s*true\s*;\s*\r?\n\s*inputFrame\.Consume\s*\(\s*\)\s*;')
+$miracleTryUse = [regex]::Match($miracleIntercept, '\bTryUseCounterCcOnce\s*\(\s*localPlayer!\s*,\s*threat\.CounterActionId\s*,\s*revalidated!\.GameObjectId')
 $miracleNativeCall = [regex]::Match($miracleIntercept, 'actionManager->UseAction\s*\(')
-if (-not $miracleConsumeState.Success -or -not $miracleTryUse.Success -or -not $miracleNativeCall.Success -or
-    $miracleConsumeState.Index -gt $miracleTryUse.Index -or
+if (-not $miracleFrameClaim.Success -or -not $miracleTryUse.Success -or -not $miracleNativeCall.Success -or
+    $miracleFrameClaim.Index -gt $miracleTryUse.Index -or
     $miracleTryUse.Index -gt $miracleNativeCall.Index) {
-    throw 'Reactive CC must retire the exact opportunity and shared generation before its one revalidated direct-GOID native action attempt.'
+    throw 'Reactive CC must claim only the current scheduler frame before each bounded revalidated direct-GOID native action attempt.'
 }
 if ([regex]::Matches($miracleIntercept, '\bnearAssist\.RunWithoutRedirect\s*\(').Count -ne 1 -or
     $miracleIntercept -match '\b(IKeyState|GameInputContextProbe|EmergencyActionInputCoordinator|PhysicalGameplayKeyRules|GetAsyncKeyState)\b') {
     throw 'Reactive CC must reuse the shared EmergencyActionInputFrame and Near Assist redirect-bypass boundary, never create a duplicate raw-key scanner/coordinator.'
 }
-if ($miracleIntercept -match '\b(GetAdjustedActionId|GetActionStatus|IsActionOffCooldown|AnimationLock|CurrentMount|CanUseActionOnTarget)\b' -or
-    $miracleIntercept -match '(?-i:\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction)\b)' -or
+if ([regex]::Matches($miracleIntercept, 'ClientActionAttemptBoundary\.Capture\s*\(').Count -ne 2 -or
+    [regex]::Matches($miracleIntercept, 'ClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
+    [regex]::Matches($miracleIntercept, 'MiracleProtectionEndRules\.CompleteNativeAttempt\s*\(').Count -ne 1 -or
+    $normalizedMiracleIntercept -notmatch 'if \(!globallyQueueReady\).*?inputClaimedThisFrame = true; inputFrame\.Consume\(\);.*?if \(!MiracleProtectionEndRules\.CanAttempt\(.*?inputClaimedThisFrame = true; inputFrame\.Consume\(\);' -or
+    $normalizedMiracleIntercept -notmatch 'attemptOutcome == MiracleProtectionEndAttemptOutcome\.RetryScheduled' -or
+    $miracleIntercept -match '(?-i:\b(RetryAction|RetryDispatch|QueuedAction|QueueAction)\b)' -or
     $miracleIntercept -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
-    throw 'Reactive CC must never cooldown-prefilter, retry, queue, or mutate a visible target.'
+    throw 'Reactive CC must use the shared complete native fingerprint and clean-false retry policy, claim global waits/throttle without spending retry budget, and never implement a custom queue or mutate a visible target.'
 }
 if ($miracleIntercept -match '\bstatus\.RemainingTime\b|\bstatus\.[A-Za-z_]*Address\b|\b(StatusAddress|StatusInstanceToken)\b' -or
     $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\) && CcImmunityBrakeActionCatalog\.IsBlockerStatus\( blockerFamily, status\.StatusId, targetJobId\).*?return true' -or
@@ -3165,7 +3252,7 @@ Assert-Literals $miracleIntercept @(
     'new MiracleInterceptLandedObservation(',
     'MiracleInterceptConfirmationRules.RegisterAttempt(',
     'new MiracleInterceptPendingAttempt(',
-    'attempted && revalidated is not null && attemptedAtMilliseconds >= 0',
+    'attempted && accepted && revalidated is not null && attemptedAtMilliseconds >= 0',
     'ConfirmationPopup = confirmationState.Popup',
     'ConfirmedLandingCount = confirmationState.TotalConfirmed',
     'ConfirmationQueueDepth = capture.MiracleInterceptConfirmationQueueDepth',
@@ -3177,10 +3264,10 @@ Assert-Literals $miracleIntercept @(
     'Waiting for exact reactive-CC landing evidence'
 ) 'Reactive-CC landing runtime correlation and diagnostics'
 $miracleRegisterIndex = $normalizedMiracleIntercept.IndexOf('MiracleInterceptConfirmationRules.RegisterAttempt(')
-$miracleTryUseIndex = $normalizedMiracleIntercept.IndexOf('TryUseCounterCcOnce( threat.CounterActionId, revalidated.GameObjectId')
+$miracleTryUseIndex = $normalizedMiracleIntercept.IndexOf('TryUseCounterCcOnce( localPlayer!, threat.CounterActionId, revalidated!.GameObjectId')
 if ($miracleTryUseIndex -lt 0 -or $miracleRegisterIndex -le $miracleTryUseIndex -or
-    $normalizedMiracleIntercept -notmatch 'if \(attempted && revalidated is not null && attemptedAtMilliseconds >= 0\) \{ var registered = MiracleInterceptConfirmationRules\.RegisterAttempt') {
-    throw 'Reactive-CC confirmation may register only after the sole native attempt against the revalidated exact target.'
+    $normalizedMiracleIntercept -notmatch 'if \(attempted && accepted && revalidated is not null && attemptedAtMilliseconds >= 0\) \{ var registered = MiracleInterceptConfirmationRules\.RegisterAttempt') {
+    throw 'Reactive-CC confirmation may register only after a client-accepted native attempt against the revalidated exact target.'
 }
 $miracleDrainConfirmationIndex = $normalizedMiracleIntercept.IndexOf('DrainConfirmations(nowMilliseconds)')
 $miracleFollowupIndex = $normalizedMiracleIntercept.IndexOf('ObserveCleanseFollowup(')
@@ -3190,22 +3277,22 @@ if ($miracleDrainConfirmationIndex -lt 0 -or
     $miracleFollowupIndex -le $miracleDrainConfirmationIndex -or
     $miracleNoThreatIndex -le $miracleFollowupIndex -or
     $miracleDispatchGateIndex -le $miracleDrainConfirmationIndex -or
-    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ \} expiringThreat && \(nowMilliseconds < expiringThreat\.ObservedAtMilliseconds \|\| nowMilliseconds - expiringThreat\.ObservedAtMilliseconds >= ThreatLifetime\(expiringThreat\.Kind\)\)\).*?RecordExpired\(expiringThreat\); activeThreat = null;.*?var followupPromotions = new List<MiracleFollowupPromotion>\(2\);.*?ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null,.*?ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null, nowMilliseconds\);.*?if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\);.*?if \(!dispatchAllowed\).*?RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\);.*?return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\);' -or
+    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ \} expiringThreat && \(nowMilliseconds < expiringThreat\.ObservedAtMilliseconds \|\| nowMilliseconds - expiringThreat\.ObservedAtMilliseconds >= ThreatLifetime\(expiringThreat\.Kind\)\)\).*?RecordExpired\(expiringThreat\); activeThreat = null;.*?var followupPromotions = new List<MiracleFollowupPromotion>\(2\);.*?ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, activeThreat is not null,.*?ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds\);.*?if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\);.*?if \(!dispatchAllowed\).*?RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\);.*?return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\);' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?if \(confirmationPendingForLocalCaster\) DrainConfirmations\(nowMilliseconds\);.*?"Waiting for exact reactive-CC landing evidence"') {
-    throw 'Every Purify/Guard follow-up frame must run before the sole dispatch decision; urgent/helper priority may only retain it inside its original TTL, while local death must preserve exact pending landing evidence.'
+    throw 'Every Purify/Guard follow-up frame must run before dispatch; urgent/helper priority may only retain the frozen intent inside its bounded lease, while local death must preserve exact pending landing evidence.'
 }
-if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null,').Count -ne 2) {
-    throw 'Both new-signal and ordinary-frame follow-up observations must yield to urgent MCH/SAM/VPR/DNC threats and higher-priority Purify/defense/Rescue input ownership.'
+if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, activeThreat is not null,').Count -ne 2) {
+    throw 'Both new-signal and ordinary-frame follow-up observations must remain independent of scheduler-frame ownership while yielding to an already frozen reactive threat.'
 }
-if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, !dispatchAllowed \|\| activeThreat is not null, nowMilliseconds\)').Count -ne 1) {
-    throw 'The live framework may observe post-Guard release exactly once per frame through the shared higher-priority gate.'
+if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds\)').Count -ne 1) {
+    throw 'The live framework may observe post-Guard release exactly once per frame while yielding only to an already frozen reactive threat.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(decision\.NextState\.ActiveSignal is null\) cleanseFollowupStates\.Remove\(enemySlot\); else cleanseFollowupStates\[enemySlot\] = decision\.NextState;.*?if \(!decision\.ShouldPromote \|\| decision\.PromotionIntent is not \{ \} promotion\) return null;.*?new MiracleThreatState\( MiracleInterceptThreatKind\.PostPurifyCrowdControl, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, canonical\.Slot, promotion\.ReleasedAtMilliseconds' -or
-    $normalizedMiracleIntercept -notmatch 'private static long ThreatLifetime\(MiracleInterceptThreatKind kind\) => kind switch \{ MiracleInterceptThreatKind\.PostPurifyCrowdControl => MiracleCleanseFollowupRules\.ReleaseOpportunityMilliseconds, MiracleInterceptThreatKind\.PostGuardCrowdControl => MiracleGuardFollowupRules\.ReleaseOpportunityMilliseconds, _ => MiracleInterceptRules\.GetThreatLifetimeMilliseconds\(kind\), \};') {
-    throw 'Both exact follow-up states must retire before promotion, and the shared dispatcher must measure each strict unextended 500 ms window from its original verified release edge.'
+    $normalizedMiracleIntercept -notmatch 'private static long ThreatLifetime\(MiracleInterceptThreatKind kind\) => kind switch \{ MiracleInterceptThreatKind\.PostPurifyCrowdControl => MiracleProtectionEndRules\.HeldLeaseMilliseconds, MiracleInterceptThreatKind\.PostGuardCrowdControl => MiracleProtectionEndRules\.HeldLeaseMilliseconds, _ => MiracleInterceptRules\.GetThreatLifetimeMilliseconds\(kind\), \};') {
+    throw 'Both exact follow-up states must retire before promotion, and the shared dispatcher must measure the strict unextended 1,500-ms frozen-intent lease from the original verified release edge.'
 }
 if ($normalizedMiracleIntercept -match 'MiracleInterceptThreatKind\.(?:PostPurifyCrowdControl|PostGuardCrowdControl),.*?decision\.NextState\.LastObservedAtMilliseconds') {
-    throw 'Priority-delayed follow-up promotion must never restart its 500-ms TTL from the later framework decision time.'
+    throw 'Priority-delayed follow-up promotion must never restart its bounded lease from the later framework decision time.'
 }
 if ($normalizedMiracleIntercept -notmatch 'var selected = SelectFollowupPromotion\(followupPromotions\); activeThreat = selected\.Threat;.*?foreach \(var retired in followupPromotions\).*?if \(retired == selected\) continue;.*?rejectedThreatCount.*?PostPurifyCrowdControl.*?PostGuardCrowdControl.*?guardFollowupRetiredCount' -or
     $normalizedMiracleIntercept -notmatch 'private static int CompareFollowupPromotions\( MiracleFollowupPromotion left, MiracleFollowupPromotion right\).*?MiracleProtectionEndRules\.Compare\(left\.Rank, right\.Rank\)') {
@@ -3461,9 +3548,10 @@ if ($unexpectedSmartPaeanReferences.Count -gt 0 -or
     throw "Smart Paean may be constructed once and consulted only by the existing shared action detour: $($locations -join ', ')"
 }
 
-# The NIN Seiton helper is a separate default-off fresh-edge action boundary.
-# Pure rules select exactly one canonical CC enemy by exact HP ratio; runtime
-# consumes the shared generation before revalidating only that frozen intent.
+# The NIN Seiton helper is a separate default-off held-level action boundary.
+# Pure rules select exactly one canonical CC enemy by exact HP ratio. Runtime
+# claims only one scheduler frame per native boundary, retries only a proven
+# clean false, and opens one follow-up epoch only after an accepted base action.
 $ninjaSeitonRules = Read-RequiredSource $ninjaSeitonDispatchRulesPath 'NIN Seiton dispatch rules'
 $ninjaSeiton = Read-RequiredSource $ninjaSeitonProbePath 'NIN Seiton dispatch runtime'
 $normalizedNinjaSeitonRules = $ninjaSeitonRules -replace '\s+', ' '
@@ -3472,7 +3560,11 @@ Assert-Literals $ninjaSeitonRules @(
     'BaseActionId = 29_515',
     'FollowUpActionId = 29_516',
     'IReadOnlyList<NinjaSeitonDispatchCandidate>? Candidates',
-    'FreshGameplayKeyPressed',
+    'NinjaSeitonAcceptedHoldState(',
+    'BeginAcceptedHold(',
+    'ObserveAcceptedHold(',
+    'CanOpenAdjustedActionEpoch(',
+    'HeldGameplayKeyEligible',
     'ActionHelpersSuppressedByGuard',
     'HigherPriorityClaimed',
     'ExactCanonicalIdentity',
@@ -3494,8 +3586,8 @@ Assert-Literals $ninjaSeitonRules @(
     'candidate.Actor == intent.Target',
     'selector again after consuming input; drift simply cancels the attempt'
 ) 'Deterministic exact NIN Seiton dispatch policy'
-if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.FreshGameplayKeyPressed\).*?NoFreshGameplayKey.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
-    throw 'NIN Seiton policy must require default-off enablement, exact CC/NIN/local identity, verified metadata, no Guard or higher claim, one fresh non-text key edge, and exact ready 29515/29516.'
+if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
+    throw 'NIN Seiton policy must require default-off enablement, exact CC/NIN/local identity, verified metadata, no Guard or higher claim, one exact held non-text key epoch, and exact ready 29515/29516.'
 }
 if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
     $normalizedNinjaSeitonRules -notmatch 'if \(!occupiedSlots\.Add\(candidate\.EnemySlot\) \|\| !occupiedActors\.Add\(candidate\.Actor\)\) \{ return -1; \}.*?if \(bestIndex < 0 \|\| Compare\(candidate, candidates\[bestIndex\]\) < 0\) bestIndex = index;' -or
@@ -3507,8 +3599,8 @@ if ($normalizedNinjaSeitonRules -notmatch 'var health = CompareRatio\( left\.Cur
     throw 'NIN Seiton must use ratio, S-slot, EntityId, and GameObjectId ordering, then validate only the frozen action/slot/actor intent.'
 }
 if ($ninjaSeitonRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $ninjaSeitonRules -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|HeldGameplayKeyEligible|PendingDispatch|BufferedDispatch)\b') {
-    throw 'Pure NIN Seiton rules must never dispatch, observe time/held level, buffer, queue, retry, mutate, or depend on the visible target.'
+    $ninjaSeitonRules -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch)\b') {
+    throw 'Pure NIN Seiton rules may model held epochs but must never dispatch, observe time, buffer, queue, mutate, or depend on the visible target.'
 }
 
 if ([regex]::Matches($ninjaSeiton, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
@@ -3546,27 +3638,34 @@ Assert-Literals $ninjaSeiton @(
     'objectTable.SearchByEntityId(target.EntityId)',
     'SeitonReadinessProbe.TryGetReadyAction(',
     'SeitonReadinessProbe.HasRangeAndLineOfSight(',
-    'inputFrame.FreshGameplayKeyPressed',
+    'inputFrame.HeldGameplayKeyEligible',
+    'NinjaSeitonDispatchRules.ObserveAcceptedHold(',
+    'NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(',
     'NinjaSeitonDispatchRules.Observe(',
-    'decision.ShouldConsumeInputGeneration',
     'inputFrame.Consume()',
-    'ResolveFrozenIntent(localPlayer!, intent, finalResolvedActionId)',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'ResolveFrozenIntent(',
     'NinjaSeitonDispatchRules.CanUseExactIntent(',
-    'accepted = TryUseSeitonOnce(',
+    'var outcome = TryUseSeitonOnce(',
     'ReadFrozenThresholdAtUseActionBoundary(',
     'BoundaryThresholdResult.AtOrAboveHalf',
     'thresholdResult != BoundaryThresholdResult.BelowHalf',
     'thresholdRevalidatedAtBoundary = true;',
     'attemptedAtBoundary = true;',
     'nearAssist.RunWithoutRedirect',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
+    'NinjaSeitonDispatchRules.BeginAcceptedHold(',
     'ActionType.Action',
     'ActionManager.UseActionMode.None',
-    'attempted (accepted={accepted})',
-    'failed and will not be retried'
-) 'Exact one-attempt NIN Seiton runtime and truthful diagnostics'
-if ($normalizedNinjaSeiton -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && ExecuteThreshold\.IsNinja\(localJobId\) && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionReady = featureContextReady && localIdentity\.IsValid && SeitonReadinessProbe\.TryGetReadyAction\(localPlayer!, out resolvedActionId\);' -or
-    $normalizedNinjaSeiton -notmatch 'var shouldResolveCandidates = actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && inputFrame\.FreshGameplayKeyPressed;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?FreshGameplayKeyPressed, resolvedActionId, actionReady, candidates, hardReset') {
-    throw 'NIN Seiton may capture candidates only behind exact CC/NIN/metadata/Guard/readiness gates and one unclaimed fresh non-text key edge.'
+    'HeldActionRetryRules.MaximumNativeAttempts'
+) 'Exact held-epoch NIN Seiton runtime, shared retry boundary, and truthful diagnostics'
+if ($normalizedNinjaSeiton -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && ExecuteThreshold\.IsNinja\(localJobId\) && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionLocallyReady = featureContextReady && localIdentity\.IsValid && SeitonReadinessProbe\.TryGetReadyAction\(localPlayer!, out resolvedActionId\) && IsActionResourceReady\(resolvedActionId\); var nearQueueable = actionLocallyReady && IsNativeBoundaryNearQueueable\(localPlayer!\); var actionReady = actionLocallyReady && nearQueueable;' -or
+    $normalizedNinjaSeiton -notmatch 'acceptedHold = NinjaSeitonDispatchRules\.ObserveAcceptedHold\(.*?var hasHeldEpoch = acceptedHold\.OwnsHold \? NinjaSeitonDispatchRules\.CanOpenAdjustedActionEpoch\( acceptedHold, resolvedActionId\) : inputFrame\.HeldGameplayKeyEligible; var shouldResolveCandidates = frozenRetry is null && terminalHeldKey == VirtualKey\.NO_KEY && actionReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && hasHeldEpoch;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?hasHeldEpoch, resolvedActionId, actionReady, candidates, hardReset') {
+    throw 'NIN Seiton may capture candidates only behind exact CC/NIN/metadata/Guard/readiness gates and one unclaimed exact held action epoch.'
 }
 if ($normalizedNinjaSeiton -notmatch 'var diagnosticsBefore = executeTracker\.Diagnostics; if \(!diagnosticsBefore\.Active \|\| !diagnosticsBefore\.IsCrystallineConflict \|\| !diagnosticsBefore\.SeitonMetadataVerified\).*?if \(diagnosticsBefore\.SlotCapacity != EnemySlotRules\.LastSlot \|\| diagnosticsBefore\.ResolvedSlots != EnemySlotRules\.LastSlot\).*?var snapshots = executeTracker\.Enemies\.ToArray\(\); var diagnosticsAfter = executeTracker\.Diagnostics; if \(!ReferenceEquals\(diagnosticsBefore, diagnosticsAfter\)\).*?if \(snapshots\.Length > EnemySlotRules\.LastSlot \|\| snapshots\.Length != diagnosticsBefore\.ValidEnemySlots\)' -or
     $normalizedNinjaSeiton -notmatch 'foreach \(var snapshotEnemy in snapshots\).*?!seenSlots\.Add\(snapshotEnemy\.Slot\).*?!seenGameObjectIds\.Add\(snapshotEnemy\.GameObjectId\).*?!seenEntityIds\.Add\(snapshotEnemy\.EntityId\).*?return \[\];.*?snapshotsBySlot\.Add\(snapshotEnemy\.Slot, snapshotEnemy\);') {
@@ -3584,25 +3683,24 @@ if ($normalizedNinjaSeiton -notmatch 'foreach \(var \(slot, player\) in currentS
 if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\)') {
     throw 'Every NIN Seiton candidate must re-resolve one canonical e-slot, match both exact actor IDs/address, and pass FFXIV native range/LoS.'
 }
-$ninjaConsume = [regex]::Match($ninjaSeiton, 'if \(inputClaimed\) inputFrame\.Consume\(\);')
-$ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(localPlayer!, intent, finalResolvedActionId\)')
+$ninjaConsume = [regex]::Match($ninjaSeiton, 'inputClaimed\s*=\s*true\s*;\s*\r?\n\s*inputFrame\.Consume\(\);')
+$ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(\s*localPlayer!,\s*retry\.Intent,\s*finalResolvedActionId\)')
 $ninjaIntentRevalidation = [regex]::Match($ninjaSeiton, 'NinjaSeitonDispatchRules\.CanUseExactIntent\s*\(')
 $ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\s*\(\s*localPlayer!,\s*intent,\s*out attempted,')
 $ninjaNativeCall = [regex]::Match($ninjaSeiton, 'actionManager->UseAction\s*\(')
 if (-not $ninjaConsume.Success -or -not $ninjaFrozenResolve.Success -or
     -not $ninjaIntentRevalidation.Success -or -not $ninjaTryUse.Success -or -not $ninjaNativeCall.Success -or
-    $ninjaConsume.Index -gt $ninjaFrozenResolve.Index -or
     $ninjaFrozenResolve.Index -gt $ninjaIntentRevalidation.Index -or
-    $ninjaIntentRevalidation.Index -gt $ninjaTryUse.Index -or
+    $ninjaConsume.Index -gt $ninjaTryUse.Index -or
     $ninjaTryUse.Index -gt $ninjaNativeCall.Index) {
-    throw 'NIN Seiton must consume the shared input generation before frozen-target revalidation and its sole native request.'
+    throw 'NIN Seiton must revalidate only its frozen target, then claim the current scheduler frame before its bounded native request.'
 }
 $ninjaPostConsumeWindow = $ninjaSeiton.Substring(
     $ninjaConsume.Index,
     $ninjaTryUse.Index + $ninjaTryUse.Length - $ninjaConsume.Index)
 if ($ninjaPostConsumeWindow -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(' -or
     $ninjaPostConsumeWindow -match '\bexecuteTracker\.Enemies\b') {
-    throw 'After input consumption NIN Seiton may revalidate only the frozen intent; it must never rerank or choose an alternate.'
+    throw 'After scheduler-frame claim NIN Seiton may use only the frozen intent; it must never rerank or choose an alternate.'
 }
 if ($normalizedNinjaSeiton -notmatch 'BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target\)' -or
     $normalizedNinjaSeiton -notmatch 'actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
@@ -3610,7 +3708,7 @@ if ($normalizedNinjaSeiton -notmatch 'BuildExactSlotCandidate\( localPlayer, act
 }
 $ninjaTryUseMethod = [regex]::Match(
     $normalizedNinjaSeiton,
-    'private unsafe bool TryUseSeitonOnce\(.*?\) \{(?<Body>.*?)\} private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary')
+    'private unsafe ClientActionAttemptOutcome TryUseSeitonOnce\(.*?\) \{(?<Body>.*?)\} private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary')
 $ninjaBoundaryThresholdMethod = [regex]::Match(
     $normalizedNinjaSeiton,
     'private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary\(.*?\) \{(?<Body>.*?)\} private static bool IsValidAtOrAboveHalf')
@@ -3618,9 +3716,9 @@ $ninjaTryUseBody = $ninjaTryUseMethod.Groups['Body'].Value
 $ninjaBoundaryThresholdBody = $ninjaBoundaryThresholdMethod.Groups['Body'].Value
 if (-not $ninjaTryUseMethod.Success -or
     -not $ninjaBoundaryThresholdMethod.Success -or
-    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp\).*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; attemptedAtBoundary = true; return actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
+    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp\).*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); attemptedAtBoundary = true; var clientAccepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); boundaryAfter = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); return clientAccepted;.*?return attemptedAtBoundary \? ClientActionAttemptBoundaryRules\.Classify\( accepted, intent\.ActionId, boundaryBefore, boundaryAfter\) : softUnavailableAtBoundary \? ClientActionAttemptOutcome\.SoftUnavailable : ClientActionAttemptOutcome\.NotInvoked;' -or
     $ninjaTryUseBody -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(|\bexecuteTracker\.Enemies\b') {
-    throw 'At the NIN UseAction boundary, the internal bypass must revalidate only the same frozen action/S-slot/GOID/EID, then perform the latest strict sub-50 HP read immediately before its sole native request with no rerank or alternate.'
+    throw 'At the NIN UseAction boundary, the internal bypass must revalidate only the same frozen action/S-slot/GOID/EID, perform the latest strict sub-50 HP read, and classify the complete pre/post native fingerprint with no rerank or alternate.'
 }
 if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
     [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.CurrentHp\b').Count -ne 1 -or
@@ -3629,15 +3727,25 @@ if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTab
 }
 $ninjaSeitonSelfTests = Read-RequiredSource $ninjaSeitonDispatchSelfTestsPath 'NIN Seiton dispatch self-tests'
 Assert-Literals $ninjaSeitonSelfTests @(
+    'public static void HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime()',
+    'NinjaSeitonDispatchRules.BeginAcceptedHold(',
+    'NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(',
+    '"same accepted base epoch cannot repeat"',
+    '"adjusted follow-up is one distinct epoch"',
+    '"accepted follow-up cannot repeat"',
+    '"key release ends accepted ownership"',
     'alternate with { CurrentHp = 50, MaximumHp = 100 }',
     '"healing to exactly half cancels the frozen intent"',
     'alternate with { CurrentHp = 51, MaximumHp = 100 }',
     '"healing above half cancels the frozen intent"'
 ) 'NIN exact-50 and above-50 frozen-target cancellation tests'
+Assert-Literals $coreSelfTestProgramForGuardian @(
+    'NinjaSeitonDispatchSelfTests.HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime'
+) 'NIN held base/follow-up accepted-epoch test registration'
 if ($ninjaSeiton -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
-    $ninjaSeiton -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|HeldGameplayKeyEligible|PendingDispatch|BufferedDispatch)\b' -or
+    $ninjaSeiton -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|QueueAction|PendingDispatch|BufferedDispatch)\b' -or
     $ninjaSeiton -match '(?:->|\.)Original\s*\(') {
-    throw 'NIN Seiton must use only the existing internal redirect bypass and must never hook, queue, retry, mutate, or depend on a visible target.'
+    throw 'NIN Seiton must use only the existing internal redirect bypass and shared bounded retry policy; it must never hook, custom-queue, mutate, or depend on a visible target.'
 }
 Assert-Literals $pluginSource @(
     'personalStatus.NinjaSeitonDiagnostics',
@@ -3749,7 +3857,7 @@ $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 if (-not $monkObserve.Success -or $monkObserve.Index -lt $scholarCriticalStrategyObserve.Index -or
     $monkObserve.Index -gt $darkKnightPlungeObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| rescue\.UseActionAttempted \|\| miracle\.UseActionAttempted \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed') {
+    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed') {
     throw 'Monk Earth Reply must run after SCH and before DRK Plunge, require exact Monk plus no Guard, and yield whenever an earlier helper claimed or attempted.'
 }
 
@@ -3825,12 +3933,12 @@ Assert-Literals $metadataGuard @(
     'Cannot be executed while bound.'
 ) 'Exact DRK Plunge installed-sheet metadata gate'
 Assert-Literals $darkKnightPlunge @(
-    'private const float AnimationLockEpsilonSeconds = 0.0005f;',
     'DarkKnightPlungeRules.ObserveOwnedHold(',
     'inputFrame.IsGameplayKeyPhysicallyDown(ownedKey)',
     'inputFrame.Consume()',
     'DarkKnightPlungeRules.TrySpendReadyEpoch(',
-    'DarkKnightPlungeRules.BeginOwnedHold(intent.HeldKeyCode)',
+    'DarkKnightPlungeRules.BeginOwnedHold(',
+    'frozen.Intent.HeldKeyCode',
     'EnemySlotResolver.Resolve(objectTable, slot)',
     'objectTable.SearchByEntityId(player!.EntityId) as IPlayerCharacter',
     'actionManager->GetActionStatus(',
@@ -3846,24 +3954,36 @@ Assert-Literals $darkKnightPlunge @(
     'DarkKnightPlungeRules.ExpectedRuntimeRecastGroupIndex',
     'DarkKnightPlungeRules.ExpectedAdjustedRecastMilliseconds',
     'actionManager->CheckActionResources(',
+    'HeldActionRetryRules.IsNativeBoundaryNearQueueable(',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
+    'HeldActionRetryRules.MaximumNativeAttempts',
     'nearAssist.RunWithoutRedirect(',
-    'ActionManager.UseActionMode.None',
-    'the held readiness epoch will not be retried'
-) 'Exact DRK Plunge native/runtime boundary'
+    'ActionManager.UseActionMode.None'
+) 'Exact DRK Plunge native/runtime boundary with shared bounded retry'
 if ([regex]::Matches($darkKnightPlunge, '(?:->|\.)UseAction\s*\(').Count -ne 1 -or
     $normalizedDarkKnightPlunge -notmatch 'actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDarkKnightPlunge -notmatch 'actionManager->GetActionStatus\( ActionType\.Action, actionId, expectedTarget\.GameObjectId, checkRecastActive: true, checkCastingActive: true\) == 0' -or
-    $normalizedDarkKnightPlunge -notmatch 'HasGlobalStructuralReadiness\(.*?PvPBindStatusId.*?IsActionOffCooldown.*?CheckActionResources.*?AnimationLock' -or
-    $darkKnightPlunge -match '(?-i:\b(?:RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch|ITargetManager|TargetManager|SetTarget|UseActionLocation|ExecuteAction|SendAction)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
-    throw 'DRK Plunge must make one exact direct-GOID request only after native action/range/LoS/Bind/resource checks, with no target mutation, alternate, queue, or retry.'
+    $normalizedDarkKnightPlunge -notmatch 'HasActionSpecificReadiness\(.*?PvPBindStatusId.*?IsActionOffCooldown.*?CheckActionResources' -or
+    $normalizedDarkKnightPlunge -notmatch 'IsGlobalNativeBoundaryReady\(.*?HeldActionRetryRules\.IsNativeBoundaryNearQueueable\( actionManager->AnimationLock, localPlayer\.IsCasting, actionManager->CastActionId, actionManager->ActionQueued\)' -or
+    $darkKnightPlunge -match '(?-i:\b(?:RetryAction|RetryDispatch|QueuedAction|QueueAction|PendingDispatch|BufferedDispatch|ITargetManager|TargetManager|SetTarget|UseActionLocation|ExecuteAction|SendAction)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
+    throw 'DRK Plunge must make only exact direct-GOID requests after action/range/LoS/Bind/resource and shared global-boundary checks, with no target mutation, alternate, or custom queue.'
 }
 $plungeInitialConsume = [regex]::Match($darkKnightPlunge, '\binputFrame\.Consume\s*\(')
 $plungeRepeatSpend = [regex]::Match($darkKnightPlunge, '\bDarkKnightPlungeRules\.TrySpendReadyEpoch\s*\(')
+$plungeCompleteAttempt = [regex]::Match($darkKnightPlunge, '\bCompleteAttempt\s*\(')
 $plungeNativeCall = [regex]::Match($darkKnightPlunge, 'actionManager->UseAction\s*\(')
-if (-not $plungeInitialConsume.Success -or -not $plungeRepeatSpend.Success -or -not $plungeNativeCall.Success -or
+if (-not $plungeInitialConsume.Success -or -not $plungeRepeatSpend.Success -or
+    -not $plungeCompleteAttempt.Success -or -not $plungeNativeCall.Success -or
     $plungeInitialConsume.Index -gt $plungeNativeCall.Index -or
-    $plungeRepeatSpend.Index -gt $plungeNativeCall.Index) {
-    throw 'DRK Plunge must consume the initial shared generation or spend the proven repeat epoch before its sole native request.'
+    $plungeCompleteAttempt.Index -gt $plungeNativeCall.Index -or
+    $plungeRepeatSpend.Index -lt $plungeNativeCall.Index -or
+    $normalizedDarkKnightPlunge -notmatch 'if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\).*?if \(frozen\.Intent\.IsRepeat\).*?DarkKnightPlungeRules\.TrySpendReadyEpoch\(.*?else.*?holdState = DarkKnightPlungeRules\.BeginOwnedHold') {
+    throw 'DRK Plunge must claim the current frame before its native boundary, retain clean-false retries, and spend a repeat cooldown epoch or begin hold ownership only after client acceptance.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
@@ -4000,16 +4120,22 @@ Assert-Literals $pluginSource @(
     'autoEnemyFocusMark.Diagnostics',
     'isolationAwareness.Diagnostics'
 ) 'Utility-awareness lifecycle and live diagnostics wiring'
-$allyRescueBuffer = Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Ally Rescue one-generation rules'
+$allyRescueBuffer = Read-RequiredSource (Join-Path $coreRoot 'AllyRescueBufferRules.cs') 'Ally Rescue status-bound held-lease rules'
 Assert-Literals $allyRescueBuffer @(
-    'DefaultBufferMilliseconds = 750',
-    'MaximumBufferMilliseconds = 750',
+    'StatusBoundBufferMilliseconds = -1',
+    'DefaultBufferMilliseconds = StatusBoundBufferMilliseconds',
+    'NativeRetryThrottleMilliseconds =',
+    'HeldActionRetryRules.NativeRetryThrottleMilliseconds',
+    'MaximumNativeAttempts = HeldActionRetryRules.MaximumNativeAttempts',
     'SpentIntents',
     'ResolveCandidateEntryTrigger',
     'AllowHeldKeyAtCandidateEntry',
-    'current.SpentIntents.Add(intent)',
-    'Kind is AllyRescueBufferDecisionKind.Armed or AllyRescueBufferDecisionKind.Dispatch'
-) 'Ally Rescue one-generation no-retry rules'
+    'CompleteNativeAttempt(',
+    'HeldActionRetryRules.Complete(',
+    'AllyRescueNativeAttemptOutcome.RetryScheduled',
+    'AllyRescueNativeAttemptOutcome.SoftWait',
+    'previous.SpentIntents.Add(intent)'
+) 'Ally Rescue status-bound exact hold and shared clean-false retry rules'
 
 $nearAssist = Read-RequiredSource $nearAssistPath 'Near Assist redirector'
 $normalizedNearAssist = $nearAssist -replace '\s+', ' '
@@ -4139,7 +4265,7 @@ if (-not $guardAttemptObserverMatch.Success) {
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
 if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\);.*?return clientAccepted;' -or
-    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64\); lock \(guardAttemptGate\) latestLocalGuardActionAttempt = attempt;' -or
+    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \};' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
 }
@@ -5058,9 +5184,16 @@ Assert-Literals $pressureEscapeSprint @(
     'inputFrame.HeldMovementKeyEligible',
     'input.HeldMovementKey',
     'warningEpisodeToken != spentSprintEpisodeToken',
-    'spentSprintEpisodeToken = warningEpisodeToken',
+    'spentSprintEpisodeToken = frozen.WarningEpisodeToken',
     'inputFrame.Consume()',
     'TryUseSprintOnce(',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'ClientActionAttemptBoundary.Capture(',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
+    'HeldActionRetryRules.MaximumNativeAttempts',
     'TargetPressureActorIdentity expectedLocalIdentity',
     'uint expectedTerritoryId',
     'ResolveCurrentContext() != SupportedPvPContext.CrystallineConflict',
@@ -5077,28 +5210,27 @@ Assert-Literals $pressureEscapeSprint @(
     'nearAssist.RunWithoutRedirect(() =>',
     'ActionManager.UseActionMode.None',
     'PressureEscapeWarningState.Initial',
-    'warningSound.Reset()',
-    'Sprint request accepted for exact direct pressure',
-    'Movement intent consumed; Sprint rejected or final state changed'
-) 'Exact one-episode PvP Sprint runtime boundary'
+    'warningSound.Reset()'
+) 'Exact one-episode PvP Sprint runtime boundary with shared bounded retry'
 if ([regex]::Matches($pressureEscapeSprint, '\bTryGetFreshSelfDirectIncomingPressure\s*\(').Count -ne 2 -or
     [regex]::Matches($pressureEscapeSprint, '\bUseAction\s*\(').Count -ne 1) {
     throw 'Pressure Sprint must read exact direct pressure once for observation and once at the final boundary, with exactly one native action call site.'
 }
 $pressureSprintClaim = [regex]::Match($pressureEscapeSprint, '\binputClaimed\s*=\s*true\s*;')
-$pressureSprintSpendEpisode = [regex]::Match($pressureEscapeSprint, '\bspentSprintEpisodeToken\s*=\s*warningEpisodeToken\s*;')
 $pressureSprintConsumeInput = [regex]::Match($pressureEscapeSprint, '\binputFrame\.Consume\s*\(\s*\)\s*;')
-$pressureSprintFinalRead = [regex]::Match($pressureEscapeSprint, '\baccepted\s*=\s*TryUseSprintOnce\s*\(')
-if (-not $pressureSprintClaim.Success -or -not $pressureSprintSpendEpisode.Success -or
-    -not $pressureSprintConsumeInput.Success -or -not $pressureSprintFinalRead.Success -or
-    $pressureSprintClaim.Index -gt $pressureSprintSpendEpisode.Index -or
-    $pressureSprintSpendEpisode.Index -gt $pressureSprintConsumeInput.Index -or
-    $pressureSprintConsumeInput.Index -gt $pressureSprintFinalRead.Index) {
-    throw 'Pressure Sprint must terminally claim the shared generation and spend its one episode before any final read or native request.'
+$pressureSprintFinalRead = [regex]::Match($pressureEscapeSprint, '\bvar outcome\s*=\s*TryUseSprintOnce\s*\(')
+$pressureSprintComplete = [regex]::Match($pressureEscapeSprint, '\bCompleteSprintAttempt\s*\(')
+if (-not $pressureSprintClaim.Success -or -not $pressureSprintConsumeInput.Success -or
+    -not $pressureSprintFinalRead.Success -or -not $pressureSprintComplete.Success -or
+    $pressureSprintClaim.Index -gt $pressureSprintConsumeInput.Index -or
+    $pressureSprintConsumeInput.Index -gt $pressureSprintFinalRead.Index -or
+    $pressureSprintFinalRead.Index -gt $pressureSprintComplete.Index -or
+    $normalizedPressureEscapeSprint -notmatch 'if \(completion\.RetryScheduled \|\| completion\.Disposition == HeldActionRetryDisposition\.SoftWait\).*?frozenSprintRetry = frozen with \{ Retry = completion\.NextState \}; return;.*?if \(HeldActionRetryRules\.ShouldLatchHeldKeyUntilRelease\(completion\.Disposition\)\) terminalSprintKey = frozen\.HeldKey; spentSprintEpisodeToken = frozen\.WarningEpisodeToken;') {
+    throw 'Pressure Sprint must claim only the current scheduler frame, retain clean-false/soft-wait frozen intent, and spend the pressure episode only on a terminal native result.'
 }
 $pressureSprintFinalBoundary = [regex]::Match(
     $pressureEscapeSprint,
-    '(?s)private unsafe bool TryUseSprintOnce\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private static unsafe bool TryGetExactLiveIdentity')
+    '(?s)private unsafe ClientActionAttemptOutcome TryUseSprintOnce\((?<Body>.*?)\r?\n    \}\r?\n\r?\n    private void CompleteSprintAttempt')
 if (-not $pressureSprintFinalBoundary.Success) {
     throw 'Pressure Sprint final native boundary is missing.'
 }
@@ -5168,7 +5300,7 @@ Assert-Literals $pressureEscapeSprint @(
 ) 'Fail-closed current-sheet PvP Sprint action and status metadata'
 $pressureFailClosed = [regex]::Match(
     $pressureEscapeSprint,
-    '(?s)internal PressureEscapeSprintProbeSnapshot FailClosed\(.*?\)\s*\{(?<Body>.*?)\r?\n    \}\r?\n\r?\n    private unsafe bool TryUseSprintOnce')
+    '(?s)internal PressureEscapeSprintProbeSnapshot FailClosed\(.*?\)\s*\{(?<Body>.*?)\r?\n    \}\r?\n\r?\n    private unsafe ClientActionAttemptOutcome TryUseSprintOnce')
 if (-not $pressureFailClosed.Success -or
     $pressureFailClosed.Groups['Body'].Value -notmatch 'warningState\.EpisodeOpen' -or
     $pressureFailClosed.Groups['Body'].Value -notmatch 'warningState\.EpisodeToken' -or
@@ -5176,8 +5308,8 @@ if (-not $pressureFailClosed.Success -or
     $pressureFailClosed.Groups['Body'].Value -match 'warningSound\.Reset|spentSprintEpisodeToken\s*=\s*0|warningState\s*=\s*PressureEscapeWarningState\.Initial') {
     throw 'A transient pressure runtime failure must hide fail-closed while preserving episode, sound ownership, and spent-Sprint ownership.'
 }
-if ($pressureEscapeSprint -match '\b(RetryAction|RetryDispatch|QueuedAction|QueueAction|ActionQueued|PendingDispatch|BufferedDispatch|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|Hook<|HookFromAddress)\b') {
-    throw 'Pressure Sprint must have no alternate, target mutation, input injection, hook, queue, replay, or retry path.'
+if ($pressureEscapeSprint -match '\b(RetryAction|RetryDispatch|QueuedAction|QueueAction|PendingDispatch|BufferedDispatch|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|Hook<|HookFromAddress)\b') {
+    throw 'Pressure Sprint must have no alternate, target mutation, input injection, hook, custom queue, or replay path outside the shared bounded retry contract.'
 }
 
 $pressureEscapeOverlay = Read-RequiredSource (Join-Path $pluginUiRoot 'OverlayRenderer.cs') 'High-pressure overlay'
@@ -5213,9 +5345,12 @@ Assert-Literals $settingsWindow @(
     'Test high-pressure warning sound',
     'Sprint once while holding a movement key under 3+ enemy focus',
     'Exact current hard/cast targets only; recent hits do not count.',
-    'visual and is one-shot per focus episode. The alert stays top-center; isolation remains top-left',
-    'It listens only to held WASD/arrow movement keys and does not swallow that key.',
-    'Purify, Smart Recuperate, Guard, and Guardian keep priority; any later manual action',
+    'This option is independent from the',
+    'visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key.',
+    'Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, and Guardian keep priority.',
+    'Known',
+    'unavailability waits for free; only an explicit client rejection may retry the same exact Sprint',
+    'episode. Any later manual action',
     'ends FFXIV''s native PvP Sprint.'
 ) 'Truthful aggregated high-pressure warning, sound, and held-movement UI contract'
 if ($inputContext -notmatch 'PressureEscapeRules\.IsSupportedMovementVirtualKey\(\(int\)gameplayKeys\[index\]\)' -or
@@ -6079,11 +6214,13 @@ Assert-Literals $combatFramesRendererLimitBreaks @(
     'private const int MaximumVisibleLimitBreakDamageCards = 3;',
     'private const long LimitBreakDamageCardFadeMilliseconds = 500;',
     'DrawLimitBreakGauge(',
-    '"LB ACTIVATED!"',
+    'var activationLabel = durationConfirmed ? "LB ACTIVE" : "LB ACTIVATED";',
     'state.LimitBreakName',
     'remainingMilliseconds / 1000d',
-    'var panelMinimum = topLeft + new Vector2(5f * scale);',
-    'var panelMaximum = bottomRight - new Vector2(5f * scale);',
+    'topLeft + new Vector2(borderInset)',
+    'bottomRight - new Vector2(borderInset)',
+    'var bannerMinimum = new Vector2(',
+    'var bannerMaximum = new Vector2(',
     'if (cards.Count >= MaximumVisibleLimitBreakDamageCards) break;',
     'options.ShowNames ? "Preview Ally" : "P2"',
     'options.ShowNames ? "Preview Enemy" : "S3"',
@@ -6091,7 +6228,7 @@ Assert-Literals $combatFramesRendererLimitBreaks @(
     'limitBreaks.TryResolveCurrentDamageDisplayNames(',
     'casterName = $"P{damageEvent.CasterPartySlot}";',
     'targetName = $"S{damageEvent.TargetEnemySlot}";'
-) 'Large actor-frame LB activation panel and at-most-three transient damage cards'
+) 'Border-only actor-frame LB activation banner and at-most-three transient damage cards'
 if ($normalizedCombatFramesRendererLimitBreaks -notmatch 'if \(options\.ShowNames\) \{ if \(!limitBreaks\.TryResolveCurrentDamageDisplayNames\( damageEvent, out casterName, out targetName\)\).*?\} else \{ casterName = \$"P\{damageEvent\.CasterPartySlot\}"; targetName = \$"S\{damageEvent\.TargetEnemySlot\}"; \}' -or
     [regex]::Matches($combatFramesRendererLimitBreaks, '\blimitBreaks\.TryResolveCurrentDamageDisplayNames\s*\(').Count -ne 1 -or
     [regex]::Matches($combatLimitBreakRuntime, '(?m)^\s*internal bool TryResolveCurrentDamageDisplayNames\s*\(').Count -ne 1 -or
@@ -6245,31 +6382,31 @@ Assert-Literals $settingsWindow @(
     'DrawDefensiveUtilityControls()',
     'Smart Recuperate',
     'DrawSmartRecuperateControls()',
-    'Use Recuperate once from a held gameplay key at 16,000+ missing HP',
+    'Use Recuperate from a held gameplay key at 16,000+ missing HP',
     'configuration.EnableSmartRecuperateOnHeldKey',
     'At exactly 16,000 or more missing HP and at least',
     '2,000 observed MP, it may request one self-targeted PvP Recuperate (29711).',
-    'If MP or the native action',
-    'is not ready, the held generation waits unspent for the real game state to become eligible.',
-    'Purify keeps priority. Smart Recuperate is evaluated before the confirmed reactive Guard chain, while',
-    'generation is consumed before final',
-    'release and press again for another attempt. The original key is not swallowed.',
+    'is not ready, it waits without blocking a currently usable lower-priority helper.',
+    'Purify keeps priority. Smart Recuperate is evaluated before Ally Rescue and reactive counter-CC, while',
+    'A clean client rejection may retry after 50 ms, up',
+    'to eight calls total.',
+    'ambiguous/invalid exact outcome latches only this helper until the frozen key is released.',
     'Team-visible enemy focus sign',
     'DrawAutoEnemyFocusMarkControls()',
     'Paladin — Guardian rescue',
     'Guardian for an exact ally at 20% HP or lower',
     'configuration.PaladinGuardianLowAlly',
     'configuration.PaladinGuardianOnHeldKey',
-    'Smart Recuperate keeps priority over this Guardian helper.',
+    'Purify, Smart Recuperate, Ally Rescue, reactive CC, and reactive Guard keep priority.',
     'Ninja — Seiton',
-    'Seiton on fresh gameplay key (experimental)',
-    'configuration.EnableNinjaSeitonOnFreshGameplayKey',
+    'Seiton on held gameplay key (experimental)',
+    'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'Default off and exact Crystalline Conflict only.',
     'exact canonical S1-S5 enemies',
     'the lowest exact HP ratio wins, then stable slot/actor identity',
-    'State and input are consumed before at most one native attempt.',
-    'selects again, chooses an alternate, falls back, replays, or retries',
-    'read again at the latest safe point before the request; exactly 50% or higher cancels the spent attempt.',
+    'Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same',
+    'A later genuine 29515-to-29516 follow-up epoch may use the continuing hold',
+    'read again at the latest safe point before every request; exactly 50% or higher cancels the intent.',
     'A client-accepted return is dispatch feedback only',
     'Scholar — Critical Strategy',
     'configuration.EnableScholarCriticalStrategyOnHeldKey',
@@ -6319,13 +6456,13 @@ Assert-Literals $settingsWindow @(
     'unknown pressure and then highest-first, followed by lowest HP ratio, known trusted MP before unknown',
     'Exactly one winner is selected; simultaneous losers',
     'are terminal and never become fallback attempts.',
-    'While a gameplay key remains held, the selected exact post-Purify or post-Guard protection-end episode',
-    'A later distinct release epoch may authorize another action without a key',
-    'Purify and Smart Recuperate keep priority.',
+    'Purify, Smart Recuperate, and Ally Rescue keep priority.',
     'Post-Guard binds an exact S1-S5 actor only after Guard',
     '3054/3673 was observed present and then verified absent.',
-    'before one direct exact-target request, with no ',
-    'selected-target change, alternate, fallback, replay, or retry.',
+    'While a gameplay key remains held, each selected exact startup or protection-end episode keeps one',
+    'frozen target intent. A later distinct episode may authorize another action without a key release; no',
+    'only a clean client rejection may retry',
+    'that same intent after 50 ms, up to eight calls. Acceptance is terminal.',
     'Reactive CC Guard follow-up: tracked/release-ready=',
     'miracle.GuardFollowupTrackedCount',
     'miracle.GuardFollowupReleaseReadyCount',
@@ -6342,17 +6479,18 @@ Assert-Literals $settingsWindow @(
     'miracle.ProtectionEndRankTeamPressureKnown',
     'miracle.ProtectionEndRankMpKnown',
     'landed/pending=',
-    'Ally Rescue (confirmation counters are exact server cleanses):',
+    'Ally Rescue (confirmation counters are captured exact status-removal ActionEffects):',
     'miracle.GuardFollowupLastEvent',
     'Warn when no party ally is within 20y and line of sight',
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark',
-    'Purify > Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia >',
+    'Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia >',
     'NIN > SCH > Monk > Hiebsprung.',
-    'Enable one Purify attempt from an eligible physical gameplay key',
+    'Enable held-key Purify for enabled removable CC',
     'Also allow a key that was already held when the debuff appeared (includes WASD)',
-    'One physical key generation can produce at most one',
-    'Seiton Sense action request.'
+    'keeps Purify at absolute priority while the exact enabled CC remains active. Cooldown, resource, cast,',
+    'queue, and animation-lock blocks wait without spending an attempt. Only an explicit client rejection may',
+    'retry the same frozen self intent after 50 ms, at most eight native calls total'
 ) 'Order-independent split Settings safety copy and feature reachability'
 
 Assert-Literals $settingsWindow @(
@@ -6399,6 +6537,7 @@ $settingsBindingExemptions = @(
     'ExperimentalMiracleInterceptOnHeldKey',
     'MiracleInterceptAfterPurifiedStun',
     'EnableSageKardiaOnHeldKey',
+    'EnableNinjaSeitonOnFreshGameplayKey',
     'PreGuardOnLowHpPressure',
     'CcBrakeJobs',
     'CcBrakeActions'
@@ -6419,7 +6558,8 @@ foreach ($propertyName in $configurationPropertyNames) {
     $writeCount = [regex]::Matches(
         $settingsWindow,
         '\bconfiguration\.' + $escapedPropertyName + '\s*=').Count
-    if ($referenceCount -lt 2 -or $writeCount -ne 1) {
+    $expectedWriteCount = if ($propertyName -eq 'CombatFramesEnableInteraction') { 2 } else { 1 }
+    if ($referenceCount -lt 2 -or $writeCount -ne $expectedWriteCount) {
         $settingsBindingFailures += "$propertyName (references=$referenceCount, writes=$writeCount)"
     }
 }
@@ -6470,7 +6610,7 @@ Assert-Literals $settingsWindow @(
     'never changes a target, chooses an alternate action or enemy, replays the macro, or retries',
     'ACCEPTED is local dispatch feedback only',
     'successful Den dummy test does not prove live CC behavior'
-) 'Schema-28 Survival, Combat Frames interaction/LB, Auto Focus, DRK Hiebsprung, post-Guard, and dual-opt-in exact Den-dummy DRK Settings bindings and safety copy'
+) 'Schema-29 Survival, held NIN, Combat Frames interaction/LB, Auto Focus, DRK Hiebsprung, post-Guard, and dual-opt-in exact Den-dummy DRK Settings bindings and safety copy'
 
 $settingsConfigurationMethodBindings = @(
     'ApplyCurrentTargetHighlightPreset',
@@ -6705,9 +6845,9 @@ if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
 $stateAssignment = [regex]::Match(
     $purifyProbe,
     '(?m)^\s*(?:this\.)?[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*\.NextState\s*;')
-$tryUsePurify = [regex]::Match($purifyProbe, '\bTryUsePurifyOnce\s*\(')
+$tryUsePurify = [regex]::Match($purifyProbe, '\bTryUsePurify\s*\(')
 if (-not $stateAssignment.Success -or -not $tryUsePurify.Success -or $stateAssignment.Index -gt $tryUsePurify.Index) {
-    throw 'Emergency Purify runtime must assign the decision NextState before calling TryUsePurifyOnce.'
+    throw 'Emergency Purify runtime must assign the decision NextState before calling TryUsePurify.'
 }
 $consumeHeldInput = [regex]::Match(
     $purifyProbe.Substring($stateAssignment.Index),
@@ -6720,10 +6860,10 @@ $consumeHeldInputIndex = if ($consumeHeldInput.Success) {
 if (-not $consumeHeldInput.Success -or
     $stateAssignment.Index -gt $consumeHeldInputIndex -or
     $consumeHeldInputIndex -gt $tryUsePurify.Index) {
-    throw 'Emergency Purify must store state and consume the physical key generation before attempting Purify.'
+    throw 'Emergency Purify must store state and claim the scheduler frame before attempting Purify.'
 }
-if ([regex]::Matches($purifyProbe, '\bTryUsePurifyOnce\s*\(').Count -ne 2) {
-    throw 'Emergency Purify probe must have one TryUsePurifyOnce call site and one method definition.'
+if ([regex]::Matches($purifyProbe, '\bTryUsePurify\s*\(').Count -ne 2) {
+    throw 'Emergency Purify probe must have one TryUsePurify call site and one method definition.'
 }
 
 if ($personalStatus -match '\b(SetRawValue|ClearAll)\b' -or
@@ -6776,12 +6916,12 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.23.0.0</Version>',
-    '<AssemblyVersion>0.23.0.0</AssemblyVersion>',
-    '<FileVersion>0.23.0.0</FileVersion>'
-) 'v0.23.0.0 project version'
+    '<Version>0.24.0.0</Version>',
+    '<AssemblyVersion>0.24.0.0</AssemblyVersion>',
+    '<FileVersion>0.24.0.0</FileVersion>'
+) 'v0.24.0.0 project version'
 Assert-Literals $pluginManifest @(
-    'Interactive PvP combat frames, reactive counter-CC, LB cues, and survival helpers.',
+    'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
     'optional exact row targeting and mouseover',
     'calibrated LB gauges',
@@ -6793,17 +6933,17 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.23.0.0 plugin manifest metadata'
+) 'v0.24.0.0 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.23.0.0"',
-    'react once for the selected exact post-Purify or post-Guard protection-end episode without a minimum team-pressure gate',
-    'a later distinct release epoch can trigger on the same hold',
-    'Simultaneous releases produce exactly one winner ranked by known-first fresh team pressure, HP ratio, then known-first trusted MP ratio',
-    'losers never become fallback attempts',
-    'Distinct S1-S5 post-Purify states',
-    'higher-priority Purify/Smart Recuperate',
-    'direct targeting, and no-retry safeguards remain.'
-) 'v0.23.0.0 repository metadata'
+    '"AssemblyVersion": "0.24.0.0"',
+    'Replaces global one-use held-key consumption with a shared per-frame scheduler',
+    'Purify, Recuperate, ally cleanse, counter-CC, and every other held helper may react in priority order from one continuous hold',
+    'Exact intents wait through known cooldown, resource, cast, queue, and animation-lock blocks',
+    'only explicit client rejection permits a bounded same-intent retry',
+    'acceptance or ambiguity is terminal',
+    'NIN Seiton now joins held scheduling',
+    'LB activation no longer covers HP/MP bars.'
+) 'v0.24.0.0 repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -6819,26 +6959,31 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.23.0.0 lets a continuously held key make one WHM/BRD counter-CC attempt for the selected exact post-Purify or post-Guard protection-end episode',
-    'A later distinct release epoch can trigger on the same hold',
-    'These paths no longer require a minimum team-pressure count',
-    'simultaneous releases produce exactly one winner ranked by fresh exact pressure, HP ratio, then trusted MP ratio',
+    'Version 0.24.0.0 replaces global one-use held- key consumption with a common priority scheduler',
+    'One continuous physical hold can authorize later distinct exact helper episodes',
+    'known cooldown, resource, cast, queued-action, and animation-lock blocks wait without spending the bounded native-attempt budget',
+    'Only an explicit client rejection may retry the same frozen intent',
+    'client acceptance or an ambiguous outcome is terminal',
+    'moves NIN Seiton onto held consent',
+    'keeps Combat Frame HP/MP visible during Limit Break activation',
+    'makes disabled frame interaction obvious in Settings',
     'v0.21''s optional Combat Frame interaction and evidence-only Limit Break telemetry',
     '**Fixed Combat Frames:** a separate default-off, Gladius-style screen-space overlay shows one Self frame plus stable canonical `S1`-`S5` enemy rows',
     'current/focus-target accents, exact Self LB, calibrated remote LB, activation countdowns, and direct ally LB damage',
     'optional interaction leaf provides one revalidated hard- target click and native `<mo>` hover for fresh exact living enemy rows',
     'native HUD itself is never edited or hidden',
     '**Experimental Dark Knight Hiebsprung helper:** a separate default-off held- key option considers only exact canonical `S1`-`S5` enemies at 30% HP or lower',
-    'continuous hold can spend at most one attempt per proven ready epoch',
+    'continuous hold can authorize one frozen intent per proven ready epoch',
+    'clean rejection uses only the shared bounded retry',
     '**Experimental Sage Smart Kardia helper:** a separate default-off option arms only after the existing Eukrasia call is forwarded unchanged and accepted by the client',
     'Inside that two-second opportunity it requires causal Eukrasia charge/status evidence, an animation-lock-clear Kardia boundary, and a fresh, complete exact five-player pressure view',
-    '**Experimental Smart Recuperate helper:** a separate default-off held-key option can make one exact self Recuperate `29711` attempt when at least 16,000 HP is missing and at least 2,000 MP is available',
-    'cooldown or MP shortage leaves the held generation unconsumed so it may become eligible later',
+    '**Experimental Smart Recuperate helper:** a separate default-off held-key option can use exact self Recuperate `29711` when at least 16,000 HP is missing and at least 2,000 MP is available',
+    'cooldown, MP, cast, queue, or animation-lock shortage waits without consuming the held consent',
+    'An explicit client rejection may retry only the same exact self epoch',
     '**Experimental Paladin Guardian job tool:** an independent default-off held-key option can attempt Guardian on one exact critically low reachable ally',
     'large fixed red `FOCUSED xN` card at the top center',
-    'Configuration schema 28 remains current in v0.23.0.0',
-    'held per-episode reactive-counter behavior reuses the existing master, held-key, post-Purify, and post-Guard choices',
-    'schema-27-to-28 migration still preserves every existing master and helper choice while forcing the then-new hostile post-Guard leaf off',
+    'Configuration schema 29 migrates an explicitly enabled legacy NIN fresh-edge option to the replacement held-key option',
+    'preserves the other existing Combat Frames and helper choices',
     'Fresh and reset configurations keep the Combat Frames master and every action-helper master off',
     'three or more exact current hard/cast targets',
     'large fixed red `FOCUSED xN` card',
@@ -6847,8 +6992,7 @@ Assert-Literals $normalizedReadme @(
     'two scaled cards would overlap is isolation stacked vertically below it',
     'selectable built-in FFXIV system',
     'fires once on entry rather than every frame',
-    'separate default-off option may use one held',
-    'WASD/arrow movement-key generation',
+    'separate default-off option may use continuous held WASD/arrow movement-key consent',
     'movement key still reaches',
     'any later native PvP action ends Sprint',
     'urgent high-pressure alarm deliberately uses the narrower direct-intent',
@@ -6873,7 +7017,8 @@ Assert-Literals $normalizedReadme @(
     'deliberately no cooldown/readiness gate',
     'fall back to the original target, select another ally, or retry',
     'client-accepted return is dispatch feedback only',
-    'existing fresh/held-key Ally Rescue behavior, including Aquaveil, remains',
+    '**Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible held gameplay key can keep consent active for Paean or Aquaveil on an exact party member',
+    'A matching explicit client rejection retains only that frozen status/actor intent for a bounded retry',
     'latest-safe frozen-actor HP re-read, exact-50% cancellation',
     'has no hard-target dependency',
     'both native empty-marker representations',
@@ -6884,7 +7029,8 @@ Assert-Literals $normalizedReadme @(
     'If every eligible guarded candidate has an active exact non-negative team-',
     'or negative pressure, or every count is zero, the whole candidate set ranks by',
     'Pressure is used only for this one selection and is not a final',
-    'The intent and generation are consumed before one',
+    'Continuous held consent can produce a frozen Critical Strategy intent for a distinct eligible episode',
+    'Only an explicit client rejection may retry the same frozen intent under the shared 50-ms/eight- call policy',
     'Pressure drift',
     'neither reranks nor switches or invalidates the frozen target',
     'not swallow the original key.',
@@ -6898,14 +7044,15 @@ Assert-Literals $normalizedReadme @(
     'exact Guard `3054` or `3673` to be observed present on one canonical `S1`-`S5` actor',
     'The first verified framework observation that finds Guard absent',
     'uses the frozen actor directly at the job-specific native range and line of sight',
-    'without requiring or switching the selected target, choosing an alternate action/actor, replaying, or retrying',
+    'without requiring or switching the selected target, choosing an alternate action/actor, or replaying',
+    'Only an explicit client rejection may retry that same frozen intent under the common bound',
     'known fresh exact team pressure before unknown and then highest-first',
     'known trusted MP before unknown and lowest-first',
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
-    'continuously held eligible gameplay key can make at most one attempt for the selected exact protection-end episode',
-    'A later distinct release epoch may authorize another action on the same hold',
+    'A continuously held eligible gameplay key keeps consent for the selected frozen episode and may also authorize a later distinct episode',
+    'Only an explicit client rejection may retry the same intent under the common bound; acceptance or ambiguity is terminal',
     'post-Guard defaults on only behind the disabled reactive-counter master'
-) 'v0.23.0.0 protection-end held-episode/ranking plus retained Combat Frames/LB/Hiebsprung and prior helper user contract'
+) 'v0.24.0.0 held scheduler plus retained protection-end ranking, Combat Frames/LB/Hiebsprung, and prior helper user contract'
 Assert-Literals $normalizedReadme @(
     '## Sage Smart Kardia after accepted Eukrasia',
     'separate **Smart Kardia after accepted Eukrasia** experiment is disabled by default',
@@ -6925,7 +7072,7 @@ Assert-Literals $normalizedReadme @(
     'It never changes a hard, soft, focus, or mouseover target',
     'Client acceptance is dispatch feedback only and does not prove that Kardia or Kardion applied',
     'current-patch hook ordering, charge/status evidence, animation lock, native reachability, dispatch, and server behavior require a live CC test'
-) 'v0.23.0.0 retained accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, exact priority, direct-target, and live-boundary user contract'
+) 'v0.24.0.0 retained accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, exact priority, direct-target, and live-boundary user contract'
 Assert-Literals $normalizedReadme @(
     '## DRK Shadowbringer two-line macro',
     'supports exact PvP Dark Knight in Crystalline Conflict',
@@ -6971,22 +7118,24 @@ Assert-Literals $normalizedReadme @(
     'current-patch live A/B boundaries'
 ) 'v0.18.0.1 exact Den-dummy/retained CC DRK macro and set-only Auto Low-MP Focus user contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.23.0.0',
-    'Changed held WHM Miracle and BRD Silent Nocturne post-Purify/post-Guard handling from one consumed physical-key generation to one attempt for the selected exact protection-end episode',
-    'A later distinct verified Resilience/ Guard-end release epoch can trigger on the same continuous hold',
-    'Removed the hard team-pressure-count requirement from both exact protection- end paths',
-    'Known fresh exact team pressure ranks before unknown and then highest-first, followed by lowest HP ratio',
-    'known trusted MP ranks before unknown and then lowest-first',
-    'Exactly one winner is selected; simultaneous losers are terminal and never become fallback attempts',
-    'independent bounded post-Purify state for each canonical `S1`-`S5` enemy',
-    'Retained Purify and Smart Recuperate priority',
-    'native 10-yalm and BRD''s native 20-yalm reachability/line-of-sight checks',
-    'direct exact-actor dispatch, and no selected-target switch, alternate, replay, or retry',
-    'Clarified in Ally Rescue settings and diagnostics that confirmation counters represent server-observed cleanses',
-    'Bumped the plugin version to `0.23.0.0`. Configuration schema remains `28`',
-    'existing reactive-counter master, held-key, post-Purify, and post-Guard choices are preserved with no new persisted option',
-    'master remains default-off'
-) 'v0.23.0.0 held protection-end episodes, ranking, independent slots, Ally Rescue diagnostics, version, and schema release notes'
+    '## 0.24.0.0',
+    'Replaced global one-use held-key consumption with continuous physical-key consent and a shared per-frame priority scheduler',
+    'same hold may authorize later distinct exact held episodes',
+    'Purify > Smart Recuperate > Ally Rescue > reactive counter-CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > DRK Hiebsprung',
+    'at most one held helper crosses the native action boundary in one framework frame',
+    'Added a common bounded pre-acceptance contract to every held-action helper',
+    'Known cooldown, resource, cast, queued-action, and animation-lock blocks wait without spending the attempt budget',
+    'Only an explicit client rejection may retry the same frozen intent after 50 ms, with eight native attempts maximum',
+    'client acceptance and ambiguous/exceptional outcomes are terminal',
+    'No helper may rerank after freezing, select an alternate, mutate the selected target, or retry an action already accepted by the client',
+    'Changed NIN Seiton from a fresh-edge-only helper to the same held scheduler',
+    'Preserved accepted Ally Rescue confirmation evidence across later rejected calls',
+    'Changed Limit Break activation in Combat Frames to a pulsing outer border and compact icon/name/countdown banner so HP, MP, LB gauge, and status badges stay visible',
+    'When Combat Frames are enabled while interaction is off, Settings now shows a prominent state label and a one-click enable button',
+    'Bumped the plugin version to `0.24.0.0` and configuration schema to `29`',
+    'explicit NIN fresh-edge-to-held migration',
+    'Existing action-helper opt-ins otherwise remain unchanged; new and reset action helpers remain default-off'
+) 'v0.24.0.0 held scheduler, retry contract, NIN migration, Ally Rescue confirmation, Combat Frames UX, version, and schema release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.21.0.0',
     'Fixed German Paladin Guardian communication to use FFXIV''s canonical localized `/schnellchat <P#> Ziel decken` form',
@@ -7218,13 +7367,14 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 28 remains current in v0.23.0.0',
-    'held per-episode reactive-counter behavior reuses the existing master, held-key, post-Purify, and post-Guard choices',
-    'schema-27-to-28 migration still preserves existing master/helper choices and forces its then-new post-Guard hostile-action leaf off',
+    'Configuration schema 29 is current in v0.24.0.0',
+    'migrates an explicitly enabled fresh-edge NIN Seiton option to the replacement held-key option',
+    'clears the obsolete compatibility field',
+    'Every other existing master/helper choice is preserved',
     'Fresh and reset configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action- helper masters off',
     'post-Guard defaults on only behind the disabled reactive- counter master',
     'Older configurations still traverse the earlier migrations first'
-) 'v0.23.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-28 migration disclosure'
+) 'v0.24.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-29 migration disclosure'
 Assert-Literals $normalizedPrivacy @(
     'When its separate interaction option is enabled, Combat Frames may set one freshly revalidated living enemy row as the hard target on click and publish that exact actor to FFXIV''s two native mouseover slots only while hovered',
     'ownership-checked cleanup never overwrites an external replacement',
@@ -7236,8 +7386,8 @@ Assert-Literals $normalizedPrivacy @(
     'until that live proof is complete, every remote gauge remains unknown',
     'when the ally LB damage feed is enabled, bounded ActionEffect caster, target, reviewed LB action, sequence, effect type, and directly decoded damage amount needed to attribute one event without inferring an HP delta',
     'when the DRK Hiebsprung helper is enabled, the exact local DRK identity, held- key ownership, action `29092` metadata/readiness and cooldown epoch',
-    'complete canonical `S1`-`S5` identity/HP/Guard evidence, center distance, and native range/line-of-sight result needed for one frozen exact-target request'
-) 'v0.23.0.0 retained Combat Frames interaction/LB and DRK Hiebsprung transient-data disclosure'
+    'complete canonical `S1`-`S5` identity/HP/Guard evidence, center distance, and native range/line-of-sight result needed for one frozen exact-target intent and its bounded native calls'
+) 'v0.24.0.0 retained Combat Frames interaction/LB and DRK Hiebsprung transient-data disclosure'
 Assert-Literals $normalizedPrivacy @(
     '## Experimental Sage Smart Kardia after accepted Eukrasia',
     'separate persisted option is disabled by default',
@@ -7273,13 +7423,18 @@ Assert-Literals $privacy @(
     'selected built-in FFXIV UI/system sound once',
     'Unknown/stale pressure hides the visual state immediately but does not rearm a',
     'continuously known below-threshold separation',
-    'one exact ordinary',
-    'self Sprint action attempt for one physical WASD/arrow movement-key generation',
+    'The separate default-off held-key option can submit an exact ordinary self',
+    'Sprint request for a verified high-pressure episode',
+    'while physical WASD/arrow',
+    'consent remains held',
     'original movement',
     'key is not swallowed',
-    'generation is consumed before the final',
+    'Known unavailable states wait without calling',
+    'the native boundary. Only an explicit client rejection may retain the same',
+    'frozen episode for the common bounded retry',
     'never changes a selected target, chooses another action',
-    'retries after drift, rejection, or exception',
+    'acceptance, ambiguity, or drift is',
+    'terminal. It never changes a selected target',
     '## Smart Bard Paean pressure redirect',
     'separate option is disabled by default and exact-Crystalline-Conflict-only',
     'already incoming The Warden''s Paean',
@@ -7305,11 +7460,13 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 28 remains current in v0.23.0.0'
-) 'v0.23.0.0 retained pressure escape, Smart Paean, Guardian, Scholar, priority, and current schema local-data/live-boundary disclosure'
+    'Configuration schema 29 is current in v0.24.0.0'
+) 'v0.24.0.0 retained pressure escape, Smart Paean, Guardian, Scholar, priority, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > Smart Recuperate > Guard > Guardian > pressure Sprint > Ally Rescue > reactive CC > Kardia > NIN > SCH > Monk > Hiebsprung**'
-) 'v0.23.0.0 exact action-request priority privacy disclosure'
+    'The current action-request priority is **Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung**',
+    'One framework frame permits at most one held-helper native boundary',
+    'continuously held key remains consent for later distinct exact episodes'
+) 'v0.24.0.0 exact action-request priority privacy disclosure'
 Assert-Literals $normalizedPrivacy @(
     'optional post-Purify path recognizes only exact enemy self-Purify `29056`',
     'requires positive live Resilience `3248`, waits for 150 ms of stable real absence',
@@ -7323,20 +7480,21 @@ Assert-Literals $normalizedPrivacy @(
     'Known trusted MP ranks before unknown MP, then lower trusted MP ratio ranks first',
     'Exactly one winner is selected',
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
-    'continuously held eligible key permits at most one attempt for the selected exact protection-end episode',
-    'A later distinct release epoch may authorize another action without a release/repress',
-    'selected episode cannot be reused and no simultaneous loser can follow it',
-    'never requires or switches the selected target, chooses an alternate action/actor, replays input, or retries',
+    'One continuous hold can authorize later distinct startup or protection-end episodes',
+    'each selected episode remains one frozen intent and no simultaneous loser can follow it',
+    'uses only the common bounded same-intent retry',
+    'never requires or switches the selected target, chooses an alternate action/actor, or replays input',
+    'Only a clean native rejection may retain the same frozen intent under the shared bounded retry policy',
     'WHM uses only Wunder der Natur / Miracle of Nature `29228`',
     'BRD uses only Stumme Nocturne / Silent Nocturne `29395`',
     'post-Purify release opportunity after 500 ms; waiting never restarts a deadline'
-) 'v0.23.0.0 post-Purify and post-Guard transient-data, identity, held-episode, ranking, and no-target-mutation disclosure'
+) 'v0.24.0.0 post-Purify and post-Guard transient-data, identity, held-episode, ranking, and no-target-mutation disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 28',
+    'public int Version { get; set; } = 29',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -7402,6 +7560,7 @@ Assert-Literals $configuration @(
     'NearHelpPreferIncomingPressure = true',
     'if (Version < 19)',
     'EnableNinjaSeitonOnFreshGameplayKey = false',
+    'public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }',
     'if (Version < 20)',
     'PaladinGuardianAnnounceAndMark = false',
     'if (Version < 21)',
@@ -7448,7 +7607,9 @@ Assert-Literals $configuration @(
     'ShowAllyLimitBreakDamageEvents = true;',
     'if (Version < 28)',
     'ReactiveCcAfterEnemyGuard = false;',
-    'Version = 28',
+    'if (Version < 29)',
+    'EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;',
+    'Version = 29',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -7475,7 +7636,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-28 post-Guard opt-in migration plus retained Combat Frames interaction/LB, DRK Hiebsprung, Survival, Smart Kardia, Guardian, Auto Focus/DRK, and prior migrations'
+) 'Schema-29 NIN held-consent migration plus retained post-Guard, Combat Frames interaction/LB, DRK Hiebsprung, Survival, Smart Kardia, Guardian, Auto Focus/DRK, and prior migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -7551,12 +7712,15 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableSageKardiaOnHeldKey \{ g
     throw 'Schema 27 must retain schema-26 Smart Recuperate and Combat Frames default-off behavior, retire held Kardia, and keep accepted-Eukrasia Kardia off except for the explicit one-time schema-25 opt-in migration.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGameplayKey \{ get; set; \}\s*$' -or
-    [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 2) {
-    throw 'Schema 19 must keep the action-initiating NIN Seiton helper default-off for new, upgrading, and reset configurations.'
+    $configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnHeldGameplayKey \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableNinjaSeitonOnFreshGameplayKey\s*=\s*false\s*;').Count -lt 3 -or
+    [regex]::Matches($configuration, '\bEnableNinjaSeitonOnHeldGameplayKey\s*=\s*false\s*;').Count -ne 1 -or
+    [regex]::Matches($configuration, '\bEnableNinjaSeitonOnHeldGameplayKey\s*=\s*EnableNinjaSeitonOnFreshGameplayKey\s*;').Count -ne 1) {
+    throw 'Schema 29 must migrate only an explicit legacy NIN fresh-edge opt-in to held consent, clear the compatibility field, and keep fresh/reset NIN automation off.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*28\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 28\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?if \(Version < 25\).*?EnableSageKardiaOnHeldKey = false;.*?if \(Version < 26\).*?var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;.*?PaladinGuardianLowAlly = guardianWasEnabled;.*?PaladinGuardianOnHeldKey = DefensiveUtilitiesOnHeldKey;.*?EnableSageKardiaAfterEukrasia = EnableSageKardiaOnHeldKey;.*?EnableSageKardiaOnHeldKey = false;.*?EnableSmartRecuperateOnHeldKey = false;.*?PreGuardOnLowHpPressure = false;.*?ShowCombatFrames = false;.*?if \(Version < 27\).*?EnableDarkKnightPlungeOnHeldKey = false;.*?CombatFramesEnableInteraction = false;.*?CombatFramesShowLimitBreaks = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?if \(Version < 28\).*?ReactiveCcAfterEnemyGuard = false;.*?Version = 28;') {
-    throw 'Schema 28 must fast-path current settings, preserve every earlier migration, force post-Guard off for every upgrade, retain effective Guardian and held-Kardia migration, remove pre-Guard, keep action/target-write leaves off, and enable only read-only LB leaves behind the existing frame master.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*29\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 29\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?if \(Version < 25\).*?EnableSageKardiaOnHeldKey = false;.*?if \(Version < 26\).*?var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;.*?PaladinGuardianLowAlly = guardianWasEnabled;.*?PaladinGuardianOnHeldKey = DefensiveUtilitiesOnHeldKey;.*?EnableSageKardiaAfterEukrasia = EnableSageKardiaOnHeldKey;.*?EnableSageKardiaOnHeldKey = false;.*?EnableSmartRecuperateOnHeldKey = false;.*?PreGuardOnLowHpPressure = false;.*?ShowCombatFrames = false;.*?if \(Version < 27\).*?EnableDarkKnightPlungeOnHeldKey = false;.*?CombatFramesEnableInteraction = false;.*?CombatFramesShowLimitBreaks = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?if \(Version < 28\).*?ReactiveCcAfterEnemyGuard = false;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?Version = 29;') {
+    throw 'Schema 29 must fast-path current settings, preserve every earlier migration, migrate only the explicit legacy NIN opt-in to held consent, and retain all reviewed default-off action/target-write boundaries.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -7620,4 +7784,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.23.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 28 and the exact 317-test Core registry. Exact job gates and request priority remain Purify > Smart Recuperate > Guard > Guardian > Sprint > Rescue > reactive CC > Kardia > NIN > SCH > Monk > DRK Hiebsprung. Protection-end consent comes only from an unconsumed eligible shared input-frame key, persists only for that exact physical hold, clears on release/text/config/context/job/death/metadata/own-Guard/reset, and is consumed by startup MCH/SAM/VPR/DNC dispatch while a later distinct verified post-Purify/post-Guard release epoch may reuse the same hold. Post-Purify keeps five bounded independent S1-S5 lifecycles, terminal pre-resolution packet deduplication, positive Resilience plus 150-ms stable absence, and a strict unextended 500-ms opportunity; post-Guard keeps exact 3054/3673 positive presence, the first verified absent framework observation, and the same strict window. Known fresh pressure ranks ahead of unknown (known zero is valid), then higher pressure, lower exact HP ratio, known trusted exact-10k MP ahead of unknown/lower ratio, and stable identity; exactly one simultaneous winner is armed and every loser is terminal. The frozen counter job/action, S-slot, GOID, EID, target job, status/protection, native range/LoS, window, and exact held input are finally revalidated before one direct-GOID call through the shared Near Assist redirect bypass, with no selected-target mutation, alternate, replay, or retry. BRD Stumme Nocturne / Silent Nocturne and WHM Wunder der Natur / Miracle of Nature share exact landing confirmation. Ally Rescue diagnostics distinguish action attempts from exact server-observed cleanse confirmations. DRK Hiebsprung, Combat Frames, Limit Break telemetry, every prior safety invariant, schema-28 migration/defaults/bindings, metadata, UI copy, and documentation remain pinned. Native action/status/charge/gauge reporting, reactive-CC timing and server results, Combat Frame interaction/rendering, Focus setter/readback, and Macro Queue/Turbo behavior still require live current-patch validation."
+Write-Host "Seiton Sense v0.24.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 29 and the exact 330-test Core registry. Held helpers share continuous physical-key consent and the exact priority Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > DRK Hiebsprung; Kardia and Monk retain their separate event-driven origins. At most one held native boundary runs per framework frame. Exact action, actor, status/episode, key, context, Guard, range, and line-of-sight evidence stays frozen; known unavailability waits without spending the common budget, and only a stable explicit client rejection may retry after 50 ms with eight calls maximum. Acceptance, exception, queue/sequence ambiguity, and unsafe drift are terminal; no rerank, alternate, selected-target mutation, replay, or accepted-action retry is permitted. Active own Guard suppresses action boundaries without consuming the physical hold. Purify retains absolute priority while exact removable CC remains, Smart Recuperate cannot run under that CC, Ally Rescue confirmation survives later rejected calls, and WHM/BRD reactive counter-CC keeps exact direct-target and landing evidence. NIN uses held consent with separate base/follow-up epochs. Combat Frame LB activation remains border/banner-only so HP/MP stay visible, and interaction-off is explicit in Settings. Schema-29 migration preserves only an explicit legacy NIN opt-in while every prior reviewed default, metadata gate, UI copy, and documentation contract remains pinned. Native action/status/charge/gauge behavior and client/server timing still require live current-patch validation."

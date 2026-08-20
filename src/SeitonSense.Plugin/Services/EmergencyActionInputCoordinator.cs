@@ -6,12 +6,13 @@ namespace SeitonSense.Plugin.Services;
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations used
 /// by Purify, Smart Recuperate, reactive Guard, PLD Guardian, high-pressure
-/// Sprint, Ally Rescue, reactive counter-CC, fresh-key Ninja Seiton, held-key
+/// Sprint, Ally Rescue, reactive counter-CC, held-key Ninja Seiton, held-key
 /// Scholar Critical Strategy, and DRK Hiebsprung. Accepted-Eukrasia Kardia and
 /// Monk Earth's Reply do not originate from this physical-key frame, but their
 /// attempts still suppress lower work in the runtime priority chain.
-/// Consumption is deliberately shared: once any held/fresh helper claims a
-/// generation, every later physical-input helper sees no input.
+/// Consumption is deliberately frame-local: one helper can own the current
+/// framework frame without destroying the still-held physical consent needed
+/// by a later distinct action episode.
 /// </summary>
 internal sealed class EmergencyActionInputFrame
 {
@@ -32,7 +33,6 @@ internal sealed class EmergencyActionInputFrame
     {
         if (IsConsumed) return;
         IsConsumed = true;
-        probe?.ConsumeHeldGameplayKeys();
     }
 
     internal bool FreshGameplayKeyPressed =>
@@ -65,6 +65,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool scholarCriticalStrategyHeldWasEnabled;
     private bool pressureEscapeHeldWasEnabled;
     private bool darkKnightPlungeHeldWasEnabled;
+    private bool ninjaSeitonHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -81,7 +82,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool miracleInterceptHeldEnabled,
         bool scholarCriticalStrategyHeldEnabled,
         bool pressureEscapeHeldEnabled = false,
-        bool darkKnightPlungeHeldEnabled = false)
+        bool darkKnightPlungeHeldEnabled = false,
+        bool ninjaSeitonHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -101,7 +103,8 @@ internal sealed class EmergencyActionInputCoordinator
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
             (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
             (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
-            (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled);
+            (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
+            (ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         paladinGuardianHeldWasEnabled = paladinGuardianHeldEnabled;
@@ -111,6 +114,7 @@ internal sealed class EmergencyActionInputCoordinator
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
         darkKnightPlungeHeldWasEnabled = darkKnightPlungeHeldEnabled;
+        ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -156,5 +160,6 @@ internal sealed class EmergencyActionInputCoordinator
         scholarCriticalStrategyHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
         darkKnightPlungeHeldWasEnabled = false;
+        ninjaSeitonHeldWasEnabled = false;
     }
 }

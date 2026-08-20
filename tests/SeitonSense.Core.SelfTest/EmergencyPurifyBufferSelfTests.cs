@@ -2,6 +2,7 @@ using SeitonSense.Core;
 
 internal static class EmergencyPurifyBufferSelfTests
 {
+    private const int HeldKey = 65;
     private static readonly PurifyCcStatusInstance StatusA = new(1343, 1);
     private static readonly PurifyCcStatusInstance StatusB = new(4325, 2);
 
@@ -9,16 +10,27 @@ internal static class EmergencyPurifyBufferSelfTests
     {
         var decision = Observe(
             EmergencyPurifyBufferState.Initial,
-            status: StatusA,
+            StatusA,
             freshKey: true,
             locallyReady: true,
             now: 1_000);
+        True(decision.ShouldDispatch, "same-frame fresh edge");
+        Equal(EmergencyPurifyBufferPhase.Buffered, decision.NextState.Phase, "intent remains exact until outcome");
 
-        True(decision.ShouldDispatch, "a real fresh edge is not lost when the status first appears");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, decision.NextState.Phase, "dispatch consumes first");
-
-        decision = Observe(decision.NextState, StatusA, freshKey: true, locallyReady: true, now: 1_001);
-        False(decision.ShouldDispatch, "same continuous status still gets at most one attempt");
+        var accepted = Complete(
+            decision.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, accepted.NextState.Phase, "accepted status spent");
+        var repeated = Observe(
+            accepted.NextState,
+            StatusA,
+            freshKey: true,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_001);
+        False(repeated.ShouldDispatch, "same exact CC cannot duplicate acceptance");
     }
 
     public static void HeldKeyAtStatusEntryIsExplicitAndOneShot()
@@ -30,7 +42,7 @@ internal static class EmergencyPurifyBufferSelfTests
             allowHeldKey: false,
             locallyReady: true,
             now: 1_000);
-        False(disabled.ShouldDispatch, "held input is disabled unless explicitly opted in");
+        False(disabled.ShouldDispatch, "held level requires opt-in");
 
         var enabled = Observe(
             EmergencyPurifyBufferState.Initial,
@@ -39,21 +51,22 @@ internal static class EmergencyPurifyBufferSelfTests
             allowHeldKey: true,
             locallyReady: true,
             now: 2_000);
-        True(enabled.ShouldDispatch, "eligible held input dispatches when the status first appears");
-        Equal(
-            EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry,
-            enabled.InputTrigger,
-            "held trigger is explicit");
-        True(enabled.ShouldConsumeInputGeneration, "held generation is consumed before the attempt");
+        True(enabled.ShouldDispatch, "held key catches status entry");
+        Equal(EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry, enabled.InputTrigger, "held trigger");
+        True(enabled.ShouldClaimInputFrame, "held Purify owns only this frame");
 
-        var repeated = Observe(
+        var accepted = Complete(
             enabled.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            2_000);
+        var sameStatus = Observe(
+            accepted.NextState,
             StatusA,
             heldKeyEligible: true,
             allowHeldKey: true,
             locallyReady: true,
             now: 2_001);
-        False(repeated.ShouldDispatch, "continuous hold cannot repeat for the same status");
+        False(sameStatus.ShouldDispatch, "same CC stays one-shot");
     }
 
     public static void HeldKeyOnlyCountsAtStatusEntry()
@@ -63,16 +76,15 @@ internal static class EmergencyPurifyBufferSelfTests
             StatusA,
             allowHeldKey: true,
             locallyReady: true,
-            now: 1_000).NextState;
-
+            now: 1_000);
         var heldLater = Observe(
-            waiting,
+            waiting.NextState,
             StatusA,
             heldKeyEligible: true,
             allowHeldKey: true,
             locallyReady: true,
             now: 1_001);
-        False(heldLater.ShouldDispatch, "a held level cannot arm after the status-entry frame");
+        False(heldLater.ShouldDispatch, "late held level is not a synthetic edge");
 
         var freshLater = Observe(
             heldLater.NextState,
@@ -82,12 +94,8 @@ internal static class EmergencyPurifyBufferSelfTests
             allowHeldKey: true,
             locallyReady: true,
             now: 1_002);
-        True(freshLater.ShouldDispatch, "a later real down-edge still dispatches");
-        Equal(
-            EmergencyPurifyInputTrigger.FreshKeyPress,
-            freshLater.InputTrigger,
-            "fresh edge wins over held level");
-        True(freshLater.ShouldConsumeInputGeneration, "fresh trigger also consumes its held generation");
+        True(freshLater.ShouldDispatch, "real later down edge works");
+        Equal(EmergencyPurifyInputTrigger.FreshKeyPress, freshLater.InputTrigger, "fresh trigger");
     }
 
     public static void FreshEdgeWinsWhenFreshAndHeldCoincide()
@@ -100,12 +108,8 @@ internal static class EmergencyPurifyBufferSelfTests
             allowHeldKey: true,
             locallyReady: true,
             now: 1_000);
-
-        True(decision.ShouldDispatch, "coincident inputs still create only one decision");
-        Equal(
-            EmergencyPurifyInputTrigger.FreshKeyPress,
-            decision.InputTrigger,
-            "the real down-edge owns the coincident intent");
+        True(decision.ShouldDispatch, "coincident edge dispatches once");
+        Equal(EmergencyPurifyInputTrigger.FreshKeyPress, decision.InputTrigger, "fresh edge wins");
     }
 
     public static void HeldKeyIsConsumedWhenItOnlyArms()
@@ -117,51 +121,70 @@ internal static class EmergencyPurifyBufferSelfTests
             allowHeldKey: true,
             locallyReady: false,
             now: 1_000);
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, armed.Kind, "locked Purify arms");
+        True(armed.ShouldClaimInputFrame, "armed Purify owns current frame");
 
-        Equal(EmergencyPurifyBufferDecisionKind.Armed, armed.Kind, "locked Purify arms the held intent");
-        True(armed.ShouldConsumeInputGeneration, "held generation is consumed at arm, not delayed until dispatch");
-        False(armed.ShouldDispatch, "arming does not fake an action call");
-
-        var ready = Observe(armed.NextState, StatusA, locallyReady: true, now: 1_001);
-        True(ready.ShouldDispatch, "the one buffered intent dispatches when locally ready");
-        False(ready.ShouldConsumeInputGeneration, "dispatch does not claim a second physical generation");
+        var ready = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_001,
+            frozenKeyStillDown: true);
+        True(ready.ShouldDispatch, "first ready frame dispatches");
+        True(ready.ShouldClaimInputFrame, "dispatch frame is owned too");
     }
 
     public static void DispatchConsumesBeforeAttempt()
     {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        var decision = Observe(state, StatusA, freshKey: true, locallyReady: false, now: 1_100);
-        Equal(EmergencyPurifyBufferDecisionKind.Armed, decision.Kind, "buffer armed while Purify is locked");
-
-        decision = Observe(decision.NextState, StatusA, locallyReady: false, now: 1_200);
-        False(decision.ShouldDispatch, "locked frame does not dispatch");
-
-        decision = Observe(decision.NextState, StatusA, locallyReady: true, now: 1_201);
-        True(decision.ShouldDispatch, "first locally-ready frame dispatches");
-        Equal(
-            EmergencyPurifyBufferPhase.SpentUntilStatusGone,
-            decision.NextState.Phase,
-            "returned state is consumed before caller attempts Purify");
-
-        var afterRejectedAttempt = Observe(
-            decision.NextState,
+        var first = Observe(
+            EmergencyPurifyBufferState.Initial,
             StatusA,
             freshKey: true,
             locallyReady: true,
-            now: 1_202);
-        Equal(EmergencyPurifyBufferDecisionKind.None, afterRejectedAttempt.Kind, "failure or rejection is never retried");
-        False(afterRejectedAttempt.ShouldDispatch, "same continuous status gets exactly one attempt");
+            now: 1_000);
+        var rejected = Complete(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientRejected,
+            1_000);
+        True(rejected.RetryScheduled, "clean false retains exact intent");
+        Equal(1, rejected.NextState.NativeAttemptCount, "first native call counted");
+
+        var throttled = Observe(
+            rejected.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_049,
+            frozenKeyStillDown: true);
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, throttled.Kind, "49 ms throttled");
+        var retry = Observe(
+            throttled.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_050,
+            frozenKeyStillDown: true);
+        True(retry.ShouldDispatch, "50 ms retry boundary");
     }
 
     public static void ReadyAtArmDispatchesExactlyOnce()
     {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        var decision = Observe(state, StatusA, freshKey: true, locallyReady: true, now: 1_100);
-        True(decision.ShouldDispatch, "ready key edge dispatches immediately");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, decision.NextState.Phase, "immediate dispatch consumes");
-
-        decision = Observe(decision.NextState, StatusA, locallyReady: true, now: 1_101);
-        False(decision.ShouldDispatch, "next ready frame does not repeat");
+        var decision = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            freshKey: true,
+            locallyReady: true,
+            now: 1_000);
+        var accepted = Complete(
+            decision.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+        True(accepted.ClientAccepted, "accepted exposed");
+        var next = Observe(
+            accepted.NextState,
+            StatusA,
+            freshKey: true,
+            locallyReady: true,
+            now: 1_001);
+        False(next.ShouldDispatch, "accepted exact CC is terminal");
     }
 
     public static void TimeoutWithoutAttemptCanRearm()
@@ -170,91 +193,150 @@ internal static class EmergencyPurifyBufferSelfTests
         Equal(100L, EmergencyPurifyBufferRules.NormalizeBufferMilliseconds(-1), "minimum clamp");
         Equal(1_000L, EmergencyPurifyBufferRules.NormalizeBufferMilliseconds(50_000), "maximum clamp");
 
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
         var armed = Observe(
-            state,
+            EmergencyPurifyBufferState.Initial,
             StatusA,
             freshKey: true,
             locallyReady: false,
             now: 1_100,
             bufferMilliseconds: 750);
-        Equal(1_850L, armed.NextState.ExpiresAtMilliseconds, "exact default deadline");
+        Equal(long.MaxValue, armed.NextState.ExpiresAtMilliseconds, "status/key bounded lease");
+        var afterThreeSeconds = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: false,
+            now: 4_500,
+            frozenKeyStillDown: true);
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, afterThreeSeconds.Kind, ">3s soft wait retained");
+        Equal(0, afterThreeSeconds.NextState.NativeAttemptCount, "wait spends no attempt budget");
+        var ready = Observe(
+            afterThreeSeconds.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 4_501,
+            frozenKeyStillDown: true);
+        True(ready.ShouldDispatch, "first ready frame after >3s dispatches");
 
-        var inside = Observe(armed.NextState, StatusA, locallyReady: false, now: 1_849);
-        Equal(EmergencyPurifyBufferDecisionKind.None, inside.Kind, "inside deadline remains buffered");
-
-        var boundary = Observe(inside.NextState, StatusA, locallyReady: true, now: 1_850);
-        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, boundary.Kind, "deadline wins over readiness");
-        Equal(EmergencyPurifyBufferCancelReason.TimedOut, boundary.CancelReason, "timeout reason exposed");
-        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, boundary.NextState.Phase, "timeout does not fake an action attempt");
-
-        var sameStatus = Observe(boundary.NextState, StatusA, freshKey: true, locallyReady: true, now: 1_851);
-        True(sameStatus.ShouldDispatch, "a later distinct key can try after a no-attempt timeout");
+        var released = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 4_502,
+            frozenKeyStillDown: false);
+        Equal(EmergencyPurifyBufferCancelReason.ExactKeyReleased, released.CancelReason, "key release bounds lease");
     }
 
     public static void StatusAbsenceIsTheOnlyRearmForSameInstance()
     {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        var spent = Observe(state, StatusA, freshKey: true, locallyReady: true, now: 1_100).NextState;
-
-        var stillPresent = Observe(spent, StatusA, freshKey: true, locallyReady: true, now: 2_000);
-        Equal(EmergencyPurifyBufferDecisionKind.None, stillPresent.Kind, "continuous status stays spent");
-
-        var gone = Observe(stillPresent.NextState, status: null, now: 2_001);
-        Equal(EmergencyPurifyBufferCancelReason.StatusGone, gone.CancelReason, "status disappearance exposed");
-        Equal(EmergencyPurifyBufferState.Initial, gone.NextState, "absence rearms the lifecycle");
-
-        var seenAgain = Observe(gone.NextState, StatusA, freshKey: true, locallyReady: true, now: 2_002);
-        True(seenAgain.ShouldDispatch, "a fresh edge on the new status frame can dispatch");
+        var first = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_000);
+        var accepted = Complete(first.NextState, ClientActionAttemptOutcome.ClientAccepted, 1_000);
+        True(
+            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
+                accepted.NextState,
+                StatusA,
+                exactStatusCurrentlyObserved: true,
+                exactFrozenKeyStillDown: true),
+            "accepted-but-lingering exact CC still owns priority");
+        var stillPresent = Observe(
+            accepted.NextState,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_100);
+        False(stillPresent.ShouldDispatch, "same status stays spent");
+        True(
+            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
+                stillPresent.NextState,
+                StatusA,
+                exactStatusCurrentlyObserved: true,
+                exactFrozenKeyStillDown: true),
+            "lingering status blocks Recup without a second Purify");
+        var gone = Observe(stillPresent.NextState, null, now: 1_101);
+        Equal(EmergencyPurifyBufferState.Initial, gone.NextState, "absence resets lifecycle");
+        False(
+            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
+                gone.NextState,
+                null,
+                exactStatusCurrentlyObserved: false,
+                exactFrozenKeyStillDown: true),
+            "status disappearance releases lower helpers");
+        var newStatus = Observe(
+            gone.NextState,
+            StatusB,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_102);
+        True(newStatus.ShouldDispatch, "same still-held key can own a distinct CC status");
     }
 
     public static void ExactStatusReplacementNeedsANewKey()
     {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        state = Observe(state, StatusA, freshKey: true, locallyReady: false, now: 1_100).NextState;
-
-        var replaced = Observe(state, StatusB, freshKey: true, locallyReady: true, now: 1_200);
-        True(replaced.ShouldDispatch, "a fresh key can dispatch for the replacement status immediately");
-        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, replaced.NextState.Phase, "replacement dispatch consumes");
+        var armedA = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: false,
+            now: 1_000);
+        var replacement = Observe(
+            armedA.NextState,
+            StatusB,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_001,
+            frozenKeyStillDown: true);
+        True(replacement.ShouldDispatch, "same exact hold may catch distinct replacement CC");
+        Equal(StatusB, replacement.NextState.StatusInstance!.Value, "replacement identity frozen");
     }
 
     public static void TemporarySafetyGatesDoNotSpendAnAttempt()
     {
-        AssertGateCancellation(
+        AssertGate(
             observation => observation with { ConfigurationEnabled = false },
-            EmergencyPurifyBufferCancelReason.ConfigurationDisabled,
-            "configuration off");
-        AssertGateCancellation(
+            EmergencyPurifyBufferCancelReason.ConfigurationDisabled);
+        AssertGate(
             observation => observation with { IsSupportedPvPContext = false },
-            EmergencyPurifyBufferCancelReason.OutsideSupportedPvPContext,
-            "outside supported PvP context");
-        AssertGateCancellation(
+            EmergencyPurifyBufferCancelReason.OutsideSupportedPvPContext);
+        AssertGate(
             observation => observation with { IsAlive = false },
-            EmergencyPurifyBufferCancelReason.PlayerDead,
-            "death");
-        AssertGateCancellation(
+            EmergencyPurifyBufferCancelReason.PlayerDead);
+        AssertGate(
             observation => observation with { IsLocalPlayerIdentityValid = false },
-            EmergencyPurifyBufferCancelReason.LocalPlayerIdentityInvalid,
-            "invalid local-player identity");
-        AssertGateCancellation(
+            EmergencyPurifyBufferCancelReason.LocalPlayerIdentityInvalid);
+        AssertGate(
             observation => observation with { IsResilienceActive = true },
-            EmergencyPurifyBufferCancelReason.ResilienceActive,
-            "Resilience");
-        AssertGateCancellation(
+            EmergencyPurifyBufferCancelReason.ResilienceActive);
+        AssertGate(
             observation => observation with { IsTextInputActive = true },
-            EmergencyPurifyBufferCancelReason.TextInputActive,
-            "text input");
+            EmergencyPurifyBufferCancelReason.TextInputActive);
     }
 
     public static void HardResetAndInvalidInputsFailClosed()
     {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        state = Observe(state, StatusA, freshKey: true, locallyReady: false, now: 1_100).NextState;
-
-        var reset = Observe(state, StatusA, locallyReady: true, now: 1_101, hardReset: true);
-        Equal(EmergencyPurifyBufferCancelReason.HardReset, reset.CancelReason, "hard-reset reason");
-        Equal(EmergencyPurifyBufferState.Initial, reset.NextState, "hard reset clears all state");
-        False(reset.ShouldDispatch, "hard reset wins over readiness");
+        var armed = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            freshKey: true,
+            locallyReady: false,
+            now: 1_000);
+        var reset = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_001,
+            hardReset: true,
+            frozenKeyStillDown: true);
+        Equal(EmergencyPurifyBufferState.Initial, reset.NextState, "hard reset clears");
+        False(reset.ShouldDispatch, "reset never dispatches");
 
         var invalid = Observe(
             EmergencyPurifyBufferState.Initial,
@@ -262,48 +344,96 @@ internal static class EmergencyPurifyBufferSelfTests
             freshKey: true,
             locallyReady: true,
             now: 2_000);
-        Equal(EmergencyPurifyBufferCancelReason.InvalidStatusInstance, invalid.CancelReason, "invalid instance reason");
-        Equal(EmergencyPurifyBufferState.Initial, invalid.NextState, "invalid identity fails closed");
+        Equal(EmergencyPurifyBufferCancelReason.InvalidStatusInstance, invalid.CancelReason, "invalid status");
 
-        state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 3_000).NextState;
-        var backwards = Observe(state, StatusA, freshKey: true, locallyReady: true, now: 2_999);
-        Equal(EmergencyPurifyBufferCancelReason.ClockMovedBackwards, backwards.CancelReason, "clock regression reason");
-        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, backwards.NextState.Phase, "clock regression waits without faking an attempt");
-        False(backwards.ShouldDispatch, "clock regression never dispatches");
-    }
-
-    private static void AssertGateCancellation(
-        Func<EmergencyPurifyBufferObservation, EmergencyPurifyBufferObservation> mutate,
-        EmergencyPurifyBufferCancelReason expectedReason,
-        string label)
-    {
-        var state = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 1_000).NextState;
-        state = Observe(state, StatusA, freshKey: true, locallyReady: false, now: 1_100).NextState;
-        var baseObservation = ValidObservation(StatusA, now: 1_200) with
-        {
-            FreshKeyPressed = true,
-            PurifyLocallyReady = true,
-        };
-
-        var cancelled = EmergencyPurifyBufferRules.Observe(state, mutate(baseObservation));
-        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, cancelled.Kind, $"{label} decision");
-        Equal(expectedReason, cancelled.CancelReason, $"{label} reason");
-        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, cancelled.NextState.Phase, $"{label} waits");
-        False(cancelled.ShouldDispatch, $"{label} blocks dispatch");
-
-        var repeatedCancellation = EmergencyPurifyBufferRules.Observe(
-            cancelled.NextState,
-            mutate(baseObservation with { NowMilliseconds = 1_201 }));
-        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, repeatedCancellation.Kind, $"{label} remains blocked");
-
-        var restored = Observe(
-            repeatedCancellation.NextState,
+        var observed = Observe(EmergencyPurifyBufferState.Initial, StatusA, now: 3_000);
+        var backwards = Observe(
+            observed.NextState,
             StatusA,
             freshKey: true,
             locallyReady: true,
-            now: 1_202);
-        True(restored.ShouldDispatch, $"{label} never consumed the later real key");
+            now: 2_999);
+        Equal(EmergencyPurifyBufferCancelReason.ClockMovedBackwards, backwards.CancelReason, "clock regression");
     }
+
+    public static void NativeOutcomesUseSharedRetryPolicy()
+    {
+        var first = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_000);
+        var soft = Complete(
+            first.NextState,
+            ClientActionAttemptOutcome.SoftUnavailable,
+            1_000);
+        True(soft.SoftWait, "known unavailable is a soft wait");
+        Equal(0, soft.NextState.NativeAttemptCount, "soft wait spends zero calls");
+
+        var state = soft.NextState;
+        for (var attempt = 1; attempt <= HeldActionRetryRules.MaximumNativeAttempts; attempt++)
+        {
+            var now = 1_000L + ((attempt - 1) * HeldActionRetryRules.NativeRetryThrottleMilliseconds);
+            var completion = Complete(state, ClientActionAttemptOutcome.ClientRejected, now);
+            state = completion.NextState;
+            if (attempt < HeldActionRetryRules.MaximumNativeAttempts)
+            {
+                True(completion.RetryScheduled, $"retry {attempt}");
+                state = Observe(
+                    state,
+                    StatusA,
+                    locallyReady: true,
+                    now: now + 50,
+                    frozenKeyStillDown: true).NextState;
+            }
+            else
+            {
+                Equal(EmergencyPurifyBufferCancelReason.NativeRetryLimitReached, completion.CancelReason, "retry cap");
+            }
+        }
+
+        first = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 2_000);
+        var unknown = Complete(
+            first.NextState,
+            ClientActionAttemptOutcome.AcceptanceUnknown,
+            2_000);
+        True(unknown.Terminal, "unknown acceptance terminal");
+        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, unknown.NextState.Phase, "unknown spent");
+    }
+
+    private static void AssertGate(
+        Func<EmergencyPurifyBufferObservation, EmergencyPurifyBufferObservation> mutate,
+        EmergencyPurifyBufferCancelReason expected)
+    {
+        var armed = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            freshKey: true,
+            locallyReady: false,
+            now: 1_000);
+        var cancelled = EmergencyPurifyBufferRules.Observe(
+            armed.NextState,
+            mutate(ValidObservation(StatusA, 1_001) with
+            {
+                FrozenKeyStillDown = true,
+            }));
+        Equal(expected, cancelled.CancelReason, expected.ToString());
+        Equal(0, cancelled.NextState.NativeAttemptCount, "gate spends zero native calls");
+    }
+
+    private static EmergencyPurifyNativeAttemptDecision Complete(
+        EmergencyPurifyBufferState state,
+        ClientActionAttemptOutcome outcome,
+        long now) =>
+        EmergencyPurifyBufferRules.ApplyNativeAttemptOutcome(state, outcome, now);
 
     private static EmergencyPurifyBufferDecision Observe(
         EmergencyPurifyBufferState state,
@@ -314,7 +444,8 @@ internal static class EmergencyPurifyBufferSelfTests
         bool locallyReady = false,
         long now = 0,
         bool hardReset = false,
-        long bufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds) =>
+        long bufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds,
+        bool? frozenKeyStillDown = null) =>
         EmergencyPurifyBufferRules.Observe(
             state,
             ValidObservation(status, now) with
@@ -325,6 +456,10 @@ internal static class EmergencyPurifyBufferSelfTests
                 PurifyLocallyReady = locallyReady,
                 HardReset = hardReset,
                 BufferMilliseconds = bufferMilliseconds,
+                FreshKeyCode = freshKey ? HeldKey : 0,
+                HeldKeyCode = heldKeyEligible ? HeldKey : 0,
+                FrozenKeyStillDown = frozenKeyStillDown ??
+                    state.Phase == EmergencyPurifyBufferPhase.Buffered,
             });
 
     private static EmergencyPurifyBufferObservation ValidObservation(

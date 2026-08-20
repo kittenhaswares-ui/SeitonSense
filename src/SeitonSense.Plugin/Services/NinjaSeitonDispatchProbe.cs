@@ -55,9 +55,9 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
 }
 
 /// <summary>
-/// Converts one unclaimed fresh physical gameplay-key generation into at most
-/// one exact Seiton Tenchu request. Selection uses only current native S1-S5
-/// actors whose identities match the fail-closed ExecuteTracker snapshot.
+/// Converts a held physical gameplay-key episode into bounded exact Seiton
+/// requests. A client-accepted base action may expose one separately adjusted
+/// follow-up epoch; every frozen action/actor retry remains exact.
 /// </summary>
 internal sealed class NinjaSeitonDispatchProbe
 {
@@ -66,6 +66,9 @@ internal sealed class NinjaSeitonDispatchProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private NinjaSeitonDispatchProbeSnapshot snapshot = NinjaSeitonDispatchProbeSnapshot.Initial;
+    private NinjaSeitonAcceptedHoldState acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+    private FrozenSeitonRetry? frozenRetry;
+    private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
     private long thresholdDriftCancellationCount;
@@ -97,6 +100,19 @@ internal sealed class NinjaSeitonDispatchProbe
         long nowMilliseconds,
         bool hardReset = false)
     {
+        if (hardReset)
+        {
+            acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+            frozenRetry = null;
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
+        if (terminalHeldKey != VirtualKey.NO_KEY &&
+            !inputFrame.IsGameplayKeyPhysicallyDown(terminalHeldKey))
+        {
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
         var localAlive = IsLivePlayer(localPlayer);
         var localIdentity = HasValidNativeIdentity(localPlayer)
             ? new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId)
@@ -112,18 +128,40 @@ internal sealed class NinjaSeitonDispatchProbe
                                   !actionHelpersSuppressedByGuard &&
                                   !hardReset;
         var resolvedActionId = 0u;
-        var actionReady = featureContextReady &&
+        var actionLocallyReady = featureContextReady &&
                           localIdentity.IsValid &&
-                          SeitonReadinessProbe.TryGetReadyAction(localPlayer!, out resolvedActionId);
-        if (!actionReady) resolvedActionId = 0;
+                          SeitonReadinessProbe.TryGetReadyAction(localPlayer!, out resolvedActionId) &&
+                          IsActionResourceReady(resolvedActionId);
+        var nearQueueable = actionLocallyReady && IsNativeBoundaryNearQueueable(localPlayer!);
+        var actionReady = actionLocallyReady && nearQueueable;
 
         var input = inputFrame.Snapshot;
-        var shouldResolveCandidates = actionReady &&
+        var acceptedKey = acceptedHold.OwnsHold
+            ? (VirtualKey)acceptedHold.HeldKeyCode
+            : VirtualKey.NO_KEY;
+        var exactAcceptedKeyDown = acceptedHold.OwnsHold &&
+                                   inputFrame.IsGameplayKeyPhysicallyDown(acceptedKey);
+        acceptedHold = NinjaSeitonDispatchRules.ObserveAcceptedHold(
+            acceptedHold,
+            hardReset,
+            featureContextReady && input.ProbeSucceeded && !input.IsTextInputActive,
+            exactAcceptedKeyDown);
+        acceptedKey = acceptedHold.OwnsHold
+            ? (VirtualKey)acceptedHold.HeldKeyCode
+            : VirtualKey.NO_KEY;
+        var hasHeldEpoch = acceptedHold.OwnsHold
+            ? NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                acceptedHold,
+                resolvedActionId)
+            : inputFrame.HeldGameplayKeyEligible;
+        var shouldResolveCandidates = frozenRetry is null &&
+                                      terminalHeldKey == VirtualKey.NO_KEY &&
+                                      actionReady &&
                                       !higherPriorityClaimed &&
                                       input.ProbeSucceeded &&
                                       !input.IsTextInputActive &&
-                                      inputFrame.FreshGameplayKeyPressed;
-        var candidateResolution = "Not evaluated: no eligible fresh input";
+                                      hasHeldEpoch;
+        var candidateResolution = "Not evaluated: no eligible held action epoch";
         var candidates = shouldResolveCandidates
             ? ResolveExactCandidates(localPlayer!, resolvedActionId, out candidateResolution)
             : [];
@@ -139,94 +177,168 @@ internal sealed class NinjaSeitonDispatchProbe
                 higherPriorityClaimed,
                 input.ProbeSucceeded,
                 input.IsTextInputActive,
-                inputFrame.FreshGameplayKeyPressed,
+                hasHeldEpoch,
                 resolvedActionId,
                 actionReady,
                 candidates,
                 hardReset));
 
-        // Commit the one physical generation before any final validation or
-        // native boundary. Drift after this point cancels instead of selecting
-        // another candidate or retrying this generation.
-        var inputClaimed = decision.ShouldConsumeInputGeneration;
-        if (inputClaimed) inputFrame.Consume();
-
+        var inputClaimed = false;
         var attempted = false;
         var accepted = false;
         var revalidatedCurrentHp = 0u;
         var revalidatedMaximumHp = 0u;
         var boundaryThresholdRevalidated = false;
         var thresholdDriftCancelled = false;
-        if (decision.ShouldDispatch && decision.Intent is { } intent)
+        NinjaSeitonDispatchCandidate? observedCandidate = null;
+        if (frozenRetry is { } retry)
         {
-            var finalActionReady = SeitonReadinessProbe.TryGetReadyAction(
-                localPlayer!,
-                out var finalResolvedActionId);
-            var finalCandidate = ResolveFrozenIntent(localPlayer!, intent, finalResolvedActionId);
-            if (finalCandidate is { } observedCandidate)
+            var exactBaseContext = featureContextReady &&
+                                   localIdentity == retry.LocalPlayer &&
+                                   input.ProbeSucceeded &&
+                                   !input.IsTextInputActive &&
+                                   inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey);
+            if (!exactBaseContext)
             {
-                revalidatedCurrentHp = observedCandidate.CurrentHp;
-                revalidatedMaximumHp = observedCandidate.MaximumHp;
-            }
-
-            if (finalCandidate is { } exactCandidate &&
-                NinjaSeitonDispatchRules.CanUseExactIntent(
-                    intent,
-                    exactCandidate,
-                    localIdentity,
-                    finalResolvedActionId,
-                    finalActionReady))
-            {
-                try
-                {
-                    accepted = TryUseSeitonOnce(
-                        localPlayer!,
-                        intent,
-                        out attempted,
-                        out var boundaryCandidate,
-                        out boundaryThresholdRevalidated,
-                        out thresholdDriftCancelled);
-                    if (boundaryCandidate is { } observedBoundaryCandidate)
-                    {
-                        revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
-                        revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
-                    }
-
-                    if (attempted) Interlocked.Increment(ref attemptCount);
-                    if (accepted) Interlocked.Increment(ref acceptedCount);
-                    lastEvent = attempted
-                        ? $"S{intent.EnemySlot} action {intent.ActionId} attempted (accepted={accepted})"
-                        : thresholdDriftCancelled
-                            ? $"S{intent.EnemySlot} terminal threshold drift at UseAction boundary " +
-                              $"({revalidatedCurrentHp}/{revalidatedMaximumHp})"
-                            : $"S{intent.EnemySlot} terminal UseAction-boundary revalidation failed";
-                }
-                catch (Exception exception)
-                {
-                    if (attempted) Interlocked.Increment(ref attemptCount);
-                    lastEvent = $"S{intent.EnemySlot} terminal action exception";
-                    LogAttemptFailure(exception, nowMilliseconds);
-                }
+                SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact context/key drift";
             }
             else
             {
-                thresholdDriftCancelled =
-                    finalCandidate is { } thresholdCandidate &&
-                    IsValidAtOrAboveHalf(thresholdCandidate);
-                lastEvent = thresholdDriftCancelled
-                    ? $"S{intent.EnemySlot} terminal threshold drift before UseAction boundary " +
-                      $"({revalidatedCurrentHp}/{revalidatedMaximumHp})"
-                    : $"S{intent.EnemySlot} terminal exact-intent revalidation failed";
+                var finalActionReady = SeitonReadinessProbe.TryGetReadyAction(
+                    localPlayer!,
+                    out var finalResolvedActionId) &&
+                    IsActionResourceReady(finalResolvedActionId);
+                var finalNearQueueable = finalActionReady &&
+                                         IsNativeBoundaryNearQueueable(localPlayer!);
+                if (finalActionReady && finalResolvedActionId != retry.Intent.ActionId)
+                {
+                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen action changed from {retry.Intent.ActionId} to {finalResolvedActionId}";
+                }
+                else if (finalActionReady)
+                {
+                    var finalCandidate = ResolveFrozenIntent(
+                        localPlayer!,
+                        retry.Intent,
+                        finalResolvedActionId);
+                    observedCandidate = finalCandidate;
+                    if (finalCandidate is { } finalObserved)
+                    {
+                        revalidatedCurrentHp = finalObserved.CurrentHp;
+                        revalidatedMaximumHp = finalObserved.MaximumHp;
+                    }
+
+                    if (finalCandidate is not { } exactCandidate ||
+                        !NinjaSeitonDispatchRules.CanUseExactIntent(
+                            retry.Intent,
+                            exactCandidate,
+                            localIdentity,
+                            finalResolvedActionId,
+                            finalActionReady))
+                    {
+                        thresholdDriftCancelled =
+                            finalCandidate is { } thresholdCandidate &&
+                            IsValidAtOrAboveHalf(thresholdCandidate);
+                        SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                        lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact target/range/threshold drift";
+                    }
+                    else
+                    {
+                        var retainsSchedulerFrame =
+                            HeldActionRetryRules.RetainsSchedulerFrame(
+                                retry.Retry,
+                                nowMilliseconds,
+                                exactIntentValid: true,
+                                actionSpecificReady: true,
+                                targetSpecificReady: true);
+                        if (!higherPriorityClaimed &&
+                            !inputFrame.IsConsumed &&
+                            retainsSchedulerFrame)
+                        {
+                            inputClaimed = true;
+                            inputFrame.Consume();
+                            if (!finalNearQueueable)
+                            {
+                                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton waiting for global native boundary";
+                            }
+                            else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                                         retry.Retry,
+                                         nowMilliseconds))
+                            {
+                                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retaining retry throttle priority";
+                            }
+                            else
+                            {
+                                var outcome = TryUseSeitonOnce(
+                                    localPlayer!,
+                                    retry.Intent,
+                                    out attempted,
+                                    out var boundaryCandidate,
+                                    out boundaryThresholdRevalidated,
+                                    out thresholdDriftCancelled);
+                                observedCandidate = boundaryCandidate ?? observedCandidate;
+                                if (boundaryCandidate is { } observedBoundaryCandidate)
+                                {
+                                    revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
+                                    revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
+                                }
+
+                                accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+                                CompleteAttempt(retry, outcome, nowMilliseconds);
+                                lastEvent = DescribeAttempt(
+                                    retry.Intent,
+                                    retry.Retry.NativeAttemptCount + 1,
+                                    outcome);
+                            }
+                        }
+                    }
+                }
             }
         }
+        else if (terminalHeldKey == VirtualKey.NO_KEY &&
+                 decision.ShouldDispatch &&
+                 decision.Intent is { } intent)
+        {
+            var heldKey = acceptedHold.OwnsHold
+                ? (VirtualKey)acceptedHold.HeldKeyCode
+                : input.HeldGameplayKey;
+            var retryIntent = new FrozenSeitonRetry(
+                intent,
+                localIdentity,
+                heldKey,
+                HeldActionRetryState.Initial);
+            inputClaimed = true;
+            inputFrame.Consume();
+            var outcome = TryUseSeitonOnce(
+                localPlayer!,
+                intent,
+                out attempted,
+                out var boundaryCandidate,
+                out boundaryThresholdRevalidated,
+                out thresholdDriftCancelled);
+            observedCandidate = boundaryCandidate;
+            if (boundaryCandidate is { } observedBoundaryCandidate)
+            {
+                revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
+                revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
+            }
+
+            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+            CompleteAttempt(retryIntent, outcome, nowMilliseconds);
+            lastEvent = DescribeAttempt(intent, 1, outcome);
+        }
+
+        if (attempted) Interlocked.Increment(ref attemptCount);
+        if (accepted) Interlocked.Increment(ref acceptedCount);
 
         if (thresholdDriftCancelled)
             Interlocked.Increment(ref thresholdDriftCancellationCount);
 
-        var selectedCandidate = decision.SelectedCandidateIndex >= 0 &&
+        var selectedCandidate = observedCandidate ?? (decision.SelectedCandidateIndex >= 0 &&
                                 decision.SelectedCandidateIndex < candidates.Count
             ? candidates[decision.SelectedCandidateIndex]
-            : (NinjaSeitonDispatchCandidate?)null;
+            : (NinjaSeitonDispatchCandidate?)null);
         var result = new NinjaSeitonDispatchProbeSnapshot(
             decision.Kind,
             decision.Reason,
@@ -240,7 +352,8 @@ internal sealed class NinjaSeitonDispatchProbe
             boundaryThresholdRevalidated,
             thresholdDriftCancelled,
             actionReady,
-            input.FreshGameplayKey,
+            frozenRetry?.HeldKey ??
+            (acceptedHold.OwnsHold ? (VirtualKey)acceptedHold.HeldKeyCode : input.HeldGameplayKey),
             inputClaimed,
             attempted,
             accepted,
@@ -255,6 +368,9 @@ internal sealed class NinjaSeitonDispatchProbe
 
     internal void Reset()
     {
+        acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = VirtualKey.NO_KEY;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, NinjaSeitonDispatchProbeSnapshot.Initial with
         {
@@ -268,6 +384,13 @@ internal sealed class NinjaSeitonDispatchProbe
 
     internal NinjaSeitonDispatchProbeSnapshot FailClosed()
     {
+        var failedKey = frozenRetry?.HeldKey ??
+                        (acceptedHold.OwnsHold
+                            ? (VirtualKey)acceptedHold.HeldKeyCode
+                            : terminalHeldKey);
+        acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = failedKey;
         lastEvent = "Failed closed";
         var result = NinjaSeitonDispatchProbeSnapshot.Initial with
         {
@@ -492,7 +615,7 @@ internal sealed class NinjaSeitonDispatchProbe
             rangeAndLineOfSight);
     }
 
-    private unsafe bool TryUseSeitonOnce(
+    private unsafe ClientActionAttemptOutcome TryUseSeitonOnce(
         IPlayerCharacter localPlayer,
         NinjaSeitonDispatchIntent intent,
         out bool attempted,
@@ -507,25 +630,36 @@ internal sealed class NinjaSeitonDispatchProbe
         if (!HasValidNativeIdentity(localPlayer) ||
             !intent.IsValid)
         {
-            return false;
+            return ClientActionAttemptOutcome.NotInvoked;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return false;
+        if (actionManager == null) return ClientActionAttemptOutcome.NotInvoked;
 
         var attemptedAtBoundary = false;
+        var softUnavailableAtBoundary = false;
         NinjaSeitonDispatchCandidate? candidateAtBoundary = null;
         var thresholdRevalidatedAtBoundary = false;
         var thresholdDriftAtBoundary = false;
+        var boundaryBefore = default(ClientActionAttemptFingerprint);
+        var boundaryAfter = default(ClientActionAttemptFingerprint);
         try
         {
-            return nearAssist.RunWithoutRedirect(() =>
+            var accepted = nearAssist.RunWithoutRedirect(() =>
             {
-                if (!HasValidNativeIdentity(localPlayer) ||
-                    !SeitonReadinessProbe.TryGetReadyAction(
-                        localPlayer,
-                        out var resolvedActionId))
+                if (!HasValidNativeIdentity(localPlayer))
                 {
+                    return false;
+                }
+
+                var ready = SeitonReadinessProbe.TryGetReadyAction(
+                    localPlayer,
+                    out var resolvedActionId) &&
+                    IsActionResourceReady(resolvedActionId);
+                if (resolvedActionId != intent.ActionId) return false;
+                if (!ready || !IsNativeBoundaryNearQueueable(localPlayer))
+                {
+                    softUnavailableAtBoundary = true;
                     return false;
                 }
 
@@ -571,15 +705,40 @@ internal sealed class NinjaSeitonDispatchProbe
                 }
 
                 thresholdRevalidatedAtBoundary = true;
+                boundaryBefore = ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    intent.ActionId);
                 attemptedAtBoundary = true;
-                return actionManager->UseAction(
+                var clientAccepted = actionManager->UseAction(
                     ActionType.Action,
                     intent.ActionId,
                     intent.Target.GameObjectId,
                     0,
                     ActionManager.UseActionMode.None,
                     0);
+                boundaryAfter = ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    intent.ActionId);
+                return clientAccepted;
             });
+            return attemptedAtBoundary
+                ? ClientActionAttemptBoundaryRules.Classify(
+                    accepted,
+                    intent.ActionId,
+                    boundaryBefore,
+                    boundaryAfter)
+                : softUnavailableAtBoundary
+                    ? ClientActionAttemptOutcome.SoftUnavailable
+                    : ClientActionAttemptOutcome.NotInvoked;
+        }
+        catch (Exception exception)
+        {
+            LogAttemptFailure(exception, Environment.TickCount64);
+            return attemptedAtBoundary
+                ? ClientActionAttemptOutcome.AcceptanceUnknown
+                : softUnavailableAtBoundary
+                    ? ClientActionAttemptOutcome.SoftUnavailable
+                    : ClientActionAttemptOutcome.NotInvoked;
         }
         finally
         {
@@ -633,6 +792,30 @@ internal sealed class NinjaSeitonDispatchProbe
         ExecuteThreshold.HasValidHp(candidate.CurrentHp, candidate.MaximumHp) &&
         !ExecuteThreshold.IsBelowHalf(candidate.CurrentHp, candidate.MaximumHp);
 
+    private static unsafe bool IsNativeBoundaryNearQueueable(IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+                   actionManager->AnimationLock,
+                   localPlayer.IsCasting,
+                   actionManager->CastActionId,
+                   actionManager->ActionQueued);
+    }
+
+    private static unsafe bool IsActionResourceReady(uint actionId)
+    {
+        if (actionId is not (SeitonReadinessProbe.BaseActionId or
+            SeitonReadinessProbe.FollowUpActionId))
+        {
+            return false;
+        }
+
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               actionManager->CheckActionResources(ActionType.Action, actionId) == 0;
+    }
+
     private enum BoundaryThresholdResult
     {
         Unresolved = 0,
@@ -662,10 +845,63 @@ internal sealed class NinjaSeitonDispatchProbe
         player.EntityId is not 0 and not 0xE0000000 &&
         player.GameObjectId is not 0 and not 0xE0000000;
 
+    private void CompleteAttempt(
+        FrozenSeitonRetry frozen,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        var completion = HeldActionRetryRules.Complete(
+            frozen.Retry,
+            Math.Max(0, nowMilliseconds),
+            outcome);
+        if (completion.RetryScheduled ||
+            completion.Disposition == HeldActionRetryDisposition.SoftWait)
+        {
+            frozenRetry = frozen with { Retry = completion.NextState };
+            return;
+        }
+
+        frozenRetry = null;
+        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            acceptedHold = NinjaSeitonDispatchRules.BeginAcceptedHold(
+                (int)frozen.HeldKey,
+                frozen.Intent.ActionId);
+            return;
+        }
+
+        SpendFrozenEpisode(
+            frozen,
+            HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(
+                completion.Disposition));
+    }
+
+    private void SpendFrozenEpisode(
+        FrozenSeitonRetry frozen,
+        bool latchCircuitBreaker)
+    {
+        frozenRetry = null;
+        if (latchCircuitBreaker)
+            terminalHeldKey = frozen.HeldKey;
+    }
+
+    private static string DescribeAttempt(
+        NinjaSeitonDispatchIntent intent,
+        int attempt,
+        ClientActionAttemptOutcome outcome) =>
+        $"S{intent.EnemySlot} action {intent.ActionId} attempt " +
+        $"{attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
+
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {
         if (nowMilliseconds < nextErrorLogAt) return;
         nextErrorLogAt = nowMilliseconds + 10_000;
-        log.Error(exception, "Seiton Sense Ninja Seiton attempt failed and will not be retried.");
+        log.Error(exception, "Seiton Sense Ninja Seiton attempt ended with ambiguous acceptance.");
     }
+
+    private readonly record struct FrozenSeitonRetry(
+        NinjaSeitonDispatchIntent Intent,
+        TargetPressureActorIdentity LocalPlayer,
+        VirtualKey HeldKey,
+        HeldActionRetryState Retry);
 }

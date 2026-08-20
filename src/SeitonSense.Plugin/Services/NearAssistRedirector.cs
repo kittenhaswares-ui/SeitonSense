@@ -98,7 +98,8 @@ internal readonly record struct LocalGuardActionAttempt(
     uint TerritoryId,
     ulong LocalGameObjectId,
     uint LocalEntityId,
-    long ObservedAtMilliseconds);
+    long ObservedAtMilliseconds,
+    long Generation);
 
 /// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist
@@ -147,6 +148,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
         FarHelpFallbackSuppressionState.Initial;
     private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
+    private long localGuardActionAttemptGeneration;
     private SmartKardiaEukrasiaTrigger? pendingSmartKardiaTrigger;
     private long smartKardiaTriggerSequence;
     private uint observedTerritory;
@@ -319,6 +321,49 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             observedAtMilliseconds = attempt.ObservedAtMilliseconds;
+            return true;
+        }
+    }
+
+    internal long CaptureLocalGuardAttemptGeneration()
+    {
+        lock (guardAttemptGate) return localGuardActionAttemptGeneration;
+    }
+
+    /// <summary>
+    /// Retracts only the exact local Guard observation synchronously created by
+    /// the immediately completed client-rejected call. A true return,
+    /// exception/ambiguity, identity drift, or any intervening Guard call keeps
+    /// the propagation observation intact.
+    /// </summary>
+    internal bool TryRetractClientRejectedLocalGuardAttempt(
+        ulong localGameObjectId,
+        uint localEntityId,
+        long generationBeforeCall)
+    {
+        if (!IsNetworkObjectId(localGameObjectId) ||
+            !IsNetworkEntityId(localEntityId) ||
+            generationBeforeCall < 0)
+        {
+            return false;
+        }
+
+        lock (guardAttemptGate)
+        {
+            if (latestLocalGuardActionAttempt is not { } attempt ||
+                !DefensiveUtilityRules.CanRetractRejectedGuardAttempt(
+                    attempt.Generation,
+                    generationBeforeCall,
+                    clientExplicitlyRejected: true,
+                    acceptanceAmbiguous: false,
+                    identityMatches:
+                        attempt.LocalGameObjectId == localGameObjectId &&
+                        attempt.LocalEntityId == localEntityId))
+            {
+                return false;
+            }
+
+            latestLocalGuardActionAttempt = null;
             return true;
         }
     }
@@ -1317,8 +1362,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 clientState.TerritoryType,
                 local!.GameObjectId,
                 local.EntityId,
-                Environment.TickCount64);
-            lock (guardAttemptGate) latestLocalGuardActionAttempt = attempt;
+                Environment.TickCount64,
+                0);
+            lock (guardAttemptGate)
+            {
+                localGuardActionAttemptGeneration =
+                    localGuardActionAttemptGeneration == long.MaxValue
+                        ? 1
+                        : localGuardActionAttemptGeneration + 1;
+                latestLocalGuardActionAttempt = attempt with
+                {
+                    Generation = localGuardActionAttemptGeneration,
+                };
+            }
         }
         catch
         {

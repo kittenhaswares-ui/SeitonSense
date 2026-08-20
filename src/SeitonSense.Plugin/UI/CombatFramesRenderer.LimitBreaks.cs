@@ -187,87 +187,134 @@ internal sealed partial class CombatFramesRenderer
         var fade = durationConfirmed ? 1f : 0.38f + (0.62f * flashFraction);
         var pulsePhase = Math.Max(0, nowMilliseconds % 850) / 850f;
         var pulse = 0.5f + (0.5f * MathF.Sin(pulsePhase * MathF.PI * 2f));
-        var panelMinimum = topLeft + new Vector2(5f * scale);
-        var panelMaximum = bottomRight - new Vector2(5f * scale);
-        var rounding = 7f * scale;
+        var self = state.Side == CombatLimitBreakRosterSide.Self;
+        var frameRounding = 8f * scale;
+        var borderInset = Math.Max(1f, scale);
 
-        draw.AddRectFilled(
-            panelMinimum,
-            panelMaximum,
-            Pack(new Vector4(0.025f, 0.012f, 0.002f, 1f), 0.9f * fade),
-            rounding);
-        draw.AddRectFilled(
-            panelMinimum,
-            panelMaximum,
-            Pack(LimitBreakActivationColor, (0.08f + (0.08f * pulse)) * fade),
-            rounding);
+        // Activation remains unmistakable without replacing the actor panel.
+        // The full-frame treatment is border-only, so HP, MP, LB gauge, and
+        // right-side status badges stay readable for both Self and S1-S5.
         draw.AddRect(
-            panelMinimum,
-            panelMaximum,
+            topLeft + new Vector2(borderInset),
+            bottomRight - new Vector2(borderInset),
             Pack(LimitBreakActivationColor, (0.72f + (0.28f * pulse)) * fade),
-            rounding,
+            frameRounding,
             ImDrawFlags.None,
             Math.Max(2f, (2.4f + pulse) * scale));
         draw.AddRect(
-            panelMinimum - new Vector2(2f * scale),
-            panelMaximum + new Vector2(2f * scale),
+            topLeft - new Vector2(2f * scale),
+            bottomRight + new Vector2(2f * scale),
             Pack(LimitBreakActivationColor, (0.14f + (0.22f * pulse)) * fade),
-            rounding + (2f * scale),
+            frameRounding + (2f * scale),
             ImDrawFlags.None,
             Math.Max(1f, 1.5f * scale));
 
-        var panelHeight = panelMaximum.Y - panelMinimum.Y;
-        var iconSize = Math.Min(48f * scale, panelHeight - (12f * scale));
+        var contentLeftOffset = (self ? 80f : 68f) * scale;
+        var rightBadgeWidth = (self ? 126f : 114f) * scale;
+        var bannerMinimum = new Vector2(
+            topLeft.X + contentLeftOffset,
+            topLeft.Y + (3f * scale));
+        var bannerMaximum = new Vector2(
+            bottomRight.X - rightBadgeWidth,
+            topLeft.Y + ((self ? 27f : 23f) * scale));
+        if (bannerMaximum.X <= bannerMinimum.X || bannerMaximum.Y <= bannerMinimum.Y) return;
+
+        var bannerRounding = 4f * scale;
+        draw.AddRectFilled(
+            bannerMinimum,
+            bannerMaximum,
+            Pack(new Vector4(0.025f, 0.012f, 0.002f, 1f), 0.96f * fade),
+            bannerRounding);
+        draw.AddRectFilled(
+            bannerMinimum,
+            new Vector2(bannerMinimum.X + (4f * scale), bannerMaximum.Y),
+            Pack(LimitBreakActivationColor, fade),
+            bannerRounding);
+        draw.AddRect(
+            bannerMinimum,
+            bannerMaximum,
+            Pack(LimitBreakActivationColor, (0.72f + (0.28f * pulse)) * fade),
+            bannerRounding,
+            ImDrawFlags.None,
+            Math.Max(1f, 1.35f * scale));
+
+        var bannerHeight = bannerMaximum.Y - bannerMinimum.Y;
+        var iconPadding = 2f * scale;
+        var iconSize = Math.Min(
+            (self ? 20f : 17f) * scale,
+            Math.Max(1f, bannerHeight - (iconPadding * 2f)));
         var iconMinimum = new Vector2(
-            panelMinimum.X + (8f * scale),
-            panelMinimum.Y + ((panelHeight - iconSize) * 0.5f));
+            bannerMinimum.X + (6f * scale),
+            bannerMinimum.Y + ((bannerHeight - iconSize) * 0.5f));
         var iconMaximum = iconMinimum + new Vector2(iconSize);
         draw.AddRectFilled(
-            iconMinimum - new Vector2(2f * scale),
-            iconMaximum + new Vector2(2f * scale),
+            iconMinimum - new Vector2(scale),
+            iconMaximum + new Vector2(scale),
             Pack(OpaqueBlack, 0.9f * fade),
-            5f * scale);
+            3f * scale);
         if (!TryDrawGameIcon(draw, state.IconId, iconMinimum, iconMaximum, fade))
         {
             draw.AddRectFilled(
                 iconMinimum,
                 iconMaximum,
                 Pack(LimitBreakActivationColor, 0.32f * fade),
-                4f * scale);
+                2f * scale);
         }
 
         draw.AddRect(
-            iconMinimum - new Vector2(2f * scale),
-            iconMaximum + new Vector2(2f * scale),
+            iconMinimum - new Vector2(scale),
+            iconMaximum + new Vector2(scale),
             Pack(LimitBreakActivationColor, fade),
-            5f * scale,
+            3f * scale,
             ImDrawFlags.None,
-            Math.Max(1f, 1.5f * scale));
+            Math.Max(1f, scale));
 
-        var textMinimumX = iconMaximum.X + (9f * scale);
-        var textMaximumX = panelMaximum.X - (8f * scale);
-        if (textMaximumX <= textMinimumX) return;
+        var fontScale = (self ? 0.66f : 0.58f) * configuredScale;
+        var textMinimum = new Vector2(
+            iconMaximum.X + (6f * scale),
+            bannerMinimum.Y);
+        var textMaximum = bannerMaximum - new Vector2(5f * scale, 0f);
+        if (durationConfirmed)
+        {
+            var countdown = $"{remainingMilliseconds / 1000d:0.0}s";
+            var countdownScale = Math.Max(0.35f, (self ? 0.64f : 0.56f) * configuredScale);
+            var countdownWidth = (ImGui.CalcTextSize(countdown).X * countdownScale) + (10f * scale);
+            var countdownMinimum = new Vector2(
+                Math.Max(textMinimum.X, textMaximum.X - countdownWidth),
+                bannerMinimum.Y + (2f * scale));
+            var countdownMaximum = new Vector2(textMaximum.X, bannerMaximum.Y - (2f * scale));
+            if (countdownMaximum.X > countdownMinimum.X)
+            {
+                draw.AddRectFilled(
+                    countdownMinimum,
+                    countdownMaximum,
+                    Pack(LimitBreakActivationColor, (0.2f + (0.08f * pulse)) * fade),
+                    3f * scale);
+                DrawLimitBreakBannerText(
+                    draw,
+                    countdownMinimum,
+                    countdownMaximum,
+                    countdown,
+                    countdownScale,
+                    new Vector4(1f, 0.93f, 0.58f, fade),
+                    centerHorizontally: true);
+                textMaximum.X = countdownMinimum.X - (5f * scale);
+            }
+        }
 
-        DrawCenteredLimitBreakText(
+        var activationLabel = durationConfirmed ? "LB ACTIVE" : "LB ACTIVATED";
+        var label = FitLimitBreakBannerText(
+            $"{activationLabel}  {state.LimitBreakName}",
+            Math.Max(0f, textMaximum.X - textMinimum.X),
+            fontScale);
+        DrawLimitBreakBannerText(
             draw,
-            textMinimumX,
-            textMaximumX,
-            panelMinimum.Y + (8f * scale),
-            "LB ACTIVATED!",
-            1.02f * configuredScale,
-            new Vector4(1f, 0.9f, 0.48f, fade));
-
-        var detail = durationConfirmed
-            ? $"{state.LimitBreakName}  {remainingMilliseconds / 1000d:0.0}s"
-            : state.LimitBreakName;
-        DrawCenteredLimitBreakText(
-            draw,
-            textMinimumX,
-            textMaximumX,
-            panelMinimum.Y + (36f * scale),
-            TruncateDisplayText(detail, 34),
-            0.68f * configuredScale,
-            new Vector4(1f, 1f, 1f, fade));
+            textMinimum,
+            textMaximum,
+            label,
+            fontScale,
+            new Vector4(1f, 0.93f, 0.58f, fade),
+            centerHorizontally: false);
     }
 
     private void DrawAllyLimitBreakDamageCards(
@@ -406,20 +453,26 @@ internal sealed partial class CombatFramesRenderer
             new Vector4(1f, 0.76f, 0.2f, alpha));
     }
 
-    private static void DrawCenteredLimitBreakText(
+    private static void DrawLimitBreakBannerText(
         ImDrawListPtr draw,
-        float minimumX,
-        float maximumX,
-        float y,
+        Vector2 minimum,
+        Vector2 maximum,
         string text,
         float fontScale,
-        Vector4 color)
+        Vector4 color,
+        bool centerHorizontally)
     {
+        if (maximum.X <= minimum.X || maximum.Y <= minimum.Y || string.IsNullOrEmpty(text)) return;
+
         var font = ImGui.GetFont();
         var safeScale = Math.Max(0.35f, fontScale);
         var fontSize = ImGui.GetFontSize() * safeScale;
         var textSize = ImGui.CalcTextSize(text) * safeScale;
-        var position = new Vector2(minimumX + Math.Max(0f, ((maximumX - minimumX) - textSize.X) * 0.5f), y);
+        var position = new Vector2(
+            centerHorizontally
+                ? minimum.X + Math.Max(0f, ((maximum.X - minimum.X) - textSize.X) * 0.5f)
+                : minimum.X,
+            minimum.Y + Math.Max(0f, ((maximum.Y - minimum.Y) - textSize.Y) * 0.5f));
         var shadow = Math.Max(1f, ImGui.GetIO().DisplayFramebufferScale.X);
         draw.AddText(
             font,
@@ -428,6 +481,23 @@ internal sealed partial class CombatFramesRenderer
             Pack(OpaqueBlack, 0.94f * color.W),
             text);
         draw.AddText(font, fontSize, position, Pack(color, 1f), text);
+    }
+
+    private static string FitLimitBreakBannerText(string value, float maximumWidth, float fontScale)
+    {
+        if (string.IsNullOrWhiteSpace(value) || maximumWidth <= 0f) return string.Empty;
+
+        var trimmed = value.Trim();
+        var safeScale = Math.Max(0.35f, fontScale);
+        if ((ImGui.CalcTextSize(trimmed).X * safeScale) <= maximumWidth) return trimmed;
+
+        for (var length = trimmed.Length - 1; length > 0; length--)
+        {
+            var candidate = trimmed[..length].TrimEnd() + "…";
+            if ((ImGui.CalcTextSize(candidate).X * safeScale) <= maximumWidth) return candidate;
+        }
+
+        return string.Empty;
     }
 
     private static string TruncateDisplayText(string value, int maximumCharacters)

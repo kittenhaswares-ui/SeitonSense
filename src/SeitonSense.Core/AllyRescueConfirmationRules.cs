@@ -150,8 +150,28 @@ public static class AllyRescueConfirmationRules
         previous = Normalize(previous);
         if (hardReset)
             return NoDecision(ResetMatch(previous, nowMilliseconds));
-        if (!IsMonotonic(previous, nowMilliseconds) ||
-            !attempt.IsValid ||
+        if (!IsMonotonic(previous, nowMilliseconds))
+        {
+            return NoDecision(ClearPending(previous, nowMilliseconds));
+        }
+
+        // A local false return is a rejected request, not correlation evidence.
+        // In particular it must never overwrite an earlier accepted request
+        // which may still produce the exact server ActionEffect packet.
+        if (!attempt.UseActionAccepted)
+        {
+            return NoDecision(previous with
+            {
+                Pending = PendingInsideWindow(
+                    previous.Pending,
+                    nowMilliseconds,
+                    DefaultCorrelationMilliseconds),
+                Popup = ActivePopup(previous.Popup, nowMilliseconds),
+                LastObservedAtMilliseconds = nowMilliseconds,
+            });
+        }
+
+        if (!attempt.IsValid ||
             attempt.AttemptedAtMilliseconds != nowMilliseconds)
         {
             return NoDecision(ClearPending(previous, nowMilliseconds));

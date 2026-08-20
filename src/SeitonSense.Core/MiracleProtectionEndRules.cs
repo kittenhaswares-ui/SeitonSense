@@ -19,6 +19,30 @@ public readonly record struct MiracleProtectionEndHeldConsentObservation(
     bool LatchedKeyPhysicallyDown,
     bool HardReset = false);
 
+public enum MiracleProtectionEndAttemptOutcome
+{
+    None = 0,
+    RetryScheduled = 1,
+    AcceptedTerminal = 2,
+    RejectedTerminal = 3,
+    AmbiguousTerminal = 4,
+    ExpiredTerminal = 5,
+    CancelledTerminal = 6,
+    SoftWait = 7,
+}
+
+public readonly record struct MiracleProtectionEndAttemptDecision(
+    HeldActionRetryState NextState,
+    MiracleProtectionEndAttemptOutcome Outcome)
+{
+    public bool IsTerminal => Outcome is
+        MiracleProtectionEndAttemptOutcome.AcceptedTerminal or
+        MiracleProtectionEndAttemptOutcome.RejectedTerminal or
+        MiracleProtectionEndAttemptOutcome.AmbiguousTerminal or
+        MiracleProtectionEndAttemptOutcome.ExpiredTerminal or
+        MiracleProtectionEndAttemptOutcome.CancelledTerminal;
+}
+
 /// <summary>
 /// Immutable comparison values captured from one exact, currently
 /// release-ready protection-end actor. A known team-pressure value of zero is
@@ -54,11 +78,12 @@ public readonly record struct MiracleProtectionEndRankCandidate(
 
 public static class MiracleProtectionEndRules
 {
-    public static bool DispatchConsumesHeldConsent(MiracleInterceptThreatKind threat) =>
-        threat is MiracleInterceptThreatKind.MarksmanSpite or
-            MiracleInterceptThreatKind.Zantetsuken or
-            MiracleInterceptThreatKind.FuriousBacklash or
-            MiracleInterceptThreatKind.Contradance;
+    public const long HeldLeaseMilliseconds = 1_500;
+    public const long NativeRetryThrottleMilliseconds =
+        HeldActionRetryRules.NativeRetryThrottleMilliseconds;
+    public const int MaximumNativeAttempts = HeldActionRetryRules.MaximumNativeAttempts;
+
+    public static bool DispatchConsumesHeldConsent(MiracleInterceptThreatKind threat) => false;
 
     public static MiracleProtectionEndHeldConsentState ObserveHeldConsent(
         MiracleProtectionEndHeldConsentState previous,
@@ -78,6 +103,94 @@ public static class MiracleProtectionEndRules
             ? new MiracleProtectionEndHeldConsentState(
                 observation.UnconsumedEligibleGameplayKeyToken)
             : MiracleProtectionEndHeldConsentState.Initial;
+    }
+
+    public static bool IsInsideHeldLease(
+        long observedAtMilliseconds,
+        long nowMilliseconds,
+        long leaseMilliseconds = HeldLeaseMilliseconds) =>
+        observedAtMilliseconds >= 0 &&
+        leaseMilliseconds > 0 &&
+        nowMilliseconds >= observedAtMilliseconds &&
+        nowMilliseconds - observedAtMilliseconds < leaseMilliseconds;
+
+    public static bool CanAttempt(
+        HeldActionRetryState state,
+        long observedAtMilliseconds,
+        long nowMilliseconds,
+        long leaseMilliseconds = HeldLeaseMilliseconds) =>
+        IsInsideHeldLease(observedAtMilliseconds, nowMilliseconds, leaseMilliseconds) &&
+        (state == HeldActionRetryState.Initial ||
+         HeldActionRetryRules.CanAttempt(state, nowMilliseconds));
+
+    public static MiracleProtectionEndAttemptDecision CompleteNativeAttempt(
+        HeldActionRetryState previous,
+        long observedAtMilliseconds,
+        long nowMilliseconds,
+        ClientActionAttemptOutcome outcome,
+        long leaseMilliseconds = HeldLeaseMilliseconds)
+    {
+        if (observedAtMilliseconds < 0 ||
+            nowMilliseconds < observedAtMilliseconds ||
+            previous.NativeAttemptCount is < 0 or > MaximumNativeAttempts)
+        {
+            return new MiracleProtectionEndAttemptDecision(
+                HeldActionRetryState.Initial,
+                MiracleProtectionEndAttemptOutcome.ExpiredTerminal);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.AcceptanceUnknown)
+        {
+            return new MiracleProtectionEndAttemptDecision(
+                HeldActionRetryState.Initial,
+                MiracleProtectionEndAttemptOutcome.AmbiguousTerminal);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            return new MiracleProtectionEndAttemptDecision(
+                HeldActionRetryState.Initial,
+                MiracleProtectionEndAttemptOutcome.AcceptedTerminal);
+        }
+
+        if (!IsInsideHeldLease(observedAtMilliseconds, nowMilliseconds, leaseMilliseconds))
+        {
+            return new MiracleProtectionEndAttemptDecision(
+                HeldActionRetryState.Initial,
+                MiracleProtectionEndAttemptOutcome.ExpiredTerminal);
+        }
+
+        var shared = HeldActionRetryRules.Complete(
+            previous,
+            nowMilliseconds,
+            outcome);
+        var deadline = SaturatingAdd(observedAtMilliseconds, leaseMilliseconds);
+        if (shared.RetryScheduled &&
+            shared.NextState.NextNativeAttemptAtMilliseconds >= deadline)
+        {
+            return new MiracleProtectionEndAttemptDecision(
+                HeldActionRetryState.Initial,
+                MiracleProtectionEndAttemptOutcome.RejectedTerminal);
+        }
+
+        return new MiracleProtectionEndAttemptDecision(
+            shared.NextState,
+            shared.Disposition switch
+            {
+                HeldActionRetryDisposition.RetryScheduled =>
+                    MiracleProtectionEndAttemptOutcome.RetryScheduled,
+                HeldActionRetryDisposition.AcceptedTerminal =>
+                    MiracleProtectionEndAttemptOutcome.AcceptedTerminal,
+                HeldActionRetryDisposition.RejectedTerminal =>
+                    MiracleProtectionEndAttemptOutcome.RejectedTerminal,
+                HeldActionRetryDisposition.AmbiguousTerminal =>
+                    MiracleProtectionEndAttemptOutcome.AmbiguousTerminal,
+                HeldActionRetryDisposition.CancelledTerminal =>
+                    MiracleProtectionEndAttemptOutcome.CancelledTerminal,
+                HeldActionRetryDisposition.SoftWait =>
+                    MiracleProtectionEndAttemptOutcome.SoftWait,
+                _ => MiracleProtectionEndAttemptOutcome.AmbiguousTerminal,
+            });
     }
 
     /// <summary>
@@ -152,4 +265,7 @@ public static class MiracleProtectionEndRules
         uint rightMaximum) =>
         ((UInt128)leftCurrent * rightMaximum).CompareTo(
             (UInt128)rightCurrent * leftMaximum);
+
+    private static long SaturatingAdd(long left, long right) =>
+        left > long.MaxValue - right ? long.MaxValue : left + right;
 }

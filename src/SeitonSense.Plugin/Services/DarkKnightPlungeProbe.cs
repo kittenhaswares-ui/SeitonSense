@@ -76,8 +76,6 @@ internal sealed record DarkKnightPlungeProbeSnapshot(
 /// </summary>
 internal sealed class DarkKnightPlungeProbe
 {
-    private const float AnimationLockEpsilonSeconds = 0.0005f;
-
     private readonly IClientState clientState;
     private readonly IDutyState dutyState;
     private readonly IObjectTable objectTable;
@@ -86,6 +84,8 @@ internal sealed class DarkKnightPlungeProbe
     private readonly IPluginLog log;
     private DarkKnightPlungeHoldState holdState = DarkKnightPlungeHoldState.Initial;
     private DarkKnightPlungeProbeSnapshot snapshot = DarkKnightPlungeProbeSnapshot.Initial;
+    private FrozenPlungeRetry? frozenRetry;
+    private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -120,6 +120,19 @@ internal sealed class DarkKnightPlungeProbe
         long nowMilliseconds,
         bool hardReset = false)
     {
+        if (hardReset)
+        {
+            holdState = DarkKnightPlungeHoldState.Initial;
+            frozenRetry = null;
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
+        if (terminalHeldKey != VirtualKey.NO_KEY &&
+            !inputFrame.IsGameplayKeyPhysicallyDown(terminalHeldKey))
+        {
+            terminalHeldKey = VirtualKey.NO_KEY;
+        }
+
         var localIdentityValid = TryGetExactLiveIdentity(localPlayer, out var localIdentity);
         var localAlive = localIdentityValid && !localPlayer!.IsDead && localPlayer.CurrentHp > 0;
         var localTargetable = localIdentityValid && localPlayer!.IsTargetable;
@@ -166,12 +179,17 @@ internal sealed class DarkKnightPlungeProbe
         exactOwnedKeyStillDown = holdState.OwnsHold &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(ownedKey);
 
-        var structurallyReady = featureContextValid &&
-                                HasGlobalStructuralReadiness(localPlayer!, nativeState);
+        var actionSpecificReady = featureContextValid &&
+                                  HasActionSpecificReadiness(localPlayer!, nativeState);
+        var globalNativeBoundaryReady = featureContextValid &&
+                                        IsGlobalNativeBoundaryReady(localPlayer!);
+        var structurallyReady = actionSpecificReady && globalNativeBoundaryReady;
         var hasInputOpportunity = holdState.OwnsHold
             ? holdState.HasAvailableReadyEpoch && exactOwnedKeyStillDown
             : inputFrame.HeldGameplayKeyEligible;
-        var shouldResolveCandidates = featureContextValid &&
+        var shouldResolveCandidates = frozenRetry is null &&
+                                      terminalHeldKey == VirtualKey.NO_KEY &&
+                                      featureContextValid &&
                                       !higherPriorityClaimed &&
                                       input.ProbeSucceeded &&
                                       !input.IsTextInputActive &&
@@ -214,67 +232,146 @@ internal sealed class DarkKnightPlungeProbe
                 hardReset));
 
         var inputClaimed = false;
-        var repeatEpochSpent = false;
-        if (decision.ShouldConsumeSharedInputGeneration)
-        {
-            inputFrame.Consume();
-            inputClaimed = true;
-        }
-        else if (decision.ShouldSpendReadyEpoch && decision.Intent is { } repeatIntent)
-        {
-            repeatEpochSpent = DarkKnightPlungeRules.TrySpendReadyEpoch(
-                holdState,
-                repeatIntent.ReadyEpochToken,
-                out var spentState);
-            if (repeatEpochSpent)
-            {
-                holdState = spentState;
-                inputClaimed = true;
-            }
-        }
-
         var attempted = false;
         var accepted = false;
         DarkKnightPlungeCandidate? boundaryCandidate = null;
-        if (decision.ShouldDispatch &&
-            decision.Intent is { } intent &&
-            (!intent.IsRepeat || repeatEpochSpent))
+        if (frozenRetry is { } retry)
         {
-            try
+            var exactKeyDown = inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey);
+            var exactBaseContext = featureContextValid &&
+                                   localIdentity == retry.LocalPlayer &&
+                                   input.ProbeSucceeded &&
+                                   !input.IsTextInputActive &&
+                                   exactKeyDown;
+            if (!exactBaseContext)
             {
-                accepted = TryUsePlungeOnce(
-                    localPlayer!,
-                    localIdentity,
-                    configurationEnabled,
-                    metadataVerified,
-                    higherPriorityClaimed,
-                    inputFrame,
-                    intent,
-                    out attempted,
-                    out boundaryCandidate);
-                if (attempted) Interlocked.Increment(ref attemptCount);
-                if (accepted) Interlocked.Increment(ref acceptedCount);
-
-                if (!intent.IsRepeat)
-                {
-                    holdState = accepted
-                        ? DarkKnightPlungeRules.BeginOwnedHold(intent.HeldKeyCode)
-                        : DarkKnightPlungeHoldState.Initial;
-                }
-
-                lastEvent = attempted
-                    ? $"S{intent.EnemySlot} Plunge attempted (accepted={accepted}, " +
-                      $"epoch={intent.ReadyEpochToken})"
-                    : $"S{intent.EnemySlot} terminal frozen-intent validation failed";
+                SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge retry cancelled by exact context/key drift";
             }
-            catch (Exception exception)
+            else if (!higherPriorityClaimed &&
+                     !inputFrame.IsConsumed &&
+                     nativeState.CooldownStateKnown &&
+                     nativeState.CooldownReady &&
+                     actionSpecificReady)
             {
-                if (attempted) Interlocked.Increment(ref attemptCount);
-                if (!intent.IsRepeat) holdState = DarkKnightPlungeHoldState.Initial;
-                lastEvent = $"S{intent.EnemySlot} terminal Plunge exception";
-                LogAttemptFailure(exception, nowMilliseconds);
+                var exactCandidate = ResolveFrozenIntent(
+                    localPlayer!,
+                    retry.Intent,
+                    nativeState.ResolvedActionId);
+                boundaryCandidate = exactCandidate;
+                var stableExactTarget = exactCandidate is { } stableCandidate &&
+                                        DarkKnightPlungeRules.IsEligibleCandidate(
+                                            stableCandidate with
+                                            {
+                                                HasValidActionTarget = true,
+                                            },
+                                            localIdentity);
+                if (!stableExactTarget)
+                {
+                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge retry cancelled by exact target/range drift";
+                }
+                else if (exactCandidate is { HasValidActionTarget: false })
+                {
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge retry waiting for target action status";
+                }
+                else if (exactCandidate is not { } frozenCandidate ||
+                         !DarkKnightPlungeRules.CanUseExactIntent(
+                        retry.Intent,
+                        frozenCandidate,
+                        localIdentity,
+                        configurationEnabled,
+                        isCrystallineConflict,
+                        localJobId,
+                        localAlive && localTargetable,
+                        metadataVerified,
+                        actionHelpersSuppressedByGuard,
+                        higherPriorityClaimed,
+                        input.ProbeSucceeded,
+                        input.IsTextInputActive,
+                        exactKeyDown,
+                        nativeState.ResolvedActionId,
+                        nativeState.CooldownStateKnown,
+                        nativeState.CooldownReady,
+                        actionStructurallyReady: true))
+                {
+                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge retry cancelled by exact target/range drift";
+                }
+                else
+                {
+                    var retainsSchedulerFrame =
+                        HeldActionRetryRules.RetainsSchedulerFrame(
+                            retry.Retry,
+                            nowMilliseconds,
+                            exactIntentValid: true,
+                            actionSpecificReady: true,
+                            targetSpecificReady: true);
+                    if (retainsSchedulerFrame)
+                    {
+                        inputClaimed = true;
+                        inputFrame.Consume();
+                        if (!globalNativeBoundaryReady)
+                        {
+                            lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge waiting for global native boundary";
+                        }
+                        else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                                     retry.Retry,
+                                     nowMilliseconds))
+                        {
+                            lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge retaining retry throttle priority";
+                        }
+                        else
+                        {
+                            var outcome = TryUsePlungeOnce(
+                                localPlayer!,
+                                localIdentity,
+                                configurationEnabled,
+                                metadataVerified,
+                                higherPriorityClaimed,
+                                inputFrame,
+                                retry.Intent,
+                                out attempted,
+                                out boundaryCandidate);
+                            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+                            CompleteAttempt(retry, outcome, nowMilliseconds);
+                            lastEvent = DescribeAttempt(
+                                retry.Intent,
+                                retry.Retry.NativeAttemptCount + 1,
+                                outcome);
+                        }
+                    }
+                }
             }
         }
+        else if (terminalHeldKey == VirtualKey.NO_KEY &&
+                 decision.ShouldDispatch &&
+                 decision.Intent is { } intent)
+        {
+            inputClaimed = true;
+            inputFrame.Consume();
+            var retryIntent = new FrozenPlungeRetry(
+                intent,
+                localIdentity,
+                (VirtualKey)intent.HeldKeyCode,
+                HeldActionRetryState.Initial);
+            var outcome = TryUsePlungeOnce(
+                localPlayer!,
+                localIdentity,
+                configurationEnabled,
+                metadataVerified,
+                higherPriorityClaimed,
+                inputFrame,
+                intent,
+                out attempted,
+                out boundaryCandidate);
+            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+            CompleteAttempt(retryIntent, outcome, nowMilliseconds);
+            lastEvent = DescribeAttempt(intent, 1, outcome);
+        }
+
+        if (attempted) Interlocked.Increment(ref attemptCount);
+        if (accepted) Interlocked.Increment(ref acceptedCount);
 
         var selectedCandidate = decision.SelectedCandidateIndex >= 0 &&
                                 decision.SelectedCandidateIndex < candidates.Count
@@ -319,6 +416,8 @@ internal sealed class DarkKnightPlungeProbe
     internal void Reset()
     {
         holdState = DarkKnightPlungeHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = VirtualKey.NO_KEY;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, DarkKnightPlungeProbeSnapshot.Initial with
         {
@@ -330,7 +429,13 @@ internal sealed class DarkKnightPlungeProbe
 
     internal DarkKnightPlungeProbeSnapshot FailClosed()
     {
+        var failedKey = frozenRetry?.HeldKey ??
+                        (holdState.OwnsHold
+                            ? (VirtualKey)holdState.HeldKeyCode
+                            : terminalHeldKey);
         holdState = DarkKnightPlungeHoldState.Initial;
+        frozenRetry = null;
+        terminalHeldKey = failedKey;
         lastEvent = "Failed closed";
         var result = DarkKnightPlungeProbeSnapshot.Initial with
         {
@@ -556,7 +661,7 @@ internal sealed class DarkKnightPlungeProbe
             nativeRangeAndLineOfSight);
     }
 
-    private unsafe bool TryUsePlungeOnce(
+    private unsafe ClientActionAttemptOutcome TryUsePlungeOnce(
         IPlayerCharacter expectedLocalPlayer,
         TargetPressureActorIdentity expectedLocalIdentity,
         bool configurationEnabled,
@@ -569,13 +674,17 @@ internal sealed class DarkKnightPlungeProbe
     {
         attempted = false;
         boundaryCandidate = null;
-        if (!intent.IsValid || !expectedLocalIdentity.IsValid) return false;
+        if (!intent.IsValid || !expectedLocalIdentity.IsValid)
+            return ClientActionAttemptOutcome.NotInvoked;
 
         var attemptedAtBoundary = false;
+        var softUnavailableAtBoundary = false;
         DarkKnightPlungeCandidate? observedAtBoundary = null;
+        var boundaryBefore = default(ClientActionAttemptFingerprint);
+        var boundaryAfter = default(ClientActionAttemptFingerprint);
         try
         {
-            return nearAssist.RunWithoutRedirect(() =>
+            var accepted = nearAssist.RunWithoutRedirect(() =>
             {
                 var currentLocal = objectTable.LocalPlayer;
                 if (!TryGetExactLiveIdentity(currentLocal, out var currentLocalIdentity) ||
@@ -595,6 +704,16 @@ internal sealed class DarkKnightPlungeProbe
                     ? currentNativeState
                     : PlungeNativeState.Unknown;
                 var structurallyReady = HasGlobalStructuralReadiness(currentLocal, nativeState);
+                if (nativeState.CooldownStateKnown &&
+                    nativeState.ResolvedActionId == intent.ActionId &&
+                    (!nativeState.CooldownReady ||
+                     (!HasActiveStatus(currentLocal, EnemyCombatConstants.PvPBindStatusId) &&
+                      !structurallyReady)))
+                {
+                    softUnavailableAtBoundary = true;
+                    return false;
+                }
+
                 var exactHeldKeyStillDown = inputFrame.IsGameplayKeyPhysicallyDown(
                     (VirtualKey)intent.HeldKeyCode);
                 var exactCandidate = ResolveFrozenIntent(
@@ -603,6 +722,15 @@ internal sealed class DarkKnightPlungeProbe
                     nativeState.ResolvedActionId);
                 if (exactCandidate is not { } frozenCandidate) return false;
                 observedAtBoundary = frozenCandidate;
+
+                if (!frozenCandidate.HasValidActionTarget &&
+                    DarkKnightPlungeRules.IsEligibleCandidate(
+                        frozenCandidate with { HasValidActionTarget = true },
+                        currentLocalIdentity))
+                {
+                    softUnavailableAtBoundary = true;
+                    return false;
+                }
 
                 if (!DarkKnightPlungeRules.CanUseExactIntent(
                         intent,
@@ -631,15 +759,40 @@ internal sealed class DarkKnightPlungeProbe
                 // immediately before this sole direct GOID request.
                 var actionManager = ActionManager.Instance();
                 if (actionManager == null) return false;
+                boundaryBefore = ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    intent.ActionId);
                 attemptedAtBoundary = true;
-                return actionManager->UseAction(
+                var clientAccepted = actionManager->UseAction(
                     ActionType.Action,
                     intent.ActionId,
                     intent.Target.GameObjectId,
                     0,
                     ActionManager.UseActionMode.None,
                     0);
+                boundaryAfter = ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    intent.ActionId);
+                return clientAccepted;
             });
+            return attemptedAtBoundary
+                ? ClientActionAttemptBoundaryRules.Classify(
+                    accepted,
+                    intent.ActionId,
+                    boundaryBefore,
+                    boundaryAfter)
+                : softUnavailableAtBoundary
+                    ? ClientActionAttemptOutcome.SoftUnavailable
+                    : ClientActionAttemptOutcome.NotInvoked;
+        }
+        catch (Exception exception)
+        {
+            LogAttemptFailure(exception, Environment.TickCount64);
+            return attemptedAtBoundary
+                ? ClientActionAttemptOutcome.AcceptanceUnknown
+                : softUnavailableAtBoundary
+                    ? ClientActionAttemptOutcome.SoftUnavailable
+                    : ClientActionAttemptOutcome.NotInvoked;
         }
         finally
         {
@@ -688,6 +841,12 @@ internal sealed class DarkKnightPlungeProbe
 
     private static unsafe bool HasGlobalStructuralReadiness(
         IPlayerCharacter localPlayer,
+        PlungeNativeState nativeState) =>
+        HasActionSpecificReadiness(localPlayer, nativeState) &&
+        IsGlobalNativeBoundaryReady(localPlayer);
+
+    private static unsafe bool HasActionSpecificReadiness(
+        IPlayerCharacter localPlayer,
         PlungeNativeState nativeState)
     {
         if (!nativeState.CooldownStateKnown ||
@@ -712,10 +871,19 @@ internal sealed class DarkKnightPlungeProbe
             return false;
         }
 
-        var animationLock = actionManager->AnimationLock;
-        return float.IsFinite(animationLock) &&
-               animationLock >= 0f &&
-               animationLock <= AnimationLockEpsilonSeconds;
+        return true;
+    }
+
+    private static unsafe bool IsGlobalNativeBoundaryReady(
+        IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued);
     }
 
     private bool IsCurrentlySuppressedByGuard(
@@ -817,14 +985,94 @@ internal sealed class DarkKnightPlungeProbe
         return false;
     }
 
+    private void CompleteAttempt(
+        FrozenPlungeRetry frozen,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        var completion = HeldActionRetryRules.Complete(
+            frozen.Retry,
+            Math.Max(0, nowMilliseconds),
+            outcome);
+        if (completion.RetryScheduled ||
+            completion.Disposition == HeldActionRetryDisposition.SoftWait)
+        {
+            frozenRetry = frozen with { Retry = completion.NextState };
+            return;
+        }
+
+        frozenRetry = null;
+        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            if (frozen.Intent.IsRepeat)
+            {
+                if (!DarkKnightPlungeRules.TrySpendReadyEpoch(
+                        holdState,
+                        frozen.Intent.ReadyEpochToken,
+                        out holdState))
+                {
+                    holdState = DarkKnightPlungeHoldState.Initial;
+                }
+            }
+            else
+            {
+                holdState = DarkKnightPlungeRules.BeginOwnedHold(
+                    frozen.Intent.HeldKeyCode);
+            }
+
+            return;
+        }
+
+        SpendFrozenEpisode(
+            frozen,
+            HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(
+                completion.Disposition));
+    }
+
+    private void SpendFrozenEpisode(
+        FrozenPlungeRetry frozen,
+        bool latchCircuitBreaker)
+    {
+        frozenRetry = null;
+        if (latchCircuitBreaker)
+            terminalHeldKey = frozen.HeldKey;
+        if (!frozen.Intent.IsRepeat)
+        {
+            holdState = DarkKnightPlungeHoldState.Initial;
+            return;
+        }
+
+        if (DarkKnightPlungeRules.TrySpendReadyEpoch(
+                holdState,
+                frozen.Intent.ReadyEpochToken,
+                out var spent))
+        {
+            holdState = spent;
+        }
+    }
+
+    private static string DescribeAttempt(
+        DarkKnightPlungeIntent intent,
+        int attempt,
+        ClientActionAttemptOutcome outcome) =>
+        $"S{intent.EnemySlot} Plunge attempt " +
+        $"{attempt}/{HeldActionRetryRules.MaximumNativeAttempts} " +
+        $"(epoch={intent.ReadyEpochToken}): {outcome}";
+
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {
         if (nowMilliseconds < nextErrorLogAt) return;
         nextErrorLogAt = nowMilliseconds + 10_000;
         log.Error(
             exception,
-            "Seiton Sense DRK Plunge attempt failed; the held readiness epoch will not be retried.");
+            "Seiton Sense DRK Plunge attempt ended with ambiguous acceptance.");
     }
+
+    private readonly record struct FrozenPlungeRetry(
+        DarkKnightPlungeIntent Intent,
+        TargetPressureActorIdentity LocalPlayer,
+        VirtualKey HeldKey,
+        HeldActionRetryState Retry);
 
     private readonly record struct PlungeNativeState(
         uint ResolvedActionId,

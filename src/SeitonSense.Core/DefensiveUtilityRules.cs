@@ -132,6 +132,19 @@ public static class DefensiveUtilityRules
     public static bool IsHighPressure(bool pressureKnown, int incomingEnemyCount) =>
         pressureKnown && incomingEnemyCount >= RequiredIncomingEnemyCount;
 
+    public static bool CanRetractRejectedGuardAttempt(
+        long latestGeneration,
+        long generationBeforeCall,
+        bool clientExplicitlyRejected,
+        bool acceptanceAmbiguous,
+        bool identityMatches) =>
+        clientExplicitlyRejected &&
+        !acceptanceAmbiguous &&
+        identityMatches &&
+        generationBeforeCall >= 0 &&
+        generationBeforeCall < long.MaxValue &&
+        latestGeneration == generationBeforeCall + 1;
+
     public static bool IsAtOrBelowHpPercent(
         uint currentHp,
         uint maximumHp,

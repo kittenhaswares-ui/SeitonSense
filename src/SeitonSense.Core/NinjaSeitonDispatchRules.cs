@@ -22,6 +22,14 @@ public readonly record struct NinjaSeitonDispatchIntent(
         Target.IsValid;
 }
 
+public readonly record struct NinjaSeitonAcceptedHoldState(
+    bool OwnsHold,
+    int HeldKeyCode,
+    uint LastAcceptedActionId)
+{
+    public static NinjaSeitonAcceptedHoldState Initial => default;
+}
+
 public readonly record struct NinjaSeitonDispatchObservation(
     bool ConfigurationEnabled,
     bool IsCrystallineConflict,
@@ -33,7 +41,7 @@ public readonly record struct NinjaSeitonDispatchObservation(
     bool HigherPriorityClaimed,
     bool InputProbeSucceeded,
     bool IsTextInputActive,
-    bool FreshGameplayKeyPressed,
+    bool HeldGameplayKeyEligible,
     uint ResolvedActionId,
     bool ActionLocallyReady,
     IReadOnlyList<NinjaSeitonDispatchCandidate>? Candidates,
@@ -60,7 +68,7 @@ public enum NinjaSeitonDispatchDecisionReason
     HigherPriorityClaimed = 9,
     InputProbeUnavailable = 10,
     TextInputActive = 11,
-    NoFreshGameplayKey = 12,
+    NoHeldGameplayKey = 12,
     ResolvedActionInvalid = 13,
     ActionNotReady = 14,
     NoExactEligibleTarget = 15,
@@ -77,24 +85,46 @@ public readonly record struct NinjaSeitonDispatchDecision(
         Intent is { IsValid: true };
 
     /// <summary>
-    /// The caller must consume the shared physical input generation before any
-    /// final revalidation or native action call. A failed revalidation, false
-    /// return, exception, or server rejection is terminal for that generation.
+    /// The caller claims only the current scheduler frame before final
+    /// revalidation or the native action boundary. Exact held-key episode
+    /// ownership remains a caller-side state machine.
     /// </summary>
     public bool ShouldConsumeInputGeneration => ShouldDispatch;
 }
 
 /// <summary>
-/// Pure, immediate policy for the default-off Ninja PvP Seiton helper. Only a
-/// real fresh gameplay-key down-edge can dispatch. There is deliberately no
-/// held-level trigger, buffering, alternate target, action substitution, or
-/// retry. It selects the lowest exact HP ratio among currently eligible,
-/// canonical CC enemy slots, then freezes that one target and action.
+/// Pure selection policy for the default-off Ninja PvP Seiton helper. A held
+/// gameplay-key episode selects the lowest exact HP ratio among currently
+/// eligible canonical CC enemy slots, then freezes that one target and action.
 /// </summary>
 public static class NinjaSeitonDispatchRules
 {
     public const uint BaseActionId = 29_515;
     public const uint FollowUpActionId = 29_516;
+
+    public static NinjaSeitonAcceptedHoldState BeginAcceptedHold(
+        int heldKeyCode,
+        uint acceptedActionId) =>
+        heldKeyCode > 0 && IsExactSeitonAction(acceptedActionId)
+            ? new NinjaSeitonAcceptedHoldState(true, heldKeyCode, acceptedActionId)
+            : NinjaSeitonAcceptedHoldState.Initial;
+
+    public static NinjaSeitonAcceptedHoldState ObserveAcceptedHold(
+        NinjaSeitonAcceptedHoldState state,
+        bool hardReset,
+        bool ownershipContextValid,
+        bool exactHeldKeyStillDown) =>
+        state.OwnsHold &&
+        (hardReset || !ownershipContextValid || !exactHeldKeyStillDown)
+            ? NinjaSeitonAcceptedHoldState.Initial
+            : state;
+
+    public static bool CanOpenAdjustedActionEpoch(
+        NinjaSeitonAcceptedHoldState state,
+        uint resolvedActionId) =>
+        state.OwnsHold &&
+        state.LastAcceptedActionId == BaseActionId &&
+        resolvedActionId == FollowUpActionId;
 
     public static NinjaSeitonDispatchDecision Observe(
         NinjaSeitonDispatchObservation observation)
@@ -219,8 +249,8 @@ public static class NinjaSeitonDispatchRules
             return NinjaSeitonDispatchDecisionReason.InputProbeUnavailable;
         if (observation.IsTextInputActive)
             return NinjaSeitonDispatchDecisionReason.TextInputActive;
-        if (!observation.FreshGameplayKeyPressed)
-            return NinjaSeitonDispatchDecisionReason.NoFreshGameplayKey;
+        if (!observation.HeldGameplayKeyEligible)
+            return NinjaSeitonDispatchDecisionReason.NoHeldGameplayKey;
         if (!IsExactSeitonAction(observation.ResolvedActionId))
             return NinjaSeitonDispatchDecisionReason.ResolvedActionInvalid;
         if (!observation.ActionLocallyReady)

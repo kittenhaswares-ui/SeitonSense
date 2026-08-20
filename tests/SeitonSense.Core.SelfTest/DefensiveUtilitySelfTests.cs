@@ -105,6 +105,30 @@ internal static class DefensiveUtilitySelfTests
         False(future.SuppressDirectActionHelpers, "a future timestamp fails closed without inventing a latch");
     }
 
+    public static void GuardRejectionRollbackIsExactAndSynchronous()
+    {
+        True(
+            DefensiveUtilityRules.CanRetractRejectedGuardAttempt(
+                latestGeneration: 42,
+                generationBeforeCall: 41,
+                clientExplicitlyRejected: true,
+                acceptanceAmbiguous: false,
+                identityMatches: true),
+            "the exact immediately rejected generation may retract");
+        False(
+            DefensiveUtilityRules.CanRetractRejectedGuardAttempt(42, 41, false, false, true),
+            "client true preserves propagation");
+        False(
+            DefensiveUtilityRules.CanRetractRejectedGuardAttempt(42, 41, true, true, true),
+            "exception ambiguity preserves propagation");
+        False(
+            DefensiveUtilityRules.CanRetractRejectedGuardAttempt(43, 41, true, false, true),
+            "an intervening generation cannot retract");
+        False(
+            DefensiveUtilityRules.CanRetractRejectedGuardAttempt(42, 41, true, false, false),
+            "wrong local identity cannot retract");
+    }
+
     public static void GuardianEligibilityUsesNativeReachability()
     {
         var valid = Candidate(10, hp: 20, maxHp: 100, distance: 15f);

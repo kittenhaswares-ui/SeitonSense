@@ -67,7 +67,7 @@ internal static class PhysicalGameplayKeySelfTests
         False(rePrimeDown.IsHeldEligible, "still-held key after reset is ineligible");
     }
 
-    public static void OneHoldCannotCrossStatusGenerations()
+    public static void OneHoldCanCrossDistinctPurifyStatusGenerations()
     {
         var keyState = Observe(PhysicalGameplayKeyState.Initial, isDown: false).NextState;
         var physicalPress = Observe(keyState, isDown: true);
@@ -76,15 +76,20 @@ internal static class PhysicalGameplayKeySelfTests
             EmergencyPurifyBufferState.Initial,
             PurifyObservation(statusA, physicalPress.IsHeldEligible, now: 1_000));
         True(first.ShouldDispatch, "eligible held generation owns the first status");
-        True(first.ShouldConsumeInputGeneration, "first status consumes the physical generation");
-        keyState = PhysicalGameplayKeyRules.Consume(physicalPress.NextState);
+        True(first.ShouldConsumeInputGeneration, "first status claims only the current framework frame");
+        var accepted = EmergencyPurifyBufferRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+        keyState = physicalPress.NextState;
 
         var stillHeld = Observe(keyState, isDown: true);
+        True(stillHeld.IsHeldEligible, "frame claim leaves held consent eligible");
         var statusB = new PurifyCcStatusInstance(1345, 2);
         var replacement = EmergencyPurifyBufferRules.Observe(
-            first.NextState,
+            accepted.NextState,
             PurifyObservation(statusB, stillHeld.IsHeldEligible, now: 1_001));
-        False(replacement.ShouldDispatch, "same hold cannot trigger a replacement status");
+        True(replacement.ShouldDispatch, "same hold can trigger a distinct exact CC status");
 
         keyState = Observe(stillHeld.NextState, isDown: false).NextState;
         var newPress = Observe(keyState, isDown: true);
@@ -93,6 +98,22 @@ internal static class PhysicalGameplayKeySelfTests
             replacement.NextState,
             PurifyObservation(statusC, newPress.IsHeldEligible, now: 1_002));
         True(nextGeneration.ShouldDispatch, "release and repress may own a later status");
+    }
+
+    public static void GuardSuppressionPreservesObservedHold()
+    {
+        var state = Observe(PhysicalGameplayKeyState.Initial, isDown: false).NextState;
+        var pressed = Observe(state, isDown: true);
+        True(pressed.IsHeldEligible, "pre-Guard physical hold is eligible");
+
+        // Guard is an action-eligibility gate, not an input-observer reset. The
+        // coordinator must continue sampling the same down generation here.
+        var whileGuarded = Observe(pressed.NextState, isDown: true);
+        True(whileGuarded.IsHeldEligible, "same hold remains observed during Guard");
+
+        var afterGuard = Observe(whileGuarded.NextState, isDown: true);
+        False(afterGuard.IsFreshPress, "Guard ending does not synthesize a new edge");
+        True(afterGuard.IsHeldEligible, "same physical hold remains consent after Guard");
     }
 
     private static EmergencyPurifyBufferObservation PurifyObservation(
@@ -111,7 +132,8 @@ internal static class PhysicalGameplayKeySelfTests
             HeldKeyEligible: heldEligible,
             AllowHeldKeyAtStatusEntry: true,
             PurifyLocallyReady: true,
-            NowMilliseconds: now);
+            NowMilliseconds: now,
+            HeldKeyCode: heldEligible ? 65 : 0);
 
     private static PhysicalGameplayKeyDecision Observe(
         PhysicalGameplayKeyState state,

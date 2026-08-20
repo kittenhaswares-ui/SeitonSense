@@ -1,3 +1,4 @@
+using System.Numerics;
 using Dalamud.Bindings.ImGui;
 
 namespace SeitonSense.Plugin.UI;
@@ -21,6 +22,19 @@ internal sealed partial class SettingsWindow
             configuration.CombatFramesEnableInteraction,
             value => configuration.CombatFramesEnableInteraction = value);
 
+        if (configuration.ShowCombatFrames && !configuration.CombatFramesEnableInteraction)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1f, 0.67f, 0.2f, 1f));
+            ImGui.TextWrapped(
+                "INTERACTION OFF — enemy rows are display-only; clicking and native <mo> mouseover are disabled.");
+            ImGui.PopStyleColor();
+            if (ImGui.Button("Enable enemy-row clicks + mouseover now"))
+            {
+                configuration.CombatFramesEnableInteraction = true;
+                changed = true;
+            }
+        }
+
         if (ImGui.Button(combatFrames.PreviewEnabled ? "Stop Combat Frames preview" : "Preview Combat Frames"))
             combatFrames.PreviewEnabled = !combatFrames.PreviewEnabled;
         ImGui.SameLine();
@@ -32,7 +46,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Fresh living enemy rows are interactive: left-clicking one row makes exactly that canonical S-slot " +
+            "When enemy-row interaction is enabled, fresh living enemy rows are interactive: left-clicking one row makes exactly that canonical S-slot " +
             "your hard target, and hovering publishes that exact actor to FFXIV's native <mo> target slots. The " +
             "self frame, preview, dead or unknown rows, stale snapshots, and gaps remain click-through. A click is " +
             "revalidated and written once with no retry; external mouseover replacement always wins. No soft or " +
