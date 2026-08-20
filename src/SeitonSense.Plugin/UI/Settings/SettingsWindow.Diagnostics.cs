@@ -20,6 +20,7 @@ internal sealed partial class SettingsWindow
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var pressureEscape = personalStatus.PressureEscapeDiagnostics;
         var defense = personalStatus.DefensiveUtilityDiagnostics;
+        var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
         var monk = personalStatus.MonkEarthReplyDiagnostics;
@@ -57,6 +58,14 @@ internal sealed partial class SettingsWindow
             $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
+        ImGui.TextWrapped(
+            $"Smart Recuperate: {recuperate.Decision}/{recuperate.Reason}, action={recuperate.ResolvedActionId}, " +
+            $"HP={recuperate.CurrentHp}/{recuperate.MaximumHp}, missing={recuperate.MissingHp}, " +
+            $"MP={recuperate.CurrentMp}/{recuperate.MaximumMp}, ready/guard=" +
+            $"{recuperate.LocallyReady}/{recuperate.GuardSuppressed}, key={recuperate.HeldGameplayKey}, " +
+            $"claim={recuperate.InputClaimed}, attempt={recuperate.UseActionAttempted}/" +
+            $"{recuperate.UseActionAccepted}, count={recuperate.AttemptCount}/{recuperate.AcceptedCount}, " +
+            $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
             $"Ally Rescue: {rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
@@ -104,8 +113,9 @@ internal sealed partial class SettingsWindow
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "Purify, defensive utilities, pressure Sprint, Ally Rescue, reactive counter-CC, Kardia, Ninja, and Scholar share " +
-            "one physical input generation and can initiate at most one exact action attempt, in that priority order. " +
+            "Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, Ally Rescue, reactive counter-CC, " +
+            "Ninja, and Scholar share one physical input generation and can initiate at most one exact action attempt, " +
+            "in that priority order. Eukrasia-triggered Kardia is a separate bounded follow-up. " +
             "Guard after Purify requires a later " +
             "physical generation, and every action-request helper is blocked while your own Guard is active. Monk Earth's " +
             "Reply is a separate automatic follow-up that yields whenever an earlier helper already attempted an action " +

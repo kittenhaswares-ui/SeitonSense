@@ -101,7 +101,6 @@ internal sealed class DefensiveUtilityProbe
     private readonly bool guardianMetadataVerified;
     private readonly HashSet<TargetPressureActorIdentity> guardianSpentActors = [];
     private DefensiveUtilityProbeSnapshot snapshot = DefensiveUtilityProbeSnapshot.Initial;
-    private bool preGuardEpisodeSpent;
     private bool awaitingPostPurifyConfirmation;
     private long postPurifyGuardExpiresAt = -1;
     private GuardPropagationState guardPropagationState = GuardPropagationState.Initial;
@@ -147,14 +146,17 @@ internal sealed class DefensiveUtilityProbe
         return decision;
     }
 
-    internal unsafe DefensiveUtilityProbeSnapshot Observe(
+    /// <summary>
+    /// First defensive pass. This owns only the verified post-Purify Guard
+    /// follow-up and is intentionally independent from Paladin Guardian so a
+    /// self-survival helper can be scheduled between the two passes.
+    /// </summary>
+    internal unsafe DefensiveUtilityProbeSnapshot ObserveGuard(
         IPlayerCharacter? localPlayer,
         bool isCrystallineConflict,
-        bool configurationEnabled,
+        bool guardConfigurationEnabled,
         bool allowHeldGameplayKey,
         bool enableGuardOnStunPressure,
-        bool enablePreGuardOnLowHpPressure,
-        bool enablePaladinGuardianLowAlly,
         bool pressureKnown,
         int incomingEnemyCount,
         bool highPressureStunObserved,
@@ -169,8 +171,8 @@ internal sealed class DefensiveUtilityProbe
     {
         if (hardReset)
             ResetRuntime();
-        else if (!configurationEnabled || !isCrystallineConflict)
-            ResetOpportunityRuntime();
+        else if (!guardConfigurationEnabled || !isCrystallineConflict)
+            ResetGuardOpportunityRuntime();
 
         var localIdentityValid = HasValidLocalPlayer(localPlayer);
         var highPressure = DefensiveUtilityRules.IsHighPressure(
@@ -178,6 +180,8 @@ internal sealed class DefensiveUtilityProbe
             incomingEnemyCount);
 
         UpdatePostPurifyGuard(
+            guardConfigurationEnabled &&
+            isCrystallineConflict &&
             enableGuardOnStunPressure,
             highPressureStunObserved,
             purifyUseActionAttempted,
@@ -186,36 +190,6 @@ internal sealed class DefensiveUtilityProbe
             highPressure,
             guardActive,
             nowMilliseconds);
-
-        var preGuardRisk = configurationEnabled &&
-                           isCrystallineConflict &&
-                           enablePreGuardOnLowHpPressure &&
-                           localIdentityValid &&
-                           DefensiveUtilityRules.IsPreGuardRisk(
-                               pressureKnown,
-                               incomingEnemyCount,
-                               localPlayer!.CurrentHp,
-                               localPlayer.MaxHp,
-                               hasPurifyRemovableCrowdControl,
-                               guardActive);
-        if (!preGuardRisk) preGuardEpisodeSpent = false;
-
-        HashSet<TargetPressureActorIdentity> criticalGuardianActors = [];
-        var guardianCandidates = configurationEnabled &&
-                                 isCrystallineConflict &&
-                                 enablePaladinGuardianLowAlly &&
-                                 localIdentityValid &&
-                                 IsPaladin(localPlayer!)
-            ? BuildGuardianCandidates(localPlayer!, out criticalGuardianActors)
-            : [];
-        if (!configurationEnabled || !isCrystallineConflict || !enablePaladinGuardianLowAlly)
-        {
-            guardianSpentActors.Clear();
-        }
-        else
-        {
-            guardianSpentActors.RemoveWhere(actor => !criticalGuardianActors.Contains(actor));
-        }
 
         var input = inputFrame.Snapshot;
         var freshKey = inputFrame.FreshGameplayKeyPressed
@@ -232,9 +206,8 @@ internal sealed class DefensiveUtilityProbe
         var accepted = false;
         var targetGameObjectId = 0UL;
         var targetEntityId = 0U;
-        var selectedGuardianPartySlot = 0;
         var lastEvent = DescribeWaitingState(
-            configurationEnabled,
+            guardConfigurationEnabled,
             isCrystallineConflict,
             localIdentityValid,
             guardActive,
@@ -242,7 +215,7 @@ internal sealed class DefensiveUtilityProbe
             pressureKnown,
             incomingEnemyCount);
 
-        var canDispatch = configurationEnabled &&
+        var canDispatch = guardConfigurationEnabled &&
                           isCrystallineConflict &&
                           localIdentityValid &&
                           input.ProbeSucceeded &&
@@ -271,29 +244,120 @@ internal sealed class DefensiveUtilityProbe
                 ? "Guard request accepted after verified Purify/Resilience"
                 : "Post-Purify Guard intent consumed; request rejected or revalidation failed";
         }
-        else if (canDispatch &&
-                 preGuardRisk &&
-                 !preGuardEpisodeSpent &&
-                 guardMetadataVerified &&
-                 IsActionOffCooldown(EnemyCombatConstants.GuardActionId))
-        {
-            action = DefensiveUtilityActionKind.Guard;
-            trigger = DefensiveUtilityTrigger.PreGuardLowHpPressure;
-            preGuardEpisodeSpent = true;
-            inputClaimed = true;
-            inputFrame.Consume();
-            accepted = TryUseGuardOnce(localPlayer!, out attempted);
-            lastEvent = accepted
-                ? "Pre-Guard request accepted at low HP and high pressure"
-                : "Pre-Guard intent consumed; request rejected or revalidation failed";
-        }
-        else if (canDispatch &&
-                 enablePaladinGuardianLowAlly &&
-                 guardMetadataVerified &&
-                 guardianMetadataVerified &&
-                 IsPaladin(localPlayer!) &&
-                 IsActionOffCooldown(EnemyCombatConstants.GuardActionId) &&
-                 IsActionOffCooldown(EnemyCombatConstants.GuardianActionId))
+
+        if (attempted) Interlocked.Increment(ref attemptCount);
+        if (accepted) Interlocked.Increment(ref acceptedCount);
+
+        var guardSuppressionNow = Math.Max(nowMilliseconds, Environment.TickCount64);
+        var guardSuppression = ObserveGuardSuppression(
+            HasActiveGuard(localPlayer),
+            observedGuardAttemptAtMilliseconds: -1,
+            guardSuppressionNow);
+
+        var result = new DefensiveUtilityProbeSnapshot(
+            guardConfigurationEnabled && isCrystallineConflict && localIdentityValid,
+            action,
+            trigger,
+            pressureKnown,
+            incomingEnemyCount,
+            guardActive,
+            guardSuppression.PropagationLatchActive,
+            guardSuppression.RemainingMilliseconds,
+            highPressureStunObserved,
+            awaitingPostPurifyConfirmation || postPurifyGuardExpiresAt > nowMilliseconds,
+            postPurifyGuardExpiresAt > nowMilliseconds
+                ? postPurifyGuardExpiresAt - nowMilliseconds
+                : 0,
+            0,
+            targetGameObjectId,
+            targetEntityId,
+            freshKey,
+            heldKey,
+            inputClaimed,
+            attempted,
+            accepted,
+            Interlocked.Read(ref attemptCount),
+            Interlocked.Read(ref acceptedCount),
+            guardMetadataVerified,
+            guardianMetadataVerified,
+            lastAcceptedGuardianEpisode,
+            guardianPopup,
+            lastEvent);
+        Volatile.Write(ref snapshot, result);
+        return result;
+    }
+
+    /// <summary>
+    /// Second defensive pass. Paladin Guardian has its own feature and held-key
+    /// gates and can therefore be scheduled after higher-priority self healing.
+    /// </summary>
+    internal unsafe DefensiveUtilityProbeSnapshot ObserveGuardian(
+        IPlayerCharacter? localPlayer,
+        bool isCrystallineConflict,
+        bool guardianConfigurationEnabled,
+        bool allowHeldGameplayKey,
+        bool guardActive,
+        bool higherPriorityClaimed,
+        EmergencyActionInputFrame inputFrame,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        if (hardReset)
+            ResetRuntime();
+        else if (!guardianConfigurationEnabled || !isCrystallineConflict)
+            ResetGuardianOpportunityRuntime();
+
+        var prior = Snapshot;
+        var localIdentityValid = HasValidLocalPlayer(localPlayer);
+        HashSet<TargetPressureActorIdentity> criticalGuardianActors = [];
+        var guardianCandidates = guardianConfigurationEnabled &&
+                                 isCrystallineConflict &&
+                                 localIdentityValid &&
+                                 IsPaladin(localPlayer!)
+            ? BuildGuardianCandidates(localPlayer!, out criticalGuardianActors)
+            : [];
+        if (!guardianConfigurationEnabled || !isCrystallineConflict)
+            guardianSpentActors.Clear();
+        else
+            guardianSpentActors.RemoveWhere(actor => !criticalGuardianActors.Contains(actor));
+
+        var input = inputFrame.Snapshot;
+        var freshKey = inputFrame.FreshGameplayKeyPressed
+            ? input.FreshGameplayKey
+            : VirtualKey.NO_KEY;
+        var heldKey = allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible
+            ? input.HeldGameplayKey
+            : VirtualKey.NO_KEY;
+        var inputEligible = freshKey != VirtualKey.NO_KEY || heldKey != VirtualKey.NO_KEY;
+        var action = DefensiveUtilityActionKind.None;
+        var trigger = DefensiveUtilityTrigger.None;
+        var inputClaimed = false;
+        var attempted = false;
+        var accepted = false;
+        var targetGameObjectId = 0UL;
+        var targetEntityId = 0U;
+        var selectedGuardianPartySlot = 0;
+        var lastEvent = DescribeGuardianWaitingState(
+            guardianConfigurationEnabled,
+            isCrystallineConflict,
+            localIdentityValid,
+            guardActive,
+            higherPriorityClaimed);
+
+        var canDispatch = guardianConfigurationEnabled &&
+                          isCrystallineConflict &&
+                          localIdentityValid &&
+                          input.ProbeSucceeded &&
+                          !input.IsTextInputActive &&
+                          inputEligible &&
+                          !guardActive &&
+                          !higherPriorityClaimed;
+        if (canDispatch &&
+            guardMetadataVerified &&
+            guardianMetadataVerified &&
+            IsPaladin(localPlayer!) &&
+            IsActionOffCooldown(EnemyCombatConstants.GuardActionId) &&
+            IsActionOffCooldown(EnemyCombatConstants.GuardianActionId))
         {
             var selectedIndex = DefensiveUtilityRules.SelectGuardianCandidateIndex(
                 guardianCandidates,
@@ -321,6 +385,7 @@ internal sealed class DefensiveUtilityProbe
                         selected.Actor,
                         selected.PartySlot);
                 }
+
                 lastEvent = accepted
                     ? $"Guardian request accepted for P{selected.PartySlot} {selected.CurrentHp}/{selected.MaximumHp}"
                     : $"Guardian intent for P{selected.PartySlot} consumed; request rejected or target changed";
@@ -332,9 +397,8 @@ internal sealed class DefensiveUtilityProbe
 
         guardianPopup = DefensiveUtilityRules.ObserveGuardianTriggerPopup(
             guardianPopup,
-            configurationEnabled &&
+            guardianConfigurationEnabled &&
             isCrystallineConflict &&
-            enablePaladinGuardianLowAlly &&
             localIdentityValid &&
             IsPaladin(localPlayer!),
             action,
@@ -345,41 +409,36 @@ internal sealed class DefensiveUtilityProbe
             nowMilliseconds,
             hardReset);
 
-        var guardSuppressionNow = Math.Max(nowMilliseconds, Environment.TickCount64);
-        var guardSuppression = ObserveGuardSuppression(
-            HasActiveGuard(localPlayer),
-            observedGuardAttemptAtMilliseconds: -1,
-            guardSuppressionNow);
-
-        var result = new DefensiveUtilityProbeSnapshot(
-            configurationEnabled && isCrystallineConflict && localIdentityValid,
-            action,
-            trigger,
-            pressureKnown,
-            incomingEnemyCount,
-            guardActive,
-            guardSuppression.PropagationLatchActive,
-            guardSuppression.RemainingMilliseconds,
-            highPressureStunObserved,
-            awaitingPostPurifyConfirmation || postPurifyGuardExpiresAt > nowMilliseconds,
-            postPurifyGuardExpiresAt > nowMilliseconds
-                ? postPurifyGuardExpiresAt - nowMilliseconds
-                : 0,
-            guardianCandidates.Count,
-            targetGameObjectId,
-            targetEntityId,
-            freshKey,
-            heldKey,
-            inputClaimed,
-            attempted,
-            accepted,
-            Interlocked.Read(ref attemptCount),
-            Interlocked.Read(ref acceptedCount),
-            guardMetadataVerified,
-            guardianMetadataVerified,
-            lastAcceptedGuardianEpisode,
-            guardianPopup,
-            lastEvent);
+        var guardianActed = action == DefensiveUtilityActionKind.Guardian;
+        var result = prior with
+        {
+            Active = prior.Active ||
+                     guardianConfigurationEnabled &&
+                     isCrystallineConflict &&
+                     localIdentityValid,
+            Action = guardianActed ? action : prior.Action,
+            Trigger = guardianActed ? trigger : prior.Trigger,
+            GuardActive = guardActive,
+            GuardianCandidateCount = guardianCandidates.Count,
+            TargetGameObjectId = guardianActed
+                ? targetGameObjectId
+                : prior.TargetGameObjectId,
+            TargetEntityId = guardianActed
+                ? targetEntityId
+                : prior.TargetEntityId,
+            FreshGameplayKey = guardianActed ? freshKey : prior.FreshGameplayKey,
+            HeldGameplayKey = guardianActed ? heldKey : prior.HeldGameplayKey,
+            InputClaimed = prior.InputClaimed || inputClaimed,
+            UseActionAttempted = prior.UseActionAttempted || attempted,
+            UseActionAccepted = prior.UseActionAccepted || accepted,
+            AttemptCount = Interlocked.Read(ref attemptCount),
+            AcceptedCount = Interlocked.Read(ref acceptedCount),
+            LastAcceptedGuardianEpisode = lastAcceptedGuardianEpisode,
+            GuardianPopup = guardianPopup,
+            LastEvent = guardianActed || !prior.UseActionAttempted
+                ? lastEvent
+                : prior.LastEvent,
+        };
         Volatile.Write(ref snapshot, result);
         return result;
     }
@@ -838,17 +897,27 @@ internal sealed class DefensiveUtilityProbe
 
     private void ResetRuntime()
     {
-        ResetOpportunityRuntime();
+        ResetGuardOpportunityRuntime();
+        ResetGuardianOpportunityRuntime();
         guardPropagationState = GuardPropagationState.Initial;
         lastAcceptedGuardianEpisode = null;
     }
 
     private void ResetOpportunityRuntime()
     {
-        guardianSpentActors.Clear();
-        preGuardEpisodeSpent = false;
+        ResetGuardOpportunityRuntime();
+        ResetGuardianOpportunityRuntime();
+    }
+
+    private void ResetGuardOpportunityRuntime()
+    {
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
+    }
+
+    private void ResetGuardianOpportunityRuntime()
+    {
+        guardianSpentActors.Clear();
         guardianPopup = null;
     }
 
@@ -881,6 +950,21 @@ internal sealed class DefensiveUtilityProbe
         if (higherPriorityClaimed) return "Waiting behind higher-priority Purify";
         if (!pressureKnown) return "Pressure unknown";
         return $"Waiting; self pressure={incomingEnemyCount}";
+    }
+
+    private static string DescribeGuardianWaitingState(
+        bool configurationEnabled,
+        bool isCrystallineConflict,
+        bool localIdentityValid,
+        bool guardActive,
+        bool higherPriorityClaimed)
+    {
+        if (!configurationEnabled) return "Paladin Guardian disabled";
+        if (!isCrystallineConflict) return "Paladin Guardian outside Crystalline Conflict";
+        if (!localIdentityValid) return "Paladin Guardian local player invalid";
+        if (guardActive) return "Active or propagating Guard blocks Guardian";
+        if (higherPriorityClaimed) return "Guardian waiting behind higher-priority survival helper";
+        return "Guardian waiting for low-HP party ally and gameplay key";
     }
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)

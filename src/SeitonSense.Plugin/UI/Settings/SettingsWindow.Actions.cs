@@ -13,15 +13,20 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. One physical input generation is shared in this order: " +
-            "Self Purify > Guard or Guardian > pressure Sprint > Ally Rescue > reactive counter-CC > Kardia > Ninja > Scholar. " +
-            "Monk Earth's Reply is a separate automatic follow-up that yields after an earlier helper attempt.");
+            "Self Purify > reactive Guard > Smart Recuperate > PLD Guardian > pressure Sprint > Ally Rescue > " +
+            "reactive counter-CC > Ninja > Scholar. Eukrasia-triggered Kardia is a separate bounded follow-up, " +
+            "and Monk Earth's Reply yields after an earlier helper attempt.");
 
         if (ImGui.CollapsingHeader("Self-Purify", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPurifyControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Guard and Paladin Guardian", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Reactive Purify → Guard", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawDefensiveUtilityControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Smart Recuperate", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawSmartRecuperateControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Pressure escape Sprint", ImGuiTreeNodeFlags.DefaultOpen))
@@ -63,7 +68,8 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Self Purify and Guard/Guardian keep priority; any later manual action ends FFXIV's native PvP Sprint.");
+            "Self Purify, reactive Guard, Smart Recuperate, and PLD Guardian keep priority; any later manual action " +
+            "ends FFXIV's native PvP Sprint.");
         return changed;
     }
 
@@ -112,7 +118,7 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Enable defensive one-action utilities",
+            "Enable the high-pressure Purify → Guard follow-up",
             configuration.EnableDefensiveUtilities,
             value => configuration.EnableDefensiveUtilities = value);
         changed |= Checkbox(
@@ -124,56 +130,41 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableDefensiveUtilities
-                ? "ON — exact defensive rules may claim one eligible physical input in CC."
-                : "OFF — this defensive group adds no pressure-triggered Purify, Guard, or Guardian request.");
-        ImGui.TextUnformatted("Rules:");
+                ? "ON — the exact reactive Guard chain may claim one eligible physical input in CC."
+                : "OFF — this group adds no pressure-triggered Purify or later Guard request.");
         changed |= Checkbox(
             "At 3+ incoming enemies and Stun: Purify, then Guard on a later input",
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
-        changed |= Checkbox(
-            "Pre-Guard at 50% HP or lower with 3+ incoming enemies",
-            configuration.PreGuardOnLowHpPressure,
-            value => configuration.PreGuardOnLowHpPressure = value);
-        changed |= Checkbox(
-            "PLD Guardian for an ally at 20% HP or lower",
-            configuration.PaladinGuardianLowAlly,
-            value => configuration.PaladinGuardianLowAlly = value);
-        changed |= Checkbox(
-            "After accepted Auto Guardian: Quick Chat + Bind pair (party-visible)",
-            configuration.PaladinGuardianAnnounceAndMark,
-            value => configuration.PaladinGuardianAnnounceAndMark = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Crystalline Conflict only and disabled by default. One physical key generation can produce at most one " +
             "Seiton Sense action request. If high-pressure Stun triggers Purify, Guard is allowed only after live " +
             "Resilience confirms the cleanse, the removable CC is gone, and you release/repress for a new physical " +
-            "generation; Purify and Guard never fire from the same generation. Pre-Guard is a risk reaction, not a " +
-            "prediction of an instant future stun, and it yields while removable CC is already present.");
+            "generation; Purify and Guard never fire from the same generation. The former speculative 50%-HP " +
+            "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
+            "every Seiton Sense action-request helper is blocked so none can cancel it.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawSmartRecuperateControls()
+    {
+        var changed = Checkbox(
+            "Use Recuperate once from a held gameplay key at 16,000+ missing HP",
+            configuration.EnableSmartRecuperateOnHeldKey,
+            value => configuration.EnableSmartRecuperateOnHeldKey = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Guardian additionally requires PLD, the exact non-self party ally alive and targetable within FFXIV's " +
-            "native 20-yalm action range/line of sight, and both your own Guard and Guardian available. There is no " +
-            "custom center-distance cap; the 10-yalm condition is the protection leash after the jump. Lowest HP% " +
-            "wins, then known higher incoming pressure and shorter distance. An accepted automatic Guardian request " +
-            "shows a 1.5-second GUARDIAN TRIGGERED card for the selected party slot; CLIENT ACCEPTED does not prove " +
-            "that the server applied protection. While your own Guard is active, and for " +
-            "the bounded 1.5-second status-propagation interval after an exact Guard request, every Seiton Sense " +
-            "action-request helper is blocked, so none can cancel Guard. Manual game actions and another plugin's " +
-            "repeats remain outside that boundary and can still end Guard normally.");
+            "Default off and exact Crystalline Conflict only. Like held-key Purify, this listens to the shared " +
+            "physical gameplay-key generation, including WASD. At exactly 16,000 or more missing HP and at least " +
+            "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
+            "is not ready, the held generation waits unspent for the real game state to become eligible.");
         ImGui.TextDisabled(
-            "The separate communication opt-in runs only after this module's automatic Guardian request is client-" +
-            "accepted in exact Crystalline Conflict. It uses localized CC Quick Chat row 35 (Ziel decken, displayed " +
-            "as Ich decke ...) for the frozen exact P-slot, then places Bind2 on that slot followed by Bind1 on self. " +
-            "If either sign is occupied or marker state is uncertain, the marker sequence is not started. Bind2 must " +
-            "be confirmed on the exact ally before Bind1 is attempted; if Bind1 then fails, only the proven-owned " +
-            "Bind2 may be cleaned. A complete pair expires nine seconds after Guardian acceptance. Cleanup tries " +
-            "Bind2 and then Bind1, each only while its exact actor/sign/timestamp ownership remains proven; drift is " +
-            "relinquished rather than cleared.");
-        ImGui.TextDisabled(
-            "Communication never changes a hard, soft, focus, or mouseover target, initiates another combat action, " +
-            "selects an alternate, falls back, or retries. A command issued is not proof that chat or signs appeared. " +
-            "Localized Quick Chat syntax, party visibility, pair placement, and cleanup remain current-patch live-" +
-            "confirmation boundaries.");
+            "Purify and the confirmed reactive Guard chain keep priority. Active Guard and its short propagation " +
+            "latch block Recuperate so the helper cannot cancel Guard. The generation is consumed before final " +
+            "HP, MP, identity, context, action-readiness, and Guard revalidation. Rejection or drift is terminal: " +
+            "release and press again for another attempt. The original key is not swallowed.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -292,7 +283,8 @@ internal sealed partial class SettingsWindow
             "Viper waits until Hardened Scales is actually absent.");
         ImGui.TextDisabled(
             "One already-eligible physical generation makes at most one exact-target attempt; Turbo pulses add no " +
-            "intent. Self-Purify, defensive utilities, pressure Sprint, and Ally Rescue have priority. Input is " +
+            "intent. Self-Purify, reactive Guard, Smart Recuperate, PLD Guardian, pressure Sprint, and Ally Rescue " +
+            "have priority. Input is " +
             "consumed before the native call, with no selected-target change, fallback, or retry. The blue AUTO CC " +
             "LANDED flash appears " +
             "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +

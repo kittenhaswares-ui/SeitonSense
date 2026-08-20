@@ -124,31 +124,31 @@ internal sealed class TargetHighlightRenderer
                     break;
 
                 case TargetHighlightRelation.CurrentAndFocus:
-                {
-                    var combinedTarget = focusTarget ?? currentTarget;
-                    if (combinedTarget is null) break;
-                    if (includeFocus)
                     {
-                        var label = configuration.FocusShowLabel ||
-                                    (configuration.EnableCurrentTargetHighlight &&
-                                     configuration.CurrentTargetShowLabel)
-                            ? "FOCUS + TARGET"
-                            : null;
-                        DrawWorldHighlight(combinedTarget, FocusStyle(), label, time);
-                    }
-                    else if (configuration.EnableCurrentTargetHighlight && currentTarget is not null)
-                    {
-                        DrawWorldHighlight(
-                            currentTarget,
-                            CurrentTargetStyle(),
-                            configuration.CurrentTargetShowLabel ? "TARGET" : null,
-                            time);
-                    }
+                        var combinedTarget = focusTarget ?? currentTarget;
+                        if (combinedTarget is null) break;
+                        if (includeFocus)
+                        {
+                            var label = configuration.FocusShowLabel ||
+                                        (configuration.EnableCurrentTargetHighlight &&
+                                         configuration.CurrentTargetShowLabel)
+                                ? "FOCUS + TARGET"
+                                : null;
+                            DrawWorldHighlight(combinedTarget, FocusStyle(), label, time);
+                        }
+                        else if (configuration.EnableCurrentTargetHighlight && currentTarget is not null)
+                        {
+                            DrawWorldHighlight(
+                                currentTarget,
+                                CurrentTargetStyle(),
+                                configuration.CurrentTargetShowLabel ? "TARGET" : null,
+                                time);
+                        }
 
-                    if (currentTarget is not null && configuration.ShowCurrentTargetInfoHud)
-                        DrawCurrentTargetInfoHud(currentTarget, item);
-                    break;
-                }
+                        if (currentTarget is not null && configuration.ShowCurrentTargetInfoHud)
+                            DrawCurrentTargetInfoHud(currentTarget, item);
+                        break;
+                    }
             }
         }
     }

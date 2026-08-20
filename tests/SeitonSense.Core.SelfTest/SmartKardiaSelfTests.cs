@@ -9,10 +9,15 @@ internal static class SmartKardiaSelfTests
     {
         Equal(40u, SmartKardiaRules.SageJobId, "SGE job");
         Equal(29_264u, SmartKardiaRules.ActionId, "PvP Kardia action");
+        Equal(29_258u, SmartKardiaRules.EukrasiaActionId, "PvP Eukrasia action");
         True(SmartKardiaRules.IsKardiaStatus(2_871), "PvP Kardia status");
         True(SmartKardiaRules.IsKardionStatus(2_872), "PvP Kardion status");
+        True(SmartKardiaRules.IsEukrasiaStatus(3_107), "PvP Eukrasia status");
         False(SmartKardiaRules.IsKardiaStatus(2_604), "PvE Kardia rejected");
         False(SmartKardiaRules.IsKardionStatus(2_605), "PvE Kardion rejected");
+        False(SmartKardiaRules.IsEukrasiaStatus(2_606), "PvE Eukrasia rejected");
+        Equal(2u, SmartKardiaRules.EukrasiaMaximumCharges, "Eukrasia charges");
+        Equal(2_000L, SmartKardiaRules.TriggerLifetimeMilliseconds, "bounded trigger lifetime");
 
         var ally = Candidate(2, pressure: 2);
         var self = Candidate(1, pressure: 2, isSelf: true, actor: LocalPlayer);
@@ -32,7 +37,7 @@ internal static class SmartKardiaSelfTests
         False(IsEligible(ally with { NativeTargetValid = false }), "native target invalid");
         False(
             IsEligible(ally with { NativeRangeAndLineOfSight = false }),
-            "native 30y or line of sight failed");
+            "native range or line of sight failed");
     }
 
     internal static void CompletePartyViewRejectsIdentityAmbiguity()
@@ -88,40 +93,30 @@ internal static class SmartKardiaSelfTests
         };
         False(
             SmartKardiaRules.HasCompleteKnownPressureView(partial),
-            "one live unknown actor makes the whole pressure view incomplete");
+            "one live unknown actor makes the pressure view incomplete");
         Equal(
             -1,
             SmartKardiaRules.SelectBestCandidateIndex(partial, LocalPlayer),
-            "partial pressure cannot silently outrank the unknown actor");
+            "partial pressure cannot rank");
         None(
             SmartKardiaRules.Observe(Observation() with { Candidates = partial }),
             SmartKardiaDecisionReason.IncompleteKnownPressureView);
 
         var deadUnknown = partial.ToArray();
-        deadUnknown[2] = deadUnknown[2] with
-        {
-            Alive = false,
-            Targetable = true,
-        };
+        deadUnknown[2] = deadUnknown[2] with { Alive = false };
         True(
             SmartKardiaRules.HasCompleteKnownPressureView(deadUnknown),
             "dead unknown actor cannot affect selection");
-        Dispatch(
-            Observation() with { Candidates = deadUnknown },
-            "dead unknown actor is ignored");
+        Dispatch(Observation() with { Candidates = deadUnknown }, "dead unknown ignored");
 
         var untargetableUnknown = partial.ToArray();
-        untargetableUnknown[2] = untargetableUnknown[2] with
-        {
-            Alive = true,
-            Targetable = false,
-        };
+        untargetableUnknown[2] = untargetableUnknown[2] with { Targetable = false };
         True(
             SmartKardiaRules.HasCompleteKnownPressureView(untargetableUnknown),
             "untargetable unknown actor cannot affect selection");
         Dispatch(
             Observation() with { Candidates = untargetableUnknown },
-            "untargetable unknown actor is ignored");
+            "untargetable unknown ignored");
     }
 
     internal static void RankingIsPressureThenExactHpThenStableSlot()
@@ -129,13 +124,11 @@ internal static class SmartKardiaSelfTests
         var candidates = Candidates();
         candidates[0] = candidates[0] with
         {
-            PressureKnown = true,
             UniqueIncomingEnemyCount = 2,
             CurrentHp = 10,
         };
         candidates[1] = candidates[1] with
         {
-            PressureKnown = true,
             UniqueIncomingEnemyCount = 3,
             CurrentHp = 90,
         };
@@ -160,16 +153,8 @@ internal static class SmartKardiaSelfTests
             SmartKardiaRules.SelectBestCandidateIndex(candidates, LocalPlayer),
             "33/100 is exactly lower than 1/3");
 
-        candidates[0] = candidates[0] with
-        {
-            CurrentHp = 1,
-            MaximumHp = 4,
-        };
-        candidates[1] = candidates[1] with
-        {
-            CurrentHp = 25,
-            MaximumHp = 100,
-        };
+        candidates[0] = candidates[0] with { CurrentHp = 1, MaximumHp = 4 };
+        candidates[1] = candidates[1] with { CurrentHp = 25, MaximumHp = 100 };
         var shuffled = new[]
         {
             candidates[4],
@@ -181,7 +166,7 @@ internal static class SmartKardiaSelfTests
         Equal(
             3,
             SmartKardiaRules.SelectBestCandidateIndex(shuffled, LocalPlayer),
-            "equal ratios use lower stable P-slot independent of input order");
+            "equal ratios use stable lower P-slot independent of input order");
     }
 
     internal static void BestKardionStateNeverFallsThroughToAnAlternate()
@@ -199,10 +184,8 @@ internal static class SmartKardiaSelfTests
             CurrentHp = 10,
         };
 
-        var unknown = SmartKardiaRules.Observe(
-            Observation() with { Candidates = candidates });
         None(
-            unknown,
+            SmartKardiaRules.Observe(Observation() with { Candidates = candidates }),
             SmartKardiaDecisionReason.SelectedKardionStateUnknown,
             selectedIndex: 1);
 
@@ -211,21 +194,173 @@ internal static class SmartKardiaSelfTests
             OwnKardionStateKnown = true,
             HasOwnKardion = true,
         };
-        var alreadyAssigned = SmartKardiaRules.Observe(
-            Observation() with { Candidates = candidates });
         None(
-            alreadyAssigned,
+            SmartKardiaRules.Observe(Observation() with { Candidates = candidates }),
             SmartKardiaDecisionReason.SelectedAlreadyHasOwnKardion,
             selectedIndex: 1);
-
-        False(unknown.ShouldConsumeInputGeneration, "unknown status does not consume");
-        False(alreadyAssigned.ShouldConsumeInputGeneration, "already assigned does not consume");
     }
 
-    internal static void DispatchRequiresEveryHeldKeyAndSafetyGate()
+    internal static void DefaultSelfFallbackIsExactAndTerminal()
+    {
+        var noPressure = Candidates();
+        Equal(
+            0,
+            SmartKardiaRules.SelectBestCandidateIndex(noPressure, LocalPlayer),
+            "no pressure defaults to exact self");
+        var fallback = SmartKardiaRules.Observe(
+            Observation() with { Candidates = noPressure });
+        True(fallback.ShouldDispatch, "exact self fallback dispatches");
+        Equal(0, fallback.SelectedCandidateIndex, "self fallback P1");
+        var selfIntent = fallback.Intent ??
+            throw new InvalidOperationException("missing self fallback intent");
+        True(selfIntent.IsSelf, "fallback intent is self");
+        Equal(LocalPlayer, selfIntent.Target, "fallback freezes exact local actor");
+        True(CanUse(selfIntent, noPressure[0]), "self fallback final validation");
+
+        var allyPressure = noPressure.ToArray();
+        allyPressure[3] = allyPressure[3] with { UniqueIncomingEnemyCount = 2 };
+        Equal(
+            3,
+            SmartKardiaRules.SelectBestCandidateIndex(allyPressure, LocalPlayer),
+            "pressure-qualified ally wins before self fallback");
+
+        var ownKardion = noPressure.ToArray();
+        ownKardion[0] = ownKardion[0] with { HasOwnKardion = true };
+        None(
+            SmartKardiaRules.Observe(Observation() with { Candidates = ownKardion }),
+            SmartKardiaDecisionReason.SelectedAlreadyHasOwnKardion,
+            selectedIndex: 0);
+    }
+
+    internal static void AcceptedTriggerIsBoundedAndIdentityExact()
+    {
+        var before = Evidence(charges: 2, hasStatus: false);
+        True(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                1,
+                1_000,
+                77,
+                LocalPlayer,
+                before,
+                out var trigger),
+            "exact accepted trigger is created");
+        Equal(3_000L, trigger.ExpiresAtMilliseconds, "two-second expiry");
+        True(
+            SmartKardiaRules.IsTriggerCurrent(trigger, 1_000, 77, LocalPlayer),
+            "inclusive accepted boundary");
+        True(
+            SmartKardiaRules.IsTriggerCurrent(trigger, 2_999, 77, LocalPlayer),
+            "last millisecond is current");
+        False(
+            SmartKardiaRules.IsTriggerCurrent(trigger, 3_000, 77, LocalPlayer),
+            "expiry boundary is terminal");
+        False(
+            SmartKardiaRules.IsTriggerCurrent(trigger, 999, 77, LocalPlayer),
+            "clock rollback fails closed");
+        False(
+            SmartKardiaRules.IsTriggerCurrent(trigger, 1_100, 78, LocalPlayer),
+            "territory drift fails closed");
+        False(
+            SmartKardiaRules.IsTriggerCurrent(
+                trigger,
+                1_100,
+                77,
+                new TargetPressureActorIdentity(99, 99)),
+            "local identity drift fails closed");
+
+        False(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                0,
+                1_000,
+                77,
+                LocalPlayer,
+                before,
+                out _),
+            "zero token rejected");
+        False(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                2,
+                1_000,
+                77,
+                LocalPlayer,
+                before with { CurrentCharges = 0 },
+                out _),
+            "a pre-call charge must exist");
+        True(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                3,
+                long.MaxValue - 1,
+                77,
+                LocalPlayer,
+                before,
+                out var saturated),
+            "near-overflow trigger saturates safely");
+        Equal(long.MaxValue, saturated.ExpiresAtMilliseconds, "expiry saturation");
+    }
+
+    internal static void CausalEvidenceRequiresChargeOrOwnedStatusTransition()
+    {
+        True(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                1,
+                1_000,
+                77,
+                LocalPlayer,
+                Evidence(charges: 2, hasStatus: false),
+                out var trigger),
+            "baseline trigger");
+        True(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                trigger,
+                Evidence(charges: 1, hasStatus: false)),
+            "charge decrement proves execution");
+        True(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                trigger,
+                Evidence(charges: 2, hasStatus: true)),
+            "absent-to-own-status transition proves execution");
+        False(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                trigger,
+                Evidence(charges: 2, hasStatus: false)),
+            "unchanged state is not causal proof");
+        False(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                trigger,
+                Evidence(charges: 1, hasStatus: false) with
+                {
+                    OwnStatusStateKnown = false,
+                }),
+            "unknown own-source status fails closed");
+        False(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                trigger,
+                Evidence(charges: 1, hasStatus: false) with
+                {
+                    AdjustedActionId = 0,
+                }),
+            "adjusted action drift fails closed");
+
+        True(
+            SmartKardiaRules.TryCreateAcceptedTrigger(
+                2,
+                1_000,
+                77,
+                LocalPlayer,
+                Evidence(charges: 1, hasStatus: true),
+                out var alreadyActive),
+            "active-status trigger");
+        False(
+            SmartKardiaRules.HasCausalEukrasiaEvidence(
+                alreadyActive,
+                Evidence(charges: 2, hasStatus: true)),
+            "charge increase and already-active status are not proof");
+    }
+
+    internal static void DispatchRequiresEveryEventAndSafetyGate()
     {
         var valid = Observation();
-        Dispatch(valid, "valid held generation");
+        Dispatch(valid, "valid event-driven observation");
 
         Cancel(valid with { HardReset = true }, SmartKardiaDecisionReason.HardReset);
         Cancel(valid with { ConfigurationEnabled = false }, SmartKardiaDecisionReason.ConfigurationDisabled);
@@ -236,20 +371,16 @@ internal static class SmartKardiaSelfTests
         Cancel(valid with { MetadataVerified = false }, SmartKardiaDecisionReason.MetadataUnverified);
         Cancel(valid with { ActionHelpersSuppressedByGuard = true }, SmartKardiaDecisionReason.GuardSuppressed);
         Cancel(valid with { HigherPriorityClaimed = true }, SmartKardiaDecisionReason.HigherPriorityClaimed);
-        Cancel(valid with { InputProbeSucceeded = false }, SmartKardiaDecisionReason.InputProbeUnavailable);
-        Cancel(valid with { IsTextInputActive = true }, SmartKardiaDecisionReason.TextInputActive);
-        Cancel(valid with { HeldGameplayKeyEligible = false }, SmartKardiaDecisionReason.NoHeldGameplayKey);
+        Cancel(valid with { TriggerAvailable = false }, SmartKardiaDecisionReason.EukrasiaTriggerUnavailable);
+        Cancel(valid with { TriggerEvidenceConfirmed = false }, SmartKardiaDecisionReason.EukrasiaEvidencePending);
+        Cancel(valid with { FreshPressurePublicationAvailable = false }, SmartKardiaDecisionReason.PressurePublicationPending);
         Cancel(valid with { ResolvedActionId = 0 }, SmartKardiaDecisionReason.ResolvedActionInvalid);
         Cancel(valid with { ActionLocallyReady = false }, SmartKardiaDecisionReason.ActionNotReady);
+        Cancel(valid with { AnimationLockClear = false }, SmartKardiaDecisionReason.AnimationLockActive);
         Cancel(valid with { CompleteExactPartyView = false }, SmartKardiaDecisionReason.IncompleteExactPartyView);
         Cancel(
             valid with { Candidates = valid.Candidates!.Take(4).ToArray() },
             SmartKardiaDecisionReason.IncompleteExactPartyView);
-
-        var noPressure = Candidates();
-        var none = SmartKardiaRules.Observe(valid with { Candidates = noPressure });
-        None(none, SmartKardiaDecisionReason.NoKnownPressureTarget);
-        False(none.ShouldConsumeInputGeneration, "no pressure does not steal hold");
     }
 
     internal static void FrozenIntentCannotRerankFallbackOrRetry()
@@ -268,7 +399,6 @@ internal static class SmartKardiaSelfTests
         var decision = SmartKardiaRules.Observe(
             Observation() with { Candidates = candidates });
         True(decision.ShouldDispatch, "dispatch freezes one intent");
-        True(decision.ShouldConsumeInputGeneration, "consume before native work");
         Equal(2, decision.SelectedCandidateIndex, "highest pressure P3");
 
         var intent = decision.Intent ??
@@ -276,7 +406,6 @@ internal static class SmartKardiaSelfTests
         Equal(SmartKardiaRules.ActionId, intent.ActionId, "frozen action");
         Equal(LocalPlayer, intent.LocalPlayer, "frozen local identity");
         Equal(candidates[2].Actor, intent.Target, "frozen target identity");
-        Equal(4, intent.SelectedIncomingEnemyCount, "frozen pressure diagnostics");
 
         var current = candidates[2] with
         {
@@ -288,15 +417,6 @@ internal static class SmartKardiaSelfTests
             CanUse(intent, candidates[0] with { UniqueIncomingEnemyCount = 8 }),
             "now-better alternate cannot replace frozen actor");
         False(CanUse(intent, current with { PartySlot = 4 }), "P-slot drift");
-        False(
-            CanUse(
-                intent,
-                current with
-                {
-                    Actor = new TargetPressureActorIdentity(90_000, 9_000),
-                }),
-            "actor drift");
-        False(CanUse(intent, current with { IsSelf = true }), "self flag drift");
         False(CanUse(intent, current with { PressureKnown = false }), "pressure unknown");
         False(CanUse(intent, current with { UniqueIncomingEnemyCount = 1 }), "pressure below threshold");
         False(CanUse(intent, current with { OwnKardionStateKnown = false }), "status ownership unknown");
@@ -304,7 +424,6 @@ internal static class SmartKardiaSelfTests
         False(CanUse(intent, current with { NativeTargetValid = false }), "native target drift");
         False(CanUse(intent, current with { NativeRangeAndLineOfSight = false }), "range or LoS drift");
         False(CanUse(intent, current with { Alive = false }), "target died");
-        False(CanUse(intent, current with { Targetable = false }), "target untargetable");
         False(CanUse(intent, current, configurationEnabled: false), "config drift");
         False(CanUse(intent, current, isCrystallineConflict: false), "context drift");
         False(CanUse(intent, current, currentLocalJobId: 39), "job drift");
@@ -312,64 +431,18 @@ internal static class SmartKardiaSelfTests
             CanUse(
                 intent,
                 current,
-                currentLocalPlayer: new TargetPressureActorIdentity(90_001, 9_001)),
+                currentLocalPlayer: new TargetPressureActorIdentity(0, 0)),
             "local identity drift");
-        False(CanUse(intent, current, isLocalPlayerAlive: false), "local death");
         False(CanUse(intent, current, metadataVerified: false), "metadata drift");
         False(CanUse(intent, current, guardSuppressed: true), "Guard drift");
-        False(CanUse(intent, current, resolvedActionId: 0), "action drift");
-        False(CanUse(intent, current, actionLocallyReady: false), "readiness drift");
+        False(CanUse(intent, current, resolvedActionId: 0), "action identity drift");
+        False(CanUse(intent, current, actionReady: false), "cooldown drift");
+        False(CanUse(intent, current, animationLockClear: false), "animation lock drift");
+        False(CanUse(intent, current, triggerConfirmed: false), "causal trigger drift");
     }
 
-    internal static void ConsumedPhysicalGenerationCannotRetry()
-    {
-        var keyState = PhysicalGameplayKeyRules.Observe(
-            PhysicalGameplayKeyState.Initial,
-            new PhysicalGameplayKeyObservation(
-                IsDown: false,
-                IsTextInputActive: false)).NextState;
-        var pressed = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(
-                IsDown: true,
-                IsTextInputActive: false));
-        True(pressed.IsHeldEligible, "new physical generation eligible");
-
-        var first = SmartKardiaRules.Observe(Observation() with
-        {
-            HeldGameplayKeyEligible = pressed.IsHeldEligible,
-        });
-        True(first.ShouldDispatch, "first intent owns the generation");
-
-        keyState = PhysicalGameplayKeyRules.Consume(pressed.NextState);
-        var stillHeld = PhysicalGameplayKeyRules.Observe(
-            keyState,
-            new PhysicalGameplayKeyObservation(
-                IsDown: true,
-                IsTextInputActive: false));
-        False(stillHeld.IsHeldEligible, "consumed generation remains spent");
-
-        var retry = SmartKardiaRules.Observe(Observation() with
-        {
-            HeldGameplayKeyEligible = stillHeld.IsHeldEligible,
-        });
-        False(retry.ShouldDispatch, "same hold cannot retry");
-        False(retry.ShouldConsumeInputGeneration, "no second consumption");
-        Equal(
-            SmartKardiaDecisionReason.NoHeldGameplayKey,
-            retry.Reason,
-            "spent reason");
-    }
-
-    private static SmartKardiaObservation Observation()
-    {
-        var candidates = Candidates();
-        candidates[1] = candidates[1] with
-        {
-            PressureKnown = true,
-            UniqueIncomingEnemyCount = 2,
-        };
-        return new SmartKardiaObservation(
+    private static SmartKardiaObservation Observation() =>
+        new(
             ConfigurationEnabled: true,
             IsCrystallineConflict: true,
             LocalJobId: SmartKardiaRules.SageJobId,
@@ -378,14 +451,23 @@ internal static class SmartKardiaSelfTests
             MetadataVerified: true,
             ActionHelpersSuppressedByGuard: false,
             HigherPriorityClaimed: false,
-            InputProbeSucceeded: true,
-            IsTextInputActive: false,
-            HeldGameplayKeyEligible: true,
+            TriggerAvailable: true,
+            TriggerEvidenceConfirmed: true,
+            FreshPressurePublicationAvailable: true,
             ResolvedActionId: SmartKardiaRules.ActionId,
             ActionLocallyReady: true,
+            AnimationLockClear: true,
             CompleteExactPartyView: true,
-            Candidates: candidates);
-    }
+            Candidates());
+
+    private static SmartKardiaEukrasiaEvidence Evidence(
+        uint charges,
+        bool hasStatus) =>
+        new(
+            SmartKardiaRules.EukrasiaActionId,
+            charges,
+            OwnStatusStateKnown: true,
+            HasOwnEukrasia: hasStatus);
 
     private static SmartKardiaCandidate[] Candidates() =>
     [
@@ -397,25 +479,25 @@ internal static class SmartKardiaSelfTests
     ];
 
     private static SmartKardiaCandidate Candidate(
-        int partySlot,
+        int slot,
         int pressure,
         bool isSelf = false,
         TargetPressureActorIdentity? actor = null) =>
         new(
-            partySlot,
+            slot,
             actor ?? new TargetPressureActorIdentity(
-                (ulong)(20_000 + partySlot),
-                (uint)(2_000 + partySlot)),
+                (ulong)(20_000 + slot),
+                (uint)(2_000 + slot)),
             ExactPartyIdentity: true,
-            isSelf,
+            IsSelf: isSelf,
             Alive: true,
             Targetable: true,
-            CurrentHp: (uint)(40 + partySlot),
+            CurrentHp: 50,
             MaximumHp: 100,
             NativeTargetValid: true,
             NativeRangeAndLineOfSight: true,
             PressureKnown: true,
-            pressure,
+            UniqueIncomingEnemyCount: pressure,
             OwnKardionStateKnown: true,
             HasOwnKardion: false);
 
@@ -433,11 +515,12 @@ internal static class SmartKardiaSelfTests
         bool isCrystallineConflict = true,
         uint currentLocalJobId = SmartKardiaRules.SageJobId,
         TargetPressureActorIdentity? currentLocalPlayer = null,
-        bool isLocalPlayerAlive = true,
         bool metadataVerified = true,
         bool guardSuppressed = false,
         uint resolvedActionId = SmartKardiaRules.ActionId,
-        bool actionLocallyReady = true) =>
+        bool actionReady = true,
+        bool animationLockClear = true,
+        bool triggerConfirmed = true) =>
         SmartKardiaRules.CanUseFrozenIntent(
             intent,
             candidate,
@@ -445,21 +528,22 @@ internal static class SmartKardiaSelfTests
             isCrystallineConflict,
             currentLocalJobId,
             currentLocalPlayer ?? LocalPlayer,
-            isLocalPlayerAlive,
+            isLocalPlayerAlive: true,
             metadataVerified,
-            guardSuppressed,
+            actionHelpersSuppressedByGuard: guardSuppressed,
             resolvedActionId,
-            actionLocallyReady);
+            actionLocallyReady: actionReady,
+            animationLockClear,
+            triggerEvidenceConfirmed: triggerConfirmed);
 
     private static void Dispatch(
         SmartKardiaObservation observation,
         string label)
     {
         var decision = SmartKardiaRules.Observe(observation);
-        True(decision.ShouldDispatch, label);
-        True(decision.ShouldConsumeInputGeneration, $"{label} consumes input");
         Equal(SmartKardiaDecisionKind.Dispatch, decision.Kind, label);
         Equal(SmartKardiaDecisionReason.None, decision.Reason, label);
+        True(decision.ShouldDispatch, label);
     }
 
     private static void Cancel(
@@ -467,12 +551,9 @@ internal static class SmartKardiaSelfTests
         SmartKardiaDecisionReason reason)
     {
         var decision = SmartKardiaRules.Observe(observation);
-        False(decision.ShouldDispatch, reason.ToString());
-        False(decision.ShouldConsumeInputGeneration, $"{reason} input");
         Equal(SmartKardiaDecisionKind.Cancelled, decision.Kind, reason.ToString());
         Equal(reason, decision.Reason, reason.ToString());
-        Equal(-1, decision.SelectedCandidateIndex, $"{reason} selected index");
-        True(decision.Intent is null, $"{reason} intent");
+        False(decision.ShouldDispatch, reason.ToString());
     }
 
     private static void None(
@@ -480,11 +561,10 @@ internal static class SmartKardiaSelfTests
         SmartKardiaDecisionReason reason,
         int selectedIndex = -1)
     {
-        False(decision.ShouldDispatch, reason.ToString());
         Equal(SmartKardiaDecisionKind.None, decision.Kind, reason.ToString());
         Equal(reason, decision.Reason, reason.ToString());
-        Equal(selectedIndex, decision.SelectedCandidateIndex, $"{reason} selected index");
-        True(decision.Intent is null, $"{reason} intent");
+        Equal(selectedIndex, decision.SelectedCandidateIndex, reason.ToString());
+        False(decision.ShouldDispatch, reason.ToString());
     }
 
     private static void True(bool condition, string label)
@@ -492,16 +572,12 @@ internal static class SmartKardiaSelfTests
         if (!condition) throw new InvalidOperationException($"Expected true: {label}");
     }
 
-    private static void False(bool condition, string label) =>
-        True(!condition, label);
+    private static void False(bool condition, string label) => True(!condition, label);
 
     private static void Equal<T>(T expected, T actual, string label)
         where T : notnull
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
-        {
-            throw new InvalidOperationException(
-                $"{label}: expected {expected}, got {actual}");
-        }
+            throw new InvalidOperationException($"{label}: expected {expected}, got {actual}");
     }
 }

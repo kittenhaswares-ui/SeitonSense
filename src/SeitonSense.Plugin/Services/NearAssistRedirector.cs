@@ -134,6 +134,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
+    private readonly object smartKardiaTriggerGate = new();
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
 
@@ -146,6 +147,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
         FarHelpFallbackSuppressionState.Initial;
     private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
+    private SmartKardiaEukrasiaTrigger? pendingSmartKardiaTrigger;
+    private long smartKardiaTriggerSequence;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
@@ -337,6 +340,70 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             internalRedirectBypassDepth--;
         }
+    }
+
+    internal bool TryPeekSmartKardiaTrigger(
+        long nowMilliseconds,
+        uint territoryId,
+        TargetPressureActorIdentity localPlayer,
+        out SmartKardiaEukrasiaTrigger trigger)
+    {
+        lock (smartKardiaTriggerGate)
+        {
+            if (pendingSmartKardiaTrigger is { } pending &&
+                SmartKardiaRules.IsTriggerCurrent(
+                    pending,
+                    nowMilliseconds,
+                    territoryId,
+                    localPlayer))
+            {
+                trigger = pending;
+                return true;
+            }
+
+            pendingSmartKardiaTrigger = null;
+            trigger = default;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Spends only the exact frozen Eukrasia opportunity. Consumption happens
+    /// before terminal Kardia validation and remains terminal on any later drift.
+    /// </summary>
+    internal bool TryConsumeSmartKardiaTrigger(long token)
+    {
+        if (token <= 0) return false;
+        var acceptedAtMilliseconds = -1L;
+        lock (smartKardiaTriggerGate)
+        {
+            if (pendingSmartKardiaTrigger is not { } pending ||
+                pending.Token != token)
+            {
+                return false;
+            }
+
+            acceptedAtMilliseconds = pending.AcceptedAtMilliseconds;
+            pendingSmartKardiaTrigger = null;
+        }
+
+        pressureTracker.CancelIncomingAllyPressureCapture(
+            acceptedAtMilliseconds);
+        return true;
+    }
+
+    internal void ClearSmartKardiaTrigger()
+    {
+        var acceptedAtMilliseconds = -1L;
+        lock (smartKardiaTriggerGate)
+        {
+            if (pendingSmartKardiaTrigger is { } pending)
+                acceptedAtMilliseconds = pending.AcceptedAtMilliseconds;
+            pendingSmartKardiaTrigger = null;
+        }
+
+        pressureTracker.CancelIncomingAllyPressureCapture(
+            acceptedAtMilliseconds);
     }
 
     internal void Start()
@@ -665,7 +732,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return new NearAssistArmResult(NearAssistArmOutcome.Armed, 0, 0f);
     }
 
-    internal void Reset() => ClearToken("Reset");
+    internal void Reset()
+    {
+        ClearToken("Reset");
+        ClearSmartKardiaTrigger();
+    }
 
     public void Dispose()
     {
@@ -674,6 +745,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
         ClearToken("Disposed");
+        ClearSmartKardiaTrigger();
         lock (guardAttemptGate) latestLocalGuardActionAttempt = null;
         useActionHook?.Dispose();
     }
@@ -1023,6 +1095,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // pass/fail-open path executes it exactly once with every argument other
         // than an optional helper target substitution intact. A confirmed immunity
         // block returns above and deliberately executes no downstream/original call.
+        var hasSmartKardiaPreflight = TryCaptureSmartKardiaEukrasiaPreflight(
+            thisPtr,
+            actionType,
+            actionId,
+            mode,
+            targetId,
+            forwardedTargetId,
+            bypassRedirect,
+            helperTokenConsumed,
+            targetSuppressedByRedirect,
+            out var smartKardiaPreflight);
         ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
         var clientAccepted = useActionHook!.Original(
             thisPtr,
@@ -1034,7 +1117,183 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             comboRouteId,
             outOptAreaTargeted);
         smartWardensPaean.RecordNativeResult(smartPaeanResult, clientAccepted);
+        if (clientAccepted && hasSmartKardiaPreflight)
+            ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
         return clientAccepted;
+    }
+
+    private bool TryCaptureSmartKardiaEukrasiaPreflight(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode,
+        ulong incomingTargetId,
+        ulong forwardedTargetId,
+        bool bypassRedirect,
+        bool helperTokenConsumed,
+        bool targetSuppressedByRedirect,
+        out SmartKardiaEukrasiaPreflight preflight)
+    {
+        preflight = default;
+        try
+        {
+            var invocationModeSupported =
+                mode is ActionManager.UseActionMode.None or
+                    ActionManager.UseActionMode.Macro ||
+                (uint)mode == 100;
+            if (bypassRedirect ||
+                helperTokenConsumed ||
+                targetSuppressedByRedirect ||
+                incomingTargetId != forwardedTargetId ||
+                !invocationModeSupported ||
+                !IsSupportedActionType(actionType) ||
+                !configuration.Enabled ||
+                !configuration.EnableSageKardiaAfterEukrasia ||
+                ResolveContext() != SupportedPvPContext.CrystallineConflict ||
+                ResolveActionId(actionManager, actionType, actionId) !=
+                SmartKardiaRules.EukrasiaActionId)
+            {
+                return false;
+            }
+
+            var local = objectTable.LocalPlayer;
+            if (!IsLivePlayer(local) ||
+                !local!.ClassJob.IsValid ||
+                local.ClassJob.RowId != SmartKardiaRules.SageJobId ||
+                GetNativeObject(local) == null)
+            {
+                return false;
+            }
+
+            var localIdentity = new TargetPressureActorIdentity(
+                local.GameObjectId,
+                local.EntityId);
+            if (!localIdentity.IsValid ||
+                !TryReadExactEukrasiaEvidence(local, out var before) ||
+                before.CurrentCharges == 0)
+            {
+                return false;
+            }
+
+            preflight = new SmartKardiaEukrasiaPreflight(
+                clientState.TerritoryType,
+                localIdentity,
+                before);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense Smart Kardia ignored an unprovable Eukrasia trigger.");
+            return false;
+        }
+    }
+
+    private void ArmAcceptedSmartKardiaTrigger(
+        SmartKardiaEukrasiaPreflight preflight)
+    {
+        try
+        {
+            var acceptedAt = Environment.TickCount64;
+            SmartKardiaEukrasiaTrigger trigger;
+            lock (smartKardiaTriggerGate)
+            {
+                if (!configuration.Enabled ||
+                    !configuration.EnableSageKardiaAfterEukrasia ||
+                    pendingSmartKardiaTrigger is { } pending &&
+                    SmartKardiaRules.IsTriggerCurrent(
+                        pending,
+                        acceptedAt,
+                        preflight.TerritoryId,
+                        preflight.LocalPlayer))
+                {
+                    return;
+                }
+
+                pendingSmartKardiaTrigger = null;
+                var token = NextSmartKardiaTriggerToken();
+                if (!SmartKardiaRules.TryCreateAcceptedTrigger(
+                        token,
+                        acceptedAt,
+                        preflight.TerritoryId,
+                        preflight.LocalPlayer,
+                        preflight.Before,
+                        out trigger))
+                {
+                    return;
+                }
+
+                pendingSmartKardiaTrigger = trigger;
+            }
+
+            pressureTracker.RequestIncomingAllyPressureCapture(acceptedAt);
+        }
+        catch (Exception exception)
+        {
+            ClearSmartKardiaTrigger();
+            LogFailure(
+                exception,
+                "Seiton Sense Smart Kardia failed closed while arming Eukrasia.");
+        }
+    }
+
+    private long NextSmartKardiaTriggerToken()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref smartKardiaTriggerSequence);
+            if (current == long.MaxValue) return 0;
+            var next = current + 1;
+            if (Interlocked.CompareExchange(
+                    ref smartKardiaTriggerSequence,
+                    next,
+                    current) == current)
+            {
+                return next;
+            }
+        }
+    }
+
+    private static bool TryReadExactEukrasiaEvidence(
+        IPlayerCharacter localPlayer,
+        out SmartKardiaEukrasiaEvidence evidence)
+    {
+        evidence = default;
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null ||
+            !localPlayer.ClassJob.IsValid ||
+            localPlayer.ClassJob.RowId != SmartKardiaRules.SageJobId ||
+            GetNativeObject(localPlayer) == null)
+        {
+            return false;
+        }
+
+        var localSourceCount = 0;
+        foreach (var status in localPlayer.StatusList)
+        {
+            if (!SmartKardiaRules.IsEukrasiaStatus(status.StatusId)) continue;
+            if (!IsNetworkEntityId(status.SourceId) ||
+                status.SourceId != localPlayer.EntityId ||
+                !float.IsFinite(status.RemainingTime) ||
+                status.RemainingTime <= 0f ||
+                ++localSourceCount > 1)
+            {
+                return false;
+            }
+        }
+
+        var adjustedActionId = actionManager->GetAdjustedActionId(
+            SmartKardiaRules.EukrasiaActionId);
+        if (adjustedActionId != SmartKardiaRules.EukrasiaActionId)
+            return false;
+        var currentCharges = actionManager->GetCurrentCharges(adjustedActionId);
+        evidence = new SmartKardiaEukrasiaEvidence(
+            adjustedActionId,
+            currentCharges,
+            OwnStatusStateKnown: true,
+            HasOwnEukrasia: localSourceCount == 1);
+        return evidence.IsValid;
     }
 
     private void ObserveExactLocalGuardActivationAttempt(
@@ -1543,6 +1802,42 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             ClearToken("Cleared: lifecycle check failed closed");
             LogFailure(exception, "Seiton Sense Near Assist lifecycle check failed closed.");
+        }
+
+        try
+        {
+            UpdateSmartKardiaTriggerLifecycle();
+        }
+        catch (Exception exception)
+        {
+            ClearSmartKardiaTrigger();
+            LogFailure(
+                exception,
+                "Seiton Sense Smart Kardia trigger lifecycle failed closed.");
+        }
+    }
+
+    private void UpdateSmartKardiaTriggerLifecycle()
+    {
+        SmartKardiaEukrasiaTrigger? pending;
+        lock (smartKardiaTriggerGate) pending = pendingSmartKardiaTrigger;
+        if (pending is null) return;
+
+        var local = objectTable.LocalPlayer;
+        var localIdentity = IsLivePlayer(local) && GetNativeObject(local!) != null
+            ? new TargetPressureActorIdentity(local!.GameObjectId, local.EntityId)
+            : default;
+        var now = Environment.TickCount64;
+        if (!configuration.Enabled ||
+            !configuration.EnableSageKardiaAfterEukrasia ||
+            ResolveContext() != SupportedPvPContext.CrystallineConflict ||
+            !SmartKardiaRules.IsTriggerCurrent(
+                pending.Value,
+                now,
+                clientState.TerritoryType,
+                localIdentity))
+        {
+            ClearSmartKardiaTrigger();
         }
     }
 
@@ -2222,6 +2517,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     private readonly record struct CanonicalEnemy(int Slot, IPlayerCharacter Player);
+
+    private readonly record struct SmartKardiaEukrasiaPreflight(
+        uint TerritoryId,
+        TargetPressureActorIdentity LocalPlayer,
+        SmartKardiaEukrasiaEvidence Before);
 
     private readonly record struct FarHelpEnemyThreat(float X, float Z, float HitboxRadius);
 

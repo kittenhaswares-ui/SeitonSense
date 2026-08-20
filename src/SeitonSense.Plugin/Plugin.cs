@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Party;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -41,6 +42,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
+    private readonly CombatFramesSnapshotService combatFramesSnapshots;
+    private readonly CombatFramesRenderer combatFrames;
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
@@ -214,6 +217,44 @@ public sealed class Plugin : IDalamudPlugin
             resourceAuraAnchors,
             gameGui,
             textureProvider);
+        combatFramesSnapshots = new CombatFramesSnapshotService(
+            objectTable,
+            framework,
+            log,
+            tracker,
+            pressureTracker,
+            metadata,
+            () => configuration.Enabled && configuration.ShowCombatFrames,
+            () =>
+            {
+                var current = targetManager.Target;
+                var focus = targetManager.FocusTarget;
+                return new CombatFrameTargetSelection(
+                    current is not null && current.Address != nint.Zero && current.IsValid()
+                        ? new TargetPressureActorIdentity(current.GameObjectId, current.EntityId)
+                        : default,
+                    focus is not null && focus.Address != nint.Zero && focus.IsValid()
+                        ? new TargetPressureActorIdentity(focus.GameObjectId, focus.EntityId)
+                        : default);
+            });
+        combatFrames = new CombatFramesRenderer(
+            combatFramesSnapshots,
+            gameGui,
+            textureProvider,
+            log,
+            () => new CombatFramesOptions(
+                configuration.Enabled && configuration.ShowCombatFrames,
+                false,
+                configuration.CombatFramesEnemyScreenX,
+                configuration.CombatFramesEnemyScreenY,
+                configuration.CombatFramesSelfScreenX,
+                configuration.CombatFramesSelfScreenY,
+                configuration.CombatFramesScale,
+                configuration.CombatFramesBackgroundOpacity,
+                configuration.CombatFramesShowNames,
+                configuration.CombatFramesShowExactValues,
+                configuration.CombatFramesShowStatuses,
+                configuration.CombatFramesShowPressure));
         pressureCounter = new PressureCounterWindow(
             configuration,
             pressureTracker,
@@ -227,7 +268,8 @@ public sealed class Plugin : IDalamudPlugin
             overlay,
             pressureTracker,
             isolationAwareness,
-            pressureCounter);
+            pressureCounter,
+            combatFrames);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(settingsWindow);
 
@@ -365,6 +407,7 @@ public sealed class Plugin : IDalamudPlugin
         darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
+        combatFramesSnapshots.Start();
     }
 
     public void Dispose()
@@ -383,6 +426,7 @@ public sealed class Plugin : IDalamudPlugin
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        combatFramesSnapshots.Dispose();
         personalStatus.Dispose();
         nearAssist.Dispose();
         darkKnightShadowbringer.Dispose();
@@ -401,6 +445,7 @@ public sealed class Plugin : IDalamudPlugin
         windowSystem.Draw();
         targetHighlights.Draw();
         overlay.Draw();
+        combatFrames.Draw();
     }
 
     private void OpenSettings() => settingsWindow.IsOpen = true;
@@ -503,6 +548,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
+                combatFrames.PreviewEnabled = false;
                 break;
             case "preview":
                 overlay.PreviewEnabled = !overlay.PreviewEnabled;
@@ -515,6 +561,7 @@ public sealed class Plugin : IDalamudPlugin
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
+                var recuperate = personalStatus.SmartRecuperateDiagnostics;
                 var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
@@ -592,6 +639,15 @@ public sealed class Plugin : IDalamudPlugin
                     $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
                     $"last={defense.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] smart-recuperate[decision={recuperate.Decision}," +
+                    $"reason={recuperate.Reason},action={recuperate.ResolvedActionId}," +
+                    $"hp={recuperate.CurrentHp}/{recuperate.MaximumHp},missing={recuperate.MissingHp}," +
+                    $"mp={recuperate.CurrentMp}/{recuperate.MaximumMp},ready={recuperate.LocallyReady}," +
+                    $"guard={recuperate.GuardSuppressed},held={recuperate.HeldGameplayKey}," +
+                    $"claimed={recuperate.InputClaimed},attempt={recuperate.UseActionAttempted}/" +
+                    $"{recuperate.UseActionAccepted},count={recuperate.AttemptCount}/" +
+                    $"{recuperate.AcceptedCount},last={recuperate.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] pressure-escape[active={pressureEscape.Active}," +
                     $"warning/sprint={pressureEscape.WarningEnabled}/{pressureEscape.SprintEnabled}," +
                     $"direct={pressureEscape.PressureKnown}/{pressureEscape.DirectEnemyCount}" +
@@ -640,10 +696,15 @@ public sealed class Plugin : IDalamudPlugin
                     $"target={kardia.TargetGameObjectId:X}/{kardia.TargetEntityId:X}," +
                     $"pressure={kardia.PressureKnown}/{kardia.IncomingEnemyCount}," +
                     $"kardion={kardia.OwnKardionStateKnown}/{kardia.HasOwnKardion}," +
-                    $"held={kardia.HeldGameplayKey},claimed={kardia.InputClaimed}," +
+                    $"trigger-consumed={kardia.TriggerConsumed}," +
                     $"attempt={kardia.UseActionAttempted}/{kardia.UseActionAccepted}," +
                     $"count={kardia.AttemptCount}/{kardia.AcceptedCount}," +
                     $"resolve={kardia.CandidateResolution},last={kardia.LastEvent}]");
+                var combatFrameSnapshot = combatFramesSnapshots.Snapshot;
+                chatGui.Print(
+                    $"[Seiton Sense] combat-frames[enabled={configuration.ShowCombatFrames}," +
+                    $"active={combatFrameSnapshot.Active},published={combatFrameSnapshot.PublishedAtMilliseconds}," +
+                    $"enemies={combatFrameSnapshot.Enemies.Count},preview={combatFrames.PreviewEnabled}]");
                 chatGui.Print(
                     $"[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}," +
                     $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +
@@ -694,6 +755,7 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
+                combatFrames.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
             case "help":

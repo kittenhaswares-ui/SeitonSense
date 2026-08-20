@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "PvP pressure, Smart Kardia, low-MP Focus, DRK macro, warnings, assists, and clarity.",
-    "Description": "A local PvP HUD integrating an optional held-key Smart Kardia helper, set-only low-MP Focus Target and exact DRK Shadowbringer macro helpers, a top-center 3+ enemy alarm with sound/Sprint options, isolation, pressure and CC-protection cues, resource auras, fail-closed assists, team communication and target highlights.",
+    "Punchline": "Fixed PvP combat frames, pressure, survival helpers, assists, and target clarity.",
+    "Description": "A local PvP HUD with fixed overlay-only Self/S1-S5 combat frames, pressure and CC cues, optional Smart Recuperate, accepted-Eukrasia Smart Kardia, low-MP Focus, exact DRK macro helpers, fail-closed assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.19.0.0",
-    "Changelog": "Adds a separate default-off Smart Kardia held-key helper for PvP Sage in exact Crystalline Conflict. A complete, unique, stable exact five-player party view may select self or an exact living, targetable party member with trusted direct incoming pressure from at least two unique enemies; non-self candidates also require native 30-yalm range and line of sight. Higher pressure wins, then lower exact HP ratio and stable party/actor identity. If the highest-ranked candidate already has local-source Kardion, no attempt is made and no lower candidate is selected. The frozen actor, pressure, Kardion source, Kardia metadata/readiness, and native reachability are revalidated before one spent native request, with no selected-target mutation, alternate, fallback, replay, or retry. Configuration schema 25 keeps the option off for fresh, upgraded, and reset configurations; live dispatch and application still require current-patch confirmation.",
+    "AssemblyVersion": "0.20.0.0",
+    "Changelog": "Adds default-off fixed overlay-only Combat Frames for Self and stable S1-S5 rows, plus a default-off held-key Smart Recuperate at 16,000+ missing HP and 2,000+ MP. Smart Kardia now opens one short-lived opportunity only after an accepted PvP Eukrasia call and causal charge/status evidence; the old continuous held-key scanner and six-second throttle are removed. Speculative low-HP pre-Guard is removed while the verified post-Purify Guard follow-up remains. PLD Guardian is now an independent Job Tool. Configuration schema 26 migrates prior explicit opt-ins safely; native FFXIV HUD and selected targets remain untouched.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -21,6 +21,8 @@
       "focus-target",
       "dark-knight",
       "sage",
+      "combat-frames",
+      "survival",
       "utility"
     ],
     "IsHide": false,
@@ -28,6 +30,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787069034"
+    "LastUpdate": "1787211463"
   }
 ]

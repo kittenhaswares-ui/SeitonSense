@@ -28,6 +28,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
+    private readonly SmartRecuperateProbe smartRecuperate;
     private readonly PressureEscapeSprintProbe pressureEscapeSprint;
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
@@ -90,6 +91,12 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             log,
             metadata);
+        smartRecuperate = new SmartRecuperateProbe(
+            clientState,
+            objectTable,
+            dutyState,
+            nearAssist,
+            log);
         pressureEscapeSprint = new PressureEscapeSprintProbe(
             clientState,
             dutyState,
@@ -153,6 +160,7 @@ internal sealed class PersonalStatusService : IDisposable
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
+    internal SmartRecuperateProbeSnapshot SmartRecuperateDiagnostics => smartRecuperate.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
         pressureEscapeSprint.Snapshot;
     internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
@@ -234,6 +242,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
+            smartRecuperate.FailClosed();
             pressureEscapeSprint.FailClosed(now, exception);
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
@@ -272,6 +281,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             emergencyPurify.Reset();
             defensiveUtility.Reset();
+            smartRecuperate.Reset();
             pressureEscapeSprint.Reset();
             guardianCommunication.Reset();
             allyRescue.Reset();
@@ -287,8 +297,11 @@ internal sealed class PersonalStatusService : IDisposable
         var alive = IsAlive(localPlayer);
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
         var defensiveUtilitiesConfigurationEnabled = configuration.Enabled &&
-                                                    configuration.EnableDefensiveUtilities &&
-                                                    isCrystallineConflict;
+                                                     configuration.EnableDefensiveUtilities &&
+                                                     isCrystallineConflict;
+        var paladinGuardianConfigurationEnabled = configuration.Enabled &&
+                                                  configuration.PaladinGuardianLowAlly &&
+                                                  isCrystallineConflict;
         var pressureKnown = pressureTracker.TryGetSelfIncomingPressure(out var incomingEnemyCount);
         var highPressure = DefensiveUtilityRules.IsHighPressure(
             pressureKnown,
@@ -406,7 +419,7 @@ internal sealed class PersonalStatusService : IDisposable
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                               configuration.EnableNinjaSeitonOnFreshGameplayKey;
         var smartKardiaConfigurationEnabled = configuration.Enabled &&
-                                              configuration.EnableSageKardiaOnHeldKey;
+                                               configuration.EnableSageKardiaAfterEukrasia;
         var scholarCriticalStrategyConfigurationEnabled = configuration.Enabled &&
                                                            configuration.EnableScholarCriticalStrategyOnHeldKey;
         var localJobId = localPlayer?.ClassJob.IsValid == true
@@ -418,38 +431,39 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ScholarCriticalStrategyVerified &&
             !guardActive &&
             localJobId == ScholarCriticalStrategyRules.ScholarJobId;
-        var smartKardiaHeldEnabled =
-            smartKardiaConfigurationEnabled &&
-            isCrystallineConflict &&
-            metadata.SmartKardiaVerified &&
-            !guardActive &&
-            localJobId == SmartKardiaRules.SageJobId;
         var pressureEscapeSprintHeldEnabled = configuration.Enabled &&
                                               configuration.EnablePressureEscapeSprintOnHeldKey &&
                                               isCrystallineConflict &&
                                               !guardActive;
+        var smartRecuperateHeldEnabled = configuration.Enabled &&
+                                         configuration.EnableSmartRecuperateOnHeldKey &&
+                                         isCrystallineConflict &&
+                                         metadata.RecuperateVerified &&
+                                         !guardActive;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
             isSupportedPvPContext &&
             (purifyConfigurationEnabled ||
              defensiveUtilitiesConfigurationEnabled ||
+             paladinGuardianConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
              miracleInterceptConfigurationEnabled ||
              (ninjaSeitonConfigurationEnabled &&
               isCrystallineConflict &&
               metadata.SeitonVerified &&
              !guardActive) ||
-             smartKardiaHeldEnabled ||
              scholarCriticalStrategyHeldEnabled ||
+             smartRecuperateHeldEnabled ||
              pressureEscapeSprintHeldEnabled),
             allowPurifyHeldGameplayKey,
             defensiveUtilitiesConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey,
+            paladinGuardianConfigurationEnabled && configuration.PaladinGuardianOnHeldKey,
+            smartRecuperateHeldEnabled,
             allyRescueConfigurationEnabled && configuration.AllyRescueOnHeldGameplayKey,
             miracleInterceptConfigurationEnabled && configuration.ReactiveCcOnHeldKey,
             scholarCriticalStrategyHeldEnabled,
-            pressureEscapeSprintHeldEnabled,
-            smartKardiaHeldEnabled);
+            pressureEscapeSprintHeldEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -470,14 +484,12 @@ internal sealed class PersonalStatusService : IDisposable
             EmergencyActionPriorityRules.SelfPurifyClaimsPriority(
                 purify.Decision,
                 purify.InputTrigger);
-        var defense = defensiveUtility.Observe(
+        var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
             isCrystallineConflict,
             defensiveUtilitiesConfigurationEnabled,
             configuration.DefensiveUtilitiesOnHeldKey,
             configuration.GuardOnStunPressure,
-            configuration.PreGuardOnLowHpPressure,
-            configuration.PaladinGuardianLowAlly,
             pressureKnown,
             incomingEnemyCount,
             highPressureStunObserved,
@@ -489,6 +501,31 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        // Deliberately separate pass boundary: Smart Recuperate belongs here,
+        // after the verified post-Purify Guard follow-up but before ally Guardian.
+        var recuperate = smartRecuperate.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
+            metadata.RecuperateVerified,
+            guardActive,
+            purifyClaimedPriority || guardDefense.InputClaimed || emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
+        var defense = defensiveUtility.ObserveGuardian(
+            localPlayer,
+            isCrystallineConflict,
+            paladinGuardianConfigurationEnabled,
+            configuration.PaladinGuardianOnHeldKey,
+            guardActive,
+            purifyClaimedPriority ||
+            guardDefense.InputClaimed ||
+            smartRecuperateClaimedPriority,
+            emergencyInputFrame,
+            now,
+            hardReset: false);
         // Guardian may return client-accepted a millisecond after this frame's
         // original timestamp. Refresh before handing the exact episode to the
         // same-frame communication consumer so it is never misclassified as a
@@ -500,7 +537,9 @@ internal sealed class PersonalStatusService : IDisposable
             defense.LastAcceptedGuardianEpisode,
             now,
             hardReset);
-        var defensiveUtilityClaimedPriority = defense.InputClaimed;
+        var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||
+                                               smartRecuperateClaimedPriority ||
+                                               defense.InputClaimed;
         now = Environment.TickCount64;
         var pressureEscape = pressureEscapeSprint.Observe(
             localPlayer,
@@ -567,9 +606,8 @@ internal sealed class PersonalStatusService : IDisposable
             defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
-            miracle.UseActionAttempted ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
+             miracle.UseActionAttempted ||
+             emergencyInputFrame.IsConsumed,
             now,
             hardReset);
         var ninja = ninjaSeiton.Observe(
@@ -583,7 +621,7 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
-            kardia.InputClaimed ||
+            kardia.UseActionAttempted ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -599,7 +637,7 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeClaimedPriority ||
             allyRescueClaimedPriority ||
             miracle.UseActionAttempted ||
-            kardia.InputClaimed ||
+            kardia.UseActionAttempted ||
             ninja.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
@@ -617,11 +655,11 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MonkEarthReplyHpPercent,
             configuration.MonkEarthReplyExpirySeconds,
             purifyClaimedPriority ||
-            defense.InputClaimed ||
+            defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
             rescue.UseActionAttempted ||
             miracle.UseActionAttempted ||
-            kardia.InputClaimed ||
+            kardia.UseActionAttempted ||
             ninja.InputClaimed ||
             scholar.InputClaimed,
             now,
@@ -969,6 +1007,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput.Reset();
         emergencyPurify.Reset();
         defensiveUtility.Reset();
+        smartRecuperate.Reset();
         pressureEscapeSprint.Reset();
         guardianCommunication.Reset();
         allyRescue.Reset();

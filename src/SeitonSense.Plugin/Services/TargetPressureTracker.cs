@@ -35,6 +35,7 @@ internal sealed class TargetPressureTracker : IDisposable
     private TargetPressureDiagnostics diagnostics = TargetPressureDiagnostics.Inactive;
     private long nextUpdateAt;
     private long nextErrorLogAt;
+    private long requestedIncomingAllyPressureAt = -1;
     private uint activeTerritory;
     private TargetPressureActorIdentity activeLocalIdentity;
     private bool started;
@@ -81,9 +82,42 @@ internal sealed class TargetPressureTracker : IDisposable
     internal bool TryCaptureIncomingAllyPressure(
         out IReadOnlyDictionary<TargetPressureActorIdentity, int> counts)
     {
+        return TryCaptureIncomingAllyPressure(
+            out counts,
+            out _);
+    }
+
+    internal bool TryCaptureIncomingAllyPressure(
+        out IReadOnlyDictionary<TargetPressureActorIdentity, int> counts,
+        out long publishedAtMilliseconds)
+    {
         var current = Volatile.Read(ref incomingAllyPressure);
         counts = current.Counts;
+        publishedAtMilliseconds = current.PublishedAtMilliseconds;
         return current.Active;
+    }
+
+    /// <summary>
+    /// Requests one fresh ally-pressure publication for an accepted Eukrasia
+    /// opportunity. This avoids keeping the full party pressure scan alive while
+    /// Smart Kardia is merely enabled but idle.
+    /// </summary>
+    internal void RequestIncomingAllyPressureCapture(long acceptedAtMilliseconds)
+    {
+        if (acceptedAtMilliseconds < 0) return;
+        Interlocked.Exchange(
+            ref requestedIncomingAllyPressureAt,
+            acceptedAtMilliseconds);
+        Volatile.Write(ref nextUpdateAt, 0);
+    }
+
+    internal void CancelIncomingAllyPressureCapture(long acceptedAtMilliseconds)
+    {
+        if (acceptedAtMilliseconds < 0) return;
+        Interlocked.CompareExchange(
+            ref requestedIncomingAllyPressureAt,
+            -1,
+            acceptedAtMilliseconds);
     }
 
     internal void Start()
@@ -225,6 +259,20 @@ internal sealed class TargetPressureTracker : IDisposable
     private void UpdateSnapshot()
     {
         var now = Environment.TickCount64;
+        var requestedAllyPressureAt = Interlocked.Read(
+            ref requestedIncomingAllyPressureAt);
+        var oneShotAllyPressureRequested =
+            requestedAllyPressureAt >= 0 &&
+            now >= requestedAllyPressureAt &&
+            now - requestedAllyPressureAt <
+            SmartKardiaRules.TriggerLifetimeMilliseconds;
+        if (requestedAllyPressureAt >= 0 && !oneShotAllyPressureRequested)
+        {
+            Interlocked.CompareExchange(
+                ref requestedIncomingAllyPressureAt,
+                -1,
+                requestedAllyPressureAt);
+        }
         var local = objectTable.LocalPlayer;
         var localIdentity = CreateIdentity(local);
         var condition = dutyState.ContentFinderCondition;
@@ -239,7 +287,11 @@ internal sealed class TargetPressureTracker : IDisposable
             condition.IsValid && condition.Value.CrystallineConflictCasualRoulette,
             condition.IsValid && condition.Value.CrystallineConflictRankedRoulette);
         var isWolvesDen = supportedContext == SupportedPvPContext.WolvesDen;
+        var combatFrameProtectionsEnabled =
+            configuration.ShowCombatFrames &&
+            configuration.CombatFramesShowStatuses;
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
+                                      configuration.ShowCombatFrames ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
                                        configuration.NearAssistPreferTeamPressure ||
@@ -258,18 +310,21 @@ internal sealed class TargetPressureTracker : IDisposable
             supportedContext == SupportedPvPContext.CrystallineConflict &&
             ((configuration.ExperimentalAllyRescueOnNextKey &&
              metadata.AllyRescueStatusesVerified) ||
-             configuration.EnableSageKardiaOnHeldKey ||
+             oneShotAllyPressureRequested ||
              configuration.EnableBardWardensPaeanPressureRedirect ||
+             configuration.PaladinGuardianLowAlly ||
              (configuration.EnableNearAssistMacro &&
               configuration.NearHelpPreferIncomingPressure));
         var pressureStateTrackingEnabled =
             pressureEnabledForContext || incomingAllyPressureEnabledForContext;
         var wolvesTrackingEnabled = isWolvesDen &&
                                     (configuration.ShowCcProtection ||
+                                     combatFrameProtectionsEnabled ||
                                      pressureEnabledForContext ||
                                      incomingAllyPressureEnabledForContext);
         var normalPvPTrackingEnabled = clientState.IsPvPExcludingDen &&
                                        (configuration.ShowCcProtection ||
+                                        combatFrameProtectionsEnabled ||
                                         pressureEnabledForContext ||
                                         incomingAllyPressureEnabledForContext);
         var supported = configuration.Enabled &&
@@ -461,8 +516,10 @@ internal sealed class TargetPressureTracker : IDisposable
             return entity != 0 ? entity : left.GameObjectId.CompareTo(right.GameObjectId);
         });
 
+        var publishedAtMilliseconds = Environment.TickCount64;
         var publishedIncomingAllyPressure = new IncomingAllyPressureRuntimeState(
             pressureStateTrackingEnabled,
+            publishedAtMilliseconds,
             core.IncomingAllyPressure.ToDictionary(
                 static pressure => pressure.Ally,
                 static pressure => pressure.UniqueEnemyCount));
@@ -546,7 +603,10 @@ internal sealed class TargetPressureTracker : IDisposable
         long now,
         bool isLargeScalePvP)
     {
-        if (!configuration.ShowCcProtection || verifiedProtectionStatusIds.Count == 0)
+        var protectionsEnabled = configuration.ShowCcProtection ||
+                                 (configuration.ShowCombatFrames &&
+                                  configuration.CombatFramesShowStatuses);
+        if (!protectionsEnabled || verifiedProtectionStatusIds.Count == 0)
         {
             protectionStates.Remove(identity);
             return [];
@@ -712,6 +772,7 @@ internal sealed class TargetPressureTracker : IDisposable
     {
         recentPressure.Clear();
         protectionStates.Clear();
+        Interlocked.Exchange(ref requestedIncomingAllyPressureAt, -1);
         Interlocked.Exchange(ref incomingAllyPressure, IncomingAllyPressureRuntimeState.Inactive);
         Interlocked.Exchange(ref snapshot, TargetPressureRuntimeSnapshot.Inactive);
         Volatile.Write(ref diagnostics, TargetPressureDiagnostics.Inactive);
@@ -741,10 +802,12 @@ internal sealed class TargetPressureTracker : IDisposable
 
     private sealed record IncomingAllyPressureRuntimeState(
         bool Active,
+        long PublishedAtMilliseconds,
         IReadOnlyDictionary<TargetPressureActorIdentity, int> Counts)
     {
         internal static IncomingAllyPressureRuntimeState Inactive { get; } = new(
             false,
+            -1,
             new Dictionary<TargetPressureActorIdentity, int>());
     }
 }
