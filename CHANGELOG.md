@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.0.1
+
+- Fixed **Smart Recuperate** remaining blocked after opt-in because the current
+  action-sheet representation exposes the shared PvP Recuperate action's row-0
+  `ClassJob` reference as valid. Metadata validation no longer rejects that
+  canonical shared-action representation.
+- Runtime behavior and configuration are otherwise unchanged. Smart Recuperate
+  remains default-off, exact-Crystalline-Conflict-only, self-only, inclusive at
+  16,000 missing HP and 2,000 MP, and limited to one attempt per eligible held
+  generation. Configuration schema remains `26`.
+
 ## 0.20.0.0
 
 - Added default-off **fixed Combat Frames** for exact Crystalline Conflict: one

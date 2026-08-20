@@ -1794,7 +1794,7 @@ Assert-Literals $smartKardiaMetadata @(
     'recuperate.Icon == EnemyCombatConstants.RecuperateIconId',
     'recuperate.IsPvP',
     'recuperate.IsPlayerAction',
-    '!recuperate.ClassJob.IsValid',
+    'recuperate.ClassJob.RowId == 0',
     'recuperate.ClassJobCategory.RowId == 85',
     'recuperate.ActionCategory.RowId == 4',
     'recuperate.Range == 0',
@@ -1812,6 +1812,9 @@ Assert-Literals $smartKardiaMetadata @(
     'Restores own HP.',
     'Cure Potency: 16,000'
 ) 'Exact installed PvP Recuperate action metadata'
+if ($smartKardiaMetadata -match '!\s*recuperate\.ClassJob\.IsValid') {
+    throw 'Recuperate metadata must accept the installed all-jobs RowRef and pin its semantic ClassJob RowId 0 sentinel.'
+}
 
 Assert-Literals $pluginSource @(
     '[Seiton Sense] smart-recuperate[decision={recuperate.Decision}',
@@ -5727,11 +5730,11 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.20.0.0</Version>',
-    '<AssemblyVersion>0.20.0.0</AssemblyVersion>',
-    '<FileVersion>0.20.0.0</FileVersion>'
-) 'v0.20.0.0 project version'
-Assert-Literals ($pluginManifest + $repositoryIndex) @(
+    '<Version>0.20.0.1</Version>',
+    '<AssemblyVersion>0.20.0.1</AssemblyVersion>',
+    '<FileVersion>0.20.0.1</FileVersion>'
+) 'v0.20.0.1 project version'
+Assert-Literals $pluginManifest @(
     'fixed overlay-only Self/S1-S5 combat frames',
     'optional Smart Recuperate',
     'accepted-Eukrasia Smart Kardia',
@@ -5739,17 +5742,13 @@ Assert-Literals ($pluginManifest + $repositoryIndex) @(
     'dark-knight',
     '"sage"',
     '"combat-frames"',
-    '"survival"',
-    '"AssemblyVersion": "0.20.0.0"',
-    'Adds default-off fixed overlay-only Combat Frames for Self and stable S1-S5 rows',
-    'default-off held-key Smart Recuperate at 16,000+ missing HP and 2,000+ MP',
-    'one short-lived opportunity only after an accepted PvP Eukrasia call and causal charge/status evidence',
-    'old continuous held-key scanner and six-second throttle are removed',
-    'Speculative low-HP pre-Guard is removed',
-    'PLD Guardian is now an independent Job Tool',
-    'Configuration schema 26 migrates prior explicit opt-ins safely',
-    'native FFXIV HUD and selected targets remain untouched'
-) 'v0.20.0.0 manifest and repository metadata'
+    '"survival"'
+) 'v0.20.0.1 plugin manifest metadata'
+Assert-Literals $repositoryIndex @(
+    '"AssemblyVersion": "0.20.0.1"',
+    'Fixes Smart Recuperate being blocked by the current row-0 ClassJob metadata representation for the shared PvP Recuperate action.',
+    'The default-off opt-in, exact Crystalline Conflict gate, inclusive 16,000-missing-HP and 2,000-MP thresholds, self-only one-attempt behavior, and configuration schema 26 are unchanged.'
+) 'v0.20.0.1 repository hotfix metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -5761,7 +5760,7 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.20.0.0 adds fixed Combat Frames and a separate default-off held-key Smart Recuperate helper, turns Smart Kardia into a bounded one-shot follow-up to a client-accepted Eukrasia, removes speculative pre-Guard, and lists PLD Guardian as an independent job tool',
+    'Version 0.20.0.1 fixes Smart Recuperate''s current action-sheet metadata validation. Version 0.20.0.0 added fixed Combat Frames and a separate default-off held-key Smart Recuperate helper, turned Smart Kardia into a bounded one-shot follow-up to a client-accepted Eukrasia, removed speculative pre-Guard, and listed PLD Guardian as an independent job tool',
     '**Fixed Combat Frames:** a separate default-off, Gladius-style screen-space overlay shows one Self frame plus stable canonical `S1`-`S5` enemy rows',
     'Rows never move with actors or disappear behind obstacles, are not clickable, and never edit or hide the native HUD',
     '**Experimental Sage Smart Kardia helper:** a separate default-off option arms only after the existing Eukrasia call is forwarded unchanged and accepted by the client',
@@ -5821,7 +5820,7 @@ Assert-Literals $normalizedReadme @(
     'neither reranks nor switches or invalidates the frozen target',
     'not swallow the original key.',
     'current-patch live-confirmation boundaries'
-) 'v0.20.0.0 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
+) 'v0.20.0.1 overview plus retained high-pressure alarm/Sprint and prior Smart Paean, NIN, Guardian, and Scholar user contract'
 Assert-Literals $normalizedReadme @(
     '## Sage Smart Kardia after accepted Eukrasia',
     'separate **Smart Kardia after accepted Eukrasia** experiment is disabled by default',
@@ -5840,7 +5839,7 @@ Assert-Literals $normalizedReadme @(
     'It never changes a hard, soft, focus, or mouseover target',
     'Client acceptance is dispatch feedback only and does not prove that Kardia or Kardion applied',
     'current-patch hook ordering, charge/status evidence, animation lock, native reachability, dispatch, and server behavior require a live CC test'
-) 'v0.20.0.0 accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, direct-target, and live-boundary user contract'
+) 'v0.20.0.1 accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, direct-target, and live-boundary user contract'
 Assert-Literals $normalizedReadme @(
     '## DRK Shadowbringer two-line macro',
     'supports exact PvP Dark Knight in Crystalline Conflict',
@@ -5886,6 +5885,15 @@ Assert-Literals $normalizedReadme @(
     'current-patch live A/B boundaries'
 ) 'v0.18.0.1 exact Den-dummy/retained CC DRK macro and set-only Auto Low-MP Focus user contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.20.0.1',
+    'Fixed **Smart Recuperate** remaining blocked after opt-in because the current action-sheet representation exposes the shared PvP Recuperate action''s row-0 `ClassJob` reference as valid',
+    'Metadata validation no longer rejects that canonical shared-action representation',
+    'Runtime behavior and configuration are otherwise unchanged',
+    'remains default-off, exact-Crystalline-Conflict-only, self-only, inclusive at 16,000 missing HP and 2,000 MP',
+    'limited to one attempt per eligible held generation',
+    'Configuration schema remains `26`'
+) 'v0.20.0.1 Smart Recuperate metadata hotfix release notes'
+Assert-Literals $normalizedChangelog @(
     '## 0.20.0.0',
     'Added default-off **fixed Combat Frames** for exact Crystalline Conflict',
     'one Self frame and stable `S1`-`S5` enemy rows',
@@ -5908,7 +5916,7 @@ Assert-Literals $normalizedChangelog @(
     'Smart Recuperate and Combat Frames remain off for fresh, upgrading, and reset configurations',
     'prior explicit Smart Kardia opt-in migrates to the new Eukrasia-triggered mode',
     'only a previously effective Guardian opt-in migrates to the independent Job Tool'
-) 'v0.20.0.0 Combat Frames, Survival, accepted-Eukrasia Kardia, Guardian separation, schema, and live-boundary release notes'
+) 'Retained v0.20.0.0 Combat Frames, Survival, accepted-Eukrasia Kardia, Guardian separation, schema, and live-boundary release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.18.0.1',
     'Extended the separate default-off `/seitonbringer` helper to Wolves'' Den striking-dummy testing',
@@ -6076,12 +6084,12 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 26 is current in v0.20.0.0',
+    'Configuration schema 26 is current in v0.20.0.1',
     'Smart Recuperate and Combat Frames remain off for fresh, upgrading, and reset configurations',
     'previously explicit Smart Kardia held-key opt-in migrates once to the accepted-Eukrasia option',
     'removed pre-Guard option is cleared',
     'only a previously effective Guardian opt-in migrates to the independent Job Tool'
-) 'v0.20.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-26 migration disclosure'
+) 'v0.20.0.1 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-26 migration disclosure'
 Assert-Literals $normalizedPrivacy @(
     '## Experimental Sage Smart Kardia after accepted Eukrasia',
     'separate persisted option is disabled by default',
@@ -6104,7 +6112,7 @@ Assert-Literals $normalizedPrivacy @(
     'trigger token, timestamps, Eukrasia evidence, pressure publication, frozen actor, result, and aggregate diagnostics remain in memory only',
     'Client acceptance does not prove that Kardia or Kardion applied',
     'current-patch Eukrasia charge/status, animation-lock, dispatch, and reachability behavior remain live-validation boundaries'
-) 'v0.20.0.0 accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, direct-target, and persistence disclosure'
+) 'v0.20.0.1 accepted-Eukrasia Smart Kardia causal-token, fresh-pressure, direct-target, and persistence disclosure'
 Assert-Literals $privacy @(
     '## High-pressure warning, sound, and held Sprint',
     'fixed local top-center warning',
@@ -6149,8 +6157,8 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 26 is current in v0.20.0.0'
-) 'v0.20.0.0 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
+    'Configuration schema 26 is current in v0.20.0.1'
+) 'v0.20.0.1 retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
@@ -6417,4 +6425,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.20.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 26. Smart Recuperate remains default-off, exact-CC/self-only, inclusive at 16,000 missing HP and 2,000 observed MP, leaves an ineligible held generation unspent, then consumes before one frozen direct-GOID request with no alternate or retry. Smart Kardia remains default-off and exact-CC/SGE-only; one client-accepted unchanged PvP Eukrasia 29258 call creates a bounded two-second causal token, requests one fresh pressure publication, waits for animation unlock, consumes the trigger/frozen actor, and permits at most one direct-GOID Kardia 29264 request without continuous held scanning, independent six-second throttling, target mutation, rerank, alternate, replay, or retry. Speculative pre-Guard has no runtime path; reactive post-Purify Guard and independent PLD Guardian retain separate gates and reviewed priority. Fixed overlay-only Combat Frames retain one Self plus stable S1-S5 rows, exact 10,000-max-MP trust and bounded 2,000-MP pips, explicit unknown/dead semantics, immutable fresh snapshots, background-only noninteractive rendering, and no native-HUD, target, world-projection, or gameplay mutation. Schema-26 migration, defaults, bindings, presets, metadata, documentation, and all prior safety contracts remain pinned. Native action/status/charge reporting, Combat Frame rendering, Focus setter/readback, Macro Queue/Turbo timing, and server effects still require live current-patch validation."
+Write-Host "Seiton Sense v0.20.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 26. Smart Recuperate remains default-off, exact-CC/self-only, inclusive at 16,000 missing HP and 2,000 observed MP, leaves an ineligible held generation unspent, then consumes before one frozen direct-GOID request with no alternate or retry. Smart Kardia remains default-off and exact-CC/SGE-only; one client-accepted unchanged PvP Eukrasia 29258 call creates a bounded two-second causal token, requests one fresh pressure publication, waits for animation unlock, consumes the trigger/frozen actor, and permits at most one direct-GOID Kardia 29264 request without continuous held scanning, independent six-second throttling, target mutation, rerank, alternate, replay, or retry. Speculative pre-Guard has no runtime path; reactive post-Purify Guard and independent PLD Guardian retain separate gates and reviewed priority. Fixed overlay-only Combat Frames retain one Self plus stable S1-S5 rows, exact 10,000-max-MP trust and bounded 2,000-MP pips, explicit unknown/dead semantics, immutable fresh snapshots, background-only noninteractive rendering, and no native-HUD, target, world-projection, or gameplay mutation. Schema-26 migration, defaults, bindings, presets, metadata, documentation, and all prior safety contracts remain pinned. Native action/status/charge reporting, Combat Frame rendering, Focus setter/readback, Macro Queue/Turbo timing, and server effects still require live current-patch validation."

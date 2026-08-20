@@ -2,10 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.20.0.0 adds fixed Combat Frames and
-a separate default-off held-key Smart Recuperate helper, turns Smart Kardia into
-a bounded one-shot follow-up to a client-accepted Eukrasia, removes speculative
-pre-Guard, and lists PLD Guardian as an independent job tool. It retains
+assistance, and target highlights. Version 0.20.0.1 fixes Smart Recuperate's
+current action-sheet metadata validation. Version 0.20.0.0 added fixed Combat
+Frames and a separate default-off held-key Smart Recuperate helper, turned Smart
+Kardia into a bounded one-shot follow-up to a client-accepted Eukrasia, removed
+speculative pre-Guard, and listed PLD Guardian as an independent job tool. It
+retains
 v0.18.0.1's corrected DRK macro and narrow, explicitly enabled Wolves' Den
 striking-dummy test path plus the separate default-off set-only low-MP Focus
 Target and exact two-line DRK/ReAction helper.
@@ -1247,7 +1249,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.20.0.0, source checks cover Smart Kardia's unchanged forwarding of one
+For v0.20.0.1, source checks cover Smart Kardia's unchanged forwarding of one
 exact Eukrasia call, client-accepted trigger creation, exact local Sage/territory
 ownership, two-second expiry, causal charge/status evidence, post-acceptance
 pressure publication, animation-lock-clear Kardia boundary, complete stable

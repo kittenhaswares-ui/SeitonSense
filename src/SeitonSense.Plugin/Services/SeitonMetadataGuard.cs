@@ -323,7 +323,6 @@ internal static class PvPMetadataGuard
                    recuperate.Icon == EnemyCombatConstants.RecuperateIconId &&
                    recuperate.IsPvP &&
                    recuperate.IsPlayerAction &&
-                   !recuperate.ClassJob.IsValid &&
                    recuperate.ClassJob.RowId == 0 &&
                    recuperate.ClassJobCategory.IsValid &&
                    recuperate.ClassJobCategory.RowId == 85 &&

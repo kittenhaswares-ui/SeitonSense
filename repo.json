@@ -5,8 +5,8 @@
     "Punchline": "Fixed PvP combat frames, pressure, survival helpers, assists, and target clarity.",
     "Description": "A local PvP HUD with fixed overlay-only Self/S1-S5 combat frames, pressure and CC cues, optional Smart Recuperate, accepted-Eukrasia Smart Kardia, low-MP Focus, exact DRK macro helpers, fail-closed assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.20.0.0",
-    "Changelog": "Adds default-off fixed overlay-only Combat Frames for Self and stable S1-S5 rows, plus a default-off held-key Smart Recuperate at 16,000+ missing HP and 2,000+ MP. Smart Kardia now opens one short-lived opportunity only after an accepted PvP Eukrasia call and causal charge/status evidence; the old continuous held-key scanner and six-second throttle are removed. Speculative low-HP pre-Guard is removed while the verified post-Purify Guard follow-up remains. PLD Guardian is now an independent Job Tool. Configuration schema 26 migrates prior explicit opt-ins safely; native FFXIV HUD and selected targets remain untouched.",
+    "AssemblyVersion": "0.20.0.1",
+    "Changelog": "Fixes Smart Recuperate being blocked by the current row-0 ClassJob metadata representation for the shared PvP Recuperate action. The default-off opt-in, exact Crystalline Conflict gate, inclusive 16,000-missing-HP and 2,000-MP thresholds, self-only one-attempt behavior, and configuration schema 26 are unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -30,6 +30,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787211463"
+    "LastUpdate": "1787228046"
   }
 ]
