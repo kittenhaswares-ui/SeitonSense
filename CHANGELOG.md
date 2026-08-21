@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.28.0.1
+
+- Simplified the explicit manual NIN `/panicshu` macro into one immediate action
+  path. Every invocation computes the exact 19.5-yalm forward terrain point and
+  calls native Shukuchi at most once in the command callback; the 500-ms lease,
+  pending state, framework wait, expiry, and second-command preservation were
+  removed.
+- Intentionally allows the manual command from the local player's own Guard so
+  Shukuchi may break it. Panic Shukuchi no longer consults the held-action
+  scheduler, Self-Purify priority, crowd-control state, cast, native queue,
+  animation lock, cooldown, or resource readiness. FFXIV immediately accepts or
+  rejects that one request; a later macro press is a new explicit command, never
+  an automatic retry.
+- Kept the exact PvP NIN/context/metadata checks, opt-in Wolves' Den test path,
+  exact adjusted Shukuchi `29513` Doton block, 19.5-yalm terrain proof, one native
+  location-action boundary, and no target/cursor mutation, shorter fallback,
+  alternate action, or replay. Routine command results are now chat-silent and
+  remain available in `/seiton debug`.
+- Bumped the plugin version to `0.28.0.1`. Configuration schema remains `30`;
+  this hotfix adds no setting or migration.
+
 ## 0.28.0.0
 
 - Added the explicit manual NIN `/panicshu` macro command. It runs only from the
