@@ -117,6 +117,30 @@ internal static class NinjaSeitonDispatchSelfTests
         Equal(3, intent.EnemySlot, "frozen slot");
         Equal(alternate.Actor, intent.Target, "frozen actor");
 
+        var castWaitRequest = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.NinjaSeiton,
+            intent.ActionId,
+            LocalPlayer,
+            intent.Target,
+            FrozenKeyCode: 0x57,
+            IntentEpochToken: 1);
+        True(castWaitRequest.IsValid, "cast wait retains the exact frozen Seiton intent");
+        True(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: true),
+            "active cast soft-wait keeps initial Seiton priority without an attempt");
+        Equal(
+            HeldActionRetryState.Initial,
+            HeldActionRetryRules.Complete(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                ClientActionAttemptOutcome.SoftUnavailable).NextState,
+            "active cast soft-wait spends no Seiton attempt budget");
+
         True(
             NinjaSeitonDispatchRules.CanUseExactIntent(
                 intent,

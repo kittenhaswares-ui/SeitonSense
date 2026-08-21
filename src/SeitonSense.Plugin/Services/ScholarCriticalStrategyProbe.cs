@@ -21,6 +21,7 @@ internal sealed record ScholarCriticalStrategyProbeSnapshot(
     bool LocallyReady,
     VirtualKey HeldGameplayKey,
     bool InputClaimed,
+    HeldCastCancellationRequest? CastCancellationRequest,
     bool UseActionAttempted,
     bool UseActionAccepted,
     long AttemptCount,
@@ -41,6 +42,7 @@ internal sealed record ScholarCriticalStrategyProbeSnapshot(
         false,
         VirtualKey.NO_KEY,
         false,
+        null,
         false,
         false,
         0,
@@ -72,6 +74,7 @@ internal sealed class ScholarCriticalStrategyProbe
     private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
+    private long frozenIntentEpochToken;
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
 
@@ -175,16 +178,15 @@ internal sealed class ScholarCriticalStrategyProbe
             : VirtualKey.NO_KEY;
         exactOwnedKeyStillDown = acceptedHold.OwnsHold &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(ownedKey);
-        var actionReady = actionStateKnown &&
-                          cooldownReady &&
-                          resourcesReady &&
-                          nativeBoundaryReady;
+        var actionSpecificReady = actionStateKnown &&
+                                  cooldownReady &&
+                                  resourcesReady;
         var hasReadyEpoch = acceptedHold.OwnsHold
             ? acceptedHold.HasAvailableReadyEpoch && exactOwnedKeyStillDown
             : inputFrame.HeldGameplayKeyEligible;
         var shouldResolveCandidates = frozenRetry is null &&
                                       terminalHeldKey == VirtualKey.NO_KEY &&
-                                      actionReady &&
+                                      actionSpecificReady &&
                                       !higherPriorityClaimed &&
                                       input.ProbeSucceeded &&
                                       !input.IsTextInputActive &&
@@ -208,12 +210,13 @@ internal sealed class ScholarCriticalStrategyProbe
                 input.IsTextInputActive,
                 hasReadyEpoch,
                 resolvedActionId,
-                actionReady,
+                actionSpecificReady,
                 completeCanonicalSet,
                 candidates,
                 hardReset));
 
         var inputClaimed = false;
+        HeldCastCancellationRequest? castCancellationRequest = null;
         var attempted = false;
         var accepted = false;
         ScholarCriticalStrategyCandidate? observedCandidate = null;
@@ -274,6 +277,10 @@ internal sealed class ScholarCriticalStrategyProbe
                 inputFrame.Consume();
                 if (!finalNativeBoundaryReady)
                 {
+                    castCancellationRequest = CreateCastCancellationRequest(
+                        currentLocal!,
+                        retry);
+
                     lastEvent = $"S{retry.Intent.EnemySlot} frozen retry waiting for global native boundary";
                 }
                 else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
@@ -310,6 +317,7 @@ internal sealed class ScholarCriticalStrategyProbe
                 heldKey,
                 acceptedHold.OwnsHold,
                 acceptedHold.OwnsHold ? acceptedHold.CurrentReadyEpochToken : 0,
+                NextIntentEpochToken(),
                 HeldActionRetryState.Initial);
             inputClaimed = true;
             inputFrame.Consume();
@@ -320,6 +328,13 @@ internal sealed class ScholarCriticalStrategyProbe
                 out attempted);
             accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
             CompleteAttempt(retryIntent, outcome, nowMilliseconds);
+            if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
+            {
+                castCancellationRequest = CreateCastCancellationRequest(
+                    localPlayer!,
+                    retryIntent);
+            }
+
             lastEvent = DescribeAttempt(intent, 1, outcome);
         }
 
@@ -340,10 +355,11 @@ internal sealed class ScholarCriticalStrategyProbe
             selectedCandidate?.Actor.EntityId ?? 0,
             selectedCandidate?.PressureKnown ?? false,
             selectedCandidate?.TeamTargetCount ?? 0,
-            actionReady,
+            actionSpecificReady,
             frozenRetry?.HeldKey ??
             (acceptedHold.OwnsHold ? (VirtualKey)acceptedHold.HeldKeyCode : input.HeldGameplayKey),
             inputClaimed,
+            castCancellationRequest,
             attempted,
             accepted,
             Interlocked.Read(ref attemptCount),
@@ -777,6 +793,52 @@ internal sealed class ScholarCriticalStrategyProbe
         return true;
     }
 
+    private static unsafe bool IsCastCancellationBoundaryReady(
+        IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               localPlayer.IsCasting &&
+               actionManager->CastActionId != 0 &&
+               !actionManager->ActionQueued &&
+               float.IsFinite(actionManager->AnimationLock) &&
+               actionManager->AnimationLock >= 0f &&
+               actionManager->AnimationLock <=
+               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
+    }
+
+    private static HeldCastCancellationRequest? CreateCastCancellationRequest(
+        IPlayerCharacter localPlayer,
+        FrozenScholarRetry frozen)
+    {
+        if (!IsCastCancellationBoundaryReady(localPlayer)) return null;
+
+        var request = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.ScholarCriticalStrategy,
+            frozen.Intent.ActionId,
+            frozen.Intent.LocalPlayer,
+            frozen.Intent.Target,
+            (int)frozen.HeldKey,
+            frozen.IntentEpochToken);
+        return request.IsValid ? request : null;
+    }
+
+    private ulong NextIntentEpochToken()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref frozenIntentEpochToken);
+            var next = current >= long.MaxValue ? 1 : current + 1;
+            if (Interlocked.CompareExchange(
+                    ref frozenIntentEpochToken,
+                    next,
+                    current) == current)
+            {
+                return (ulong)next;
+            }
+        }
+    }
+
     private static unsafe bool HasRangeAndLineOfSight(
         IPlayerCharacter localPlayer,
         IPlayerCharacter target,
@@ -972,5 +1034,6 @@ internal sealed class ScholarCriticalStrategyProbe
         VirtualKey HeldKey,
         bool IsRepeat,
         ulong ReadyEpochToken,
+        ulong IntentEpochToken,
         HeldActionRetryState Retry);
 }

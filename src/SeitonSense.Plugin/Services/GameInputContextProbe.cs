@@ -44,6 +44,8 @@ internal sealed class GameInputContextProbe
     private readonly IKeyState keyState;
     private readonly VirtualKey[] gameplayKeys;
     private readonly PhysicalGameplayKeyState[] keyGenerations;
+    private VirtualKey selectedHeldGameplayKey = VirtualKey.NO_KEY;
+    private VirtualKey selectedHeldMovementKey = VirtualKey.NO_KEY;
 
     internal GameInputContextProbe(IKeyState keyState)
     {
@@ -90,8 +92,13 @@ internal sealed class GameInputContextProbe
             var textInputActive = atkModule->IsTextInputActive() ||
                                   io.WantTextInput;
             var freshKey = VirtualKey.NO_KEY;
-            var heldKey = VirtualKey.NO_KEY;
-            var heldMovementKey = VirtualKey.NO_KEY;
+            var fallbackHeldKeyToken = 0;
+            var fallbackHeldKeyIsFreshPress = false;
+            var fallbackHeldKeyIsMovementKey = false;
+            var fallbackHeldMovementKeyToken = 0;
+            var fallbackHeldMovementKeyIsFreshPress = false;
+            var selectedHeldGameplayKeyStillEligible = false;
+            var selectedHeldMovementKeyStillEligible = false;
             for (var index = 0; index < gameplayKeys.Length; index++)
             {
                 var pressed = keyState[gameplayKeys[index]];
@@ -101,15 +108,64 @@ internal sealed class GameInputContextProbe
                 keyGenerations[index] = decision.NextState;
                 if (decision.IsFreshPress && freshKey == VirtualKey.NO_KEY)
                     freshKey = gameplayKeys[index];
-                if (decision.IsHeldEligible && heldKey == VirtualKey.NO_KEY)
-                    heldKey = gameplayKeys[index];
-                if (decision.IsHeldEligible &&
-                    heldMovementKey == VirtualKey.NO_KEY &&
-                    PressureEscapeRules.IsSupportedMovementVirtualKey((int)gameplayKeys[index]))
+                if (decision.IsHeldEligible)
                 {
-                    heldMovementKey = gameplayKeys[index];
+                    var candidateToken = (int)gameplayKeys[index];
+                    var candidateIsMovementKey =
+                        PressureEscapeRules.IsSupportedMovementVirtualKey(candidateToken);
+                    selectedHeldGameplayKeyStillEligible |=
+                        gameplayKeys[index] == selectedHeldGameplayKey;
+                    selectedHeldMovementKeyStillEligible |=
+                        candidateIsMovementKey && gameplayKeys[index] == selectedHeldMovementKey;
+                    var selectedToken = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+                        fallbackHeldKeyToken,
+                        fallbackHeldKeyIsFreshPress,
+                        fallbackHeldKeyIsMovementKey,
+                        candidateToken,
+                        decision.IsFreshPress,
+                        candidateIsMovementKey);
+                    if (selectedToken != fallbackHeldKeyToken)
+                    {
+                        fallbackHeldKeyToken = selectedToken;
+                        fallbackHeldKeyIsFreshPress = decision.IsFreshPress;
+                        fallbackHeldKeyIsMovementKey = candidateIsMovementKey;
+                    }
+
+                    if (candidateIsMovementKey)
+                    {
+                        var selectedMovementToken =
+                            PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+                                fallbackHeldMovementKeyToken,
+                                fallbackHeldMovementKeyIsFreshPress,
+                                selectedIsMovementKey: true,
+                                candidateToken,
+                                decision.IsFreshPress,
+                                candidateIsMovementKey: true);
+                        if (selectedMovementToken != fallbackHeldMovementKeyToken)
+                        {
+                            fallbackHeldMovementKeyToken = selectedMovementToken;
+                            fallbackHeldMovementKeyIsFreshPress = decision.IsFreshPress;
+                        }
+                    }
                 }
             }
+
+            var heldKeyToken = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+                (int)selectedHeldGameplayKey,
+                selectedHeldGameplayKeyStillEligible,
+                fallbackHeldKeyToken);
+            var heldMovementKeyToken = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+                (int)selectedHeldMovementKey,
+                selectedHeldMovementKeyStillEligible,
+                fallbackHeldMovementKeyToken);
+            var heldKey = heldKeyToken > 0
+                ? (VirtualKey)heldKeyToken
+                : VirtualKey.NO_KEY;
+            var heldMovementKey = heldMovementKeyToken > 0
+                ? (VirtualKey)heldMovementKeyToken
+                : VirtualKey.NO_KEY;
+            selectedHeldGameplayKey = heldKey;
+            selectedHeldMovementKey = heldMovementKey;
 
             return new GameInputContextSnapshot(
                 true,
@@ -131,6 +187,8 @@ internal sealed class GameInputContextProbe
     internal void Reset()
     {
         Array.Clear(keyGenerations);
+        selectedHeldGameplayKey = VirtualKey.NO_KEY;
+        selectedHeldMovementKey = VirtualKey.NO_KEY;
     }
 
     internal void ConsumeHeldGameplayKeys()
@@ -140,6 +198,9 @@ internal sealed class GameInputContextProbe
             if (!keyGenerations[index].IsDown) continue;
             keyGenerations[index] = PhysicalGameplayKeyRules.Consume(keyGenerations[index]);
         }
+
+        selectedHeldGameplayKey = VirtualKey.NO_KEY;
+        selectedHeldMovementKey = VirtualKey.NO_KEY;
     }
 
     /// <summary>

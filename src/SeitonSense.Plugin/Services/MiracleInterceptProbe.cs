@@ -33,6 +33,7 @@ internal sealed record MiracleInterceptProbeSnapshot(
     string LastEvent)
 {
     internal bool InputClaimed { get; init; }
+    internal HeldCastCancellationRequest? CastCancellationRequest { get; init; }
     internal long RecognizedThreatCount { get; init; }
     internal long ArmedThreatCount { get; init; }
     internal long RejectedThreatCount { get; init; }
@@ -137,6 +138,7 @@ internal sealed class MiracleInterceptProbe
     private readonly Dictionary<int, MiracleCleanseFollowupState> cleanseFollowupStates = [];
     private MiracleThreatState? activeThreat;
     private bool inputClaimedThisFrame;
+    private HeldCastCancellationRequest? castCancellationRequestThisFrame;
     private MiracleInterceptConfirmationState confirmationState =
         MiracleInterceptConfirmationState.Initial;
     private MiracleGuardFollowupState guardFollowupState =
@@ -226,6 +228,7 @@ internal sealed class MiracleInterceptProbe
         bool hardReset = false)
     {
         inputClaimedThisFrame = false;
+        castCancellationRequestThisFrame = null;
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
         if (hardReset) ResetRuntime();
 
@@ -544,17 +547,19 @@ internal sealed class MiracleInterceptProbe
         }
         else
         {
-            triggerKey = inputFrame.FreshGameplayKeyPressed
-                ? input.FreshGameplayKey
-                : allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible
-                    ? input.HeldGameplayKey
-                    : VirtualKey.NO_KEY;
-            if (triggerKey == VirtualKey.NO_KEY &&
-                isProtectionEndThreat &&
+            if (isProtectionEndThreat &&
                 TryGetLatchedProtectionEndKey(out var latchedKey) &&
                 inputFrame.IsGameplayKeyPhysicallyDown(latchedKey))
             {
                 triggerKey = latchedKey;
+            }
+            else if (allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible)
+            {
+                triggerKey = input.HeldGameplayKey;
+            }
+            else if (inputFrame.FreshGameplayKeyPressed)
+            {
+                triggerKey = input.FreshGameplayKey;
             }
 
             if (IsExactVirtualKey(triggerKey) &&
@@ -626,6 +631,12 @@ internal sealed class MiracleInterceptProbe
             RecordWait(threat, MiracleWaitReason.GlobalQueue);
             inputClaimedThisFrame = true;
             inputFrame.Consume();
+            castCancellationRequestThisFrame = BuildCastCancellationRequest(
+                localPlayer!,
+                candidate,
+                threat,
+                triggerKey,
+                inputFrame);
             return PublishCandidate(
                 threat,
                 candidate,
@@ -1689,10 +1700,10 @@ internal sealed class MiracleInterceptProbe
         var eligibleKey = VirtualKey.NO_KEY;
         if (enabled && dispatchAllowed && !input.IsTextInputActive)
         {
-            var observedKey = inputFrame.FreshGameplayKeyPressed
-                ? input.FreshGameplayKey
-                : inputFrame.HeldGameplayKeyEligible
-                    ? input.HeldGameplayKey
+            var observedKey = inputFrame.HeldGameplayKeyEligible
+                ? input.HeldGameplayKey
+                : inputFrame.FreshGameplayKeyPressed
+                    ? input.FreshGameplayKey
                     : VirtualKey.NO_KEY;
             if (IsExactVirtualKey(observedKey) &&
                 inputFrame.IsGameplayKeyPhysicallyDown(observedKey))
@@ -1993,6 +2004,7 @@ internal sealed class MiracleInterceptProbe
         capture.SetMiracleCleanseFollowupLocalEntityId(0);
         capture.ClearMiracleInterceptThreats();
         capture.ClearMiracleInterceptConfirmations();
+        castCancellationRequestThisFrame = null;
         confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
             confirmationState,
             Environment.TickCount64,
@@ -2010,6 +2022,7 @@ internal sealed class MiracleInterceptProbe
         return value with
         {
             InputClaimed = inputClaimedThisFrame,
+            CastCancellationRequest = castCancellationRequestThisFrame,
             RecognizedThreatCount = Interlocked.Read(ref recognizedThreatCount),
             ArmedThreatCount = Interlocked.Read(ref armedThreatCount),
             RejectedThreatCount = Interlocked.Read(ref rejectedThreatCount),
@@ -2063,6 +2076,67 @@ internal sealed class MiracleInterceptProbe
             ProtectionEndRankMaximumMp = protectionEndLastRank?.MaximumMp ?? 0,
             ConfirmationPendingCount = confirmationState.Pending is null ? 0 : 1,
         };
+    }
+
+    private static unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter target,
+        MiracleThreatState threat,
+        VirtualKey frozenKey,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (!HasValidNativeIdentity(localPlayer) ||
+            !HasValidNativeIdentity(target) ||
+            !IsLivePlayer(localPlayer) ||
+            !IsLivePlayer(target) ||
+            !IsExactVirtualKey(frozenKey) ||
+            threat.GameplayKeyToken != (int)frozenKey ||
+            !inputFrame.IsGameplayKeyPhysicallyDown(frozenKey) ||
+            threat.CounterActionId == 0)
+        {
+            return null;
+        }
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null ||
+            !localPlayer.IsCasting ||
+            actionManager->CastActionId == 0 ||
+            actionManager->ActionQueued ||
+            !float.IsFinite(actionManager->AnimationLock) ||
+            actionManager->AnimationLock < 0f ||
+            actionManager->AnimationLock >
+            HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds)
+        {
+            return null;
+        }
+
+        var localIdentity = new TargetPressureActorIdentity(
+            localPlayer.GameObjectId,
+            localPlayer.EntityId);
+        var targetIdentity = new TargetPressureActorIdentity(
+            target.GameObjectId,
+            target.EntityId);
+        if (!localIdentity.IsValid || !targetIdentity.IsValid) return null;
+
+        return new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.ReactiveCounterCc,
+            threat.CounterActionId,
+            localIdentity,
+            targetIdentity,
+            threat.GameplayKeyToken,
+            GetIntentEpochToken(threat));
+    }
+
+    private static ulong GetIntentEpochToken(MiracleThreatState threat)
+    {
+        var token = unchecked(
+            (ulong)threat.ObservedAtMilliseconds ^
+            threat.GameObjectId ^
+            ((ulong)threat.EntityId << 32) ^
+            ((ulong)(byte)threat.Kind << 56) ^
+            threat.Signal.GlobalSequence ^
+            ((ulong)threat.Signal.SourceSequence << 16));
+        return token == 0 ? 1 : token;
     }
 
     private void ClearProtectionEndHeldConsent()

@@ -412,12 +412,12 @@ public static class AllyRescueBufferRules
     private static AllyRescueInputTrigger ResolveCandidateEntryTrigger(
         AllyRescueBufferObservation observation)
     {
-        if (observation.FreshKeyPressed && observation.FreshGameplayKeyToken > 0)
-            return AllyRescueInputTrigger.FreshKeyPress;
         if (observation.AllowHeldKeyAtCandidateEntry &&
             observation.HeldKeyEligible &&
             observation.HeldGameplayKeyToken > 0)
             return AllyRescueInputTrigger.HeldKeyAtCandidateEntry;
+        if (observation.FreshKeyPressed && observation.FreshGameplayKeyToken > 0)
+            return AllyRescueInputTrigger.FreshKeyPress;
 
         return AllyRescueInputTrigger.None;
     }

@@ -98,18 +98,32 @@ internal static class EmergencyPurifyBufferSelfTests
         Equal(EmergencyPurifyInputTrigger.FreshKeyPress, freshLater.InputTrigger, "fresh trigger");
     }
 
-    public static void FreshEdgeWinsWhenFreshAndHeldCoincide()
+    public static void StableHoldWinsWhenFreshAndHeldCoincide()
     {
-        var decision = Observe(
+        var decision = EmergencyPurifyBufferRules.Observe(
             EmergencyPurifyBufferState.Initial,
-            StatusA,
-            freshKey: true,
-            heldKeyEligible: true,
-            allowHeldKey: true,
-            locallyReady: true,
-            now: 1_000);
-        True(decision.ShouldDispatch, "coincident edge dispatches once");
-        Equal(EmergencyPurifyInputTrigger.FreshKeyPress, decision.InputTrigger, "fresh edge wins");
+            ValidObservation(StatusA, now: 1_000) with
+            {
+                FreshKeyPressed = true,
+                HeldKeyEligible = true,
+                AllowHeldKeyAtStatusEntry = true,
+                PurifyLocallyReady = false,
+                FreshKeyCode = 49,
+                HeldKeyCode = 87,
+            });
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, decision.Kind, "coincident input arms once");
+        Equal(EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry, decision.InputTrigger, "stable hold wins");
+        Equal(87, decision.NextState.FrozenKeyCode, "stable held key is frozen");
+
+        var afterFreshTapReleased = EmergencyPurifyBufferRules.Observe(
+            decision.NextState,
+            ValidObservation(StatusA, now: 1_001) with
+            {
+                PurifyLocallyReady = true,
+                FrozenKeyStillDown = true,
+            });
+        True(afterFreshTapReleased.ShouldDispatch, "released fresh tap cannot cancel stable Purify intent");
+        Equal(87, afterFreshTapReleased.NextState.FrozenKeyCode, "dispatch retains exact W intent");
     }
 
     public static void HeldKeyIsConsumedWhenItOnlyArms()

@@ -18,6 +18,12 @@ internal sealed partial class SettingsWindow
             "states which usable request wins one scheduler frame. A continuously held key remains consent for later " +
             "distinct exact episodes; Kardia and Monk retain their separate event-driven origins.");
 
+        if (ImGui.CollapsingHeader(
+                "Held-action cast cancellation (experimental)",
+                ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawHeldActionCastCancellationControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Self-Purify", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPurifyControls();
 
@@ -58,6 +64,26 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Team-visible enemy focus sign", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawAutoEnemyFocusMarkControls();
 
+        return changed;
+    }
+
+    private bool DrawHeldActionCastCancellationControls()
+    {
+        var changed = Checkbox(
+            "Cancel my active cast for an otherwise-ready held helper",
+            configuration.AllowHeldHelpersToCancelOwnCast,
+            value => configuration.AllowHeldHelpersToCancelOwnCast = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off. When the highest-priority held helper has already frozen an exact valid intent and your " +
+            "own cast is the remaining shared native-boundary blocker, Seiton Sense may request FFXIV's native cast " +
+            "cancel exactly once for that observed cast. It never synthesizes movement or Escape, clears a queued " +
+            "action, changes a target, or combines cancel and UseAction in the same framework frame. The frozen " +
+            "helper revalidates normally on a later frame. This is intended to cover stationary casts and mobile " +
+            "BRD Powerful Shot / MCH Blast Charge, but current-patch in-game behavior still needs live testing; an " +
+            "action the client refuses to cancel simply continues. Enabling this can deliberately sacrifice your " +
+            "current cast for the held helper.");
+        ImGui.PopTextWrapPos();
         return changed;
     }
 
