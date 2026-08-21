@@ -2,15 +2,19 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.27.0.0 adds event-owned reactive
-counter-CC reservations: an urgent startup, exact enemy Purify, or first enemy
-Guard presence freezes the eligible physical key, actor, counter action, and
-episode. Validated Resilience/Guard duration is only a non-extending wake-up
-hint; a real status-list absence is still mandatory. The first absent frame at
-the expected Resilience end is immediate, early Guard cancellation is immediate,
-and release, typing, ambiguity, or identity drift cannot substitute another key
-or target. PvP NIN now joins WHM and BRD with both metadata-verified Forked and
-Fleeting Raiju variants plus exact Stun landing confirmation. It retains v0.26's
+assistance, and target highlights. Version 0.27.1.0 repairs reactive held-key
+attachment while preserving bounded, exact intent. Urgent startup events may
+attach the first currently eligible held/fresh generation inside their original
+short threat lease. Exact enemy Purify and Guard episodes are remembered without
+prematurely freezing a key; the current eligible generation is bound only when
+authoritative Resilience/Guard absence opens the original 500-ms release window.
+Once bound, release, typing, ambiguity, or identity drift cannot substitute
+another key, action, or target. Native reachability is checked before simultaneous
+release candidates are ranked, NIN protection-end intent covers its verified
+2.5-second Raiju recast with a 3-second lease, and exact action source sequences
+prevent manual Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil from being
+reported as an automatic landing. It retains v0.27's metadata-verified Forked and
+Fleeting Raiju variants, plus v0.26's
 Purify-first scheduler and six job-specific second-tier order, optional positive
 pressure ranking, v0.25's stable held-key leases across all ten physical-hold
 helpers, separate default-off native cast-cancellation test, and 50-ms/eight-call
@@ -47,10 +51,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Stable held-action leases:** Purify, reactive counter-CC, Ally Rescue,
   Guardian, NIN, SCH, DRK, Smart Recuperate, Guard, and pressure Sprint prefer an
   already-held movement key, then any other stable held key, before fresh
-  movement/other fallbacks. Every helper keeps the exact frozen key lease rather
-  than letting a later action tap replace and prematurely cancel it. Reactive
-  startup/Purify/Guard episodes additionally snapshot that eligible generation
-  at their event edge; no later key or text-poisoned generation can inherit it.
+  movement/other fallbacks. Every helper keeps its exact key lease once bound
+  rather than letting a later action tap replace and prematurely cancel it.
+  Reactive urgent-startup events may bind the first eligible current generation
+  inside the original short threat lease. Purify/Guard retain their exact enemy
+  episode while protection is live and bind only at authoritative protection end
+  inside the original 500-ms release window; a text-poisoned generation is never
+  eligible, and no different key can inherit the intent after binding.
 - **Experimental held-action cast cancellation:** a separate default-off test
   may request one native cancel for the current cast when the highest-priority
   exact held intent is otherwise ready. It never requests the helper in that
@@ -161,7 +168,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   explicit client rejection retains only that frozen status/actor intent for a
   bounded retry; acceptance is terminal. A matching successful status-removal
   effect produces a blue `CLEANSED` popup and feeds resettable, in-memory match/
-  session counters.
+  session counters only when it carries the exact source sequence from the
+  plugin's accepted request; a manual Paean or Aquaveil cannot claim it.
 - **Smart Bard Paean target:** a separate default-off exact-CC option examines
   only an already incoming manual or Turbo Warden's Paean call. It
   may redirect that call to an exact reachable non-self party ally with trusted
@@ -190,11 +198,16 @@ and Super Focus Glow into one configurable custom-repository plugin.
   pressure above zero earns a highest-first ranking bonus; zero, unknown, or
   stale pressure is neutral. Lowest HP ratio follows, then lowest trusted MP and
   stable identity. Exactly one simultaneous
-  winner freezes one exact intent; losers are terminal, with no fallback. A
+  winner binds one exact intent; losers are terminal, with no fallback. Native
+  range/line of sight and the exact blocker state are checked before ranking. A
   clean rejection may retry only that intent, and a later distinct release epoch
   can trigger on the same continuous held key without requiring or mutating the
   selected target. WHM uses native 10-yalm range; BRD and both NIN Raiju variants
-  use native 20-yalm range. NIN confirms only exact Stun on the frozen enemy. An
+  use native 20-yalm range. NIN protection-end intent uses a 3-second lease to
+  cover the verified 2.5-second Raiju recast plus the existing release window;
+  WHM and BRD keep the normal 1.5-second lease. NIN confirms only exact Stun on
+  the frozen enemy and every automatic landing requires the exact native action
+  source sequence, so a manual cast cannot claim it. An
   already-accepted instant LB may still win the client/server race.
 - **Optional team focus sign:** a separate default-off module can place the real,
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
@@ -817,18 +830,30 @@ early DNC Contradance `29432`, MCH Marksman's Spite `29415`, SAM Zantetsuken
 signals. VPR waits for live Hardened Scales `4096` to be genuinely absent, and
 every path revalidates exact canonical
 enemy identity, life/targetability, action-specific CC protection, native range,
-and line of sight.
+and line of sight. Expired or disabled leases retire, and every active startup
+must still resolve the same local job, counter action, and exact enemy before a
+new packet can compete. A later exact urgent startup may preempt only an
+unattempted lower-priority reactive lease; equal/lower events and every lease
+with a native attempt remain frozen.
 
 The post-Purify subtype accepts all six exact recovered statuses: Stun
 `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of Nature `3085`, and
-Deep Freeze `3219`. It requires exact enemy self-Purify `29056`, positive live
-Resilience `3248`. On the Purify observation it snapshots the eligible physical
-key generation, exact actor, action, and a validated bounded `RemainingTime`
-hint. Live Resilience membership remains authoritative: the first real absent
+Deep Freeze `3219`. It accepts an exact enemy self-Purify `29056` action packet
+even when that packet omits an individual recovered-status tuple, but positive
+live Resilience `3248` remains mandatory. The Purify observation remembers the
+exact actor, action, episode, and a validated bounded `RemainingTime` hint; it
+does not freeze whichever key happened to be down on that packet frame.
+If the exact canonical enemy row is transiently unavailable on that frame, the
+already-deduplicated signal may retry only that identity resolution inside its
+original 750-ms acquisition deadline. It carries no key or action, cannot select
+another actor, and cannot extend or replay the signal. Live
+Resilience membership remains authoritative: the first real absent
 frame at or after the non-extending expected end is eligible immediately, while
 an early or untimed absence still needs 150 ms of continuous proof. The signal
-dispatches directly to that actor; it neither requires nor changes the selected
-target. There is no minimum team-pressure count. Each exact protection-end
+may bind the current eligible held/fresh generation at that authoritative end or
+during the same original 500-ms release opportunity, then dispatches directly
+to that actor. It neither requires nor changes the selected target. There is no
+minimum team-pressure count. Each exact protection-end
 episode retains its original bounded release edge and is never extended while
 another helper has priority. Post-Purify state is tracked independently for each
 canonical `S1`-`S5` slot, so two exact enemies can reach their own verified
@@ -836,27 +861,34 @@ Resilience end without either signal replacing the other.
 
 The separate post-Guard subtype requires exact Guard `3054` or `3673` to be
 observed present on one canonical `S1`-`S5` actor. Its first exact presence
-snapshots the eligible key, actor, action, episode, and bounded non-extending
-duration hint. The first verified framework observation that finds Guard absent
-exposes one bounded exact protection-end episode, including an early manual
-Guard cancel, with no minimum team-pressure count. A released key retires that
-same uninterrupted Guard through unknown or ambiguous samples until real absence
-separates a later episode. Dispatch uses the frozen actor
+remembers the actor, action, episode, and bounded non-extending duration hint,
+without freezing an event-edge key. The first verified framework observation
+that finds Guard absent exposes one bounded exact protection-end episode,
+including an early manual Guard cancel, with no minimum team-pressure count. It
+may bind the current eligible held/fresh generation on that observation or
+inside the same original 500-ms release opportunity. Once bound, releasing that
+key retires the intent; the uninterrupted Guard episode stays retired through
+unknown or ambiguous samples until real absence separates a later episode.
+Dispatch uses the frozen actor
 directly at the job-specific native range and line of sight, without requiring
 or switching the selected target, choosing an alternate action/actor, or
 replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
 If multiple exact post-Purify or post-Guard releases are simultaneously eligible,
+each candidate must first pass its exact action-specific blocker state, native
+range, and line of sight, so an unreachable high-pressure actor cannot starve a
+reachable one. Among the remaining candidates,
 only a fresh exact team-pressure count above zero earns a ranking bonus, with
 higher positive counts first. Known zero, unknown, or stale pressure is neutral
 and never gates a candidate. Lowest HP ratio follows, then lowest trusted MP
 ratio and stable `S1`-`S5` identity. It selects exactly one winner.
 Every simultaneous loser is terminal and cannot become a fallback attempt. A
 continuously held eligible gameplay key keeps consent for the selected frozen
-episode and may also authorize a later distinct episode. A key not eligible at
-the event edge cannot be added later, and opening text input poisons that exact
-generation until release. Only an explicit
+episode and may also authorize a later distinct episode. Before binding, the
+current eligible generation may attach only inside that episode's original
+bounded opportunity. After binding, release or text input retires that exact
+generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
@@ -876,7 +908,9 @@ CC-immunity brake immediately before the native call.
 After a client-accepted request, a blue `AUTO CC LANDED` popup appears only if the bounded
 ActionEffect observer captures the matching status on that exact pending enemy:
 Miracle `3085` for WHM, Silence `1347` for BRD, or Stun `1343` for either NIN
-Raiju variant. A local client-accepted request
+Raiju variant, with the exact `SourceSequence` created by the plugin request.
+A manual use of the same action cannot claim the pending automatic result. A
+local client-accepted request
 does not count. Even an exact landed popup proves only that the counter-CC status
 landed; it does not conclusively prove that Contradance, another limit break, or
 its damage was interrupted. In particular, an instant LB already accepted by
@@ -884,6 +918,11 @@ the server can resolve before the reactive request arrives. All startup timing,
 Purify/Resilience release
 ordering, WHM/BRD/NIN dispatch, and claimed interruption outcomes remain explicit
 current-patch live-validation boundaries.
+
+Bounded transition diagnostics record reactive episode memory, current-key
+attachment, protection-end promotion, native attempt outcome, and exact source
+sequence in the durable plugin log. This lets a later live match be diagnosed
+without treating a manual press as an automatic success.
 
 The separate **team-visible enemy focus sign** module is default-off and exact
 CC-only. It considers an enemy only when this client knows Guard is unavailable
@@ -1213,7 +1252,7 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 30 remains current in v0.27.0.0; this release adds no
+Configuration schema 30 remains current in v0.27.1.0; this release adds no
 setting or migration. The held-action cast-cancellation test is explicitly off
 for fresh, reset, and migrated
 configurations. An older explicitly enabled NIN fresh-edge helper still traverses
@@ -1457,14 +1496,15 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.27.0.0, source checks pin one shared held-action policy: the physical hold
+For v0.27.1.0, source checks pin one shared held-action policy: the physical hold
 remains consent across later distinct episodes, a per-frame claim allows at most
 one held native boundary, known cooldown/resource/cast/queue/full-animation-lock
 states spend no attempt, and only a clean explicit client rejection can retry
 the same frozen intent after 50 ms with eight calls maximum. Client acceptance,
 exceptions, uncertain queue/sequence transitions, key release, context/job/
 identity drift, and other ambiguity are terminal. Tests cover exact action,
-actor, status/episode and key freezing, no rerank/alternate/target mutation, and
+actor, status/episode memory, bounded current-key attachment followed by strict
+key freezing, no rerank/alternate/target mutation, and
 the priority **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN
 Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic
 Guard > pressure Sprint > event Kardia > event Monk**. The six job-specific
@@ -1480,12 +1520,17 @@ later dispatch, and the absence of movement/Escape synthesis, queue clearing,
 cast-state writes, or target mutation. They cannot prove that FFXIV canceled a
 live cast; current-patch stationary and mobile BRD/MCH tests remain required.
 
-The same release checks event-edge key/action/actor freezing for urgent reactive
-startups, enemy Purify, and first Guard presence; no late key acquisition; exact
-eligible-generation retirement on release or text input; bounded, non-extending
-duration hints with mandatory live status absence; immediate expected-end
-Resilience release; early Guard cancellation; and a terminal Guard tombstone
-through ambiguous observations. It also checks Purify's absolute active-CC priority, Smart Recuperate's
+The same release checks bounded current-key attachment inside an urgent startup's
+original threat lease; exact Purify/Guard actor/action/episode memory without an
+event-edge key; current eligible key binding only at authoritative protection end
+or inside the original 500-ms release opportunity; and strict generation
+retirement on release or text input after binding. It also checks exact
+self-target Purify sentinel capture with mandatory live Resilience, bounded
+non-extending duration hints with mandatory live status absence, immediate
+expected-end Resilience release, early Guard cancellation, pre-rank native
+reachability/blocker filtering, the NIN-only 3-second protection-end lease, exact
+source-sequence confirmation, and a terminal Guard tombstone through ambiguous
+observations. It also checks Purify's absolute active-CC priority, Smart Recuperate's
 inclusive 16,000-missing-HP/2,000-MP gates, Ally Rescue confirmation preservation,
 all reviewed WHM/BRD/NIN reactive trigger families, both fully verified Raiju
 variants with exact Stun confirmation, accepted-only Guard propagation,

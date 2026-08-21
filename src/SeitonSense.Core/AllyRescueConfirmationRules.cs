@@ -14,7 +14,8 @@ public readonly record struct AllyRescuePendingAttempt(
     uint TargetEntityId,
     AllyRescueIntent Intent,
     bool UseActionAccepted,
-    long AttemptedAtMilliseconds)
+    long AttemptedAtMilliseconds,
+    ushort ExpectedSourceSequence = 0)
 {
     public bool IsValid =>
         AllyRescueConfirmationRules.IsValidEntityId(LocalCasterEntityId) &&
@@ -24,6 +25,8 @@ public readonly record struct AllyRescuePendingAttempt(
         Intent.IsValid &&
         Intent.GameObjectId == TargetGameObjectId &&
         Intent.EntityId == TargetEntityId &&
+        UseActionAccepted &&
+        ExpectedSourceSequence != 0 &&
         AttemptedAtMilliseconds >= 0;
 }
 
@@ -123,7 +126,9 @@ public readonly record struct AllyRescueConfirmationDecision(
 /// <summary>
 /// Pure correlation rules for ally-rescue confirmation. Registration never
 /// confirms a cleanse. Only an exact local-caster/action/target 0x10 effect
-/// with one of the six removable PvP status IDs confirms and increments once.
+/// with one of the six removable PvP status IDs and the same non-zero client
+/// source sequence confirms and increments once. A manual request cannot
+/// inherit the pending.
 /// </summary>
 public static class AllyRescueConfirmationRules
 {
@@ -345,7 +350,7 @@ public static class AllyRescueConfirmationRules
                observation.TargetEntityId == pending.TargetEntityId &&
                observation.EffectType == RecoveredFromStatusEffectType &&
                IsConfirmableRemovedStatus(observation.EffectValue) &&
-               (observation.GlobalSequence != 0 || observation.SourceSequence != 0);
+               observation.SourceSequence == pending.ExpectedSourceSequence;
     }
 
     private static AllyRescuePendingAttempt? PendingInsideWindow(

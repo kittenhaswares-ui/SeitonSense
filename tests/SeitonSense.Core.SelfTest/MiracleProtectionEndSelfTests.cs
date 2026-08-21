@@ -133,7 +133,8 @@ internal static class MiracleProtectionEndSelfTests
                 TargetEntityId: 200,
                 Threat: MiracleInterceptThreatKind.PostPurifyCrowdControl,
                 UseActionAccepted: true,
-                AttemptedAtMilliseconds: 1_000)
+                AttemptedAtMilliseconds: 1_000,
+                ExpectedSourceSequence: 9)
             {
                 RemovedStatusId = MiracleCleanseFollowupRules.StunStatusId,
             };
@@ -166,12 +167,76 @@ internal static class MiracleProtectionEndSelfTests
             MiracleInterceptConfirmationRules.ExpectedStatusForAction(
                 MiracleInterceptConfirmationRules.FleetingRaijuActionId),
             "NIN Fleeting Raiju retains exact Stun landing status");
+
+        foreach (var active in new[]
+                 {
+                     MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                     MiracleInterceptThreatKind.PostGuardCrowdControl,
+                 })
+        {
+            foreach (var incoming in new[]
+                     {
+                         MiracleInterceptThreatKind.MarksmanSpite,
+                         MiracleInterceptThreatKind.Zantetsuken,
+                         MiracleInterceptThreatKind.FuriousBacklash,
+                         MiracleInterceptThreatKind.Contradance,
+                     })
+            {
+                True(
+                    MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                        active,
+                        HeldActionRetryState.Initial,
+                        incoming),
+                    $"exact higher-priority {incoming} preempts unattempted {active}");
+            }
+        }
+
+        False(
+            MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                new HeldActionRetryState(1, 1_050),
+                MiracleInterceptThreatKind.MarksmanSpite),
+            "a native attempt freezes the protection-end lease against preemption");
+        True(
+            MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                MiracleInterceptThreatKind.Contradance,
+                HeldActionRetryState.Initial,
+                MiracleInterceptThreatKind.MarksmanSpite),
+            "a strictly higher urgent startup preempts an unattempted lower urgent lease");
+        False(
+            MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                MiracleInterceptThreatKind.MarksmanSpite,
+                HeldActionRetryState.Initial,
+                MiracleInterceptThreatKind.Zantetsuken),
+            "equal-priority urgent startups preserve the first exact lease");
+        False(
+            MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                MiracleInterceptThreatKind.PostGuardCrowdControl,
+                HeldActionRetryState.Initial,
+                MiracleInterceptThreatKind.PostPurifyCrowdControl),
+            "equal/lower protection-end priority cannot preempt");
     }
 
     internal static void HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound()
     {
         const long observedAt = 1_000;
         Equal(1_500L, MiracleProtectionEndRules.HeldLeaseMilliseconds, "held episode lease");
+        Equal(3_000L, MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds,
+            "NIN keeps one verified 2.5-second weaponskill recast plus the 500 ms release allowance");
+        True(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 3_999,
+                leaseMilliseconds: MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds),
+            "NIN remains eligible immediately before its exact 3000 ms lease ends");
+        False(
+            MiracleProtectionEndRules.CanAttempt(
+                HeldActionRetryState.Initial,
+                observedAt,
+                nowMilliseconds: 4_000,
+                leaseMilliseconds: MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds),
+            "NIN lease has an exclusive 3000 ms boundary");
         True(
             MiracleProtectionEndRules.CanAttempt(
                 HeldActionRetryState.Initial,

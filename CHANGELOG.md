@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.27.1.0
+
+- Fixed the v0.27 reactive held-key regression without widening any event
+  deadline. An urgent startup now remembers its exact actor, action, and event
+  first, then may attach the first currently eligible held/fresh key generation
+  inside the original bounded threat lease. Post-Purify and post-Guard remember
+  the exact enemy episode while protection is live and bind the current eligible
+  generation only when authoritative Resilience/Guard absence opens the original
+  500-ms release opportunity. Once attached, the key is strict: release, text
+  input, identity drift, or ambiguity cannot substitute another generation,
+  actor, or action. Expired/disabled leases retire and every active startup
+  revalidates its frozen job, action, and actor before new packets are drained;
+  an exact later urgent startup may preempt only an unattempted lower-priority
+  reactive lease.
+- Made post-Purify capture tolerate the exact self-target Purify action packet
+  when it omits an individual recovered-status tuple. Live Resilience is still
+  mandatory before any follow-up can arm, and real status-list absence remains
+  mandatory before dispatch. If the canonical enemy row is transiently absent,
+  only that already-deduplicated signal is retained for resolution inside its
+  original 750-ms acquisition deadline; no key, target fallback, action, or
+  deadline extension is created. Native range/line of sight and blocker state are
+  now checked before simultaneous protection-end candidates are ranked, so an
+  unreachable high-pressure enemy cannot starve a reachable exact enemy.
+- Extended only NIN post-protection reactive intent lifetime to 3,000 ms. Both
+  verified Raiju rows have a 2.5-second recast, so this covers one full recast
+  plus the existing 500-ms release opportunity; WHM and BRD retain the normal
+  1.5-second held-action lease.
+- Bound automatic reactive-CC and Ally Rescue landing confirmation to the exact
+  `SourceSequence` produced by the plugin's accepted native request. A manual
+  Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil can no longer claim the
+  pending automatic `AUTO CC LANDED` / `CLEANSED` result.
+- Added bounded durable diagnostics for reactive episode memory, key attachment,
+  protection-end promotion, native attempt outcome, and exact source-sequence
+  confirmation. Bumped the plugin version to `0.27.1.0`; configuration schema
+  remains `30`, with no new setting or migration.
+
 ## 0.27.0.0
 
 - Added event-owned reservations to reactive counter-CC. An eligible physical

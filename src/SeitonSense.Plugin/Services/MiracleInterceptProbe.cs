@@ -139,6 +139,8 @@ internal sealed class MiracleInterceptProbe
     private readonly HashSet<MiracleSignalIdentity> rememberedSignals = [];
     private readonly Queue<MiracleSignalIdentity> rememberedSignalOrder = [];
     private readonly Dictionary<int, MiracleCleanseFollowupState> cleanseFollowupStates = [];
+    private readonly List<MiracleCleanseFollowupPendingResolution>
+        pendingCleanseTargetResolutions = [];
     private MiracleThreatState? activeThreat;
     private bool inputClaimedThisFrame;
     private HeldCastCancellationRequest? castCancellationRequestThisFrame;
@@ -371,6 +373,55 @@ internal sealed class MiracleInterceptProbe
             furiousBacklashMetadataVerified &&
             verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId);
         var contradanceEnabled = enableContradance && contradanceMetadataVerified;
+
+        // Retire an old lease before draining new packets. Otherwise an already
+        // expired or newly disabled threat could terminally suppress the first
+        // fresh exact event in this same framework frame and only then be
+        // cleared below.
+        nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
+        if (activeThreat is { } staleThreatBeforeDrain &&
+            (nowMilliseconds < staleThreatBeforeDrain.ObservedAtMilliseconds ||
+             nowMilliseconds - staleThreatBeforeDrain.ObservedAtMilliseconds >=
+             ThreatLifetime(staleThreatBeforeDrain)))
+        {
+            RecordExpired(staleThreatBeforeDrain);
+            activeThreat = null;
+        }
+
+        if (activeThreat is { } disabledThreatBeforeDrain &&
+            !IsThreatKindEnabled(
+                disabledThreatBeforeDrain.Kind,
+                marksmanSpiteEnabled,
+                zantetsukenEnabled,
+                furiousBacklashEnabled,
+                contradanceEnabled,
+                cleanseFollowupEnabled,
+                guardFollowupEnabled))
+        {
+            lastOpportunity =
+                $"{disabledThreatBeforeDrain.Kind}: retired because its trigger was disabled";
+            activeThreat = null;
+        }
+
+        if (activeThreat is { } frozenThreatBeforeDrain)
+        {
+            if (TryRefreshAndResolveFrozenThreat(
+                    localPlayer!,
+                    frozenThreatBeforeDrain,
+                    out var refreshedThreatBeforeDrain,
+                    out _))
+            {
+                activeThreat = refreshedThreatBeforeDrain;
+            }
+            else
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity =
+                    $"{frozenThreatBeforeDrain.Kind}: retired before drain after exact job/action/actor drift";
+                activeThreat = null;
+            }
+        }
+
         var cleanseSignals = DrainThreats(
             localPlayer!,
             marksmanSpiteEnabled,
@@ -387,7 +438,7 @@ internal sealed class MiracleInterceptProbe
 
         if (activeThreat is { } expiringThreat &&
             (nowMilliseconds < expiringThreat.ObservedAtMilliseconds ||
-             nowMilliseconds - expiringThreat.ObservedAtMilliseconds >= ThreatLifetime(expiringThreat.Kind)))
+             nowMilliseconds - expiringThreat.ObservedAtMilliseconds >= ThreatLifetime(expiringThreat)))
         {
             RecordExpired(expiringThreat);
             activeThreat = null;
@@ -474,6 +525,46 @@ internal sealed class MiracleInterceptProbe
 
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
+
+        // The exact hostile packet owns the short event lease, not whichever
+        // movement key happened to win the very same framework frame. Attach
+        // the first currently eligible held/fresh generation inside that
+        // original lease, then freeze it for every later validation. This
+        // restores the pre-v0.27 behavior without extending, retargeting, or
+        // replaying the event.
+        if (threat.GameplayKeyToken <= 0)
+        {
+            if (!TryRefreshAndResolveFrozenThreat(
+                    localPlayer!,
+                    threat,
+                    out var refreshedKeylessThreat,
+                    out _))
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{threat.Kind}: keyless lease exact job/action/actor changed";
+                activeThreat = null;
+                return Publish(
+                    "Cancelled",
+                    "Keyless lease exact job/action/actor changed",
+                    nowMilliseconds);
+            }
+            threat = refreshedKeylessThreat;
+            activeThreat = threat;
+
+            if (episodeGameplayKeyToken <= 0)
+            {
+                RecordWait(threat, MiracleWaitReason.NoEligibleInput);
+                return Publish(
+                    "Armed",
+                    "Waiting: exact threat stored; no eligible held/fresh key yet",
+                    nowMilliseconds);
+            }
+
+            threat = threat with { GameplayKeyToken = episodeGameplayKeyToken };
+            activeThreat = threat;
+            lastOpportunity =
+                $"{threat.Kind}: exact key {episodeGameplayKeyToken} attached inside original event lease";
+        }
 
         // Validate the frozen key before yielding to another helper. Otherwise
         // a release/text-input frame hidden behind a priority wait could let a
@@ -656,7 +747,7 @@ internal sealed class MiracleInterceptProbe
                 threat.RetryState,
                 threat.ObservedAtMilliseconds,
                 nowMilliseconds,
-                ThreatLifetime(threat.Kind)))
+                ThreatLifetime(threat)))
         {
             inputClaimedThisFrame = true;
             inputFrame.Consume();
@@ -686,6 +777,7 @@ internal sealed class MiracleInterceptProbe
         var exceptionAmbiguous = false;
         var nativeOutcome = ClientActionAttemptOutcome.NotInvoked;
         var attemptedAtMilliseconds = -1L;
+        ushort expectedSourceSequence = 0;
         var revalidated = ResolveCandidate(localPlayer!, threat);
         var revalidatedHardened = revalidated is not null &&
                                   threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
@@ -715,7 +807,7 @@ internal sealed class MiracleInterceptProbe
             inputFrame.IsGameplayKeyGenerationEligible(triggerKey);
         var revalidatedInsideWindow =
             revalidationNow >= threat.ObservedAtMilliseconds &&
-            revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat.Kind);
+            revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat);
         var finalValidationPassed = revalidated is not null &&
                                     !revalidatedHardened &&
                                     !revalidatedProtection &&
@@ -734,7 +826,8 @@ internal sealed class MiracleInterceptProbe
                     localPlayer!,
                     threat.CounterActionId,
                     revalidated!.GameObjectId,
-                    out attempted);
+                    out attempted,
+                    out expectedSourceSequence);
                 accepted = nativeOutcome == ClientActionAttemptOutcome.ClientAccepted;
                 exceptionAmbiguous =
                     nativeOutcome == ClientActionAttemptOutcome.AcceptanceUnknown;
@@ -756,7 +849,7 @@ internal sealed class MiracleInterceptProbe
                 threat.ObservedAtMilliseconds,
                 Math.Max(revalidationNow, Environment.TickCount64),
                 nativeOutcome,
-                ThreatLifetime(threat.Kind));
+                ThreatLifetime(threat));
             attemptOutcome = completion.Outcome;
             activeThreat = completion.IsTerminal
                 ? null
@@ -779,12 +872,28 @@ internal sealed class MiracleInterceptProbe
                     revalidated.EntityId,
                     threat.Kind,
                     accepted,
-                    attemptedAtMilliseconds)
+                    attemptedAtMilliseconds,
+                    expectedSourceSequence)
                 {
                     RemovedStatusId = threat.RemovedStatusId,
                 },
                 attemptedAtMilliseconds);
             confirmationState = registered.NextState;
+        }
+
+        if (attempted)
+        {
+            log.Information(
+                "Seiton Sense reactive CC attempt: kind={ThreatKind} action={ActionId} " +
+                "target={TargetEntityId:X8} key={KeyToken} outcome={AttemptOutcome}/{NativeOutcome} " +
+                "sourceSequence={SourceSequence}",
+                threat.Kind,
+                threat.CounterActionId,
+                revalidated?.EntityId ?? threat.EntityId,
+                threat.GameplayKeyToken,
+                attemptOutcome,
+                nativeOutcome,
+                expectedSourceSequence);
         }
 
         var retryScheduled =
@@ -859,6 +968,33 @@ internal sealed class MiracleInterceptProbe
     {
         var cleanseSignals = new List<MiracleCleanseFollowupSignal>();
         var immediateThreats = new List<MiracleThreatState>();
+        ResolvePendingCleanseTargets(
+            localPlayer,
+            enablePostPurifyCrowdControl,
+            nowMilliseconds,
+            cleanseSignals);
+
+        // A keyless event lease must remain exact while waiting for a later
+        // held/fresh generation. Retire stale job/action/actor identity before
+        // it can suppress a newly dequeued exact hostile packet.
+        if (activeThreat is { GameplayKeyToken: <= 0 } unboundThreat)
+        {
+            if (TryRefreshAndResolveFrozenThreat(
+                    localPlayer,
+                    unboundThreat,
+                    out var refreshedThreat,
+                    out _))
+            {
+                activeThreat = refreshedThreat;
+            }
+            else
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{unboundThreat.Kind}: keyless lease retired after exact identity drift";
+                activeThreat = null;
+            }
+        }
+
         while (capture.TryDequeueMiracleInterceptThreat(out var signal))
         {
             var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
@@ -899,22 +1035,45 @@ internal sealed class MiracleInterceptProbe
                 cleanseFollowupSignalLedger = retirement.NextState;
                 if (!retirement.IsNewValidatedSignal) continue;
 
-                var canonicalCleanseTarget = ResolveCanonicalEnemy(signal.CasterEntityId);
-                if (canonicalCleanseTarget is null)
+                var pendingResolution = new MiracleCleanseFollowupPendingResolution(
+                    cleanseSignalKey,
+                    signal.ObservedAtMilliseconds,
+                    signal.LocalEntityId,
+                    localPlayer.ClassJob.RowId,
+                    signal.FeatureGeneration);
+                var resolution = ResolveCleanseTarget(
+                    pendingResolution,
+                    localPlayer,
+                    enablePostPurifyCrowdControl,
+                    eventNow);
+                if (resolution.DidResolve && resolution.ResolvedSignal is { } resolvedSignal)
                 {
-                    Interlocked.Increment(ref rejectedThreatCount);
-                    cleanseFollowupLastEvent =
-                        "PostPurifyCC: Purify caster was not one exact canonical e1-e5 enemy";
+                    cleanseSignals.Add(resolvedSignal);
                     continue;
                 }
 
-                cleanseSignals.Add(new MiracleCleanseFollowupSignal(
-                    cleanseSignalKey,
-                    new MiracleCleanseFollowupTargetIdentity(
-                        canonicalCleanseTarget.GameObjectId,
-                        canonicalCleanseTarget.EntityId,
-                        canonicalCleanseTarget.JobId),
-                    signal.ObservedAtMilliseconds));
+                if (resolution.ShouldRetry &&
+                    pendingCleanseTargetResolutions.Count <
+                    MiracleCleanseFollowupRules.MaximumPendingResolutions)
+                {
+                    pendingCleanseTargetResolutions.Add(pendingResolution);
+                    cleanseFollowupLastEvent =
+                        "PostPurifyCC: exact signal retained; waiting for one unique canonical e1-e5 row";
+                    log.Information(
+                        "Seiton Sense reactive CC pending target: source=Purify " +
+                        "caster={CasterEntityId:X8} generation={FeatureGeneration} " +
+                        "deadline={DeadlineMilliseconds}",
+                        pendingResolution.Key.CasterEntityId,
+                        pendingResolution.FeatureGeneration,
+                        pendingResolution.ObservedAtMilliseconds +
+                        MiracleCleanseFollowupRules.ResilienceAcquisitionMilliseconds);
+                    continue;
+                }
+
+                Interlocked.Increment(ref rejectedThreatCount);
+                cleanseFollowupLastEvent = resolution.ShouldRetry
+                    ? "PostPurifyCC: pending canonical-resolution capacity exhausted"
+                    : $"PostPurifyCC: exact signal retired ({resolution.RetireReason})";
                 continue;
             }
 
@@ -960,13 +1119,6 @@ internal sealed class MiracleInterceptProbe
             if (!RememberSignal(identity)) continue;
             Interlocked.Increment(ref recognizedThreatCount);
 
-            if (episodeGameplayKeyToken <= 0)
-            {
-                Interlocked.Increment(ref rejectedThreatCount);
-                lastOpportunity = $"{kind}: no exact held key reserved on capture";
-                continue;
-            }
-
             var canonical = ResolveCanonicalEnemy(signal.CasterEntityId, kind);
             if (canonical is null)
             {
@@ -988,13 +1140,7 @@ internal sealed class MiracleInterceptProbe
                 continue;
             }
 
-            if (activeThreat is { } previousThreat && previousThreat.Signal != identity)
-            {
-                Interlocked.Increment(ref rejectedThreatCount);
-                lastOpportunity = $"{kind}: retired behind frozen exact {previousThreat.Kind} lease";
-                continue;
-            }
-            immediateThreats.Add(new MiracleThreatState(
+            var incomingThreat = new MiracleThreatState(
                 kind,
                 canonical.GameObjectId,
                 canonical.EntityId,
@@ -1007,10 +1153,22 @@ internal sealed class MiracleInterceptProbe
                 localPlayer.ClassJob.RowId,
                 ProtectionEndRank: null,
                 HeldActionRetryState.Initial,
-                GameplayKeyToken: episodeGameplayKeyToken));
+                GameplayKeyToken: episodeGameplayKeyToken);
+            if (activeThreat is { } previousThreat && previousThreat.Signal != identity &&
+                !MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
+                    previousThreat.Kind,
+                    previousThreat.RetryState,
+                    incomingThreat.Kind))
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{kind}: retired behind frozen exact {previousThreat.Kind} lease";
+                continue;
+            }
+
+            immediateThreats.Add(incomingThreat);
         }
 
-        if (activeThreat is null && immediateThreats.Count > 0)
+        if (immediateThreats.Count > 0)
         {
             var selected = immediateThreats
                 .OrderByDescending(static threat =>
@@ -1019,18 +1177,117 @@ internal sealed class MiracleInterceptProbe
                 .ThenBy(static threat => threat.EnemySlot)
                 .ThenBy(static threat => threat.GameObjectId)
                 .First();
+            var preemptedThreat = activeThreat;
             activeThreat = selected;
             Interlocked.Increment(ref armedThreatCount);
+            if (preemptedThreat is { } retiredActive && retiredActive.Signal != selected.Signal)
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity =
+                    $"{selected.Kind}: exact higher-priority event preempted unattempted {retiredActive.Kind}";
+                log.Information(
+                    "Seiton Sense reactive CC preemption: incoming={IncomingThreat} " +
+                    "retired={RetiredThreat} incomingTarget={TargetEntityId:X8} " +
+                    "retiredNativeAttempts={NativeAttemptCount}",
+                    selected.Kind,
+                    retiredActive.Kind,
+                    selected.EntityId,
+                    retiredActive.RetryState.NativeAttemptCount);
+            }
             foreach (var retired in immediateThreats)
             {
                 if (retired == selected) continue;
                 Interlocked.Increment(ref rejectedThreatCount);
             }
             ResetWaitDiagnostics();
-            lastOpportunity = $"{selected.Kind}: exact ranked threat armed";
+            if (preemptedThreat is null || preemptedThreat.Value.Signal == selected.Signal)
+                lastOpportunity = $"{selected.Kind}: exact ranked threat armed";
         }
 
         return cleanseSignals;
+    }
+
+    private void ResolvePendingCleanseTargets(
+        IPlayerCharacter localPlayer,
+        bool configurationEnabled,
+        long nowMilliseconds,
+        List<MiracleCleanseFollowupSignal> resolvedSignals)
+    {
+        var index = 0;
+        while (index < pendingCleanseTargetResolutions.Count)
+        {
+            var pending = pendingCleanseTargetResolutions[index];
+            var decision = ResolveCleanseTarget(
+                pending,
+                localPlayer,
+                configurationEnabled,
+                Math.Max(nowMilliseconds, Environment.TickCount64));
+            if (decision.ShouldRetry)
+            {
+                index++;
+                continue;
+            }
+
+            // Remove before exposing a resolved lifecycle. The terminal signal
+            // ledger already owns duplicate suppression, so this exact pending
+            // entry can neither replay nor extend its deadline.
+            pendingCleanseTargetResolutions.RemoveAt(index);
+            if (decision.DidResolve && decision.ResolvedSignal is { } resolvedSignal)
+            {
+                resolvedSignals.Add(resolvedSignal);
+                cleanseFollowupLastEvent =
+                    "PostPurifyCC: exact pending caster resolved to one canonical e1-e5 identity";
+                log.Information(
+                    "Seiton Sense reactive CC pending target resolved: source=Purify " +
+                    "caster={CasterEntityId:X8} gameObject={GameObjectId:X16}",
+                    resolvedSignal.Key.CasterEntityId,
+                    resolvedSignal.Target.GameObjectId);
+                continue;
+            }
+
+            Interlocked.Increment(ref rejectedThreatCount);
+            if (decision.RetireReason ==
+                MiracleCleanseFollowupResolutionRetireReason.AcquisitionExpired)
+            {
+                Interlocked.Increment(ref expiredThreatCount);
+            }
+            cleanseFollowupLastEvent =
+                $"PostPurifyCC: pending canonical resolution retired ({decision.RetireReason})";
+            log.Information(
+                "Seiton Sense reactive CC pending target retired: source=Purify " +
+                "caster={CasterEntityId:X8} reason={RetireReason}",
+                pending.Key.CasterEntityId,
+                decision.RetireReason);
+        }
+    }
+
+    private MiracleCleanseFollowupResolutionDecision ResolveCleanseTarget(
+        MiracleCleanseFollowupPendingResolution pending,
+        IPlayerCharacter localPlayer,
+        bool configurationEnabled,
+        long nowMilliseconds)
+    {
+        var canonical = ResolveUniqueCanonicalCleanseEnemy(pending.Key.CasterEntityId);
+        MiracleCleanseFollowupTargetIdentity? target = canonical is null
+            ? null
+            : new MiracleCleanseFollowupTargetIdentity(
+                canonical.GameObjectId,
+                canonical.EntityId,
+                canonical.JobId);
+        var localJobId = localPlayer.ClassJob.IsValid
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        return MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            new MiracleCleanseFollowupResolutionObservation(
+                configurationEnabled,
+                IsCrystallineConflict: true,
+                IsLocalCounterJobValid: counterActionId != 0 && localJobId != 0,
+                localPlayer.EntityId,
+                localJobId,
+                capture.CurrentMiracleCleanseFollowupGeneration,
+                target,
+                nowMilliseconds));
     }
 
     private MiracleFollowupPromotion? ObserveCleanseFollowup(
@@ -1096,6 +1353,9 @@ internal sealed class MiracleInterceptProbe
                             ? previous.GameplayKeyToken
                             : episodeGameplayKeyToken,
                         inputFrame),
+                    CounterActionReachable = IsCounterActionReachable(
+                        localPlayer,
+                        player),
                 };
                 teamTargetCountKnown = TryGetFreshTeamTargetCount(
                     localPlayer,
@@ -1118,6 +1378,25 @@ internal sealed class MiracleInterceptProbe
                 teamTargetCountKnown,
                 cleanseFollowupTeamPressure,
                 nowMilliseconds));
+
+        if (signalWasNew ||
+            decision.Kind is MiracleCleanseFollowupDecisionKind.ResilienceObserved or
+                MiracleCleanseFollowupDecisionKind.ReadyForPromotion or
+                MiracleCleanseFollowupDecisionKind.Cancelled ||
+            previous.Phase != decision.NextState.Phase)
+        {
+            log.Information(
+                "Seiton Sense reactive CC memory: source=Purify target={TargetEntityId:X8} " +
+                "kind={DecisionKind} phase={PreviousPhase}->{NextPhase} key={KeyToken} " +
+                "reachable={Reachable} reason={CancelReason}",
+                target?.EntityId ?? 0,
+                decision.Kind,
+                previous.Phase,
+                decision.NextState.Phase,
+                decision.NextState.GameplayKeyToken,
+                candidate?.CounterActionReachable ?? false,
+                decision.CancelReason);
+        }
 
         // The exact signal is retired in Core before a promotion can reach the
         // existing single Miracle action boundary.
@@ -1179,7 +1458,7 @@ internal sealed class MiracleInterceptProbe
             Interlocked.Increment(ref cleanseFollowupCancellationCount);
             Interlocked.Increment(ref rejectedThreatCount);
             cleanseFollowupLastEvent =
-                "PostPurifyCC: release retired because no exact key was reserved on Purify";
+                "PostPurifyCC: release retired because no exact key was bound at Resilience end";
             return null;
         }
 
@@ -1260,6 +1539,7 @@ internal sealed class MiracleInterceptProbe
             nowMilliseconds,
             inputFrame,
             episodeGameplayKeyToken);
+        var previous = guardFollowupState;
         var decision = MiracleGuardFollowupRules.Observe(
             guardFollowupState,
             new MiracleGuardFollowupObservation(
@@ -1270,6 +1550,28 @@ internal sealed class MiracleInterceptProbe
                 candidates,
                 nowMilliseconds));
         guardFollowupState = decision.NextState;
+
+        if (decision.NewGuardEpisodeCount > 0 ||
+            decision.NewReleaseOpportunityCount > 0 ||
+            decision.ExpiredOpportunityCount > 0 ||
+            decision.ShouldPromote ||
+            (decision.Kind == MiracleGuardFollowupDecisionKind.Cancelled &&
+             previous.Actors.Length > 0))
+        {
+            log.Information(
+                "Seiton Sense reactive CC memory: source=Guard actors={PreviousActors}->{NextActors} " +
+                "episodes={Episodes} releases={Releases} expired={Expired} promoted={Promoted} " +
+                "target={TargetEntityId:X8} key={KeyToken} reason={CancelReason}",
+                previous.Actors.Length,
+                decision.NextState.Actors.Length,
+                decision.NewGuardEpisodeCount,
+                decision.NewReleaseOpportunityCount,
+                decision.ExpiredOpportunityCount,
+                decision.ShouldPromote,
+                decision.PromotionIntent?.Target.EntityId ?? 0,
+                decision.PromotionIntent?.GameplayKeyToken ?? 0,
+                decision.CancelReason);
+        }
 
         if (decision.NewGuardEpisodeCount > 0)
         {
@@ -1331,7 +1633,7 @@ internal sealed class MiracleInterceptProbe
             Interlocked.Increment(ref guardFollowupRetiredCount);
             Interlocked.Increment(ref rejectedThreatCount);
             guardFollowupLastEvent =
-                "GuardEndCC: release retired because no exact key was reserved on Guard entry";
+                "GuardEndCC: release retired because no exact key was bound at Guard end";
             return null;
         }
 
@@ -1413,6 +1715,16 @@ internal sealed class MiracleInterceptProbe
                     effect.SourceSequence,
                     effect.ObservedAtMilliseconds));
             confirmationState = decision.NextState;
+            if (decision.Confirmed)
+            {
+                log.Information(
+                    "Seiton Sense reactive CC confirmed: action={ActionId} target={TargetEntityId:X8} " +
+                    "status={StatusId} sourceSequence={SourceSequence}",
+                    effect.ActionId,
+                    effect.TargetEntityId,
+                    effect.EffectValue,
+                    effect.SourceSequence);
+            }
         }
 
         confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
@@ -1436,6 +1748,29 @@ internal sealed class MiracleInterceptProbe
 
         var match = ResolveCanonicalEnemy(casterEntityId);
         return match is { } enemy && enemy.JobId == expectedJob ? enemy : null;
+    }
+
+    private EnemyHudSnapshot? ResolveUniqueCanonicalCleanseEnemy(uint casterEntityId)
+    {
+        if (!executeTracker.IsActive) return null;
+        var enemies = executeTracker.Enemies
+            .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
+            .ToArray();
+        var matches = enemies
+            .Where(enemy =>
+                enemy.EntityId == casterEntityId &&
+                enemy.JobId != 0 &&
+                TargetHighlightRules.IsValidGameObjectId(enemy.GameObjectId))
+            .Take(2)
+            .ToArray();
+        if (matches.Length != 1) return null;
+
+        var match = matches[0];
+        return enemies.Count(enemy => enemy.Slot == match.Slot) == 1 &&
+               enemies.Count(enemy => enemy.GameObjectId == match.GameObjectId) == 1 &&
+               enemies.Count(enemy => enemy.EntityId == match.EntityId) == 1
+            ? match
+            : null;
     }
 
     private EnemyHudSnapshot? ResolveCanonicalEnemy(uint casterEntityId)
@@ -1491,6 +1826,35 @@ internal sealed class MiracleInterceptProbe
                enemies.Count(enemy => enemy.EntityId == match.EntityId) == 1
             ? match
             : null;
+    }
+
+    private bool TryRefreshAndResolveFrozenThreat(
+        IPlayerCharacter localPlayer,
+        MiracleThreatState threat,
+        out MiracleThreatState refreshedThreat,
+        out IPlayerCharacter? candidate)
+    {
+        refreshedThreat = threat;
+        candidate = null;
+        var currentLocalJobId = localPlayer.ClassJob.IsValid
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        if (currentLocalJobId == EnemyCombatConstants.NinjaJobId &&
+            refreshedThreat.CounterActionId ==
+            EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId &&
+            IsExactRaijuAction(counterActionId))
+        {
+            refreshedThreat = refreshedThreat with { CounterActionId = counterActionId };
+        }
+
+        if (refreshedThreat.CounterActionId != counterActionId ||
+            refreshedThreat.LocalJobId != currentLocalJobId)
+        {
+            return false;
+        }
+
+        candidate = ResolveCandidate(localPlayer, refreshedThreat);
+        return candidate is not null;
     }
 
     private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates(
@@ -1574,6 +1938,9 @@ internal sealed class MiracleInterceptProbe
                 ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
                     ownedGameplayKeyToken,
                     inputFrame),
+                CounterActionReachable = live && IsCounterActionReachable(
+                    localPlayer,
+                    player!),
             });
         }
 
@@ -1945,9 +2312,11 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         uint actionId,
         ulong targetGameObjectId,
-        out bool attempted)
+        out bool attempted,
+        out ushort expectedSourceSequence)
     {
         attempted = false;
+        expectedSourceSequence = 0;
         if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0 ||
             !TargetHighlightRules.IsValidGameObjectId(targetGameObjectId))
         {
@@ -1974,11 +2343,33 @@ internal sealed class MiracleInterceptProbe
                 0,
                 ActionManager.UseActionMode.None,
                 0));
+        var boundaryAfter = ClientActionAttemptBoundary.Capture(actionManager, actionId);
+        if (accepted &&
+            boundaryAfter.LastUsedActionSequence != 0 &&
+            boundaryAfter.LastUsedActionSequence != boundaryBefore.LastUsedActionSequence)
+        {
+            expectedSourceSequence = boundaryAfter.LastUsedActionSequence;
+        }
+
         return ClientActionAttemptBoundaryRules.Classify(
             accepted,
             actionId,
             boundaryBefore,
-            ClientActionAttemptBoundary.Capture(actionManager, actionId));
+            boundaryAfter);
+    }
+
+    private bool IsCounterActionReachable(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter candidate)
+    {
+        var rangeActionId = counterActionId == EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId
+            ? EnemyCombatConstants.ForkedRaijuActionId
+            : counterActionId;
+        return MiracleInterceptConfirmationRules.ExpectedStatusForAction(rangeActionId) != 0 &&
+               !HasAnyVerifiedCcProtection(
+                   candidate,
+                   BlockerFamilyForAction(rangeActionId)) &&
+               HasActionRangeAndLineOfSight(rangeActionId, localPlayer, candidate);
     }
 
     private static unsafe bool HasStructuralActionReadiness(
@@ -2116,6 +2507,7 @@ internal sealed class MiracleInterceptProbe
     private void ClearCleanseFollowupStates()
     {
         cleanseFollowupStates.Clear();
+        pendingCleanseTargetResolutions.Clear();
         cleanseFollowupSignalLedger = MiracleCleanseFollowupSignalLedger.Initial;
     }
 
@@ -2125,7 +2517,7 @@ internal sealed class MiracleInterceptProbe
         long nowMilliseconds)
     {
         var remaining = activeThreat is { } threat
-            ? Math.Max(0, ThreatLifetime(threat.Kind) -
+            ? Math.Max(0, ThreatLifetime(threat) -
                           Math.Max(0, nowMilliseconds - threat.ObservedAtMilliseconds))
             : 0;
         var result = WithOpportunityDiagnostics(MiracleInterceptProbeSnapshot.Initial with
@@ -2171,7 +2563,7 @@ internal sealed class MiracleInterceptProbe
             candidate.GameObjectId,
             candidate.EntityId,
             threat.JobId,
-            Math.Max(0, ThreatLifetime(threat.Kind) -
+            Math.Max(0, ThreatLifetime(threat) -
                         Math.Max(0, nowMilliseconds - threat.ObservedAtMilliseconds)),
             hardenedScales,
             otherProtection,
@@ -2443,6 +2835,12 @@ internal sealed class MiracleInterceptProbe
             MiracleProtectionEndRules.HeldLeaseMilliseconds,
         _ => MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind),
     };
+
+    private static long ThreatLifetime(MiracleThreatState threat) =>
+        IsProtectionEndThreat(threat.Kind) &&
+        threat.LocalJobId == EnemyCombatConstants.NinjaJobId
+            ? MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds
+            : ThreatLifetime(threat.Kind);
 
     private static bool IsThreatKindEnabled(
         MiracleInterceptThreatKind kind,

@@ -15,7 +15,12 @@ free text. Fixed Combat Frames may display character names read from the live
 client, but the plugin does not persist or transmit those names, Home Worlds,
 combat, target, status, or key history. Ally Rescue attempt,
 client-accepted, and confirmed-cleanse counters exist only in memory for the
-current match/plugin session and are never uploaded.
+current match/plugin session and are never uploaded. To diagnose the explicitly
+enabled reactive counter-CC and Ally Rescue helpers, bounded transition,
+attempt, and confirmation records are written to the ordinary local Dalamud
+plugin log. They contain numeric action/status/entity/sequence identifiers and
+outcomes, never character names, chat text, damage values, or a continuous key
+history, and are not uploaded by Seiton Sense.
 
 ## Transient local data
 
@@ -656,8 +661,11 @@ currently usable lower helper; a globally blocked queue/animation boundary and
 the brief explicit-false retry retain priority. Only the same frozen ally/status
 intent may use the common bounded retry. Acceptance, ambiguity, vanished status,
 or changed target is terminal. The original key is still neither swallowed nor
-replayed, and no observed ally/status/input data is logged, persisted, or
-transmitted.
+replayed. Continuous ally/status/input observations are not persisted or
+transmitted. When this helper reaches a native attempt or exact confirmation,
+one local Dalamud diagnostic record contains only action ID, target entity ID,
+status ID, outcome, and source sequence; it contains no character name, damage,
+chat, or key history and is not uploaded by Seiton Sense.
 
 The local return from the action request is counted separately as
 `client-accepted`; it is not proof of a cleanse. A confirmed removal requires a
@@ -673,9 +681,10 @@ aggregate current-match and plugin-session counts, including per-action and
 per-status totals. Attempts and client-accepted requests remain visibly
 separate. These counters, the bounded pending correlation, and duplicate-event
 keys exist only in memory; the settings reset can clear the displayed
-statistics. No ActionEffect payload, actor identity, counter, or popup history
-is written to disk, logged as combat history, sent over the network, or
-uploaded.
+statistics. Full ActionEffect payloads, counters, and popup history are not
+persisted. The bounded local attempt/confirmation diagnostics described above
+may include the exact numeric target entity ID and source sequence; they are not
+sent over the network or uploaded by Seiton Sense.
 
 ## Smart Bard Paean pressure redirect
 
@@ -909,12 +918,14 @@ Fleeting Raiju `29707` rows are available. The bounded queues exist only in
 memory.
 
 The optional post-Purify path recognizes only exact enemy self-Purify `29056`
-with one self target, a non-empty event sequence, and recovered-status effect
-`0x10` for Stun `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of
-Nature `3085`, or Deep Freeze `3219`. The source must resolve to one exact live
-canonical `S1`-`S5` enemy. The plugin then requires positive live Resilience
-`3248`. On the exact Purify observation it freezes the eligible physical key
-generation, actor, local counter action, and event epoch. A finite, positive,
+with one self target and a non-empty event sequence. It retains the exact
+recovered-status effect `0x10` when the packet exposes Stun `1343`, Heavy `1344`,
+Bind `1345`, Silence `1347`, Miracle of Nature `3085`, or Deep Freeze `3219`, but
+also accepts the exact action-level packet when no individual recovery tuple is
+present. The source must resolve to one exact live canonical `S1`-`S5` enemy,
+and positive live Resilience `3248` is mandatory before the episode can
+progress. The Purify observation remembers the exact actor, local counter
+action, and event epoch without binding a key. A finite, positive,
 catalog-bounded `RemainingTime` may establish only a non-extending expected end;
 live status-list membership remains authoritative. The first real absent frame
 at or after that end is eligible immediately, while early or untimed absence
@@ -925,24 +936,34 @@ count. Each verified Resilience end creates only a bounded exact protection-end
 episode in memory. The runtime keeps at most one active post-Purify state per
 canonical `S1`-`S5` slot plus a bounded deduplication set, allowing distinct exact
 enemies to progress independently without one replacing the other's signal.
+If the exact canonical row is transiently unavailable, at most five already-
+deduplicated signals may retain only their original caster/event identity until
+the original 750-ms acquisition deadline. They carry no key or action, cannot
+fall back to another actor, and are retired on context, local identity/job, or
+feature-generation change.
 
 The separate optional post-Guard path observes only exact Guard `3054` or `3673`
-present on one live canonical `S1`-`S5` enemy. Its first exact presence freezes
-the eligible physical key generation, actor, local action, Guard epoch, and the
-same kind of bounded non-extending duration hint. The first verified framework
-observation that finds Guard absent exposes one bounded exact protection-end
-opportunity, including an early manual Guard cancel. Key release retires that
-same uninterrupted Guard through missing or ambiguous samples until exact
-absence separates a later episode. It retains only the frozen identity, key,
-hint, and bounded lifecycle in memory, with no minimum team-pressure count. Any identity, context, protection,
+present on one live canonical `S1`-`S5` enemy. Its first exact presence remembers
+the actor, local action, Guard epoch, and the same kind of bounded non-extending
+duration hint without binding a key. The first verified framework observation
+that finds Guard absent exposes one bounded exact protection-end opportunity,
+including an early manual Guard cancel. At that authoritative absence, or only
+inside its original 500-ms release window, the episode may bind the current
+eligible held/fresh generation. After binding, key release retires that intent;
+the same uninterrupted Guard remains retired through missing or ambiguous
+samples until exact absence separates a later episode. It retains only the exact
+identity, optional bound key, hint, and bounded lifecycle in memory, with no
+minimum team-pressure count. Any identity, context, protection,
 native range, or line-of-sight uncertainty fails closed. It never requires or
 switches the selected target, chooses an alternate action/actor, or replays
 input. Only a clean native rejection may retain the same frozen intent under the
 shared bounded retry policy.
 
 When multiple exact post-Purify or post-Guard releases are simultaneously
-eligible, selection reads each candidate's fresh exact team-target count,
-current/maximum HP, and trusted current/maximum MP. Only a fresh exact pressure
+eligible, each actor must first pass exact counter-specific protection, native
+range, and line-of-sight checks. Selection then reads each remaining candidate's
+fresh exact team-target count, current/maximum HP, and trusted current/maximum
+MP. Only a fresh exact pressure
 count above zero earns a ranking bonus, with higher positive counts first. Known
 zero, unknown, or stale pressure is neutral and never excludes or delays a
 candidate. Lower HP ratio follows, then lower trusted MP ratio and stable
@@ -964,13 +985,24 @@ requires the exact local Sealed Forked Raiju status `3195` to be absent, and bot
 variants require exact local Bind `1345` to be absent. VPR requires live
 Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
-post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
+post-Purify/post-Guard release opportunity after 500 ms; waiting never restarts
+a deadline. WHM and BRD keep the normal 1.5-second protection-end held lease.
+NIN alone uses 3 seconds so one verified 2.5-second Raiju recast plus the
+existing release window can complete without extending the underlying episode.
 
 The helper observes held gameplay-key state immediately after Purify and before
-every other job-specific helper. The eligible key is snapshotted at the startup,
-Purify, or first Guard-presence edge; a later key cannot inherit that episode,
-and text input poisons the exact generation until real release. One continuous
-hold can authorize later distinct startup or protection-end episodes, but each selected episode remains one frozen intent and
+every other job-specific helper. An urgent startup may bind the first current
+eligible held/fresh generation only inside that startup's original short event
+lease. Expired or disabled leases retire, and its exact local job, action, and
+enemy are revalidated before new packets are compared.
+A later exact urgent startup may replace only an unattempted lower-priority
+reactive lease; equal/lower events and every attempted lease remain frozen.
+Purify and Guard remember the exact enemy episode while protection is
+live and may bind the current eligible generation only when authoritative
+absence opens, or inside the original 500-ms release opportunity. Once bound, a
+later key cannot inherit that episode, and text input poisons the exact
+generation until real release. One continuous hold can authorize later distinct
+startup or protection-end episodes, but each selected episode remains one frozen intent and
 no simultaneous loser can follow it. Known action-specific unavailability keeps
 the lease without blocking a usable lower helper; a global queue/animation wait
 and the brief explicit-false retry retain the scheduler frame. The helper uses
@@ -982,20 +1014,25 @@ boundary.
 The action-effect hook also places exact local counter-status observations into
 a separate bounded in-memory queue. A 1.5-second `AUTO CC LANDED` visual is
 created only when local caster, expected action, pending enemy, effect type
-`0x0E`, non-empty sequence, and action-specific status match within 1500 ms:
-Miracle `3085` for WHM, Silence `1347` for BRD, or Stun `1343` for either exact
-NIN Raiju variant. This proves only that the
+`0x0E`, action-specific status, and the same nonzero source sequence created by
+the plugin's accepted native request match within 1500 ms: Miracle `3085` for
+WHM, Silence `1347` for BRD, or Stun `1343` for either exact NIN Raiju variant.
+A manual use with a different sequence cannot claim the pending automatic
+result. This proves only that the
 counter-CC status landed on the intended enemy, not that Contradance, another
 limit break, or damage was interrupted. A client-accepted action request alone
 is never presented as confirmation. For an instant LB, the server may already
 have accepted the activation before the reactive request arrives; even a later
 confirmed Silence cannot retroactively prevent that race.
 
-No observed threat, actor identity, key state, status, action result, or team
-focus is written to disk, uploaded, or retained as combat history. Aggregate
-bounded diagnostics remain memory-only across context exit; active threats and
-queues are cleared. Current-patch startup, release, dispatch, and interruption
-behavior remains a live-validation boundary.
+No continuous threat, key, status, team-focus, or combat history is retained or
+uploaded. Bounded reactive transition/attempt/confirmation records are written
+to the ordinary local Dalamud plugin log with numeric action/status/entity/key/
+sequence identifiers and outcomes, but no character names, chat text, damage,
+or full event payloads. Active threats and queues are cleared on context exit;
+the log is retained according to Dalamud's own local logging policy. Current-
+patch startup, release, dispatch, and interruption behavior remains a live-
+validation boundary.
 
 ## Experimental Ninja Seiton held-key helper
 
@@ -1108,7 +1145,7 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 30 remains current in v0.27.0.0; this release adds no
+Configuration schema 30 remains current in v0.27.1.0; this release adds no
 setting or migration. The held-action cast-cancellation test remains explicitly
 off for fresh, reset, and migrated
 configurations. An older explicitly enabled fresh-edge NIN Seiton option still

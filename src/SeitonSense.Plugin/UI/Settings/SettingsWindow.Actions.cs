@@ -327,21 +327,25 @@ internal sealed partial class SettingsWindow
             "must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
-            "accepts Stun, Heavy, Bind, Silence, Deep " +
-            "Freeze, or Miracle of Nature, observes real Resilience, snapshots the held key and a validated duration " +
-            "hint, then still requires real disappearance. At or after the expected end, the first absent frame is " +
+            "accepts an exact enemy self-Purify action packet with or without an exposed Stun, Heavy, Bind, Silence, Deep " +
+            "Freeze, or Miracle of Nature recovery tuple, observes real Resilience and remembers the exact enemy episode " +
+            "without binding a key. A validated duration is only a wake-up hint. It binds the current eligible held/fresh " +
+            "generation only at authoritative protection end or inside the original 500-ms release opportunity. " +
+            "At or after the expected end, the first absent frame is " +
             "eligible immediately; an early or untimed absence keeps the 150-ms anti-flicker check. It uses " +
             "the exact S1-S5 actor directly, does not require that actor to be your selected target, and never changes " +
             "your target. There is no minimum team-pressure count, and distinct S-slots are tracked independently. " +
             "Viper waits until Hardened Scales is actually absent.");
         ImGui.TextDisabled(
-            "For simultaneous post-Purify or post-Guard releases, only fresh exact team pressure above zero earns a " +
+            "For simultaneous post-Purify or post-Guard releases, candidates are evaluated before pressure ranking. " +
+            "Native blocker, range, and line-of-sight eligibility " +
+            "is checked before ranking. Only fresh exact team pressure above zero earns a " +
             "ranking bonus, highest-first. Zero, unknown, or stale pressure is neutral and never gates a candidate. " +
             "Lowest HP ratio follows, then lowest trusted MP ratio and stable S-slot identity. Exactly one winner is " +
             "selected; simultaneous losers " +
             "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
             "3054/3673 was observed present and then verified absent. Early Guard cancellation releases immediately. " +
-            "All three jobs require their native range and line of sight.");
+            "WHM and BRD retain the 1.5-second held lease; NIN uses 3 seconds to cover one verified 2.5-second Raiju recast.");
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
@@ -351,7 +355,8 @@ internal sealed partial class SettingsWindow
             "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
             "change, alternate, fallback, or replay. The blue AUTO CC " +
             "LANDED flash appears " +
-            "only after the matching Miracle, Silence, or Stun status is captured on that exact pending enemy. It confirms " +
+            "only after the matching Miracle, Silence, or Stun status is captured on that exact pending enemy with the " +
+            "same source sequence created by the plugin request; a manual use cannot claim it. It confirms " +
             "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +
             "particular, an instant LB already accepted by the server may be too late to stop even when Silence lands.");
         ImGui.PopTextWrapPos();
