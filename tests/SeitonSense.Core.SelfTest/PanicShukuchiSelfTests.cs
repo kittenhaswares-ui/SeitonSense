@@ -2,16 +2,12 @@ using SeitonSense.Core;
 
 internal static class PanicShukuchiSelfTests
 {
-    private static readonly TargetPressureActorIdentity LocalA = new(0x100, 0x200);
-    private static readonly TargetPressureActorIdentity LocalB = new(0x101, 0x201);
-
     public static void ConstantsAndForwardAxesAreExact()
     {
         Equal(30u, PanicShukuchiRules.NinjaJobId, "NIN job ID");
         Equal(29_513u, PanicShukuchiRules.ActionId, "PvP Shukuchi action ID");
         Equal(20f, PanicShukuchiRules.NativeMaximumRangeYalms, "native action range");
         Equal(19.5f, PanicShukuchiRules.SafeForwardDistanceYalms, "safe destination range");
-        Equal(500L, PanicShukuchiRules.MaximumPendingMilliseconds, "maximum pending lease");
 
         var origin = new PanicShukuchiPoint(10f, 3f, -4f);
         True(
@@ -110,321 +106,166 @@ internal static class PanicShukuchiSelfTests
         False(
             PanicShukuchiRules.IsValidGroundHit(
                 valid with { RotationRadians = MathF.PI }),
-            "a ground hit behind the snapshotted facing is rejected");
+            "a ground hit behind the current facing is rejected");
     }
 
-    public static void ArmFreezesExactIdentityContextAndDestination()
+    public static void ValidCommandProducesOneImmediateIntent()
     {
-        var arm = PanicShukuchiRules.Arm(
-            PanicShukuchiPendingState.Initial,
-            ValidArm());
+        var decision = PanicShukuchiRules.Evaluate(ValidObservation());
 
-        True(arm.DidArm, "valid command arms one pending lease");
-        Equal(PanicShukuchiDecisionReason.Armed, arm.Reason, "arm reason");
-        True(arm.NextState.IsPending, "armed state is valid");
-        var pending = arm.NextState.Pending!.Value;
-        Equal(LocalA, pending.LocalPlayer, "local identity is frozen");
-        Equal(1_032u, pending.TerritoryId, "territory is frozen");
-        Equal(SupportedPvPContext.CrystallineConflict, pending.Context, "context is frozen");
-        Equal(new PanicShukuchiPoint(0f, 0f, 19.5f), pending.Intent.Destination, "destination is frozen");
-        Equal(1_000L, pending.ArmedAtMilliseconds, "arm time is exact");
-        Equal(1_500L, pending.ExpiresAtMilliseconds, "default lease is exactly 500 ms");
+        True(decision.ShouldAttempt, "valid command produces an immediate native intent");
+        Equal(PanicShukuchiDecisionReason.Ready, decision.Reason, "ready reason");
+        True(decision.Intent is { IsValid: true }, "one exact intent is present");
+        Equal(PanicShukuchiRules.ActionId, decision.Intent!.Value.ActionId, "exact action ID");
+        Equal(
+            new PanicShukuchiPoint(0f, 0f, 19.5f),
+            decision.Intent.Value.Destination,
+            "exact destination");
+    }
 
-        RejectedArm(ValidArm() with { PluginEnabled = false }, PanicShukuchiDecisionReason.PluginDisabled);
-        RejectedArm(ValidArm() with { MetadataVerified = false }, PanicShukuchiDecisionReason.MetadataUnverified);
-        RejectedArm(ValidArm() with { Context = SupportedPvPContext.None }, PanicShukuchiDecisionReason.UnsupportedContext);
-        RejectedArm(ValidArm() with { TerritoryId = 0 }, PanicShukuchiDecisionReason.InvalidLocalPlayer);
-        RejectedArm(ValidArm() with { LocalPlayer = default }, PanicShukuchiDecisionReason.InvalidLocalPlayer);
-        RejectedArm(ValidArm() with { LocalPlayerAliveAndTargetable = false }, PanicShukuchiDecisionReason.InvalidLocalPlayer);
-        RejectedArm(ValidArm() with { LocalJobId = 31 }, PanicShukuchiDecisionReason.WrongJob);
-        RejectedArm(ValidArm() with { OwnGuardClear = false }, PanicShukuchiDecisionReason.OwnGuardActiveOrPropagating);
-        RejectedArm(ValidArm() with { Incapacitated = true }, PanicShukuchiDecisionReason.Incapacitated);
-        RejectedArm(ValidArm() with { ResolvedActionId = 1 }, PanicShukuchiDecisionReason.ResolvedActionInvalid);
-        RejectedArm(
-            ValidArm() with
+    public static void RepeatedCommandsAreIndependent()
+    {
+        var first = PanicShukuchiRules.Evaluate(ValidObservation());
+        var second = PanicShukuchiRules.Evaluate(
+            ValidObservation() with
             {
-                Candidate = Candidate(new PanicShukuchiPoint(0f, 0f, 18f)),
-            },
-            PanicShukuchiDecisionReason.InvalidForwardGroundHit);
+                Candidate = new PanicShukuchiCandidate(
+                    new PanicShukuchiPoint(0f, 0f, 0f),
+                    MathF.PI / 2f,
+                    new PanicShukuchiGroundHit(
+                        true,
+                        new PanicShukuchiPoint(19.5f, 0f, 0f))),
+            });
 
-        var wolvesBlocked = PanicShukuchiRules.Arm(
-            PanicShukuchiPendingState.Initial,
-            ValidArm() with
+        True(first.ShouldAttempt, "first command is immediate");
+        True(second.ShouldAttempt, "second command has no pending predecessor");
+        Equal(
+            new PanicShukuchiPoint(0f, 0f, 19.5f),
+            first.Intent!.Value.Destination,
+            "first command keeps its own point");
+        Equal(
+            new PanicShukuchiPoint(19.5f, 0f, 0f),
+            second.Intent!.Value.Destination,
+            "second command computes its own point");
+    }
+
+    public static void CommandPolicyHasNoGuardOrSchedulerInputs()
+    {
+        var observationNames = typeof(PanicShukuchiCommandObservation)
+            .GetProperties()
+            .Select(static property => property.Name)
+            .ToArray();
+        var forbidden = new[]
+        {
+            "Guard",
+            "Purify",
+            "CrowdControl",
+            "Incapacitated",
+            "Cast",
+            "Queue",
+            "Animation",
+            "Cooldown",
+            "Resource",
+            "Pending",
+            "Wait",
+            "Time",
+            "Expiry",
+        };
+
+        foreach (var token in forbidden)
+        {
+            False(
+                observationNames.Any(name =>
+                    name.Contains(token, StringComparison.OrdinalIgnoreCase)),
+                $"command policy must not expose {token} input");
+        }
+
+        var reasonNames = Enum.GetNames<PanicShukuchiDecisionReason>();
+        foreach (var token in new[] { "Guard", "Purify", "Pending", "Waiting", "Expired" })
+        {
+            False(
+                reasonNames.Any(name =>
+                    name.Contains(token, StringComparison.OrdinalIgnoreCase)),
+                $"command policy must not expose {token} outcome");
+        }
+    }
+
+    public static void StaticCommandGatesFailClosed()
+    {
+        Rejected(
+            ValidObservation() with { PluginEnabled = false },
+            PanicShukuchiDecisionReason.PluginDisabled);
+        Rejected(
+            ValidObservation() with { MetadataVerified = false },
+            PanicShukuchiDecisionReason.MetadataUnverified);
+        Rejected(
+            ValidObservation() with { Context = SupportedPvPContext.None },
+            PanicShukuchiDecisionReason.UnsupportedContext);
+        Rejected(
+            ValidObservation() with { LocalPlayerAliveAndTargetable = false },
+            PanicShukuchiDecisionReason.InvalidLocalPlayer);
+        Rejected(
+            ValidObservation() with { LocalJobId = 31 },
+            PanicShukuchiDecisionReason.WrongJob);
+
+        var wolvesBlocked = PanicShukuchiRules.Evaluate(
+            ValidObservation() with
             {
                 Context = SupportedPvPContext.WolvesDen,
                 WolvesDenTestingEnabled = false,
             });
-        False(wolvesBlocked.DidArm, "Wolves' Den needs explicit test consent");
-        var wolvesAllowed = PanicShukuchiRules.Arm(
-            PanicShukuchiPendingState.Initial,
-            ValidArm() with
+        False(wolvesBlocked.ShouldAttempt, "Wolves' Den needs explicit test consent");
+        var wolvesAllowed = PanicShukuchiRules.Evaluate(
+            ValidObservation() with
             {
                 Context = SupportedPvPContext.WolvesDen,
                 WolvesDenTestingEnabled = true,
-                TerritoryId = PvPMatchRules.WolvesDenPierTerritoryId,
             });
-        True(wolvesAllowed.DidArm, "Wolves' Den can arm with test consent");
-
-        foreach (var lifetime in new[] { -1L, 0L, 501L })
-        {
-            var invalidLifetime = PanicShukuchiRules.Arm(
-                PanicShukuchiPendingState.Initial,
-                ValidArm(),
-                lifetime);
-            False(invalidLifetime.DidArm, $"invalid lifetime {lifetime} fails closed");
-            Equal(PanicShukuchiDecisionReason.InvalidClock, invalidLifetime.Reason, "lifetime reason");
-        }
+        True(wolvesAllowed.ShouldAttempt, "Wolves' Den command is immediate with test consent");
     }
 
-    public static void ExistingPendingCannotBeReplacedAndExpiryIsExact()
+    public static void InvalidActionOrTerrainExposesNoFallback()
     {
-        var state = Arm();
-        var replacement = PanicShukuchiRules.Arm(
-            state,
-            ValidArm(now: 1_100) with
+        Rejected(
+            ValidObservation() with { ResolvedActionId = 29_514 },
+            PanicShukuchiDecisionReason.ResolvedActionInvalid);
+        Rejected(
+            ValidObservation() with
             {
-                LocalPlayer = LocalB,
-                Candidate = Candidate(new PanicShukuchiPoint(0f, 0.1f, 19.5f)),
-            });
-
-        Equal(
-            PanicShukuchiArmDecisionKind.ExistingPendingPreserved,
-            replacement.Kind,
-            "second command is rejected as already pending");
-        Equal(PanicShukuchiDecisionReason.AlreadyPending, replacement.Reason, "replacement reason");
-        Equal(state, replacement.NextState, "second command preserves every frozen bit");
-
-        var lastInside = PanicShukuchiRules.ObservePending(
-            state,
-            ValidPending(state, now: 1_499));
-        True(lastInside.ShouldAttempt, "lease is usable one millisecond before expiry");
-
-        var boundary = PanicShukuchiRules.ObservePending(
-            state,
-            ValidPending(state, now: 1_500));
-        Equal(PanicShukuchiPendingDecisionKind.Cleared, boundary.Kind, "deadline is expired");
-        Equal(PanicShukuchiDecisionReason.Expired, boundary.Reason, "expiry reason");
-        False(boundary.NextState.IsPending, "expired lease is cleared");
-
-        var newAtBoundary = PanicShukuchiRules.Arm(state, ValidArm(now: 1_500));
-        True(newAtBoundary.DidArm, "a new explicit command may arm after proven expiry");
-        Equal(2_000L, newAtBoundary.NextState.Pending!.Value.ExpiresAtMilliseconds, "new lease has its own deadline");
-
-        var rollback = PanicShukuchiRules.Arm(state, ValidArm(now: 999));
-        Equal(PanicShukuchiDecisionReason.ClockMovedBackwards, rollback.Reason, "clock rollback reason");
-        False(rollback.NextState.IsPending, "clock rollback clears instead of replacing");
-    }
-
-    public static void CastQueueAndAnimationLockWaitWithoutDrift()
-    {
-        var state = Arm();
-        var higherPriority = PanicShukuchiRules.ObservePending(
-            state,
-            ValidPending(state, 1_001) with
-            {
-                HigherPriorityClaimed = true,
-                CooldownStateKnown = false,
-                ActionStructurallyReady = false,
-            });
-        Waiting(
-            higherPriority,
-            state,
-            PanicShukuchiDecisionReason.WaitingForHigherPriority,
-            "Purify priority");
-
-        var casting = PanicShukuchiRules.ObservePending(
-            higherPriority.NextState,
-            ValidPending(state, 1_001) with
-            {
-                NotCasting = false,
-                CooldownStateKnown = false,
-                ActionStructurallyReady = false,
-            });
-        Waiting(casting, state, PanicShukuchiDecisionReason.WaitingForCast, "cast");
-
-        var queued = PanicShukuchiRules.ObservePending(
-            casting.NextState,
-            ValidPending(state, 1_100) with
-            {
-                NativeQueueClear = false,
-                CooldownReady = false,
-            });
-        Waiting(queued, state, PanicShukuchiDecisionReason.WaitingForNativeQueue, "native queue");
-
-        var locked = PanicShukuchiRules.ObservePending(
-            queued.NextState,
-            ValidPending(state, 1_200) with
-            {
-                AnimationLockClear = false,
-                ActionStructurallyReady = false,
-            });
-        Waiting(locked, state, PanicShukuchiDecisionReason.WaitingForAnimationLock, "animation lock");
-
-        Equal(
-            state.Pending!.Value.ExpiresAtMilliseconds,
-            locked.NextState.Pending!.Value.ExpiresAtMilliseconds,
-            "soft waits never extend the deadline");
-        Equal(
-            state.Pending.Value.Intent,
-            locked.NextState.Pending.Value.Intent,
-            "soft waits never recompute the destination");
-    }
-
-    public static void ReadyConsumesBeforeTheSoleNativeAttempt()
-    {
-        var state = Arm();
-        var ready = PanicShukuchiRules.ObservePending(state, ValidPending(state, 1_001));
-
-        True(ready.ShouldAttempt, "fully ready pending lease authorizes one attempt");
-        Equal(PanicShukuchiDecisionReason.Ready, ready.Reason, "ready reason");
-        False(ready.NextState.IsPending, "lease is spent before caller invokes native code");
-        Equal(state.Pending!.Value.Intent, ready.Intent!.Value, "sole attempt uses frozen intent");
-
-        // The caller stores NextState before UseActionLocation. A false return or
-        // exception therefore has no state from which a retry could be made.
-        var afterNativeFalse = PanicShukuchiRules.ObservePending(
-            ready.NextState,
-            ValidPending(state, 1_002));
-        False(afterNativeFalse.ShouldAttempt, "client false cannot retry");
-        Equal(PanicShukuchiDecisionReason.NoPending, afterNativeFalse.Reason, "spent lease is absent");
-        True(afterNativeFalse.Intent is null, "no fallback intent is exposed");
-
-        var shorter = Arm(candidate: Candidate(new PanicShukuchiPoint(0f, 0f, 18f)));
-        False(shorter.IsPending, "invalid shorter fallback never arms");
-    }
-
-    public static void PendingDriftAndTerminalGatesFailClosed()
-    {
-        var state = Arm();
-        Cleared(state, ValidPending(state, 1_001) with { PluginEnabled = false }, PanicShukuchiDecisionReason.PluginDisabled);
-        Cleared(state, ValidPending(state, 1_001) with { MetadataVerified = false }, PanicShukuchiDecisionReason.MetadataUnverified);
-        Cleared(state, ValidPending(state, 1_001) with { Context = SupportedPvPContext.None }, PanicShukuchiDecisionReason.UnsupportedContext);
-        Cleared(state, ValidPending(state, 1_001) with { TerritoryId = 1_033 }, PanicShukuchiDecisionReason.TerritoryChanged);
-        Cleared(state, ValidPending(state, 1_001) with { LocalPlayer = default }, PanicShukuchiDecisionReason.InvalidLocalPlayer);
-        Cleared(state, ValidPending(state, 1_001) with { LocalPlayer = LocalB }, PanicShukuchiDecisionReason.LocalPlayerIdentityChanged);
-        Cleared(state, ValidPending(state, 1_001) with { LocalPlayerAliveAndTargetable = false }, PanicShukuchiDecisionReason.InvalidLocalPlayer);
-        Cleared(state, ValidPending(state, 1_001) with { LocalJobId = 31 }, PanicShukuchiDecisionReason.WrongJob);
-        Cleared(state, ValidPending(state, 1_001) with { OwnGuardClear = false }, PanicShukuchiDecisionReason.OwnGuardActiveOrPropagating);
-        Cleared(state, ValidPending(state, 1_001) with { Incapacitated = true }, PanicShukuchiDecisionReason.Incapacitated);
-        Cleared(
-            state,
-            ValidPending(state, 1_001) with
-            {
-                RequestedDestination = state.Pending!.Value.Intent.Destination with { Y = 0.001f },
+                Candidate = Candidate(new PanicShukuchiPoint(0f, 0f, 18f)),
             },
-            PanicShukuchiDecisionReason.DestinationChanged);
-        Cleared(state, ValidPending(state, 1_001) with { ResolvedActionId = 1 }, PanicShukuchiDecisionReason.ResolvedActionInvalid);
-        Cleared(state, ValidPending(state, 1_001) with { CooldownStateKnown = false }, PanicShukuchiDecisionReason.CooldownStateUnknown);
-        Cleared(state, ValidPending(state, 1_001) with { CooldownReady = false }, PanicShukuchiDecisionReason.ActionNotReady);
-        Cleared(state, ValidPending(state, 1_001) with { ActionStructurallyReady = false }, PanicShukuchiDecisionReason.ActionStructurallyUnavailable);
-        Cleared(state, ValidPending(state, 1_001) with { HardReset = true }, PanicShukuchiDecisionReason.HardReset);
-        Cleared(state, ValidPending(state, 999), PanicShukuchiDecisionReason.ClockMovedBackwards);
-
-        var corrupted = state with
-        {
-            Pending = state.Pending!.Value with
+            PanicShukuchiDecisionReason.InvalidForwardGroundHit);
+        Rejected(
+            ValidObservation() with
             {
-                Intent = state.Pending.Value.Intent with
-                {
-                    Destination = state.Pending.Value.Intent.Destination with { X = 1f },
-                },
+                Candidate = Candidate(new PanicShukuchiPoint(float.NaN, 0f, 19.5f)),
             },
-        };
-        Cleared(corrupted, ValidPending(state, 1_001), PanicShukuchiDecisionReason.InvalidPending);
+            PanicShukuchiDecisionReason.InvalidForwardGroundHit);
     }
 
-    private static PanicShukuchiArmObservation ValidArm(
-        long now = 1_000,
-        PanicShukuchiCandidate? candidate = null) => new(
-        NowMilliseconds: now,
+    private static PanicShukuchiCommandObservation ValidObservation() => new(
         PluginEnabled: true,
         MetadataVerified: true,
         Context: SupportedPvPContext.CrystallineConflict,
         WolvesDenTestingEnabled: false,
-        TerritoryId: 1_032,
         LocalJobId: PanicShukuchiRules.NinjaJobId,
-        LocalPlayer: LocalA,
         LocalPlayerAliveAndTargetable: true,
-        OwnGuardClear: true,
-        Incapacitated: false,
         ResolvedActionId: PanicShukuchiRules.ActionId,
-        Candidate: candidate ?? Candidate(new PanicShukuchiPoint(0f, 0f, 19.5f)));
-
-    private static PanicShukuchiPendingState Arm(
-        PanicShukuchiCandidate? candidate = null)
-    {
-        var decision = PanicShukuchiRules.Arm(
-            PanicShukuchiPendingState.Initial,
-            ValidArm(candidate: candidate));
-        return decision.NextState;
-    }
-
-    private static PanicShukuchiPendingObservation ValidPending(
-        PanicShukuchiPendingState state,
-        long now)
-    {
-        var pending = state.Pending!.Value;
-        return new PanicShukuchiPendingObservation(
-            NowMilliseconds: now,
-            PluginEnabled: true,
-            MetadataVerified: true,
-            Context: pending.Context,
-            WolvesDenTestingEnabled: pending.WolvesDenTestingEnabledAtArm,
-            TerritoryId: pending.TerritoryId,
-            LocalJobId: PanicShukuchiRules.NinjaJobId,
-            LocalPlayer: pending.LocalPlayer,
-            LocalPlayerAliveAndTargetable: true,
-            OwnGuardClear: true,
-            Incapacitated: false,
-            HigherPriorityClaimed: false,
-            NotCasting: true,
-            NativeQueueClear: true,
-            AnimationLockClear: true,
-            ResolvedActionId: PanicShukuchiRules.ActionId,
-            CooldownStateKnown: true,
-            CooldownReady: true,
-            ActionStructurallyReady: true,
-            RequestedDestination: pending.Intent.Destination);
-    }
+        Candidate: Candidate(new PanicShukuchiPoint(0f, 0f, 19.5f)));
 
     private static PanicShukuchiCandidate Candidate(PanicShukuchiPoint hit) => new(
         Origin: new PanicShukuchiPoint(0f, 0f, 0f),
         RotationRadians: 0f,
         GroundHit: new PanicShukuchiGroundHit(true, hit));
 
-    private static void RejectedArm(
-        PanicShukuchiArmObservation observation,
+    private static void Rejected(
+        PanicShukuchiCommandObservation observation,
         PanicShukuchiDecisionReason expectedReason)
     {
-        var decision = PanicShukuchiRules.Arm(PanicShukuchiPendingState.Initial, observation);
-        False(decision.DidArm, expectedReason.ToString());
-        Equal(expectedReason, decision.Reason, "arm failure reason");
-        False(decision.NextState.IsPending, "rejected arm has no lease");
-    }
-
-    private static void Waiting(
-        PanicShukuchiPendingDecision decision,
-        PanicShukuchiPendingState expectedState,
-        PanicShukuchiDecisionReason expectedReason,
-        string label)
-    {
-        Equal(PanicShukuchiPendingDecisionKind.Waiting, decision.Kind, $"{label} waits");
-        Equal(expectedReason, decision.Reason, $"{label} reason");
-        Equal(expectedState, decision.NextState, $"{label} preserves frozen state");
-        False(decision.ShouldAttempt, $"{label} spends no native attempt");
-    }
-
-    private static void Cleared(
-        PanicShukuchiPendingState state,
-        PanicShukuchiPendingObservation observation,
-        PanicShukuchiDecisionReason expectedReason)
-    {
-        var decision = PanicShukuchiRules.ObservePending(state, observation);
-        Equal(PanicShukuchiPendingDecisionKind.Cleared, decision.Kind, expectedReason.ToString());
-        Equal(expectedReason, decision.Reason, "terminal failure reason");
-        False(decision.NextState.IsPending, "terminal failure clears lease");
-        False(decision.ShouldAttempt, "terminal failure makes no native call");
-        True(decision.Intent is null, "terminal failure exposes no fallback");
+        var decision = PanicShukuchiRules.Evaluate(observation);
+        False(decision.ShouldAttempt, expectedReason.ToString());
+        Equal(expectedReason, decision.Reason, "command refusal reason");
+        True(decision.Intent is null, "refused command exposes no alternate intent");
     }
 
     private static void True(bool value, string message)

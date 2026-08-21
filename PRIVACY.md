@@ -97,9 +97,10 @@ following data already available in the local FFXIV client:
   state, Kardia readiness and animation lock, and FFXIV's native 30-yalm
   range/line-of-sight result for a frozen non-self candidate;
 - for one explicit `/panicshu` invocation, the exact local NIN identity, position
-  and facing, PvP territory/context, own Guard and crowd-control state, exact
-  Shukuchi metadata/adjusted action/readiness, cast/queue/animation-lock state,
-  and the terrain collision point projected 19.5 yalms straight ahead;
+  and facing, PvP territory/context, exact Shukuchi metadata/adjusted action,
+  and the terrain collision point projected 19.5 yalms straight ahead; the
+  command deliberately does not read Guard, crowd-control, cast, queue,
+  animation-lock, cooldown, or resource state before its immediate request;
 - when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
   local DRK and current canonical CC target identity or exact native Wolves'
   Den striking-dummy hard-target identity, native combo/Shadowbringer recast and
@@ -509,26 +510,25 @@ in the Wolves' Den when the existing testing option is enabled. Frontline and
 Rival Wings are excluded.
 
 One invocation computes only the terrain point 19.5 yalms along the local
-character's current facing and freezes that exact location for at most 500 ms.
-Only an active Self-Purify priority claim, cast, occupied native action queue, or
-animation lock may preserve the same pending lease. The exact local identity, job, territory/context,
-metadata, adjusted action, own Guard, crowd-control state, cooldown/resources,
-and structural readiness are revalidated; ineligible, changed, missing, or
-ambiguous evidence cancels instead of choosing another outcome. Three Mudra
-adjusts Shukuchi to Doton, so anything other than exact Shukuchi `29513` blocks
-the attempt. Crowd control blocks the command so Purify retains priority.
+character's current facing and immediately makes at most one native
+location-action call in the same command callback. It stores no pending intent
+and has no lease, timer, framework wait, expiry, scheduler/Purify claim, Guard or
+crowd-control gate, cast/queue/animation-lock gate, or cooldown/resource precheck.
+This is intentionally allowed from own Guard so Shukuchi may break it. Three
+Mudra adjusts Shukuchi to Doton, so anything other than exact Shukuchi `29513`
+still blocks the attempt.
 
-The pending state is cleared before the sole native location-action call. A
-client rejection, ambiguity, or exception cannot retry. The helper does not
+A client rejection, ambiguity, or exception cannot retry. A later macro press is
+a new explicit user command. The helper does not
 recompute after movement or turning, search a path, move inward, choose an
 alternate action, or use a shorter fallback point. It neither reads nor changes
 the mouse/ground-target cursor or any hard, soft, Focus, or mouseover target. A
 wall, missing exact terrain collision, excessive vertical offset, or native
 line-of-sight refusal therefore fails closed.
 
-The complete frozen identity/candidate, including facing, exists only in bounded
-memory for the command lease. Afterward, only the last origin/destination
-coordinates, action-sequence outcome, and aggregate command counters may remain
+The complete identity/candidate, including facing, exists only during the
+immediate command callback. Afterward, only the last origin/destination
+coordinates, native acceptance outcome, and aggregate command counters may remain
 in plugin memory for local `/seiton debug` diagnostics until unload; they are not
 persisted or uploaded. Source
 checks cannot establish current-client terrain, line-of-sight, or actual movement
@@ -931,7 +931,9 @@ not prove that Kardia or Kardion applied; current-patch Eukrasia charge/status,
 animation-lock, dispatch, and reachability behavior remain live-validation
 boundaries.
 
-When own Guard is active, every Seiton Sense action-request helper is suppressed.
+When own Guard is active, every scheduled or automatic Seiton Sense action-
+request helper is suppressed. The explicit manual `/panicshu` command is the
+sole exception and may intentionally break own Guard with one immediate request.
 The bounded reactive observer may keep an already eligible enemy startup,
 Purify, or Guard reservation in memory, but it cannot dispatch that reservation
 through own Guard.
@@ -1185,7 +1187,7 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 30 remains current in v0.28.0.0; this release adds no
+Configuration schema 30 remains current in v0.28.0.1; this release adds no
 setting or migration. Panic Shukuchi is command-only and saves no dedicated
 option; it uses the global plugin enable and existing Wolves' Den testing option.
 The held-action cast-cancellation test remains explicitly off for fresh, reset,

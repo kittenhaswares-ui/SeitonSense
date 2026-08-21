@@ -2,12 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.28.0.0 adds the explicit manual NIN
-`/panicshu` macro command. Each invocation freezes one exact terrain point 19.5
-yalms along the character's facing and may make at most one native Shukuchi
-attempt inside a 500-ms lease. It never originates from an automatic, pressure,
-enemy, status, or held-key trigger; changes no mouse cursor or target; and has no
-retry, shorter-distance fallback, or destination recomputation. It retains
+assistance, and target highlights. Version 0.28.0.1 simplifies the explicit
+manual NIN `/panicshu` macro command: each invocation computes one exact terrain
+point 19.5 yalms along the character's facing and immediately makes at most one
+native Shukuchi request, including from the local player's own Guard. It has no
+pending state, 500-ms lease, wait, expiry, automatic trigger, chat-result spam,
+retry, shorter-distance fallback, cursor/target change, or destination
+recomputation. It retains
 v0.27.1's bounded reactive held-key attachment, exact post-Purify/post-Guard
 episode memory, native pre-rank reachability, three-second NIN protection-end
 lease, and source-sequence-bound automatic landing confirmation; v0.27's
@@ -151,9 +152,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   Slither. Only no valid reachable ally means no movement; it never falls back
   to your target.
 - **Manual NIN Panic Shukuchi macro:** `/panicshu` makes one fail-closed
-  Shukuchi attempt at a frozen terrain point 19.5 yalms along the character's
-  facing. It is command-only, never automatic or held-triggered, changes no
-  cursor or target, and never retries or searches for a shorter fallback point.
+  immediate Shukuchi attempt at the terrain point 19.5 yalms along the
+  character's current facing. It is command-only, works from own Guard, is never
+  automatic or held-triggered, changes no cursor or target, stores no pending
+  attempt, and never retries or searches for a shorter fallback point.
 - **DRK Shadowbringer macro:** the separate default-off `/seitonbringer` helper
   pairs only with the immediately following authored Souleater Combo `<t>` line
   on exact PvP Dark Knight. It supports canonical `S1`-`S5` enemies in
@@ -803,10 +805,12 @@ A locally issued command is not proof that the party received Quick Chat or saw
 both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
-While your own Guard is active, Seiton Sense blocks all of its action requests,
+While your own Guard is active, Seiton Sense blocks all scheduled and automatic action requests,
 including Purify, reactive counter-CC, Ally Rescue, Guardian, NIN, SCH,
 Hiebsprung, Smart Recuperate, Guard, pressure Sprint, accepted-Eukrasia Kardia,
-and Monk. The bounded reactive observer may retain an already eligible enemy
+and Monk. The explicit manual `/panicshu` command is the sole exception: its
+one immediate Shukuchi request is intentionally allowed to break own Guard.
+The bounded reactive observer may retain an already eligible enemy
 startup/Purify/Guard reservation, but it cannot dispatch it through own Guard.
 The same action suppression
 starts immediately for a bounded 1.5 seconds after an exact local Guard request,
@@ -1120,27 +1124,22 @@ It runs only on exact PvP Ninja in Crystalline Conflict, or in the Wolves' Den
 when the existing **Enable Wolves' Den testing** option is enabled. Frontline and
 Rival Wings remain excluded. Each command invocation reads the character's
 current position and facing, projects only the point 19.5 yalms straight ahead
-onto terrain, and freezes that exact destination. Turning or moving during the
-short lease does not recompute it.
+onto terrain, and immediately makes at most one native location-action call in
+that same command callback. There is no stored intent, scheduler claim, 500-ms
+lease, wait, expiry, cast/queue/animation-lock gate, cooldown/resource precheck,
+Guard gate, or crowd-control/Purify-priority gate. FFXIV decides whether the one
+request is accepted in the current state; a later macro press is a new explicit
+command rather than a replay. Three Mudra changes Shukuchi into Doton, so any
+adjusted action other than exact Shukuchi `29513` still ends without an attempt.
 
-The lease lasts at most 500 ms and may remain pending only while Self-Purify owns
-the current scheduler frame, the local character is casting, FFXIV's native
-action queue is occupied, or animation lock remains active. Shukuchi must
-already have known, ready cooldown/resources when the
-command arms. Before the sole native location-action call, Seiton revalidates the
-exact local identity, job, territory/context, metadata, adjusted action, own
-Guard, crowd-control state, cooldown/resources, structural availability, queue,
-and animation lock. Three Mudra changes Shukuchi into Doton, so any adjusted
-action other than exact Shukuchi `29513` cancels without an attempt. Crowd
-control also cancels so Purify keeps priority.
-
-The frozen lease is spent before the native call. Client rejection, ambiguity,
-or exception is terminal: there is no retry, alternate action, shorter/inward
+Client rejection, ambiguity, or exception is terminal for that invocation:
+there is no retry, alternate action, shorter/inward
 point, path search, or destination fallback. The command never moves the mouse
 or ground-target cursor and never reads, changes, or substitutes a hard, soft,
 Focus, or mouseover target. A wall, missing exact terrain hit, excessive vertical
 offset, or native line-of-sight refusal therefore fails closed instead of making
-a different jump.
+a different jump. Routine accepted/rejected results are chat-silent and remain
+available only through `/seiton debug` diagnostics.
 
 ## DRK Shadowbringer two-line macro
 
@@ -1291,7 +1290,7 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 30 remains current in v0.28.0.0; this release adds no
+Configuration schema 30 remains current in v0.28.0.1; this release adds no
 setting or migration. `/panicshu` is command-only and uses the existing global
 plugin enable plus the existing Wolves' Den testing option. The held-action
 cast-cancellation test is explicitly off
@@ -1330,8 +1329,9 @@ update through the same repository.
 - `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
   the next reviewed friendly movement action; no valid reachable ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
-- `/panicshu` - on exact PvP NIN, freeze the terrain point 19.5 yalms straight
-  ahead and make at most one Shukuchi attempt in CC or enabled Wolves' Den testing
+- `/panicshu` - on exact PvP NIN, immediately make one Shukuchi attempt at the
+  terrain point 19.5 yalms straight ahead in CC or enabled Wolves' Den testing,
+  including from own Guard
 - `/seitonbringer` - arm the immediately following exact DRK Souleater Combo
   macro line for the bounded CC or explicitly enabled Wolves' Den striking-
   dummy weave check
@@ -1379,7 +1379,7 @@ native `<mo>` while hovered. Auto Low-MP Focus is a separate explicit setter, an
 the DRK macro is a separate explicit action helper; both are default-off and
 bounded as described above. Panic Shukuchi instead has no automatic or held-key
 trigger and no dedicated saved toggle: only the user-authored `/panicshu` command
-can create its one bounded forward-location attempt. For one already incoming,
+can make its one immediate forward-location attempt. For one already incoming,
 enabled CC action attempt
 against an exact protected enemy, the optional brake can return `false` without
 calling the downstream/original action function. The exact native selected target may
@@ -1406,7 +1406,8 @@ Monk is an automatic follow-up.
 The same continuous hold can authorize later distinct exact held episodes; a
 post-Purify reactive Guard no longer requires release/repress. There is no HP/
 pressure pre-Guard. While your own Guard is
-active, all Seiton action-request helpers are blocked; the same gate applies for
+active, all scheduled/automatic Seiton action-request helpers are blocked; the
+explicit manual `/panicshu` command is the sole exception. The same scheduler gate applies for
 the bounded 1.5-second status-propagation interval after an exact local Guard
 request. Manual game actions remain outside that protection. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
@@ -1542,11 +1543,11 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.28.0.0, source checks pin `/panicshu` as an explicit NIN-only command with
-one exact 19.5-yalm forward terrain projection, one frozen destination, an at-
-most-500-ms lease, and at most one native location-action call. Only an active
-Self-Purify claim, cast, native queue, and animation lock may wait; action/readiness, identity, context, Guard,
-crowd-control, destination, or metadata ambiguity fails closed. The checks also
+For v0.28.0.1, source checks pin `/panicshu` as an explicit NIN-only command with
+one exact 19.5-yalm forward terrain projection and at most one immediate native
+location-action call in the command callback. They prove the absence of pending,
+lease, wait, expiry, Guard/Purify/crowd-control, cast, queue, animation-lock,
+cooldown/resource, automatic, held-key, and retry inputs. The checks also
 pin exact Shukuchi `29513`, the Three Mudra/Doton block, CC plus existing Wolves'
 Den test-option context, and the absence of automatic/held triggers, mouse/cursor
 or target mutation, destination recomputation, alternate, retry, or shorter

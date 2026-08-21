@@ -215,15 +215,7 @@ public sealed class Plugin : IDalamudPlugin
             clientState,
             objectTable,
             dutyState,
-            framework,
-            chatGui,
             log,
-            nearAssist,
-            () =>
-            {
-                var personal = personalStatus.Snapshot;
-                return !personal.Active || personal.Purify.InputClaimed;
-            },
             metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         resourceAuraAnchors = new ResourceAuraAnchorTracker(
@@ -443,7 +435,7 @@ public sealed class Plugin : IDalamudPlugin
             {
                 AllowedInMacros = true,
                 HelpMessage =
-                    "NIN-only: one fail-closed PvP Shukuchi attempt 19.5 yalms straight ahead. " +
+                    "NIN-only: immediately try one PvP Shukuchi 19.5 yalms straight ahead, including from own Guard. " +
                     "Works in Crystalline Conflict and enabled Wolves' Den testing without cursor or target changes.",
             });
         if (!panicShukuchiCommandRegistered)
@@ -481,7 +473,6 @@ public sealed class Plugin : IDalamudPlugin
         darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
-        panicShukuchi.Start();
         combatLimitBreakRuntime.Start();
         combatFrameLimitGauge.Start();
         combatFramesSnapshots.Start();
@@ -511,7 +502,6 @@ public sealed class Plugin : IDalamudPlugin
         combatFrameLimitGauge.Dispose();
         combatLimitBreakRuntime.Dispose();
         personalStatus.Dispose();
-        panicShukuchi.Dispose();
         nearAssist.Dispose();
         darkKnightShadowbringer.Dispose();
         isolationAwareness.Dispose();
@@ -931,8 +921,8 @@ public sealed class Plugin : IDalamudPlugin
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
             "CC or enabled Wolves' Den striking-dummy testing. " +
-            "/panicshu makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
-            "Wolves' Den testing, without cursor or target changes. " +
+            "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
+            "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
@@ -984,12 +974,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
-            panicShukuchi.Arm(arguments);
+            panicShukuchi.Execute(arguments);
         }
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Panic Shukuchi command failed closed.");
-            chatGui.PrintError("[Seiton Sense] Panic Shukuchi failed closed. See the Dalamud log.");
         }
     }
 

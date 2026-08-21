@@ -172,19 +172,18 @@ internal sealed partial class SettingsWindow
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "This is an explicit NIN-only macro command, never an automatic, proc-driven, or held-key helper. " +
-                "One command freezes the terrain point 19.5 yalms along your character's current facing. It neither " +
+                "Each command computes the terrain point 19.5 yalms along your character's current facing and immediately " +
+                "tries Shukuchi exactly once. It neither " +
                 "opens or moves the ground cursor nor reads, changes, or substitutes a target.");
             ImGui.TextDisabled(
                 "Exact Crystalline Conflict is supported directly. Wolves' Den additionally requires the existing " +
-                "Start-page testing option. Frontline and Rival Wings remain blocked. Your own Guard, crowd control, " +
-                "an unavailable Shukuchi, or Three Mudra changing Shukuchi into Doton rejects the command. Purify " +
-                "therefore keeps priority.");
+                "Start-page testing option. Frontline and Rival Wings remain blocked. The command is intentionally allowed " +
+                "from your own Guard so Shukuchi may break it. Three Mudra changing Shukuchi into Doton still rejects the command.");
             ImGui.TextDisabled(
-                "The exact frozen point may wait for at most 500 ms only while Self-Purify owns the current frame or " +
-                "your current cast, native action queue, or animation lock clears. The one-attempt token is spent before the native Shukuchi request: a wall, " +
-                "invalid terrain, client rejection, ambiguity, or exception never causes a retry, shorter fallback, " +
-                "new point, alternate action, or later automatic jump. Current-patch slopes and obstacles still require " +
-                "a live Wolves' Den test.");
+                "There is no pending state, 500-ms lease, wait, expiry, scheduler priority, cooldown precheck, or automatic " +
+                "retry. FFXIV immediately accepts or rejects that one request in the current Guard/cast/queue/animation state. " +
+                "Normal results stay out of chat and remain visible in /seiton debug. A wall or invalid terrain never causes " +
+                "a shorter fallback, new point, alternate action, or later jump.");
             ImGui.PopTextWrapPos();
         }
 
