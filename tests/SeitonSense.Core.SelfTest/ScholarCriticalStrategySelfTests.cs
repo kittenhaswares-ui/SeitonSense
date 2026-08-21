@@ -192,6 +192,30 @@ internal static class ScholarCriticalStrategySelfTests
         Equal(candidates[2].Actor, intent.Target, "frozen target");
         True(intent.PressureKnown && intent.TeamTargetCount == 4, "frozen pressure diagnostics");
 
+        var castWaitRequest = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.ScholarCriticalStrategy,
+            intent.ActionId,
+            intent.LocalPlayer,
+            intent.Target,
+            FrozenKeyCode: 0x57,
+            IntentEpochToken: 1);
+        True(castWaitRequest.IsValid, "cast wait retains the exact frozen Scholar intent");
+        True(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: true),
+            "active cast soft-wait keeps initial Scholar priority without an attempt");
+        Equal(
+            HeldActionRetryState.Initial,
+            HeldActionRetryRules.Complete(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                ClientActionAttemptOutcome.SoftUnavailable).NextState,
+            "active cast soft-wait spends no Scholar attempt budget");
+
         var current = candidates[2] with
         {
             CurrentHp = 20,

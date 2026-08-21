@@ -30,6 +30,7 @@ internal sealed record PressureEscapeSprintProbeSnapshot(
     bool SprintMetadataVerified,
     VirtualKey HeldGameplayKey,
     bool InputClaimed,
+    HeldCastCancellationRequest? CastCancellationRequest,
     bool UseActionAttempted,
     bool UseActionAccepted,
     long AttemptCount,
@@ -55,6 +56,7 @@ internal sealed record PressureEscapeSprintProbeSnapshot(
         SprintMetadataVerified: false,
         HeldGameplayKey: VirtualKey.NO_KEY,
         InputClaimed: false,
+        CastCancellationRequest: null,
         UseActionAttempted: false,
         UseActionAccepted: false,
         AttemptCount: 0,
@@ -187,7 +189,6 @@ internal sealed class PressureEscapeSprintProbe
                                         IsSprintActionSpecificallyReady();
         var sprintNearQueueable = localIdentityValid &&
                                   IsNativeBoundaryNearQueueable(localPlayer!);
-        var sprintReady = sprintActionSpecificReady && sprintNearQueueable;
         var warningEpisodeToken = warningDecision.NextState.EpisodeToken;
         var sprintEpisodeAvailable = warningDecision.HighPressure &&
                                      warningEpisodeToken != 0 &&
@@ -206,9 +207,10 @@ internal sealed class PressureEscapeSprintProbe
             sprintEpisodeAvailable,
             heldMovementKey != VirtualKey.NO_KEY,
             (int)heldMovementKey,
-            sprintReady && sprintNearQueueable);
+            sprintActionSpecificReady);
 
         var inputClaimed = false;
+        HeldCastCancellationRequest? castCancellationRequest = null;
         var attempted = false;
         var accepted = false;
         var lastEvent = DescribeState(
@@ -225,7 +227,7 @@ internal sealed class PressureEscapeSprintProbe
             higherPriorityClaimed || inputFrame.IsConsumed,
             sprintEpisodeAvailable,
             heldMovementKey,
-            sprintReady && sprintNearQueueable);
+            sprintActionSpecificReady);
 
         var retry = frozenSprintRetry;
         if (retry is { } frozen)
@@ -262,7 +264,14 @@ internal sealed class PressureEscapeSprintProbe
                 inputFrame.Consume();
                 if (!sprintNearQueueable)
                 {
-                    lastEvent = "Frozen Sprint waiting for global native boundary";
+                    frozenSprintRetry = frozen;
+                    castCancellationRequest = CreateCastCancellationRequest(
+                        localPlayer!,
+                        frozen,
+                        sprintActionSpecificReady);
+                    lastEvent = castCancellationRequest is not null
+                        ? "Frozen Sprint waiting for active cast cancellation"
+                        : "Frozen Sprint waiting for global native boundary";
                 }
                 else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
                              frozen.Retry,
@@ -278,6 +287,14 @@ internal sealed class PressureEscapeSprintProbe
                         out attempted);
                     accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     CompleteSprintAttempt(frozen, outcome, nowMilliseconds);
+                    if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
+                    {
+                        castCancellationRequest = CreateCastCancellationRequest(
+                            localPlayer!,
+                            frozen,
+                            sprintActionSpecificReady);
+                    }
+
                     lastEvent = DescribeSprintAttempt(
                         "retry",
                         frozen.Retry.NativeAttemptCount + 1,
@@ -296,13 +313,35 @@ internal sealed class PressureEscapeSprintProbe
                 warningEpisodeToken,
                 heldMovementKey,
                 HeldActionRetryState.Initial);
-            var outcome = TryUseSprintOnce(
-                initialIntent.LocalPlayer,
-                initialIntent.TerritoryId,
-                out attempted);
-            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
-            CompleteSprintAttempt(initialIntent, outcome, nowMilliseconds);
-            lastEvent = DescribeSprintAttempt("initial", 1, outcome);
+            if (!sprintNearQueueable)
+            {
+                frozenSprintRetry = initialIntent;
+                castCancellationRequest = CreateCastCancellationRequest(
+                    localPlayer!,
+                    initialIntent,
+                    sprintActionSpecificReady);
+                lastEvent = castCancellationRequest is not null
+                    ? "Frozen Sprint waiting for active cast cancellation"
+                    : "Frozen Sprint waiting for global native boundary";
+            }
+            else
+            {
+                var outcome = TryUseSprintOnce(
+                    initialIntent.LocalPlayer,
+                    initialIntent.TerritoryId,
+                    out attempted);
+                accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+                CompleteSprintAttempt(initialIntent, outcome, nowMilliseconds);
+                if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
+                {
+                    castCancellationRequest = CreateCastCancellationRequest(
+                        localPlayer!,
+                        initialIntent,
+                        sprintActionSpecificReady);
+                }
+
+                lastEvent = DescribeSprintAttempt("initial", 1, outcome);
+            }
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -328,6 +367,7 @@ internal sealed class PressureEscapeSprintProbe
             sprintMetadataVerified,
             heldMovementKey,
             inputClaimed,
+            castCancellationRequest,
             attempted,
             accepted,
             Interlocked.Read(ref attemptCount),
@@ -597,6 +637,37 @@ internal sealed class PressureEscapeSprintProbe
             localPlayer.IsCasting,
             actionManager->CastActionId,
             actionManager->ActionQueued);
+
+    private static unsafe bool IsCastCancellationBoundaryReady(IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               localPlayer.IsCasting &&
+               actionManager->CastActionId != 0 &&
+               !actionManager->ActionQueued &&
+               float.IsFinite(actionManager->AnimationLock) &&
+               actionManager->AnimationLock >= 0f &&
+               actionManager->AnimationLock <=
+               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
+    }
+
+    private static HeldCastCancellationRequest? CreateCastCancellationRequest(
+        IPlayerCharacter localPlayer,
+        FrozenSprintRetry frozen,
+        bool actionSpecificallyReady)
+    {
+        if (!actionSpecificallyReady || !IsCastCancellationBoundaryReady(localPlayer))
+            return null;
+
+        var request = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.PressureEscapeSprint,
+            EnemyCombatConstants.PvPSprintActionId,
+            frozen.LocalPlayer,
+            frozen.LocalPlayer,
+            (int)frozen.HeldKey,
+            frozen.WarningEpisodeToken);
+        return request.IsValid ? request : null;
+    }
 
     private static bool ValidateMetadata(IDataManager dataManager, IPluginLog log)
     {

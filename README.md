@@ -2,16 +2,18 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.24.0.0 replaces global one-use held-
-key consumption with a common priority scheduler. One continuous physical hold
-can authorize later distinct exact helper episodes; known cooldown, resource,
-cast, queued-action, and animation-lock blocks wait without spending the bounded
-native-attempt budget. Only an explicit client rejection may retry the same
-frozen intent, while client acceptance or an ambiguous outcome is terminal. It
-also moves NIN Seiton onto held consent, keeps Combat Frame HP/MP visible during
-Limit Break activation, and makes disabled frame interaction obvious in
-Settings. It retains v0.23's exact ranked post-Purify/post-Guard dispatch,
-v0.21's optional Combat
+assistance, and target highlights. Version 0.25.0.0 fixes the v0.24 held-key
+lease regression across all ten physical-hold helpers. A stable already-held
+movement key now wins before another stable held key; fresh movement and other
+gameplay keys are fallbacks, and each frozen intent retains its exact lease.
+This prevents a tapped-and-released hotbar key from canceling an otherwise-valid
+intent still backed by held WASD. The release also adds a separate default-off
+test that may request one native cast cancellation when the highest-priority
+held helper is otherwise ready, then performs the normal complete preflight on
+a later frame. It retains v0.24's shared priority scheduler, 50-ms/eight-call
+explicit-rejection retry, NIN held consent, unobscured Limit Break activation,
+and clearer Combat Frame interaction state; v0.23's exact ranked post-Purify/
+post-Guard dispatch; v0.21's optional Combat
 Frame interaction and evidence-only Limit Break telemetry, default-off Dark
 Knight Hiebsprung helper, and BRD coverage for reviewed DNC/MCH/SAM/VPR startup
 signals, plus v0.20's Smart Recuperate fix and accepted-Eukrasia
@@ -40,6 +42,18 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the same direct-enemy count is at least three. The movement key still reaches
   FFXIV. Known unavailability waits, explicit client rejection permits only the
   bounded same-intent retry, and any later native PvP action ends Sprint.
+- **Stable held-action leases:** Purify, Smart Recuperate, Ally Rescue, reactive
+  counter-CC, Guard, Guardian, pressure Sprint, NIN, SCH, and DRK now prefer an
+  already-held movement key, then any other stable held key, before fresh
+  movement/other fallbacks. Every helper keeps the exact frozen key lease rather
+  than letting a later action tap replace and prematurely cancel it.
+- **Experimental held-action cast cancellation:** a separate default-off test
+  may request one native cancel for the current cast when the highest-priority
+  exact held intent is otherwise ready. It never requests the helper in that
+  same frame, synthesizes movement or Escape, clears the queue, or changes a
+  target; the later helper frame repeats full validation. The void cancel call
+  reports only `requested`, not confirmed, and current-patch BRD/MCH live proof
+  remains pending.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
   the enemy is directly targeting/casting at you, recently hit you, or placed
@@ -200,9 +214,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   and Diagnostics.
   Shared-input actions are shown in their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  29 migrates an explicitly enabled legacy NIN fresh-edge option to the replacement
-  held-key option and preserves the other existing Combat Frames and helper
-  choices. Combat Frames, Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
+  30 preserves the schema-29 NIN migration and every existing Combat Frames and
+  helper choice; the new held-action cast-cancellation test remains explicitly
+  off for fresh, reset, and migrated configurations. Combat Frames, Smart
+  Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
   and Scholar Critical Strategy remain separate opt-ins. Every action-attempt,
@@ -1171,14 +1186,17 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 29 is current in v0.24.0.0. An explicitly enabled NIN
-fresh-edge helper migrates to the replacement held-key option; the obsolete
+Configuration schema 30 is current in v0.25.0.0. The new held-action cast-
+cancellation test is explicitly off for fresh, reset, and migrated
+configurations. An older explicitly enabled NIN fresh-edge helper still traverses
+schema 29 and migrates to the replacement held-key option; the obsolete
 compatibility field is then cleared. Every other existing master and helper
 choice is preserved. Older configurations still traverse the earlier migrations
-first, including schema 28's default-off post-Guard migration. Fresh and reset configurations keep
-the Combat Frames master and every action-helper master off; post-Guard defaults
-on only behind the disabled reactive-counter master, while interaction and LB
-detail leaves likewise default on only behind the disabled Combat Frames master.
+first, including schema 28's default-off post-Guard migration. Fresh and reset
+configurations keep the Combat Frames master and every action-helper master off;
+post-Guard defaults on only behind the disabled reactive-counter master, while
+interaction and LB detail leaves likewise default on only behind the disabled
+Combat Frames master.
 
 ## Install
 
@@ -1213,8 +1231,9 @@ update through the same repository.
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
   selected-target CC-brake resolution, isolation/reactive-defense state, Smart
   Recuperate, accepted-Eukrasia Smart Kardia, Combat Frames interaction/LB
-  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, and retained
-  reactive counter-CC opportunity results
+  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, retained reactive
+  counter-CC opportunity results, and the held-action cast-cancel request/epoch
+  state
 - `/seiton reset` - restore defaults
 - `/howmany show` / `/howmany hide` - show or hide only the integrated pressure
   counter; these do not disable pressure-dependent helpers
@@ -1275,6 +1294,40 @@ the bounded 1.5-second status-propagation interval after an exact local Guard
 request. Manual game actions remain outside that protection. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
+
+For the ten physical-hold helpers, key choice prefers stable movement, then any
+other stable held gameplay key, then fresh movement and fresh other gameplay
+keys as fallbacks. Each helper evaluates its held lease before fresh input and
+retains the exact frozen key until its normal release, ineligibility, reset, or
+terminal action-specific boundary. This prevents a later short action-key tap
+from displacing a valid long-held WASD lease.
+
+The separate **Cancel my active cast for an otherwise-ready held helper** test
+is disabled by default. It applies only to exact frozen physical-hold intents
+for Purify, Smart Recuperate, Ally Rescue, reactive counter-CC, Guard, Guardian,
+pressure Sprint, NIN Seiton, SCH Critical Strategy, and DRK Hiebsprung. Smart
+Kardia and Monk Earth's Reply are excluded because they do not originate from
+held input; every already-incoming manual/Turbo redirect, including Paean, and
+all macro helpers are excluded as well.
+
+When the highest-priority frozen intent passes its ordinary action, actor/
+target, status/episode, key, context, Guard, resource, cooldown, range, line-of-
+sight, empty-queue, and animation-lock gates and only the local cast remains in
+the way, the plugin may call FFXIV's native cast-cancel boundary once for that
+observed cast epoch. That native call returns no acceptance result: diagnostics
+therefore say only that cancellation was **requested**, never confirmed. A cast-
+signal mismatch, action-ID drift without a fully observed clear state, or any
+other ambiguity fails closed without another request for the same cast.
+
+Cancellation claims its framework frame, so it can never share a frame with a
+helper `UseAction` request. Only a later frame that observes both cast signals
+clear may run the normal complete helper preflight again. The option does not
+synthesize movement or Escape, clear the native action queue, write cast state,
+or mutate a selected target. It can sacrifice the current cast, and FFXIV may
+refuse to cancel some actions. Stationary casts and mobile BRD Powerful Shot /
+MCH Blast Charge still require current-patch live validation. The ordinary
+clean-`false` action retry remains independent: calls stay at least 50 ms apart
+with eight attempts maximum, and acceptance or ambiguity remains terminal.
 
 The separate default-off Smart Recuperate helper may freeze an exact self
 Recuperate `29711` epoch when missing HP is at least 16,000 and MP is at least
@@ -1370,7 +1423,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.24.0.0, source checks pin one shared held-action policy: the physical hold
+For v0.25.0.0, source checks pin one shared held-action policy: the physical hold
 remains consent across later distinct episodes, a per-frame claim allows at most
 one held native boundary, known cooldown/resource/cast/queue/full-animation-lock
 states spend no attempt, and only a clean explicit client rejection can retry
@@ -1381,6 +1434,15 @@ actor, status/episode and key freezing, no rerank/alternate/target mutation, and
 the priority **Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard >
 Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung**. Kardia
 and Monk retain their separate event-driven origins.
+
+The same checks pin stable-movement, stable-other, fresh-movement, then fresh-
+other key selection and held-lease-before-fresh behavior for all ten physical-
+hold helpers. Cast-cancel checks cover the separate schema-30 default-off toggle,
+exact inclusion/exclusion list, one native cancel request per observed cast,
+void/requested-only diagnostics, no same-frame helper action, fully revalidated
+later dispatch, and the absence of movement/Escape synthesis, queue clearing,
+cast-state writes, or target mutation. They cannot prove that FFXIV canceled a
+live cast; current-patch stationary and mobile BRD/MCH tests remain required.
 
 The same release checks Purify's absolute active-CC priority, Smart Recuperate's
 inclusive 16,000-missing-HP/2,000-MP gates, Ally Rescue confirmation preservation,
@@ -1401,7 +1463,7 @@ Self gauge trust, remote `LB ?` before complete native-HUD calibration, no charg
 time estimate, live-RemainingTime-origin duration with at most 150 ms of non-
 extending last-expiry preservation, the 1.8-second instant card, and direct
 ally ActionEffect damage without HP-delta inference. Configuration checks pin
-schema 29 migration, fresh/reset defaults, and default-off action/communication/
+schema 30 migration, fresh/reset defaults, and default-off action/communication/
 Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
 30% HP, strict 10-yalm plus native reachability, local Bind, Guard/readiness gates,
 one accepted action per proven cooldown epoch, and no target mutation. Reactive
@@ -1412,8 +1474,9 @@ pressure gate, deterministic simultaneous ranking by fresh exact pressure/HP/
 trusted MP with known telemetry before unknown, independent per-`S1`-`S5` Purify
 tracking, one terminal winner, bounded retry for only the selected exact episode,
 a later distinct release epoch without key release, the full priority chain, and
-job-specific native reachability. Configuration checks pin schema 29 and the
-explicit prior NIN opt-in migration to held consent.
+job-specific native reachability. Configuration checks pin schema 30, the new
+cast-cancellation explicit-off migration, and the prior NIN opt-in migration to
+held consent.
 They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
 native action acceptance/effects, current client range/line of sight, Combat
 Frame appearance/calibration, native status/resource telemetry, LB packet timing,

@@ -154,13 +154,13 @@ internal static class MiracleInterceptSelfTests
         False(invalidIdentity.ShouldConsumeInputGeneration, "cancel does not consume");
     }
 
-    internal static void FreshPressWinsAndTypingNeverTriggers()
+    internal static void StableHoldWinsAndTypingNeverTriggers()
     {
         var threat = Threat(MiracleInterceptThreatKind.MarksmanSpite, 50, 3_000);
         var fresh = MiracleInterceptRules.Observe(
             MiracleInterceptState.Initial,
             Observation(threat, 3_000, fresh: true, held: true));
-        Equal(MiracleInterceptInputTrigger.FreshKeyPress, fresh.InputTrigger, "fresh wins");
+        Equal(MiracleInterceptInputTrigger.HeldPhysicalKey, fresh.InputTrigger, "stable hold wins");
 
         var typing = MiracleInterceptRules.Observe(
             MiracleInterceptState.Initial,

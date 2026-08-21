@@ -75,6 +75,11 @@ following data already available in the local FFXIV client:
   state, current/maximum HP and MP, held-key generation, own Guard state, and
   exact PvP Recuperate `29711` metadata/readiness needed for one frozen self
   intent and its bounded native calls;
+- when the separate held-action cast-cancellation test is enabled, the exact
+  highest-priority frozen helper/action/target/key/intent epoch, both current
+  local cast signals and cast action ID, own Guard, queue, animation lock,
+  context, identity, readiness, and one-request-per-cast latch needed to decide
+  whether to request FFXIV's native cast cancellation;
 - when the DRK Hiebsprung helper is enabled, the exact local DRK identity, held-
   key ownership, action `29092` metadata/readiness and cooldown epoch, animation
   lock, own Bind/Guard state, complete canonical `S1`-`S5` identity/HP/Guard
@@ -549,6 +554,12 @@ failure, or reset clears the relevant leases. Own Guard suppresses every native
 helper boundary without consuming the physical hold; individual frozen episodes
 either wait or cancel according to their exact action-specific contract.
 
+The ten physical-hold helpers prefer an already-held movement key, then another
+stable held gameplay key, before fresh movement/other fallback. Each helper
+checks its held lease before fresh input and retains the exact frozen key until
+release, ineligibility, reset, or its action-specific terminal outcome. A short
+later action-key tap therefore cannot replace a valid long-held WASD lease.
+
 Every helper freezes its exact action, actor/target, status or episode, and key.
 The first structurally ready call is immediate. Known cooldown, resource, cast,
 occupied native queue, and blocking animation-lock states are soft waits and do
@@ -568,6 +579,36 @@ reactive CC instead spend their exact status/event intent. A retry cannot rerank
 actor/action, mutate a selected target, or outlive its original exact event. All
 leases, retry clocks, outcomes, and aggregate diagnostics are memory-only and
 are neither persisted nor uploaded.
+
+## Experimental held-action cast cancellation
+
+This separate test is disabled by default. It applies only to otherwise-ready
+exact physical-hold intents for Purify, Smart Recuperate, Ally Rescue, reactive
+counter-CC, Guard, Guardian, pressure Sprint, NIN Seiton, SCH Critical Strategy,
+and DRK Hiebsprung. Smart Kardia, Monk Earth's Reply, every already-incoming
+manual/Turbo redirect (including Paean), and macro helpers are excluded.
+
+For the highest-priority eligible intent, the plugin rechecks exact local and
+target identity, held key, context, own Guard, helper action/readiness/resources,
+empty queue, and nonblocking animation lock. Only when both local cast signals
+prove an active cast may it request FFXIV's native cast cancellation once for
+that observed cast epoch. The native function returns no acceptance value, so a
+recorded request does not confirm that FFXIV canceled the cast. Signal mismatch,
+cast-action drift without a fully observed clear state, or other ambiguity fails
+closed for that epoch.
+
+The cancellation request claims its framework frame and can never be paired
+with a helper action request in that frame. A later frame must observe both cast
+signals clear and repeat the ordinary complete helper preflight. The plugin does
+not synthesize movement or Escape, clear the native queue, write cast state, or
+change a target. It may sacrifice the current cast, FFXIV may decline to cancel
+some actions, and current-patch stationary plus mobile BRD/MCH behavior still
+requires live validation. Bounded Settings and `/seiton debug` values retain
+only the current cast decision, the last requested helper/action/target/key/
+intent and native request result, plus request/fault counts in memory; none is
+persisted or uploaded. The separate
+explicit-`false` helper-action retry remains at least 50 ms apart with eight
+native calls maximum.
 
 ## Experimental Purify helper
 
@@ -1034,18 +1075,21 @@ interaction/LB information/layout options and ally LB damage-feed leaf, the Monk
 Earth's Reply master/triggers/thresholds,
 the Ninja Seiton held-key opt-in, the Scholar Critical Strategy held-key opt-in,
 the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
-opt-in, the separate DRK Hiebsprung held-key opt-in, and the CC-immunity-brake
-master plus exact per-job/per-action selections.
+opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
+cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
+per-action selections.
 
-Configuration schema 29 is current in v0.24.0.0. It migrates an explicitly
-enabled fresh-edge NIN Seiton option to the replacement held-key option, then
-clears the obsolete compatibility field. Every other existing master/helper
-choice is preserved. Older configurations still traverse the earlier migrations
-first, including schema 28's default-off post-Guard migration. Fresh and reset configurations keep
-Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-
-helper masters off; post-Guard defaults on only behind the disabled reactive-
-counter master. Interaction and both LB details also default on behind the
-disabled frame master. Configuration does not save observed actors, targets,
+Configuration schema 30 is current in v0.25.0.0. The held-action cast-
+cancellation test remains explicitly off for fresh, reset, and migrated
+configurations. An older explicitly enabled fresh-edge NIN Seiton option still
+traverses schema 29, migrates to the replacement held-key option, and clears the
+obsolete compatibility field. Every other existing master/helper choice is
+preserved. Older configurations still traverse the earlier migrations first,
+including schema 28's default-off post-Guard migration. Fresh and reset
+configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and
+all other action-helper masters off; post-Guard defaults on only behind the
+disabled reactive-counter master. Interaction and both LB details also default
+on behind the disabled frame master. Configuration does not save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 ActionEffect confirmation state, or in-memory counters.
 

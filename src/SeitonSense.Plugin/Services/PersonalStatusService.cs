@@ -26,6 +26,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
+    private readonly HeldCastCancellationService heldCastCancellation;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
@@ -84,6 +85,7 @@ internal sealed class PersonalStatusService : IDisposable
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         emergencyInput = new EmergencyActionInputCoordinator(keyState);
+        heldCastCancellation = new HeldCastCancellationService(log);
         emergencyPurify = new EmergencyPurifyProbe(log);
         defensiveUtility = new DefensiveUtilityProbe(
             objectTable,
@@ -182,6 +184,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal DarkKnightPlungeProbeSnapshot DarkKnightPlungeDiagnostics =>
         darkKnightPlunge.Snapshot;
+    internal HeldCastCancellationSnapshot HeldCastCancellationDiagnostics =>
+        heldCastCancellation.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
@@ -761,7 +765,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame.IsConsumed,
             now,
             hardReset);
-        darkKnightPlunge.Observe(
+        var plunge = darkKnightPlunge.Observe(
             localPlayer,
             isCrystallineConflict,
             darkKnightPlungeConfigurationEnabled,
@@ -782,6 +786,53 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+
+        // The producers have already frozen and revalidated one exact intent.
+        // Select only the first request in the canonical held-helper order. A
+        // cast-cancel request owns this frame; the normal UseAction boundary is
+        // deliberately reached no earlier than a later clear-cast frame.
+        var castCancellationRequest =
+            ClaimedCastCancellationRequest(
+                purify.InputClaimed,
+                purify.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                recuperate.InputClaimed,
+                recuperate.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                rescue.InputClaimed,
+                rescue.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                miracle.InputClaimed,
+                miracle.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                guardDefense.InputClaimed,
+                guardDefense.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                defense.InputClaimed,
+                defense.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                pressureEscape.InputClaimed,
+                pressureEscape.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                ninja.InputClaimed,
+                ninja.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                scholar.InputClaimed,
+                scholar.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                plunge.InputClaimed,
+                plunge.CastCancellationRequest);
+        heldCastCancellation.Observe(
+            localPlayer,
+            configuration.Enabled &&
+            configuration.AllowHeldHelpersToCancelOwnCast,
+            isSupportedPvPContext,
+            guardActive,
+            prioritizedInputClaimed: castCancellationRequest is { IsValid: true },
+            intentOtherwiseReady: castCancellationRequest is { IsValid: true },
+            request: castCancellationRequest,
+            inputFrame: emergencyInputFrame,
+            hardReset: hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
             configuration.Enabled && isSupportedPvPContext && alive && !hardReset,
@@ -811,6 +862,13 @@ internal sealed class PersonalStatusService : IDisposable
         // exact locally observed status.
         return context;
     }
+
+    private static HeldCastCancellationRequest? ClaimedCastCancellationRequest(
+        bool inputClaimed,
+        HeldCastCancellationRequest? request) =>
+        inputClaimed && request is { IsValid: true }
+            ? request
+            : null;
 
     private List<ObservedPersonalStatus> ScanExactStatuses(
         IPlayerCharacter? localPlayer,

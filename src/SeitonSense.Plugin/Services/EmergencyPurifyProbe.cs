@@ -32,6 +32,7 @@ internal sealed record EmergencyPurifyProbeSnapshot(
     internal long TotalStructuralSoftWaits { get; init; }
     internal long TotalNativeRetriesScheduled { get; init; }
     internal bool InputClaimed { get; init; }
+    internal HeldCastCancellationRequest? CastCancellationRequest { get; init; }
     internal string LastEvent { get; init; } = "Waiting";
 
     internal static EmergencyPurifyProbeSnapshot Initial { get; } = new(
@@ -90,6 +91,13 @@ internal sealed class EmergencyPurifyProbe
                                  inputFrame.IsGameplayKeyPhysicallyDown(
                                      (VirtualKey)state.FrozenKeyCode);
 
+        var actionStructurallyReady = false;
+        var globalQueueReady = false;
+        var actionStateReadable = localPlayerIdentityValid &&
+                                  TryGetPurifyActionState(
+                                      localPlayer!,
+                                      out actionStructurallyReady,
+                                      out globalQueueReady);
         var locallyReady = !hardReset &&
                            configurationEnabled &&
                            isSupportedPvPContext &&
@@ -97,7 +105,9 @@ internal sealed class EmergencyPurifyProbe
                            statusCurrentlyObserved &&
                            !resilienceActive &&
                            !input.IsTextInputActive &&
-                           IsPurifyStructurallyReady(localPlayer!);
+                           actionStateReadable &&
+                           actionStructurallyReady &&
+                           globalQueueReady;
 
         var decision = EmergencyPurifyBufferRules.Observe(
             state,
@@ -143,6 +153,19 @@ internal sealed class EmergencyPurifyProbe
                            !input.IsTextInputActive;
         if (decision.ShouldClaimInputFrame)
             inputFrame.Consume();
+
+        var castCancellationRequest = BuildCastCancellationRequest(
+            localPlayer,
+            isSupportedPvPContext,
+            configurationEnabled,
+            statusInstance,
+            statusCurrentlyObserved,
+            resilienceActive,
+            input.IsTextInputActive,
+            inputClaimed,
+            actionStateReadable && actionStructurallyReady,
+            state,
+            inputFrame);
 
         var attempted = false;
         var accepted = false;
@@ -246,6 +269,7 @@ internal sealed class EmergencyPurifyProbe
             TotalNativeRetriesScheduled =
                 Interlocked.Read(ref totalNativeRetriesScheduled),
             InputClaimed = inputClaimed,
+            CastCancellationRequest = castCancellationRequest,
             LastEvent = lastEvent,
         };
     }
@@ -369,30 +393,104 @@ internal sealed class EmergencyPurifyProbe
                 EnemyCombatConstants.PurifyActionId));
     }
 
-    private static unsafe bool IsPurifyStructurallyReady(IPlayerCharacter localPlayer)
+    private static unsafe bool TryGetPurifyActionState(
+        IPlayerCharacter localPlayer,
+        out bool actionStructurallyReady,
+        out bool globalQueueReady)
     {
+        actionStructurallyReady = false;
+        globalQueueReady = false;
         if (!HasValidLocalPlayer(localPlayer)) return false;
 
         var actionManager = ActionManager.Instance();
         var nativePlayer = (GameObject*)localPlayer.Address;
         if (actionManager == null ||
             nativePlayer == null ||
-            nativePlayer->EntityId != localPlayer.EntityId ||
-            !ClientActionAttemptBoundary.IsExactActionReady(
-                actionManager,
-                EnemyCombatConstants.PurifyActionId))
+            nativePlayer->EntityId != localPlayer.EntityId)
         {
             return false;
         }
 
+        var boundary = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.PurifyActionId);
+        actionStructurallyReady = boundary.Captured &&
+                                  boundary.AdjustedActionId ==
+                                  EnemyCombatConstants.PurifyActionId &&
+                                  boundary.IsActionOffCooldown &&
+                                  boundary.ResourceStatus == 0;
+
         // GetActionStatus is deliberately not used here: Purify is the action
         // explicitly permitted while its removable CC is active, and a broad
         // action-status gate can incorrectly classify that exceptional state.
-        return HeldActionRetryRules.IsNativeBoundaryNearQueueable(
-            actionManager->AnimationLock,
+        globalQueueReady = actionStructurallyReady &&
+                           HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            boundary.AnimationLockSeconds,
             localPlayer.IsCasting,
-            actionManager->CastActionId,
-            actionManager->ActionQueued);
+            boundary.CastActionId,
+            boundary.ActionQueued);
+        return true;
+    }
+
+    private static unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
+        IPlayerCharacter? localPlayer,
+        bool isSupportedPvPContext,
+        bool configurationEnabled,
+        PurifyCcStatusInstance? currentStatus,
+        bool statusCurrentlyObserved,
+        bool resilienceActive,
+        bool textInputActive,
+        bool inputClaimed,
+        bool actionStructurallyReady,
+        EmergencyPurifyBufferState currentState,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (!configurationEnabled ||
+            !isSupportedPvPContext ||
+            resilienceActive ||
+            textInputActive ||
+            !inputClaimed ||
+            !actionStructurallyReady ||
+            currentState.Phase != EmergencyPurifyBufferPhase.Buffered ||
+            currentState.StatusInstance is not { IsValid: true } frozenStatus ||
+            currentStatus != frozenStatus ||
+            !statusCurrentlyObserved ||
+            currentState.FrozenKeyCode <= 0 ||
+            !inputFrame.IsGameplayKeyPhysicallyDown(
+                (VirtualKey)currentState.FrozenKeyCode) ||
+            localPlayer is null ||
+            !HasValidLocalPlayer(localPlayer) ||
+            !HasCastCancellationBoundary(localPlayer))
+        {
+            return null;
+        }
+
+        var localIdentity = new TargetPressureActorIdentity(
+            localPlayer.GameObjectId,
+            localPlayer.EntityId);
+        if (!localIdentity.IsValid) return null;
+
+        return new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.Purify,
+            EnemyCombatConstants.PurifyActionId,
+            localIdentity,
+            localIdentity,
+            currentState.FrozenKeyCode,
+            frozenStatus.InstanceToken);
+    }
+
+    private static unsafe bool HasCastCancellationBoundary(
+        IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               localPlayer.IsCasting &&
+               actionManager->CastActionId != 0 &&
+               !actionManager->ActionQueued &&
+               float.IsFinite(actionManager->AnimationLock) &&
+               actionManager->AnimationLock >= 0f &&
+               actionManager->AnimationLock <=
+               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
     }
 
     private static bool HasValidLocalPlayer(IPlayerCharacter localPlayer) =>

@@ -30,6 +30,7 @@ internal sealed record DarkKnightPlungeProbeSnapshot(
     float RevalidatedCenterDistanceYalms,
     bool RevalidatedTargetGuardActive,
     bool InputClaimed,
+    HeldCastCancellationRequest? CastCancellationRequest,
     bool UseActionAttempted,
     bool UseActionAccepted,
     long AttemptCount,
@@ -59,6 +60,7 @@ internal sealed record DarkKnightPlungeProbeSnapshot(
         0f,
         false,
         false,
+        null,
         false,
         false,
         0,
@@ -88,6 +90,7 @@ internal sealed class DarkKnightPlungeProbe
     private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
+    private long frozenIntentEpochToken;
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
 
@@ -184,6 +187,10 @@ internal sealed class DarkKnightPlungeProbe
         var globalNativeBoundaryReady = featureContextValid &&
                                         IsGlobalNativeBoundaryReady(localPlayer!);
         var structurallyReady = actionSpecificReady && globalNativeBoundaryReady;
+        // A running cast is excluded only from target-status preflight so the
+        // exact Plunge intent can be frozen for cancellation. The final
+        // UseAction boundary below always rechecks with casting enabled.
+        var anyLocalCastSignal = featureContextValid && HasAnyLocalCastSignal(localPlayer!);
         var hasInputOpportunity = holdState.OwnsHold
             ? holdState.HasAvailableReadyEpoch && exactOwnedKeyStillDown
             : inputFrame.HeldGameplayKeyEligible;
@@ -198,12 +205,13 @@ internal sealed class DarkKnightPlungeProbe
                                       DarkKnightPlungeRules.ActionId &&
                                       nativeState.CooldownStateKnown &&
                                       nativeState.CooldownReady &&
-                                      structurallyReady;
+                                      actionSpecificReady;
         var candidateResolution = "Not evaluated: no eligible held-input epoch";
         var candidates = shouldResolveCandidates
             ? ResolveExactCandidates(
                 localPlayer!,
                 nativeState.ResolvedActionId,
+                checkCastingActive: !anyLocalCastSignal,
                 out candidateResolution)
             : [];
 
@@ -227,11 +235,12 @@ internal sealed class DarkKnightPlungeProbe
                 nativeState.ResolvedActionId,
                 nativeState.CooldownStateKnown,
                 nativeState.CooldownReady,
-                structurallyReady,
+                actionSpecificReady,
                 candidates,
                 hardReset));
 
         var inputClaimed = false;
+        HeldCastCancellationRequest? castCancellationRequest = null;
         var attempted = false;
         var accepted = false;
         DarkKnightPlungeCandidate? boundaryCandidate = null;
@@ -257,7 +266,8 @@ internal sealed class DarkKnightPlungeProbe
                 var exactCandidate = ResolveFrozenIntent(
                     localPlayer!,
                     retry.Intent,
-                    nativeState.ResolvedActionId);
+                    nativeState.ResolvedActionId,
+                    checkCastingActive: !anyLocalCastSignal);
                 boundaryCandidate = exactCandidate;
                 var stableExactTarget = exactCandidate is { } stableCandidate &&
                                         DarkKnightPlungeRules.IsEligibleCandidate(
@@ -313,6 +323,10 @@ internal sealed class DarkKnightPlungeProbe
                         inputFrame.Consume();
                         if (!globalNativeBoundaryReady)
                         {
+                            castCancellationRequest = CreateCastCancellationRequest(
+                                localPlayer!,
+                                retry);
+
                             lastEvent = $"S{retry.Intent.EnemySlot} frozen Plunge waiting for global native boundary";
                         }
                         else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
@@ -354,6 +368,7 @@ internal sealed class DarkKnightPlungeProbe
                 intent,
                 localIdentity,
                 (VirtualKey)intent.HeldKeyCode,
+                NextIntentEpochToken(),
                 HeldActionRetryState.Initial);
             var outcome = TryUsePlungeOnce(
                 localPlayer!,
@@ -367,6 +382,13 @@ internal sealed class DarkKnightPlungeProbe
                 out boundaryCandidate);
             accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
             CompleteAttempt(retryIntent, outcome, nowMilliseconds);
+            if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
+            {
+                castCancellationRequest = CreateCastCancellationRequest(
+                    localPlayer!,
+                    retryIntent);
+            }
+
             lastEvent = DescribeAttempt(intent, 1, outcome);
         }
 
@@ -403,6 +425,7 @@ internal sealed class DarkKnightPlungeProbe
                 : 0f,
             observedCandidate?.TargetGuardActive ?? false,
             inputClaimed,
+            castCancellationRequest,
             attempted,
             accepted,
             Interlocked.Read(ref attemptCount),
@@ -452,6 +475,7 @@ internal sealed class DarkKnightPlungeProbe
     private IReadOnlyList<DarkKnightPlungeCandidate> ResolveExactCandidates(
         IPlayerCharacter localPlayer,
         uint actionId,
+        bool checkCastingActive,
         out string resolution)
     {
         var diagnosticsBefore = executeTracker.Diagnostics;
@@ -566,7 +590,8 @@ internal sealed class DarkKnightPlungeProbe
                 localPlayer,
                 actionId,
                 slot,
-                new TargetPressureActorIdentity(player.GameObjectId, player.EntityId));
+                new TargetPressureActorIdentity(player.GameObjectId, player.EntityId),
+                checkCastingActive);
             if (candidate is not { } exact)
             {
                 resolution = $"Native S{slot} action validation failed";
@@ -593,18 +618,21 @@ internal sealed class DarkKnightPlungeProbe
     private DarkKnightPlungeCandidate? ResolveFrozenIntent(
         IPlayerCharacter localPlayer,
         DarkKnightPlungeIntent intent,
-        uint actionId) =>
+        uint actionId,
+        bool checkCastingActive) =>
         BuildExactSlotCandidate(
             localPlayer,
             actionId,
             intent.EnemySlot,
-            intent.Target);
+            intent.Target,
+            checkCastingActive);
 
     private unsafe DarkKnightPlungeCandidate? BuildExactSlotCandidate(
         IPlayerCharacter localPlayer,
         uint actionId,
         int enemySlot,
-        TargetPressureActorIdentity expectedTarget)
+        TargetPressureActorIdentity expectedTarget,
+        bool checkCastingActive)
     {
         if (actionId != DarkKnightPlungeRules.ActionId ||
             !EnemySlotRules.IsValidSlot(enemySlot) ||
@@ -637,7 +665,7 @@ internal sealed class DarkKnightPlungeProbe
                                     actionId,
                                     expectedTarget.GameObjectId,
                                     checkRecastActive: true,
-                                    checkCastingActive: true) == 0;
+                                    checkCastingActive) == 0;
         var nativeRangeAndLineOfSight = nativePointersValid &&
                                         SeitonRangeRules.HasNativeRangeAndLineOfSight(
                                             ActionManager.GetActionInRangeOrLoS(
@@ -719,7 +747,8 @@ internal sealed class DarkKnightPlungeProbe
                 var exactCandidate = ResolveFrozenIntent(
                     currentLocal,
                     intent,
-                    nativeState.ResolvedActionId);
+                    nativeState.ResolvedActionId,
+                    checkCastingActive: true);
                 if (exactCandidate is not { } frozenCandidate) return false;
                 observedAtBoundary = frozenCandidate;
 
@@ -884,6 +913,59 @@ internal sealed class DarkKnightPlungeProbe
             localPlayer.IsCasting,
             actionManager->CastActionId,
             actionManager->ActionQueued);
+    }
+
+    private static unsafe bool HasAnyLocalCastSignal(IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               (localPlayer.IsCasting || actionManager->CastActionId != 0);
+    }
+
+    private static unsafe bool IsCastCancellationBoundaryReady(
+        IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               localPlayer.IsCasting &&
+               actionManager->CastActionId != 0 &&
+               !actionManager->ActionQueued &&
+               float.IsFinite(actionManager->AnimationLock) &&
+               actionManager->AnimationLock >= 0f &&
+               actionManager->AnimationLock <=
+               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
+    }
+
+    private static HeldCastCancellationRequest? CreateCastCancellationRequest(
+        IPlayerCharacter localPlayer,
+        FrozenPlungeRetry frozen)
+    {
+        if (!IsCastCancellationBoundaryReady(localPlayer)) return null;
+
+        var request = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.DarkKnightPlunge,
+            frozen.Intent.ActionId,
+            frozen.LocalPlayer,
+            frozen.Intent.Target,
+            (int)frozen.HeldKey,
+            frozen.IntentEpochToken);
+        return request.IsValid ? request : null;
+    }
+
+    private ulong NextIntentEpochToken()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref frozenIntentEpochToken);
+            var next = current >= long.MaxValue ? 1 : current + 1;
+            if (Interlocked.CompareExchange(
+                    ref frozenIntentEpochToken,
+                    next,
+                    current) == current)
+            {
+                return (ulong)next;
+            }
+        }
     }
 
     private bool IsCurrentlySuppressedByGuard(
@@ -1072,6 +1154,7 @@ internal sealed class DarkKnightPlungeProbe
         DarkKnightPlungeIntent Intent,
         TargetPressureActorIdentity LocalPlayer,
         VirtualKey HeldKey,
+        ulong IntentEpochToken,
         HeldActionRetryState Retry);
 
     private readonly record struct PlungeNativeState(

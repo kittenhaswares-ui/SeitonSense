@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.25.0.0
+
+- Fixed the v0.24 held-key lease regression across all ten physical-hold
+  helpers: Purify, Smart Recuperate, Ally Rescue, reactive counter-CC, Guard,
+  Guardian, pressure Sprint, NIN Seiton, SCH Critical Strategy, and DRK
+  Hiebsprung. An already-held movement key now wins before another stable held
+  key, while a fresh movement or other gameplay key is used only as fallback.
+  Each frozen intent keeps that exact lease until release, ineligibility, reset,
+  or its action-specific terminal outcome, so tapping and releasing a hotbar key
+  no longer cancels an otherwise-valid lease still backed by held WASD.
+- Kept held input ahead of fresh fallback in every affected helper and retained
+  the existing exact action, actor/target, status/episode, context, Guard, range,
+  line-of-sight, and key revalidation. The request priority remains **Purify >
+  Smart Recuperate > Ally Rescue > reactive counter-CC > Guard > Guardian >
+  pressure Sprint > Kardia > NIN > SCH > Monk > DRK Hiebsprung**. Kardia and
+  Monk remain separately event-driven rather than physical-hold origins.
+- Added a separate default-off **cancel my active cast for an otherwise-ready
+  held helper** test toggle for exactly the ten physical-hold helpers above.
+  When the highest-priority frozen intent is otherwise ready and only the local
+  cast blocks it, Seiton Sense may request FFXIV's native cast cancellation once
+  for that observed cast. The void native call proves only that cancellation was
+  requested, not that the cast stopped.
+- Cast cancellation and the held action can never occur in the same framework
+  frame. A later frame must observe the cast cleared and repeat the complete
+  ordinary helper preflight before any `UseAction` request. The test synthesizes
+  no movement or Escape input, clears no native queue, writes no cast state, and
+  never changes a target. Smart Kardia, Monk Earth's Reply, every already-
+  incoming manual/Turbo redirect (including Paean), and macro helpers are
+  excluded. Current-patch live proof remains
+  pending for stationary casts and mobile BRD Powerful Shot / MCH Blast Charge.
+- Added bounded Settings and `/seiton debug` diagnostics for the selected cast-
+  cancellation helper, exact action/target/key/intent epoch, observed cast, one-
+  request latch, native request/fault counts, and last result. The existing
+  explicit-client-rejection retry remains at least 50 ms apart with eight calls
+  maximum and is independent of the one-request-per-cast cancellation path.
+- Bumped the plugin version to `0.25.0.0` and configuration schema to `30`.
+  The cast-cancellation test is explicit opt-in and remains off for fresh, reset,
+  and migrated configurations; every existing setting is otherwise preserved.
+
 ## 0.24.0.0
 
 - Replaced global one-use held-key consumption with continuous physical-key

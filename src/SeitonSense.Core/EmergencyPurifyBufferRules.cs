@@ -439,18 +439,18 @@ public static class EmergencyPurifyBufferRules
         out int keyCode)
     {
         keyCode = 0;
-        if (observation.FreshKeyPressed && observation.FreshKeyCode > 0)
-        {
-            keyCode = observation.FreshKeyCode;
-            return EmergencyPurifyInputTrigger.FreshKeyPress;
-        }
-
         if (observation.AllowHeldKeyAtStatusEntry &&
             observation.HeldKeyEligible &&
             observation.HeldKeyCode > 0)
         {
             keyCode = observation.HeldKeyCode;
             return EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry;
+        }
+
+        if (observation.FreshKeyPressed && observation.FreshKeyCode > 0)
+        {
+            keyCode = observation.FreshKeyCode;
+            return EmergencyPurifyInputTrigger.FreshKeyPress;
         }
 
         return EmergencyPurifyInputTrigger.None;

@@ -199,6 +199,48 @@ internal static class AllyRescueBufferSelfTests
             "held entry trigger is explicit");
     }
 
+    public static void StableHeldEntryWinsOverCoincidentFreshTap()
+    {
+        var decision = AllyRescueBufferRules.Observe(
+            AllyRescueBufferState.Initial,
+            ValidObservation([CandidateA], now: 1_000) with
+            {
+                FreshKeyPressed = true,
+                HeldKeyEligible = true,
+                AllowHeldKeyAtCandidateEntry = true,
+                ActionLocallyReady = false,
+                FreshGameplayKeyToken = 49,
+                HeldGameplayKeyToken = 87,
+                DispatchAllowed = true,
+            });
+
+        Equal(AllyRescueBufferDecisionKind.Armed, decision.Kind, "exact rescue lease arms");
+        Equal(
+            AllyRescueInputTrigger.HeldKeyAtCandidateEntry,
+            decision.InputTrigger,
+            "stable hold wins over coincident fresh tap");
+        Equal(87, decision.NextState.GameplayKeyToken, "stable held key is frozen");
+
+        var afterFreshTapReleased = AllyRescueBufferRules.Observe(
+            decision.NextState,
+            ValidObservation([CandidateA], now: 1_001) with
+            {
+                FreshKeyPressed = false,
+                HeldKeyEligible = true,
+                AllowHeldKeyAtCandidateEntry = true,
+                ActionLocallyReady = true,
+                FreshGameplayKeyToken = 0,
+                HeldGameplayKeyToken = 87,
+                TrackedGameplayKeyPhysicallyDown = true,
+                DispatchAllowed = true,
+            });
+
+        True(
+            afterFreshTapReleased.ShouldDispatch,
+            "release of the coincident fresh tap cannot cancel the stable held lease");
+        Equal(87, afterFreshTapReleased.NextState.GameplayKeyToken, "dispatch retains exact W intent");
+    }
+
     public static void ContinuousHoldCanAuthorizeLaterDistinctIntents()
     {
         var first = Observe(

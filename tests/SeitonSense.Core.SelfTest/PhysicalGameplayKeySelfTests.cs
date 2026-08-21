@@ -67,6 +67,103 @@ internal static class PhysicalGameplayKeySelfTests
         False(rePrimeDown.IsHeldEligible, "still-held key after reset is ineligible");
     }
 
+    public static void StableHoldWinsOverCoincidentFreshTap()
+    {
+        var stableHeld = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 87,
+            selectedIsFreshPress: false,
+            selectedIsMovementKey: true,
+            candidateKeyToken: 49,
+            candidateIsFreshPress: true,
+            candidateIsMovementKey: false);
+        Equal(87, stableHeld, "stable W hold wins over a fresh number-key tap");
+
+        var stableCandidate = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 49,
+            selectedIsFreshPress: true,
+            selectedIsMovementKey: false,
+            candidateKeyToken: 87,
+            candidateIsFreshPress: false,
+            candidateIsMovementKey: true);
+        Equal(87, stableCandidate, "a later-scanned stable hold replaces a fresh tap");
+
+        var freshFallback = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 0,
+            selectedIsFreshPress: false,
+            selectedIsMovementKey: false,
+            candidateKeyToken: 49,
+            candidateIsFreshPress: true,
+            candidateIsMovementKey: false);
+        Equal(49, freshFallback, "fresh press remains the fallback without a stable hold");
+
+        var stableMovement = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 49,
+            selectedIsFreshPress: false,
+            selectedIsMovementKey: false,
+            candidateKeyToken: 87,
+            candidateIsFreshPress: false,
+            candidateIsMovementKey: true);
+        Equal(87, stableMovement, "stable movement is preferred over another stable key");
+    }
+
+    public static void StableSelectionSurvivesMultiFrameActionTap()
+    {
+        var firstFrame = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 87,
+            selectedIsFreshPress: false,
+            selectedIsMovementKey: true,
+            candidateKeyToken: 49,
+            candidateIsFreshPress: true,
+            candidateIsMovementKey: false);
+        Equal(87, firstFrame, "stable W is selected while 1 goes down");
+
+        var secondFrameFallback = PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+            selectedKeyToken: 49,
+            selectedIsFreshPress: false,
+            selectedIsMovementKey: false,
+            candidateKeyToken: 87,
+            candidateIsFreshPress: false,
+            candidateIsMovementKey: true);
+        var secondFrame = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+            firstFrame,
+            currentKeyStillEligible: true,
+            secondFrameFallback);
+        Equal(87, secondFrame, "W stays frozen while 1 remains down for another frame");
+
+        var afterTapRelease = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+            secondFrame,
+            currentKeyStillEligible: true,
+            preferredFallbackKeyToken: 87);
+        Equal(87, afterTapRelease, "releasing 1 cannot move the stable held selection");
+
+        var lowerCompetingMovementFallback =
+            PhysicalGameplayKeyRules.SelectPreferredHeldKeyToken(
+                selectedKeyToken: 87,
+                selectedIsFreshPress: false,
+                selectedIsMovementKey: true,
+                candidateKeyToken: 65,
+                candidateIsFreshPress: false,
+                candidateIsMovementKey: true);
+        Equal(65, lowerCompetingMovementFallback, "fresh selection would otherwise choose lower A");
+        var stickyW = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+            afterTapRelease,
+            currentKeyStillEligible: true,
+            lowerCompetingMovementFallback);
+        Equal(87, stickyW, "an eligible frozen W cannot drift to another held movement key");
+
+        var afterWRelease = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+            stickyW,
+            currentKeyStillEligible: false,
+            lowerCompetingMovementFallback);
+        Equal(65, afterWRelease, "release permits deterministic reselection");
+
+        var afterFinalRelease = PhysicalGameplayKeyRules.RetainEligibleHeldKeyToken(
+            afterWRelease,
+            currentKeyStillEligible: false,
+            preferredFallbackKeyToken: 0);
+        Equal(0, afterFinalRelease, "release without a fallback clears the sticky selection");
+    }
+
     public static void OneHoldCanCrossDistinctPurifyStatusGenerations()
     {
         var keyState = Observe(PhysicalGameplayKeyState.Initial, isDown: false).NextState;

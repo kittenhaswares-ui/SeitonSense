@@ -34,6 +34,7 @@ internal sealed record SmartRecuperateProbeSnapshot(
     internal long RejectedCount { get; init; }
     internal long UnknownCount { get; init; }
     internal long SoftWaitCount { get; init; }
+    internal HeldCastCancellationRequest? CastCancellationRequest { get; init; }
 
     internal static SmartRecuperateProbeSnapshot Initial { get; } = new(
         Decision: SmartRecuperateDecisionKind.None,
@@ -160,6 +161,23 @@ internal sealed unsafe class SmartRecuperateProbe
         var inputClaimed = decision.ShouldConsumeInputGeneration;
         if (inputClaimed) inputFrame.Consume();
 
+        var castCancellationRequest = BuildCastCancellationRequest(
+            localPlayer,
+            localIdentity,
+            configurationEnabled,
+            metadataVerified,
+            actionHelpersSuppressedByGuard,
+            higherPriorityClaimed,
+            resolvedActionId,
+            actionStateReadable && cooldownReady && resourcesReady,
+            currentHp,
+            maximumHp,
+            currentMp,
+            maximumMp,
+            inputClaimed,
+            state,
+            inputFrame);
+
         var attempted = false;
         var accepted = false;
         var nativeOutcome = ClientActionAttemptOutcome.None;
@@ -233,6 +251,7 @@ internal sealed unsafe class SmartRecuperateProbe
             RejectedCount = Interlocked.Read(ref rejectedCount),
             UnknownCount = Interlocked.Read(ref unknownCount),
             SoftWaitCount = Interlocked.Read(ref softWaitCount),
+            CastCancellationRequest = castCancellationRequest,
         };
         Volatile.Write(ref snapshot, result);
         return result;
@@ -344,6 +363,76 @@ internal sealed unsafe class SmartRecuperateProbe
             intent.ActionId,
             boundaryBefore,
             ClientActionAttemptBoundary.Capture(actionManager, intent.ActionId));
+    }
+
+    private HeldCastCancellationRequest? BuildCastCancellationRequest(
+        IPlayerCharacter? localPlayer,
+        TargetPressureActorIdentity localIdentity,
+        bool configurationEnabled,
+        bool metadataVerified,
+        bool actionHelpersSuppressedByGuard,
+        bool higherPriorityClaimed,
+        uint resolvedActionId,
+        bool actionStructurallyReady,
+        uint currentHp,
+        uint maximumHp,
+        uint currentMp,
+        uint maximumMp,
+        bool inputClaimed,
+        SmartRecuperateState currentState,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (!inputClaimed ||
+            !actionStructurallyReady ||
+            currentState.Phase != SmartRecuperatePhase.Buffered ||
+            currentState.Intent is not { IsValid: true } intent ||
+            localPlayer is null ||
+            !TryGetExactIdentity(localPlayer, out var currentIdentity) ||
+            currentIdentity != localIdentity ||
+            !HasCastCancellationBoundary(localPlayer) ||
+            !SmartRecuperateRules.CanUseFrozenIntent(
+                intent,
+                configurationEnabled,
+                IsCurrentCrystallineConflict(),
+                currentIdentity,
+                IsAlive(localPlayer),
+                localPlayer.IsTargetable,
+                metadataVerified,
+                actionHelpersSuppressedByGuard,
+                higherPriorityClaimed,
+                resolvedActionId,
+                actionLocallyReady: true,
+                currentHp,
+                maximumHp,
+                currentMp,
+                maximumMp,
+                intent.FrozenKeyCode,
+                inputFrame.IsGameplayKeyPhysicallyDown(
+                    (VirtualKey)intent.FrozenKeyCode)))
+        {
+            return null;
+        }
+
+        return new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.SmartRecuperate,
+            intent.ActionId,
+            intent.LocalPlayer,
+            intent.LocalPlayer,
+            intent.FrozenKeyCode,
+            intent.HealthEventToken);
+    }
+
+    private static bool HasCastCancellationBoundary(IPlayerCharacter localPlayer)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               localPlayer.IsCasting &&
+               actionManager->CastActionId != 0 &&
+               !actionManager->ActionQueued &&
+               float.IsFinite(actionManager->AnimationLock) &&
+               actionManager->AnimationLock >= 0f &&
+               actionManager->AnimationLock <=
+               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
     }
 
     private bool TryGetExactIdentity(

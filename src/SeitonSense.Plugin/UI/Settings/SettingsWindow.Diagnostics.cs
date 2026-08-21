@@ -23,6 +23,7 @@ internal sealed partial class SettingsWindow
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
         var protectionEndRankPressure = !protectionEndRankPresent
             ? "none"
@@ -96,15 +97,31 @@ internal sealed partial class SettingsWindow
             $"{recuperate.SoftWaitCount}, " +
             $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
+            $"Held cast cancellation: enabled={configuration.AllowHeldHelpersToCancelOwnCast}, " +
+            $"state={castCancellation.Decision}/{castCancellation.Reason}, " +
+            $"cast={castCancellation.CastActionId}, epoch={castCancellation.CastEpochToken}, " +
+            $"current-helper={castCancellation.Request?.HelperKind ?? HeldCastCancellationHelperKind.None}, " +
+            $"last-helper={castCancellation.LastRequestedIntent?.HelperKind ?? HeldCastCancellationHelperKind.None}, " +
+            $"last-action={castCancellation.LastRequestedIntent?.HelperActionId ?? 0}, " +
+            $"last-target={castCancellation.LastRequestedIntent?.Target.GameObjectId ?? 0:X}, " +
+            $"last-key={castCancellation.LastRequestedIntent?.FrozenKeyCode ?? 0}, " +
+            $"last-intent={castCancellation.LastRequestedIntent?.IntentEpochToken ?? 0}, " +
+            $"native/last-native={castCancellation.NativeStatus}/{castCancellation.LastNativeStatus}, " +
+            $"requested/faulted=" +
+            $"{castCancellation.NativeRequestCount}/{castCancellation.NativeFaultCount}, " +
+            $"last={castCancellation.LastEvent}");
+        ImGui.TextWrapped(
             $"Ally Rescue (confirmation counters are captured exact status-removal ActionEffects): " +
             $"{rescue.Phase}/{rescue.Decision}, cancel={rescue.CancelReason}, " +
             $"trigger={rescue.InputTrigger}, candidates={rescue.CandidateCount}, action={rescue.ActionId}, " +
             $"target={rescue.TargetGameObjectId:X}, status={rescue.TargetStatusId}, ready={rescue.LocallyReady}, " +
+            $"key={rescue.FreshGameplayKey}/{rescue.HeldGameplayKey}, claim={rescue.InputClaimed}, " +
             $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}, " +
             $"count={rescue.AttemptCount}/{rescue.AcceptedCount}, confirm-pending={rescue.ConfirmationPending}, " +
             $"confirmed-cleanses match/session={rescue.MatchConfirmations.TotalConfirmed}/" +
             $"{rescue.SessionConfirmations.TotalConfirmed}, " +
-            $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}");
+            $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}, " +
+            $"last={rescue.LastEvent}");
         ImGui.TextWrapped(
             $"Reactive CC (WHM Wunder der Natur / Miracle of Nature; BRD Stumme Nocturne / Silent Nocturne): " +
             $"{miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
@@ -112,6 +129,7 @@ internal sealed partial class SettingsWindow
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
             $"blocker scales/other={miracle.HardenedScalesPresent}/{miracle.OtherCcProtectionPresent}, " +
             $"range/LoS={miracle.HasNativeRangeAndLineOfSight}, key={miracle.InputKey}, " +
+            $"claim={miracle.InputClaimed}, " +
             $"attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}, " +
             $"count={miracle.AttemptCount}/{miracle.AcceptedCount}, " +
             $"capture/queue/drop={miracle.CapturedThreatCount}/{miracle.CaptureQueueDepth}/{miracle.DroppedThreatCount}, " +

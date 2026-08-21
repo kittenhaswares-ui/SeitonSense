@@ -149,6 +149,31 @@ internal static class DarkKnightPlungeSelfTests
         False(initial.ShouldSpendReadyEpoch, "first request has no repeat epoch");
         Equal(0UL, initial.Intent!.Value.ReadyEpochToken, "first intent token");
 
+        var initialIntent = initial.Intent.Value;
+        var castWaitRequest = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.DarkKnightPlunge,
+            initialIntent.ActionId,
+            LocalPlayer,
+            initialIntent.Target,
+            initialIntent.HeldKeyCode,
+            IntentEpochToken: 1);
+        True(castWaitRequest.IsValid, "cast wait retains the exact frozen Plunge intent");
+        True(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: true),
+            "active cast soft-wait keeps initial Plunge priority without an attempt");
+        Equal(
+            HeldActionRetryState.Initial,
+            HeldActionRetryRules.Complete(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 0,
+                ClientActionAttemptOutcome.SoftUnavailable).NextState,
+            "active cast soft-wait spends no Plunge attempt budget");
+
         var owned = DarkKnightPlungeRules.BeginOwnedHold(65);
         owned = ObserveHold(owned, cooldownKnown: true, cooldownReady: false).State;
         owned = ObserveHold(owned, cooldownKnown: true, cooldownReady: true).State;

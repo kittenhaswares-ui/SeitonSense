@@ -281,8 +281,8 @@ public static class MiracleInterceptRules
     private static MiracleInterceptInputTrigger ResolveInput(MiracleInterceptObservation observation)
     {
         if (observation.IsTextInputActive) return MiracleInterceptInputTrigger.None;
-        if (observation.FreshKeyPressed) return MiracleInterceptInputTrigger.FreshKeyPress;
         if (observation.HeldKeyEligible) return MiracleInterceptInputTrigger.HeldPhysicalKey;
+        if (observation.FreshKeyPressed) return MiracleInterceptInputTrigger.FreshKeyPress;
         return MiracleInterceptInputTrigger.None;
     }
 

@@ -209,6 +209,60 @@ internal static class HeldActionRetrySelfTests
             "invalid clocks fail closed");
     }
 
+    internal static void InitialExactIntentClaimsCastSoftWaitWithoutSpendingBudget()
+    {
+        var initial = HeldActionRetryState.Initial;
+        False(initial.IsPending, "an initial freeze has not spent a native attempt");
+        False(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+                animationLockSeconds: 0f,
+                localPlayerIsCasting: true,
+                castActionId: 12_345,
+                actionQueued: false),
+            "a complete active cast is a global soft wait");
+        False(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(0f, true, 0, false),
+            "IsCasting must clear before the action boundary");
+        False(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(0f, false, 12_345, false),
+            "CastActionId must clear before the action boundary");
+        True(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                initial,
+                1_000,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: true),
+            "an exact action/target/key/episode freeze claims the cast-soft-wait frame");
+
+        var softWait = HeldActionRetryRules.Complete(
+            initial,
+            1_000,
+            ClientActionAttemptOutcome.SoftUnavailable);
+        Equal(HeldActionRetryDisposition.SoftWait, softWait.Disposition, "cast soft wait");
+        Equal(initial, softWait.NextState, "cast soft wait preserves the initial freeze");
+        Equal(0, softWait.NextState.NativeAttemptCount, "cast wait spends zero attempts");
+        True(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                softWait.NextState,
+                1_001,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: true),
+            "the same exact freeze retains scheduler ownership on the next cast frame");
+        False(
+            HeldActionRetryRules.RetainsSchedulerFrame(
+                softWait.NextState,
+                1_001,
+                exactIntentValid: true,
+                actionSpecificReady: true,
+                targetSpecificReady: false),
+            "target drift cannot retain or redirect the frozen intent");
+        True(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(0f, false, 0, false),
+            "actual execution becomes eligible only after both cast signals clear");
+    }
+
     private static ClientActionAttemptFingerprint Fingerprint(uint actionId) =>
         new(
             Captured: true,

@@ -38,6 +38,7 @@ internal sealed record AllyRescueProbeSnapshot(
     string LastEvent)
 {
     internal bool InputClaimed { get; init; }
+    internal HeldCastCancellationRequest? CastCancellationRequest { get; init; }
 
     internal static AllyRescueProbeSnapshot Initial { get; } = new(
         AllyRescueBufferPhase.WaitingForCandidate,
@@ -250,6 +251,17 @@ internal sealed class AllyRescueProbe
                                (VirtualKey)state.GameplayKeyToken);
         if (inputClaimed) inputFrame.Consume();
 
+        var castCancellationRequest = BuildCastCancellationRequest(
+            localPlayer,
+            actionId,
+            configurationEnabled,
+            isCrystallineConflict,
+            input.IsTextInputActive,
+            inputClaimed,
+            structurallyReady,
+            nowMilliseconds,
+            inputFrame);
+
         var attempted = false;
         var accepted = false;
         var targetGameObjectId = 0UL;
@@ -401,6 +413,7 @@ internal sealed class AllyRescueProbe
             lastEvent)
         {
             InputClaimed = inputClaimed,
+            CastCancellationRequest = castCancellationRequest,
         };
         Volatile.Write(ref snapshot, result);
         return result;
@@ -677,6 +690,68 @@ internal sealed class AllyRescueProbe
             actionId,
             boundaryBefore,
             ClientActionAttemptBoundary.Capture(actionManager, actionId));
+    }
+
+    private unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
+        IPlayerCharacter? localPlayer,
+        uint actionId,
+        bool configurationEnabled,
+        bool isCrystallineConflict,
+        bool textInputActive,
+        bool inputClaimed,
+        bool actionStructurallyReady,
+        long nowMilliseconds,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (!configurationEnabled ||
+            !isCrystallineConflict ||
+            textInputActive ||
+            !inputClaimed ||
+            !actionStructurallyReady ||
+            state.Phase != AllyRescueBufferPhase.Buffered ||
+            state.TrackedIntent is not { IsValid: true } intent ||
+            !IsExactVirtualKeyToken(state.GameplayKeyToken) ||
+            !inputFrame.IsGameplayKeyPhysicallyDown(
+                (VirtualKey)state.GameplayKeyToken) ||
+            !HasValidNativeIdentity(localPlayer) ||
+            !TryRevalidateCandidate(
+                localPlayer!,
+                actionId,
+                intent,
+                nowMilliseconds,
+                out var exactTarget))
+        {
+            return null;
+        }
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null ||
+            !localPlayer!.IsCasting ||
+            actionManager->CastActionId == 0 ||
+            actionManager->ActionQueued ||
+            !float.IsFinite(actionManager->AnimationLock) ||
+            actionManager->AnimationLock < 0f ||
+            actionManager->AnimationLock >
+            HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds)
+        {
+            return null;
+        }
+
+        var localIdentity = new TargetPressureActorIdentity(
+            localPlayer.GameObjectId,
+            localPlayer.EntityId);
+        var targetIdentity = new TargetPressureActorIdentity(
+            exactTarget.GameObjectId,
+            exactTarget.EntityId);
+        if (!localIdentity.IsValid || !targetIdentity.IsValid) return null;
+
+        return new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.AllyRescue,
+            actionId,
+            localIdentity,
+            targetIdentity,
+            state.GameplayKeyToken,
+            intent.Status.InstanceToken);
     }
 
     private static unsafe bool HasStructuralActionReadiness(uint actionId)

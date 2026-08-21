@@ -620,6 +620,7 @@ public sealed class Plugin : IDalamudPlugin
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
+                var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
                 var limitBreakGauge = combatFrameLimitGauge.Diagnostics;
                 var assist = nearAssist.Diagnostics;
@@ -670,6 +671,7 @@ public sealed class Plugin : IDalamudPlugin
                     $"cancel={rescue.CancelReason},trigger={rescue.InputTrigger},candidates={rescue.CandidateCount}," +
                     $"action={rescue.ActionId},target={rescue.TargetGameObjectId:X},status={rescue.TargetStatusId}," +
                     $"ready={rescue.LocallyReady},fresh={rescue.FreshGameplayKey},held={rescue.HeldGameplayKey}," +
+                    $"claimed={rescue.InputClaimed}," +
                     $"attempt={rescue.UseActionAttempted}/{rescue.UseActionAccepted}," +
                     $"count={rescue.AttemptCount}/{rescue.AcceptedCount},pending={rescue.ConfirmationPending}," +
                     $"match={rescue.MatchConfirmations.TotalConfirmed}," +
@@ -700,6 +702,20 @@ public sealed class Plugin : IDalamudPlugin
                     $"{recuperate.UseActionAccepted},count={recuperate.AttemptCount}/" +
                     $"{recuperate.AcceptedCount},last={recuperate.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] cast-cancel[enabled=" +
+                    $"{configuration.AllowHeldHelpersToCancelOwnCast}," +
+                    $"state={castCancellation.Decision}/{castCancellation.Reason}," +
+                    $"cast={castCancellation.CastActionId},epoch={castCancellation.CastEpochToken}," +
+                    $"current-helper={castCancellation.Request?.HelperKind ?? HeldCastCancellationHelperKind.None}," +
+                    $"last-helper={castCancellation.LastRequestedIntent?.HelperKind ?? HeldCastCancellationHelperKind.None}," +
+                    $"last-action={castCancellation.LastRequestedIntent?.HelperActionId ?? 0}," +
+                    $"last-target={castCancellation.LastRequestedIntent?.Target.GameObjectId ?? 0:X}," +
+                    $"last-key={castCancellation.LastRequestedIntent?.FrozenKeyCode ?? 0}," +
+                    $"last-intent={castCancellation.LastRequestedIntent?.IntentEpochToken ?? 0}," +
+                    $"native/last-native={castCancellation.NativeStatus}/{castCancellation.LastNativeStatus}," +
+                    $"requested/faulted={castCancellation.NativeRequestCount}/" +
+                    $"{castCancellation.NativeFaultCount},last={castCancellation.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] pressure-escape[active={pressureEscape.Active}," +
                     $"warning/sprint={pressureEscape.WarningEnabled}/{pressureEscape.SprintEnabled}," +
                     $"direct={pressureEscape.PressureKnown}/{pressureEscape.DirectEnemyCount}" +
@@ -720,7 +736,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"{miracle.TargetEntityId:X},job={miracle.TargetJobId}," +
                     $"ttl={miracle.ThreatRemainingMilliseconds},scales={miracle.HardenedScalesPresent}," +
                     $"other-blocker={miracle.OtherCcProtectionPresent},range={miracle.HasNativeRangeAndLineOfSight}," +
-                    $"key={miracle.InputKey},attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
+                    $"key={miracle.InputKey},claimed={miracle.InputClaimed}," +
+                    $"attempt={miracle.UseActionAttempted}/{miracle.UseActionAccepted}," +
                     $"count={miracle.AttemptCount}/{miracle.AcceptedCount},q={miracle.CaptureQueueDepth}," +
                     $"capture={miracle.CapturedThreatCount},drop={miracle.DroppedThreatCount}," +
                     $"seen/armed/reject={miracle.RecognizedThreatCount}/{miracle.ArmedThreatCount}/" +

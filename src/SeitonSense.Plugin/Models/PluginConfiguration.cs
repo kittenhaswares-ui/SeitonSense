@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 29;
+    public int Version { get; set; } = 30;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -53,6 +53,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
     public bool EnableSmartRecuperateOnHeldKey { get; set; }
+    public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
@@ -218,7 +219,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 29)
+        if (Version >= 30)
         {
             if (repaired) Save();
             return;
@@ -513,7 +514,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableNinjaSeitonOnFreshGameplayKey = false;
         }
 
-        Version = 29;
+        if (Version < 30)
+        {
+            // Native cast cancellation is a new local action side effect. It
+            // remains a separate explicit opt-in for every upgrading user.
+            AllowHeldHelpersToCancelOwnCast = false;
+        }
+
+        Version = 30;
         ClampSettings();
         Save();
     }
@@ -522,7 +530,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 29;
+        Version = 30;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -538,6 +546,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
+        AllowHeldHelpersToCancelOwnCast = false;
         EnableDarkKnightPlungeOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
