@@ -326,6 +326,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    internal bool IsLocalGuardActiveOrPropagatingForPanicShukuchi() =>
+        IsLocalGuardActiveOrPropagating();
+
     internal long CaptureLocalGuardAttemptGeneration()
     {
         lock (guardAttemptGate) return localGuardActionAttemptGeneration;

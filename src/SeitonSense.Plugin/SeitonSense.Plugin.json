@@ -2,7 +2,7 @@
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
   "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
-  "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
+  "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, explicit PvP macros, low-MP Focus, assists, team communication, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

@@ -19,6 +19,7 @@ internal sealed record PvPMetadataValidation(
     bool AllyRescueStatusesVerified,
     bool MiracleOfNatureActionVerified,
     bool SilentNocturneVerified,
+    bool PanicShukuchiVerified,
     bool ContradanceVerified,
     bool ZantetsukenVerified,
     bool FuriousBacklashVerified,
@@ -28,7 +29,7 @@ internal sealed record PvPMetadataValidation(
     bool AutoLowMpFocusProbeVerified,
     bool DarkKnightPlungeVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -713,6 +714,43 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var panicShukuchiVerified = ValidateFeature("Panic Shukuchi", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var action) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var transient))
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return string.Equals(action.Name.ToString(), "Shukuchi", StringComparison.Ordinal) &&
+                   action.Icon == EnemyCombatConstants.PanicShukuchiActionIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId &&
+                   action.Range == EnemyCombatConstants.PanicShukuchiSheetRange &&
+                   action.EffectRange == 1 &&
+                   action.CastType == 7 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.PanicShukuchiRecast100ms &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetHostile &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetAlliance &&
+                   action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.NeedToFaceTarget &&
+                   action.AffectsPosition &&
+                   description.Contains("Move quickly to the specified location.", StringComparison.Ordinal) &&
+                   description.Contains("Grants Hidden", StringComparison.Ordinal) &&
+                   description.Contains("Cannot be executed while bound.", StringComparison.Ordinal) &&
+                   description.Contains("Action changes to Doton while under the effect of Three Mudra.", StringComparison.Ordinal);
+        });
+
         var contradanceVerified = ValidateFeature("Contradance", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
@@ -877,6 +915,7 @@ internal static class PvPMetadataGuard
             allyRescueStatusesVerified,
             miracleOfNatureActionVerified,
             silentNocturneVerified,
+            panicShukuchiVerified,
             contradanceVerified,
             zantetsukenVerified,
             furiousBacklashVerified,
@@ -890,7 +929,7 @@ internal static class PvPMetadataGuard
             "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
-            "SilentNocturne={SilentNocturne}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
+            "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
             "ScholarCriticalStrategy={ScholarCriticalStrategy}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}.",
@@ -905,6 +944,7 @@ internal static class PvPMetadataGuard
             validation.AllyRescueStatusesVerified,
             validation.MiracleOfNatureActionVerified,
             validation.SilentNocturneVerified,
+            validation.PanicShukuchiVerified,
             validation.ContradanceVerified,
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
