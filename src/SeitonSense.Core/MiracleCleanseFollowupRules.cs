@@ -37,6 +37,7 @@ public enum MiracleCleanseFollowupCancelReason
     ReleaseOpportunityExpired = 12,
     ClockMovedBackwards = 13,
     HardReset = 14,
+    ReservationKeyReleased = 15,
 }
 
 /// <summary>
@@ -87,6 +88,9 @@ public readonly record struct MiracleCleanseFollowupIntent(
     MiracleCleanseFollowupSignal Signal,
     long ReleasedAtMilliseconds)
 {
+    public int GameplayKeyToken { get; init; }
+    public long ExpectedProtectionEndAtMilliseconds { get; init; } = -1;
+
     public MiracleCleanseFollowupTargetIdentity Target => Signal.Target;
 
     public bool IsValid =>
@@ -103,7 +107,16 @@ public readonly record struct MiracleCleanseFollowupCandidate(
     MiracleCleanseFollowupTargetIdentity Target,
     bool IsExactCanonicalEnemy,
     bool IsAliveAndTargetable,
-    int ActiveResilienceStatusCount);
+    int ActiveResilienceStatusCount)
+{
+    /// <summary>
+    /// Advisory only. Live StatusList membership remains the authority for
+    /// Resilience presence and release.
+    /// </summary>
+    public long ResilienceRemainingMilliseconds { get; init; }
+    public int ReservationGameplayKeyToken { get; init; }
+    public bool ReservedGameplayKeyPhysicallyDown { get; init; }
+}
 
 public readonly record struct MiracleCleanseFollowupState(
     MiracleCleanseFollowupPhase Phase,
@@ -115,6 +128,9 @@ public readonly record struct MiracleCleanseFollowupState(
     ImmutableArray<MiracleCleanseFollowupSignalKey> ObservedSignals,
     long LastObservedAtMilliseconds)
 {
+    public int GameplayKeyToken { get; init; }
+    public long ExpectedProtectionEndAtMilliseconds { get; init; } = -1;
+
     public static MiracleCleanseFollowupState Initial => new(
         MiracleCleanseFollowupPhase.WaitingForSignal,
         null,
@@ -157,15 +173,16 @@ public readonly record struct MiracleCleanseFollowupDecision(
 }
 
 /// <summary>
-/// Pure, opt-in WHM/BRD follow-up policy:
+/// Pure, opt-in WHM/BRD/NIN follow-up policy:
 /// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
-/// 150ms continuous live absence -> one bounded promotion into the existing
+/// one authoritative live absence at/after a validated expected end, or 150ms
+/// continuous early/untimed absence -> one bounded promotion into the existing
 /// reactive-CC dispatcher. Positive fresh total-team pressure is an optional
 /// bonus for simultaneous releases. Known zero and unavailable/stale pressure
 /// are neutral peers and always remain eligible for HP/MP/identity fallback.
 /// The shared dispatcher owns fresh/held input, native
 /// range/LoS, protection checks, input consumption, and the sole action call.
-/// RemainingTime is deliberately absent; release is never predicted.
+/// RemainingTime is only an advisory wake-up hint; live absence is mandatory.
 /// </summary>
 public static class MiracleCleanseFollowupRules
 {
@@ -183,6 +200,7 @@ public static class MiracleCleanseFollowupRules
     public const long ResilienceReleaseWaitMilliseconds = 3_000;
     public const long ResilienceMissingGraceMilliseconds = 150;
     public const long ReleaseOpportunityMilliseconds = 500;
+    public const long MaximumResilienceRemainingMilliseconds = 2_250;
     public const int MaximumObservedSignals = 128;
 
     public static bool IsExactPurifySignal(
@@ -328,6 +346,8 @@ public static class MiracleCleanseFollowupRules
                     ResilienceObservedAtMilliseconds = -1,
                     ResilienceMissingSinceMilliseconds = -1,
                     ReleasedAtMilliseconds = -1,
+                    GameplayKeyToken = 0,
+                    ExpectedProtectionEndAtMilliseconds = -1,
                 };
                 observedNewSignal = true;
             }
@@ -349,6 +369,26 @@ public static class MiracleCleanseFollowupRules
             return Cancelled(
                 StopTracking(state, observation.NowMilliseconds),
                 MiracleCleanseFollowupCancelReason.ResilienceObservationAmbiguous);
+        }
+
+        if (observedNewSignal)
+        {
+            // The exact event frame owns the reservation. A key first pressed
+            // later during Resilience cannot retroactively authorize it.
+            state = state with
+            {
+                GameplayKeyToken = candidate.ReservationGameplayKeyToken > 0 &&
+                                   candidate.ReservedGameplayKeyPhysicallyDown
+                    ? candidate.ReservationGameplayKeyToken
+                    : 0,
+            };
+        }
+
+        if (state.GameplayKeyToken > 0 && !candidate.ReservedGameplayKeyPhysicallyDown)
+        {
+            return Cancelled(
+                StopTracking(state, observation.NowMilliseconds),
+                MiracleCleanseFollowupCancelReason.ReservationKeyReleased);
         }
 
         return state.Phase switch
@@ -411,6 +451,10 @@ public static class MiracleCleanseFollowupRules
                 ResiliencePresenceObserved = true,
                 ResilienceObservedAtMilliseconds = nowMilliseconds,
                 ResilienceMissingSinceMilliseconds = -1,
+                ExpectedProtectionEndAtMilliseconds = UpdateExpectedProtectionEnd(
+                    state.ExpectedProtectionEndAtMilliseconds,
+                    candidate.ResilienceRemainingMilliseconds,
+                    nowMilliseconds),
             },
             MiracleCleanseFollowupDecisionKind.ResilienceObserved,
             MiracleCleanseFollowupCancelReason.None);
@@ -447,7 +491,26 @@ public static class MiracleCleanseFollowupRules
         {
             // The same status ID returning inside the grace is conservatively
             // treated as uninterrupted presence, irrespective of slot movement.
-            return Waiting(state with { ResilienceMissingSinceMilliseconds = -1 });
+            return Waiting(state with
+            {
+                ResilienceMissingSinceMilliseconds = -1,
+                ExpectedProtectionEndAtMilliseconds = UpdateExpectedProtectionEnd(
+                    state.ExpectedProtectionEndAtMilliseconds,
+                    candidate.ResilienceRemainingMilliseconds,
+                    observation.NowMilliseconds),
+            });
+        }
+
+        if (state.ExpectedProtectionEndAtMilliseconds > 0 &&
+            observation.NowMilliseconds >= state.ExpectedProtectionEndAtMilliseconds)
+        {
+            var predictedRelease = state with
+            {
+                Phase = MiracleCleanseFollowupPhase.ReleaseOpportunity,
+                ResilienceMissingSinceMilliseconds = observation.NowMilliseconds,
+                ReleasedAtMilliseconds = observation.NowMilliseconds,
+            };
+            return ObserveReleaseOpportunity(predictedRelease, candidate, observation);
         }
 
         if (state.ResilienceMissingSinceMilliseconds < 0)
@@ -518,7 +581,11 @@ public static class MiracleCleanseFollowupRules
 
         var intent = new MiracleCleanseFollowupIntent(
             signal,
-            state.ReleasedAtMilliseconds);
+            state.ReleasedAtMilliseconds)
+        {
+            GameplayKeyToken = state.GameplayKeyToken,
+            ExpectedProtectionEndAtMilliseconds = state.ExpectedProtectionEndAtMilliseconds,
+        };
         if (!intent.IsValid)
         {
             return Cancelled(
@@ -580,8 +647,30 @@ public static class MiracleCleanseFollowupRules
             ResilienceObservedAtMilliseconds = -1,
             ResilienceMissingSinceMilliseconds = -1,
             ReleasedAtMilliseconds = -1,
+            GameplayKeyToken = 0,
+            ExpectedProtectionEndAtMilliseconds = -1,
             LastObservedAtMilliseconds = nowMilliseconds,
         };
+
+    private static long UpdateExpectedProtectionEnd(
+        long currentExpectedEndMilliseconds,
+        long remainingMilliseconds,
+        long nowMilliseconds)
+    {
+        if (remainingMilliseconds <= 0 ||
+            remainingMilliseconds > MaximumResilienceRemainingMilliseconds ||
+            nowMilliseconds < 0)
+        {
+            return currentExpectedEndMilliseconds;
+        }
+
+        var observedEnd = nowMilliseconds > long.MaxValue - remainingMilliseconds
+            ? long.MaxValue
+            : nowMilliseconds + remainingMilliseconds;
+        return currentExpectedEndMilliseconds > 0
+            ? Math.Min(currentExpectedEndMilliseconds, observedEnd)
+            : observedEnd;
+    }
 
     private static ImmutableArray<MiracleCleanseFollowupSignalKey> AddBounded(
         ImmutableArray<MiracleCleanseFollowupSignalKey> signals,

@@ -743,8 +743,10 @@ public sealed class Plugin : IDalamudPlugin
                     $"seen/armed/reject={miracle.RecognizedThreatCount}/{miracle.ArmedThreatCount}/" +
                     $"{miracle.RejectedThreatCount},wait[p/r/k]={miracle.ProtectionWaitCount}/" +
                     $"{miracle.RangeWaitCount}/{miracle.NoInputWaitCount}," +
-                    $"priority={miracle.PriorityWaitCount},expired={miracle.ExpiredThreatCount}," +
-                    $"landed={miracle.ConfirmedLandingCount},confirm-q={miracle.ConfirmationQueueDepth}," +
+                     $"priority={miracle.PriorityWaitCount},expired={miracle.ExpiredThreatCount}," +
+                     $"reservation={miracle.ProtectionEndReservedKey}/" +
+                     $"{miracle.ProtectionEndExpectedRemainingMilliseconds}ms," +
+                     $"landed={miracle.ConfirmedLandingCount},confirm-q={miracle.ConfirmationQueueDepth}," +
                     $"confirm-capture={miracle.CapturedConfirmationCount}," +
                     $"confirm-drop={miracle.DroppedConfirmationCount}," +
                     $"last={miracle.LastEvent},last-op={miracle.LastOpportunity}," +

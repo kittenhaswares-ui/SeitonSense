@@ -663,9 +663,7 @@ internal sealed class OverlayRenderer
         var iconMax = iconMin + new Vector2(iconSize);
         if (!TryDrawGameIcon(
                 draw,
-                popup.ActionId == EnemyCombatConstants.SilentNocturneActionId
-                    ? EnemyCombatConstants.SilentNocturneActionIconId
-                    : EnemyCombatConstants.MiracleOfNatureActionIconId,
+                MiracleInterceptActionIconId(popup.ActionId),
                 iconMin,
                 iconMax,
                 1f))
@@ -695,9 +693,13 @@ internal sealed class OverlayRenderer
     private static string MiracleInterceptConfirmationSubtitle(
         MiracleInterceptConfirmationPopup popup)
     {
-        var action = popup.ActionId == EnemyCombatConstants.SilentNocturneActionId
-            ? "SILENCE"
-            : "MIRACLE";
+        var action = popup.ActionId switch
+        {
+            EnemyCombatConstants.SilentNocturneActionId => "SILENCE",
+            EnemyCombatConstants.ForkedRaijuActionId or
+            EnemyCombatConstants.FleetingRaijuActionId => "STUN",
+            _ => "MIRACLE",
+        };
         return popup.Threat switch
         {
             MiracleInterceptThreatKind.MarksmanSpite => $"{action}  •  MCH LB START",
@@ -711,6 +713,17 @@ internal sealed class OverlayRenderer
             _ => action,
         };
     }
+
+    private static uint MiracleInterceptActionIconId(uint actionId) => actionId switch
+    {
+        EnemyCombatConstants.SilentNocturneActionId =>
+            EnemyCombatConstants.SilentNocturneActionIconId,
+        EnemyCombatConstants.ForkedRaijuActionId =>
+            EnemyCombatConstants.ForkedRaijuActionIconId,
+        EnemyCombatConstants.FleetingRaijuActionId =>
+            EnemyCombatConstants.FleetingRaijuActionIconId,
+        _ => EnemyCombatConstants.MiracleOfNatureActionIconId,
+    };
 
     private static string PurifyStatusLabel(uint statusId) =>
         statusId switch

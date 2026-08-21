@@ -9,6 +9,7 @@ $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $sourceRoot = Join-Path $resolvedRoot 'src'
 $pluginServicesRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\Services'
 $pluginUiRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\UI'
+$overlayRendererPath = Join-Path $pluginUiRoot 'OverlayRenderer.cs'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
 $coreSelfTestRoot = Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest'
 $autoLowMpFocusTargetServicePath = Join-Path $pluginServicesRoot 'AutoLowMpFocusTargetService.cs'
@@ -1072,7 +1073,7 @@ if ([regex]::Matches($pluginSource, '\bnew\s+DarkKnightShadowbringerMacroService
 
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
-# one exact WHM/BRD reactive-CC boundary, one exact default-off NIN Seiton
+# one exact WHM/BRD/NIN reactive-CC boundary, one exact default-off NIN Seiton
 # boundary, one exact default-off SCH Critical Strategy boundary, one exact
 # Eukrasia-triggered SGE Smart Kardia boundary, one exact self-only Smart
 # Recuperate boundary, one exact default-off Monk Earth's Reply call, and one
@@ -2004,7 +2005,7 @@ if ([regex]::Matches($mchCapture, '\bConcurrentQueue<MiracleInterceptLandedEffec
 $normalizedMiracleConfirmationCapture = $normalizedMchCapture
 if ($normalizedMiracleConfirmationCapture -notmatch 'casterEntityId != localEntityId.*?header->NumTargets is 0 or > MaximumTargetsPerAction.*?var expectedStatus = MiracleInterceptConfirmationRules\.ExpectedStatusForAction\(actionId\); if \(expectedStatus == 0\) return null;.*?targetEntityId == localEntityId.*?for \(var slot = 0; slot < EffectSlotsPerTarget; slot\+\+\).*?effect\.Type != MiracleInterceptConfirmationRules\.AddStatusEffectType \|\| effect\.Value != expectedStatus.*?return new MiracleInterceptLandedEffect' -or
     $normalizedMiracleConfirmationCapture -notmatch 'confirmation\.CasterEntityId != CurrentMiracleInterceptLocalEntityId.*?confirmation\.FeatureGeneration != CurrentMiracleInterceptGeneration.*?!IsNetworkEntityId\(confirmation\.TargetEntityId\).*?if \(depth > MaximumQueuedMiracleInterceptConfirmations\).*?pendingMiracleInterceptConfirmations\.Enqueue\(confirmation\)') {
-    throw 'Reactive-CC landing capture must require the exact local caster, a non-self network target, an action-specific WHM/BRD status, and AddStatus 0x0E before bounded enqueue.'
+    throw 'Reactive-CC landing capture must require the exact local caster, a non-self network target, an action-specific WHM/BRD/NIN status, and AddStatus 0x0E before bounded enqueue.'
 }
 if ($normalizedMchCapture -notmatch 'MiracleInterceptRules\.ClassifyExactStartSignal\( actionId, casterEntityId, targetEntityId, header->NumTargets, targetEffects\[0\]\.Type, IsEmpty\(targetEffects\[0\]\), HasOnlyEmptyAdditionalEffects\(targetEffects\), header->AnimationVariation\)' -or
     $normalizedMchCapture -notmatch 'for \(var index = 1; index < effects\.Length; index\+\+\).*?!IsEmpty\(effects\[index\]\)') {
@@ -2078,6 +2079,7 @@ Assert-Literals $miracleCleanseFollowupRules @(
     'ResilienceReleaseWaitMilliseconds = 3_000',
     'ResilienceMissingGraceMilliseconds = 150',
     'ReleaseOpportunityMilliseconds = 500',
+    'MaximumResilienceRemainingMilliseconds = 2_250',
     'MaximumObservedSignals = 128',
     'MiracleCleanseFollowupSignalLedger',
     'RetiredSignals',
@@ -2091,6 +2093,12 @@ Assert-Literals $miracleCleanseFollowupRules @(
     'ResiliencePresenceObserved',
     'ResilienceObservedAtMilliseconds',
     'ResilienceMissingSinceMilliseconds',
+    'ResilienceRemainingMilliseconds',
+    'ReservationGameplayKeyToken',
+    'ReservedGameplayKeyPhysicallyDown',
+    'GameplayKeyToken',
+    'ExpectedProtectionEndAtMilliseconds',
+    'ReservationKeyReleased = 15',
     'TeamTargetCountKnown',
     'TeamTargetCount',
     'HigherPriorityClaimed',
@@ -2107,12 +2115,17 @@ if ($normalizedMiracleCleanseFollowupRules -notmatch 'IsExactPurifySignal\(.*?Is
     throw 'The follow-up must bind one exact self-Purify recovery from exactly six reviewed CC statuses to one unchanged exact canonical actor.'
 }
 if ($normalizedMiracleCleanseFollowupRules -notmatch 'if \(age >= ResilienceAcquisitionMilliseconds\).*?ResilienceNotObserved.*?if \(candidate\.ActiveResilienceStatusCount == 0\).*?SignalObserved.*?Waiting.*?Phase = MiracleCleanseFollowupPhase\.WaitingForResilienceEnd, ResiliencePresenceObserved = true, ResilienceObservedAtMilliseconds = nowMilliseconds' -or
-    $normalizedMiracleCleanseFollowupRules -notmatch 'if \(!state\.ResiliencePresenceObserved \|\| state\.ResilienceObservedAtMilliseconds < 0\).*?if \(candidate\.ActiveResilienceStatusCount == 1\).*?ResilienceMissingSinceMilliseconds = -1.*?if \(state\.ResilienceMissingSinceMilliseconds < 0\).*?ResilienceMissingSinceMilliseconds = observation\.NowMilliseconds.*?if \(missingAge < ResilienceMissingGraceMilliseconds\) return Waiting\(state\);.*?Phase = MiracleCleanseFollowupPhase\.ReleaseOpportunity') {
-    throw 'Resilience must be positively observed within 750 ms before 150 ms of continuous live absence can open a release opportunity.'
+    $normalizedMiracleCleanseFollowupRules -notmatch 'if \(!state\.ResiliencePresenceObserved \|\| state\.ResilienceObservedAtMilliseconds < 0\).*?if \(candidate\.ActiveResilienceStatusCount == 1\).*?ResilienceMissingSinceMilliseconds = -1.*?ExpectedProtectionEndAtMilliseconds = UpdateExpectedProtectionEnd\(.*?if \(state\.ExpectedProtectionEndAtMilliseconds > 0 && observation\.NowMilliseconds >= state\.ExpectedProtectionEndAtMilliseconds\).*?Phase = MiracleCleanseFollowupPhase\.ReleaseOpportunity.*?ObserveReleaseOpportunity\(predictedRelease, candidate, observation\).*?if \(state\.ResilienceMissingSinceMilliseconds < 0\).*?ResilienceMissingSinceMilliseconds = observation\.NowMilliseconds.*?if \(missingAge < ResilienceMissingGraceMilliseconds\) return Waiting\(state\);.*?Phase = MiracleCleanseFollowupPhase\.ReleaseOpportunity') {
+    throw 'Resilience must be positively observed within 750 ms; live presence stays authoritative, while only an actual absent sample at a bounded expected end may skip the 150-ms anti-flicker grace.'
 }
 if ($normalizedMiracleCleanseFollowupRules -notmatch 'var age = observation\.NowMilliseconds - state\.ResilienceObservedAtMilliseconds; if \(age < 0\).*?ClockMovedBackwards.*?if \(age >= ResilienceReleaseWaitMilliseconds\).*?ResilienceReleaseTimedOut.*?if \(candidate\.ActiveResilienceStatusCount == 1\)' -or
     $normalizedMiracleCleanseFollowupRules -notmatch 'var releaseAge = observation\.NowMilliseconds - state\.ReleasedAtMilliseconds;.*?if \(releaseAge >= ReleaseOpportunityMilliseconds\).*?ReleaseOpportunityExpired.*?if \(observation\.HigherPriorityClaimed\) return Waiting\(state\);.*?new MiracleCleanseFollowupIntent\( signal, state\.ReleasedAtMilliseconds\).*?StopTracking\(state, observation\.NowMilliseconds\).*?ReadyForPromotion.*?intent') {
-    throw 'The 3-second hard Resilience deadline, positive 3248 observation, 150-ms stable absence, and unextended 500-ms opportunity must remain; helper priority may wait, but pressure is ranking data rather than a promotion gate.'
+    throw 'The 3-second hard Resilience deadline, positive 3248 observation, bounded advisory end, actual absence, and unextended 500-ms opportunity must remain; helper priority may wait, but pressure is ranking data rather than a promotion gate.'
+}
+if ($normalizedMiracleCleanseFollowupRules -notmatch 'if \(observedNewSignal\).*?GameplayKeyToken = candidate\.ReservationGameplayKeyToken > 0 && candidate\.ReservedGameplayKeyPhysicallyDown \? candidate\.ReservationGameplayKeyToken : 0.*?if \(state\.GameplayKeyToken > 0 && !candidate\.ReservedGameplayKeyPhysicallyDown\).*?StopTracking\(state, observation\.NowMilliseconds\).*?MiracleCleanseFollowupCancelReason\.ReservationKeyReleased' -or
+    [regex]::Matches($miracleCleanseFollowupRules, 'GameplayKeyToken\s*=\s*candidate\.ReservationGameplayKeyToken').Count -ne 1 -or
+    $normalizedMiracleCleanseFollowupRules -notmatch 'private static long UpdateExpectedProtectionEnd\(.*?remainingMilliseconds <= 0 \|\| remainingMilliseconds > MaximumResilienceRemainingMilliseconds \|\| nowMilliseconds < 0.*?return currentExpectedEndMilliseconds;.*?nowMilliseconds > long\.MaxValue - remainingMilliseconds \? long\.MaxValue : nowMilliseconds \+ remainingMilliseconds; return currentExpectedEndMilliseconds > 0 \? Math\.Min\(currentExpectedEndMilliseconds, observedEnd\) : observedEnd;') {
+    throw 'Post-Purify must snapshot one exact eligible key only on the event frame, terminally cancel on that generation release, and accept only a bounded non-extending duration hint.'
 }
 if ($miracleCleanseFollowupRules -match '\b(HasExactTeamFocus|RequiredTeamTargetCount)\b' -or
     $normalizedMiracleCleanseFollowupRules -match 'TeamTargetCount\s*>=\s*[12]\b') {
@@ -2121,8 +2134,8 @@ if ($miracleCleanseFollowupRules -match '\b(HasExactTeamFocus|RequiredTeamTarget
 if ($normalizedMiracleCleanseFollowupRules -notmatch 'RetireValidatedSignal\( MiracleCleanseFollowupSignalLedger previous, MiracleCleanseFollowupSignalKey signal\).*?IsExactPurifySignal\(.*?\|\| retired\.Contains\(signal\).*?IsNewValidatedSignal: false.*?var skip = Math\.Max\(0, retired\.Length - MaximumObservedSignals \+ 1\);.*?retired\.Skip\(skip\)\.Append\(signal\)\.ToImmutableArray\(\).*?IsNewValidatedSignal: true') {
     throw 'Every already-validated exact Purify packet must enter one bounded terminal ledger before mutable canonical resolution, so an unresolved first observation cannot retry through a duplicate.'
 }
-if ($miracleCleanseFollowupRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|StatusAddress|StatusInstanceToken)\b|\bstatus\.[A-Za-z_]*Address\b|\bstatus\.RemainingTime\b') {
-    throw 'Pure post-Purify rules must never dispatch, mutate targets/input, use a status address, or predict release from RemainingTime.'
+if ($miracleCleanseFollowupRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|StatusAddress|StatusInstanceToken|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\bstatus\.[A-Za-z_]*Address\b') {
+    throw 'Pure post-Purify rules must never dispatch, mutate targets/input, inspect native status storage, or own a runtime clock/timer.'
 }
 
 $miracleGuardFollowupRules = Read-RequiredSource $miracleGuardFollowupRulesPath 'Reactive CC post-Guard follow-up rules'
@@ -2131,15 +2144,22 @@ Assert-Literals $miracleGuardFollowupRules @(
     'GuardStatusId = 3_054',
     'GuardStatusAlternateId = 3_673',
     'ReleaseOpportunityMilliseconds = 500',
+    'MaximumGuardRemainingMilliseconds = 4_250',
     'WaitingForGuard',
     'GuardPresent',
     'ReleaseOpportunity',
+    'RetiredUntilGuardAbsent',
     'EnemySlotRules.IsValidSlot(EnemySlot)',
     'MiracleGuardFollowupRules.IsValidEntityId(EntityId)',
     'ActiveGuardStatusCount is 0 or 1',
     'TeamTargetCountKnown',
     '(!TeamTargetCountKnown || TeamTargetCount >= 0)',
     'HasTrustedMp',
+    'GuardRemainingMilliseconds',
+    'ReservationGameplayKeyToken',
+    'ReservedGameplayKeyPhysicallyDown',
+    'GameplayKeyToken',
+    'ExpectedProtectionEndAtMilliseconds',
     'MaximumMp == CombatFrameRules.ExpectedMaximumMp',
     'RankCandidate',
     'previous.Phase == MiracleGuardFollowupPhase.GuardPresent',
@@ -2153,16 +2173,29 @@ Assert-Literals $miracleGuardFollowupRules @(
     'MiracleGuardFollowupActorState.Waiting(actor.Target)',
     'public bool ShouldPromote'
 ) 'Exact positive-presence first-absence post-Guard one-shot policy'
-if ($normalizedMiracleGuardFollowupRules -notmatch 'if \(guardPresent\).*?previous\.Phase != MiracleGuardFollowupPhase\.GuardPresent.*?MiracleGuardFollowupPhase\.GuardPresent.*?if \(previous\.Phase == MiracleGuardFollowupPhase\.GuardPresent\).*?Phase = MiracleGuardFollowupPhase\.ReleaseOpportunity, ReleasedAtMilliseconds = nowMilliseconds' -or
+if ($normalizedMiracleGuardFollowupRules -notmatch 'if \(guardPresent\).*?var firstPresence = previous\.Phase != MiracleGuardFollowupPhase\.GuardPresent;.*?var keyToken = firstPresence \? candidate\.ReservationGameplayKeyToken > 0 && candidate\.ReservedGameplayKeyPhysicallyDown \? candidate\.ReservationGameplayKeyToken : 0 : previous\.GameplayKeyToken;.*?MiracleGuardFollowupPhase\.GuardPresent, firstPresence \? nowMilliseconds : previous\.GuardObservedAtMilliseconds.*?GameplayKeyToken = keyToken.*?UpdateExpectedProtectionEnd\( firstPresence \? -1 : previous\.ExpectedProtectionEndAtMilliseconds, candidate\.GuardRemainingMilliseconds, nowMilliseconds\).*?if \(previous\.Phase == MiracleGuardFollowupPhase\.GuardPresent\).*?Phase = MiracleGuardFollowupPhase\.ReleaseOpportunity, ReleasedAtMilliseconds = nowMilliseconds' -or
     $normalizedMiracleGuardFollowupRules -notmatch 'releaseReady.*?IsInsideReleaseWindow\(pair\.Actor, observation\.NowMilliseconds\).*?if \(observation\.HigherPriorityClaimed\).*?OrderBy\(static pair => pair\.Candidate, ProtectionEndRankComparer\.Instance\).*?FirstOrDefault\(\)' -or
     $normalizedMiracleGuardFollowupRules -notmatch 'retiredActors = state\.Actors.*?actor\.Phase == MiracleGuardFollowupPhase\.ReleaseOpportunity \? MiracleGuardFollowupActorState\.Waiting\(actor\.Target\).*?ReadyForPromotion') {
-    throw 'Post-Guard must arm only from exact positive Guard presence, release on the first later absent observation, use the common pressure/HP/trusted-MP/identity rank, and retire every same-frame release before promotion.'
+    throw 'Post-Guard must snapshot one key/epoch on first exact positive Guard presence, release on the first later authoritative absent observation, use the common rank, and retire every same-frame release before promotion.'
+}
+if ($normalizedMiracleGuardFollowupRules -notmatch 'public bool IsValid => Target\.IsValid && ReleasedAtMilliseconds >= 0 && GameplayKeyToken > 0' -or
+    $normalizedMiracleGuardFollowupRules -notmatch 'var selected = releaseReady \.Where\(static pair => pair\.Actor\.GameplayKeyToken > 0\) \.OrderBy\(static pair => pair\.Candidate, ProtectionEndRankComparer\.Instance\) \.FirstOrDefault\(\);') {
+    throw 'A Guard release without the exact key generation frozen on first presence must remain observation-only and can never win promotion.'
+}
+if ($normalizedMiracleGuardFollowupRules -notmatch 'if \(previous\.GameplayKeyToken > 0 && !candidate\.ReservedGameplayKeyPhysicallyDown\).*?guardPresent \? previous with.*?Phase = MiracleGuardFollowupPhase\.RetiredUntilGuardAbsent.*?GameplayKeyToken = 0.*?MiracleGuardFollowupActorState\.Waiting\(candidate\.Target\).*?if \(previous\.Phase == MiracleGuardFollowupPhase\.RetiredUntilGuardAbsent\).*?guardPresent \? previous : MiracleGuardFollowupActorState\.Waiting\(candidate\.Target\)' -or
+    $normalizedMiracleGuardFollowupRules -notmatch 'previousBySlot\.Values.*?actor\.Phase is MiracleGuardFollowupPhase\.GuardPresent or MiracleGuardFollowupPhase\.RetiredUntilGuardAbsent.*?!candidates\.ContainsKey\(actor\.Target\.EnemySlot\).*?ShouldRetainUncertainActor.*?retained\.Phase == MiracleGuardFollowupPhase\.GuardPresent \? retained with.*?Phase = MiracleGuardFollowupPhase\.RetiredUntilGuardAbsent.*?GameplayKeyToken = 0.*?: retained' -or
+    $normalizedMiracleGuardFollowupRules -notmatch 'private static bool ShouldRetainUncertainActor\(.*?if \(observedCandidates is null \|\| observedCandidates\.Count == 0\) return true;.*?if \(sameSlot\.Length == 0\) return true;.*?if \(sameIdentity\.Length == 0\) return false;.*?if \(sameIdentity\.Length != 1 \|\| !sameIdentity\[0\]\.IsExactCanonicalEnemy\).*?return true;.*?return sameIdentity\[0\]\.IsAliveAndTargetable && sameIdentity\[0\]\.CurrentHp > 0;') {
+    throw 'A released or telemetry-ambiguous Guard reservation must become a tombstone through unknown samples; only proven identity/life loss drops it, and exact Guard absence separates a later episode.'
+}
+if ($normalizedMiracleGuardFollowupRules -notmatch 'private static long UpdateExpectedProtectionEnd\(.*?remainingMilliseconds <= 0 \|\| remainingMilliseconds > MaximumGuardRemainingMilliseconds \|\| nowMilliseconds < 0.*?return currentExpectedEndMilliseconds;.*?return currentExpectedEndMilliseconds > 0 \? Math\.Min\(currentExpectedEndMilliseconds, observedEnd\) : observedEnd;' -or
+    $normalizedMiracleGuardFollowupRules -match 'if \([^)]*ExpectedProtectionEndAtMilliseconds') {
+    throw 'Guard RemainingTime must remain only a bounded, non-extending diagnostic/wake-up hint and may never delay or authorize the first real absence edge.'
 }
 if ($miracleGuardFollowupRules -match '\b(HasExactTeamFocus|RequiredTeamTargetCount)\b' -or
     $normalizedMiracleGuardFollowupRules -match 'TeamTargetCount\s*>=\s*[12]\b' -or
     $miracleGuardFollowupRules -match '\b(ResilienceMissingGraceMilliseconds|MissingGrace|150)\b' -or
-    $miracleGuardFollowupRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|StatusAddress|StatusInstanceToken)\b|\bstatus\.[A-Za-z_]*Address\b|\bstatus\.RemainingTime\b') {
-    throw 'Pure post-Guard rules must have no pressure minimum or 150-ms absence grace and must never dispatch, mutate targets/input, or inspect native status storage/timers.'
+    $miracleGuardFollowupRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|StatusAddress|StatusInstanceToken|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\bstatus\.[A-Za-z_]*Address\b') {
+    throw 'Pure post-Guard rules must have no pressure minimum or 150-ms absence grace and must never dispatch, mutate targets/input, inspect native status storage, or own a runtime clock/timer.'
 }
 
 $miracleProtectionEndRules = Read-RequiredSource $miracleProtectionEndRulesPath 'Shared protection-end consent and ranking rules'
@@ -2211,6 +2244,9 @@ $miracleCleanseTestMethods = @(
     'TeamPressureHasNoMinimumAndUnknownRemainsEligible',
     'IdentityAmbiguityAndConcurrencyFailClosed',
     'IndependentEnemySlotsKeepDistinctPurifyEpisodes',
+    'ExpectedEndUsesFirstAuthoritativeAbsentFrame',
+    'InvalidExpectedEndKeepsAbsenceGrace',
+    'ReservedKeyReleaseTerminallyCancelsEpisode',
     'PromotionKindLabelsConfirmationWithoutBroadeningStartRules'
 )
 foreach ($method in $miracleCleanseTestMethods) {
@@ -2223,7 +2259,9 @@ $miracleGuardTestMethods = @(
     'PressureHasNoMinimumAndPriorityWaitsInsideOriginalWindow',
     'SimultaneousReleaseUsesPositivePressureBonusThenFallbacks',
     'IdentityLifeAndStatusAmbiguityBreakTheEpisode',
-    'ConfigurationContextClockAndHardResetClearAllEpisodes'
+    'ConfigurationContextClockAndHardResetClearAllEpisodes',
+    'ReservationSnapshotsFirstPresenceAndAllowsEarlyGuardCancel',
+    'ReservedKeyReleaseRetiresGuardEpisode'
 )
 foreach ($method in $miracleGuardTestMethods) {
     Assert-Literals $miracleGuardFollowupSelfTests @("internal static void $method()") "Post-Guard self-test $method"
@@ -2232,23 +2270,23 @@ foreach ($method in $miracleGuardTestMethods) {
 $miracleProtectionEndTestMethods = @(
     'HeldConsentRequiresOneExactUnconsumedGeneration',
     'RankingUsesPositivePressureBonusThenHealthMpAndIdentity',
-    'WhiteMageAndBardShareProtectionEndSemantics',
+    'WhiteMageBardAndNinjaShareProtectionEndSemantics',
     'HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound'
 )
 foreach ($method in $miracleProtectionEndTestMethods) {
     Assert-Literals $miracleProtectionEndSelfTests @("internal static void $method()") "Protection-end self-test $method"
     Assert-Literals $miracleGuardProgram @("MiracleProtectionEndSelfTests.$method") "Protection-end test registration $method"
 }
-if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 10 -or
-    [regex]::Matches($miracleGuardProgram, '\bMiracleCleanseFollowupSelfTests\.\w+').Count -ne 10 -or
-    [regex]::Matches($miracleGuardFollowupSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '\bMiracleGuardFollowupSelfTests\.\w+').Count -ne 6) {
-    throw 'All ten post-Purify and six post-Guard lifecycle tests must remain registered exactly once.'
+if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 13 -or
+    [regex]::Matches($miracleGuardProgram, '\bMiracleCleanseFollowupSelfTests\.\w+').Count -ne 13 -or
+    [regex]::Matches($miracleGuardFollowupSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($miracleGuardProgram, '\bMiracleGuardFollowupSelfTests\.\w+').Count -ne 8) {
+    throw 'All thirteen post-Purify and eight post-Guard lifecycle tests must remain registered exactly once.'
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 342) {
-    throw 'All four shared protection-end tests and the exact 342-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 348) {
+    throw 'All four shared protection-end tests and the exact 348-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -2260,8 +2298,18 @@ Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first exact slot keeps its own release episode',
     'second exact slot keeps its own release episode',
     'first distinct slot can yield one candidate',
-    'second distinct slot can yield one candidate'
-) 'Focused post-Purify unknown/known-zero pressure, independent-slot, and bounded episode coverage'
+    'second distinct slot can yield one candidate',
+    'validated expected end is absolute',
+    'expected time alone never authorizes through live Resilience',
+    'later key cannot replace frozen consent',
+    'first live absence after expected end promotes immediately',
+    'actual absence remains release authority',
+    'implausible duration is not trusted',
+    'untimed first absence retains anti-flicker grace',
+    'one observed release terminally cancels the reservation',
+    're-press or alternate key cannot resurrect retired signal',
+    'a later key cannot retroactively reserve the Purify episode'
+) 'Focused post-Purify rank, event-key snapshot, advisory timing, release, and bounded episode coverage'
 Assert-Literals $miracleGuardFollowupSelfTests @(
     'absence without prior exact presence cannot arm',
     'first verified absent framework frame promotes immediately',
@@ -2278,9 +2326,22 @@ Assert-Literals $miracleGuardFollowupSelfTests @(
     'other ready opportunity is spent',
     'retired opportunity cannot dispatch on a later frame',
     'same slot with changed life identity cannot release',
-    'duplicate Guard rows are not absence proof',
-    'shared landing confirmation accepts the post-Guard label without a removed status'
-) 'Focused post-Guard no-synthetic-arm, immediate release, arbitration, identity, expiry, and confirmation coverage'
+    'duplicate Guard rows retire without becoming absence proof or allowing rearm',
+    'shared landing confirmation accepts the post-Guard label without a removed status',
+    'first Guard frame owns the episode epoch',
+    'Guard duration becomes an advisory absolute end',
+    'continued Guard cannot restart the epoch',
+    'later telemetry cannot extend the hint',
+    'manual Guard cancel releases on its first authoritative absent frame',
+    'timer never delays early Guard cancel',
+    'observed key release terminally retires the Guard reservation',
+    'alternate key cannot resurrect the same uninterrupted Guard',
+    'an ambiguous frame cannot erase the retired-until-absence tombstone',
+    'same Guard cannot rearm after an ambiguous telemetry gap',
+    'separation after retirement cannot promote the old Guard episode',
+    'a later Guard after real absence may begin a distinct episode',
+    'a later key cannot retroactively reserve Guard'
+) 'Focused post-Guard first-presence snapshot, advisory timing, early release, tombstone, arbitration, identity, expiry, and confirmation coverage'
 Assert-Literals $miracleProtectionEndSelfTests @(
     'raw physical level cannot invent consent',
     'one shared unconsumed eligible token acquires consent',
@@ -2377,14 +2438,16 @@ Assert-Literals $emergencyInputCoordinator @(
     'ninjaSeitonHeldEnabled',
     'ninjaSeitonHeldWasEnabled',
     'IsGameplayKeyPhysicallyDown(VirtualKey key)',
+    'IsGameplayKeyGenerationEligible(VirtualKey key)',
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
 ) 'Shared physical-hold input ownership for Purify > reactive CC > Ally Rescue > PLD Guardian > NIN > SCH > DRK Plunge > Smart Recuperate > generic Guard > pressure Sprint'
 if ($normalizedEmergencyInputCoordinator -notmatch 'internal bool FreshGameplayKeyPressed => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.FreshGameplayKeyPressed;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool HeldGameplayKeyEligible => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.HeldGameplayKeyEligible;' -or
-    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;') {
-    throw 'The shared frame must expose fresh/held gameplay keys only while that exact generation remains unconsumed and must own the physical-key revalidation used by protection-end consent.'
+    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;' -or
+    $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyGenerationEligible\(VirtualKey key\) => Snapshot\.ProbeSucceeded && !Snapshot\.IsTextInputActive && probe\?\.IsGameplayKeyGenerationEligible\(key\) == true;') {
+    throw 'The shared frame must expose fresh/held gameplay keys only while that exact generation remains unconsumed, retain a separate physical-level observation, and revalidate exact generation eligibility with text input closed.'
 }
 if ($emergencyInputCoordinator -match '\bsmartKardiaHeld(?:Enabled|WasEnabled)\b') {
     throw 'Accepted-Eukrasia Smart Kardia must not participate in held-key generation tracking.'
@@ -2438,8 +2501,14 @@ Assert-Literals $stableInputProbe @(
     'selectedHeldGameplayKeyStillEligible',
     'selectedHeldMovementKeyStillEligible',
     'selectedHeldGameplayKey = heldKey;',
-    'selectedHeldMovementKey = heldMovementKey;'
+    'selectedHeldMovementKey = heldMovementKey;',
+    'internal bool IsGameplayKeyGenerationEligible(VirtualKey key)',
+    'generation.IsEligible',
+    '!generation.IsConsumed'
 ) 'Runtime stable held-key selection and retention'
+if ($normalizedStableInputProbe -notmatch 'internal bool IsGameplayKeyGenerationEligible\(VirtualKey key\).*?var generation = keyGenerations\[index\]; return generation\.IsPrimed && generation\.IsDown && generation\.IsEligible && !generation\.IsConsumed;') {
+    throw 'Runtime episode reservations must validate the exact observed physical generation, including eligibility and unconsumed state, rather than a raw key-down level.'
+}
 $stableInputReset = [regex]::Match(
     $normalizedStableInputProbe,
     'internal void Reset\(\) \{(?<Body>.*?)\} internal void ConsumeHeldGameplayKeys')
@@ -2455,10 +2524,16 @@ foreach ($method in @($stableInputReset, $stableInputConsume)) {
 }
 foreach ($method in @(
     'StableHoldWinsOverCoincidentFreshTap',
-    'StableSelectionSurvivesMultiFrameActionTap')) {
+    'StableSelectionSurvivesMultiFrameActionTap',
+    'TextInputPoisonsOnlyTheCurrentHold')) {
     Assert-Literals $stablePhysicalKeySelfTests @("public static void $method()") "Stable held-key self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("PhysicalGameplayKeySelfTests.$method") "Stable held-key test registration $method"
 }
+Assert-Literals $stablePhysicalKeySelfTests @(
+    'typing is never a gameplay edge',
+    'typed hold stays blocked after chat closes',
+    'only the later generation is eligible'
+) 'Exact text-input poisoning until physical release'
 
 $purifyBufferRulesForLease = Read-RequiredSource $emergencyPurifyBufferRulesPath 'Purify held-before-fresh rules'
 $allyRescueBufferRulesForLease = Read-RequiredSource $allyRescueBufferRulesPath 'Ally Rescue held-before-fresh rules'
@@ -2473,7 +2548,7 @@ if ($normalizedPurifyBufferRulesForLease -notmatch 'if \(observation\.AllowHeldK
     $normalizedAllyRescueBufferRulesForLease -notmatch 'if \(observation\.AllowHeldKeyAtCandidateEntry && observation\.HeldKeyEligible && observation\.HeldGameplayKeyToken > 0\) return AllyRescueInputTrigger\.HeldKeyAtCandidateEntry; if \(observation\.FreshKeyPressed && observation\.FreshGameplayKeyToken > 0\) return AllyRescueInputTrigger\.FreshKeyPress;' -or
     $normalizedMiracleRulesForLease -notmatch 'if \(observation\.HeldKeyEligible\) return MiracleInterceptInputTrigger\.HeldPhysicalKey; if \(observation\.FreshKeyPressed\) return MiracleInterceptInputTrigger\.FreshKeyPress;' -or
     [regex]::Matches($defensiveUtilityForLease, 'var selectedKey = heldKey != VirtualKey\.NO_KEY \? heldKey : freshKey;').Count -ne 2 -or
-    $normalizedMiracleProbeForLease -notmatch 'TryGetLatchedProtectionEndKey.*?else if \(allowHeldGameplayKey && inputFrame\.HeldGameplayKeyEligible\).*?triggerKey = input\.HeldGameplayKey;.*?else if \(inputFrame\.FreshGameplayKeyPressed\).*?triggerKey = input\.FreshGameplayKey;') {
+    $normalizedMiracleProbeForLease -notmatch 'private int ResolveEpisodeGameplayKeyToken\( bool allowHeldGameplayKey, EmergencyActionInputFrame inputFrame\).*?if \(!input\.ProbeSucceeded \|\| input\.IsTextInputActive\) return 0;.*?if \(allowHeldGameplayKey && TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyGenerationEligible\(latchedKey\)\).*?var candidate = allowHeldGameplayKey && input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(candidate\) && inputFrame\.IsGameplayKeyGenerationEligible\(candidate\)') {
     throw 'Purify, Ally Rescue, reactive CC, Guard, and Guardian must evaluate their stable held lease before any coincident fresh-key fallback.'
 }
 Assert-Literals $coreSelfTestProgramForGuardian @(
@@ -2956,6 +3031,11 @@ Assert-Literals $personalStatus @(
     'var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||',
     'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled'
 ) 'Guard-independent persistent physical held-input observation gates'
+if ($normalizedPersonalStatus -notmatch 'miracleIntercept = new MiracleInterceptProbe\( objectTable, nearAssist\.VerifiedCcBrakeActionIds, nearAssist\.VerifiedCcBrakeStatusIds, executeTracker, pressureTracker, nearAssist, machinistLimitBreakCapture, log, metadata\);' -or
+    $normalizedPersonalStatus -notmatch 'var isAllyRescueJob = localJobId is EnemyCombatConstants\.WhiteMageJobId or EnemyCombatConstants\.BardJobId; var isNinja = ExecuteThreshold\.IsNinja\(localJobId\); var isReactiveCcJob = isAllyRescueJob \|\| isNinja;' -or
+    $normalizedPersonalStatus -notmatch 'var reactiveCcActionMetadataVerified = \(localJobId == EnemyCombatConstants\.WhiteMageJobId && metadata\.MiracleOfNatureActionVerified\) \|\| \(localJobId == EnemyCombatConstants\.BardJobId && metadata\.SilentNocturneVerified\) \|\| \(localJobId == EnemyCombatConstants\.NinjaJobId && nearAssist\.VerifiedCcBrakeActionIds\.Contains\( EnemyCombatConstants\.ForkedRaijuActionId\) && nearAssist\.VerifiedCcBrakeActionIds\.Contains\( EnemyCombatConstants\.FleetingRaijuActionId\)\);.*?var miracleInterceptHeldInputEnabled = configuration\.Enabled && configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcOnHeldKey && reactiveCcActionMetadataVerified && isCrystallineConflict && isReactiveCcJob;') {
+    throw 'Reactive counter-CC must remain WHM/BRD/NIN-only, pass the verified brake catalogs into runtime, and require both Raiju metadata rows with AND before NIN held observation can arm.'
+}
 $persistentHeldGateBlock = [regex]::Match(
     $normalizedPersonalStatus,
     'var purifyHeldInputEnabled =(?<Body>.*?)var emergencyInputFrame = emergencyInput\.Observe')
@@ -3314,7 +3394,7 @@ if ($allyRescueSelection -match '\b(HeavyStatusId|BindStatusId)\b|\b1344\b|\b134
 $miracleIntercept = Read-RequiredSource $miracleInterceptProbePath 'Miracle intercept probe'
 $normalizedMiracleIntercept = $miracleIntercept -replace '\s+', ' '
 if ([regex]::Matches($miracleIntercept, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
-    throw 'Reactive CC must contain exactly one native UseAction call shared by WHM and BRD.'
+    throw 'Reactive CC must contain exactly one native UseAction call shared by WHM, BRD, and NIN.'
 }
 Assert-Literals $miracleIntercept @(
     'MiracleInterceptRules.GetThreatLifetimeMilliseconds(kind)',
@@ -3331,9 +3411,13 @@ Assert-Literals $miracleIntercept @(
     'isCrystallineConflict',
     'EnemyCombatConstants.WhiteMageJobId',
     'EnemyCombatConstants.BardJobId',
+    'EnemyCombatConstants.NinjaJobId',
     'EnemyCombatConstants.DancerJobId',
     'EnemyCombatConstants.MiracleOfNatureActionId',
     'EnemyCombatConstants.SilentNocturneActionId',
+    'EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId',
+    'EnemyCombatConstants.ForkedRaijuActionId',
+    'EnemyCombatConstants.FleetingRaijuActionId',
     'EnemyCombatConstants.ContradanceActionId',
     'signal.LocalEntityId != localPlayer.EntityId',
     'EnemyCombatConstants.MachinistJobId',
@@ -3387,9 +3471,10 @@ Assert-Literals $miracleIntercept @(
     'ClearCleanseFollowupStates()',
     'ResolveCleanseFollowupCandidate(',
     'CountActiveStatuses(',
-    'inputFrame.FreshGameplayKeyPressed',
-    'inputFrame.HeldGameplayKeyEligible',
+    'input.FreshGameplayKeyPressed',
+    'input.HeldGameplayKeyEligible',
     'inputFrame.IsGameplayKeyPhysicallyDown(',
+    'inputFrame.IsGameplayKeyGenerationEligible(',
     'ObserveProtectionEndHeldConsent(',
     'MiracleProtectionEndRules.ObserveHeldConsent(',
     'protectionEndJobChanged',
@@ -3438,32 +3523,33 @@ Assert-Literals $miracleIntercept @(
     'ProtectionEndRankMpKnown',
     'ProtectionEndRankCurrentMp',
     'ProtectionEndRankMaximumMp'
-) 'Bounded exact-target WHM/BRD reactive-CC protection-end runtime'
+) 'Bounded exact-target WHM/BRD/NIN reactive-CC reservation runtime'
 if ($normalizedMiracleIntercept -notmatch 'counterActionId = ResolveCounterActionId\( localJobId, miracleMetadataVerified, silentNocturneMetadataVerified\); var protectionMetadataReady = RequiredProtectionStatusIds\(counterActionId\)\.All\( verifiedProtectionStatusIds\.Contains\); var enabled = configurationEnabled && isCrystallineConflict && localIdentityValid && counterActionId != 0 && protectionMetadataReady;' -or
-    $normalizedMiracleIntercept -notmatch 'var contradanceEnabled = enableContradance && contradanceMetadataVerified; var cleanseSignals = DrainThreats\( localPlayer!, marksmanSpiteEnabled, zantetsukenEnabled, furiousBacklashEnabled, contradanceEnabled, cleanseFollowupEnabled, nowMilliseconds\)' -or
+    $normalizedMiracleIntercept -notmatch 'var contradanceEnabled = enableContradance && contradanceMetadataVerified; var cleanseSignals = DrainThreats\( localPlayer!, marksmanSpiteEnabled, zantetsukenEnabled, furiousBacklashEnabled, contradanceEnabled, cleanseFollowupEnabled, nowMilliseconds, episodeGameplayKeyToken\)' -or
     $miracleIntercept -match '\bShowCcProtection\b') {
-    throw 'Reactive CC must require exact WHM/BRD action metadata, its action-specific blocker metadata, and each independently verified threat before arming.'
+    throw 'Reactive CC must require exact WHM/BRD/NIN action-family metadata, its action-specific blocker metadata, one event-owned key generation, and each independently verified threat before arming.'
 }
 if ($normalizedMiracleIntercept -notmatch 'var cleanseFollowupEnabled = enabled && enablePostPurifyCrowdControl && purifyMetadataVerified;' -or
     $normalizedMiracleIntercept -notmatch 'capture\.SetMiracleCleanseFollowupLocalEntityId\( cleanseFollowupEnabled && localAlive \? localPlayer!\.EntityId : 0\)') {
-    throw 'Post-Purify CC capture must remain separately gated by its toggle, verified Purify metadata, live WHM/BRD identity, and CC-only master.'
+    throw 'Post-Purify CC capture must remain separately gated by its toggle, verified Purify metadata, live WHM/BRD/NIN identity, and CC-only master.'
 }
 if ($normalizedMiracleIntercept -notmatch 'var guardFollowupEnabled = enabled && enablePostGuardCrowdControl && verifiedProtectionStatusIds\.Contains\( MiracleGuardFollowupRules\.GuardStatusId\) && verifiedProtectionStatusIds\.Contains\( MiracleGuardFollowupRules\.GuardStatusAlternateId\);' -or
     $normalizedMiracleIntercept -notmatch 'var protectionEndFollowupEnabled = cleanseFollowupEnabled \|\| guardFollowupEnabled; var protectionEndJobChanged = protectionEndFollowupEnabled && protectionEndLocalJobId != 0 && protectionEndLocalJobId != localJobId; if \(protectionEndJobChanged\).*?inputFrame\.Consume\(\);.*?activeThreat = null;.*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?ClearProtectionEndDiagnostics\(\);.*?protectionEndLocalJobId = protectionEndFollowupEnabled \? localJobId : 0;') {
-    throw 'Both protection-end subtypes must be separately metadata-gated and a local WHM/BRD job change must retire shared input, active work, all Purify/Guard episodes, consent, and rank diagnostics.'
+    throw 'Both protection-end subtypes must be separately metadata-gated and a local WHM/BRD/NIN job change must retire shared input, active work, all Purify/Guard episodes, consent, and rank diagnostics.'
 }
-if ($normalizedMiracleIntercept -notmatch 'ObserveProtectionEndHeldConsent\( allowHeldGameplayKey && localAlive && \(cleanseFollowupEnabled \|\| guardFollowupEnabled\), dispatchAllowed, inputFrame, hardReset \|\| protectionEndJobChanged\);' -or
-    $normalizedMiracleIntercept -notmatch 'var latchedKeyPhysicallyDown = TryGetLatchedProtectionEndKey\(out var previousKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(previousKey\); var eligibleKey = VirtualKey\.NO_KEY; if \(enabled && dispatchAllowed && !input\.IsTextInputActive\).*?inputFrame\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : inputFrame\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(observedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(observedKey\).*?MiracleProtectionEndRules\.ObserveHeldConsent\( protectionEndHeldConsent, new MiracleProtectionEndHeldConsentObservation\( enabled, input\.IsTextInputActive, eligibleKey == VirtualKey\.NO_KEY \? 0 : \(int\)eligibleKey, latchedKeyPhysicallyDown, hardReset\)\)' -or
-    $normalizedMiracleIntercept -notmatch 'if \(isProtectionEndThreat && TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(latchedKey\)\).*?triggerKey = latchedKey;.*?else if \(allowHeldGameplayKey && inputFrame\.HeldGameplayKeyEligible\).*?triggerKey = input\.HeldGameplayKey;.*?else if \(inputFrame\.FreshGameplayKeyPressed\).*?triggerKey = input\.FreshGameplayKey;' -or
+if ($normalizedMiracleIntercept -notmatch 'ObserveProtectionEndHeldConsent\( allowHeldGameplayKey && localAlive && \(cleanseFollowupEnabled \|\| guardFollowupEnabled\), inputFrame, hardReset \|\| protectionEndJobChanged\);' -or
+    $normalizedMiracleIntercept -notmatch 'var latchedKeyPhysicallyDown = TryGetLatchedProtectionEndKey\(out var previousKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(previousKey\); var eligibleKey = VirtualKey\.NO_KEY; if \(enabled && !input\.IsTextInputActive\).*?input\.ProbeSucceeded && input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.ProbeSucceeded && input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(observedKey\) && inputFrame\.IsGameplayKeyPhysicallyDown\(observedKey\).*?MiracleProtectionEndRules\.ObserveHeldConsent\( protectionEndHeldConsent, new MiracleProtectionEndHeldConsentObservation\( enabled, input\.IsTextInputActive, eligibleKey == VirtualKey\.NO_KEY \? 0 : \(int\)eligibleKey, latchedKeyPhysicallyDown, hardReset\)\)' -or
+    $normalizedMiracleIntercept -notmatch 'private int ResolveEpisodeGameplayKeyToken\(.*?!input\.ProbeSucceeded \|\| input\.IsTextInputActive.*?TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyGenerationEligible\(latchedKey\).*?input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY; return IsExactVirtualKey\(candidate\) && inputFrame\.IsGameplayKeyGenerationEligible\(candidate\)' -or
+    $normalizedMiracleIntercept -notmatch 'private static bool IsReservedGameplayKeyPhysicallyDown\(.*?IsExactVirtualKey\(key\) && inputFrame\.IsGameplayKeyGenerationEligible\(key\)' -or
     $normalizedMiracleProtectionEndRules -notmatch 'public static bool DispatchConsumesHeldConsent\(MiracleInterceptThreatKind threat\) => false;') {
-    throw 'Protection-end consent must originate only from an unconsumed shared held/fresh eligible exact physical key with held priority, persist by that exact key level, and remain available across distinct startup and protection-end episodes while the same physical hold remains valid.'
+    throw 'Protection-end pre-arm may observe the immutable raw frame despite a same-frame Purify claim, but every episode must snapshot and retain only the exact eligible, unconsumed, non-chat-poisoned key generation.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(!enabled\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);' -or
     $normalizedMiracleIntercept -notmatch 'private void ResetRuntime\(\).*?activeThreat = null;.*?ClearCleanseFollowupStates\(\);.*?guardFollowupState = MiracleGuardFollowupState\.Initial;.*?protectionEndLocalJobId = 0;.*?ClearProtectionEndDiagnostics\(\);') {
     throw 'Configuration/context/action-metadata failure, own Guard via the coordinator gate, death, job change, and hard reset must clear protection-end episodes, exact held consent, and frozen rank state.'
 }
-if ($normalizedMiracleIntercept -notmatch 'var followupPromotions = new List<MiracleFollowupPromotion>\(2\); foreach \(var cleanseSignal in cleanseSignals\).*?ObserveCleanseFollowup\(.*?trackedSlot: null\).*?foreach \(var cleanseSlot in cleanseFollowupStates\.Keys\.Order\(\)\.ToArray\(\)\).*?ObserveCleanseFollowup\(.*?cleanseSlot\).*?ObserveGuardFollowup\(.*?if \(activeThreat is null && followupPromotions\.Count > 0\).*?var selected = SelectFollowupPromotion\(followupPromotions\); activeThreat = selected\.Threat; protectionEndLastRank = selected\.Rank;.*?foreach \(var retired in followupPromotions\).*?if \(retired == selected\) continue;.*?rejectedThreatCount' -or
+if ($normalizedMiracleIntercept -notmatch 'var followupPromotions = new List<MiracleFollowupPromotion>\(2\); foreach \(var cleanseSignal in cleanseSignals\).*?ObserveCleanseFollowup\(.*?trackedSlot: null, inputFrame, episodeGameplayKeyToken\).*?foreach \(var cleanseSlot in cleanseFollowupStates\.Keys\.Order\(\)\.ToArray\(\)\).*?ObserveCleanseFollowup\(.*?cleanseSlot, inputFrame, episodeGameplayKeyToken\).*?ObserveGuardFollowup\(.*?inputFrame, episodeGameplayKeyToken\).*?if \(activeThreat is null && followupPromotions\.Count > 0\).*?var selected = SelectFollowupPromotion\(followupPromotions\); activeThreat = selected\.Threat; protectionEndLastRank = selected\.Rank;.*?foreach \(var retired in followupPromotions\).*?if \(retired == selected\) continue;.*?rejectedThreatCount' -or
     $normalizedMiracleIntercept -notmatch 'private static MiracleFollowupPromotion SelectFollowupPromotion\(.*?var selected = promotions\[0\];.*?for \(var index = 1; index < promotions\.Count; index\+\+\).*?CompareFollowupPromotions\(promotions\[index\], selected\) < 0.*?return selected;.*?MiracleProtectionEndRules\.Compare\(left\.Rank, right\.Rank\)') {
     throw 'All independently tracked Purify slots and the Guard release set must enter one common rank pass, arm exactly one winner, and terminally retire every simultaneous loser without fallback.'
 }
@@ -3476,6 +3562,13 @@ if ($normalizedMiracleIntercept -notmatch 'var cleanseSignalKey = new MiracleCle
     $normalizedMiracleIntercept -notmatch 'cleanseSignals\.Add\(new MiracleCleanseFollowupSignal\( cleanseSignalKey, new MiracleCleanseFollowupTargetIdentity') {
     throw 'Runtime must commit a validated Purify signal to the bounded terminal ledger before canonical actor lookup; only the first exact packet may proceed and unresolved duplicates can never arm later.'
 }
+if ($normalizedMiracleIntercept -notmatch 'var immediateThreats = new List<MiracleThreatState>\(\); while \(capture\.TryDequeueMiracleInterceptThreat\(out var signal\)\).*?if \(episodeGameplayKeyToken <= 0\).*?no exact held key reserved on capture.*?immediateThreats\.Add\(new MiracleThreatState\(.*?GameplayKeyToken: episodeGameplayKeyToken\)\);.*?if \(activeThreat is null && immediateThreats\.Count > 0\).*?OrderByDescending\(static threat => MiracleInterceptRules\.GetDispatchPriority\(threat\.Kind\)\).*?ThenBy\(static threat => threat\.ObservedAtMilliseconds\).*?ThenBy\(static threat => threat\.EnemySlot\).*?ThenBy\(static threat => threat\.GameObjectId\).*?First\(\); activeThreat = selected;.*?foreach \(var retired in immediateThreats\).*?if \(retired == selected\) continue;.*?rejectedThreatCount' -or
+    $normalizedMiracleInterceptRules -notmatch 'MarksmanSpite or MiracleInterceptThreatKind\.Zantetsuken or MiracleInterceptThreatKind\.FuriousBacklash => 3, MiracleInterceptThreatKind\.Contradance => 2, MiracleInterceptThreatKind\.PostPurifyCrowdControl or MiracleInterceptThreatKind\.PostGuardCrowdControl => 1') {
+    throw 'All urgent events drained together must first freeze their exact event key/actor/action data, then select one deterministic priority winner via GetDispatchPriority; every simultaneous loser is terminal.'
+}
+if ($normalizedMiracleIntercept -notmatch 'if \(activeThreat is not \{ \} threat\).*?var input = inputFrame\.Snapshot; var triggerKey = threat\.GameplayKeyToken > 0 \? \(VirtualKey\)threat\.GameplayKeyToken : VirtualKey\.NO_KEY; if \(!IsExactVirtualKey\(triggerKey\) \|\| !inputFrame\.IsGameplayKeyGenerationEligible\(triggerKey\)\).*?activeThreat = null;.*?if \(!dispatchAllowed\)') {
+    throw 'An active reactive-CC reservation must terminally validate its exact eligible key generation before yielding to a higher-priority same-frame claim.'
+}
 $enemyHudSnapshot = Read-RequiredSource (Join-Path $pluginServicesRoot 'EnemyHudSnapshot.cs') 'Enemy HUD rank snapshot'
 $executeTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'ExecuteTracker.cs') 'Enemy HUD tracker'
 $normalizedExecuteTracker = $executeTracker -replace '\s+', ' '
@@ -3487,9 +3580,9 @@ if ($normalizedExecuteTracker -notmatch 'var exactMpIdentityPreviouslyTrusted = 
 if ($normalizedMiracleIntercept -notmatch 'private IPlayerCharacter\? ResolveCleanseFollowupCandidate\( IPlayerCharacter localPlayer, MiracleCleanseFollowupTargetIdentity target\).*?enemy\.GameObjectId == target\.GameObjectId && enemy\.EntityId == target\.EntityId && enemy\.JobId == target\.JobId.*?Take\(2\).*?if \(canonical\.Length != 1\) return null;.*?player\.GameObjectId == target\.GameObjectId && player\.EntityId == target\.EntityId && player\.GameObjectId != localPlayer\.GameObjectId && player\.ClassJob\.IsValid && player\.ClassJob\.RowId == target\.JobId.*?Take\(2\).*?return players\.Length == 1 && IsLivePlayer\(players\[0\]\) && HasValidNativeIdentity\(players\[0\]\)') {
     throw 'Post-Purify status observation must resolve exactly one unchanged canonical e1-e5 and exactly one matching live native player actor.'
 }
-if ($normalizedMiracleIntercept -notmatch 'var blockerFamily = BlockerFamilyForAction\(threat\.CounterActionId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate, blockerFamily\); var guardReappeared = threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl && CountActiveGuardStatuses\(candidate\) != 0;.*?var otherProtection = \(anyProtection && !hardenedScales\) \|\| guardReappeared;.*?var rangeAndLineOfSight = HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, candidate\); var structurallyReady = HasStructuralActionReadiness\(threat\.CounterActionId\); var exactIntentCanProgress = !hardenedScales && !otherProtection && rangeAndLineOfSight && structurallyReady; var globallyQueueReady = exactIntentCanProgress && HasGlobalQueueReadiness\( localPlayer!, threat\.CounterActionId\);' -or
-    $normalizedMiracleIntercept -notmatch 'var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated, blockerFamily\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && IsExactVirtualKey\(triggerKey\) && threat\.GameplayKeyToken == \(int\)triggerKey && inputFrame\.IsGameplayKeyPhysicallyDown\(triggerKey\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\.Kind\); var finalValidationPassed = revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedGuardAbsent && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow;') {
-    throw 'Reactive CC must freeze and finally revalidate counter action/local job, exact actor/life, action-specific blockers, post-Guard absence, range/LoS, exact physical key, and the strict original window before every bounded native call.'
+if ($normalizedMiracleIntercept -notmatch 'var blockerFamily = BlockerFamilyForAction\(threat\.CounterActionId\); var anyProtection = HasAnyVerifiedCcProtection\(candidate, blockerFamily\); var guardReappeared = threat\.Kind == MiracleInterceptThreatKind\.PostGuardCrowdControl && CountActiveGuardStatuses\(candidate\) != 0;.*?var otherProtection = \(anyProtection && !hardenedScales\) \|\| guardReappeared;.*?var rangeAndLineOfSight = HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, candidate\); var structurallyReady = HasStructuralActionReadiness\(localPlayer!, threat\.CounterActionId\); var exactIntentCanProgress = !hardenedScales && !otherProtection && rangeAndLineOfSight && structurallyReady; var globallyQueueReady = exactIntentCanProgress && HasGlobalQueueReadiness\( localPlayer!, threat\.CounterActionId\);' -or
+    $normalizedMiracleIntercept -notmatch 'var revalidatedProtection = revalidated is not null && HasAnyVerifiedCcProtection\(revalidated, blockerFamily\); var revalidatedGuardAbsent = revalidated is not null && \(threat\.Kind != MiracleInterceptThreatKind\.PostGuardCrowdControl \|\| CountActiveGuardStatuses\(revalidated\) == 0\);.*?var revalidatedRange = revalidated is not null && HasActionRangeAndLineOfSight\( threat\.CounterActionId, localPlayer!, revalidated\);.*?var revalidatedActionIdentity = threat\.CounterActionId == counterActionId && threat\.LocalJobId == revalidatedLocalJobId; var revalidatedInput = !input\.IsTextInputActive && IsExactVirtualKey\(triggerKey\) && threat\.GameplayKeyToken == \(int\)triggerKey && inputFrame\.IsGameplayKeyGenerationEligible\(triggerKey\); var revalidatedInsideWindow = revalidationNow >= threat\.ObservedAtMilliseconds && revalidationNow - threat\.ObservedAtMilliseconds < ThreatLifetime\(threat\.Kind\); var finalValidationPassed = revalidated is not null && !revalidatedHardened && !revalidatedProtection && revalidatedGuardAbsent && revalidatedRange && revalidatedActionIdentity && revalidatedInput && revalidatedInsideWindow;') {
+    throw 'Reactive CC must freeze and finally revalidate counter action/local job, exact actor/life, action-specific blockers, post-Guard absence, range/LoS, exact eligible key generation, and the strict original window before every bounded native call.'
 }
 if ($normalizedMiracleIntercept -notmatch 'return pressureTracker\.TryGetFreshTeamTargetCount\( new TargetPressureActorIdentity\(localPlayer\.GameObjectId, localPlayer\.EntityId\), new TargetPressureActorIdentity\(candidate\.GameObjectId, candidate\.EntityId\), nowMilliseconds, MaximumTeamPressureAgeMilliseconds, out teamTargetCount\);' -or
     $normalizedMiracleIntercept -notmatch 'teamTargetCountKnown = TryGetFreshTeamTargetCount\( localPlayer, player, nowMilliseconds, out cleanseFollowupTeamPressure\);.*?new MiracleProtectionEndRankCandidate\( MiracleInterceptThreatKind\.PostPurifyCrowdControl, canonical\.Slot, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, teamTargetCountKnown, cleanseFollowupTeamPressure, player\.CurrentHp, player\.MaxHp, canonical\.HasTrustedMp, canonical\.CurrentMp, canonical\.MaxMp\)' -or
@@ -3504,21 +3597,24 @@ if ($miracleIntercept -match '\bGetTargetId\s*\(' -or
     $miracleIntercept -match 'pressureTracker\.GetTeamTargetCount\s*\(') {
     throw 'Post-Purify and post-Guard reactive CC must not require or read the local selected/hard target, nor use the stale raw team-count accessor.'
 }
-if ($normalizedMiracleIntercept -notmatch 'private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates\(.*?executeTracker\.IsActive.*?EnemySlotRules\.IsValidSlot\(enemy\.Slot\).*?ambiguousSlots.*?ambiguousGameObjectIds.*?ambiguousEntityIds.*?ResolveGuardFollowupCandidate\(localPlayer, target\).*?TryGetFreshTeamTargetCount\( localPlayer, player!, nowMilliseconds, out teamTargetCount\).*?CountActiveGuardStatuses\(player!\)' -or
-    $normalizedMiracleIntercept -notmatch 'private static int CountActiveGuardStatuses\(IPlayerCharacter player\).*?MiracleGuardFollowupRules\.IsExactGuardStatus\(status\.StatusId\).*?if \(count > 1\) return count') {
-    throw 'Post-Guard observation must use exact unambiguous S1-S5 identity, stable live actor identity, exact Guard 3054/3673 StatusList presence, and fresh pressure only.'
+if ($normalizedMiracleIntercept -notmatch 'private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates\(.*?executeTracker\.IsActive.*?EnemySlotRules\.IsValidSlot\(enemy\.Slot\).*?ambiguousSlots.*?ambiguousGameObjectIds.*?ambiguousEntityIds.*?ResolveGuardFollowupCandidate\(localPlayer, target\).*?TryGetFreshTeamTargetCount\( localPlayer, player!, nowMilliseconds, out teamTargetCount\).*?CountActiveGuardStatuses\(player!, out guardRemainingMilliseconds\).*?GuardRemainingMilliseconds = live \? guardRemainingMilliseconds : 0.*?ReservationGameplayKeyToken = episodeGameplayKeyToken.*?IsReservedGameplayKeyPhysicallyDown\( ownedGameplayKeyToken, inputFrame\)' -or
+    $normalizedMiracleIntercept -notmatch 'private static int CountActiveGuardStatuses\( IPlayerCharacter player, out long longestRemainingMilliseconds\).*?foreach \(var status in player\.StatusList\).*?MiracleGuardFollowupRules\.IsExactGuardStatus\(status\.StatusId\).*?count\+\+;.*?ValidatedProtectionRemainingMilliseconds\( status\.StatusId, status\.RemainingTime\).*?if \(count > 1\) return count') {
+    throw 'Post-Guard observation must use exact unambiguous S1-S5 identity, exact Guard 3054/3673 live membership, event-owned key generation, and only a bounded advisory duration.'
 }
 if ($normalizedMiracleIntercept -notmatch 'guardFollowupState = decision\.NextState;.*?if \(!decision\.ShouldPromote \|\| decision\.PromotionIntent is not \{ \} promotion\) return null;.*?ResolveCanonicalEnemy\(promotion\.Target\).*?ResolveGuardFollowupCandidate\(localPlayer, promotion\.Target\).*?CountActiveGuardStatuses\(player\) != 0.*?new MiracleProtectionEndRankCandidate\( MiracleInterceptThreatKind\.PostGuardCrowdControl, promotion\.Target\.EnemySlot, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, promotion\.TeamTargetCountKnown, promotion\.TeamTargetCount, promotion\.CurrentHp, promotion\.MaximumHp, promotion\.HasTrustedMp, promotion\.CurrentMp, promotion\.MaximumMp\).*?new MiracleThreatState\( MiracleInterceptThreatKind\.PostGuardCrowdControl, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, promotion\.Target\.EnemySlot, promotion\.ReleasedAtMilliseconds') {
     throw 'Post-Guard promotion must consume Core state first, revalidate the same frozen S-slot/GOID/entity/job actor and exact Guard absence, then carry one immutable common-rank record without reranking or fallback.'
 }
-if ($normalizedMiracleIntercept -notmatch 'activeThreat = new MiracleThreatState\( kind, canonical\.GameObjectId, canonical\.EntityId, canonical\.JobId, canonical\.Slot, signal\.ObservedAtMilliseconds' -or
+if ($normalizedMiracleIntercept -notmatch 'immediateThreats\.Add\(new MiracleThreatState\( kind, canonical\.GameObjectId, canonical\.EntityId, canonical\.JobId, canonical\.Slot, signal\.ObservedAtMilliseconds' -or
     $normalizedMiracleIntercept -notmatch 'new MiracleThreatState\( MiracleInterceptThreatKind\.PostPurifyCrowdControl, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, canonical\.Slot, promotion\.ReleasedAtMilliseconds' -or
     $normalizedMiracleIntercept -notmatch 'private IPlayerCharacter\? ResolveCandidate\(.*?EnemySlotRules\.IsValidSlot\(threat\.EnemySlot\) && enemy\.Slot == threat\.EnemySlot && enemy\.GameObjectId == threat\.GameObjectId && enemy\.EntityId == threat\.EntityId && enemy\.JobId == threat\.JobId.*?player\.GameObjectId == threat\.GameObjectId && player\.EntityId == threat\.EntityId.*?player\.ClassJob\.RowId == threat\.JobId.*?IsLivePlayer\(players\[0\]\) && HasValidNativeIdentity\(players\[0\]\)') {
     throw 'Every reactive-CC arming path must freeze the exact canonical S1-S5 slot with GOID/entity/job, and final resolution must require that same living native identity.'
 }
-if ($normalizedMiracleIntercept -notmatch 'ResolveCounterActionId\(.*?EnemyCombatConstants\.WhiteMageJobId when miracleMetadataVerified => EnemyCombatConstants\.MiracleOfNatureActionId, EnemyCombatConstants\.BardJobId when silentNocturneMetadataVerified => EnemyCombatConstants\.SilentNocturneActionId' -or
+if ($normalizedMiracleIntercept -notmatch 'if \(localJobId == EnemyCombatConstants\.NinjaJobId\).*?!verifiedCounterActionIds\.Contains\( EnemyCombatConstants\.ForkedRaijuActionId\) \|\| !verifiedCounterActionIds\.Contains\( EnemyCombatConstants\.FleetingRaijuActionId\).*?return 0;.*?GetAdjustedActionId\( EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId\).*?IsExactRaijuAction\(adjustedActionId\) && verifiedCounterActionIds\.Contains\(adjustedActionId\) \? adjustedActionId : EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId;.*?EnemyCombatConstants\.WhiteMageJobId when miracleMetadataVerified => EnemyCombatConstants\.MiracleOfNatureActionId, EnemyCombatConstants\.BardJobId when silentNocturneMetadataVerified => EnemyCombatConstants\.SilentNocturneActionId' -or
+    $normalizedMiracleIntercept -notmatch 'private static unsafe bool HasStructuralActionReadiness\( IPlayerCharacter localPlayer, uint actionId\).*?if \(actionId == EnemyCombatConstants\.ForkedRaijuActionId && localPlayer\.StatusList\.Any\(static status => status\.StatusId == EnemyCombatConstants\.SealedForkedRaijuStatusId\)\).*?return false;.*?if \(IsExactRaijuAction\(actionId\) && localPlayer\.StatusList\.Any\(static status => status\.StatusId == EnemyCombatConstants\.PvPBindStatusId\)\).*?return false;.*?IsExactRaijuAction\(actionId\) \? actionManager->GetAdjustedActionId\( EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId\) : actionManager->GetAdjustedActionId\(actionId\); return actionManager != null && adjustedActionId == actionId' -or
+    $normalizedMiracleIntercept -notmatch 'if \(currentLocalJobId == EnemyCombatConstants\.NinjaJobId && threat\.CounterActionId == EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId && IsExactRaijuAction\(counterActionId\)\).*?threat = threat with \{ CounterActionId = counterActionId \}; activeThreat = threat;.*?if \(threat\.CounterActionId == EnemyCombatConstants\.NinjaAeolianEdgeComboCarrierActionId\).*?no exact Raiju variant exposed by the combo carrier' -or
+    $normalizedMiracleIntercept -notmatch 'BlockerFamilyForAction\(uint actionId\) => actionId == EnemyCombatConstants\.MiracleOfNatureActionId \? CcImmunityBrakeBlockerFamily\.Miracle : CcImmunityBrakeBlockerFamily\.StandardPurifyCc;' -or
     $normalizedMiracleIntercept -notmatch 'if \(MiracleInterceptConfirmationRules\.ExpectedStatusForAction\(actionId\) == 0 \|\| !TargetHighlightRules\.IsValidGameObjectId\(targetGameObjectId\)\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\( ActionType\.Action, actionId, targetGameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\)') {
-    throw 'Reactive CC may resolve only WHM 29228 or BRD 29395 and issue that exact action once to the revalidated enemy.'
+    throw 'Reactive CC may resolve only WHM 29228, BRD 29395, or one Raiju variant exposed by exact NIN combo carrier 29500; both NIN metadata rows, StandardPurify blockers, and exact variant identity are mandatory before one direct request.'
 }
 $miracleFrameClaim = [regex]::Match($miracleIntercept, 'inputClaimedThisFrame\s*=\s*true\s*;\s*\r?\n\s*inputFrame\.Consume\s*\(\s*\)\s*;')
 $miracleTryUse = [regex]::Match($miracleIntercept, '\bTryUseCounterCcOnce\s*\(\s*localPlayer!\s*,\s*threat\.CounterActionId\s*,\s*revalidated!\.GameObjectId')
@@ -3541,11 +3637,13 @@ if ([regex]::Matches($miracleIntercept, 'ClientActionAttemptBoundary\.Capture\s*
     $miracleIntercept -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'Reactive CC must use the shared complete native fingerprint and clean-false retry policy, claim global waits/throttle without spending retry budget, and never implement a custom queue or mutate a visible target.'
 }
-if ($miracleIntercept -match '\bstatus\.RemainingTime\b|\bstatus\.[A-Za-z_]*Address\b|\b(StatusAddress|StatusInstanceToken)\b' -or
+if ($miracleIntercept -match '\bstatus\.[A-Za-z_]*Address\b|\b(StatusAddress|StatusInstanceToken)\b|\b(?:Task|Timer|Thread)\b' -or
     $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?verifiedProtectionStatusIds\.Contains\(status\.StatusId\) && CcImmunityBrakeActionCatalog\.IsBlockerStatus\( blockerFamily, status\.StatusId, targetJobId\).*?return true' -or
     $normalizedMiracleIntercept -notmatch 'foreach \(var status in player\.StatusList\).*?status\.StatusId == statusId.*?return true' -or
-    $normalizedMiracleIntercept -notmatch 'private static int CountActiveStatuses\(IPlayerCharacter player, uint statusId\).*?foreach \(var status in player\.StatusList\).*?if \(status\.StatusId != statusId\) continue; count\+\+; if \(count > 1\) return count;') {
-    throw 'Reactive-CC protection and Resilience-release gates must use unambiguous live StatusList membership, never status addresses or RemainingTime prediction.'
+    $normalizedMiracleIntercept -notmatch 'private static int CountActiveStatuses\( IPlayerCharacter player, uint statusId, out long longestRemainingMilliseconds\).*?foreach \(var status in player\.StatusList\).*?if \(status\.StatusId != statusId\) continue; count\+\+;.*?ValidatedProtectionRemainingMilliseconds\( status\.StatusId, status\.RemainingTime\).*?if \(count > 1\) return count;' -or
+    $normalizedMiracleIntercept -notmatch 'private static long ValidatedProtectionRemainingMilliseconds\( uint statusId, float remainingSeconds\).*?!CcProtectionStatusCatalog\.TryGet\(statusId, out var definition\) \|\| !float\.IsFinite\(remainingSeconds\) \|\| remainingSeconds <= 0f \|\| remainingSeconds > definition\.MaximumRemainingTime.*?return 0;.*?Math\.Max\(1L, \(long\)Math\.Ceiling\(\(double\)remainingSeconds \* 1_000d\)\)' -or
+    [regex]::Matches($miracleIntercept, '\bstatus\.RemainingTime\b').Count -ne 2) {
+    throw 'Reactive-CC blockers and release authority must use live StatusList membership. The only two RemainingTime reads feed one finite, positive, catalog-bounded, non-authorizing advisory helper; no status address or owned timer is allowed.'
 }
 
 # The news flash confirms only the exact action-specific counter-CC status add,
@@ -3557,6 +3655,9 @@ Assert-Literals $miracleConfirmationRules @(
     'MiracleOfNatureStatusId = 3_085',
     'SilentNocturneActionId = 29_395',
     'SilenceStatusId = 1_347',
+    'ForkedRaijuActionId = 29_510',
+    'FleetingRaijuActionId = 29_707',
+    'StunStatusId = 1_343',
     'AddStatusEffectType = 0x0E',
     'CorrelationMilliseconds = 1_500',
     'PopupDurationMilliseconds = 1_500',
@@ -3589,9 +3690,40 @@ if ($normalizedMiracleConfirmationRules -notmatch 'observation\.ObservedAtMillis
 if ($miracleConfirmationRules -match '\b(UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
     throw 'Reactive-CC landing confirmation rules must remain observational and never initiate actions, input, or target changes.'
 }
-if ($normalizedMiracleConfirmationRules -notmatch 'ExpectedStatusForAction\(uint actionId\) => actionId switch \{ MiracleOfNatureActionId => MiracleOfNatureStatusId, SilentNocturneActionId => SilenceStatusId, _ => 0, \}' -or
+if ($normalizedMiracleConfirmationRules -notmatch 'ExpectedStatusForAction\(uint actionId\) => actionId switch \{ MiracleOfNatureActionId => MiracleOfNatureStatusId, SilentNocturneActionId => SilenceStatusId, ForkedRaijuActionId or FleetingRaijuActionId => StunStatusId, _ => 0, \}' -or
     $normalizedMiracleConfirmationRules -notmatch 'observation\.ActionId == pending\.ActionId.*?observation\.EffectType == AddStatusEffectType.*?observation\.EffectValue == ExpectedStatusForAction\(pending\.ActionId\)') {
-    throw 'AddStatus 0x0E confirmation must correlate WHM 29228 to 3085 and BRD 29395 to 1347 by the exact attempted action.'
+    throw 'AddStatus 0x0E confirmation must correlate WHM 29228 to 3085, BRD 29395 to 1347, and each exact NIN Raiju 29510/29707 to Stun 1343.'
+}
+$miracleConfirmationSelfTests = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'MiracleInterceptConfirmationSelfTests.cs') 'Reactive-CC confirmation self-tests'
+Assert-Literals $miracleConfirmationSelfTests @(
+    'public static void NinjaRaijuVariantsRequireExactStunStatus()',
+    'MiracleInterceptConfirmationRules.ForkedRaijuActionId',
+    'MiracleInterceptConfirmationRules.FleetingRaijuActionId',
+    'cannot confirm from Silence',
+    'confirms only exact Stun',
+    'popup keeps exact Raiju variant'
+) 'Both exact Raiju/Stun confirmation variants'
+Assert-Literals $miracleGuardProgram @(
+    'MiracleInterceptConfirmationSelfTests.NinjaRaijuVariantsRequireExactStunStatus'
+) 'Raiju confirmation test registration'
+$reactiveCcCombatConstants = Read-RequiredSource (
+    Join-Path $pluginServicesRoot 'EnemyCombatConstants.cs') 'Reactive-CC action/icon constants'
+$reactiveCcOverlayRenderer = Read-RequiredSource $overlayRendererPath 'Reactive-CC landing popup renderer'
+Assert-Literals $reactiveCcCombatConstants @(
+    'NinjaAeolianEdgeComboCarrierActionId = 29500',
+    'ForkedRaijuActionId = 29510',
+    'ForkedRaijuActionIconId = 9656',
+    'SealedForkedRaijuStatusId = 3195',
+    'FleetingRaijuActionId = 29707',
+    'FleetingRaijuActionIconId = 9693',
+    'PvPBindStatusId = 1345',
+    'RaijuRange = 20f'
+) 'Exact NIN combo-carrier, Raiju action, icon, and native-range constants'
+$normalizedReactiveCcOverlayRenderer = $reactiveCcOverlayRenderer -replace '\s+', ' '
+if ($normalizedReactiveCcOverlayRenderer -notmatch 'EnemyCombatConstants\.ForkedRaijuActionId or EnemyCombatConstants\.FleetingRaijuActionId => "STUN"' -or
+    $normalizedReactiveCcOverlayRenderer -notmatch 'EnemyCombatConstants\.ForkedRaijuActionId => EnemyCombatConstants\.ForkedRaijuActionIconId, EnemyCombatConstants\.FleetingRaijuActionId => EnemyCombatConstants\.FleetingRaijuActionIconId') {
+    throw 'Reactive NIN landing presentation must label both exact Raiju variants as STUN and render each variant with its matching game icon.'
 }
 if ($normalizedMiracleConfirmationRules -notmatch 'MiracleInterceptThreatKind\.PostPurifyCrowdControl or MiracleInterceptThreatKind\.PostGuardCrowdControl\) && \(Threat != MiracleInterceptThreatKind\.PostPurifyCrowdControl \|\| MiracleCleanseFollowupRules\.IsPurifyRemovableStatus\(RemovedStatusId\)\)') {
     throw 'Shared landing confirmation must accept post-Guard with no synthetic removed-status requirement while retaining exact removed-status validation for post-Purify.'
@@ -3630,14 +3762,14 @@ if ($miracleDrainConfirmationIndex -lt 0 -or
     $miracleFollowupIndex -le $miracleDrainConfirmationIndex -or
     $miracleNoThreatIndex -le $miracleFollowupIndex -or
     $miracleDispatchGateIndex -le $miracleDrainConfirmationIndex -or
-    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ \} expiringThreat && \(nowMilliseconds < expiringThreat\.ObservedAtMilliseconds \|\| nowMilliseconds - expiringThreat\.ObservedAtMilliseconds >= ThreatLifetime\(expiringThreat\.Kind\)\)\).*?RecordExpired\(expiringThreat\); activeThreat = null;.*?var followupPromotions = new List<MiracleFollowupPromotion>\(2\);.*?ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, activeThreat is not null,.*?ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds\);.*?if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\);.*?if \(!dispatchAllowed\).*?RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\);.*?return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\);' -or
+    $normalizedMiracleIntercept -notmatch 'if \(activeThreat is \{ \} expiringThreat && \(nowMilliseconds < expiringThreat\.ObservedAtMilliseconds \|\| nowMilliseconds - expiringThreat\.ObservedAtMilliseconds >= ThreatLifetime\(expiringThreat\.Kind\)\)\).*?RecordExpired\(expiringThreat\); activeThreat = null;.*?var followupPromotions = new List<MiracleFollowupPromotion>\(2\);.*?ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, activeThreat is not null,.*?ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds, inputFrame, episodeGameplayKeyToken\);.*?if \(activeThreat is not \{ \} threat\) return Publish\("Waiting", "No current exact threat", nowMilliseconds\);.*?if \(!dispatchAllowed\).*?RecordWait\(threat, MiracleWaitReason\.HigherPriorityHelper\);.*?return Publish\("Armed", "Waiting: higher-priority helper claimed this frame", nowMilliseconds\);' -or
     $normalizedMiracleIntercept -notmatch 'if \(!localAlive\).*?if \(confirmationPendingForLocalCaster\) DrainConfirmations\(nowMilliseconds\);.*?"Waiting for exact reactive-CC landing evidence"') {
     throw 'Every Purify/Guard follow-up frame must run before dispatch; urgent/helper priority may only retain the frozen intent inside its bounded lease, while local death must preserve exact pending landing evidence.'
 }
 if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveCleanseFollowup\( localPlayer!, cleanseFollowupEnabled, activeThreat is not null,').Count -ne 2) {
     throw 'Both new-signal and ordinary-frame follow-up observations must remain independent of scheduler-frame ownership while yielding to an already frozen reactive threat.'
 }
-if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds\)').Count -ne 1) {
+if ([regex]::Matches($normalizedMiracleIntercept, 'ObserveGuardFollowup\( localPlayer!, guardFollowupEnabled, activeThreat is not null, nowMilliseconds, inputFrame, episodeGameplayKeyToken\)').Count -ne 1) {
     throw 'The live framework may observe post-Guard release exactly once per frame while yielding only to an already frozen reactive threat.'
 }
 if ($normalizedMiracleIntercept -notmatch 'if \(decision\.NextState\.ActiveSignal is null\) cleanseFollowupStates\.Remove\(enemySlot\); else cleanseFollowupStates\[enemySlot\] = decision\.NextState;.*?if \(!decision\.ShouldPromote \|\| decision\.PromotionIntent is not \{ \} promotion\) return null;.*?new MiracleThreatState\( MiracleInterceptThreatKind\.PostPurifyCrowdControl, promotion\.Target\.GameObjectId, promotion\.Target\.EntityId, promotion\.Target\.JobId, canonical\.Slot, promotion\.ReleasedAtMilliseconds' -or
@@ -3678,8 +3810,9 @@ Assert-Literals $overlaySource @(
     'miracle.ConfirmationPopup is { } miraclePopup && miraclePopup.IsVisible(now)',
     'DrawMiracleInterceptConfirmationCard(',
     '"AUTO CC LANDED"',
-    '? "SILENCE"',
-    ': "MIRACLE"',
+    'EnemyCombatConstants.SilentNocturneActionId => "SILENCE"',
+    'EnemyCombatConstants.FleetingRaijuActionId => "STUN"',
+    '_ => "MIRACLE"',
     ('MiracleInterceptThreatKind.MarksmanSpite => $"{action}  ' + $bullet + '  MCH LB START"'),
     ('MiracleInterceptThreatKind.Zantetsuken => $"{action}  ' + $bullet + '  SAM LB START"'),
     ('MiracleInterceptThreatKind.FuriousBacklash => $"{action}  ' + $bullet + '  VPR NEST START"'),
@@ -4345,8 +4478,9 @@ $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
 if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(isAllyRescueJob && configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| oneShotAllyPressureRequested \|\| \(isBard && configuration\.EnableBardWardensPaeanPressureRedirect\) \|\| \(isPaladin && configuration\.PaladinGuardianLowAlly\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
     throw 'Incoming ally pressure must remain CC-only with exact job gates for Ally Rescue, Smart Paean, and PLD Guardian, plus accepted-Eukrasia one-shot or explicit Near Help pressure.'
 }
-if ($normalizedTargetPressureTracker -notmatch 'configuration\.ShowCombatFrames \|\|.*?configuration\.EnableDefensiveUtilities \|\| \(isReactiveCounterCcJob && configuration\.EnableReactiveCcUtilities && \(configuration\.ReactiveCcAfterEnemyPurify \|\| configuration\.ReactiveCcAfterEnemyGuard\)\) \|\| \(isScholar && configuration\.EnableScholarCriticalStrategyOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark') {
-    throw 'Pressure tracking must remain independently active with exact WHM/BRD job gates for either post-Purify or post-Guard counter-CC and SCH ranking, plus defensive and Attack-1 consumers.'
+if ($normalizedTargetPressureTracker -notmatch 'var isAllyRescueJob = localJobId is EnemyCombatConstants\.WhiteMageJobId or EnemyCombatConstants\.BardJobId; var isReactiveCounterCcJob = isAllyRescueJob \|\| localJobId == EnemyCombatConstants\.NinjaJobId;' -or
+    $normalizedTargetPressureTracker -notmatch 'configuration\.ShowCombatFrames \|\|.*?configuration\.EnableDefensiveUtilities \|\| \(isReactiveCounterCcJob && configuration\.EnableReactiveCcUtilities && \(configuration\.ReactiveCcAfterEnemyPurify \|\| configuration\.ReactiveCcAfterEnemyGuard\)\) \|\| \(isScholar && configuration\.EnableScholarCriticalStrategyOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark') {
+    throw 'Pressure tracking must remain independently active with exact WHM/BRD/NIN job gates for either post-Purify or post-Guard counter-CC and SCH ranking, plus defensive and Attack-1 consumers.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'configuration\.EnableAutoEnemyFocusMark \|\| configuration\.ShowHighPressureWarning \|\| configuration\.PlayHighPressureWarningSound \|\| configuration\.EnablePressureEscapeSprintOnHeldKey;') {
     throw 'Direct pressure tracking must activate independently for each high-pressure visual, FFXIV-system-sound, or held-Sprint option.'
@@ -6807,7 +6941,10 @@ Assert-Literals $settingsWindow @(
     'configuration.ReactiveCcAfterEnemyPurify',
     'After enemy Guard ends: ranked exact release',
     'configuration.ReactiveCcAfterEnemyGuard',
-    'observes real Resilience and waits for its stable disappearance',
+    'observes real Resilience, snapshots the held key and a validated duration',
+    'hint, then still requires real disappearance.',
+    'At or after the expected end, the first absent frame is',
+    'eligible immediately; an early or untimed absence keeps the 150-ms anti-flicker check.',
     'There is no minimum team-pressure count, and distinct S-slots are tracked independently.',
     'only fresh exact team pressure above zero earns a',
     'ranking bonus, highest-first. Zero, unknown, or stale pressure is neutral and never gates a candidate.',
@@ -7277,10 +7414,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.26.0.0</Version>',
-    '<AssemblyVersion>0.26.0.0</AssemblyVersion>',
-    '<FileVersion>0.26.0.0</FileVersion>'
-) 'v0.26.0.0 project version'
+    '<Version>0.27.0.0</Version>',
+    '<AssemblyVersion>0.27.0.0</AssemblyVersion>',
+    '<FileVersion>0.27.0.0</FileVersion>'
+) 'v0.27.0.0 project version'
 Assert-Literals $pluginManifest @(
     'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
@@ -7294,18 +7431,20 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.26.0.0 plugin manifest metadata'
+) 'v0.27.0.0 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.26.0.0"',
-    'Moves every job-specific physical-hold helper into the second priority tier immediately after Purify',
-    'reactive WHM Miracle / BRD Silent Nocturne, Ally Rescue, PLD Guardian, NIN Seiton, SCH Critical Strategy, then DRK Hiebsprung',
-    'Reactive counter-CC leads ally cleanse because its LB and protection-end windows are shorter',
-    'Smart Recuperate and the generic helpers now follow that tier',
-    'only fresh positive pressure as a ranking bonus',
-    'Zero, unknown, or stale pressure is neutral and never gates a candidate',
-    'HP, trusted MP, and stable identity decide the remaining order',
-    'Schema 30 and all existing settings are preserved.'
-) 'v0.26.0.0 repository metadata and exact priority/pressure wording'
+    '"AssemblyVersion": "0.27.0.0"',
+    'Adds event-owned reactive counter-CC reservations',
+    'the exact actor, action, and eligible held-key generation are frozen when an urgent startup, enemy Purify, or enemy Guard is observed',
+    'Validated Resilience/Guard RemainingTime is only a non-extending wake-up hint',
+    'live status absence remains mandatory',
+    'The first absent frame at the expected Resilience end is immediate',
+    'early Guard cancellation remains immediate',
+    'release, text-input poisoning, ambiguity, or identity drift cannot substitute another key or target',
+    'NIN now joins reactive counter-CC with metadata-verified Forked Raiju and Fleeting Raiju resolved through the exact PvP combo carrier at native 20-yalm range',
+    'exact Stun landing confirmation',
+    'Schema 30 and all existing opt-ins are preserved.'
+) 'v0.27.0.0 repository event-reservation, timing, NIN, and schema metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7321,11 +7460,16 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.26.0.0 raises all six job-specific physical-hold helpers into the second priority tier immediately after Purify',
-    'reactive counter-CC, Ally Rescue, PLD Guardian, NIN Seiton, SCH Critical Strategy, and DRK Hiebsprung',
-    'reactive WHM Miracle / BRD Silent Nocturne before ally cleanse because its LB and protection-end windows are shorter',
-    'Fresh positive pressure is now only a ranking bonus for simultaneous post-Purify/post-Guard releases',
-    'zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'Version 0.27.0.0 adds event-owned reactive counter-CC reservations',
+    'an urgent startup, exact enemy Purify, or first enemy Guard presence freezes the eligible physical key, actor, counter action, and episode',
+    'Validated Resilience/Guard duration is only a non-extending wake-up hint',
+    'a real status-list absence is still mandatory',
+    'The first absent frame at the expected Resilience end is immediate',
+    'early Guard cancellation is immediate',
+    'release, typing, ambiguity, or identity drift cannot substitute another key or target',
+    'PvP NIN now joins WHM and BRD with both metadata-verified Forked and Fleeting Raiju variants plus exact Stun landing confirmation',
+    'Purify-first scheduler and six job-specific second-tier order',
+    'optional positive pressure ranking',
     'stable held-key leases across all ten physical-hold helpers',
     '**Experimental held-action cast cancellation:** a separate default-off test',
     'never requests the helper in that same frame, synthesizes movement or Escape, clears the queue, or changes a target',
@@ -7345,10 +7489,37 @@ Assert-Literals $normalizedReadme @(
     'later frame that observes both cast signals clear may run the normal complete helper preflight again',
     'does not synthesize movement or Escape, clear the native action queue, write cast state, or mutate a selected target',
     'Stationary casts and mobile BRD Powerful Shot / MCH Blast Charge still require current-patch live validation',
-    'Configuration schema 30 remains current in v0.26.0.0',
+    'Configuration schema 30 remains current in v0.27.0.0',
     'this release adds no setting or migration',
     'held-action cast-cancellation test is explicitly off for fresh, reset, and migrated configurations'
-) 'v0.26.0.0 priority/pressure plus retained stable held lease, cast-cancel safety, and schema user contract'
+) 'v0.27.0.0 event reservation plus retained scheduler, held lease, cast-cancel, and schema user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.27.0.0',
+    'Added event-owned reservations to reactive counter-CC',
+    'eligible physical key, exact canonical actor, local counter action, and event epoch are frozen when an urgent startup, enemy Purify, or first enemy Guard presence is observed',
+    'A later key cannot inherit that episode',
+    'release, text-input poisoning, identity drift, or ambiguity is terminal with no alternate, target switch, fallback, or replay',
+    'Validated live `RemainingTime` may establish only a non-extending expected Resilience/Guard end',
+    'Real status-list absence remains mandatory',
+    'Post-Purify can use the first authoritative absent frame at or after its expected end',
+    'early or untimed absence keeps the 150-ms anti-flicker proof',
+    'Post-Guard still releases on its first authoritative absent frame, including an early manual cancel',
+    'released Guard reservation stays retired through ambiguous samples until exact absence separates a later Guard episode',
+    'Forked Raiju `29510` and Fleeting Raiju `29707`',
+    'standard Purify-removable protection matrix',
+    'confirmed only by exact Stun `1343` on the frozen enemy',
+    'Both metadata rows must verify before NIN can arm',
+    'PvP Spinning Edge/Aeolian Edge Combo carrier `29500`',
+    'Sealed Forked Raiju status `3195` is active',
+    'both variants wait through exact local Bind `1345`',
+    'MCH/SAM/VPR first, DNC second, protection-end releases third',
+    'stable event time and canonical identity',
+    'Simultaneous losers are terminal',
+    'Reactive observation may remain alive while own Guard suppresses every action request',
+    'Bumped the plugin version to `0.27.0.0`',
+    'Configuration schema remains `30`',
+    'there is no new setting or migration, and all existing opt-ins are preserved'
+) 'v0.27.0.0 event-owned reservation, advisory timing, NIN, arbitration, and schema release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.26.0.0',
     'Raised every job-specific physical-hold helper into the second priority tier, immediately after Purify',
@@ -7401,22 +7572,20 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 30 remains current in v0.26.0.0',
+    'Configuration schema 30 remains current in v0.27.0.0',
     'this release adds no setting or migration',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
-) 'v0.26.0.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
+) 'v0.27.0.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.26.0.0 raises all six job-specific physical-hold helpers into the second priority tier immediately after Purify',
-    'Fresh positive pressure is now only a ranking bonus for simultaneous post-Purify/post-Guard releases',
-    'zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'Version 0.27.0.0 adds event-owned reactive counter-CC reservations',
+    'Reactive startup/Purify/Guard episodes additionally snapshot that eligible generation at their event edge',
+    'no later key or text-poisoned generation can inherit it',
     'stable held-key leases across all ten physical-hold helpers',
     'off native cast-cancellation test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
     'Client acceptance, exceptions, uncertain queue/sequence transitions, key release, context/job/ identity drift, and other ambiguity are terminal',
-    'NIN held consent',
-    'unobscured Limit Break activation',
-    'clearer Combat Frame interaction state',
+    'PvP NIN now joins WHM and BRD',
     'v0.21''s optional Combat Frame interaction and evidence-only Limit Break telemetry',
     '**Fixed Combat Frames:** a separate default-off, Gladius-style screen-space overlay shows one Self frame plus stable canonical `S1`-`S5` enemy rows',
     'current/focus-target accents, exact Self LB, calibrated remote LB, activation countdowns, and direct ally LB damage',
@@ -7487,12 +7656,23 @@ Assert-Literals $normalizedReadme @(
     'current-patch live-confirmation boundaries',
     'uses Wunder der Natur / Miracle of Nature `29228` at native 10-yalm range',
     'BRD it uses Stumme Nocturne / Silent Nocturne `29395` at native 20-yalm range',
-    'positive live Resilience `3248`, and then 150 ms of stable real Resilience absence',
+    'on NIN it resolves the PvP Spinning Edge/Aeolian Edge Combo carrier `29500` to either Forked Raiju `29510` or Fleeting Raiju `29707` at native 20-yalm range',
+    'Both Raiju metadata rows must verify before NIN can arm, and the carrier must expose the exact variant before an action can be requested',
+    'Forked Raiju remains blocked while the exact local Sealed Forked Raiju status `3195` is present',
+    'both variants remain blocked through exact local Bind `1345`',
+    'positive live Resilience `3248`',
+    'On the Purify observation it snapshots the eligible physical key generation, exact actor, action, and a validated bounded `RemainingTime` hint',
+    'Live Resilience membership remains authoritative',
+    'first real absent frame at or after the non-extending expected end is eligible immediately',
+    'an early or untimed absence still needs 150 ms of continuous proof',
     'dispatches directly to that actor; it neither requires nor changes the selected target',
     'There is no minimum team-pressure count',
     'Post-Purify state is tracked independently for each canonical `S1`-`S5` slot',
     'exact Guard `3054` or `3673` to be observed present on one canonical `S1`-`S5` actor',
+    'Its first exact presence snapshots the eligible key, actor, action, episode, and bounded non-extending duration hint',
     'The first verified framework observation that finds Guard absent',
+    'including an early manual Guard cancel',
+    'A released key retires that same uninterrupted Guard through unknown or ambiguous samples until real absence separates a later episode',
     'uses the frozen actor directly at the job-specific native range and line of sight',
     'without requiring or switching the selected target, choosing an alternate action/actor, or replaying',
     'Only an explicit client rejection may retry that same frozen intent under the common bound',
@@ -7501,9 +7681,13 @@ Assert-Literals $normalizedReadme @(
     'Lowest HP ratio follows, then lowest trusted MP ratio and stable `S1`-`S5` identity',
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
     'A continuously held eligible gameplay key keeps consent for the selected frozen episode and may also authorize a later distinct episode',
+    'A key not eligible at the event edge cannot be added later',
+    'opening text input poisons that exact generation until release',
     'Only an explicit client rejection may retry the same intent under the common bound; acceptance or ambiguity is terminal',
+    'Plugin-owned Miracle, Silent Nocturne, and Raiju requests still pass through the final action-specific CC-immunity brake immediately before the native call',
+    'Stun `1343` for either NIN Raiju variant',
     'post-Guard defaults on only behind the disabled reactive-counter master'
-) 'v0.26.0.0 held scheduler plus retained Combat Frames/LB/Hiebsprung and prior helper user contract'
+) 'v0.27.0.0 event-owned reactive-CC plus retained Combat Frames/LB/Hiebsprung and prior helper user contract'
 Assert-Literals $normalizedReadme @(
     '## Sage Smart Kardia after accepted Eukrasia',
     'separate **Smart Kardia after accepted Eukrasia** experiment is disabled by default',
@@ -7818,14 +8002,14 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 30 remains current in v0.26.0.0; this release adds no setting or migration',
+    'Configuration schema 30 remains current in v0.27.0.0; this release adds no setting or migration',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
     'Every other existing master/helper choice is preserved',
     'Fresh and reset configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-helper masters off',
     'post-Guard defaults on only behind the disabled reactive-counter master',
     'Older configurations still traverse the earlier migrations first'
-) 'v0.26.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus unchanged schema-30 disclosure'
+) 'v0.27.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus unchanged schema-30 disclosure'
 Assert-Literals $normalizedPrivacy @(
     'When its separate interaction option is enabled, Combat Frames may set one freshly revalidated living enemy row as the hard target on click and publish that exact actor to FFXIV''s two native mouseover slots only while hovered',
     'ownership-checked cleanup never overwrites an external replacement',
@@ -7911,21 +8095,31 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 30 remains current in v0.26.0.0; this release adds no'
+    'Configuration schema 30 remains current in v0.27.0.0; this release adds no'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
     'One framework frame permits at most one held-helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
-) 'v0.26.0.0 exact action-request priority privacy disclosure'
+) 'v0.27.0.0 exact action-request priority privacy disclosure'
 Assert-Literals $normalizedPrivacy @(
+    '## Experimental WHM/BRD/NIN reactive counter-CC',
+    'NIN is enabled only when both metadata-verified Forked Raiju `29510` and Fleeting Raiju `29707` rows are available',
     'optional post-Purify path recognizes only exact enemy self-Purify `29056`',
-    'requires positive live Resilience `3248`, waits for 150 ms of stable real absence',
-    'freezes that exact actor and dispatches directly to it without requiring or changing the selected target',
+    'requires positive live Resilience `3248`',
+    'On the exact Purify observation it freezes the eligible physical key generation, actor, local counter action, and event epoch',
+    'finite, positive, catalog-bounded `RemainingTime` may establish only a non-extending expected end',
+    'live status-list membership remains authoritative',
+    'first real absent frame at or after that end is eligible immediately',
+    'early or untimed absence still requires 150 ms of continuous proof',
+    'dispatches directly to the frozen actor without requiring or changing the selected target',
     'There is no minimum team-pressure count',
     'at most one active post-Purify state per canonical `S1`-`S5` slot plus a bounded deduplication set',
     'optional post-Guard path observes only exact Guard `3054` or `3673` present on one live canonical `S1`-`S5` enemy',
+    'Its first exact presence freezes the eligible physical key generation, actor, local action, Guard epoch, and the same kind of bounded non-extending duration hint',
     'first verified framework observation that finds Guard absent',
+    'including an early manual Guard cancel',
+    'Key release retires that same uninterrupted Guard through missing or ambiguous samples until exact absence separates a later episode',
     'with no minimum team-pressure count',
     'Only a fresh exact pressure count above zero earns a ranking bonus, with higher positive counts first',
     'Known zero, unknown, or stale pressure is neutral and never excludes or delays a candidate',
@@ -7934,13 +8128,22 @@ Assert-Literals $normalizedPrivacy @(
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
     'One continuous hold can authorize later distinct startup or protection-end episodes',
     'each selected episode remains one frozen intent and no simultaneous loser can follow it',
+    'PvP Spinning Edge/Aeolian Edge Combo carrier `29500`',
+    'metadata-verified Forked Raiju `29510` or Fleeting Raiju `29707`',
+    'standard Purify-removable protection matrix',
+    'Sealed Forked Raiju status `3195` to be absent',
+    'both variants require exact local Bind `1345` to be absent',
+    'eligible key is snapshotted at the startup, Purify, or first Guard-presence edge',
+    'a later key cannot inherit that episode',
+    'text input poisons the exact generation until real release',
     'uses only the common bounded same-intent retry',
     'never requires or switches the selected target, chooses an alternate action/actor, or replays input',
     'Only a clean native rejection may retain the same frozen intent under the shared bounded retry policy',
     'WHM uses only Wunder der Natur / Miracle of Nature `29228`',
     'BRD uses only Stumme Nocturne / Silent Nocturne `29395`',
+    'Stun `1343` for either exact NIN Raiju variant',
     'post-Purify release opportunity after 500 ms; waiting never restarts a deadline'
-) 'v0.24.0.0 post-Purify and post-Guard transient-data, identity, held-episode, ranking, and no-target-mutation disclosure'
+) 'v0.27.0.0 post-Purify, post-Guard, NIN blocker, event-key, confirmation, and no-target-mutation disclosure'
 
 $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
@@ -8239,4 +8442,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.26.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 342-test Core registry. Runtime priority is pinned as Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The first ten physical-hold helpers use sticky stable-movement/stable-other leases before fresh fallbacks, and the separate default-off cast-cancellation coordinator mirrors that exact ten-helper order while excluding event Kardia, event Monk, manual/Turbo redirects including Paean, and macro helpers. Guardian begins from a clean frame-local snapshot, publishes accepted communication independently, and combines with the later generic Guard through pure current-frame aggregation: a Guard claim/attempt cannot be masked, while an unavailable Guardian remains background presentation only if Guard is idle. Simultaneous post-Purify/post-Guard selection treats only fresh pressure above zero as an optional bonus; zero, unknown, and stale pressure remain neutral and eligible before HP, trusted MP, and stable identity, with no rerank, alternate, target mutation, fallback, or replay. Cast cancellation makes at most one UIState.Instance()->Hotbar.CancelCast() void request per consistently observed cast epoch, records requested rather than success, quarantines cast-ID/local-identity drift until both cast signals clear, fully revalidates on a later frame, and never combines cancellation with helper UseAction, synthesizes Escape/jump/movement, clears the queue, writes cast state, or mutates a target. The ordinary exact-intent action retry remains independently bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal. Native cancellation behavior, including stationary casts and mobile BRD Powerful Shot / MCH Blast Charge, still requires live current-patch validation."
+Write-Host "Seiton Sense v0.27.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 348-test Core registry. Runtime priority remains Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. Reactive startup, Purify, and first-Guard observations freeze one exact eligible key generation, actor, action, and epoch; release, text-input poisoning, identity drift, and ambiguity cannot acquire a later key or target. Bounded Resilience/Guard RemainingTime is advisory and non-extending while live status membership remains authoritative. Same-drain urgent captures are deterministically ranked before one winner arms and every loser retires. NIN requires both metadata-verified Raiju variants through combo carrier 29500, exact StandardPurify blockers, live absence of Bind 1345 and Forked seal 3195 as applicable, native 20-yalm reachability, and exact Stun 1343 confirmation with the matching icon. No reactive path owns a native queue/timer or mutates a selected target. The ordinary exact-intent retry remains bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal."

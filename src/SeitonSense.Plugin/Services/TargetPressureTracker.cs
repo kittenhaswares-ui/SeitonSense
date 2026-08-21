@@ -313,7 +313,8 @@ internal sealed class TargetPressureTracker : IDisposable
             : 0;
         var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
             EnemyCombatConstants.BardJobId;
-        var isReactiveCounterCcJob = isAllyRescueJob;
+        var isReactiveCounterCcJob = isAllyRescueJob ||
+                                     localJobId == EnemyCombatConstants.NinjaJobId;
         var isScholar = localJobId == EnemyCombatConstants.ScholarJobId;
         var isBard = localJobId == EnemyCombatConstants.BardJobId;
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;

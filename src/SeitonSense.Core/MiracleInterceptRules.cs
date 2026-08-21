@@ -93,7 +93,7 @@ public readonly record struct MiracleInterceptDecision(
 }
 
 /// <summary>
-/// Pure one-event/one-physical-generation policy for the experimental WHM/BRD
+/// Pure one-event/one-physical-generation policy for the experimental WHM/BRD/NIN
 /// reactive-CC helper. A dispatch clears the active event while retaining its
 /// bounded signal key, so a false or throwing native call cannot re-arm it.
 /// </summary>

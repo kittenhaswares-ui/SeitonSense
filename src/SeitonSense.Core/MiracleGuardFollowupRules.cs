@@ -7,6 +7,7 @@ public enum MiracleGuardFollowupPhase
     WaitingForGuard = 0,
     GuardPresent = 1,
     ReleaseOpportunity = 2,
+    RetiredUntilGuardAbsent = 3,
 }
 
 public enum MiracleGuardFollowupDecisionKind
@@ -58,6 +59,12 @@ public readonly record struct MiracleGuardFollowupCandidate(
     public bool HasTrustedMp { get; init; }
     public uint CurrentMp { get; init; }
     public uint MaximumMp { get; init; }
+    /// <summary>
+    /// Advisory only. Live Guard StatusList membership remains authoritative.
+    /// </summary>
+    public long GuardRemainingMilliseconds { get; init; }
+    public int ReservationGameplayKeyToken { get; init; }
+    public bool ReservedGameplayKeyPhysicallyDown { get; init; }
 
     public bool IsValid =>
         Target.IsValid &&
@@ -91,9 +98,15 @@ public readonly record struct MiracleGuardFollowupActorState(
     long GuardObservedAtMilliseconds,
     long ReleasedAtMilliseconds)
 {
+    public int GameplayKeyToken { get; init; }
+    public long ExpectedProtectionEndAtMilliseconds { get; init; } = -1;
+
     public static MiracleGuardFollowupActorState Waiting(
         MiracleGuardFollowupTargetIdentity target) =>
-        new(target, MiracleGuardFollowupPhase.WaitingForGuard, -1, -1);
+        new(target, MiracleGuardFollowupPhase.WaitingForGuard, -1, -1)
+        {
+            ExpectedProtectionEndAtMilliseconds = -1,
+        };
 }
 
 public readonly record struct MiracleGuardFollowupState(
@@ -123,10 +136,13 @@ public readonly record struct MiracleGuardFollowupIntent(
     public bool HasTrustedMp { get; init; }
     public uint CurrentMp { get; init; }
     public uint MaximumMp { get; init; }
+    public int GameplayKeyToken { get; init; }
+    public long ExpectedProtectionEndAtMilliseconds { get; init; } = -1;
 
     public bool IsValid =>
         Target.IsValid &&
         ReleasedAtMilliseconds >= 0 &&
+        GameplayKeyToken > 0 &&
         CurrentHp > 0 &&
         MaximumHp >= CurrentHp &&
         (!TeamTargetCountKnown || TeamTargetCount >= 0) &&
@@ -162,6 +178,7 @@ public static class MiracleGuardFollowupRules
     public const uint GuardStatusId = 3_054;
     public const uint GuardStatusAlternateId = 3_673;
     public const long ReleaseOpportunityMilliseconds = 500;
+    public const long MaximumGuardRemainingMilliseconds = 4_250;
 
     public static MiracleGuardFollowupDecision Observe(
         MiracleGuardFollowupState previous,
@@ -219,8 +236,34 @@ public static class MiracleGuardFollowupRules
             nextActors.Add(actor);
         }
 
+        // Unknown/ambiguous telemetry terminally retires an active Guard
+        // reservation but preserves a tombstone. It can neither synthesize an
+        // absence release nor let a different key resurrect the same episode.
+        foreach (var retained in previousBySlot.Values
+                     .Where(static actor =>
+                         actor.Phase is MiracleGuardFollowupPhase.GuardPresent or
+                             MiracleGuardFollowupPhase.RetiredUntilGuardAbsent)
+                     .Where(actor => !candidates.ContainsKey(actor.Target.EnemySlot))
+                     .Where(actor => ShouldRetainUncertainActor(
+                         actor,
+                         observation.Candidates))
+                     .OrderBy(static actor => actor.Target.EnemySlot))
+        {
+            nextActors.Add(retained.Phase == MiracleGuardFollowupPhase.GuardPresent
+                ? retained with
+                {
+                    Phase = MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
+                    ReleasedAtMilliseconds = -1,
+                    GameplayKeyToken = 0,
+                }
+                : retained);
+        }
+
         var state = new MiracleGuardFollowupState(
-            nextActors.ToImmutable(),
+            nextActors
+                .ToImmutable()
+                .OrderBy(static actor => actor.Target.EnemySlot)
+                .ToImmutableArray(),
             observation.NowMilliseconds);
         var releaseReady = state.Actors
             .Where(actor => actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity)
@@ -236,7 +279,11 @@ public static class MiracleGuardFollowupRules
                 expiredOpportunities);
         }
 
+        // Only an episode that owned an exact key on its first Guard frame may
+        // compete for promotion. A higher-ranked observation-only episode must
+        // never consume a simultaneously valid held-key reservation.
         var selected = releaseReady
+            .Where(static pair => pair.Actor.GameplayKeyToken > 0)
             .OrderBy(static pair => pair.Candidate, ProtectionEndRankComparer.Instance)
             .FirstOrDefault();
         if (!selected.Candidate.IsValid)
@@ -264,6 +311,9 @@ public static class MiracleGuardFollowupRules
             HasTrustedMp = selected.Candidate.HasTrustedMp,
             CurrentMp = selected.Candidate.CurrentMp,
             MaximumMp = selected.Candidate.MaximumMp,
+            GameplayKeyToken = selected.Actor.GameplayKeyToken,
+            ExpectedProtectionEndAtMilliseconds =
+                selected.Actor.ExpectedProtectionEndAtMilliseconds,
         };
         return new MiracleGuardFollowupDecision(
             new MiracleGuardFollowupState(retiredActors, observation.NowMilliseconds),
@@ -294,15 +344,48 @@ public static class MiracleGuardFollowupRules
         newRelease = false;
         expired = false;
         var guardPresent = candidate.ActiveGuardStatusCount == 1;
+        if (previous.GameplayKeyToken > 0 &&
+            !candidate.ReservedGameplayKeyPhysicallyDown)
+        {
+            return guardPresent
+                ? previous with
+                {
+                    Phase = MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
+                    ReleasedAtMilliseconds = -1,
+                    GameplayKeyToken = 0,
+                }
+                : MiracleGuardFollowupActorState.Waiting(candidate.Target);
+        }
+
+        if (previous.Phase == MiracleGuardFollowupPhase.RetiredUntilGuardAbsent)
+        {
+            return guardPresent
+                ? previous
+                : MiracleGuardFollowupActorState.Waiting(candidate.Target);
+        }
+
         if (guardPresent)
         {
-            if (previous.Phase != MiracleGuardFollowupPhase.GuardPresent)
-                newEpisode = true;
+            var firstPresence = previous.Phase != MiracleGuardFollowupPhase.GuardPresent;
+            if (firstPresence) newEpisode = true;
+            var keyToken = firstPresence
+                ? candidate.ReservationGameplayKeyToken > 0 &&
+                  candidate.ReservedGameplayKeyPhysicallyDown
+                    ? candidate.ReservationGameplayKeyToken
+                    : 0
+                : previous.GameplayKeyToken;
             return new MiracleGuardFollowupActorState(
                 candidate.Target,
                 MiracleGuardFollowupPhase.GuardPresent,
-                nowMilliseconds,
-                -1);
+                firstPresence ? nowMilliseconds : previous.GuardObservedAtMilliseconds,
+                -1)
+            {
+                GameplayKeyToken = keyToken,
+                ExpectedProtectionEndAtMilliseconds = UpdateExpectedProtectionEnd(
+                    firstPresence ? -1 : previous.ExpectedProtectionEndAtMilliseconds,
+                    candidate.GuardRemainingMilliseconds,
+                    nowMilliseconds),
+            };
         }
 
         if (previous.Phase == MiracleGuardFollowupPhase.GuardPresent)
@@ -329,6 +412,26 @@ public static class MiracleGuardFollowupRules
         actor.ReleasedAtMilliseconds >= 0 &&
         nowMilliseconds >= actor.ReleasedAtMilliseconds &&
         nowMilliseconds - actor.ReleasedAtMilliseconds < ReleaseOpportunityMilliseconds;
+
+    private static long UpdateExpectedProtectionEnd(
+        long currentExpectedEndMilliseconds,
+        long remainingMilliseconds,
+        long nowMilliseconds)
+    {
+        if (remainingMilliseconds <= 0 ||
+            remainingMilliseconds > MaximumGuardRemainingMilliseconds ||
+            nowMilliseconds < 0)
+        {
+            return currentExpectedEndMilliseconds;
+        }
+
+        var observedEnd = nowMilliseconds > long.MaxValue - remainingMilliseconds
+            ? long.MaxValue
+            : nowMilliseconds + remainingMilliseconds;
+        return currentExpectedEndMilliseconds > 0
+            ? Math.Min(currentExpectedEndMilliseconds, observedEnd)
+            : observedEnd;
+    }
 
     private static Dictionary<int, MiracleGuardFollowupCandidate> ExactCandidates(
         IReadOnlyList<MiracleGuardFollowupCandidate>? candidates)
@@ -357,6 +460,37 @@ public static class MiracleGuardFollowupRules
                 !ambiguousGameObjectIds.Contains(candidate.Target.GameObjectId) &&
                 !ambiguousEntityIds.Contains(candidate.Target.EntityId))
             .ToDictionary(static candidate => candidate.Target.EnemySlot);
+    }
+
+    private static bool ShouldRetainUncertainActor(
+        MiracleGuardFollowupActorState actor,
+        IReadOnlyList<MiracleGuardFollowupCandidate>? observedCandidates)
+    {
+        if (observedCandidates is null || observedCandidates.Count == 0)
+            return true;
+
+        var sameSlot = observedCandidates
+            .Where(candidate => candidate.Target.EnemySlot == actor.Target.EnemySlot)
+            .ToArray();
+        if (sameSlot.Length == 0) return true;
+
+        var sameIdentity = sameSlot
+            .Where(candidate => candidate.Target == actor.Target)
+            .ToArray();
+        if (sameIdentity.Length == 0) return false;
+
+        // A non-canonical row is ambiguity, not proof that the actor vanished.
+        // Duplicate rows and malformed HP/status telemetry are likewise
+        // unknown. Only one exact same-identity row with proven life loss may
+        // remove the tombstone; every other uncertain frame retains it.
+        if (sameIdentity.Length != 1 ||
+            !sameIdentity[0].IsExactCanonicalEnemy)
+        {
+            return true;
+        }
+
+        return sameIdentity[0].IsAliveAndTargetable &&
+               sameIdentity[0].CurrentHp > 0;
     }
 
     private static MiracleGuardFollowupCancelReason GateFailure(

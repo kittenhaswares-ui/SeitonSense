@@ -86,8 +86,8 @@ public readonly record struct MiracleInterceptConfirmationDecision(
     MiracleInterceptConfirmationPopup? TriggeredPopup);
 
 /// <summary>
-/// Correlates the sole native WHM Miracle or BRD Silent Nocturne attempt made by
-/// the reactive helper with the exact server status-add on the intended target.
+/// Correlates the sole native WHM Miracle, BRD Silent Nocturne, or NIN Raiju
+/// attempt made by the reactive helper with the exact server status-add on the intended target.
 /// This proves only that the counter-CC landed; it never claims the hostile
 /// action was interrupted.
 /// </summary>
@@ -97,6 +97,9 @@ public static class MiracleInterceptConfirmationRules
     public const ushort MiracleOfNatureStatusId = 3_085;
     public const uint SilentNocturneActionId = 29_395;
     public const ushort SilenceStatusId = 1_347;
+    public const uint ForkedRaijuActionId = 29_510;
+    public const uint FleetingRaijuActionId = 29_707;
+    public const ushort StunStatusId = 1_343;
     public const byte AddStatusEffectType = 0x0E;
     public const long CorrelationMilliseconds = 1_500;
     public const long PopupDurationMilliseconds = 1_500;
@@ -238,6 +241,7 @@ public static class MiracleInterceptConfirmationRules
         {
             MiracleOfNatureActionId => MiracleOfNatureStatusId,
             SilentNocturneActionId => SilenceStatusId,
+            ForkedRaijuActionId or FleetingRaijuActionId => StunStatusId,
             _ => 0,
         };
 

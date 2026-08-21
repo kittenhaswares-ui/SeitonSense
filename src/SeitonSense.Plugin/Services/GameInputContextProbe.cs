@@ -221,6 +221,27 @@ internal sealed class GameInputContextProbe
         return false;
     }
 
+    /// <summary>
+    /// Reports whether the exact observed key generation remains eligible.
+    /// Unlike the physical-level check, this becomes false for a key pressed
+    /// or retained through text input and stays false until a real release.
+    /// </summary>
+    internal bool IsGameplayKeyGenerationEligible(VirtualKey key)
+    {
+        if (key == VirtualKey.NO_KEY) return false;
+        for (var index = 0; index < gameplayKeys.Length; index++)
+        {
+            if (gameplayKeys[index] != key) continue;
+            var generation = keyGenerations[index];
+            return generation.IsPrimed &&
+                   generation.IsDown &&
+                   generation.IsEligible &&
+                   !generation.IsConsumed;
+        }
+
+        return false;
+    }
+
     private static HashSet<int> BuildCandidateVirtualKeyCodes()
     {
         var keys = new HashSet<int>

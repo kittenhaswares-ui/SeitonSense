@@ -285,10 +285,11 @@ internal sealed partial class SettingsWindow
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
                 ? "ON — WHM Wunder der Natur / Miracle of Nature or BRD Stumme Nocturne / " +
-                  "Silent Nocturne may schedule one frozen exact-target intent for an eligible CC opportunity."
+                  "Silent Nocturne, plus NIN Forked/Fleeting Raiju, may schedule one frozen exact-target intent " +
+                  "for an eligible CC opportunity."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
 
-        ImGui.TextUnformatted("WHM / BRD triggers:");
+        ImGui.TextUnformatted("WHM / BRD / NIN triggers:");
         changed |= Checkbox(
             "DNC Contradance startup",
             configuration.ReactiveCcDancerLimitBreak,
@@ -302,7 +303,7 @@ internal sealed partial class SettingsWindow
             configuration.ReactiveCcAfterEnemyGuard,
             value => configuration.ReactiveCcAfterEnemyGuard = value);
 
-        ImGui.TextUnformatted("Additional WHM / BRD urgent startup triggers:");
+        ImGui.TextUnformatted("Additional WHM / BRD / NIN urgent startup triggers:");
         changed |= Checkbox(
             "MCH Marksman's Spite",
             configuration.MiracleInterceptMchLimitBreak,
@@ -321,12 +322,15 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Experimental, CC-only, and disabled by default. WHM Wunder der Natur / Miracle of Nature uses its " +
-            "native 10-yalm range; BRD Stumme Nocturne / Silent Nocturne uses its native 20-yalm range. The enemy " +
+            "native 10-yalm range; BRD Stumme Nocturne / Silent Nocturne and both NIN Raiju stun variants use " +
+            "their native 20-yalm range. The enemy " +
             "must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
             "accepts Stun, Heavy, Bind, Silence, Deep " +
-            "Freeze, or Miracle of Nature, observes real Resilience and waits for its stable disappearance. It uses " +
+            "Freeze, or Miracle of Nature, observes real Resilience, snapshots the held key and a validated duration " +
+            "hint, then still requires real disappearance. At or after the expected end, the first absent frame is " +
+            "eligible immediately; an early or untimed absence keeps the 150-ms anti-flicker check. It uses " +
             "the exact S1-S5 actor directly, does not require that actor to be your selected target, and never changes " +
             "your target. There is no minimum team-pressure count, and distinct S-slots are tracked independently. " +
             "Viper waits until Hardened Scales is actually absent.");
@@ -336,8 +340,8 @@ internal sealed partial class SettingsWindow
             "Lowest HP ratio follows, then lowest trusted MP ratio and stable S-slot identity. Exactly one winner is " +
             "selected; simultaneous losers " +
             "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
-            "3054/3673 was observed present and then verified absent. WHM uses its native 10-yalm range and BRD its " +
-            "native 20-yalm range; both require line of sight.");
+            "3054/3673 was observed present and then verified absent. Early Guard cancellation releases immediately. " +
+            "All three jobs require their native range and line of sight.");
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
@@ -347,7 +351,7 @@ internal sealed partial class SettingsWindow
             "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
             "change, alternate, fallback, or replay. The blue AUTO CC " +
             "LANDED flash appears " +
-            "only after the matching Miracle or Silence status is captured on that exact pending enemy. It confirms " +
+            "only after the matching Miracle, Silence, or Stun status is captured on that exact pending enemy. It confirms " +
             "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +
             "particular, an instant LB already accepted by the server may be too late to stop even when Silence lands.");
         ImGui.PopTextWrapPos();

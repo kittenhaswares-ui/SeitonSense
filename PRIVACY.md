@@ -883,6 +883,9 @@ animation-lock, dispatch, and reachability behavior remain live-validation
 boundaries.
 
 When own Guard is active, every Seiton Sense action-request helper is suppressed.
+The bounded reactive observer may keep an already eligible enemy startup,
+Purify, or Guard reservation in memory, but it cannot dispatch that reservation
+through own Guard.
 The same in-memory suppression begins immediately after an exact local Guard
 request and expires after 1.5 seconds unless the real Guard status takes over; the
 same observed request cannot extend or rearm it. This prevents the plugin from
@@ -892,24 +895,31 @@ attempt diagnostics are bounded in memory and are not stored as combat/key
 history or uploaded. Exact client/server action ordering remains a live-validation
 boundary.
 
-## Experimental WHM/BRD reactive counter-CC
+## Experimental WHM/BRD/NIN reactive counter-CC
 
 If explicitly enabled in exact Crystalline Conflict, the plugin extends its
 bounded local action-effect observer to recognize the reviewed early event
 shapes for DNC Contradance `29432`, Marksman's Spite `29415`, Zantetsuken
 `29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188`. It reads
 source/target network identity, action identity, bounded event sequence/time,
-and the small fixed effect-slot shape needed to reject later hit packets. DNC is
-available to WHM and BRD, as are the reviewed MCH/SAM/VPR urgent startup paths.
-The bounded queues exist only in memory.
+and the small fixed effect-slot shape needed to reject later hit packets. DNC
+and the reviewed MCH/SAM/VPR urgent startup paths are available to WHM, BRD, and
+NIN. NIN is enabled only when both metadata-verified Forked Raiju `29510` and
+Fleeting Raiju `29707` rows are available. The bounded queues exist only in
+memory.
 
 The optional post-Purify path recognizes only exact enemy self-Purify `29056`
 with one self target, a non-empty event sequence, and recovered-status effect
 `0x10` for Stun `1343`, Heavy `1344`, Bind `1345`, Silence `1347`, Miracle of
 Nature `3085`, or Deep Freeze `3219`. The source must resolve to one exact live
 canonical `S1`-`S5` enemy. The plugin then requires positive live Resilience
-`3248`, waits for 150 ms of stable real absence, and never predicts its timer.
-The signal freezes that exact actor and dispatches directly to it without
+`3248`. On the exact Purify observation it freezes the eligible physical key
+generation, actor, local counter action, and event epoch. A finite, positive,
+catalog-bounded `RemainingTime` may establish only a non-extending expected end;
+live status-list membership remains authoritative. The first real absent frame
+at or after that end is eligible immediately, while early or untimed absence
+still requires 150 ms of continuous proof. The signal dispatches directly to
+the frozen actor without
 requiring or changing the selected target. There is no minimum team-pressure
 count. Each verified Resilience end creates only a bounded exact protection-end
 episode in memory. The runtime keeps at most one active post-Purify state per
@@ -917,10 +927,14 @@ canonical `S1`-`S5` slot plus a bounded deduplication set, allowing distinct exa
 enemies to progress independently without one replacing the other's signal.
 
 The separate optional post-Guard path observes only exact Guard `3054` or `3673`
-present on one live canonical `S1`-`S5` enemy. The first verified framework
+present on one live canonical `S1`-`S5` enemy. Its first exact presence freezes
+the eligible physical key generation, actor, local action, Guard epoch, and the
+same kind of bounded non-extending duration hint. The first verified framework
 observation that finds Guard absent exposes one bounded exact protection-end
-opportunity. It retains only the frozen actor identity and bounded lifecycle in
-memory, with no minimum team-pressure count. Any identity, context, protection,
+opportunity, including an early manual Guard cancel. Key release retires that
+same uninterrupted Guard through missing or ambiguous samples until exact
+absence separates a later episode. It retains only the frozen identity, key,
+hint, and bounded lifecycle in memory, with no minimum team-pressure count. Any identity, context, protection,
 native range, or line-of-sight uncertainty fails closed. It never requires or
 switches the selected target, chooses an alternate action/actor, or replays
 input. Only a clean native rejection may retain the same frozen intent under the
@@ -938,17 +952,25 @@ values and the frozen winning actor are retained only in bounded in-memory helpe
 state.
 
 At dispatch, the enemy identity, expected triggering job, life/targetable state,
-and action-specific verified protection are revalidated. WHM uses only Wunder
+exact still-eligible key generation, and action-specific verified protection
+are revalidated. WHM uses only Wunder
 der Natur / Miracle of Nature `29228` with native 10-yalm range/line of sight.
 BRD uses only Stumme Nocturne / Silent Nocturne `29395` with native 20-yalm
-range/line of sight. VPR requires live
+range/line of sight. NIN reads only the PvP Spinning Edge/Aeolian Edge Combo
+carrier `29500` and can dispatch only when it exposes metadata-verified Forked
+Raiju `29510` or Fleeting Raiju `29707`, also with native 20-yalm range/line of
+sight and the standard Purify-removable protection matrix. Forked Raiju also
+requires the exact local Sealed Forked Raiju status `3195` to be absent, and both
+variants require exact local Bind `1345` to be absent. VPR requires live
 Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
 
 The helper observes held gameplay-key state immediately after Purify and before
-every other job-specific helper. One continuous hold can authorize later distinct startup or
-protection-end episodes, but each selected episode remains one frozen intent and
+every other job-specific helper. The eligible key is snapshotted at the startup,
+Purify, or first Guard-presence edge; a later key cannot inherit that episode,
+and text input poisons the exact generation until real release. One continuous
+hold can authorize later distinct startup or protection-end episodes, but each selected episode remains one frozen intent and
 no simultaneous loser can follow it. Known action-specific unavailability keeps
 the lease without blocking a usable lower helper; a global queue/animation wait
 and the brief explicit-false retry retain the scheduler frame. The helper uses
@@ -961,7 +983,8 @@ The action-effect hook also places exact local counter-status observations into
 a separate bounded in-memory queue. A 1.5-second `AUTO CC LANDED` visual is
 created only when local caster, expected action, pending enemy, effect type
 `0x0E`, non-empty sequence, and action-specific status match within 1500 ms:
-Miracle `3085` for WHM or Silence `1347` for BRD. This proves only that the
+Miracle `3085` for WHM, Silence `1347` for BRD, or Stun `1343` for either exact
+NIN Raiju variant. This proves only that the
 counter-CC status landed on the intended enemy, not that Contradance, another
 limit break, or damage was interrupted. A client-accepted action request alone
 is never presented as confirmation. For an instant LB, the server may already
@@ -1073,7 +1096,7 @@ Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
 opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
 trigger opt-ins, the separate held Smart Recuperate opt-in, the independent PLD
-Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD reactive
+Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN reactive
 counter-CC master/held-key/post-Purify/post-Guard/per-startup-trigger opt-ins,
 the team-visible Attack1 marker
 opt-in, resource-aura surfaces/thresholds/appearance, fixed Combat Frames master/
@@ -1085,7 +1108,7 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 30 remains current in v0.26.0.0; this release adds no
+Configuration schema 30 remains current in v0.27.0.0; this release adds no
 setting or migration. The held-action cast-cancellation test remains explicitly
 off for fresh, reset, and migrated
 configurations. An older explicitly enabled fresh-edge NIN Seiton option still

@@ -331,6 +331,135 @@ internal static class MiracleCleanseFollowupSelfTests
         True(secondPromotion.ShouldPromote, "second distinct slot can yield one candidate");
     }
 
+    internal static void ExpectedEndUsesFirstAuthoritativeAbsentFrame()
+    {
+        var target = Target(70);
+        var signal = Signal(target, sequence: 700, now: 1_000);
+        var observed = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(
+                signal,
+                Candidate(
+                    target,
+                    resilienceCount: 1,
+                    remainingMilliseconds: 2_000,
+                    reservationKey: 65,
+                    reservedKeyDown: true),
+                1_000));
+        Equal(3_000L, observed.NextState.ExpectedProtectionEndAtMilliseconds, "validated expected end is absolute");
+        Equal(65, observed.NextState.GameplayKeyToken, "held key is frozen during immunity");
+
+        var stillPresent = MiracleCleanseFollowupRules.Observe(
+            observed.NextState,
+            Observation(
+                null,
+                Candidate(
+                    target,
+                    resilienceCount: 1,
+                    remainingMilliseconds: 1,
+                    reservationKey: 66,
+                    reservedKeyDown: true),
+                3_000));
+        False(stillPresent.ShouldPromote, "expected time alone never authorizes through live Resilience");
+        Equal(65, stillPresent.NextState.GameplayKeyToken, "later key cannot replace frozen consent");
+
+        var firstAbsent = MiracleCleanseFollowupRules.Observe(
+            stillPresent.NextState,
+            Observation(
+                null,
+                Candidate(target, reservationKey: 66, reservedKeyDown: true),
+                3_001));
+        True(firstAbsent.ShouldPromote, "first live absence after expected end promotes immediately");
+        Equal(65, firstAbsent.PromotionIntent!.Value.GameplayKeyToken, "promotion carries exact reserved key");
+        Equal(3_000L, firstAbsent.PromotionIntent.Value.ExpectedProtectionEndAtMilliseconds, "promotion retains non-extending hint");
+        Equal(3_001L, firstAbsent.PromotionIntent.Value.ReleasedAtMilliseconds, "actual absence remains release authority");
+    }
+
+    internal static void InvalidExpectedEndKeepsAbsenceGrace()
+    {
+        var target = Target(71);
+        var signal = Signal(target, sequence: 701, now: 1_000);
+        var observed = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(
+                signal,
+                Candidate(
+                    target,
+                    resilienceCount: 1,
+                    remainingMilliseconds:
+                        MiracleCleanseFollowupRules.MaximumResilienceRemainingMilliseconds + 1),
+                1_000));
+        True(observed.NextState.ExpectedProtectionEndAtMilliseconds <= 0, "implausible duration is not trusted");
+
+        var missing = MiracleCleanseFollowupRules.Observe(
+            observed.NextState,
+            Observation(null, Candidate(target), 2_000));
+        False(missing.ShouldPromote, "untimed first absence retains anti-flicker grace");
+        var ready = MiracleCleanseFollowupRules.Observe(
+            missing.NextState,
+            Observation(null, Candidate(target), 2_150));
+        True(ready.ShouldPromote, "untimed continuous absence still promotes after grace");
+    }
+
+    internal static void ReservedKeyReleaseTerminallyCancelsEpisode()
+    {
+        var target = Target(72);
+        var signal = Signal(target, sequence: 702, now: 1_000);
+        var observed = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(
+                signal,
+                Candidate(
+                    target,
+                    resilienceCount: 1,
+                    reservationKey: 65,
+                    reservedKeyDown: true),
+                1_000));
+        var released = MiracleCleanseFollowupRules.Observe(
+            observed.NextState,
+            Observation(
+                null,
+                Candidate(
+                    target,
+                    resilienceCount: 1,
+                    reservationKey: 66,
+                    reservedKeyDown: false),
+                1_001));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ReservationKeyReleased,
+            released.CancelReason,
+            "one observed release terminally cancels the reservation");
+        Equal(0, released.NextState.GameplayKeyToken, "alternate key cannot inherit cancelled episode");
+
+        var absent = MiracleCleanseFollowupRules.Observe(
+            released.NextState,
+            Observation(null, Candidate(target, reservationKey: 66, reservedKeyDown: true), 1_200));
+        False(absent.ShouldPromote, "re-press or alternate key cannot resurrect retired signal");
+
+        var noKeyTarget = Target(73);
+        var noKeySignal = Signal(noKeyTarget, sequence: 703, now: 2_000);
+        var noKeyAtSignal = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(
+                noKeySignal,
+                Candidate(noKeyTarget, resilienceCount: 1),
+                2_000));
+        var keyPressedLater = MiracleCleanseFollowupRules.Observe(
+            noKeyAtSignal.NextState,
+            Observation(
+                null,
+                Candidate(
+                    noKeyTarget,
+                    resilienceCount: 1,
+                    reservationKey: 66,
+                    reservedKeyDown: true),
+                2_001));
+        Equal(
+            0,
+            keyPressedLater.NextState.GameplayKeyToken,
+            "a later key cannot retroactively reserve the Purify episode");
+    }
+
     internal static void PromotionKindLabelsConfirmationWithoutBroadeningStartRules()
     {
         Equal(
@@ -413,12 +542,20 @@ internal static class MiracleCleanseFollowupSelfTests
 
     private static MiracleCleanseFollowupCandidate Candidate(
         MiracleCleanseFollowupTargetIdentity target,
-        int resilienceCount = 0) =>
+        int resilienceCount = 0,
+        long remainingMilliseconds = 0,
+        int reservationKey = 0,
+        bool reservedKeyDown = false) =>
         new(
             target,
             IsExactCanonicalEnemy: true,
             IsAliveAndTargetable: true,
-            ActiveResilienceStatusCount: resilienceCount);
+            ActiveResilienceStatusCount: resilienceCount)
+        {
+            ResilienceRemainingMilliseconds = remainingMilliseconds,
+            ReservationGameplayKeyToken = reservationKey,
+            ReservedGameplayKeyPhysicallyDown = reservedKeyDown,
+        };
 
     private static MiracleCleanseFollowupObservation Observation(
         MiracleCleanseFollowupSignal? signal,

@@ -116,12 +116,14 @@ internal static class MiracleProtectionEndSelfTests
         Equal(2, selected, "one deterministic winner is selected");
     }
 
-    internal static void WhiteMageAndBardShareProtectionEndSemantics()
+    internal static void WhiteMageBardAndNinjaShareProtectionEndSemantics()
     {
         foreach (var actionId in new[]
                  {
                      MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
                      MiracleInterceptConfirmationRules.SilentNocturneActionId,
+                     MiracleInterceptConfirmationRules.ForkedRaijuActionId,
+                     MiracleInterceptConfirmationRules.FleetingRaijuActionId,
                  })
         {
             var purify = new MiracleInterceptPendingAttempt(
@@ -154,6 +156,16 @@ internal static class MiracleProtectionEndSelfTests
             MiracleInterceptConfirmationRules.ExpectedStatusForAction(
                 MiracleInterceptConfirmationRules.SilentNocturneActionId),
             "BRD retains its exact landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.StunStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.ForkedRaijuActionId),
+            "NIN Forked Raiju retains exact Stun landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.StunStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.FleetingRaijuActionId),
+            "NIN Fleeting Raiju retains exact Stun landing status");
     }
 
     internal static void HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound()

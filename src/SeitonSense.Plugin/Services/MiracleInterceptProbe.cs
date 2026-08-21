@@ -68,6 +68,8 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal string GuardFollowupLastEvent { get; init; } = "None observed";
     internal bool ProtectionEndHeldConsentActive { get; init; }
     internal VirtualKey ProtectionEndHeldConsentKey { get; init; }
+    internal VirtualKey ProtectionEndReservedKey { get; init; }
+    internal long ProtectionEndExpectedRemainingMilliseconds { get; init; }
     internal bool ProtectionEndRankTeamPressureKnown { get; init; }
     internal int ProtectionEndRankTeamPressure { get; init; }
     internal uint ProtectionEndRankCurrentHp { get; init; }
@@ -104,7 +106,7 @@ internal sealed record MiracleInterceptProbeSnapshot(
 }
 
 /// <summary>
-/// Experimental CC-only WHM/BRD held helper. It freezes one exact threat,
+/// Experimental CC-only WHM/BRD/NIN held helper. It freezes one exact threat,
 /// target, action, and physical key. Only proven client-false calls may retry
 /// inside the bounded event lease; it never changes the selected target.
 /// </summary>
@@ -130,6 +132,7 @@ internal sealed class MiracleInterceptProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly MachinistLimitBreakCapture capture;
     private readonly IPluginLog log;
+    private readonly IReadOnlySet<uint> verifiedCounterActionIds;
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
     private readonly bool silentNocturneMetadataVerified;
     private readonly bool contradanceMetadataVerified;
@@ -185,6 +188,7 @@ internal sealed class MiracleInterceptProbe
 
     internal MiracleInterceptProbe(
         IObjectTable objectTable,
+        IReadOnlySet<uint> verifiedCcBrakeActionIds,
         IReadOnlySet<uint> verifiedCcBrakeStatusIds,
         ExecuteTracker executeTracker,
         TargetPressureTracker pressureTracker,
@@ -199,6 +203,7 @@ internal sealed class MiracleInterceptProbe
         this.nearAssist = nearAssist;
         this.capture = capture;
         this.log = log;
+        verifiedCounterActionIds = verifiedCcBrakeActionIds.ToHashSet();
         verifiedProtectionStatusIds = verifiedCcBrakeStatusIds.ToHashSet();
         silentNocturneMetadataVerified = metadata.SilentNocturneVerified;
         contradanceMetadataVerified = metadata.ContradanceVerified;
@@ -285,9 +290,11 @@ internal sealed class MiracleInterceptProbe
             allowHeldGameplayKey &&
             localAlive &&
             (cleanseFollowupEnabled || guardFollowupEnabled),
-            dispatchAllowed,
             inputFrame,
             hardReset || protectionEndJobChanged);
+        var episodeGameplayKeyToken = ResolveEpisodeGameplayKeyToken(
+            allowHeldGameplayKey,
+            inputFrame);
         var confirmationPendingForLocalCaster = enabled &&
             confirmationState.Pending is { } pending &&
             pending.LocalCasterEntityId == localPlayer!.EntityId;
@@ -371,7 +378,8 @@ internal sealed class MiracleInterceptProbe
             furiousBacklashEnabled,
             contradanceEnabled,
             cleanseFollowupEnabled,
-            nowMilliseconds);
+            nowMilliseconds,
+            episodeGameplayKeyToken);
         DrainConfirmations(nowMilliseconds);
         // The native hook can enqueue after the framework-frame clock was read.
         // Refresh before comparing the newly captured event against its deadline.
@@ -408,7 +416,9 @@ internal sealed class MiracleInterceptProbe
                 activeThreat is not null,
                 cleanseSignal,
                 nowMilliseconds,
-                trackedSlot: null);
+                trackedSlot: null,
+                inputFrame,
+                episodeGameplayKeyToken);
             if (promotion is { } ready) followupPromotions.Add(ready);
         }
 
@@ -420,7 +430,9 @@ internal sealed class MiracleInterceptProbe
                 activeThreat is not null,
                 null,
                 nowMilliseconds,
-                cleanseSlot);
+                cleanseSlot,
+                inputFrame,
+                episodeGameplayKeyToken);
             if (cleansePromotion is { } cleanseReady)
                 followupPromotions.Add(cleanseReady);
         }
@@ -429,7 +441,9 @@ internal sealed class MiracleInterceptProbe
             localPlayer!,
             guardFollowupEnabled,
             activeThreat is not null,
-            nowMilliseconds);
+            nowMilliseconds,
+            inputFrame,
+            episodeGameplayKeyToken);
         if (guardPromotion is { } guardReady) followupPromotions.Add(guardReady);
 
         if (activeThreat is null && followupPromotions.Count > 0)
@@ -461,6 +475,33 @@ internal sealed class MiracleInterceptProbe
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
 
+        // Validate the frozen key before yielding to another helper. Otherwise
+        // a release/text-input frame hidden behind a priority wait could let a
+        // later press of the same virtual key impersonate the old reservation.
+        var input = inputFrame.Snapshot;
+        var triggerKey = threat.GameplayKeyToken > 0
+            ? (VirtualKey)threat.GameplayKeyToken
+            : VirtualKey.NO_KEY;
+        if (!IsExactVirtualKey(triggerKey) ||
+            !inputFrame.IsGameplayKeyGenerationEligible(triggerKey))
+        {
+            Interlocked.Increment(ref rejectedThreatCount);
+            lastOpportunity = input.IsTextInputActive
+                ? $"{threat.Kind}: reserved key generation poisoned by text input"
+                : threat.GameplayKeyToken > 0
+                    ? $"{threat.Kind}: exact held key released"
+                    : $"{threat.Kind}: no exact key was reserved at capture";
+            activeThreat = null;
+            return Publish(
+                "Cancelled",
+                input.IsTextInputActive
+                    ? "Reserved key generation invalidated by text input"
+                    : threat.GameplayKeyToken > 0
+                        ? "Exact held key released"
+                        : "No exact held key was reserved at capture",
+                nowMilliseconds);
+        }
+
         // A transient higher-priority survival/Sprint/Rescue claim cannot dispatch a
         // second action from the same physical generation, but it also need not
         // destroy the exact threat. Retain it only inside its original deadline
@@ -475,6 +516,16 @@ internal sealed class MiracleInterceptProbe
         var currentLocalJobId = localPlayer!.ClassJob.IsValid
             ? localPlayer.ClassJob.RowId
             : 0;
+        if (currentLocalJobId == EnemyCombatConstants.NinjaJobId &&
+            threat.CounterActionId == EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId &&
+            IsExactRaijuAction(counterActionId))
+        {
+            // The carrier is a family placeholder only until FFXIV exposes one
+            // exact executable Raiju variant. Freeze that variant once.
+            threat = threat with { CounterActionId = counterActionId };
+            activeThreat = threat;
+        }
+
         if (threat.CounterActionId != counterActionId ||
             threat.LocalJobId != currentLocalJobId)
         {
@@ -493,6 +544,33 @@ internal sealed class MiracleInterceptProbe
             return Publish("Cancelled", "Exact enemy identity changed", nowMilliseconds);
         }
 
+        if (threat.CounterActionId == EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId)
+        {
+            var reservedKey = (VirtualKey)threat.GameplayKeyToken;
+            if (!IsExactVirtualKey(reservedKey) ||
+                !inputFrame.IsGameplayKeyGenerationEligible(reservedKey))
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{threat.Kind}: exact held key released before Raiju became executable";
+                activeThreat = null;
+                return Publish("Cancelled", "Exact held key released", nowMilliseconds);
+            }
+
+            RecordWait(threat, MiracleWaitReason.ActionCooldownOrResources);
+            return PublishCandidate(
+                threat,
+                candidate,
+                "Armed",
+                "Background wait: no exact Raiju variant exposed by the combo carrier",
+                reservedKey,
+                false,
+                false,
+                false,
+                false,
+                false,
+                nowMilliseconds);
+        }
+
         var blockerFamily = BlockerFamilyForAction(threat.CounterActionId);
         var anyProtection = HasAnyVerifiedCcProtection(candidate, blockerFamily);
         var guardReappeared =
@@ -508,7 +586,7 @@ internal sealed class MiracleInterceptProbe
             localPlayer!,
             candidate);
         var structurallyReady =
-            HasStructuralActionReadiness(threat.CounterActionId);
+            HasStructuralActionReadiness(localPlayer!, threat.CounterActionId);
         var exactIntentCanProgress = !hardenedScales &&
                                      !otherProtection &&
                                      rangeAndLineOfSight &&
@@ -517,83 +595,6 @@ internal sealed class MiracleInterceptProbe
                                  HasGlobalQueueReadiness(
                                      localPlayer!,
                                      threat.CounterActionId);
-        var input = inputFrame.Snapshot;
-        var isProtectionEndThreat = IsProtectionEndThreat(threat.Kind);
-        var triggerKey = VirtualKey.NO_KEY;
-        if (threat.GameplayKeyToken > 0)
-        {
-            var frozenKey = (VirtualKey)threat.GameplayKeyToken;
-            if (!IsExactVirtualKey(frozenKey) ||
-                !inputFrame.IsGameplayKeyPhysicallyDown(frozenKey))
-            {
-                Interlocked.Increment(ref rejectedThreatCount);
-                lastOpportunity = $"{threat.Kind}: exact held key released";
-                activeThreat = null;
-                return PublishCandidate(
-                    threat,
-                    candidate,
-                    "Cancelled",
-                    "Exact held key released",
-                    VirtualKey.NO_KEY,
-                    false,
-                    false,
-                    hardenedScales,
-                    otherProtection,
-                    rangeAndLineOfSight,
-                    nowMilliseconds);
-            }
-
-            triggerKey = frozenKey;
-        }
-        else
-        {
-            if (isProtectionEndThreat &&
-                TryGetLatchedProtectionEndKey(out var latchedKey) &&
-                inputFrame.IsGameplayKeyPhysicallyDown(latchedKey))
-            {
-                triggerKey = latchedKey;
-            }
-            else if (allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible)
-            {
-                triggerKey = input.HeldGameplayKey;
-            }
-            else if (inputFrame.FreshGameplayKeyPressed)
-            {
-                triggerKey = input.FreshGameplayKey;
-            }
-
-            if (IsExactVirtualKey(triggerKey) &&
-                inputFrame.IsGameplayKeyPhysicallyDown(triggerKey))
-            {
-                threat = threat with { GameplayKeyToken = (int)triggerKey };
-                activeThreat = threat;
-            }
-            else
-            {
-                triggerKey = VirtualKey.NO_KEY;
-            }
-        }
-        if (input.IsTextInputActive || triggerKey == VirtualKey.NO_KEY)
-        {
-            RecordWait(
-                threat,
-                input.IsTextInputActive
-                    ? MiracleWaitReason.TextInput
-                    : MiracleWaitReason.NoEligibleInput);
-            return PublishCandidate(
-                threat,
-                candidate,
-                "Armed",
-                input.IsTextInputActive ? "Text input active" : "Waiting for held/fresh physical key",
-                triggerKey,
-                false,
-                false,
-                hardenedScales,
-                otherProtection,
-                rangeAndLineOfSight,
-                nowMilliseconds);
-        }
-
         if (!exactIntentCanProgress)
         {
             var waitReason = hardenedScales
@@ -711,7 +712,7 @@ internal sealed class MiracleInterceptProbe
         var revalidatedInput = !input.IsTextInputActive &&
             IsExactVirtualKey(triggerKey) &&
             threat.GameplayKeyToken == (int)triggerKey &&
-            inputFrame.IsGameplayKeyPhysicallyDown(triggerKey);
+            inputFrame.IsGameplayKeyGenerationEligible(triggerKey);
         var revalidatedInsideWindow =
             revalidationNow >= threat.ObservedAtMilliseconds &&
             revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat.Kind);
@@ -853,9 +854,11 @@ internal sealed class MiracleInterceptProbe
         bool enableFuriousBacklash,
         bool enableContradance,
         bool enablePostPurifyCrowdControl,
-        long nowMilliseconds)
+        long nowMilliseconds,
+        int episodeGameplayKeyToken)
     {
         var cleanseSignals = new List<MiracleCleanseFollowupSignal>();
+        var immediateThreats = new List<MiracleThreatState>();
         while (capture.TryDequeueMiracleInterceptThreat(out var signal))
         {
             var eventNow = Math.Max(nowMilliseconds, Environment.TickCount64);
@@ -957,6 +960,13 @@ internal sealed class MiracleInterceptProbe
             if (!RememberSignal(identity)) continue;
             Interlocked.Increment(ref recognizedThreatCount);
 
+            if (episodeGameplayKeyToken <= 0)
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity = $"{kind}: no exact held key reserved on capture";
+                continue;
+            }
+
             var canonical = ResolveCanonicalEnemy(signal.CasterEntityId, kind);
             if (canonical is null)
             {
@@ -984,7 +994,7 @@ internal sealed class MiracleInterceptProbe
                 lastOpportunity = $"{kind}: retired behind frozen exact {previousThreat.Kind} lease";
                 continue;
             }
-            activeThreat = new MiracleThreatState(
+            immediateThreats.Add(new MiracleThreatState(
                 kind,
                 canonical.GameObjectId,
                 canonical.EntityId,
@@ -997,10 +1007,27 @@ internal sealed class MiracleInterceptProbe
                 localPlayer.ClassJob.RowId,
                 ProtectionEndRank: null,
                 HeldActionRetryState.Initial,
-                GameplayKeyToken: 0);
+                GameplayKeyToken: episodeGameplayKeyToken));
+        }
+
+        if (activeThreat is null && immediateThreats.Count > 0)
+        {
+            var selected = immediateThreats
+                .OrderByDescending(static threat =>
+                    MiracleInterceptRules.GetDispatchPriority(threat.Kind))
+                .ThenBy(static threat => threat.ObservedAtMilliseconds)
+                .ThenBy(static threat => threat.EnemySlot)
+                .ThenBy(static threat => threat.GameObjectId)
+                .First();
+            activeThreat = selected;
             Interlocked.Increment(ref armedThreatCount);
+            foreach (var retired in immediateThreats)
+            {
+                if (retired == selected) continue;
+                Interlocked.Increment(ref rejectedThreatCount);
+            }
             ResetWaitDiagnostics();
-            lastOpportunity = $"{kind}: exact threat armed";
+            lastOpportunity = $"{selected.Kind}: exact ranked threat armed";
         }
 
         return cleanseSignals;
@@ -1012,7 +1039,9 @@ internal sealed class MiracleInterceptProbe
         bool higherPriorityClaimed,
         MiracleCleanseFollowupSignal? newSignal,
         long nowMilliseconds,
-        int? trackedSlot)
+        int? trackedSlot,
+        EmergencyActionInputFrame inputFrame,
+        int episodeGameplayKeyToken)
     {
         var enemySlot = trackedSlot ?? 0;
         EnemyHudSnapshot? canonical = null;
@@ -1057,7 +1086,17 @@ internal sealed class MiracleInterceptProbe
                     IsAliveAndTargetable: true,
                     ActiveResilienceStatusCount: CountActiveStatuses(
                         player,
-                        EnemyCombatConstants.ResilienceStatusId));
+                        EnemyCombatConstants.ResilienceStatusId,
+                        out var resilienceRemainingMilliseconds))
+                {
+                    ResilienceRemainingMilliseconds = resilienceRemainingMilliseconds,
+                    ReservationGameplayKeyToken = episodeGameplayKeyToken,
+                    ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
+                        previous.GameplayKeyToken > 0
+                            ? previous.GameplayKeyToken
+                            : episodeGameplayKeyToken,
+                        inputFrame),
+                };
                 teamTargetCountKnown = TryGetFreshTeamTargetCount(
                     localPlayer,
                     player,
@@ -1135,6 +1174,15 @@ internal sealed class MiracleInterceptProbe
         if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
             return null;
 
+        if (promotion.GameplayKeyToken <= 0)
+        {
+            Interlocked.Increment(ref cleanseFollowupCancellationCount);
+            Interlocked.Increment(ref rejectedThreatCount);
+            cleanseFollowupLastEvent =
+                "PostPurifyCC: release retired because no exact key was reserved on Purify";
+            return null;
+        }
+
         Interlocked.Increment(ref cleanseFollowupPromotionCount);
         canonical = ResolveCanonicalEnemy(promotion.Target);
         player = ResolveCleanseFollowupCandidate(localPlayer, promotion.Target);
@@ -1193,7 +1241,7 @@ internal sealed class MiracleInterceptProbe
             localPlayer.ClassJob.RowId,
             rank,
             HeldActionRetryState.Initial,
-            GameplayKeyToken: 0);
+            promotion.GameplayKeyToken);
 
         cleanseFollowupRemovedStatusId = promotionSignal.Key.EffectValue;
         return new MiracleFollowupPromotion(threat, rank);
@@ -1203,9 +1251,15 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         bool configurationEnabled,
         bool higherPriorityClaimed,
-        long nowMilliseconds)
+        long nowMilliseconds,
+        EmergencyActionInputFrame inputFrame,
+        int episodeGameplayKeyToken)
     {
-        var candidates = BuildGuardFollowupCandidates(localPlayer, nowMilliseconds);
+        var candidates = BuildGuardFollowupCandidates(
+            localPlayer,
+            nowMilliseconds,
+            inputFrame,
+            episodeGameplayKeyToken);
         var decision = MiracleGuardFollowupRules.Observe(
             guardFollowupState,
             new MiracleGuardFollowupObservation(
@@ -1272,6 +1326,15 @@ internal sealed class MiracleInterceptProbe
         if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
             return null;
 
+        if (promotion.GameplayKeyToken <= 0)
+        {
+            Interlocked.Increment(ref guardFollowupRetiredCount);
+            Interlocked.Increment(ref rejectedThreatCount);
+            guardFollowupLastEvent =
+                "GuardEndCC: release retired because no exact key was reserved on Guard entry";
+            return null;
+        }
+
         Interlocked.Increment(ref guardFollowupPromotionCount);
         var canonical = ResolveCanonicalEnemy(promotion.Target);
         var player = ResolveGuardFollowupCandidate(localPlayer, promotion.Target);
@@ -1321,7 +1384,7 @@ internal sealed class MiracleInterceptProbe
             localPlayer.ClassJob.RowId,
             rank,
             HeldActionRetryState.Initial,
-            GameplayKeyToken: 0);
+            promotion.GameplayKeyToken);
         return new MiracleFollowupPromotion(threat, rank);
     }
 
@@ -1432,7 +1495,9 @@ internal sealed class MiracleInterceptProbe
 
     private IReadOnlyList<MiracleGuardFollowupCandidate> BuildGuardFollowupCandidates(
         IPlayerCharacter localPlayer,
-        long nowMilliseconds)
+        long nowMilliseconds,
+        EmergencyActionInputFrame inputFrame,
+        int episodeGameplayKeyToken)
     {
         if (!executeTracker.IsActive) return [];
         var enemies = executeTracker.Enemies
@@ -1472,6 +1537,14 @@ internal sealed class MiracleInterceptProbe
                 ? ResolveGuardFollowupCandidate(localPlayer, target)
                 : null;
             var live = player is not null;
+            var previousActor = guardFollowupState.Actors
+                .Where(actor => actor.Target == target)
+                .Take(2)
+                .ToArray();
+            var ownedGameplayKeyToken = previousActor.Length == 1 &&
+                                        previousActor[0].GameplayKeyToken > 0
+                ? previousActor[0].GameplayKeyToken
+                : episodeGameplayKeyToken;
             var teamTargetCount = 0;
             var teamTargetCountKnown = live &&
                 TryGetFreshTeamTargetCount(
@@ -1479,11 +1552,15 @@ internal sealed class MiracleInterceptProbe
                     player!,
                     nowMilliseconds,
                     out teamTargetCount);
+            var guardRemainingMilliseconds = 0L;
+            var guardCount = live
+                ? CountActiveGuardStatuses(player!, out guardRemainingMilliseconds)
+                : -1;
             candidates.Add(new MiracleGuardFollowupCandidate(
                 target,
                 exactCanonical,
                 live,
-                live ? CountActiveGuardStatuses(player!) : -1,
+                guardCount,
                 live ? player!.CurrentHp : 0,
                 live ? player!.MaxHp : 0,
                 teamTargetCountKnown,
@@ -1492,6 +1569,11 @@ internal sealed class MiracleInterceptProbe
                 HasTrustedMp = live && enemy.HasTrustedMp,
                 CurrentMp = live ? enemy.CurrentMp : 0,
                 MaximumMp = live ? enemy.MaxMp : 0,
+                GuardRemainingMilliseconds = live ? guardRemainingMilliseconds : 0,
+                ReservationGameplayKeyToken = episodeGameplayKeyToken,
+                ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
+                    ownedGameplayKeyToken,
+                    inputFrame),
             });
         }
 
@@ -1643,30 +1725,65 @@ internal sealed class MiracleInterceptProbe
         return false;
     }
 
-    private static int CountActiveStatuses(IPlayerCharacter player, uint statusId)
+    private static int CountActiveStatuses(
+        IPlayerCharacter player,
+        uint statusId,
+        out long longestRemainingMilliseconds)
     {
+        longestRemainingMilliseconds = 0;
         var count = 0;
         foreach (var status in player.StatusList)
         {
             if (status.StatusId != statusId) continue;
             count++;
+            longestRemainingMilliseconds = Math.Max(
+                longestRemainingMilliseconds,
+                ValidatedProtectionRemainingMilliseconds(
+                    status.StatusId,
+                    status.RemainingTime));
             if (count > 1) return count;
         }
 
         return count;
     }
 
-    private static int CountActiveGuardStatuses(IPlayerCharacter player)
+    private static int CountActiveGuardStatuses(IPlayerCharacter player) =>
+        CountActiveGuardStatuses(player, out _);
+
+    private static int CountActiveGuardStatuses(
+        IPlayerCharacter player,
+        out long longestRemainingMilliseconds)
     {
+        longestRemainingMilliseconds = 0;
         var count = 0;
         foreach (var status in player.StatusList)
         {
             if (!MiracleGuardFollowupRules.IsExactGuardStatus(status.StatusId)) continue;
             count++;
+            longestRemainingMilliseconds = Math.Max(
+                longestRemainingMilliseconds,
+                ValidatedProtectionRemainingMilliseconds(
+                    status.StatusId,
+                    status.RemainingTime));
             if (count > 1) return count;
         }
 
         return count;
+    }
+
+    private static long ValidatedProtectionRemainingMilliseconds(
+        uint statusId,
+        float remainingSeconds)
+    {
+        if (!CcProtectionStatusCatalog.TryGet(statusId, out var definition) ||
+            !float.IsFinite(remainingSeconds) ||
+            remainingSeconds <= 0f ||
+            remainingSeconds > definition.MaximumRemainingTime)
+        {
+            return 0;
+        }
+
+        return Math.Max(1L, (long)Math.Ceiling((double)remainingSeconds * 1_000d));
     }
 
     private static unsafe bool HasActionRangeAndLineOfSight(
@@ -1689,7 +1806,6 @@ internal sealed class MiracleInterceptProbe
 
     private void ObserveProtectionEndHeldConsent(
         bool enabled,
-        bool dispatchAllowed,
         EmergencyActionInputFrame inputFrame,
         bool hardReset)
     {
@@ -1698,11 +1814,13 @@ internal sealed class MiracleInterceptProbe
             TryGetLatchedProtectionEndKey(out var previousKey) &&
             inputFrame.IsGameplayKeyPhysicallyDown(previousKey);
         var eligibleKey = VirtualKey.NO_KEY;
-        if (enabled && dispatchAllowed && !input.IsTextInputActive)
+        if (enabled && !input.IsTextInputActive)
         {
-            var observedKey = inputFrame.HeldGameplayKeyEligible
+            // Read the immutable raw frame snapshot so a same-frame Purify claim
+            // cannot hide the held generation from a future protection episode.
+            var observedKey = input.ProbeSucceeded && input.HeldGameplayKeyEligible
                 ? input.HeldGameplayKey
-                : inputFrame.FreshGameplayKeyPressed
+                : input.ProbeSucceeded && input.FreshGameplayKeyPressed
                     ? input.FreshGameplayKey
                     : VirtualKey.NO_KEY;
             if (IsExactVirtualKey(observedKey) &&
@@ -1720,6 +1838,39 @@ internal sealed class MiracleInterceptProbe
                 eligibleKey == VirtualKey.NO_KEY ? 0 : (int)eligibleKey,
                 latchedKeyPhysicallyDown,
                 hardReset));
+    }
+
+    private int ResolveEpisodeGameplayKeyToken(
+        bool allowHeldGameplayKey,
+        EmergencyActionInputFrame inputFrame)
+    {
+        var input = inputFrame.Snapshot;
+        if (!input.ProbeSucceeded || input.IsTextInputActive) return 0;
+        if (allowHeldGameplayKey &&
+            TryGetLatchedProtectionEndKey(out var latchedKey) &&
+            inputFrame.IsGameplayKeyGenerationEligible(latchedKey))
+        {
+            return (int)latchedKey;
+        }
+
+        var candidate = allowHeldGameplayKey && input.HeldGameplayKeyEligible
+            ? input.HeldGameplayKey
+            : input.FreshGameplayKeyPressed
+                ? input.FreshGameplayKey
+                : VirtualKey.NO_KEY;
+        return IsExactVirtualKey(candidate) &&
+               inputFrame.IsGameplayKeyGenerationEligible(candidate)
+            ? (int)candidate
+            : 0;
+    }
+
+    private static bool IsReservedGameplayKeyPhysicallyDown(
+        int gameplayKeyToken,
+        EmergencyActionInputFrame inputFrame)
+    {
+        if (gameplayKeyToken <= 0) return false;
+        var key = (VirtualKey)gameplayKeyToken;
+        return IsExactVirtualKey(key) && inputFrame.IsGameplayKeyGenerationEligible(key);
     }
 
     private bool TryGetLatchedProtectionEndKey(out VirtualKey key)
@@ -1805,7 +1956,7 @@ internal sealed class MiracleInterceptProbe
 
         var actionManager = ActionManager.Instance();
         if (actionManager == null ||
-            !HasStructuralActionReadiness(actionId) ||
+            !HasStructuralActionReadiness(localPlayer, actionId) ||
             !HasGlobalQueueReadiness(localPlayer, actionId))
         {
             return actionManager == null
@@ -1830,14 +1981,42 @@ internal sealed class MiracleInterceptProbe
             ClientActionAttemptBoundary.Capture(actionManager, actionId));
     }
 
-    private static unsafe bool HasStructuralActionReadiness(uint actionId)
+    private static unsafe bool HasStructuralActionReadiness(
+        IPlayerCharacter localPlayer,
+        uint actionId)
     {
         if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0)
             return false;
 
+        // PvP Forked Raiju can remain exposed by the combo carrier while the
+        // exact local "Sealed Forked Raiju" row forbids its execution. Live
+        // StatusList membership is authoritative; duration telemetry is not.
+        if (actionId == EnemyCombatConstants.ForkedRaijuActionId &&
+            localPlayer.StatusList.Any(static status =>
+                status.StatusId == EnemyCombatConstants.SealedForkedRaijuStatusId))
+        {
+            return false;
+        }
+
+        // Both PvP Raiju variants are movement attacks and explicitly cannot
+        // execute while Bound. Membership of the exact live Bind row is the
+        // authority; duration telemetry is deliberately ignored.
+        if (IsExactRaijuAction(actionId) &&
+            localPlayer.StatusList.Any(static status =>
+                status.StatusId == EnemyCombatConstants.PvPBindStatusId))
+        {
+            return false;
+        }
+
         var actionManager = ActionManager.Instance();
+        var adjustedActionId = actionManager == null
+            ? 0
+            : IsExactRaijuAction(actionId)
+                ? actionManager->GetAdjustedActionId(
+                    EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId)
+                : actionManager->GetAdjustedActionId(actionId);
         return actionManager != null &&
-               actionManager->GetAdjustedActionId(actionId) == actionId &&
+               adjustedActionId == actionId &&
                actionManager->IsActionOffCooldown(ActionType.Action, actionId) &&
                actionManager->CheckActionResources(ActionType.Action, actionId) == 0;
     }
@@ -1868,11 +2047,33 @@ internal sealed class MiracleInterceptProbe
             actionManager->ActionQueued);
     }
 
-    private static uint ResolveCounterActionId(
+    private unsafe uint ResolveCounterActionId(
         uint localJobId,
         bool miracleMetadataVerified,
-        bool silentNocturneMetadataVerified) =>
-        localJobId switch
+        bool silentNocturneMetadataVerified)
+    {
+        if (localJobId == EnemyCombatConstants.NinjaJobId)
+        {
+            if (!verifiedCounterActionIds.Contains(
+                    EnemyCombatConstants.ForkedRaijuActionId) ||
+                !verifiedCounterActionIds.Contains(
+                    EnemyCombatConstants.FleetingRaijuActionId))
+            {
+                return 0;
+            }
+
+            var actionManager = ActionManager.Instance();
+            if (actionManager == null)
+                return EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId;
+            var adjustedActionId = actionManager->GetAdjustedActionId(
+                EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId);
+            return IsExactRaijuAction(adjustedActionId) &&
+                   verifiedCounterActionIds.Contains(adjustedActionId)
+                ? adjustedActionId
+                : EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId;
+        }
+
+        return localJobId switch
         {
             EnemyCombatConstants.WhiteMageJobId when miracleMetadataVerified =>
                 EnemyCombatConstants.MiracleOfNatureActionId,
@@ -1880,19 +2081,28 @@ internal sealed class MiracleInterceptProbe
                 EnemyCombatConstants.SilentNocturneActionId,
             _ => 0,
         };
+    }
 
     private static CcImmunityBrakeBlockerFamily BlockerFamilyForAction(uint actionId) =>
-        actionId == EnemyCombatConstants.SilentNocturneActionId
-            ? CcImmunityBrakeBlockerFamily.StandardPurifyCc
-            : CcImmunityBrakeBlockerFamily.Miracle;
+        actionId == EnemyCombatConstants.MiracleOfNatureActionId
+            ? CcImmunityBrakeBlockerFamily.Miracle
+            : CcImmunityBrakeBlockerFamily.StandardPurifyCc;
 
     private static IReadOnlyList<uint> RequiredProtectionStatusIds(uint actionId) =>
         actionId switch
         {
             EnemyCombatConstants.MiracleOfNatureActionId => RequiredMiracleProtectionStatusIds,
-            EnemyCombatConstants.SilentNocturneActionId => RequiredSilentProtectionStatusIds,
+            EnemyCombatConstants.SilentNocturneActionId or
+            EnemyCombatConstants.ForkedRaijuActionId or
+            EnemyCombatConstants.FleetingRaijuActionId or
+            EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId =>
+                RequiredSilentProtectionStatusIds,
             _ => Array.Empty<uint>(),
         };
+
+    private static bool IsExactRaijuAction(uint actionId) =>
+        actionId is EnemyCombatConstants.ForkedRaijuActionId or
+            EnemyCombatConstants.FleetingRaijuActionId;
 
     private bool RememberSignal(MiracleSignalIdentity identity)
     {
@@ -2019,6 +2229,20 @@ internal sealed class MiracleInterceptProbe
             .ThenBy(static pair => pair.Key)
             .Select(static pair => (MiracleCleanseFollowupState?)pair.Value)
             .FirstOrDefault() ?? MiracleCleanseFollowupState.Initial;
+        var diagnosticGuardState = guardFollowupState.Actors
+            .OrderByDescending(static actor => actor.Phase)
+            .ThenBy(static actor => actor.Target.EnemySlot)
+            .Select(static actor => (MiracleGuardFollowupActorState?)actor)
+            .FirstOrDefault();
+        var reservedKeyToken = activeThreat is { } reservedThreat &&
+                               IsProtectionEndThreat(reservedThreat.Kind)
+            ? reservedThreat.GameplayKeyToken
+            : diagnosticCleanseState.GameplayKeyToken > 0
+                ? diagnosticCleanseState.GameplayKeyToken
+                : diagnosticGuardState?.GameplayKeyToken ?? 0;
+        var expectedProtectionEnd = diagnosticCleanseState.ExpectedProtectionEndAtMilliseconds > 0
+            ? diagnosticCleanseState.ExpectedProtectionEndAtMilliseconds
+            : diagnosticGuardState?.ExpectedProtectionEndAtMilliseconds ?? -1;
         return value with
         {
             InputClaimed = inputClaimedThisFrame,
@@ -2066,6 +2290,12 @@ internal sealed class MiracleInterceptProbe
             ProtectionEndHeldConsentKey = TryGetLatchedProtectionEndKey(out var heldConsentKey)
                 ? heldConsentKey
                 : VirtualKey.NO_KEY,
+            ProtectionEndReservedKey = IsExactVirtualKey((VirtualKey)reservedKeyToken)
+                ? (VirtualKey)reservedKeyToken
+                : VirtualKey.NO_KEY,
+            ProtectionEndExpectedRemainingMilliseconds = expectedProtectionEnd > 0
+                ? Math.Max(0, expectedProtectionEnd - Environment.TickCount64)
+                : 0,
             ProtectionEndRankTeamPressureKnown =
                 protectionEndLastRank?.TeamTargetCountKnown ?? false,
             ProtectionEndRankTeamPressure = protectionEndLastRank?.TeamTargetCount ?? 0,
@@ -2091,7 +2321,7 @@ internal sealed class MiracleInterceptProbe
             !IsLivePlayer(target) ||
             !IsExactVirtualKey(frozenKey) ||
             threat.GameplayKeyToken != (int)frozenKey ||
-            !inputFrame.IsGameplayKeyPhysicallyDown(frozenKey) ||
+            !inputFrame.IsGameplayKeyGenerationEligible(frozenKey) ||
             threat.CounterActionId == 0)
         {
             return null;

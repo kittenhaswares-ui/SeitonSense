@@ -68,6 +68,15 @@ internal static class EnemyCombatConstants
     internal const ushort SilentNocturneRecast100ms = 200;
     internal const float SilentNocturneRange = 20f;
 
+    internal const uint NinjaJobId = 30;
+    internal const uint NinjaAeolianEdgeComboCarrierActionId = 29500;
+    internal const uint ForkedRaijuActionId = 29510;
+    internal const uint ForkedRaijuActionIconId = 9656;
+    internal const uint SealedForkedRaijuStatusId = 3195;
+    internal const uint FleetingRaijuActionId = 29707;
+    internal const uint FleetingRaijuActionIconId = 9693;
+    internal const float RaijuRange = 20f;
+
     internal const uint ContradanceActionId = 29432;
     internal const uint ContradanceActionIconId = 9641;
     internal const uint DancerJobId = 38;
