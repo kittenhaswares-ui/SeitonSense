@@ -114,6 +114,7 @@ $miracleGuardFollowupSelfTestsPath = Join-Path $coreSelfTestRoot 'MiracleGuardFo
 $miracleProtectionEndRulesPath = Join-Path $coreRoot 'MiracleProtectionEndRules.cs'
 $miracleProtectionEndSelfTestsPath = Join-Path $coreSelfTestRoot 'MiracleProtectionEndSelfTests.cs'
 $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
+$defensiveUtilitySelfTestsPath = Join-Path $coreSelfTestRoot 'DefensiveUtilitySelfTests.cs'
 $pressureEscapeRulesPath = Join-Path $coreRoot 'PressureEscapeRules.cs'
 $pressureEscapeSelfTestsPath = Join-Path $coreSelfTestRoot 'PressureEscapeSelfTests.cs'
 $ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
@@ -1075,7 +1076,7 @@ if ([regex]::Matches($pluginSource, '\bnew\s+DarkKnightShadowbringerMacroService
 # boundary, one exact default-off SCH Critical Strategy boundary, one exact
 # Eukrasia-triggered SGE Smart Kardia boundary, one exact self-only Smart
 # Recuperate boundary, one exact default-off Monk Earth's Reply call, and one
-# exact lowest-priority default-off DRK Plunge call. Near Assist/Near Help/Far Help may
+# exact job-tier default-off DRK Plunge call. Near Assist/Near Help/Far Help may
 # forward an incoming action through their sole Original. The same reviewed
 # detour may issue exactly one spent DRK Shadowbringer call before leaving the
 # original Souleater carrier unchanged; that boundary is pinned below.
@@ -2188,9 +2189,9 @@ if ($normalizedMiracleProtectionEndRules -notmatch 'DispatchConsumesHeldConsent\
     $normalizedMiracleProtectionEndRules -notmatch 'if \(observation\.HardReset \|\| !observation\.Enabled \|\| observation\.IsTextInputActive\).*?MiracleProtectionEndHeldConsentState\.Initial.*?if \(previous\.IsLatched && observation\.LatchedKeyPhysicallyDown\) return previous;.*?observation\.UnconsumedEligibleGameplayKeyToken > 0.*?MiracleProtectionEndHeldConsentState\.Initial') {
     throw 'No dispatch may globally consume continuous held consent; exact consent persists only while physically held and clears on release/text/disable/reset.'
 }
-if ($normalizedMiracleProtectionEndRules -notmatch 'pressureTrust = right\.TeamTargetCountKnown\.CompareTo\(left\.TeamTargetCountKnown\).*?if \(left\.TeamTargetCountKnown\).*?right\.TeamTargetCount\.CompareTo\(left\.TeamTargetCount\).*?hpRatio = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\).*?mpTrust = right\.HasTrustedMp\.CompareTo\(left\.HasTrustedMp\).*?if \(left\.HasTrustedMp\).*?mpRatio = CompareRatio\( left\.CurrentMp, left\.MaximumMp, right\.CurrentMp, right\.MaximumMp\).*?left\.EnemySlot\.CompareTo\(right\.EnemySlot\).*?left\.EntityId\.CompareTo\(right\.EntityId\).*?left\.GameObjectId\.CompareTo\(right\.GameObjectId\).*?left\.JobId\.CompareTo\(right\.JobId\).*?left\.Threat\.CompareTo\(right\.Threat\)' -or
+if ($normalizedMiracleProtectionEndRules -notmatch 'leftHasPositivePressure = left\.TeamTargetCountKnown && left\.TeamTargetCount > 0;.*?rightHasPositivePressure = right\.TeamTargetCountKnown && right\.TeamTargetCount > 0;.*?positivePressure = rightHasPositivePressure\.CompareTo\(leftHasPositivePressure\);.*?if \(leftHasPositivePressure\).*?right\.TeamTargetCount\.CompareTo\(left\.TeamTargetCount\).*?hpRatio = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\).*?mpTrust = right\.HasTrustedMp\.CompareTo\(left\.HasTrustedMp\).*?if \(left\.HasTrustedMp\).*?mpRatio = CompareRatio\( left\.CurrentMp, left\.MaximumMp, right\.CurrentMp, right\.MaximumMp\).*?left\.EnemySlot\.CompareTo\(right\.EnemySlot\).*?left\.EntityId\.CompareTo\(right\.EntityId\).*?left\.GameObjectId\.CompareTo\(right\.GameObjectId\).*?left\.JobId\.CompareTo\(right\.JobId\).*?left\.Threat\.CompareTo\(right\.Threat\)' -or
     $normalizedMiracleProtectionEndRules -notmatch 'for \(var index = 0; index < candidates\.Count; index\+\+\).*?if \(!candidates\[index\]\.IsValid\) continue;.*?Compare\(candidates\[index\], candidates\[selected\]\) < 0.*?return selected') {
-    throw 'Protection-end ranking must choose one winner by known fresh pressure before unknown (known zero valid), then descending pressure, ascending exact HP, known trusted exact-10k MP before unknown/ascending, and stable S-slot/IDs.'
+    throw 'Protection-end ranking must choose one winner by optional fresh positive pressure bonus, then ascending exact HP, known trusted exact-10k MP before unknown/ascending, and stable S-slot/IDs; zero and unknown/stale pressure are neutral peers.'
 }
 if ($miracleProtectionEndRules -match '\b(HasExactTeamFocus|RequiredTeamTargetCount)\b|TeamTargetCount\s*>=\s*[12]\b') {
     throw 'Shared protection-end ranking must not restore a minimum pressure threshold or fabricate unknown pressure as zero.'
@@ -2220,7 +2221,7 @@ $miracleGuardTestMethods = @(
     'ExactGuardRowsAndAbsenceCannotSyntheticArm',
     'FirstVerifiedAbsentFramePromotesOnceAndRequiresPositiveRearm',
     'PressureHasNoMinimumAndPriorityWaitsInsideOriginalWindow',
-    'SimultaneousReleaseRanksPressureThenHpAndRetiresEveryOther',
+    'SimultaneousReleaseUsesPositivePressureBonusThenFallbacks',
     'IdentityLifeAndStatusAmbiguityBreakTheEpisode',
     'ConfigurationContextClockAndHardResetClearAllEpisodes'
 )
@@ -2230,7 +2231,7 @@ foreach ($method in $miracleGuardTestMethods) {
 }
 $miracleProtectionEndTestMethods = @(
     'HeldConsentRequiresOneExactUnconsumedGeneration',
-    'RankingIsPressureThenHealthThenTrustedMpThenIdentity',
+    'RankingUsesPositivePressureBonusThenHealthMpAndIdentity',
     'WhiteMageAndBardShareProtectionEndSemantics',
     'HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound'
 )
@@ -2246,8 +2247,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 340) {
-    throw 'All four shared protection-end tests and the exact 340-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 342) {
+    throw 'All four shared protection-end tests and the exact 342-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -2270,6 +2271,8 @@ Assert-Literals $miracleGuardFollowupSelfTests @(
     'fresh known pressure zero may promote at 499 ms',
     '500 ms boundary is already expired',
     'highest fresh exact pressure wins before HP',
+    'zero and unavailable pressure both remain eligible',
+    'known zero and unavailable pressure are neutral, so lower HP wins',
     'lower trusted MP ratio wins before S-slot',
     'equal HP ratio uses lower S-slot',
     'other ready opportunity is spent',
@@ -2290,8 +2293,10 @@ Assert-Literals $miracleProtectionEndSelfTests @(
     'post-Guard dispatch retains consent for a later distinct episode',
     'a higher-priority accepted action may finish before exact counter-CC dispatch',
     'retry cannot run before the shared throttle',
-    'known zero pressure ranks ahead of unknown',
-    'higher pressure ranks before HP',
+    'known zero and unknown pressure are neutral, so HP wins',
+    'zero cannot outrank unknown before stable identity',
+    'higher positive pressure ranks before HP',
+    'any positive fresh pressure earns the optional bonus',
     'lower exact HP ratio ranks next',
     'trusted MP ranks ahead of unknown MP',
     'lower trusted MP ratio ranks next',
@@ -2375,7 +2380,7 @@ Assert-Literals $emergencyInputCoordinator @(
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared Purify, Smart Recuperate, reactive Guard, PLD Guardian, pressure Sprint, Ally Rescue, reactive-CC, NIN, SCH, and DRK Plunge input ownership'
+) 'Shared physical-hold input ownership for Purify > reactive CC > Ally Rescue > PLD Guardian > NIN > SCH > DRK Plunge > Smart Recuperate > generic Guard > pressure Sprint'
 if ($normalizedEmergencyInputCoordinator -notmatch 'internal bool FreshGameplayKeyPressed => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.FreshGameplayKeyPressed;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool HeldGameplayKeyEligible => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.HeldGameplayKeyEligible;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;') {
@@ -2490,15 +2495,15 @@ Assert-Literals $heldCastCancellationRules @(
     'public enum HeldCastCancellationHelperKind : byte',
     'None = 0,',
     'Purify = 1,',
-    'SmartRecuperate = 2,',
+    'ReactiveCounterCc = 2,',
     'AllyRescue = 3,',
-    'ReactiveCounterCc = 4,',
-    'Guard = 5,',
-    'Guardian = 6,',
-    'PressureEscapeSprint = 7,',
-    'NinjaSeiton = 8,',
-    'ScholarCriticalStrategy = 9,',
-    'DarkKnightPlunge = 10,',
+    'Guardian = 4,',
+    'NinjaSeiton = 5,',
+    'ScholarCriticalStrategy = 6,',
+    'DarkKnightPlunge = 7,',
+    'SmartRecuperate = 8,',
+    'Guard = 9,',
+    'PressureEscapeSprint = 10,',
     'HeldCastCancellationRequest(',
     'TargetPressureActorIdentity LocalPlayer,',
     'TargetPressureActorIdentity Target,',
@@ -2570,6 +2575,7 @@ if ($castFieldWrites.Count -ne 0) {
 }
 
 $heldCastCancellationTestMethods = @(
+    'CanonicalHelperPriorityOrderIsPinned',
     'ExactRequestIsOncePerObservedCastEpoch',
     'IntentMayBecomeEligibleInsideTheSameCast',
     'OnlyConsistentClearRearmsAndSignalDriftFailsClosed',
@@ -2581,22 +2587,22 @@ foreach ($method in $heldCastCancellationTestMethods) {
     Assert-Literals $heldCastCancellationSelfTests @("internal static void $method()") "Held cast cancellation self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("HeldCastCancellationSelfTests.$method") "Held cast cancellation test registration $method"
 }
-if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 6 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 6) {
-    throw 'All six once-per-cast, dual-clear, drift-quarantine, exact-boundary, and central-gate cast-cancellation tests must remain registered exactly once.'
+if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 7) {
+    throw 'All seven canonical-order, once-per-cast, dual-clear, drift-quarantine, exact-boundary, and central-gate cast-cancellation tests must remain registered exactly once.'
 }
 
 $castRequestProducers = @(
     [pscustomobject]@{ Path = $purifyProbePath; Kind = 'Purify'; Count = 1 },
-    [pscustomobject]@{ Path = $smartRecuperateProbePath; Kind = 'SmartRecuperate'; Count = 1 },
-    [pscustomobject]@{ Path = $allyRescueProbePath; Kind = 'AllyRescue'; Count = 1 },
     [pscustomobject]@{ Path = $miracleInterceptProbePath; Kind = 'ReactiveCounterCc'; Count = 1 },
-    [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guard'; Count = 1 },
+    [pscustomobject]@{ Path = $allyRescueProbePath; Kind = 'AllyRescue'; Count = 1 },
     [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guardian'; Count = 1 },
-    [pscustomobject]@{ Path = $pressureEscapeSprintProbePath; Kind = 'PressureEscapeSprint'; Count = 1 },
     [pscustomobject]@{ Path = $ninjaSeitonProbePath; Kind = 'NinjaSeiton'; Count = 1 },
     [pscustomobject]@{ Path = $scholarCriticalStrategyProbePath; Kind = 'ScholarCriticalStrategy'; Count = 1 },
-    [pscustomobject]@{ Path = $darkKnightPlungeProbePath; Kind = 'DarkKnightPlunge'; Count = 1 }
+    [pscustomobject]@{ Path = $darkKnightPlungeProbePath; Kind = 'DarkKnightPlunge'; Count = 1 },
+    [pscustomobject]@{ Path = $smartRecuperateProbePath; Kind = 'SmartRecuperate'; Count = 1 },
+    [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guard'; Count = 1 },
+    [pscustomobject]@{ Path = $pressureEscapeSprintProbePath; Kind = 'PressureEscapeSprint'; Count = 1 }
 )
 $castRequestProducerPaths = @($castRequestProducers.Path | Sort-Object -Unique)
 $allCastRequestProducerSource = ($castRequestProducerPaths | ForEach-Object {
@@ -2624,9 +2630,9 @@ $castSelection = [regex]::Match(
     'var castCancellationRequest =(?<Body>.*?)heldCastCancellation\.Observe\(')
 if (-not $castSelection.Success -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 10 -or
-    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?plunge\.InputClaimed, plunge\.CastCancellationRequest\)' -or
+    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
     $castSelection.Groups['Body'].Value -match '\b(kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Recuperate > Rescue > reactive CC > Guard > Guardian > Sprint > NIN > SCH > DRK order, excluding Kardia and Monk.'
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > reactive CC > Rescue > Guardian > NIN > SCH > DRK > Recuperate > Guard > Sprint order, excluding Kardia and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -2832,20 +2838,20 @@ $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Obse
 $darkKnightPlungeObserve = [regex]::Match($personalStatus, '\bdarkKnightPlunge\.Observe\s*\(')
 if (-not $purifyObserve.Success -or -not $guardObserve.Success -or -not $smartRecuperateObserve.Success -or -not $guardianObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
     -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or -not $darkKnightPlungeObserve.Success -or
-    $purifyObserve.Index -gt $smartRecuperateObserve.Index -or
-    $smartRecuperateObserve.Index -gt $rescueObserve.Index -or
-    $rescueObserve.Index -gt $miracleObserve.Index -or
-    $miracleObserve.Index -gt $guardObserve.Index -or
-    $guardObserve.Index -gt $guardianObserve.Index -or
+    $purifyObserve.Index -gt $miracleObserve.Index -or
+    $miracleObserve.Index -gt $rescueObserve.Index -or
+    $rescueObserve.Index -gt $guardianObserve.Index -or
     $guardianObserve.Index -gt $guardianCommunicationObserve.Index -or
-    $guardianCommunicationObserve.Index -gt $pressureEscapeObserve.Index -or
-    $pressureEscapeObserve.Index -gt $smartKardiaObserve.Index -or
-    $smartKardiaObserve.Index -gt $ninjaSeitonObserve.Index -or
+    $guardianCommunicationObserve.Index -gt $ninjaSeitonObserve.Index -or
     $ninjaSeitonObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
-    $scholarCriticalStrategyObserve.Index -gt $monkEarthReplyObserve.Index -or
-    $monkEarthReplyObserve.Index -gt $darkKnightPlungeObserve.Index -or
+    $scholarCriticalStrategyObserve.Index -gt $darkKnightPlungeObserve.Index -or
+    $darkKnightPlungeObserve.Index -gt $smartRecuperateObserve.Index -or
+    $smartRecuperateObserve.Index -gt $guardObserve.Index -or
+    $guardObserve.Index -gt $pressureEscapeObserve.Index -or
+    $pressureEscapeObserve.Index -gt $smartKardiaObserve.Index -or
+    $smartKardiaObserve.Index -gt $monkEarthReplyObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
-    throw 'Personal status coordination must process Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, Guardian, same-frame Guardian communication, pressure Sprint, Kardia, NIN, SCH, Monk, then DRK Plunge in exact order.'
+    throw 'Personal status coordination must process Purify, reactive CC, Ally Rescue, Guardian, same-frame Guardian communication, NIN, SCH, DRK Plunge, Smart Recuperate, generic Guard, pressure Sprint, event Kardia, then event Monk in exact order.'
 }
 Assert-Literals $personalStatus @(
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;',
@@ -2889,7 +2895,7 @@ Assert-Literals $personalStatus @(
     'guardActive',
     'miracleInterceptConfigurationEnabled,',
     '!purifyClaimedPriority &&',
-    '!allyRescueClaimedPriority',
+    '!miracle.InputClaimed &&',
     'metadata.AllyRescueStatusesVerified',
     'metadata.MiracleOfNatureActionVerified',
     'metadata.MarksmanSpiteVerified',
@@ -2935,7 +2941,7 @@ Assert-Literals $personalStatus @(
     'darkKnightPlunge.Reset()',
     'metadata.PurifyVerified',
     'context == SupportedPvPContext.CrystallineConflict'
-) 'Exact-job shared priority from self-Purify through lowest-priority DRK Plunge'
+) 'Exact shared priority from self-Purify through the job-specific DRK Plunge tier'
 Assert-Literals $personalStatus @(
     'var purifyHeldInputEnabled = configuration.Enabled &&',
     'var defensiveUtilityHeldInputEnabled = defensiveUtilitiesConfigurationEnabled &&',
@@ -2964,11 +2970,14 @@ if (-not $persistentHeldGateBlock.Success -or
 Assert-Literals $personalStatus @(
     'var purifyClaimedPriority = purify.InputClaimed;',
     'hasPurifyRemovableCrowdControl ||',
-    'var smartRecuperateClaimedPriority = recuperate.InputClaimed;',
     'var allyRescueClaimedPriority = rescue.InputClaimed;',
+    'var guardianClaimedPriority = defense.InputClaimed;',
+    'var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority ||',
+    'plunge.InputClaimed;',
+    'var smartRecuperateClaimedPriority = recuperate.InputClaimed;',
     'miracle.InputClaimed ||',
     'var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||',
-    'defense.InputClaimed;',
+    'guardianClaimedPriority;',
     'var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'ninjaSeitonHeldEnabled:',
@@ -2976,14 +2985,15 @@ Assert-Literals $personalStatus @(
     'scholar.InputClaimed ||',
     'emergencyInputFrame.IsConsumed'
 ) 'Frame-local absolute priority claims across every held helper'
-if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !smartRecuperateClaimedPriority && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !smartRecuperateClaimedPriority && !allyRescueClaimedPriority && !emergencyInputFrame\.IsConsumed' -or
-    $normalizedPersonalStatus -notmatch 'var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| smartRecuperateClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var defense = defensiveUtility\.ObserveGuardian\(.*?miracle\.InputClaimed \|\| guardDefense\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?miracle\.InputClaimed \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
-    throw 'Purify, Recup, Rescue, reactive CC, Guard, Guardian, and Sprint must propagate frame-local priority in exact order; removable CC must absolutely block Recup.'
+if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?purifyClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: true\)' -or
+    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\(.*?purifyClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?guardianClaimedPriority \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
+    throw 'The runtime must propagate frame-local priority exactly as Purify > reactive CC > Rescue > Guardian > NIN > SCH > DRK > Recuperate > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
     $normalizedPersonalStatus -match '\bsmartKardiaHeldEnabled\b' -or
-    $normalizedPersonalStatus -notmatch 'var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var kardia = smartKardia\.Observe\(.*?var ninja = ninjaSeiton\.Observe\(.*?kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var scholar = scholarCriticalStrategy\.Observe\(.*?ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?var monk = monkEarthReply\.Observe\(.*?scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?darkKnightPlunge\.Observe\(.*?monk\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame') {
-    throw 'Kardia, held NIN, held SCH, Monk, and held DRK must remain in exact lower-priority order with no held-Kardia slot and no consumed-frame overtake.'
+    $normalizedPersonalStatus -notmatch 'var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var kardia = smartKardia\.Observe\(.*?pressureEscapeClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var monk = monkEarthReply\.Observe\(.*?kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
+    throw 'Event Kardia and event Monk must remain last after all ten physical-hold helpers, with no held-Kardia slot and no consumed-frame overtake.'
 }
 if ($personalStatus -match '\bstatus\.Address\b|\bStatusAddress\b') {
     throw 'Personal status scanning must never gate on status.Address.'
@@ -2992,8 +3002,8 @@ if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe
     throw 'Exact live or identity-and-territory-bound propagated Guard must be computed independently of the defensive-utility master before every direct-action probe.'
 }
 if ([regex]::Matches($personalStatus, '\bguardianCommunication\.Observe\s*\(').Count -ne 1 -or
-    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\(.*?\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed \|\| defense\.InputClaimed;') {
-    throw 'Guardian communication must observe once after the independent PLD pass without becoming a separate held scheduler claim.'
+    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\(.*?beginsFrame: true\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\);.*?var guardianClaimedPriority = defense\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?prioritizedGuardianPass: defense\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed \|\| guardianClaimedPriority;') {
+    throw 'Guardian must begin from a clean frame, publish its exact accepted episode to communication independently, and only then be aggregated with the later generic Guard pass.'
 }
 if (($personalStatus -replace '(?s)//.*?\r?\n', '') -match '\bconfiguration\.PreGuardOnLowHpPressure\b|\bEnableSageKardiaOnHeldKey\b') {
     throw 'Legacy pre-Guard and held-Kardia configuration fields may not be read by the PersonalStatus runtime.'
@@ -3013,6 +3023,18 @@ $normalizedDefensiveUtilityRules = $defensiveUtilityRules -replace '\s+', ' '
 $defensiveUtility = Read-RequiredSource $defensiveUtilityProbePath 'Defensive utility runtime'
 $normalizedDefensiveUtility = $defensiveUtility -replace '\s+', ' '
 Assert-Literals $defensiveUtilityRules @(
+    'DefensiveUtilityFramePass(',
+    'DefensiveUtilityFrameAggregation(',
+    'bool GuardianOwnsPresentation,',
+    'AggregateFramePasses(',
+    'guardian.InputClaimed ||',
+    'guardian.UseActionAttempted ||',
+    '(guardian.Action == DefensiveUtilityActionKind.Guardian &&',
+    '!guard.InputClaimed &&',
+    '!guard.UseActionAttempted)',
+    'guardian.InputClaimed || guard.InputClaimed',
+    'guardian.UseActionAttempted || guard.UseActionAttempted',
+    'guardian.UseActionAccepted || guard.UseActionAccepted',
     'GuardPropagationState(',
     'GuardPropagationDecision(',
     'public bool SuppressDirectActionHelpers =>',
@@ -3044,6 +3066,9 @@ Assert-Literals $defensiveUtilityRules @(
     'candidate.DistanceSquared >= 0f',
     'spentActors?.Contains(candidate.Actor) == true'
 ) 'Exact pressure, native Guardian reachability, Resilience, and split one-intent defensive rules'
+if ($normalizedDefensiveUtilityRules -notmatch 'public static DefensiveUtilityFrameAggregation AggregateFramePasses\( DefensiveUtilityFramePass guardian, DefensiveUtilityFramePass guard\) \{ var guardianOwnsPresentation = guardian\.InputClaimed \|\| guardian\.UseActionAttempted \|\| \(guardian\.Action == DefensiveUtilityActionKind\.Guardian && !guard\.InputClaimed && !guard\.UseActionAttempted\); return new DefensiveUtilityFrameAggregation\( guardianOwnsPresentation, guardian\.InputClaimed \|\| guard\.InputClaimed, guardian\.UseActionAttempted \|\| guard\.UseActionAttempted, guardian\.UseActionAccepted \|\| guard\.UseActionAccepted\); \}') {
+    throw 'Defensive frame aggregation must be pure current-frame data: a Guardian claim/attempt owns presentation, unavailable Guardian stays background-only while Guard is idle, any Guard claim/attempt wins, and aggregate claim/attempt/acceptance bits are monotonic.'
+}
 $guardianTriggerPopupMethod = [regex]::Match(
     $normalizedDefensiveUtilityRules,
     'public static GuardianTriggerPopup\? ObserveGuardianTriggerPopup\(.*?\) \{(?<Body>.*?)\} public static bool CanDispatchPostPurifyGuard')
@@ -3113,6 +3138,30 @@ Assert-Literals $defensiveUtility @(
     'if (outcome == ClientActionAttemptOutcome.ClientAccepted)',
     'ObserveGuardSuppression('
 ) 'Shared retry exact Guard and Guardian runtime'
+if ($normalizedDefensiveUtility -notmatch 'var prior = beginsFrame \? CreateFrameSnapshotBase\(guardActive\) : Snapshot;' -or
+    $normalizedDefensiveUtility -notmatch 'private DefensiveUtilityProbeSnapshot CreateFrameSnapshotBase\(bool guardActive\) => DefensiveUtilityProbeSnapshot\.Initial with \{ Active = false, GuardActive = guardActive,.*?LastEvent = "Frame initialized", \};' -or
+    $normalizedDefensiveUtility -notmatch 'var guardResult = new DefensiveUtilityProbeSnapshot\(.*?var result = prioritizedGuardianPass is \{ \} guardianPass \? MergePrioritizedGuardianPass\(guardResult, guardianPass\) : guardResult;' -or
+    $normalizedDefensiveUtility -notmatch 'private static DefensiveUtilityProbeSnapshot MergePrioritizedGuardianPass\(.*?DefensiveUtilityRules\.AggregateFramePasses\(.*?Action = aggregate\.GuardianOwnsPresentation \? guardianPass\.Action : guardPass\.Action,.*?InputClaimed = aggregate\.InputClaimed,.*?UseActionAttempted = aggregate\.UseActionAttempted, UseActionAccepted = aggregate\.UseActionAccepted,.*?LastEvent = aggregate\.GuardianOwnsPresentation \? guardianPass\.LastEvent : guardPass\.LastEvent,') {
+    throw 'Guardian must start from a clean frame-local snapshot, and the later Guard pass must publish only their current-frame aggregate without stale or masked Guard diagnostics.'
+}
+$defensiveUtilitySelfTests = Read-RequiredSource $defensiveUtilitySelfTestsPath 'Defensive utility self-tests'
+Assert-Literals $defensiveUtilitySelfTests @(
+    'public static void IndependentGuardianAndGuardPassesAggregateCurrentFrameOnly()',
+    'Guardian cast/throttle wait stays visible',
+    'Guardian claim survives later Guard pass',
+    'idle Guardian cannot mask current Guard',
+    'unready Guardian candidate cannot mask the Guard which actually acted',
+    'later Guard acceptance remains visible',
+    'unready Guardian remains visible while the later Guard pass is idle',
+    'background Guardian diagnostics cannot synthesize a claim',
+    'background Guardian diagnostics cannot synthesize an attempt',
+    'no stale prior-frame owner is synthesized',
+    'no stale prior-frame claim is synthesized',
+    'no stale prior-frame attempt is synthesized'
+) 'Independent current-frame Guardian/Guard aggregation regression'
+Assert-Literals $coreSelfTestProgramForGuardian @(
+    'DefensiveUtilitySelfTests.IndependentGuardianAndGuardPassesAggregateCurrentFrameOnly'
+) 'Independent Guardian/Guard aggregation test registration'
 if ([regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 4 -or
     [regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 2 -or
     [regex]::Matches($defensiveUtility, '\bHeldActionRetryRules\.Complete\s*\(').Count -ne 2 -or
@@ -3258,8 +3307,9 @@ if ($allyRescueSelection -match '\b(HeavyStatusId|BindStatusId)\b|\b1344\b|\b134
     throw 'Heavy and Bind must remain excluded from Ally Rescue triggers.'
 }
 
-# Reactive CC is the direct-action boundary after Purify, Smart Recuperate,
-# defensive utility, pressure Sprint, and Ally Rescue. Startup events retain
+# Reactive CC is the highest-priority job-specific direct-action boundary,
+# immediately after Purify and before Ally Rescue, Guardian, NIN, SCH, DRK,
+# Smart Recuperate, generic Guard, and pressure Sprint. Startup events retain
 # one-generation ownership; protection-end events retain only exact held consent.
 $miracleIntercept = Read-RequiredSource $miracleInterceptProbePath 'Miracle intercept probe'
 $normalizedMiracleIntercept = $miracleIntercept -replace '\s+', ' '
@@ -4157,14 +4207,13 @@ Assert-Literals $metadataGuard @(
 ) 'Independent Monk Earth Reply metadata gate'
 
 $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
-if (-not $monkObserve.Success -or $monkObserve.Index -lt $scholarCriticalStrategyObserve.Index -or
-    $monkObserve.Index -gt $darkKnightPlungeObserve.Index -or
+if (-not $monkObserve.Success -or $monkObserve.Index -lt $smartKardiaObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| kardia\.UseActionAttempted \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed') {
-    throw 'Monk Earth Reply must run after SCH and before DRK Plunge, require exact Monk plus no Guard, and yield whenever an earlier helper claimed or attempted.'
+    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
+    throw 'Event Monk Earth Reply must remain last after event Kardia, require exact Monk plus no Guard, and yield whenever any earlier helper claimed or attempted.'
 }
 
-# DRK Plunge is the last and lowest-priority direct-action helper. The first
+# DRK Plunge closes the job-specific physical-hold tier before generic helpers. The first
 # request owns one ordinary held-key generation; continued hold can open exactly
 # one later request only after a known not-ready -> ready cooldown transition.
 $darkKnightPlungeRules = Read-RequiredSource $darkKnightPlungeRulesPath 'DRK Plunge rules'
@@ -4196,7 +4245,7 @@ Assert-Literals $darkKnightPlungeRules @(
     'cooldownStateKnown',
     'cooldownReady',
     'actionStructurallyReady'
-) 'Exact lowest-priority DRK Plunge Core policy'
+) 'Exact job-tier DRK Plunge Core policy'
 if ($normalizedDarkKnightPlungeRules -notmatch '\(ulong\)currentHp \* 100UL <= \(ulong\)maximumHp \* MaximumHpPercent' -or
     $normalizedDarkKnightPlungeRules -notmatch 'centerDistanceSquared <= MaximumCenterDistanceSquared' -or
     $normalizedDarkKnightPlungeRules -notmatch 'if \(!observation\.CooldownStateKnown\).*?PreservedUnknown.*?if \(!observation\.CooldownReady\).*?ObservedCooldownUnavailable = true.*?if \(!state\.ObservedCooldownUnavailable\).*?ReadyEpochUnchanged.*?CurrentReadyEpochToken = NextToken' -or
@@ -5652,7 +5701,7 @@ Assert-Literals $settingsWindow @(
     'Exact current hard/cast targets only; recent hits do not count.',
     'This option is independent from the',
     'visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key.',
-    'Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, and Guardian keep priority.',
+    'Purify, the job-specific second tier, Smart Recuperate, and generic Guard keep priority.',
     'Known',
     'unavailability waits for free; only an explicit client rejection may retry the same exact Sprint',
     'episode. Any later manual action',
@@ -6693,7 +6742,8 @@ Assert-Literals $settingsWindow @(
     'At exactly 16,000 or more missing HP and at least',
     '2,000 observed MP, it may request one self-targeted PvP Recuperate (29711).',
     'is not ready, it waits without blocking a currently usable lower-priority helper.',
-    'Purify keeps priority. Smart Recuperate is evaluated before Ally Rescue and reactive counter-CC, while',
+    'Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before',
+    'generic Guard and pressure Sprint, while',
     'A clean client rejection may retry after 50 ms, up',
     'to eight calls total.',
     'ambiguous/invalid exact outcome latches only this helper until the frozen key is released.',
@@ -6703,7 +6753,8 @@ Assert-Literals $settingsWindow @(
     'Guardian for an exact ally at 20% HP or lower',
     'configuration.PaladinGuardianLowAlly',
     'configuration.PaladinGuardianOnHeldKey',
-    'Purify, Smart Recuperate, Ally Rescue, reactive CC, and reactive Guard keep priority.',
+    'Purify, reactive counter-CC, and Ally Rescue keep priority. Guardian then wins before NIN, SCH, DRK,',
+    'Smart Recuperate, generic Guard, and pressure Sprint.',
     'Ninja — Seiton',
     'Seiton on held gameplay key (experimental)',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
@@ -6758,11 +6809,14 @@ Assert-Literals $settingsWindow @(
     'configuration.ReactiveCcAfterEnemyGuard',
     'observes real Resilience and waits for its stable disappearance',
     'There is no minimum team-pressure count, and distinct S-slots are tracked independently.',
-    'known fresh exact team pressure ranks before',
-    'unknown pressure and then highest-first, followed by lowest HP ratio, known trusted MP before unknown',
-    'Exactly one winner is selected; simultaneous losers',
+    'only fresh exact team pressure above zero earns a',
+    'ranking bonus, highest-first. Zero, unknown, or stale pressure is neutral and never gates a candidate.',
+    'Lowest HP ratio follows, then lowest trusted MP ratio and stable S-slot identity.',
+    'stable S-slot identity. Exactly one winner is',
+    'selected; simultaneous losers',
     'are terminal and never become fallback attempts.',
-    'Purify, Smart Recuperate, and Ally Rescue keep priority.',
+    'Only Purify keeps priority; reactive counter-CC leads the job-specific second',
+    'tier because its LB and protection-end windows are shorter.',
     'Post-Guard binds an exact S1-S5 actor only after Guard',
     '3054/3673 was observed present and then verified absent.',
     'While a gameplay key remains held, each selected exact startup or protection-end episode keeps one',
@@ -6779,7 +6833,8 @@ Assert-Literals $settingsWindow @(
     'miracle.GuardFollowupPromotionCount',
     'miracle.GuardFollowupExpiredCount',
     'miracle.GuardFollowupRetiredCount',
-    'Reactive CC protection-end hold/rank: consent=',
+    'Reactive CC protection-end hold/rank (pressure >0 bonus; zero/unknown/stale neutral; then HP/MP/ID):',
+    'consent={miracle.ProtectionEndHeldConsentActive}/',
     'miracle.ProtectionEndHeldConsentActive',
     'miracle.ProtectionEndHeldConsentKey',
     'miracle.ProtectionEndRankTeamPressureKnown',
@@ -6790,8 +6845,8 @@ Assert-Literals $settingsWindow @(
     'Warn when no party ally is within 20y and line of sight',
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark',
-    'Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia >',
-    'NIN > SCH > Monk > Hiebsprung.',
+    'Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK',
+    'Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk.',
     'Enable held-key Purify for enabled removable CC',
     'Also allow a key that was already held when the debuff appeared (includes WASD)',
     'keeps Purify at absolute priority while the exact enabled CC remains active. Cooldown, resource, cast,',
@@ -7222,10 +7277,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.25.0.0</Version>',
-    '<AssemblyVersion>0.25.0.0</AssemblyVersion>',
-    '<FileVersion>0.25.0.0</FileVersion>'
-) 'v0.25.0.0 project version'
+    '<Version>0.26.0.0</Version>',
+    '<AssemblyVersion>0.26.0.0</AssemblyVersion>',
+    '<FileVersion>0.26.0.0</FileVersion>'
+) 'v0.26.0.0 project version'
 Assert-Literals $pluginManifest @(
     'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
@@ -7239,21 +7294,18 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.25.0.0 plugin manifest metadata'
+) 'v0.26.0.0 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.25.0.0"',
-    'Fixes the v0.24 held-key lease regression across all ten held helpers',
-    'a stable already-held movement key now wins before another stable held key',
-    'fresh keys used only as fallback',
-    'every frozen intent retains its exact lease',
-    'Adds a separate default-off cast-cancel test for otherwise-ready held Purify, Recuperate, ally cleanse, counter-CC, Guard, Guardian, Sprint, NIN, SCH, and DRK intents',
-    'It requests one native cancel per cast',
-    'never combines cancellation with helper use in the same frame',
-    'then fully revalidates later',
-    'no movement, Escape, queue clear, or target mutation is synthesized',
-    'Diagnostics report the request path',
-    'live current-patch BRD/MCH proof remains pending.'
-) 'v0.25.0.0 repository metadata and exact no-same-frame wording'
+    '"AssemblyVersion": "0.26.0.0"',
+    'Moves every job-specific physical-hold helper into the second priority tier immediately after Purify',
+    'reactive WHM Miracle / BRD Silent Nocturne, Ally Rescue, PLD Guardian, NIN Seiton, SCH Critical Strategy, then DRK Hiebsprung',
+    'Reactive counter-CC leads ally cleanse because its LB and protection-end windows are shorter',
+    'Smart Recuperate and the generic helpers now follow that tier',
+    'only fresh positive pressure as a ranking bonus',
+    'Zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'HP, trusted MP, and stable identity decide the remaining order',
+    'Schema 30 and all existing settings are preserved.'
+) 'v0.26.0.0 repository metadata and exact priority/pressure wording'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7269,17 +7321,19 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.25.0.0 fixes the v0.24 held-key lease regression across all ten physical-hold helpers',
-    'stable already-held movement key now wins before another stable held key',
-    'fresh movement and other gameplay keys are fallbacks',
-    'each frozen intent retains its exact lease',
+    'Version 0.26.0.0 raises all six job-specific physical-hold helpers into the second priority tier immediately after Purify',
+    'reactive counter-CC, Ally Rescue, PLD Guardian, NIN Seiton, SCH Critical Strategy, and DRK Hiebsprung',
+    'reactive WHM Miracle / BRD Silent Nocturne before ally cleanse because its LB and protection-end windows are shorter',
+    'Fresh positive pressure is now only a ranking bonus for simultaneous post-Purify/post-Guard releases',
+    'zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'stable held-key leases across all ten physical-hold helpers',
     '**Experimental held-action cast cancellation:** a separate default-off test',
     'never requests the helper in that same frame, synthesizes movement or Escape, clears the queue, or changes a target',
     'void cancel call reports only `requested`, not confirmed',
     'For the ten physical-hold helpers, key choice prefers stable movement, then any other stable held gameplay key, then fresh movement and fresh other gameplay keys as fallbacks',
     'Each helper evaluates its held lease before fresh input and retains the exact frozen key until its normal release, ineligibility, reset, or terminal action-specific boundary',
     'Cancel my active cast for an otherwise-ready held helper',
-    'Purify, Smart Recuperate, Ally Rescue, reactive counter-CC, Guard, Guardian, pressure Sprint, NIN Seiton, SCH Critical Strategy, and DRK Hiebsprung',
+    'Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
     'Smart Kardia and Monk Earth''s Reply are excluded because they do not originate from held input',
     'every already-incoming manual/Turbo redirect, including Paean, and all macro helpers are excluded as well',
     'When the highest-priority frozen intent passes its ordinary action, actor/ target, status/episode, key, context, Guard, resource, cooldown, range, line-of- sight, empty-queue, and animation-lock gates and only the local cast remains in the way',
@@ -7291,9 +7345,26 @@ Assert-Literals $normalizedReadme @(
     'later frame that observes both cast signals clear may run the normal complete helper preflight again',
     'does not synthesize movement or Escape, clear the native action queue, write cast state, or mutate a selected target',
     'Stationary casts and mobile BRD Powerful Shot / MCH Blast Charge still require current-patch live validation',
-    'Configuration schema 30 is current in v0.25.0.0',
-    'cast- cancellation test is explicitly off for fresh, reset, and migrated configurations'
-) 'v0.25.0.0 stable held lease, cast-cancel inclusion/exclusion, safety, live-boundary, and schema user contract'
+    'Configuration schema 30 remains current in v0.26.0.0',
+    'this release adds no setting or migration',
+    'held-action cast-cancellation test is explicitly off for fresh, reset, and migrated configurations'
+) 'v0.26.0.0 priority/pressure plus retained stable held lease, cast-cancel safety, and schema user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.26.0.0',
+    'Raised every job-specific physical-hold helper into the second priority tier, immediately after Purify',
+    '**reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung**',
+    'Reactive WHM Miracle / BRD Silent Nocturne wins before ally cleanse because its LB, post-Purify, and post-Guard windows are shorter',
+    'complete request order is now **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
+    'One continuously held key may still authorize later distinct exact episodes',
+    'at most one held helper crosses the native action boundary per framework frame',
+    'team pressure an optional positive-only ranking bonus for simultaneous post-Purify and post-Guard counter-CC releases',
+    'fresh exact count above zero ranks ahead; zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'Remaining order is lowest HP ratio, lowest trusted MP ratio, then stable canonical identity',
+    'selected episode remains frozen with no rerank, alternate, target change, fallback, or replay',
+    'Bumped the plugin version to `0.26.0.0`',
+    'Configuration schema remains `30`',
+    'there is no new setting or migration, and existing opt-ins are preserved'
+) 'v0.26.0.0 scheduler, optional-pressure, frozen-intent, version, and schema release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.25.0.0',
     'Fixed the v0.24 held-key lease regression across all ten physical-hold helpers',
@@ -7316,7 +7387,7 @@ Assert-Literals $normalizedChangelog @(
 Assert-Literals $normalizedPrivacy @(
     '## Experimental held-action cast cancellation',
     'This separate test is disabled by default',
-    'exact physical-hold intents for Purify, Smart Recuperate, Ally Rescue, reactive counter-CC, Guard, Guardian, pressure Sprint, NIN Seiton, SCH Critical Strategy, and DRK Hiebsprung',
+    'exact physical-hold intents for Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
     'Smart Kardia, Monk Earth''s Reply, every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded',
     'highest-priority eligible intent',
     'rechecks exact local and target identity, held key, context, own Guard, helper action/readiness/resources, empty queue, and nonblocking animation lock',
@@ -7330,15 +7401,16 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 30 is current in v0.25.0.0',
-    'cast- cancellation test remains explicitly off for fresh, reset, and migrated configurations'
-) 'v0.25.0.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
+    'Configuration schema 30 remains current in v0.26.0.0',
+    'this release adds no setting or migration',
+    'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
+) 'v0.26.0.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.25.0.0 fixes the v0.24 held-key lease regression across all ten physical-hold helpers',
-    'A stable already-held movement key now wins before another stable held key; fresh movement and other gameplay keys are fallbacks, and each frozen intent retains its exact lease',
-    'This prevents a tapped-and-released hotbar key from canceling an otherwise-valid intent still backed by held WASD',
-    'separate default-off test that may request one native cast cancellation when the highest-priority held helper is otherwise ready',
-    'performs the normal complete preflight on a later frame',
+    'Version 0.26.0.0 raises all six job-specific physical-hold helpers into the second priority tier immediately after Purify',
+    'Fresh positive pressure is now only a ranking bonus for simultaneous post-Purify/post-Guard releases',
+    'zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'stable held-key leases across all ten physical-hold helpers',
+    'off native cast-cancellation test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
     'Client acceptance, exceptions, uncertain queue/sequence transitions, key release, context/job/ identity drift, and other ambiguity are terminal',
@@ -7424,13 +7496,14 @@ Assert-Literals $normalizedReadme @(
     'uses the frozen actor directly at the job-specific native range and line of sight',
     'without requiring or switching the selected target, choosing an alternate action/actor, or replaying',
     'Only an explicit client rejection may retry that same frozen intent under the common bound',
-    'known fresh exact team pressure before unknown and then highest-first',
-    'known trusted MP before unknown and lowest-first',
+    'only a fresh exact team-pressure count above zero earns a ranking bonus',
+    'higher positive counts first. Known zero, unknown, or stale pressure is neutral and never gates a candidate',
+    'Lowest HP ratio follows, then lowest trusted MP ratio and stable `S1`-`S5` identity',
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
     'A continuously held eligible gameplay key keeps consent for the selected frozen episode and may also authorize a later distinct episode',
     'Only an explicit client rejection may retry the same intent under the common bound; acceptance or ambiguity is terminal',
     'post-Guard defaults on only behind the disabled reactive-counter master'
-) 'v0.24.0.0 held scheduler plus retained protection-end ranking, Combat Frames/LB/Hiebsprung, and prior helper user contract'
+) 'v0.26.0.0 held scheduler plus retained Combat Frames/LB/Hiebsprung and prior helper user contract'
 Assert-Literals $normalizedReadme @(
     '## Sage Smart Kardia after accepted Eukrasia',
     'separate **Smart Kardia after accepted Eukrasia** experiment is disabled by default',
@@ -7446,7 +7519,7 @@ Assert-Literals $normalizedReadme @(
     'If its local-source Kardion state is unknown or already present, the trigger ends without falling through to another actor',
     'token is consumed before the terminal identity, Kardion, pressure/self-fallback, Kardia metadata/readiness, animation-lock, and native-reachability checks',
     'This follow-up has no physical-key generation and requires its own accepted- Eukrasia trigger',
-    'In the current request order it follows reactive CC and comes before NIN, SCH, Monk, and Hiebsprung',
+    'In the current request order it follows pressure Sprint and precedes only event Monk',
     'It never changes a hard, soft, focus, or mouseover target',
     'Client acceptance is dispatch feedback only and does not prove that Kardia or Kardion applied',
     'current-patch hook ordering, charge/status evidence, animation lock, native reachability, dispatch, and server behavior require a live CC test'
@@ -7745,14 +7818,14 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 30 is current in v0.25.0.0',
+    'Configuration schema 30 remains current in v0.26.0.0; this release adds no setting or migration',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
     'Every other existing master/helper choice is preserved',
     'Fresh and reset configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-helper masters off',
     'post-Guard defaults on only behind the disabled reactive-counter master',
     'Older configurations still traverse the earlier migrations first'
-) 'v0.25.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-30 migration disclosure'
+) 'v0.26.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus unchanged schema-30 disclosure'
 Assert-Literals $normalizedPrivacy @(
     'When its separate interaction option is enabled, Combat Frames may set one freshly revalidated living enemy row as the hard target on click and publish that exact actor to FFXIV''s two native mouseover slots only while hovered',
     'ownership-checked cleanup never overwrites an external replacement',
@@ -7838,13 +7911,13 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 30 is current in v0.25.0.0'
-) 'v0.24.0.0 retained pressure escape, Smart Paean, Guardian, Scholar, priority, and current schema local-data/live-boundary disclosure'
+    'Configuration schema 30 remains current in v0.26.0.0; this release adds no'
+) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung**',
+    'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
     'One framework frame permits at most one held-helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
-) 'v0.24.0.0 exact action-request priority privacy disclosure'
+) 'v0.26.0.0 exact action-request priority privacy disclosure'
 Assert-Literals $normalizedPrivacy @(
     'optional post-Purify path recognizes only exact enemy self-Purify `29056`',
     'requires positive live Resilience `3248`, waits for 150 ms of stable real absence',
@@ -7854,8 +7927,9 @@ Assert-Literals $normalizedPrivacy @(
     'optional post-Guard path observes only exact Guard `3054` or `3673` present on one live canonical `S1`-`S5` enemy',
     'first verified framework observation that finds Guard absent',
     'with no minimum team-pressure count',
-    'known pressure sample ranks before unknown pressure, then higher pressure ranks first; lower HP ratio follows',
-    'Known trusted MP ranks before unknown MP, then lower trusted MP ratio ranks first',
+    'Only a fresh exact pressure count above zero earns a ranking bonus, with higher positive counts first',
+    'Known zero, unknown, or stale pressure is neutral and never excludes or delays a candidate',
+    'Lower HP ratio follows, then lower trusted MP ratio and stable canonical slot/identity',
     'Exactly one winner is selected',
     'Every simultaneous loser is terminal and cannot become a fallback attempt',
     'One continuous hold can authorize later distinct startup or protection-end episodes',
@@ -8165,4 +8239,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.25.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 340-test Core registry. All ten physical-hold helpers use sticky stable-movement/stable-other leases before fresh fallbacks and expose exact prioritized cast-cancellation intents in the order Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > NIN > SCH > DRK Hiebsprung. The separate default-off path makes at most one UIState.Instance()->Hotbar.CancelCast() void request per consistently observed cast epoch, records requested rather than success, quarantines cast-ID/local-identity drift until both cast signals clear, and fully gates toggle, context, text input, Guard, claimed exact key/intent/action/target, cooldown/resources, queue, and finite animation lock at or below 50 ms. It never combines cancellation with helper UseAction in the same frame and never synthesizes Escape, jump, movement, queue clearing, cast-field writes, or target mutation. Smart Kardia, Monk Earth's Reply, manual/Turbo redirects including Paean, and macro helpers remain excluded. Current and last actual request/native diagnostics stay distinct and memory-only. The ordinary exact-intent action retry remains independently bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal. Native cancellation behavior, including stationary casts and mobile BRD Powerful Shot / MCH Blast Charge, still requires live current-patch validation."
+Write-Host "Seiton Sense v0.26.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 342-test Core registry. Runtime priority is pinned as Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The first ten physical-hold helpers use sticky stable-movement/stable-other leases before fresh fallbacks, and the separate default-off cast-cancellation coordinator mirrors that exact ten-helper order while excluding event Kardia, event Monk, manual/Turbo redirects including Paean, and macro helpers. Guardian begins from a clean frame-local snapshot, publishes accepted communication independently, and combines with the later generic Guard through pure current-frame aggregation: a Guard claim/attempt cannot be masked, while an unavailable Guardian remains background presentation only if Guard is idle. Simultaneous post-Purify/post-Guard selection treats only fresh pressure above zero as an optional bonus; zero, unknown, and stale pressure remain neutral and eligible before HP, trusted MP, and stable identity, with no rerank, alternate, target mutation, fallback, or replay. Cast cancellation makes at most one UIState.Instance()->Hotbar.CancelCast() void request per consistently observed cast epoch, records requested rather than success, quarantines cast-ID/local-identity drift until both cast signals clear, fully revalidates on a later frame, and never combines cancellation with helper UseAction, synthesizes Escape/jump/movement, clears the queue, writes cast state, or mutates a target. The ordinary exact-intent action retry remains independently bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal. Native cancellation behavior, including stationary casts and mobile BRD Powerful Shot / MCH Blast Charge, still requires live current-patch validation."

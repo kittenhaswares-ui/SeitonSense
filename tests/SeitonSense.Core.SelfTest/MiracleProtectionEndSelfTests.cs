@@ -56,15 +56,22 @@ internal static class MiracleProtectionEndSelfTests
             "post-Guard dispatch retains consent for a later distinct episode");
     }
 
-    internal static void RankingIsPressureThenHealthThenTrustedMpThenIdentity()
+    internal static void RankingUsesPositivePressureBonusThenHealthMpAndIdentity()
     {
         var unknownLowHp = Candidate(slot: 1, pressureKnown: false, hp: 1_000);
         var knownZero = Candidate(slot: 2, pressureKnown: true, pressure: 0, hp: 9_000);
-        Less(knownZero, unknownLowHp, "known zero pressure ranks ahead of unknown");
+        Less(unknownLowHp, knownZero, "known zero and unknown pressure are neutral, so HP wins");
+
+        var neutralUnknown = Candidate(slot: 1, pressureKnown: false, hp: 5_000);
+        var neutralKnownZero = Candidate(slot: 2, pressureKnown: true, pressure: 0, hp: 5_000);
+        Less(neutralUnknown, neutralKnownZero, "zero cannot outrank unknown before stable identity");
 
         var higherPressure = Candidate(slot: 3, pressure: 3, hp: 9_000);
         var lowerPressure = Candidate(slot: 4, pressure: 2, hp: 1_000);
-        Less(higherPressure, lowerPressure, "higher pressure ranks before HP");
+        Less(higherPressure, lowerPressure, "higher positive pressure ranks before HP");
+
+        var positivePressure = Candidate(slot: 5, pressure: 1, hp: 9_000);
+        Less(positivePressure, unknownLowHp, "any positive fresh pressure earns the optional bonus");
 
         var lowerHp = Candidate(slot: 3, pressure: 2, hp: 2_000);
         var higherHp = Candidate(slot: 4, pressure: 2, hp: 4_000);

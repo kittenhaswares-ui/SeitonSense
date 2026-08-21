@@ -154,9 +154,10 @@ internal sealed class DefensiveUtilityProbe
     }
 
     /// <summary>
-    /// First defensive pass. This owns only the verified post-Purify Guard
-    /// follow-up and is intentionally independent from Paladin Guardian so a
-    /// self-survival helper can be scheduled between the two passes.
+    /// Generic defensive pass. This owns only the verified post-Purify Guard
+    /// follow-up. A same-frame prioritized Guardian pass can be supplied so
+    /// the public diagnostic snapshot still represents both passes after the
+    /// scheduler runs Guardian before generic defense.
     /// </summary>
     internal unsafe DefensiveUtilityProbeSnapshot ObserveGuard(
         IPlayerCharacter? localPlayer,
@@ -174,7 +175,8 @@ internal sealed class DefensiveUtilityProbe
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
-        bool hardReset = false)
+        bool hardReset = false,
+        DefensiveUtilityProbeSnapshot? prioritizedGuardianPass = null)
     {
         if (hardReset)
             ResetRuntime();
@@ -362,7 +364,7 @@ internal sealed class DefensiveUtilityProbe
             observedGuardAttemptAtMilliseconds: -1,
             guardSuppressionNow);
 
-        var result = new DefensiveUtilityProbeSnapshot(
+        var guardResult = new DefensiveUtilityProbeSnapshot(
             guardConfigurationEnabled && isCrystallineConflict && localIdentityValid,
             action,
             trigger,
@@ -392,13 +394,16 @@ internal sealed class DefensiveUtilityProbe
             lastAcceptedGuardianEpisode,
             guardianPopup,
             lastEvent);
+        var result = prioritizedGuardianPass is { } guardianPass
+            ? MergePrioritizedGuardianPass(guardResult, guardianPass)
+            : guardResult;
         Volatile.Write(ref snapshot, result);
         return result;
     }
 
     /// <summary>
-    /// Second defensive pass. Paladin Guardian has its own feature and held-key
-    /// gates and can therefore be scheduled after higher-priority self healing.
+    /// Job-specific defensive pass. Paladin Guardian has its own feature and
+    /// held-key gates and is scheduled directly after reactive counter-CC.
     /// </summary>
     internal unsafe DefensiveUtilityProbeSnapshot ObserveGuardian(
         IPlayerCharacter? localPlayer,
@@ -409,7 +414,8 @@ internal sealed class DefensiveUtilityProbe
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
-        bool hardReset = false)
+        bool hardReset = false,
+        bool beginsFrame = false)
     {
         if (hardReset)
             ResetRuntime();
@@ -418,7 +424,14 @@ internal sealed class DefensiveUtilityProbe
 
         ReleaseTerminalKeyWhenUp(inputFrame, ref terminalGuardianKey);
 
-        var prior = Snapshot;
+        // Historically Guardian was the second pass and could merge the Guard
+        // snapshot published earlier in the same frame. The priority scheduler
+        // now runs Guardian first, so it must start from a clean frame-local
+        // base instead of inheriting a stale claimed/action bit from the prior
+        // framework frame.
+        var prior = beginsFrame
+            ? CreateFrameSnapshotBase(guardActive)
+            : Snapshot;
         var localIdentityValid = HasValidLocalPlayer(localPlayer);
         HashSet<TargetPressureActorIdentity> criticalGuardianActors = [];
         var guardianCandidates = guardianConfigurationEnabled &&
@@ -679,6 +692,71 @@ internal sealed class DefensiveUtilityProbe
         };
         Volatile.Write(ref snapshot, result);
         return result;
+    }
+
+    private DefensiveUtilityProbeSnapshot CreateFrameSnapshotBase(bool guardActive) =>
+        DefensiveUtilityProbeSnapshot.Initial with
+        {
+            Active = false,
+            GuardActive = guardActive,
+            AttemptCount = Interlocked.Read(ref attemptCount),
+            AcceptedCount = Interlocked.Read(ref acceptedCount),
+            GuardMetadataVerified = guardMetadataVerified,
+            GuardianMetadataVerified = guardianMetadataVerified,
+            LastAcceptedGuardianEpisode = lastAcceptedGuardianEpisode,
+            GuardianPopup = guardianPopup,
+            LastEvent = "Frame initialized",
+        };
+
+    private static DefensiveUtilityProbeSnapshot MergePrioritizedGuardianPass(
+        DefensiveUtilityProbeSnapshot guardPass,
+        DefensiveUtilityProbeSnapshot guardianPass)
+    {
+        var aggregate = DefensiveUtilityRules.AggregateFramePasses(
+            new DefensiveUtilityFramePass(
+                guardianPass.Action,
+                guardianPass.InputClaimed,
+                guardianPass.UseActionAttempted,
+                guardianPass.UseActionAccepted),
+            new DefensiveUtilityFramePass(
+                guardPass.Action,
+                guardPass.InputClaimed,
+                guardPass.UseActionAttempted,
+                guardPass.UseActionAccepted));
+        return guardPass with
+        {
+            Active = guardPass.Active || guardianPass.Active,
+            Action = aggregate.GuardianOwnsPresentation
+                ? guardianPass.Action
+                : guardPass.Action,
+            Trigger = aggregate.GuardianOwnsPresentation
+                ? guardianPass.Trigger
+                : guardPass.Trigger,
+            GuardianCandidateCount = guardianPass.GuardianCandidateCount,
+            TargetGameObjectId = aggregate.GuardianOwnsPresentation
+                ? guardianPass.TargetGameObjectId
+                : guardPass.TargetGameObjectId,
+            TargetEntityId = aggregate.GuardianOwnsPresentation
+                ? guardianPass.TargetEntityId
+                : guardPass.TargetEntityId,
+            FreshGameplayKey = aggregate.GuardianOwnsPresentation
+                ? guardianPass.FreshGameplayKey
+                : guardPass.FreshGameplayKey,
+            HeldGameplayKey = aggregate.GuardianOwnsPresentation
+                ? guardianPass.HeldGameplayKey
+                : guardPass.HeldGameplayKey,
+            InputClaimed = aggregate.InputClaimed,
+            CastCancellationRequest = guardianPass.InputClaimed
+                ? guardianPass.CastCancellationRequest
+                : guardPass.CastCancellationRequest,
+            UseActionAttempted = aggregate.UseActionAttempted,
+            UseActionAccepted = aggregate.UseActionAccepted,
+            LastAcceptedGuardianEpisode = guardianPass.LastAcceptedGuardianEpisode,
+            GuardianPopup = guardianPass.GuardianPopup,
+            LastEvent = aggregate.GuardianOwnsPresentation
+                ? guardianPass.LastEvent
+                : guardPass.LastEvent,
+        };
     }
 
     internal void Reset()

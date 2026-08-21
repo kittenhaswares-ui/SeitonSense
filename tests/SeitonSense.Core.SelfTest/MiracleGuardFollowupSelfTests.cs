@@ -139,7 +139,7 @@ internal static class MiracleGuardFollowupSelfTests
         Equal(1, boundary.ExpiredOpportunityCount, "expiry is diagnosed exactly once");
     }
 
-    internal static void SimultaneousReleaseRanksPressureThenHpAndRetiresEveryOther()
+    internal static void SimultaneousReleaseUsesPositivePressureBonusThenFallbacks()
     {
         var slot1 = Target(slot: 1, entityId: 101);
         var slot2 = Target(slot: 2, entityId: 102);
@@ -194,6 +194,34 @@ internal static class MiracleGuardFollowupSelfTests
 
         present = MiracleGuardFollowupRules.Observe(
             tied.NextState,
+            Observation(
+                [Candidate(slot1, guardCount: 1), Candidate(slot2, guardCount: 1)],
+                2_500));
+        var neutralPressure = MiracleGuardFollowupRules.Observe(
+            present.NextState,
+            Observation(
+                [
+                    Candidate(
+                        slot1,
+                        guardCount: 0,
+                        teamTargetCountKnown: true,
+                        teamTargetCount: 0,
+                        hp: 9_000),
+                    Candidate(
+                        slot2,
+                        guardCount: 0,
+                        teamTargetCountKnown: false,
+                        hp: 2_000),
+                ],
+                2_501));
+        True(neutralPressure.ShouldPromote, "zero and unavailable pressure both remain eligible");
+        Equal(
+            slot2,
+            neutralPressure.PromotionIntent!.Value.Target,
+            "known zero and unavailable pressure are neutral, so lower HP wins");
+
+        present = MiracleGuardFollowupRules.Observe(
+            neutralPressure.NextState,
             Observation(
                 [Candidate(slot1, guardCount: 1), Candidate(slot2, guardCount: 1)],
                 3_000));

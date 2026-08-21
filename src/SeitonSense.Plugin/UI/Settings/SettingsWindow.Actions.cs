@@ -13,10 +13,12 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > Smart Recuperate > Ally Rescue > reactive CC > Guard > Guardian > pressure Sprint > Kardia > " +
-            "NIN > SCH > Monk > Hiebsprung. Kardia still requires its separate accepted-Eukrasia trigger; the order " +
-            "states which usable request wins one scheduler frame. A continuously held key remains consent for later " +
-            "distinct exact episodes; Kardia and Monk retain their separate event-driven origins.");
+            "Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK " +
+            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The six " +
+            "job-specific physical-hold helpers share the second tier; their deterministic urgency order puts reactive " +
+            "counter-CC before ally cleanse because its LB and protection-end windows are shorter. A continuously held " +
+            "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
+            "frame. Kardia and Monk retain their separate event-driven origins.");
 
         if (ImGui.CollapsingHeader(
                 "Held-action cast cancellation (experimental)",
@@ -96,7 +98,7 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, and Guardian keep priority. Known " +
+            "Purify, the job-specific second tier, Smart Recuperate, and generic Guard keep priority. Known " +
             "unavailability waits for free; only an explicit client rejection may retry the same exact Sprint " +
             "episode. Any later manual action ends FFXIV's native PvP Sprint.");
         return changed;
@@ -192,7 +194,8 @@ internal sealed partial class SettingsWindow
             "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
             "is not ready, it waits without blocking a currently usable lower-priority helper.");
         ImGui.TextDisabled(
-            "Purify keeps priority. Smart Recuperate is evaluated before Ally Rescue and reactive counter-CC, while " +
+            "Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before " +
+            "generic Guard and pressure Sprint, while " +
             "active Guard and its short propagation latch block Recuperate so the helper cannot cancel Guard. The " +
             "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms, up " +
             "to eight calls total. Temporary readiness/MP, higher-priority, and Guard states wait without spending " +
@@ -220,7 +223,8 @@ internal sealed partial class SettingsWindow
             "CC-only and self-excluding. BRD uses The Warden's Paean; WHM uses Aquaveil, independent of client " +
             "language. The target must be an exact party member in the action's native range and line of sight. " +
             "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
-            "distance and stable party order. Self Purify and Smart Recuperate win the current scheduler frame. " +
+            "distance and stable party order. Purify and reactive counter-CC win the current scheduler frame; Ally " +
+            "Rescue then wins before Guardian, NIN, SCH, DRK, Recuperate, Guard, and Sprint. " +
             "Known action-specific cooldown, resource, and reachability blocks wait in the background without " +
             "starving a usable lower helper. Global cast, occupied-queue, blocking-animation-lock waits and the " +
             "brief explicit-false throttle retain the scheduler frame; none spends the retry budget. A clean client " +
@@ -327,16 +331,18 @@ internal sealed partial class SettingsWindow
             "your target. There is no minimum team-pressure count, and distinct S-slots are tracked independently. " +
             "Viper waits until Hardened Scales is actually absent.");
         ImGui.TextDisabled(
-            "For simultaneous post-Purify or post-Guard releases, known fresh exact team pressure ranks before " +
-            "unknown pressure and then highest-first, followed by lowest HP ratio, known trusted MP before unknown " +
-            "MP and then lowest-first, with stable S-slot ties. Exactly one winner is selected; simultaneous losers " +
+            "For simultaneous post-Purify or post-Guard releases, only fresh exact team pressure above zero earns a " +
+            "ranking bonus, highest-first. Zero, unknown, or stale pressure is neutral and never gates a candidate. " +
+            "Lowest HP ratio follows, then lowest trusted MP ratio and stable S-slot identity. Exactly one winner is " +
+            "selected; simultaneous losers " +
             "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
             "3054/3673 was observed present and then verified absent. WHM uses its native 10-yalm range and BRD its " +
             "native 20-yalm range; both require line of sight.");
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
-            "simultaneous loser can. Purify, Smart Recuperate, and Ally Rescue keep priority. Known action-specific " +
+            "simultaneous loser can. Only Purify keeps priority; reactive counter-CC leads the job-specific second " +
+            "tier because its LB and protection-end windows are shorter. Known action-specific " +
             "unavailability waits without blocking a usable lower helper; only a clean client rejection may retry " +
             "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
             "change, alternate, fallback, or replay. The blue AUTO CC " +

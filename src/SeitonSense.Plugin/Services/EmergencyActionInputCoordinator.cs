@@ -4,10 +4,10 @@ using Dalamud.Plugin.Services;
 namespace SeitonSense.Plugin.Services;
 
 /// <summary>
-/// One framework-frame view of the shared physical gameplay-key generations used
-/// by Purify, Smart Recuperate, reactive Guard, PLD Guardian, high-pressure
-/// Sprint, Ally Rescue, reactive counter-CC, held-key Ninja Seiton, held-key
-/// Scholar Critical Strategy, and DRK Hiebsprung. Accepted-Eukrasia Kardia and
+/// One framework-frame view of the shared physical gameplay-key generations.
+/// Canonical order is Purify, reactive counter-CC, Ally Rescue, PLD Guardian,
+/// Ninja Seiton, Scholar Critical Strategy, DRK Hiebsprung, Smart Recuperate,
+/// reactive Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia and
 /// Monk Earth's Reply do not originate from this physical-key frame, but their
 /// attempts still suppress lower work in the runtime priority chain.
 /// Consumption is deliberately frame-local: one helper can own the current
