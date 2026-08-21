@@ -310,18 +310,22 @@ internal sealed class AllyRescueProbe
                     out var revalidated))
             {
                 var outcome = ClientActionAttemptOutcome.NotInvoked;
+                ushort expectedSourceSequence = 0;
                 try
                 {
                     outcome = TryUseRescueOnce(
                         localPlayer!,
                         actionId,
                         revalidated.GameObjectId,
-                        out attempted);
+                        out attempted,
+                        out expectedSourceSequence);
                     accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     if (attempted) Interlocked.Increment(ref attemptCount);
                     if (accepted) Interlocked.Increment(ref acceptedCount);
                     lastEvent = outcome switch
                     {
+                        ClientActionAttemptOutcome.ClientAccepted when expectedSourceSequence == 0 =>
+                            $"Accepted action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}; confirmation unavailable: source sequence did not advance",
                         ClientActionAttemptOutcome.ClientAccepted =>
                             $"Accepted action={actionId} target={revalidated.GameObjectId:X} status={targetStatusId}",
                         ClientActionAttemptOutcome.ClientRejected =>
@@ -358,7 +362,7 @@ internal sealed class AllyRescueProbe
                         $"after {AllyRescueBufferRules.NativeRetryThrottleMilliseconds} ms";
                 }
 
-                if (attempted && accepted)
+                if (attempted && accepted && expectedSourceSequence != 0)
                 {
                     var attemptedAt = Math.Max(confirmationNow, Environment.TickCount64);
                     confirmationState = AllyRescueConfirmationRules.RegisterAttempt(
@@ -370,8 +374,21 @@ internal sealed class AllyRescueProbe
                             revalidated.EntityId,
                             dispatchIntent,
                             accepted,
-                            attemptedAt),
+                            attemptedAt,
+                            expectedSourceSequence),
                         attemptedAt).NextState;
+                }
+
+                if (attempted)
+                {
+                    log.Information(
+                        "Seiton Sense Ally Rescue attempt: action={ActionId} target={TargetEntityId:X8} " +
+                        "status={StatusId} outcome={Outcome} sourceSequence={SourceSequence}",
+                        actionId,
+                        revalidated.EntityId,
+                        targetStatusId,
+                        outcome,
+                        expectedSourceSequence);
                 }
             }
             else
@@ -472,6 +489,16 @@ internal sealed class AllyRescueProbe
                     cleanse.SourceSequence,
                     observedAt));
             confirmationState = decision.NextState;
+            if (decision.Confirmed)
+            {
+                log.Information(
+                    "Seiton Sense Ally Rescue confirmed: action={ActionId} target={TargetEntityId:X8} " +
+                    "status={StatusId} sourceSequence={SourceSequence}",
+                    cleanse.ActionId,
+                    cleanse.TargetEntityId,
+                    cleanse.RemovedStatusId,
+                    cleanse.SourceSequence);
+            }
         }
     }
 
@@ -656,9 +683,11 @@ internal sealed class AllyRescueProbe
         IPlayerCharacter localPlayer,
         uint actionId,
         ulong targetGameObjectId,
-        out bool attempted)
+        out bool attempted,
+        out ushort expectedSourceSequence)
     {
         attempted = false;
+        expectedSourceSequence = 0;
         if (actionId is not (WardensPaeanActionId or AquaveilActionId) ||
             targetGameObjectId is 0 or 0xE0000000)
         {
@@ -685,11 +714,19 @@ internal sealed class AllyRescueProbe
                 0,
                 ActionManager.UseActionMode.None,
                 0));
+        var boundaryAfter = ClientActionAttemptBoundary.Capture(actionManager, actionId);
+        if (accepted &&
+            boundaryAfter.LastUsedActionSequence != 0 &&
+            boundaryAfter.LastUsedActionSequence != boundaryBefore.LastUsedActionSequence)
+        {
+            expectedSourceSequence = boundaryAfter.LastUsedActionSequence;
+        }
+
         return ClientActionAttemptBoundaryRules.Classify(
             accepted,
             actionId,
             boundaryBefore,
-            ClientActionAttemptBoundary.Capture(actionManager, actionId));
+            boundaryAfter);
     }
 
     private unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(

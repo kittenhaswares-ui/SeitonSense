@@ -14,8 +14,16 @@ internal static class MiracleInterceptConfirmationSelfTests
         Equal(0L, registered.NextState.TotalConfirmed, "no local count");
 
         registered = Register(MiracleInterceptThreatKind.Zantetsuken, accepted: false, now: 2_000);
-        True(registered.PendingRegistered, "a real native call is correlatable even after a false local return");
-        False(registered.NextState.Pending!.Value.UseActionAccepted, "diagnostic local result preserved");
+        False(registered.PendingRegistered, "a rejected native call cannot create a confirmation pending");
+        True(registered.NextState.Pending is null, "rejected call remains unconfirmable");
+
+        registered = Register(
+            MiracleInterceptThreatKind.Zantetsuken,
+            accepted: true,
+            now: 3_000,
+            expectedSourceSequence: 0);
+        False(registered.PendingRegistered, "accepted call without exact source sequence cannot claim automation");
+        True(registered.NextState.Pending is null, "unattributable accepted call remains unconfirmable");
     }
 
     public static void ExactStatusAddConfirmsAndLabelsThreat()
@@ -103,10 +111,20 @@ internal static class MiracleInterceptConfirmationSelfTests
                     effectValue: MiracleInterceptConfirmationRules.SilenceStatusId));
             False(wrong.Confirmed, $"Raiju {actionId} cannot confirm from Silence");
 
-            var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
-                state,
+            var manual = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                wrong.NextState,
                 Effect(
                     now: 1_051,
+                    actionId: actionId,
+                    effectValue: MiracleInterceptConfirmationRules.StunStatusId,
+                    sourceSequence: 10));
+            False(manual.Confirmed, $"Raiju {actionId} cannot confirm from a manual source sequence");
+            True(manual.NextState.Pending is not null, "wrong Raiju sequence preserves the exact pending");
+
+            var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                manual.NextState,
+                Effect(
+                    now: 1_052,
                     actionId: actionId,
                     effectValue: MiracleInterceptConfirmationRules.StunStatusId));
             True(exact.Confirmed, $"Raiju {actionId} confirms only exact Stun");
@@ -124,6 +142,8 @@ internal static class MiracleInterceptConfirmationSelfTests
             Effect(now: 1_100) with { EffectType = 0x0F },
             Effect(now: 1_100) with { EffectValue = 3_086 },
             Effect(now: 1_100) with { GlobalSequence = 0, SourceSequence = 0 },
+            Effect(now: 1_100) with { GlobalSequence = 77, SourceSequence = 0 },
+            Effect(now: 1_100) with { SourceSequence = 10 },
             Effect(now: 999),
             Effect(now: 2_501),
         };
@@ -140,6 +160,23 @@ internal static class MiracleInterceptConfirmationSelfTests
             Register(MiracleInterceptThreatKind.Zantetsuken, accepted: true, now: 1_000).NextState,
             Effect(now: 2_500));
         True(boundary.Confirmed, "exact 1500 ms boundary remains eligible");
+
+        var pending = Register(
+            MiracleInterceptThreatKind.PostGuardCrowdControl,
+            accepted: true,
+            now: 3_000).NextState;
+        var manual = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            pending,
+            Effect(now: 3_100, sourceSequence: 10));
+        False(manual.Confirmed, "manual same-action same-target packet cannot confirm helper ownership");
+        True(manual.NextState.Pending is not null, "manual packet leaves helper pending alive");
+        var stillPending = manual.NextState.Pending!.Value;
+        Equal((ushort)9, stillPending.ExpectedSourceSequence, "pending retains exact helper source sequence");
+
+        var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            manual.NextState,
+            Effect(now: 3_101));
+        True(exact.Confirmed, "later exact helper source sequence still confirms");
     }
 
     public static void DuplicateCannotIncrementTwice()
@@ -207,10 +244,11 @@ internal static class MiracleInterceptConfirmationSelfTests
         bool accepted,
         long now,
         uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
-        uint removedStatusId = 0) =>
+        uint removedStatusId = 0,
+        ushort expectedSourceSequence = 9) =>
         MiracleInterceptConfirmationRules.RegisterAttempt(
             MiracleInterceptConfirmationState.Initial,
-            Attempt(threat, accepted, now, actionId, removedStatusId),
+            Attempt(threat, accepted, now, actionId, removedStatusId, expectedSourceSequence),
             now);
 
     private static MiracleInterceptPendingAttempt Attempt(
@@ -218,7 +256,8 @@ internal static class MiracleInterceptConfirmationSelfTests
         bool accepted,
         long now,
         uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
-        uint removedStatusId = 0) =>
+        uint removedStatusId = 0,
+        ushort expectedSourceSequence = 9) =>
         new(
             Caster,
             actionId,
@@ -226,7 +265,8 @@ internal static class MiracleInterceptConfirmationSelfTests
             Target,
             threat,
             accepted,
-            now)
+            now,
+            expectedSourceSequence)
         {
             RemovedStatusId = removedStatusId,
         };
@@ -234,7 +274,8 @@ internal static class MiracleInterceptConfirmationSelfTests
     private static MiracleInterceptLandedObservation Effect(
         long now,
         uint actionId = MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
-        ushort? effectValue = null) =>
+        ushort? effectValue = null,
+        ushort sourceSequence = 9) =>
         new(
             Caster,
             actionId,
@@ -242,7 +283,7 @@ internal static class MiracleInterceptConfirmationSelfTests
             MiracleInterceptConfirmationRules.AddStatusEffectType,
             effectValue ?? MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId),
             77,
-            9,
+            sourceSequence,
             now);
 
     private static void True(bool condition, string label)

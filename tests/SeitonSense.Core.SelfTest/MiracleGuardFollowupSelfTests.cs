@@ -25,7 +25,8 @@ internal static class MiracleGuardFollowupSelfTests
                 TargetEntityId: 10,
                 Threat: MiracleInterceptThreatKind.PostGuardCrowdControl,
                 UseActionAccepted: true,
-                AttemptedAtMilliseconds: 1_000).IsValid,
+                AttemptedAtMilliseconds: 1_000,
+                ExpectedSourceSequence: 9).IsValid,
             "shared landing confirmation accepts the post-Guard label without a removed status");
 
         var target = Target(slot: 1, entityId: 10);
@@ -283,6 +284,38 @@ internal static class MiracleGuardFollowupSelfTests
         True(keyedWins.ShouldPromote, "a keyed release remains promotable beside a no-key observer");
         Equal(keyed, keyedWins.PromotionIntent!.Value.Target, "no-key observer cannot displace held consent");
         Equal(65, keyedWins.PromotionIntent.Value.GameplayKeyToken, "selected release owns its first-frame key");
+
+        var unreachableHighPressure = Target(slot: 1, entityId: 105);
+        var reachableLowPressure = Target(slot: 2, entityId: 106);
+        present = MiracleGuardFollowupRules.Observe(
+            keyedWins.NextState,
+            Observation(
+                [
+                    Candidate(unreachableHighPressure, guardCount: 1),
+                    Candidate(reachableLowPressure, guardCount: 1),
+                ],
+                5_000));
+        var reachableWins = MiracleGuardFollowupRules.Observe(
+            present.NextState,
+            Observation(
+                [
+                    Candidate(
+                        unreachableHighPressure,
+                        guardCount: 0,
+                        teamTargetCount: 5,
+                        hp: 1_000,
+                        counterActionReachable: false),
+                    Candidate(
+                        reachableLowPressure,
+                        guardCount: 0,
+                        teamTargetCount: 0,
+                        hp: 9_000,
+                        counterActionReachable: true),
+                ],
+                5_001));
+        True(reachableWins.ShouldPromote, "one reachable release remains dispatchable beside a stronger unreachable candidate");
+        Equal(reachableLowPressure, reachableWins.PromotionIntent!.Value.Target,
+            "range and line of sight filter before pressure, HP, and MP ranking");
     }
 
     internal static void IdentityLifeAndStatusAmbiguityBreakTheEpisode()
@@ -391,7 +424,7 @@ internal static class MiracleGuardFollowupSelfTests
         Equal(0, hardReset.NextState.Actors.Length, "hard reset clears all episodes");
     }
 
-    internal static void ReservationSnapshotsFirstPresenceAndAllowsEarlyGuardCancel()
+    internal static void ReservationBindsOnGuardEndAndAllowsEarlyCancel()
     {
         var target = Target(slot: 1, entityId: 61);
         var present = MiracleGuardFollowupRules.Observe(
@@ -407,7 +440,7 @@ internal static class MiracleGuardFollowupSelfTests
         var first = Find(present.NextState, 1);
         Equal(1_000L, first.GuardObservedAtMilliseconds, "first Guard frame owns the episode epoch");
         Equal(5_000L, first.ExpectedProtectionEndAtMilliseconds, "Guard duration becomes an advisory absolute end");
-        Equal(65, first.GameplayKeyToken, "first held key is frozen");
+        Equal(0, first.GameplayKeyToken, "Guard presence stores the enemy episode without binding an early key");
 
         var repeated = MiracleGuardFollowupRules.Observe(
             present.NextState,
@@ -422,7 +455,7 @@ internal static class MiracleGuardFollowupSelfTests
         var retained = Find(repeated.NextState, 1);
         Equal(1_000L, retained.GuardObservedAtMilliseconds, "continued Guard cannot restart the epoch");
         Equal(5_000L, retained.ExpectedProtectionEndAtMilliseconds, "later telemetry cannot extend the hint");
-        Equal(65, retained.GameplayKeyToken, "later key cannot replace frozen consent");
+        Equal(0, retained.GameplayKeyToken, "movement-key changes during Guard do not own or cancel the episode");
 
         var earlyCancel = MiracleGuardFollowupRules.Observe(
             repeated.NextState,
@@ -430,11 +463,11 @@ internal static class MiracleGuardFollowupSelfTests
                 Candidate(target, guardCount: 0, reservationKey: 66, reservedKeyDown: true),
                 2_000));
         True(earlyCancel.ShouldPromote, "manual Guard cancel releases on its first authoritative absent frame");
-        Equal(65, earlyCancel.PromotionIntent!.Value.GameplayKeyToken, "early release keeps original held key");
+        Equal(66, earlyCancel.PromotionIntent!.Value.GameplayKeyToken, "early release freezes the currently held exact key");
         Equal(5_000L, earlyCancel.PromotionIntent.Value.ExpectedProtectionEndAtMilliseconds, "timer never delays early Guard cancel");
     }
 
-    internal static void ReservedKeyReleaseRetiresGuardEpisode()
+    internal static void ReleaseOpportunityAcquiresOnceAndThenRequiresExactKey()
     {
         var target = Target(slot: 2, entityId: 62);
         var present = MiracleGuardFollowupRules.Observe(
@@ -452,7 +485,7 @@ internal static class MiracleGuardFollowupSelfTests
             Find(present.NextState, 2).ExpectedProtectionEndAtMilliseconds <= 0,
             "implausible Guard duration is not trusted");
 
-        var releasedKey = MiracleGuardFollowupRules.Observe(
+        var changedDuringGuard = MiracleGuardFollowupRules.Observe(
             present.NextState,
             Observation(
                 Candidate(
@@ -462,124 +495,71 @@ internal static class MiracleGuardFollowupSelfTests
                     reservedKeyDown: false),
                 1_001));
         Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(releasedKey.NextState, 2).Phase,
-            "observed key release terminally retires the Guard reservation");
-
-        var alternateWhilePresent = MiracleGuardFollowupRules.Observe(
-            releasedKey.NextState,
-            Observation(
-                Candidate(target, guardCount: 1, reservationKey: 66, reservedKeyDown: true),
-                1_002));
-        Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(alternateWhilePresent.NextState, 2).Phase,
-            "alternate key cannot resurrect the same uninterrupted Guard");
-        Equal(0, Find(alternateWhilePresent.NextState, 2).GameplayKeyToken, "retired episode owns no replacement key");
-
-        var ambiguous = MiracleGuardFollowupRules.Observe(
-            alternateWhilePresent.NextState,
-            Observation(
-                Candidate(target, guardCount: 2, reservationKey: 66, reservedKeyDown: true),
-                1_003));
-        Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(ambiguous.NextState, 2).Phase,
-            "an ambiguous frame cannot erase the retired-until-absence tombstone");
-
-        var stillSameGuard = MiracleGuardFollowupRules.Observe(
-            ambiguous.NextState,
-            Observation(
-                Candidate(target, guardCount: 1, reservationKey: 66, reservedKeyDown: true),
-                1_004));
-        Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(stillSameGuard.NextState, 2).Phase,
-            "same Guard cannot rearm after an ambiguous telemetry gap");
-
-        var absent = MiracleGuardFollowupRules.Observe(
-            stillSameGuard.NextState,
-            Observation(
-                Candidate(target, guardCount: 0, reservationKey: 66, reservedKeyDown: true),
-                1_005));
-        False(absent.ShouldPromote, "separation after retirement cannot promote the old Guard episode");
-        Equal(
-            MiracleGuardFollowupPhase.WaitingForGuard,
-            Find(absent.NextState, 2).Phase,
-            "real Guard absence rearms observation for a later distinct Guard");
-
-        var laterGuard = MiracleGuardFollowupRules.Observe(
-            absent.NextState,
-            Observation(
-                Candidate(target, guardCount: 1, reservationKey: 66, reservedKeyDown: true),
-                1_006));
-        Equal(
             MiracleGuardFollowupPhase.GuardPresent,
-            Find(laterGuard.NextState, 2).Phase,
-            "a later Guard after real absence may begin a distinct episode");
-        Equal(66, Find(laterGuard.NextState, 2).GameplayKeyToken, "later distinct Guard may freeze the new key");
+            Find(changedDuringGuard.NextState, 2).Phase,
+            "key release during Guard does not retire the enemy episode");
+        Equal(0, Find(changedDuringGuard.NextState, 2).GameplayKeyToken,
+            "the episode still owns no input before Guard absence");
 
-        var noKeyTarget = Target(slot: 3, entityId: 63);
-        var noKeyAtEntry = MiracleGuardFollowupRules.Observe(
-            MiracleGuardFollowupState.Initial,
+        var absentWithoutKey = MiracleGuardFollowupRules.Observe(
+            changedDuringGuard.NextState,
             Observation(
-                Candidate(
-                    noKeyTarget,
-                    guardCount: 1,
-                    reservationKey: 0,
-                    reservedKeyDown: false),
-                2_000));
-        var lateKey = MiracleGuardFollowupRules.Observe(
-            noKeyAtEntry.NextState,
-            Observation(
-                Candidate(
-                    noKeyTarget,
-                    guardCount: 1,
-                    reservationKey: 67,
-                    reservedKeyDown: true),
-                2_001));
+                Candidate(target, guardCount: 0, reservationKey: 0, reservedKeyDown: false),
+                1_002));
+        False(absentWithoutKey.ShouldPromote, "Guard end without a key opens but cannot dispatch the release opportunity");
         Equal(
-            0,
-            Find(lateKey.NextState, 3).GameplayKeyToken,
-            "a later key cannot retroactively reserve Guard");
+            MiracleGuardFollowupPhase.ReleaseOpportunity,
+            Find(absentWithoutKey.NextState, 2).Phase,
+            "the original 500 ms release edge remains available");
 
-        var gapTarget = Target(slot: 4, entityId: 64);
-        var gapPresent = MiracleGuardFollowupRules.Observe(
+        var acquiredInsideWindow = MiracleGuardFollowupRules.Observe(
+            absentWithoutKey.NextState,
+            Observation(
+                Candidate(target, guardCount: 0, reservationKey: 67, reservedKeyDown: true),
+                1_003));
+        True(acquiredInsideWindow.ShouldPromote, "a current key may bind inside the original release window");
+        Equal(67, acquiredInsideWindow.PromotionIntent!.Value.GameplayKeyToken,
+            "promotion owns exactly the release-time key");
+
+        var strictTarget = Target(slot: 3, entityId: 63);
+        var strictPresent = MiracleGuardFollowupRules.Observe(
             MiracleGuardFollowupState.Initial,
             Observation(
                 Candidate(
-                    gapTarget,
+                    strictTarget,
                     guardCount: 1,
                     reservationKey: 65,
                     reservedKeyDown: true),
-                3_000));
-        var releasedInsideAmbiguity = MiracleGuardFollowupRules.Observe(
-            gapPresent.NextState,
+                2_000));
+        var frozenBehindPriority = MiracleGuardFollowupRules.Observe(
+            strictPresent.NextState,
             Observation(
                 Candidate(
-                    gapTarget,
-                    guardCount: 2,
-                    reservationKey: 66,
-                    reservedKeyDown: false),
-                3_001));
+                    strictTarget,
+                    guardCount: 0,
+                    reservationKey: 65,
+                    reservedKeyDown: true),
+                2_001,
+                higherPriority: true));
         Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(releasedInsideAmbiguity.NextState, 4).Phase,
-            "ambiguous release frame terminally tombstones the old Guard episode");
-        var validAgain = MiracleGuardFollowupRules.Observe(
-            releasedInsideAmbiguity.NextState,
+            65,
+            Find(frozenBehindPriority.NextState, 3).GameplayKeyToken,
+            "once Guard has ended, the exact key is frozen through priority waits");
+
+        var releasedFrozenKey = MiracleGuardFollowupRules.Observe(
+            frozenBehindPriority.NextState,
             Observation(
                 Candidate(
-                    gapTarget,
-                    guardCount: 1,
+                    strictTarget,
+                    guardCount: 0,
                     reservationKey: 66,
                     reservedKeyDown: false),
-                3_002));
+                2_002));
+        False(releasedFrozenKey.ShouldPromote, "releasing the frozen key cancels this exact opportunity");
         Equal(
-            MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-            Find(validAgain.NextState, 4).Phase,
-            "first valid frame after the gap cannot resurrect the tombstoned Guard");
-        Equal(0, Find(validAgain.NextState, 4).GameplayKeyToken, "new key cannot inherit across release ambiguity");
+            MiracleGuardFollowupPhase.WaitingForGuard,
+            Find(releasedFrozenKey.NextState, 3).Phase,
+            "the same already-absent Guard cannot acquire a replacement key");
     }
 
     private static MiracleGuardFollowupTargetIdentity Target(int slot, uint entityId) =>
@@ -599,7 +579,8 @@ internal static class MiracleGuardFollowupSelfTests
         long remainingMilliseconds = 0,
         int reservationKey = 65,
         bool reservedKeyDown = true,
-        bool exactCanonical = true) =>
+        bool exactCanonical = true,
+        bool counterActionReachable = true) =>
         new(
             target,
             IsExactCanonicalEnemy: exactCanonical,
@@ -616,6 +597,7 @@ internal static class MiracleGuardFollowupSelfTests
             GuardRemainingMilliseconds = remainingMilliseconds,
             ReservationGameplayKeyToken = reservationKey,
             ReservedGameplayKeyPhysicallyDown = reservedKeyDown,
+            CounterActionReachable = counterActionReachable,
         };
 
     private static MiracleGuardFollowupObservation Observation(

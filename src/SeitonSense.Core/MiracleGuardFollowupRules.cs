@@ -65,6 +65,7 @@ public readonly record struct MiracleGuardFollowupCandidate(
     public long GuardRemainingMilliseconds { get; init; }
     public int ReservationGameplayKeyToken { get; init; }
     public bool ReservedGameplayKeyPhysicallyDown { get; init; }
+    public bool CounterActionReachable { get; init; }
 
     public bool IsValid =>
         Target.IsValid &&
@@ -279,11 +280,13 @@ public static class MiracleGuardFollowupRules
                 expiredOpportunities);
         }
 
-        // Only an episode that owned an exact key on its first Guard frame may
-        // compete for promotion. A higher-ranked observation-only episode must
-        // never consume a simultaneously valid held-key reservation.
+        // Only a currently reachable release with an exact key acquired after
+        // Guard ended may compete for promotion. Pressure/HP/MP cannot freeze an
+        // out-of-range actor ahead of a dispatchable one.
         var selected = releaseReady
-            .Where(static pair => pair.Actor.GameplayKeyToken > 0)
+            .Where(static pair =>
+                pair.Actor.GameplayKeyToken > 0 &&
+                pair.Candidate.CounterActionReachable)
             .OrderBy(static pair => pair.Candidate, ProtectionEndRankComparer.Instance)
             .FirstOrDefault();
         if (!selected.Candidate.IsValid)
@@ -344,17 +347,11 @@ public static class MiracleGuardFollowupRules
         newRelease = false;
         expired = false;
         var guardPresent = candidate.ActiveGuardStatusCount == 1;
-        if (previous.GameplayKeyToken > 0 &&
+        if (previous.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity &&
+            previous.GameplayKeyToken > 0 &&
             !candidate.ReservedGameplayKeyPhysicallyDown)
         {
-            return guardPresent
-                ? previous with
-                {
-                    Phase = MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
-                    ReleasedAtMilliseconds = -1,
-                    GameplayKeyToken = 0,
-                }
-                : MiracleGuardFollowupActorState.Waiting(candidate.Target);
+            return MiracleGuardFollowupActorState.Waiting(candidate.Target);
         }
 
         if (previous.Phase == MiracleGuardFollowupPhase.RetiredUntilGuardAbsent)
@@ -368,19 +365,15 @@ public static class MiracleGuardFollowupRules
         {
             var firstPresence = previous.Phase != MiracleGuardFollowupPhase.GuardPresent;
             if (firstPresence) newEpisode = true;
-            var keyToken = firstPresence
-                ? candidate.ReservationGameplayKeyToken > 0 &&
-                  candidate.ReservedGameplayKeyPhysicallyDown
-                    ? candidate.ReservationGameplayKeyToken
-                    : 0
-                : previous.GameplayKeyToken;
             return new MiracleGuardFollowupActorState(
                 candidate.Target,
                 MiracleGuardFollowupPhase.GuardPresent,
                 firstPresence ? nowMilliseconds : previous.GuardObservedAtMilliseconds,
                 -1)
             {
-                GameplayKeyToken = keyToken,
+                // The enemy episode is remembered now; held consent is sampled
+                // only after authoritative Guard absence.
+                GameplayKeyToken = 0,
                 ExpectedProtectionEndAtMilliseconds = UpdateExpectedProtectionEnd(
                     firstPresence ? -1 : previous.ExpectedProtectionEndAtMilliseconds,
                     candidate.GuardRemainingMilliseconds,
@@ -395,13 +388,27 @@ public static class MiracleGuardFollowupRules
             {
                 Phase = MiracleGuardFollowupPhase.ReleaseOpportunity,
                 ReleasedAtMilliseconds = nowMilliseconds,
+                GameplayKeyToken = candidate.ReservationGameplayKeyToken > 0 &&
+                                   candidate.ReservedGameplayKeyPhysicallyDown
+                    ? candidate.ReservationGameplayKeyToken
+                    : 0,
             };
         }
 
         if (previous.Phase != MiracleGuardFollowupPhase.ReleaseOpportunity)
             return MiracleGuardFollowupActorState.Waiting(candidate.Target);
 
-        if (IsInsideReleaseWindow(previous, nowMilliseconds)) return previous;
+        if (IsInsideReleaseWindow(previous, nowMilliseconds))
+        {
+            return previous.GameplayKeyToken == 0 &&
+                   candidate.ReservationGameplayKeyToken > 0 &&
+                   candidate.ReservedGameplayKeyPhysicallyDown
+                ? previous with
+                {
+                    GameplayKeyToken = candidate.ReservationGameplayKeyToken,
+                }
+                : previous;
+        }
         expired = true;
         return MiracleGuardFollowupActorState.Waiting(candidate.Target);
     }

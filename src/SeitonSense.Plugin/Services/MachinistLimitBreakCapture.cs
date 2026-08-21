@@ -500,6 +500,22 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         var targetEffects = effects[0].Effects;
         if (actionId == EnemyCombatConstants.PurifyActionId)
         {
+            // The action-level self-target packet is the episode identity. Some
+            // valid Purify packets expose the recovered status in a separate
+            // effect shape; live Resilience remains the mandatory authority
+            // before a follow-up can progress.
+            if (!MiracleCleanseFollowupRules.IsExactPurifySignal(
+                    casterEntityId,
+                    actionId,
+                    targetEntityId,
+                    effectType: 0,
+                    effectValue: 0,
+                    header->GlobalSequence,
+                    header->SourceSequence))
+            {
+                return null;
+            }
+
             ushort removedStatusId = 0;
             for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
             {
@@ -526,8 +542,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                 }
             }
 
-            return removedStatusId == 0 ||
-                   featureGeneration != CurrentMiracleCleanseFollowupGeneration ||
+            return featureGeneration != CurrentMiracleCleanseFollowupGeneration ||
                    localEntityId != CurrentMiracleCleanseFollowupLocalEntityId
                 ? null
                 : new MiracleInterceptThreatEvent(
@@ -537,7 +552,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
                     targetEntityId,
                     actionId,
                     header->AnimationVariation,
-                    MiracleCleanseFollowupRules.RecoveredFromStatusEffectType,
+                    removedStatusId == 0
+                        ? (byte)0
+                        : MiracleCleanseFollowupRules.RecoveredFromStatusEffectType,
                     removedStatusId,
                     featureGeneration,
                     header->GlobalSequence,

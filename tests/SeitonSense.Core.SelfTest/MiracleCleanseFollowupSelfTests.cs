@@ -2,37 +2,97 @@ using SeitonSense.Core;
 
 internal static class MiracleCleanseFollowupSelfTests
 {
-    internal static void ExactPurifySignalAcceptsOnlyKnownRemovableCrowdControl()
+    internal static void ExactPurifySignalAcceptsActionLevelOrKnownRecovery()
     {
         foreach (var statusId in new ushort[] { 1_343, 1_344, 1_345, 1_347, 3_085, 3_219 })
             True(IsExact(effectValue: statusId), $"exact self-Purify recovery {statusId}");
 
+        True(IsExact(effectType: 0, effectValue: 0), "exact self-Purify action packet without exposed recovery");
+
         False(IsExact(action: 29_057), "wrong action");
         False(IsExact(target: 11), "not self-targeted");
         False(IsExact(effectType: 0x0E), "status add is not recovery");
+        False(IsExact(effectType: 0, effectValue: 1_343), "action-level sentinel must be exactly zero/zero");
         False(IsExact(effectValue: 9_999), "unknown recovery status excluded");
         False(IsExact(caster: 0, target: 0), "invalid actor IDs");
         False(IsExact(globalSequence: 0, sourceSequence: 0), "missing packet identity");
     }
 
-    internal static void ValidatedSignalRetiresBeforeCanonicalResolution()
+    internal static void ValidatedSignalRetriesOnlyCanonicalResolutionInsideOriginalDeadline()
     {
         var target = Target(9);
-        var key = Signal(target, sequence: 99, now: 1_000).Key;
+        var signal = Signal(target, sequence: 99, now: 1_000);
+        var key = signal.Key;
         var first = MiracleCleanseFollowupRules.RetireValidatedSignal(
             MiracleCleanseFollowupSignalLedger.Initial,
             key);
         True(first.IsNewValidatedSignal, "first validated packet is terminally remembered");
 
-        // Simulate the runtime's exact canonical lookup failing: no lifecycle
-        // state is armed, but the packet retirement must already be durable.
-        var lifecycle = MiracleCleanseFollowupState.Initial;
+        var pending = new MiracleCleanseFollowupPendingResolution(
+            key,
+            signal.ObservedAtMilliseconds,
+            LocalEntityId: 100,
+            LocalCounterJobId: 24,
+            FeatureGeneration: 7);
+        var unresolved = MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            ResolutionObservation(target: null, now: 1_000));
+        True(unresolved.ShouldRetry, "one transient canonical miss retains only the same exact signal");
+        Equal(pending, unresolved.NextPending!.Value, "canonical retry cannot replace or mutate signal identity");
+        False(unresolved.DidResolve, "missing canonical identity cannot arm the lifecycle");
+
         var duplicate = MiracleCleanseFollowupRules.RetireValidatedSignal(
             first.NextState,
             key);
-        False(duplicate.IsNewValidatedSignal, "duplicate cannot retry canonical resolution");
-        True(lifecycle.ActiveSignal is null, "unresolved first observation armed no lifecycle");
+        False(duplicate.IsNewValidatedSignal, "duplicate packet cannot enqueue or extend resolution");
         Equal(1, duplicate.NextState.RetiredSignals.Length, "duplicate adds no second retirement");
+
+        var beforeDeadline = MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            ResolutionObservation(target, now: 1_749));
+        True(beforeDeadline.DidResolve, "the same signal may resolve at 749ms");
+        True(beforeDeadline.NextPending is null, "resolution is removed before lifecycle exposure");
+        Equal(signal, beforeDeadline.ResolvedSignal!.Value, "resolution preserves the original packet and timestamp");
+
+        var atDeadline = MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            ResolutionObservation(target, now: 1_750));
+        Equal(
+            MiracleCleanseFollowupResolutionRetireReason.AcquisitionExpired,
+            atDeadline.RetireReason,
+            "the original exact 750ms acquisition deadline is terminal");
+        True(atDeadline.NextPending is null, "deadline retirement cannot retry");
+
+        var wrongTarget = Target(10);
+        var changed = MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            ResolutionObservation(wrongTarget, now: 1_001));
+        Equal(
+            MiracleCleanseFollowupResolutionRetireReason.CanonicalIdentityChanged,
+            changed.RetireReason,
+            "a different canonical actor is terminal rather than a fallback");
+
+        foreach (var gated in new[]
+                 {
+                     ResolutionObservation(null, 1_001) with { ConfigurationEnabled = false },
+                     ResolutionObservation(null, 1_001) with { IsCrystallineConflict = false },
+                     ResolutionObservation(null, 1_001) with { IsLocalCounterJobValid = false },
+                     ResolutionObservation(null, 1_001) with { LocalEntityId = 101 },
+                     ResolutionObservation(null, 1_001) with { LocalCounterJobId = 23 },
+                     ResolutionObservation(null, 1_001) with { FeatureGeneration = 8 },
+                     ResolutionObservation(null, 1_001) with { HardReset = true },
+                 })
+        {
+            var retired = MiracleCleanseFollowupRules.ResolvePendingSignal(pending, gated);
+            Equal(
+                MiracleCleanseFollowupResolutionDecisionKind.Retired,
+                retired.Kind,
+                "disable/context/death-job-generation/reset gates clear pending state");
+            True(retired.NextPending is null, "closed gate retains no pending resolution");
+        }
+
+        Equal(5, MiracleCleanseFollowupRules.MaximumPendingResolutions,
+            "pending storage is bounded to the five canonical enemy slots");
     }
 
     internal static void ExactLifecyclePromotesOnceAfterObservedRelease()
@@ -231,6 +291,21 @@ internal static class MiracleCleanseFollowupSelfTests
             knownZero.PromotionIntent!.Value.ReleasedAtMilliseconds,
             "pressure does not restart the release lifetime");
 
+        releaseState = ReachReleaseOpportunity(target, now: 2_500);
+        var unreachable = MiracleCleanseFollowupRules.Observe(
+            releaseState,
+            Observation(
+                null,
+                Candidate(target, counterActionReachable: false),
+                2_751));
+        False(unreachable.ShouldPromote, "an out-of-range release cannot be frozen into dispatch");
+        Equal(MiracleCleanseFollowupPhase.ReleaseOpportunity, unreachable.NextState.Phase,
+            "reachability may recover only inside the original release window");
+        var reachable = MiracleCleanseFollowupRules.Observe(
+            unreachable.NextState,
+            Observation(null, Candidate(target), 2_752));
+        True(reachable.ShouldPromote, "native reachability recovery inside the same window promotes immediately");
+
         releaseState = ReachReleaseOpportunity(target, now: 3_000);
         var expired = MiracleCleanseFollowupRules.Observe(
             releaseState,
@@ -347,7 +422,7 @@ internal static class MiracleCleanseFollowupSelfTests
                     reservedKeyDown: true),
                 1_000));
         Equal(3_000L, observed.NextState.ExpectedProtectionEndAtMilliseconds, "validated expected end is absolute");
-        Equal(65, observed.NextState.GameplayKeyToken, "held key is frozen during immunity");
+        Equal(0, observed.NextState.GameplayKeyToken, "enemy episode stores no early key during immunity");
 
         var stillPresent = MiracleCleanseFollowupRules.Observe(
             observed.NextState,
@@ -361,7 +436,7 @@ internal static class MiracleCleanseFollowupSelfTests
                     reservedKeyDown: true),
                 3_000));
         False(stillPresent.ShouldPromote, "expected time alone never authorizes through live Resilience");
-        Equal(65, stillPresent.NextState.GameplayKeyToken, "later key cannot replace frozen consent");
+        Equal(0, stillPresent.NextState.GameplayKeyToken, "movement-key changes remain irrelevant during immunity");
 
         var firstAbsent = MiracleCleanseFollowupRules.Observe(
             stillPresent.NextState,
@@ -370,7 +445,7 @@ internal static class MiracleCleanseFollowupSelfTests
                 Candidate(target, reservationKey: 66, reservedKeyDown: true),
                 3_001));
         True(firstAbsent.ShouldPromote, "first live absence after expected end promotes immediately");
-        Equal(65, firstAbsent.PromotionIntent!.Value.GameplayKeyToken, "promotion carries exact reserved key");
+        Equal(66, firstAbsent.PromotionIntent!.Value.GameplayKeyToken, "first executable frame freezes the current exact key");
         Equal(3_000L, firstAbsent.PromotionIntent.Value.ExpectedProtectionEndAtMilliseconds, "promotion retains non-extending hint");
         Equal(3_001L, firstAbsent.PromotionIntent.Value.ReleasedAtMilliseconds, "actual absence remains release authority");
     }
@@ -401,7 +476,7 @@ internal static class MiracleCleanseFollowupSelfTests
         True(ready.ShouldPromote, "untimed continuous absence still promotes after grace");
     }
 
-    internal static void ReservedKeyReleaseTerminallyCancelsEpisode()
+    internal static void ReservationBindsAtReleaseAndThenRequiresExactKey()
     {
         var target = Target(72);
         var signal = Signal(target, sequence: 702, now: 1_000);
@@ -412,10 +487,11 @@ internal static class MiracleCleanseFollowupSelfTests
                 Candidate(
                     target,
                     resilienceCount: 1,
+                    remainingMilliseconds: 100,
                     reservationKey: 65,
                     reservedKeyDown: true),
                 1_000));
-        var released = MiracleCleanseFollowupRules.Observe(
+        var changedDuringResilience = MiracleCleanseFollowupRules.Observe(
             observed.NextState,
             Observation(
                 null,
@@ -425,39 +501,66 @@ internal static class MiracleCleanseFollowupSelfTests
                     reservationKey: 66,
                     reservedKeyDown: false),
                 1_001));
-        Equal(
-            MiracleCleanseFollowupCancelReason.ReservationKeyReleased,
-            released.CancelReason,
-            "one observed release terminally cancels the reservation");
-        Equal(0, released.NextState.GameplayKeyToken, "alternate key cannot inherit cancelled episode");
+        Equal(MiracleCleanseFollowupCancelReason.None, changedDuringResilience.CancelReason,
+            "releasing or changing a movement key during Resilience does not destroy the enemy episode");
+        Equal(0, changedDuringResilience.NextState.GameplayKeyToken,
+            "no input is owned before authoritative Resilience absence");
 
-        var absent = MiracleCleanseFollowupRules.Observe(
-            released.NextState,
-            Observation(null, Candidate(target, reservationKey: 66, reservedKeyDown: true), 1_200));
-        False(absent.ShouldPromote, "re-press or alternate key cannot resurrect retired signal");
-
-        var noKeyTarget = Target(73);
-        var noKeySignal = Signal(noKeyTarget, sequence: 703, now: 2_000);
-        var noKeyAtSignal = MiracleCleanseFollowupRules.Observe(
-            MiracleCleanseFollowupState.Initial,
-            Observation(
-                noKeySignal,
-                Candidate(noKeyTarget, resilienceCount: 1),
-                2_000));
-        var keyPressedLater = MiracleCleanseFollowupRules.Observe(
-            noKeyAtSignal.NextState,
+        var absentWithoutKey = MiracleCleanseFollowupRules.Observe(
+            changedDuringResilience.NextState,
             Observation(
                 null,
+                Candidate(target, reservationKey: 0, reservedKeyDown: false),
+                1_100));
+        False(absentWithoutKey.ShouldPromote, "release is remembered even when no key exists on its first frame");
+        Equal(MiracleCleanseFollowupPhase.ReleaseOpportunity, absentWithoutKey.NextState.Phase,
+            "the bounded 500 ms release opportunity stays available");
+        Equal(0, absentWithoutKey.NextState.GameplayKeyToken, "no key is invented");
+
+        var acquiredInsideWindow = MiracleCleanseFollowupRules.Observe(
+            absentWithoutKey.NextState,
+            Observation(
+                null,
+                Candidate(target, reservationKey: 67, reservedKeyDown: true),
+                1_101));
+        True(acquiredInsideWindow.ShouldPromote, "a current held key can be acquired inside the original release window");
+        Equal(67, acquiredInsideWindow.PromotionIntent!.Value.GameplayKeyToken,
+            "promotion owns exactly the key observed at release");
+
+        var strictTarget = Target(73);
+        var strictSignal = Signal(strictTarget, sequence: 703, now: 2_000);
+        var strictPresent = MiracleCleanseFollowupRules.Observe(
+            MiracleCleanseFollowupState.Initial,
+            Observation(
+                strictSignal,
                 Candidate(
-                    noKeyTarget,
+                    strictTarget,
                     resilienceCount: 1,
+                    remainingMilliseconds: 100,
                     reservationKey: 66,
                     reservedKeyDown: true),
-                2_001));
+                2_000));
+        var frozenBehindPriority = MiracleCleanseFollowupRules.Observe(
+            strictPresent.NextState,
+            Observation(
+                null,
+                Candidate(strictTarget, reservationKey: 66, reservedKeyDown: true),
+                2_100,
+                higherPriority: true));
         Equal(
-            0,
-            keyPressedLater.NextState.GameplayKeyToken,
-            "a later key cannot retroactively reserve the Purify episode");
+            66,
+            frozenBehindPriority.NextState.GameplayKeyToken,
+            "once release begins, the exact key is frozen while priority work runs");
+
+        var releasedFrozenKey = MiracleCleanseFollowupRules.Observe(
+            frozenBehindPriority.NextState,
+            Observation(
+                null,
+                Candidate(strictTarget, reservationKey: 67, reservedKeyDown: false),
+                2_101));
+        Equal(MiracleCleanseFollowupCancelReason.ReservationKeyReleased,
+            releasedFrozenKey.CancelReason,
+            "after release binding, letting go terminally cancels the exact intent");
     }
 
     internal static void PromotionKindLabelsConfirmationWithoutBroadeningStartRules()
@@ -480,7 +583,8 @@ internal static class MiracleCleanseFollowupSelfTests
             TargetEntityId: 200,
             Threat: MiracleInterceptThreatKind.PostPurifyCrowdControl,
             UseActionAccepted: true,
-            AttemptedAtMilliseconds: 1_000)
+            AttemptedAtMilliseconds: 1_000,
+            ExpectedSourceSequence: 9)
         {
             RemovedStatusId = MiracleCleanseFollowupRules.StunStatusId,
         };
@@ -544,8 +648,9 @@ internal static class MiracleCleanseFollowupSelfTests
         MiracleCleanseFollowupTargetIdentity target,
         int resilienceCount = 0,
         long remainingMilliseconds = 0,
-        int reservationKey = 0,
-        bool reservedKeyDown = false) =>
+        int reservationKey = 65,
+        bool reservedKeyDown = true,
+        bool counterActionReachable = true) =>
         new(
             target,
             IsExactCanonicalEnemy: true,
@@ -555,6 +660,7 @@ internal static class MiracleCleanseFollowupSelfTests
             ResilienceRemainingMilliseconds = remainingMilliseconds,
             ReservationGameplayKeyToken = reservationKey,
             ReservedGameplayKeyPhysicallyDown = reservedKeyDown,
+            CounterActionReachable = counterActionReachable,
         };
 
     private static MiracleCleanseFollowupObservation Observation(
@@ -573,6 +679,19 @@ internal static class MiracleCleanseFollowupSelfTests
             Candidate: candidate,
             TeamTargetCountKnown: teamPressureKnown,
             TeamTargetCount: teamTargetCount,
+            NowMilliseconds: now);
+
+    private static MiracleCleanseFollowupResolutionObservation ResolutionObservation(
+        MiracleCleanseFollowupTargetIdentity? target,
+        long now) =>
+        new(
+            ConfigurationEnabled: true,
+            IsCrystallineConflict: true,
+            IsLocalCounterJobValid: true,
+            LocalEntityId: 100,
+            LocalCounterJobId: 24,
+            FeatureGeneration: 7,
+            UniqueCanonicalTarget: target,
             NowMilliseconds: now);
 
     private static bool IsExact(

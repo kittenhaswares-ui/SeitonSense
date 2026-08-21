@@ -9,7 +9,8 @@ public readonly record struct MiracleInterceptPendingAttempt(
     uint TargetEntityId,
     MiracleInterceptThreatKind Threat,
     bool UseActionAccepted,
-    long AttemptedAtMilliseconds)
+    long AttemptedAtMilliseconds,
+    ushort ExpectedSourceSequence = 0)
 {
     public bool IsValid =>
         MiracleInterceptConfirmationRules.IsValidEntityId(LocalCasterEntityId) &&
@@ -24,7 +25,10 @@ public readonly record struct MiracleInterceptPendingAttempt(
             MiracleInterceptThreatKind.PostPurifyCrowdControl or
             MiracleInterceptThreatKind.PostGuardCrowdControl) &&
         (Threat != MiracleInterceptThreatKind.PostPurifyCrowdControl ||
+         RemovedStatusId == 0 ||
          MiracleCleanseFollowupRules.IsPurifyRemovableStatus(RemovedStatusId)) &&
+        UseActionAccepted &&
+        ExpectedSourceSequence != 0 &&
         AttemptedAtMilliseconds >= 0;
 
     public uint RemovedStatusId { get; init; }
@@ -87,7 +91,8 @@ public readonly record struct MiracleInterceptConfirmationDecision(
 
 /// <summary>
 /// Correlates the sole native WHM Miracle, BRD Silent Nocturne, or NIN Raiju
-/// attempt made by the reactive helper with the exact server status-add on the intended target.
+/// attempt made by the reactive helper with the exact server status-add on the intended target
+/// and the same non-zero client source sequence. A manual request cannot inherit the pending.
 /// This proves only that the counter-CC landed; it never claims the hostile
 /// action was interrupted.
 /// </summary>
@@ -260,7 +265,7 @@ public static class MiracleInterceptConfirmationRules
                observation.TargetEntityId == pending.TargetEntityId &&
                observation.EffectType == AddStatusEffectType &&
                observation.EffectValue == ExpectedStatusForAction(pending.ActionId) &&
-               (observation.GlobalSequence != 0 || observation.SourceSequence != 0);
+               observation.SourceSequence == pending.ExpectedSourceSequence;
     }
 
     private static MiracleInterceptPendingAttempt? PendingInsideWindow(

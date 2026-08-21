@@ -80,6 +80,10 @@ public readonly record struct MiracleProtectionEndRankCandidate(
 public static class MiracleProtectionEndRules
 {
     public const long HeldLeaseMilliseconds = 1_500;
+    // Both verified PvP Raiju rows have a 2.5-second recast. One full recast
+    // plus the existing 500-ms release opportunity keeps the intent alive long
+    // enough to reach the next GCD without delaying an immediately ready use.
+    public const long NinjaWeaponskillHeldLeaseMilliseconds = 3_000;
     public const long NativeRetryThrottleMilliseconds =
         HeldActionRetryRules.NativeRetryThrottleMilliseconds;
     public const int MaximumNativeAttempts = HeldActionRetryRules.MaximumNativeAttempts;
@@ -123,6 +127,24 @@ public static class MiracleProtectionEndRules
         IsInsideHeldLease(observedAtMilliseconds, nowMilliseconds, leaseMilliseconds) &&
         (state == HeldActionRetryState.Initial ||
          HeldActionRetryRules.CanAttempt(state, nowMilliseconds));
+
+    /// <summary>
+    /// An exact hostile startup packet may replace any unattempted lower-priority
+    /// reactive lease only when its dispatcher priority is strictly higher. A
+    /// proven native false or equal/lower priority remains frozen and cannot be
+    /// retargeted.
+    /// </summary>
+    public static bool CanPreemptUnattemptedLowerPriorityThreat(
+        MiracleInterceptThreatKind activeThreat,
+        HeldActionRetryState activeRetryState,
+        MiracleInterceptThreatKind incomingThreat)
+    {
+        var activePriority = MiracleInterceptRules.GetDispatchPriority(activeThreat);
+        var incomingPriority = MiracleInterceptRules.GetDispatchPriority(incomingThreat);
+        return activeRetryState == HeldActionRetryState.Initial &&
+               activePriority > 0 &&
+               incomingPriority > activePriority;
+    }
 
     public static MiracleProtectionEndAttemptDecision CompleteNativeAttempt(
         HeldActionRetryState previous,

@@ -42,8 +42,10 @@ public enum MiracleCleanseFollowupCancelReason
 
 /// <summary>
 /// One exact server ActionEffect result proving that an enemy used Purify on
-/// itself and recovered from Stun. Sequence identity makes duplicate packets
-/// harmless and is retained before any later native Miracle attempt.
+/// itself. A recovered status is retained when the packet exposes one; live
+/// Resilience is still required before the episode can progress. Sequence
+/// identity makes duplicate packets harmless and is retained before any later
+/// native counter-CC attempt.
 /// </summary>
 public readonly record struct MiracleCleanseFollowupSignalKey(
     uint CasterEntityId,
@@ -81,6 +83,89 @@ public readonly record struct MiracleCleanseFollowupSignalRetirementDecision(
     bool IsNewValidatedSignal);
 
 /// <summary>
+/// One already-validated and terminally deduplicated Purify packet whose exact
+/// e1-e5 actor row was temporarily unavailable. This carries no gameplay key,
+/// target fallback, action intent, or mutable deadline.
+/// </summary>
+public readonly record struct MiracleCleanseFollowupPendingResolution(
+    MiracleCleanseFollowupSignalKey Key,
+    long ObservedAtMilliseconds,
+    uint LocalEntityId,
+    uint LocalCounterJobId,
+    int FeatureGeneration)
+{
+    public bool IsValid =>
+        MiracleCleanseFollowupRules.IsExactPurifySignal(
+            Key.CasterEntityId,
+            Key.ActionId,
+            Key.TargetEntityId,
+            Key.EffectType,
+            Key.EffectValue,
+            Key.GlobalSequence,
+            Key.SourceSequence) &&
+        ObservedAtMilliseconds >= 0 &&
+        MiracleCleanseFollowupRules.IsValidEntityId(LocalEntityId) &&
+        LocalEntityId != Key.CasterEntityId &&
+        LocalCounterJobId != 0;
+}
+
+public enum MiracleCleanseFollowupResolutionDecisionKind
+{
+    Waiting = 0,
+    Resolved = 1,
+    Retired = 2,
+}
+
+public enum MiracleCleanseFollowupResolutionRetireReason
+{
+    None = 0,
+    InvalidSignal = 1,
+    ConfigurationDisabled = 2,
+    OutsideCrystallineConflict = 3,
+    LocalCounterJobInvalid = 4,
+    LocalIdentityChanged = 5,
+    LocalCounterJobChanged = 6,
+    FeatureGenerationChanged = 7,
+    AcquisitionExpired = 8,
+    ClockMovedBackwards = 9,
+    CanonicalIdentityChanged = 10,
+    HardReset = 11,
+}
+
+/// <summary>
+/// UniqueCanonicalTarget must remain null until the runtime proves exactly one
+/// canonical e1-e5 row for the original caster. Null therefore means retry the
+/// same signal, not select another actor.
+/// </summary>
+public readonly record struct MiracleCleanseFollowupResolutionObservation(
+    bool ConfigurationEnabled,
+    bool IsCrystallineConflict,
+    bool IsLocalCounterJobValid,
+    uint LocalEntityId,
+    uint LocalCounterJobId,
+    int FeatureGeneration,
+    MiracleCleanseFollowupTargetIdentity? UniqueCanonicalTarget,
+    long NowMilliseconds,
+    bool HardReset = false);
+
+public readonly record struct MiracleCleanseFollowupResolutionDecision(
+    MiracleCleanseFollowupResolutionDecisionKind Kind,
+    MiracleCleanseFollowupPendingResolution? NextPending,
+    MiracleCleanseFollowupSignal? ResolvedSignal,
+    MiracleCleanseFollowupResolutionRetireReason RetireReason)
+{
+    public bool ShouldRetry =>
+        Kind == MiracleCleanseFollowupResolutionDecisionKind.Waiting &&
+        NextPending is { IsValid: true };
+
+    public bool DidResolve =>
+        Kind == MiracleCleanseFollowupResolutionDecisionKind.Resolved &&
+        NextPending is null &&
+        ResolvedSignal is { } signal &&
+        MiracleCleanseFollowupRules.IsValidSignalShape(signal);
+}
+
+/// <summary>
 /// Exact no-retry action intent. The Purify ActionEffect signal, not a mutable
 /// StatusList slot or remaining-time estimate, is its identity.
 /// </summary>
@@ -95,7 +180,8 @@ public readonly record struct MiracleCleanseFollowupIntent(
 
     public bool IsValid =>
         MiracleCleanseFollowupRules.IsValidSignalShape(Signal) &&
-        ReleasedAtMilliseconds >= Signal.ObservedAtMilliseconds;
+        ReleasedAtMilliseconds >= Signal.ObservedAtMilliseconds &&
+        GameplayKeyToken > 0;
 }
 
 /// <summary>
@@ -116,6 +202,7 @@ public readonly record struct MiracleCleanseFollowupCandidate(
     public long ResilienceRemainingMilliseconds { get; init; }
     public int ReservationGameplayKeyToken { get; init; }
     public bool ReservedGameplayKeyPhysicallyDown { get; init; }
+    public bool CounterActionReachable { get; init; }
 }
 
 public readonly record struct MiracleCleanseFollowupState(
@@ -174,7 +261,7 @@ public readonly record struct MiracleCleanseFollowupDecision(
 
 /// <summary>
 /// Pure, opt-in WHM/BRD/NIN follow-up policy:
-/// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
+/// exact enemy self-Purify -> positive live Resilience latch ->
 /// one authoritative live absence at/after a validated expected end, or 150ms
 /// continuous early/untimed absence -> one bounded promotion into the existing
 /// reactive-CC dispatcher. Positive fresh total-team pressure is an optional
@@ -202,6 +289,7 @@ public static class MiracleCleanseFollowupRules
     public const long ReleaseOpportunityMilliseconds = 500;
     public const long MaximumResilienceRemainingMilliseconds = 2_250;
     public const int MaximumObservedSignals = 128;
+    public const int MaximumPendingResolutions = 5;
 
     public static bool IsExactPurifySignal(
         uint casterEntityId,
@@ -214,8 +302,9 @@ public static class MiracleCleanseFollowupRules
         IsValidEntityId(casterEntityId) &&
         casterEntityId == targetEntityId &&
         actionId == PurifyActionId &&
-        effectType == RecoveredFromStatusEffectType &&
-        IsPurifyRemovableStatus(effectValue) &&
+        ((effectType == 0 && effectValue == 0) ||
+         (effectType == RecoveredFromStatusEffectType &&
+          IsPurifyRemovableStatus(effectValue))) &&
         (globalSequence != 0 || sourceSequence != 0);
 
     public static bool IsPurifyRemovableStatus(uint statusId) =>
@@ -228,9 +317,9 @@ public static class MiracleCleanseFollowupRules
             DeepFreezeStatusId;
 
     /// <summary>
-    /// Terminally retires one already-validated exact Purify packet before any
-    /// mutable canonical-actor resolution. A later duplicate can never arm
-    /// merely because the first framework resolution was temporarily absent.
+    /// Terminally deduplicates one already-validated exact Purify packet before
+    /// mutable canonical-actor resolution. Only a separately stored copy of
+    /// this first packet may retry resolution; a later duplicate stays inert.
     /// </summary>
     public static MiracleCleanseFollowupSignalRetirementDecision RetireValidatedSignal(
         MiracleCleanseFollowupSignalLedger previous,
@@ -259,6 +348,75 @@ public static class MiracleCleanseFollowupRules
             new MiracleCleanseFollowupSignalLedger(
                 retired.Skip(skip).Append(signal).ToImmutableArray()),
             IsNewValidatedSignal: true);
+    }
+
+    /// <summary>
+    /// Retries only canonical identity resolution for one already-retired exact
+    /// Purify signal. Every gate and the original acquisition deadline are
+    /// terminal. Resolution returns the original signal exactly once to a
+    /// caller that removes NextPending before lifecycle dispatch.
+    /// </summary>
+    public static MiracleCleanseFollowupResolutionDecision ResolvePendingSignal(
+        MiracleCleanseFollowupPendingResolution pending,
+        MiracleCleanseFollowupResolutionObservation observation)
+    {
+        if (observation.HardReset)
+            return RetiredResolution(MiracleCleanseFollowupResolutionRetireReason.HardReset);
+        if (!pending.IsValid)
+            return RetiredResolution(MiracleCleanseFollowupResolutionRetireReason.InvalidSignal);
+        if (!observation.ConfigurationEnabled)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.ConfigurationDisabled);
+        if (!observation.IsCrystallineConflict)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.OutsideCrystallineConflict);
+        if (!observation.IsLocalCounterJobValid || observation.LocalCounterJobId == 0)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.LocalCounterJobInvalid);
+        if (observation.LocalEntityId != pending.LocalEntityId)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.LocalIdentityChanged);
+        if (observation.LocalCounterJobId != pending.LocalCounterJobId)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.LocalCounterJobChanged);
+        if (observation.FeatureGeneration != pending.FeatureGeneration)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.FeatureGenerationChanged);
+        if (observation.NowMilliseconds < pending.ObservedAtMilliseconds)
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.ClockMovedBackwards);
+        if (observation.NowMilliseconds - pending.ObservedAtMilliseconds >=
+            ResilienceAcquisitionMilliseconds)
+        {
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.AcquisitionExpired);
+        }
+
+        if (observation.UniqueCanonicalTarget is not { } target)
+        {
+            return new MiracleCleanseFollowupResolutionDecision(
+                MiracleCleanseFollowupResolutionDecisionKind.Waiting,
+                pending,
+                null,
+                MiracleCleanseFollowupResolutionRetireReason.None);
+        }
+
+        if (!target.IsValid ||
+            target.EntityId != pending.Key.CasterEntityId ||
+            target.EntityId != pending.Key.TargetEntityId)
+        {
+            return RetiredResolution(
+                MiracleCleanseFollowupResolutionRetireReason.CanonicalIdentityChanged);
+        }
+
+        return new MiracleCleanseFollowupResolutionDecision(
+            MiracleCleanseFollowupResolutionDecisionKind.Resolved,
+            null,
+            new MiracleCleanseFollowupSignal(
+                pending.Key,
+                target,
+                pending.ObservedAtMilliseconds),
+            MiracleCleanseFollowupResolutionRetireReason.None);
     }
 
     public static bool IsValidEntityId(uint entityId) =>
@@ -369,26 +527,6 @@ public static class MiracleCleanseFollowupRules
             return Cancelled(
                 StopTracking(state, observation.NowMilliseconds),
                 MiracleCleanseFollowupCancelReason.ResilienceObservationAmbiguous);
-        }
-
-        if (observedNewSignal)
-        {
-            // The exact event frame owns the reservation. A key first pressed
-            // later during Resilience cannot retroactively authorize it.
-            state = state with
-            {
-                GameplayKeyToken = candidate.ReservationGameplayKeyToken > 0 &&
-                                   candidate.ReservedGameplayKeyPhysicallyDown
-                    ? candidate.ReservationGameplayKeyToken
-                    : 0,
-            };
-        }
-
-        if (state.GameplayKeyToken > 0 && !candidate.ReservedGameplayKeyPhysicallyDown)
-        {
-            return Cancelled(
-                StopTracking(state, observation.NowMilliseconds),
-                MiracleCleanseFollowupCancelReason.ReservationKeyReleased);
         }
 
         return state.Phase switch
@@ -567,9 +705,34 @@ public static class MiracleCleanseFollowupRules
                 MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired);
         }
 
+        // Purify is the remembered enemy episode. Consent is intentionally
+        // sampled only when Resilience is authoritatively absent, so ordinary
+        // W/A/S/D handoffs during the protection duration cannot kill it. Once
+        // acquired, the exact generation remains frozen through dispatch.
+        if (state.GameplayKeyToken > 0)
+        {
+            if (!candidate.ReservedGameplayKeyPhysicallyDown)
+            {
+                return Cancelled(
+                    StopTracking(state, observation.NowMilliseconds),
+                    MiracleCleanseFollowupCancelReason.ReservationKeyReleased);
+            }
+        }
+        else if (candidate.ReservationGameplayKeyToken > 0 &&
+                 candidate.ReservedGameplayKeyPhysicallyDown)
+        {
+            state = state with
+            {
+                GameplayKeyToken = candidate.ReservationGameplayKeyToken,
+            };
+        }
+
         // Immediate MCH/SAM/VPR events keep priority without destroying this
         // opportunity. Promotion remains bounded by the original release edge.
         if (observation.HigherPriorityClaimed)
+            return Waiting(state);
+
+        if (state.GameplayKeyToken <= 0 || !candidate.CounterActionReachable)
             return Waiting(state);
 
         if (state.ActiveSignal is not { } signal)
@@ -616,6 +779,14 @@ public static class MiracleCleanseFollowupRules
             ? MiracleCleanseFollowupCancelReason.CandidateChanged
             : null;
     }
+
+    private static MiracleCleanseFollowupResolutionDecision RetiredResolution(
+        MiracleCleanseFollowupResolutionRetireReason reason) =>
+        new(
+            MiracleCleanseFollowupResolutionDecisionKind.Retired,
+            null,
+            null,
+            reason);
 
     private static bool IsValidNewSignal(
         MiracleCleanseFollowupSignal signal,

@@ -28,6 +28,10 @@ internal static class AllyRescueConfirmationSelfTests
             1_200);
         False(malformedRejected.PendingRegistered, "malformed rejected diagnostics are ignored");
         Equal(1_000L, malformedRejected.NextState.Pending!.Value.AttemptedAtMilliseconds, "no rejected record can erase accepted evidence");
+
+        var unattributable = Register(accepted: true, now: 2_000, expectedSourceSequence: 0);
+        False(unattributable.PendingRegistered, "accepted call without exact source sequence cannot claim automation");
+        True(unattributable.NextState.Pending is null, "unattributable accepted call remains unconfirmable");
     }
 
     public static void ExactRecoveredEffectConfirmsOnce()
@@ -58,6 +62,7 @@ internal static class AllyRescueConfirmationSelfTests
             Effect(now: 1_100) with { EffectType = 0x11 },
             Effect(now: 1_100) with { EffectValue = 999 },
             Effect(now: 1_100) with { GlobalSequence = 0, SourceSequence = 0 },
+            Effect(now: 1_100) with { GlobalSequence = 100, SourceSequence = 11 },
             Effect(now: 999),
             Effect(now: 3_501),
         };
@@ -70,6 +75,19 @@ internal static class AllyRescueConfirmationSelfTests
             False(decision.Confirmed, $"mismatch ignored: {variant}");
             Equal(0L, decision.NextState.SessionStatistics.TotalConfirmed, "mismatch cannot count");
         }
+
+        var pending = Register(accepted: true, now: 4_000).NextState;
+        var manual = AllyRescueConfirmationRules.ObserveActionEffect(
+            pending,
+            Effect(now: 4_100) with { SourceSequence = 11 });
+        False(manual.Confirmed, "manual same-action same-target packet cannot confirm helper ownership");
+        True(manual.NextState.Pending is not null, "manual packet leaves helper pending alive");
+        Equal((ushort)10, manual.NextState.Pending!.Value.ExpectedSourceSequence, "pending retains exact helper source sequence");
+
+        var exact = AllyRescueConfirmationRules.ObserveActionEffect(
+            manual.NextState,
+            Effect(now: 4_101));
+        True(exact.Confirmed, "later exact helper source sequence still confirms");
     }
 
     public static void DuplicateSequenceCannotDoubleCount()
@@ -108,7 +126,10 @@ internal static class AllyRescueConfirmationSelfTests
             var attemptedAt = 1_000L + (index * 100L);
             state = AllyRescueConfirmationRules.RegisterAttempt(
                 state,
-                Attempt(accepted: true, now: attemptedAt),
+                Attempt(
+                    accepted: true,
+                    now: attemptedAt,
+                    expectedSourceSequence: (ushort)(10 + index)),
                 attemptedAt).NextState;
             state = AllyRescueConfirmationRules.ObserveActionEffect(
                 state,
@@ -193,13 +214,19 @@ internal static class AllyRescueConfirmationSelfTests
         True(invalid.NextState.Pending is null, "clock regression clears pending");
     }
 
-    private static AllyRescueConfirmationDecision Register(bool accepted, long now) =>
+    private static AllyRescueConfirmationDecision Register(
+        bool accepted,
+        long now,
+        ushort expectedSourceSequence = 10) =>
         AllyRescueConfirmationRules.RegisterAttempt(
             AllyRescueConfirmationState.Initial,
-            Attempt(accepted, now),
+            Attempt(accepted, now, expectedSourceSequence),
             now);
 
-    private static AllyRescuePendingAttempt Attempt(bool accepted, long now) =>
+    private static AllyRescuePendingAttempt Attempt(
+        bool accepted,
+        long now,
+        ushort expectedSourceSequence = 10) =>
         new(
             Caster,
             AllyRescueConfirmationRules.AquaveilActionId,
@@ -210,7 +237,8 @@ internal static class AllyRescueConfirmationSelfTests
                 Target,
                 new AllyRescueStatusInstance(AllyRescueStatusRules.StunStatusId, 1)),
             accepted,
-            now);
+            now,
+            expectedSourceSequence);
 
     private static AllyRescueActionEffectObservation Effect(
         uint statusId = AllyRescueConfirmationRules.StunStatusId,
