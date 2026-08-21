@@ -2,19 +2,16 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.27.1.0 repairs reactive held-key
-attachment while preserving bounded, exact intent. Urgent startup events may
-attach the first currently eligible held/fresh generation inside their original
-short threat lease. Exact enemy Purify and Guard episodes are remembered without
-prematurely freezing a key; the current eligible generation is bound only when
-authoritative Resilience/Guard absence opens the original 500-ms release window.
-Once bound, release, typing, ambiguity, or identity drift cannot substitute
-another key, action, or target. Native reachability is checked before simultaneous
-release candidates are ranked, NIN protection-end intent covers its verified
-2.5-second Raiju recast with a 3-second lease, and exact action source sequences
-prevent manual Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil from being
-reported as an automatic landing. It retains v0.27's metadata-verified Forked and
-Fleeting Raiju variants, plus v0.26's
+assistance, and target highlights. Version 0.28.0.0 adds the explicit manual NIN
+`/panicshu` macro command. Each invocation freezes one exact terrain point 19.5
+yalms along the character's facing and may make at most one native Shukuchi
+attempt inside a 500-ms lease. It never originates from an automatic, pressure,
+enemy, status, or held-key trigger; changes no mouse cursor or target; and has no
+retry, shorter-distance fallback, or destination recomputation. It retains
+v0.27.1's bounded reactive held-key attachment, exact post-Purify/post-Guard
+episode memory, native pre-rank reachability, three-second NIN protection-end
+lease, and source-sequence-bound automatic landing confirmation; v0.27's
+metadata-verified Forked and Fleeting Raiju variants; plus v0.26's
 Purify-first scheduler and six job-specific second-tier order, optional positive
 pressure ranking, v0.25's stable held-key leases across all ten physical-hold
 helpers, separate default-off native cast-cancellation test, and 50-ms/eight-call
@@ -153,6 +150,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   job. It supports Guardian, Thunderclap, Aetherial Manipulation, Icarus, and
   Slither. Only no valid reachable ally means no movement; it never falls back
   to your target.
+- **Manual NIN Panic Shukuchi macro:** `/panicshu` makes one fail-closed
+  Shukuchi attempt at a frozen terrain point 19.5 yalms along the character's
+  facing. It is command-only, never automatic or held-triggered, changes no
+  cursor or target, and never retries or searches for a shorter fallback point.
 - **DRK Shadowbringer macro:** the separate default-off `/seitonbringer` helper
   pairs only with the immediately following authored Souleater Combo `<t>` line
   on exact PvP Dark Knight. It supports canonical `S1`-`S5` enemies in
@@ -1106,6 +1107,41 @@ movement action for the rest of the bounded 750-ms window, including a former
 fourth `<t>` line and Turbo duplicates. Remove that old line; it is not part of
 the supported Far Help macro.
 
+## Manual NIN Panic Shukuchi macro
+
+Panic Shukuchi is an explicit one-line macro command, not an automatic feature
+and not part of the held-action scheduler:
+
+```text
+/panicshu
+```
+
+It runs only on exact PvP Ninja in Crystalline Conflict, or in the Wolves' Den
+when the existing **Enable Wolves' Den testing** option is enabled. Frontline and
+Rival Wings remain excluded. Each command invocation reads the character's
+current position and facing, projects only the point 19.5 yalms straight ahead
+onto terrain, and freezes that exact destination. Turning or moving during the
+short lease does not recompute it.
+
+The lease lasts at most 500 ms and may remain pending only while Self-Purify owns
+the current scheduler frame, the local character is casting, FFXIV's native
+action queue is occupied, or animation lock remains active. Shukuchi must
+already have known, ready cooldown/resources when the
+command arms. Before the sole native location-action call, Seiton revalidates the
+exact local identity, job, territory/context, metadata, adjusted action, own
+Guard, crowd-control state, cooldown/resources, structural availability, queue,
+and animation lock. Three Mudra changes Shukuchi into Doton, so any adjusted
+action other than exact Shukuchi `29513` cancels without an attempt. Crowd
+control also cancels so Purify keeps priority.
+
+The frozen lease is spent before the native call. Client rejection, ambiguity,
+or exception is terminal: there is no retry, alternate action, shorter/inward
+point, path search, or destination fallback. The command never moves the mouse
+or ground-target cursor and never reads, changes, or substitutes a hard, soft,
+Focus, or mouseover target. A wall, missing exact terrain hit, excessive vertical
+offset, or native line-of-sight refusal therefore fails closed instead of making
+a different jump.
+
 ## DRK Shadowbringer two-line macro
 
 This separate helper is disabled by default and supports exact PvP Dark Knight
@@ -1231,12 +1267,15 @@ focus module to avoid drawing both over the same actor.
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
+| Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
 | Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
 
-Wolves' Den support is explicitly a test option. Its enemy visuals require one
+Wolves' Den support is explicitly a test option. Panic Shukuchi chooses no enemy
+and uses no target; its destination comes from the local NIN position, facing,
+and exact forward terrain point. Enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
 nothing. The DRK macro does not use that duel-opponent path: with both existing
 options enabled, it accepts only the exact current hard-target striking dummy.
@@ -1252,8 +1291,10 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 30 remains current in v0.27.1.0; this release adds no
-setting or migration. The held-action cast-cancellation test is explicitly off
+Configuration schema 30 remains current in v0.28.0.0; this release adds no
+setting or migration. `/panicshu` is command-only and uses the existing global
+plugin enable plus the existing Wolves' Den testing option. The held-action
+cast-cancellation test is explicitly off
 for fresh, reset, and migrated
 configurations. An older explicitly enabled NIN fresh-edge helper still traverses
 schema 29 and migrates to the replacement held-key option; the obsolete
@@ -1289,6 +1330,8 @@ update through the same repository.
 - `/farhelp` - arm one CC-only, backline-preferred farthest mobility redirect for
   the next reviewed friendly movement action; no valid reachable ally means no movement
 - `/ssfar` - collision-free alias for `/farhelp`
+- `/panicshu` - on exact PvP NIN, freeze the terrain point 19.5 yalms straight
+  ahead and make at most one Shukuchi attempt in CC or enabled Wolves' Den testing
 - `/seitonbringer` - arm the immediately following exact DRK Souleater Combo
   macro line for the bounded CC or explicitly enabled Wolves' Den striking-
   dummy weave check
@@ -1298,9 +1341,9 @@ update through the same repository.
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
   selected-target CC-brake resolution, isolation/reactive-defense state, Smart
   Recuperate, accepted-Eukrasia Smart Kardia, Combat Frames interaction/LB
-  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, retained reactive
-  counter-CC opportunity results, and the held-action cast-cancel request/epoch
-  state
+  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, Panic Shukuchi,
+  retained reactive counter-CC opportunity results, and the held-action cast-
+  cancel request/epoch state
 - `/seiton reset` - restore defaults
 - `/howmany show` / `/howmany hide` - show or hide only the integrated pressure
   counter; these do not disable pressure-dependent helpers
@@ -1334,7 +1377,10 @@ edit FFXIV's parameter/enemy-list HUD; their separate interaction leaf can only
 set one revalidated exact living enemy row as hard target or expose it through
 native `<mo>` while hovered. Auto Low-MP Focus is a separate explicit setter, and
 the DRK macro is a separate explicit action helper; both are default-off and
-bounded as described above. For one already incoming, enabled CC action attempt
+bounded as described above. Panic Shukuchi instead has no automatic or held-key
+trigger and no dedicated saved toggle: only the user-authored `/panicshu` command
+can create its one bounded forward-location attempt. For one already incoming,
+enabled CC action attempt
 against an exact protected enemy, the optional brake can return `false` without
 calling the downstream/original action function. The exact native selected target may
 be read only to resolve an unchanged native target carrier of `0` or
@@ -1495,6 +1541,19 @@ snapshot contents, pressure evidence, MCH marker/sound timing, optional action
 helpers, and the macro helpers with both normal macros and Turbo Hotbar should be
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
+
+For v0.28.0.0, source checks pin `/panicshu` as an explicit NIN-only command with
+one exact 19.5-yalm forward terrain projection, one frozen destination, an at-
+most-500-ms lease, and at most one native location-action call. Only an active
+Self-Purify claim, cast, native queue, and animation lock may wait; action/readiness, identity, context, Guard,
+crowd-control, destination, or metadata ambiguity fails closed. The checks also
+pin exact Shukuchi `29513`, the Three Mudra/Doton block, CC plus existing Wolves'
+Den test-option context, and the absence of automatic/held triggers, mouse/cursor
+or target mutation, destination recomputation, alternate, retry, or shorter
+fallback. They cannot prove current-client terrain collision, native line of
+sight, client/server movement, or map behavior. Live Wolves' Den validation in
+four facings on flat ground, slopes, and wall/invalid-endpoint cases remains
+required; a Den result does not by itself prove Crystalline Conflict behavior.
 
 For v0.27.1.0, source checks pin one shared held-action policy: the physical hold
 remains consent across later distinct episodes, a per-frame claim allows at most

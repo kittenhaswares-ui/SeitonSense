@@ -76,6 +76,10 @@ internal static class EnemyCombatConstants
     internal const uint FleetingRaijuActionId = 29707;
     internal const uint FleetingRaijuActionIconId = 9693;
     internal const float RaijuRange = 20f;
+    internal const uint PanicShukuchiActionId = 29513;
+    internal const uint PanicShukuchiActionIconId = 9185;
+    internal const ushort PanicShukuchiRecast100ms = 200;
+    internal const int PanicShukuchiSheetRange = 20;
 
     internal const uint ContradanceActionId = 29432;
     internal const uint ContradanceActionIconId = 9641;

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.28.0.0
+
+- Added the explicit manual NIN `/panicshu` macro command. It runs only from the
+  authored command invocation, never from an automatic, pressure, enemy, status,
+  or held-key trigger, and is independent of the held-action scheduler and its
+  cast-cancellation option.
+- Each invocation projects the exact terrain point 19.5 yalms along the local
+  character's current facing and freezes that destination for at most 500 ms.
+  Only an active Self-Purify priority claim, cast, occupied native action queue,
+  or animation lock may wait inside that lease. The lease is spent before at most one native Shukuchi
+  location-action call, with no retry, destination recomputation, path search,
+  alternate action, or shorter/inward fallback.
+- Restricted the command to exact PvP Ninja in Crystalline Conflict and the
+  Wolves' Den only when the existing test option is enabled. Exact identity,
+  territory/context, metadata, action/readiness, own Guard, crowd-control, and
+  terrain evidence fail closed. Three Mudra's adjusted Doton route blocks the
+  command, crowd control leaves Purify priority, and the helper never reads or
+  changes the mouse/ground cursor or any hard, soft, Focus, or mouseover target.
+- Added core/safety coverage for the one frozen command intent and documented the
+  remaining current-client boundary. Four-direction flat-ground, slope, wall,
+  invalid-endpoint, and observed movement tests in the Wolves' Den are still
+  required; a local client-accepted return is not proof of server movement or CC
+  behavior. Bumped the plugin version to `0.28.0.0`; configuration schema remains
+  `30`, with no new setting or migration.
+
 ## 0.27.1.0
 
 - Fixed the v0.27 reactive held-key regression without widening any event

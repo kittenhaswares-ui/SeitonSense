@@ -163,6 +163,31 @@ internal sealed partial class SettingsWindow
             ImGui.PopTextWrapPos();
         }
 
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.7f, 0.45f, 1f, 1f), "NIN PANIC SHUKUCHI MACRO (MANUAL)");
+        if (ImGui.CollapsingHeader("Panic Shukuchi — straight-ahead ground jump", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextUnformatted("Use this single macro line:");
+            ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/panicshu");
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "This is an explicit NIN-only macro command, never an automatic, proc-driven, or held-key helper. " +
+                "One command freezes the terrain point 19.5 yalms along your character's current facing. It neither " +
+                "opens or moves the ground cursor nor reads, changes, or substitutes a target.");
+            ImGui.TextDisabled(
+                "Exact Crystalline Conflict is supported directly. Wolves' Den additionally requires the existing " +
+                "Start-page testing option. Frontline and Rival Wings remain blocked. Your own Guard, crowd control, " +
+                "an unavailable Shukuchi, or Three Mudra changing Shukuchi into Doton rejects the command. Purify " +
+                "therefore keeps priority.");
+            ImGui.TextDisabled(
+                "The exact frozen point may wait for at most 500 ms only while Self-Purify owns the current frame or " +
+                "your current cast, native action queue, or animation lock clears. The one-attempt token is spent before the native Shukuchi request: a wall, " +
+                "invalid terrain, client rejection, ambiguity, or exception never causes a retry, shorter fallback, " +
+                "new point, alternate action, or later automatic jump. Current-patch slopes and obstacles still require " +
+                "a live Wolves' Den test.");
+            ImGui.PopTextWrapPos();
+        }
+
         return changed;
     }
 }

@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
-    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
+    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, explicit PvP macros, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.27.1.0",
-    "Changelog": "Fixes reactive held-key attachment without extending event deadlines. Urgent startups may bind the first eligible current key inside their original lease; Purify and Guard bind only at authoritative protection end or inside the original 500-ms window. Expired/disabled leases retire and active leases revalidate exact identity before new packets; a later urgent startup may preempt only an unattempted lower-priority reactive lease. Exact self-target Purify still requires live Resilience; a transient canonical-row miss retries only that signal inside the original 750-ms acquisition deadline. Reachability is checked before ranking; NIN gets a 3-second protection-end lease. Exact SourceSequence attribution prevents manual Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil from claiming automatic success, and durable diagnostics were added. Schema 30 and all existing opt-ins are preserved.",
+    "AssemblyVersion": "0.28.0.0",
+    "Changelog": "Adds the explicit NIN /panicshu macro for one fail-closed Shukuchi attempt at a frozen terrain point 19.5 yalms along the character's facing. It is manual only: no enemy, pressure, proc, or held-key event can trigger it. Exact Crystalline Conflict is supported directly and Wolves' Den requires the existing testing option. The command never opens the ground cursor or reads, changes, or substitutes a target. It may wait at most 500 ms only for an active Self-Purify claim, cast, native queue, or animation lock, spends its token before the sole native request, and never retries or chooses a shorter point, another action, or a fallback. Own Guard, crowd control, invalid terrain, unavailable Shukuchi, metadata mismatch, and Three Mudra/Doton fail closed. Schema 30 is unchanged.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787343142"
+    "LastUpdate": "1787350669"
   }
 ]

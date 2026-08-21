@@ -18,6 +18,9 @@ $autoLowMpFocusTargetSelfTestsPath = Join-Path $coreSelfTestRoot 'AutoLowMpFocus
 $darkKnightShadowbringerServicePath = Join-Path $pluginServicesRoot 'DarkKnightShadowbringerMacroService.cs'
 $darkKnightShadowbringerRulesPath = Join-Path $coreRoot 'DarkKnightShadowbringerMacroRules.cs'
 $darkKnightShadowbringerSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightShadowbringerMacroSelfTests.cs'
+$panicShukuchiServicePath = Join-Path $pluginServicesRoot 'PanicShukuchiService.cs'
+$panicShukuchiRulesPath = Join-Path $coreRoot 'PanicShukuchiRules.cs'
+$panicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'PanicShukuchiSelfTests.cs'
 $darkKnightPlungeProbePath = Join-Path $pluginServicesRoot 'DarkKnightPlungeProbe.cs'
 $darkKnightPlungeRulesPath = Join-Path $coreRoot 'DarkKnightPlungeRules.cs'
 $darkKnightPlungeSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightPlungeSelfTests.cs'
@@ -237,6 +240,7 @@ $allowedUnsafe = @(
     $ccImmunityBrakeServicePath,
     $autoLowMpFocusTargetServicePath,
     $darkKnightShadowbringerServicePath,
+    $panicShukuchiServicePath,
     $darkKnightPlungeProbePath,
     $combatFrameLimitGaugeServicePath,
     $combatLimitBreakCaptureBufferPath
@@ -1071,13 +1075,183 @@ if ([regex]::Matches($pluginSource, '\bnew\s+DarkKnightShadowbringerMacroService
     throw 'DRK must own exactly one macro-allowed /seitonbringer command, one arm call, no alias, and no independent hook.'
 }
 
+$panicShukuchiRules = Read-RequiredSource $panicShukuchiRulesPath 'Panic Shukuchi rules'
+$panicShukuchiService = Read-RequiredSource $panicShukuchiServicePath 'Panic Shukuchi service'
+$panicShukuchiSelfTests = Read-RequiredSource $panicShukuchiSelfTestsPath 'Panic Shukuchi self-tests'
+$panicShukuchiProgram = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'Program.cs') 'Panic Shukuchi test registry'
+$panicShukuchiMetadata = Read-RequiredSource (
+    Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'Panic Shukuchi metadata guard'
+$panicShukuchiConstants = Read-RequiredSource (
+    Join-Path $pluginServicesRoot 'EnemyCombatConstants.cs') 'Panic Shukuchi constants'
+$panicShukuchiConfiguration = Read-RequiredSource (
+    Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs') 'Plugin configuration'
+$normalizedPanicShukuchiRules = $panicShukuchiRules -replace '\s+', ' '
+$normalizedPanicShukuchiService = $panicShukuchiService -replace '\s+', ' '
+$normalizedPanicShukuchiPlugin = $pluginSource -replace '\s+', ' '
+
+Assert-Literals $panicShukuchiRules @(
+    'public const uint NinjaJobId = 30',
+    'public const uint ActionId = 29_513',
+    'public const float NativeMaximumRangeYalms = 20f',
+    'public const float SafeForwardDistanceYalms = 19.5f',
+    'public const long MaximumPendingMilliseconds = 500',
+    'public const float MaximumGroundHorizontalErrorYalms = 0.05f',
+    'context == SupportedPvPContext.CrystallineConflict',
+    'wolvesDenTestingEnabled && context == SupportedPvPContext.WolvesDen',
+    'MathF.Sin(rotationRadians)',
+    'MathF.Cos(rotationRadians)',
+    'IsApproximatelySafeHorizontalDistance(origin, probe)',
+    'candidate.GroundHit.ExactGroundHit',
+    'Intent.Destination == Candidate.GroundHit.Position',
+    'observation.HigherPriorityClaimed',
+    'PanicShukuchiDecisionReason.WaitingForHigherPriority',
+    'PanicShukuchiDecisionReason.WaitingForCast',
+    'PanicShukuchiDecisionReason.WaitingForNativeQueue',
+    'PanicShukuchiDecisionReason.WaitingForAnimationLock',
+    'PanicShukuchiPendingState.Initial',
+    'PanicShukuchiPendingDecisionKind.Attempt',
+    'pending.Intent'
+) 'Pure one-shot Panic Shukuchi policy'
+if ($panicShukuchiRules -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|IPlayerCharacter|BGCollisionModule|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($panicShukuchiRules, '\bObservePending\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiRules, '\bTryCreateForwardProbe\s*\(').Count -lt 2) {
+    throw 'Panic Shukuchi Core policy must remain pure, deterministic, caller-clocked, and free of native action/target/thread APIs.'
+}
+if ($normalizedPanicShukuchiRules -notmatch 'if \(observation\.HigherPriorityClaimed\) return Waiting\(previous, PanicShukuchiDecisionReason\.WaitingForHigherPriority\); if \(!observation\.NotCasting\).*?if \(!observation\.NativeQueueClear\).*?if \(!observation\.AnimationLockClear\).*?return new PanicShukuchiPendingDecision\( PanicShukuchiPendingState\.Initial, PanicShukuchiPendingDecisionKind\.Attempt, PanicShukuchiDecisionReason\.Ready, pending\.Intent\);') {
+    throw 'Panic Shukuchi must wait behind Purify/cast/queue/lock and consume its frozen state before exposing the sole attempt.'
+}
+
+Assert-Literals $panicShukuchiService @(
+    'internal const string Command = "/panicshu"',
+    'Executes only an explicit /panicshu command',
+    'There is no automatic trigger, retry, shorter-point',
+    'private const ulong DefaultTargetSentinel = 0xE0000000UL',
+    'private const float GroundProbeStartAboveYalms = 5f',
+    'private const float GroundProbeMaximumDistanceYalms = 10f',
+    'private const float AnimationLockClearEpsilonSeconds = 0.0005f',
+    'metadata.PanicShukuchiVerified',
+    'PanicShukuchiRules.IsSupportedContext(',
+    'local.ClassJob.RowId != PanicShukuchiRules.NinjaJobId',
+    'nearAssist.IsLocalGuardActiveOrPropagatingForPanicShukuchi()',
+    'EnemyCombatConstants.PvPStunStatusId',
+    'EnemyCombatConstants.PvPHeavyStatusId',
+    'EnemyCombatConstants.PvPBindStatusId',
+    'EnemyCombatConstants.PvPSilenceStatusId',
+    'EnemyCombatConstants.DeepFreezeStatusId',
+    'EnemyCombatConstants.MiracleOfNatureStatusId',
+    'actionState.AdjustedActionId != PanicShukuchiRules.ActionId',
+    'BGCollisionModule.RaycastMaterialFilter(',
+    'new PanicShukuchiGroundHit(true, destination)',
+    'PanicShukuchiRules.Arm(pendingState, observation)',
+    'PanicShukuchiRules.ObservePending(previous, observation)',
+    'IsPurifyPriorityClaimed()',
+    'before.AnimationLockSeconds <= AnimationLockClearEpsilonSeconds',
+    'pendingState = decision.NextState',
+    'actionManager->UseActionLocation(',
+    'ActionType.Action',
+    'PanicShukuchiRules.ActionId',
+    'DefaultTargetSentinel',
+    'Sole dispatch failed closed; no retry'
+) 'Explicit manual Panic Shukuchi runtime boundary'
+if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiService, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
+    [regex]::Matches($panicShukuchiService, '\bRaycastMaterialFilter\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiService, '\bunsafe\b').Count -ne 2 -or
+    $panicShukuchiService -match '(?-i:\b(?:IKeyState|VirtualKey|TargetPressureTracker|Hook<|HookFromAddress|IGameInteropProvider|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
+    $panicShukuchiService -match '\b(?:for|foreach|while|do)\s*\(') {
+    throw 'Panic Shukuchi must retain one reviewed location call with no automatic input/event hook, target/cursor mutation, queue write, loop, retry, or fallback search.'
+}
+$panicStateConsumeIndex = $panicShukuchiService.IndexOf(
+    'pendingState = decision.NextState;',
+    [System.StringComparison]::Ordinal)
+$panicNativeCallIndex = $panicShukuchiService.IndexOf(
+    'actionManager->UseActionLocation(',
+    [System.StringComparison]::Ordinal)
+if ($panicStateConsumeIndex -lt 0 -or $panicNativeCallIndex -lt 0 -or
+    $panicStateConsumeIndex -ge $panicNativeCallIndex) {
+    throw 'Panic Shukuchi must store the consumed decision state before its sole native location call.'
+}
+
+Assert-Literals $panicShukuchiConstants @(
+    'PanicShukuchiActionId = 29513',
+    'PanicShukuchiActionIconId = 9185',
+    'PanicShukuchiRecast100ms = 200',
+    'PanicShukuchiSheetRange = 20'
+) 'Current-patch Panic Shukuchi constants'
+Assert-Literals $panicShukuchiMetadata @(
+    'bool PanicShukuchiVerified',
+    'ValidateFeature("Panic Shukuchi"',
+    'action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId',
+    'action.Range == EnemyCombatConstants.PanicShukuchiSheetRange',
+    'action.EffectRange == 1',
+    'action.CastType == 7',
+    'action.Cast100ms == 0',
+    'action.TargetArea',
+    'action.RequiresLineOfSight',
+    'action.NeedToFaceTarget',
+    'action.AffectsPosition',
+    'Action changes to Doton while under the effect of Three Mudra.'
+) 'Current-patch Panic Shukuchi metadata gate'
+
+Assert-Literals $pluginSource @(
+    'private readonly PanicShukuchiService panicShukuchi',
+    'panicShukuchi = new PanicShukuchiService(',
+    'new CommandInfo(OnPanicShukuchiCommand)',
+    'panicShukuchi.Arm(arguments)',
+    'panicShukuchi.Start()',
+    'panicShukuchi.Dispose()',
+    'commandManager.RemoveHandler(PanicShukuchiService.Command)',
+    'panic-shukuchi[cmd={panicShukuchiCommandRegistered}',
+    '/panicshu makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead',
+    'return !personal.Active || personal.Purify.InputClaimed;'
+) 'Command-only Panic Shukuchi ownership and fail-closed Purify priority'
+if ($normalizedPanicShukuchiPlugin -notmatch 'personalStatus = new PersonalStatusService\(.*?panicShukuchi = new PanicShukuchiService\(.*?return !personal\.Active \|\| personal\.Purify\.InputClaimed;.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?personalStatus\.Start\(\); panicShukuchi\.Start\(\);' -or
+    [regex]::Matches($pluginSource, '\bnew\s+PanicShukuchiService\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.Command').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bpanicShukuchi\.Arm\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bOnPanicShukuchiCommand\s*\(').Count -ne 1) {
+    throw 'Only one macro-allowed /panicshu handler may arm Panic after the fail-closed Purify scheduler view and before no automatic source.'
+}
+$panicServiceTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bPanicShukuchiService\b')
+if (@($panicServiceTypeReferences | Where-Object {
+        $_.Path -notin @($pluginPath, $panicShukuchiServicePath)
+    }).Count -ne 0 -or
+    [regex]::Matches(($sourceFiles | ForEach-Object {
+        Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+    }) -join "`n", '\bpanicShukuchi\.Arm\s*\(').Count -ne 1 -or
+    $panicShukuchiConfiguration -match '\bPanicShukuchi\b') {
+    throw 'Panic Shukuchi must remain command-only, with no configuration/automatic trigger and exactly one Plugin.cs arm provenance.'
+}
+
+$panicTestMethods = @(
+    'ConstantsAndForwardAxesAreExact',
+    'SupportedContextsAreExact',
+    'GroundHitMustBeExactForwardFiniteAndInRange',
+    'ArmFreezesExactIdentityContextAndDestination',
+    'ExistingPendingCannotBeReplacedAndExpiryIsExact',
+    'CastQueueAndAnimationLockWaitWithoutDrift',
+    'ReadyConsumesBeforeTheSoleNativeAttempt',
+    'PendingDriftAndTerminalGatesFailClosed'
+)
+foreach ($method in $panicTestMethods) {
+    Assert-Literals $panicShukuchiSelfTests @("public static void $method()") "Panic Shukuchi test $method"
+    Assert-Literals $panicShukuchiProgram @("PanicShukuchiSelfTests.$method") "Panic Shukuchi test registration $method"
+}
+if ([regex]::Matches($panicShukuchiSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 8 -or
+    [regex]::Matches($panicShukuchiProgram, '\bPanicShukuchiSelfTests\.\w+').Count -ne 8 -or
+    $panicShukuchiSelfTests -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|IPlayerCharacter|BGCollisionModule|ITargetManager|TargetManager)\b') {
+    throw 'All eight pure Panic Shukuchi tests and their exact Core registry entries must remain pinned.'
+}
+
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
 # one exact WHM/BRD/NIN reactive-CC boundary, one exact default-off NIN Seiton
 # boundary, one exact default-off SCH Critical Strategy boundary, one exact
 # Eukrasia-triggered SGE Smart Kardia boundary, one exact self-only Smart
 # Recuperate boundary, one exact default-off Monk Earth's Reply call, and one
-# exact job-tier default-off DRK Plunge call. Near Assist/Near Help/Far Help may
+# exact job-tier default-off DRK Plunge call, and the explicit command-only NIN
+# Panic Shukuchi location call. Near Assist/Near Help/Far Help may
 # forward an incoming action through their sole Original. The same reviewed
 # detour may issue exactly one spent DRK Shadowbringer call before leaving the
 # original Souleater carrier unchanged; that boundary is pinned below.
@@ -1086,17 +1260,20 @@ $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
         $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
+    $reviewedPanicLocationBoundary =
+        $_.Path -eq $panicShukuchiServicePath -and
+        $_.Line -match '\bUseActionLocation\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
         $_.Line -match '^\s*///.*\bUseAction\b'
     $reviewedAttemptDocumentation =
         $_.Path -eq $clientActionAttemptOutcomePath -and
         $_.Line -match '^\s*///.*\bUseAction\b'
-    -not ($reviewedActionBoundary -or $reviewedBrakeDocumentation -or $reviewedAttemptDocumentation)
+    -not ($reviewedActionBoundary -or $reviewedPanicLocationBoundary -or $reviewedBrakeDocumentation -or $reviewedAttemptDocumentation)
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only EmergencyPurifyProbe, DefensiveUtilityProbe, PressureEscapeSprintProbe, AllyRescueProbe, MiracleInterceptProbe, NinjaSeitonProbe, ScholarCriticalStrategyProbe, SmartKardiaProbe, SmartRecuperateProbe, MonkEarthReplyProbe, DarkKnightPlungeProbe, and the bounded shared macro detour may reference UseAction: $($locations -join ', ')"
+    throw "Only the reviewed action probes, bounded shared macro detour, and explicit PanicShukuchiService location boundary may initiate actions: $($locations -join ', ')"
 }
 
 # All party-visible commands share one closed, typed dispatcher. It remains the
@@ -2313,8 +2490,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 348) {
-    throw 'All four shared protection-end tests and the exact 348-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 356) {
+    throw 'All four shared protection-end tests and the exact 356-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -7509,10 +7686,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.27.1.0</Version>',
-    '<AssemblyVersion>0.27.1.0</AssemblyVersion>',
-    '<FileVersion>0.27.1.0</FileVersion>'
-) 'v0.27.1.0 project version'
+    '<Version>0.28.0.0</Version>',
+    '<AssemblyVersion>0.28.0.0</AssemblyVersion>',
+    '<FileVersion>0.28.0.0</FileVersion>'
+) 'v0.28.0.0 project version'
 Assert-Literals $pluginManifest @(
     'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
@@ -7526,21 +7703,19 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.27.1.0 plugin manifest metadata'
+) 'v0.28.0.0 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.27.1.0"',
-    'Fixes reactive held-key attachment without extending event deadlines',
-    'Urgent startups may bind the first eligible current key inside their original lease',
-    'Purify and Guard bind only at authoritative protection end or inside the original 500-ms window',
-    'Expired/disabled leases retire and active leases revalidate exact identity before new packets',
-    'a later urgent startup may preempt only an unattempted lower-priority reactive lease',
-    'Exact self-target Purify still requires live Resilience',
-    'a transient canonical-row miss retries only that signal inside the original 750-ms acquisition deadline',
-    'Reachability is checked before ranking',
-    'NIN gets a 3-second protection-end lease',
-    'Exact SourceSequence attribution prevents manual Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil from claiming automatic success',
-    'Schema 30 and all existing opt-ins are preserved.'
-) 'v0.27.1.0 repository actor-first reservation, release-time consent, reachability, NIN lease, attribution, and schema metadata'
+    '"AssemblyVersion": "0.28.0.0"',
+    'Adds the explicit NIN /panicshu macro',
+    'It is manual only: no enemy, pressure, proc, or held-key event can trigger it',
+    'terrain point 19.5 yalms along the character''s facing',
+    'Wolves'' Den requires the existing testing option',
+    'never opens the ground cursor or reads, changes, or substitutes a target',
+    'active Self-Purify claim, cast, native queue, or animation lock',
+    'never retries or chooses a shorter point, another action, or a fallback',
+    'Three Mudra/Doton fail closed',
+    'Schema 30 is unchanged.'
+) 'v0.28.0.0 explicit manual Panic Shukuchi repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7556,16 +7731,19 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.27.1.0 repairs reactive held-key attachment while preserving bounded, exact intent',
-    'Urgent startup events may attach the first currently eligible held/fresh generation inside their original short threat lease',
-    'Exact enemy Purify and Guard episodes are remembered without prematurely freezing a key',
-    'current eligible generation is bound only when authoritative Resilience/Guard absence opens the original 500-ms release window',
-    'Once bound, release, typing, ambiguity, or identity drift cannot substitute another key, action, or target',
+    'Version 0.28.0.0 adds the explicit manual NIN `/panicshu` macro command',
+    'Each invocation freezes one exact terrain point 19.5 yalms along the character''s facing and may make at most one native Shukuchi attempt inside a 500-ms lease',
+    'never originates from an automatic, pressure, enemy, status, or held-key trigger',
+    'no retry, shorter-distance fallback, or destination recomputation',
+    'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
+    'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end',
+    'bind only at authoritative protection end inside the original 500-ms release window',
+    'a text-poisoned generation is never eligible, and no different key can inherit the intent after binding',
     'Expired or disabled leases retire, and every active startup must still resolve the same local job, counter action, and exact enemy before a new packet can compete',
     'later exact urgent startup may preempt only an unattempted lower-priority reactive lease',
-    'Native reachability is checked before simultaneous release candidates are ranked',
-    'NIN protection-end intent covers its verified 2.5-second Raiju recast with a 3-second lease',
-    'exact action source sequences prevent manual Miracle, Silent Nocturne, Raiju, Paean, or Aquaveil from being reported as an automatic landing',
+    'pre-rank native reachability/blocker filtering',
+    'the NIN-only 3-second protection-end lease',
+    'exact source-sequence confirmation',
     'Purify-first scheduler and six job-specific second-tier order',
     'optional positive pressure ranking',
     'stable held-key leases across all ten physical-hold helpers',
@@ -7587,10 +7765,53 @@ Assert-Literals $normalizedReadme @(
     'later frame that observes both cast signals clear may run the normal complete helper preflight again',
     'does not synthesize movement or Escape, clear the native action queue, write cast state, or mutate a selected target',
     'Stationary casts and mobile BRD Powerful Shot / MCH Blast Charge still require current-patch live validation',
-    'Configuration schema 30 remains current in v0.27.1.0',
+    'Configuration schema 30 remains current in v0.28.0.0',
     'this release adds no setting or migration',
     'held-action cast-cancellation test is explicitly off for fresh, reset, and migrated configurations'
-) 'v0.27.1.0 actor-first reservation plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+) 'v0.28.0.0 Panic Shukuchi plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.28.0.0',
+    'explicit manual NIN `/panicshu` macro command',
+    'never from an automatic, pressure, enemy, status, or held-key trigger',
+    'exact terrain point 19.5 yalms along the local character''s current facing',
+    'Only an active Self-Purify priority claim, cast, occupied native action queue, or animation lock may wait',
+    'lease is spent before at most one native Shukuchi location-action call',
+    'no retry, destination recomputation, path search, alternate action, or shorter/inward fallback',
+    'Wolves'' Den only when the existing test option is enabled',
+    'Three Mudra''s adjusted Doton route blocks the command',
+    'never reads or changes the mouse/ground cursor or any hard, soft, Focus, or mouseover target',
+    'Bumped the plugin version to `0.28.0.0`',
+    'configuration schema remains `30`'
+) 'v0.28.0.0 explicit manual Panic Shukuchi release notes'
+Assert-Literals $normalizedReadme @(
+    '## Manual NIN Panic Shukuchi macro',
+    'explicit one-line macro command, not an automatic feature and not part of the held-action scheduler',
+    '/panicshu',
+    'exact PvP Ninja in Crystalline Conflict, or in the Wolves'' Den when the existing **Enable Wolves'' Den testing** option is enabled',
+    'projects only the point 19.5 yalms straight ahead onto terrain, and freezes that exact destination',
+    'lease lasts at most 500 ms and may remain pending only while Self-Purify owns the current scheduler frame',
+    'Shukuchi must already have known, ready cooldown/resources when the command arms',
+    'Three Mudra changes Shukuchi into Doton',
+    'frozen lease is spent before the native call',
+    'no retry, alternate action, shorter/inward point, path search, or destination fallback',
+    'never moves the mouse or ground-target cursor and never reads, changes, or substitutes a hard, soft, Focus, or mouseover target',
+    'Live Wolves'' Den validation in four facings on flat ground, slopes, and wall/invalid-endpoint cases remains required'
+) 'v0.28.0.0 Panic Shukuchi command, one-shot, no-target, and live-boundary README contract'
+Assert-Literals $normalizedPrivacy @(
+    '## Explicit manual NIN Panic Shukuchi macro',
+    '`/panicshu` is a command-only, user-authored macro action',
+    'no automatic, pressure, enemy, status, or held-key trigger',
+    'terrain point 19.5 yalms along the local character''s current facing',
+    'Only an active Self-Purify priority claim, cast, occupied native action queue, or animation lock may preserve the same pending lease',
+    'anything other than exact Shukuchi `29513` blocks the attempt',
+    'pending state is cleared before the sole native location-action call',
+    'does not recompute after movement or turning, search a path, move inward, choose an alternate action, or use a shorter fallback point',
+    'neither reads nor changes the mouse/ground-target cursor or any hard, soft, Focus, or mouseover target',
+    'last origin/destination coordinates, action-sequence outcome, and aggregate command counters may remain in plugin memory',
+    'not persisted or uploaded',
+    'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
+    'Configuration schema 30 remains current in v0.28.0.0'
+) 'v0.28.0.0 Panic Shukuchi transient-data, one-shot, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
     'Fixed the v0.27 reactive held-key regression without widening any event deadline',
@@ -7693,12 +7914,12 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 30 remains current in v0.27.1.0',
+    'Configuration schema 30 remains current in v0.28.0.0',
     'this release adds no setting or migration',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.27.1.0 repairs reactive held-key attachment while preserving bounded, exact intent',
+    'Version 0.28.0.0 adds the explicit manual NIN `/panicshu` macro command',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end inside the original 500-ms release window',
     'no different key can inherit the intent after binding',
@@ -7707,7 +7928,7 @@ Assert-Literals $normalizedReadme @(
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
     'Client acceptance, exceptions, uncertain queue/sequence transitions, key release, context/job/ identity drift, and other ambiguity are terminal',
-    'NIN protection-end intent covers its verified 2.5-second Raiju recast with a 3-second lease',
+    'the NIN-only 3-second protection-end lease',
     'v0.21''s optional Combat Frame interaction and evidence-only Limit Break telemetry',
     '**Fixed Combat Frames:** a separate default-off, Gladius-style screen-space overlay shows one Self frame plus stable canonical `S1`-`S5` enemy rows',
     'current/focus-target accents, exact Self LB, calibrated remote LB, activation countdowns, and direct ally LB damage',
@@ -8135,7 +8356,7 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 30 remains current in v0.27.1.0; this release adds no setting or migration',
+    'Configuration schema 30 remains current in v0.28.0.0; this release adds no setting or migration',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
     'Every other existing master/helper choice is preserved',
@@ -8228,7 +8449,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 30 remains current in v0.27.1.0; this release adds no'
+    'Configuration schema 30 remains current in v0.28.0.0; this release adds no'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -8586,4 +8807,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.27.1.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 348-test Core registry. Runtime priority remains Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. Reactive episodes remember exact actor/action/event identity first: urgent startup may attach only the first eligible generation inside its original lease, while Purify/Guard bind the current exact key only at authoritative protection end or inside the original 500-ms release opportunity. Once bound, release, text-input poisoning, identity drift, and ambiguity cannot substitute another key or target. Exact sequenced self-Purify action evidence is allowed without an exposed recovered-status tuple, but positive live Resilience and later authoritative absence remain mandatory. Blocker-free native reachability filters protection-end candidates before pressure/HP/MP ranking. WHM/BRD retain 1,500 ms while NIN gets exactly 3,000 ms for its verified 2.5-second Raiju recast plus the existing release allowance. Reactive-CC and Ally Rescue confirmations require a client-accepted request and its advanced non-zero exact SourceSequence, so manual actions cannot claim AUTO. No reactive path owns a native queue/timer or mutates a selected target. The ordinary exact-intent retry remains bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal."
+Write-Host "Seiton Sense v0.28.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 356-test Core registry. /panicshu remains an explicit manual NIN command with one frozen 19.5-yalm ground point, a maximum 500-ms lease, Purify and Guard priority, one state-consumed UseActionLocation boundary, and no automatic trigger, target/cursor mutation, retry, fallback, or alternate action. Runtime held-helper priority remains Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. Reactive episodes remember exact actor/action/event identity first: urgent startup may attach only the first eligible generation inside its original lease, while Purify/Guard bind the current exact key only at authoritative protection end or inside the original 500-ms release opportunity. Once bound, release, text-input poisoning, identity drift, and ambiguity cannot substitute another key or target. Exact sequenced self-Purify action evidence is allowed without an exposed recovered-status tuple, but positive live Resilience and later authoritative absence remain mandatory. Blocker-free native reachability filters protection-end candidates before pressure/HP/MP ranking. WHM/BRD retain 1,500 ms while NIN gets exactly 3,000 ms for its verified 2.5-second Raiju recast plus the existing release allowance. Reactive-CC and Ally Rescue confirmations require a client-accepted request and its advanced non-zero exact SourceSequence, so manual actions cannot claim AUTO. No reactive path owns a native queue/timer or mutates a selected target. The ordinary exact-intent retry remains bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal."

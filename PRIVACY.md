@@ -96,6 +96,10 @@ following data already available in the local FFXIV client:
   pressure publication, life/targetable state, exact HP, local-source Kardion
   state, Kardia readiness and animation lock, and FFXIV's native 30-yalm
   range/line-of-sight result for a frozen non-self candidate;
+- for one explicit `/panicshu` invocation, the exact local NIN identity, position
+  and facing, PvP territory/context, own Guard and crowd-control state, exact
+  Shukuchi metadata/adjusted action/readiness, cast/queue/animation-lock state,
+  and the terrain collision point projected 19.5 yalms straight ahead;
 - when the DRK Shadowbringer macro is enabled, the exact macro line/cycle token,
   local DRK and current canonical CC target identity or exact native Wolves'
   Den striking-dummy hard-target identity, native combo/Shadowbringer recast and
@@ -495,6 +499,42 @@ legacy line is not part of the recommended macro and should be removed. Far
 Help does not initiate, repeat, queue, or retry an action; change
 its ID; or visibly change a hard, soft, or focus target. No observed
 party/action data is persisted or uploaded.
+
+## Explicit manual NIN Panic Shukuchi macro
+
+`/panicshu` is a command-only, user-authored macro action. It has no automatic,
+pressure, enemy, status, or held-key trigger and is not part of the shared held-
+action scheduler. It runs only for exact PvP Ninja in Crystalline Conflict, or
+in the Wolves' Den when the existing testing option is enabled. Frontline and
+Rival Wings are excluded.
+
+One invocation computes only the terrain point 19.5 yalms along the local
+character's current facing and freezes that exact location for at most 500 ms.
+Only an active Self-Purify priority claim, cast, occupied native action queue, or
+animation lock may preserve the same pending lease. The exact local identity, job, territory/context,
+metadata, adjusted action, own Guard, crowd-control state, cooldown/resources,
+and structural readiness are revalidated; ineligible, changed, missing, or
+ambiguous evidence cancels instead of choosing another outcome. Three Mudra
+adjusts Shukuchi to Doton, so anything other than exact Shukuchi `29513` blocks
+the attempt. Crowd control blocks the command so Purify retains priority.
+
+The pending state is cleared before the sole native location-action call. A
+client rejection, ambiguity, or exception cannot retry. The helper does not
+recompute after movement or turning, search a path, move inward, choose an
+alternate action, or use a shorter fallback point. It neither reads nor changes
+the mouse/ground-target cursor or any hard, soft, Focus, or mouseover target. A
+wall, missing exact terrain collision, excessive vertical offset, or native
+line-of-sight refusal therefore fails closed.
+
+The complete frozen identity/candidate, including facing, exists only in bounded
+memory for the command lease. Afterward, only the last origin/destination
+coordinates, action-sequence outcome, and aggregate command counters may remain
+in plugin memory for local `/seiton debug` diagnostics until unload; they are not
+persisted or uploaded. Source
+checks cannot establish current-client terrain, line-of-sight, or actual movement
+behavior. Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'
+Den remain a live-validation boundary, and a Den result is not proof of CC
+behavior.
 
 ## Experimental DRK Shadowbringer macro helper
 
@@ -1145,9 +1185,11 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 30 remains current in v0.27.1.0; this release adds no
-setting or migration. The held-action cast-cancellation test remains explicitly
-off for fresh, reset, and migrated
+Configuration schema 30 remains current in v0.28.0.0; this release adds no
+setting or migration. Panic Shukuchi is command-only and saves no dedicated
+option; it uses the global plugin enable and existing Wolves' Den testing option.
+The held-action cast-cancellation test remains explicitly off for fresh, reset,
+and migrated
 configurations. An older explicitly enabled fresh-edge NIN Seiton option still
 traverses schema 29, migrates to the replacement held-key option, and clears the
 obsolete compatibility field. Every other existing master/helper choice is
@@ -1158,7 +1200,8 @@ all other action-helper masters off; post-Guard defaults on only behind the
 disabled reactive-counter master. Interaction and both LB details also default
 on behind the disabled frame master. Configuration does not save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
-ActionEffect confirmation state, or in-memory counters.
+Panic Shukuchi ground destinations, ActionEffect confirmation state, or in-
+memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

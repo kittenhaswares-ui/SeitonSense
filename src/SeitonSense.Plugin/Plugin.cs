@@ -38,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PressureCounterWindow pressureCounter;
     private readonly NearAssistRedirector nearAssist;
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
+    private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
@@ -55,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool farHelpCommandRegistered;
     private readonly bool farHelpAliasRegistered;
     private readonly bool darkKnightShadowbringerCommandRegistered;
+    private readonly bool panicShukuchiCommandRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -208,6 +210,21 @@ public sealed class Plugin : IDalamudPlugin
             configuration,
             metadata,
             reviewedPvpCommands);
+        panicShukuchi = new PanicShukuchiService(
+            configuration,
+            clientState,
+            objectTable,
+            dutyState,
+            framework,
+            chatGui,
+            log,
+            nearAssist,
+            () =>
+            {
+                var personal = personalStatus.Snapshot;
+                return !personal.Active || personal.Purify.InputClaimed;
+            },
+            metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
         resourceAuraAnchors = new ResourceAuraAnchorTracker(
             configuration,
@@ -420,6 +437,22 @@ public sealed class Plugin : IDalamudPlugin
                 "[Seiton Sense] /seitonbringer is owned by another plugin. Disable the conflict and reload before using the DRK macro helper.");
         }
 
+        panicShukuchiCommandRegistered = commandManager.AddHandler(
+            PanicShukuchiService.Command,
+            new CommandInfo(OnPanicShukuchiCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "NIN-only: one fail-closed PvP Shukuchi attempt 19.5 yalms straight ahead. " +
+                    "Works in Crystalline Conflict and enabled Wolves' Den testing without cursor or target changes.",
+            });
+        if (!panicShukuchiCommandRegistered)
+        {
+            log.Warning("/panicshu is already owned by another plugin; Panic Shukuchi remains unavailable.");
+            chatGui.PrintError(
+                "[Seiton Sense] /panicshu is owned by another plugin. Disable the conflict and reload before using Panic Shukuchi.");
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -448,6 +481,7 @@ public sealed class Plugin : IDalamudPlugin
         darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
+        panicShukuchi.Start();
         combatLimitBreakRuntime.Start();
         combatFrameLimitGauge.Start();
         combatFramesSnapshots.Start();
@@ -467,6 +501,8 @@ public sealed class Plugin : IDalamudPlugin
         if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
         if (darkKnightShadowbringerCommandRegistered)
             commandManager.RemoveHandler(DarkKnightShadowbringerMacroService.Command);
+        if (panicShukuchiCommandRegistered)
+            commandManager.RemoveHandler(PanicShukuchiService.Command);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
@@ -475,6 +511,7 @@ public sealed class Plugin : IDalamudPlugin
         combatFrameLimitGauge.Dispose();
         combatLimitBreakRuntime.Dispose();
         personalStatus.Dispose();
+        panicShukuchi.Dispose();
         nearAssist.Dispose();
         darkKnightShadowbringer.Dispose();
         isolationAwareness.Dispose();
@@ -628,6 +665,7 @@ public sealed class Plugin : IDalamudPlugin
                 var farHelp = nearAssist.FarHelpDiagnostics;
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
                 var smartPaean = nearAssist.SmartWardensPaeanDiagnostics;
+                var panic = panicShukuchi.Diagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -844,6 +882,9 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print(
                     $"[Seiton Sense] shadowbringer[cmd={darkKnightShadowbringerCommandRegistered}," +
                     $"{darkKnightShadowbringer.Diagnostics.ToChatLine()}]");
+                chatGui.Print(
+                    $"[Seiton Sense] panic-shukuchi[cmd={panicShukuchiCommandRegistered}," +
+                    $"{panic.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -890,6 +931,8 @@ public sealed class Plugin : IDalamudPlugin
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
             "CC or enabled Wolves' Den striking-dummy testing. " +
+            "/panicshu makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
+            "Wolves' Den testing, without cursor or target changes. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
@@ -934,6 +977,19 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Far Help command failed closed.");
+        }
+    }
+
+    private void OnPanicShukuchiCommand(string _, string arguments)
+    {
+        try
+        {
+            panicShukuchi.Arm(arguments);
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Panic Shukuchi command failed closed.");
+            chatGui.PrintError("[Seiton Sense] Panic Shukuchi failed closed. See the Dalamud log.");
         }
     }
 
