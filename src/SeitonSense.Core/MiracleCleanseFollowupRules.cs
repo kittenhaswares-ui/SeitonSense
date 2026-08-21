@@ -160,9 +160,9 @@ public readonly record struct MiracleCleanseFollowupDecision(
 /// Pure, opt-in WHM/BRD follow-up policy:
 /// exact enemy self-Purify recovering one known removable PvP CC -> positive live Resilience latch ->
 /// 150ms continuous live absence -> one bounded promotion into the existing
-/// reactive-CC dispatcher. Fresh exact total-team pressure ranks simultaneous
-/// releases, while an unavailable sample remains an eligible lower-priority
-/// fallback and a known count of zero is preserved as known.
+/// reactive-CC dispatcher. Positive fresh total-team pressure is an optional
+/// bonus for simultaneous releases. Known zero and unavailable/stale pressure
+/// are neutral peers and always remain eligible for HP/MP/identity fallback.
 /// The shared dispatcher owns fresh/held input, native
 /// range/LoS, protection checks, input consumption, and the sole action call.
 /// RemainingTime is deliberately absent; release is never predicted.

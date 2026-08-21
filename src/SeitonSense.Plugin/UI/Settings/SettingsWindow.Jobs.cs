@@ -11,7 +11,10 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Job-specific PvP cues and helpers. Cross-job survival and counter-CC tools are grouped under Action Helpers.");
+            "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
+            "in deterministic urgency order: reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH " +
+            "Critical Strategy > DRK Hiebsprung. Reactive counter-CC leads because its LB and protection-end windows " +
+            "are shorter. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
         {
@@ -34,7 +37,8 @@ internal sealed partial class SettingsWindow
                 "both your own Guard state and Guardian readiness are revalidated. Lowest exact HP ratio wins, then " +
                 "known higher incoming pressure, shorter distance, party slot, and stable actor identity.");
             ImGui.TextDisabled(
-                "Purify, Smart Recuperate, Ally Rescue, reactive CC, and reactive Guard keep priority. Continuous " +
+                "Purify, reactive counter-CC, and Ally Rescue keep priority. Guardian then wins before NIN, SCH, DRK, " +
+                "Smart Recuperate, generic Guard, and pressure Sprint. Continuous " +
                 "held consent freezes one exact Guardian intent; only a clean client rejection may use the common " +
                 "bounded same-intent retry. There is no selected-target change, alternate, fallback, or replay. " +
                 "CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
@@ -68,8 +72,9 @@ internal sealed partial class SettingsWindow
                 "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
-                "missed rather than guessed. The shared order is Purify > Smart Recuperate > Ally Rescue > reactive " +
-                "CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk > Hiebsprung.");
+                "missed rather than guessed. The shared order is Purify > reactive counter-CC > Ally Rescue > PLD " +
+                "Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
+                "pressure Sprint > event Kardia > event Monk.");
             ImGui.PopTextWrapPos();
         }
 
@@ -98,6 +103,9 @@ internal sealed partial class SettingsWindow
                 "read again at the latest safe point before every request; exactly 50% or higher cancels the intent. " +
                 "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
                 "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
+            ImGui.TextDisabled(
+                "In the job-specific second tier, Purify, reactive counter-CC, Ally Rescue, and PLD Guardian precede " +
+                "NIN; SCH and DRK follow it before Smart Recuperate and the generic helpers.");
             ImGui.PopTextWrapPos();
 
             ImGui.Spacing();
@@ -198,6 +206,9 @@ internal sealed partial class SettingsWindow
                 "never changes a hard, soft, focus, or mouseover target, reranks, selects an alternate after drift, " +
                 "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
+            ImGui.TextDisabled(
+                "Purify, reactive counter-CC, Ally Rescue, Guardian, and NIN precede SCH. DRK Hiebsprung closes the " +
+                "job-specific second tier before Smart Recuperate and the generic helpers.");
             ImGui.PopTextWrapPos();
         }
 
@@ -242,7 +253,8 @@ internal sealed partial class SettingsWindow
             "actor ends the opportunity; it never falls through to another ally or self.");
         ImGui.TextDisabled(
             "The opportunity and frozen actor are spent before at most one direct-GOID Kardia request. Urgent " +
-            "survival/counter-CC helpers still win the frame. Kardia never changes a hard, soft, focus, or mouseover " +
+            "physical-hold helpers through pressure Sprint still win the frame; event Kardia precedes only event Monk. " +
+            "Kardia never changes a hard, soft, focus, or mouseover " +
             "target, reranks after commitment, selects an alternate, replays, or retries. 'Incoming Eukrasia' may " +
             "include another plugin's or Turbo's call because the native hook cannot prove a physical origin. Client " +
             "acceptance does not prove that Kardia or Kardion applied.");
@@ -309,7 +321,8 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "PvP MNK only and disabled by default. This detonates the already-active Earth's Reply / Echo der Erde " +
             "at the enabled low-HP threshold or before the 8-second Earth Resonance timer is lost. It never starts " +
-            "Riddle of Earth / Steinernes Enigma, changes your target, or retries a rejected action.");
+            "Riddle of Earth / Steinernes Enigma, changes your target, or retries a rejected action. Event Monk is " +
+            "last in the request order.");
         ImGui.PopTextWrapPos();
         return changed;
     }

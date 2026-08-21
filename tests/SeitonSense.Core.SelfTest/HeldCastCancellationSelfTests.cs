@@ -12,6 +12,31 @@ internal static class HeldCastCancellationSelfTests
     private static readonly TargetPressureActorIdentity Target =
         new(10_002, 1_002);
 
+    internal static void CanonicalHelperPriorityOrderIsPinned()
+    {
+        var expected = new[]
+        {
+            HeldCastCancellationHelperKind.Purify,
+            HeldCastCancellationHelperKind.ReactiveCounterCc,
+            HeldCastCancellationHelperKind.AllyRescue,
+            HeldCastCancellationHelperKind.Guardian,
+            HeldCastCancellationHelperKind.NinjaSeiton,
+            HeldCastCancellationHelperKind.ScholarCriticalStrategy,
+            HeldCastCancellationHelperKind.DarkKnightPlunge,
+            HeldCastCancellationHelperKind.SmartRecuperate,
+            HeldCastCancellationHelperKind.Guard,
+            HeldCastCancellationHelperKind.PressureEscapeSprint,
+        };
+        var actual = Enum.GetValues<HeldCastCancellationHelperKind>()
+            .Where(static helper => helper != HeldCastCancellationHelperKind.None)
+            .OrderBy(static helper => (byte)helper)
+            .ToArray();
+
+        Equal(expected.Length, actual.Length, "helper count");
+        for (var index = 0; index < expected.Length; index++)
+            Equal(expected[index], actual[index], $"priority {index + 1}");
+    }
+
     internal static void ExactRequestIsOncePerObservedCastEpoch()
     {
         var first = HeldCastCancellationRules.Observe(

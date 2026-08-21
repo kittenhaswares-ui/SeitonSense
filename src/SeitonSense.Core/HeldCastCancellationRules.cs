@@ -2,21 +2,22 @@ namespace SeitonSense.Core;
 
 /// <summary>
 /// Identifies the held helper which owns the single prioritized cancellation
-/// request. The value is diagnostic only; it never selects another action.
+/// request. Numeric order mirrors the canonical physical-held scheduler order;
+/// it never selects another action or target.
 /// </summary>
 public enum HeldCastCancellationHelperKind : byte
 {
     None = 0,
     Purify = 1,
-    SmartRecuperate = 2,
+    ReactiveCounterCc = 2,
     AllyRescue = 3,
-    ReactiveCounterCc = 4,
-    Guard = 5,
-    Guardian = 6,
-    PressureEscapeSprint = 7,
-    NinjaSeiton = 8,
-    ScholarCriticalStrategy = 9,
-    DarkKnightPlunge = 10,
+    Guardian = 4,
+    NinjaSeiton = 5,
+    ScholarCriticalStrategy = 6,
+    DarkKnightPlunge = 7,
+    SmartRecuperate = 8,
+    Guard = 9,
+    PressureEscapeSprint = 10,
 }
 
 /// <summary>

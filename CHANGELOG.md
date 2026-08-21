@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.26.0.0
+
+- Raised every job-specific physical-hold helper into the second priority tier,
+  immediately after Purify. The deterministic order inside that tier is
+  **reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH
+  Critical Strategy > DRK Hiebsprung**. Reactive WHM Miracle / BRD Silent
+  Nocturne wins before ally cleanse because its LB, post-Purify, and post-Guard
+  windows are shorter.
+- The complete request order is now **Purify > reactive counter-CC > Ally Rescue >
+  PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart
+  Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**.
+  One continuously held key may still authorize later distinct exact episodes,
+  while at most one held helper crosses the native action boundary per framework
+  frame.
+- Made team pressure an optional positive-only ranking bonus for simultaneous
+  post-Purify and post-Guard counter-CC releases. A fresh exact count above zero
+  ranks ahead; zero, unknown, or stale pressure is neutral and never gates a
+  candidate. Remaining order is lowest HP ratio, lowest trusted MP ratio, then
+  stable canonical identity. The selected episode remains frozen with no rerank,
+  alternate, target change, fallback, or replay.
+- Bumped the plugin version to `0.26.0.0`. Configuration schema remains `30`;
+  there is no new setting or migration, and existing opt-ins are preserved.
+
 ## 0.25.0.0
 
 - Fixed the v0.24 held-key lease regression across all ten physical-hold

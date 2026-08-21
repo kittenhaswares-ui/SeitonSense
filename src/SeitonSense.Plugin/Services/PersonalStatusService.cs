@@ -565,38 +565,14 @@ internal sealed class PersonalStatusService : IDisposable
         // actionable or waiting at the global native boundary. It no longer
         // consumes that physical hold through release.
         var purifyClaimedPriority = purify.InputClaimed;
-        // The reactive scheduler is ordered by the next action which may be
-        // client-accepted, not by ownership of the whole physical hold:
-        // Purify > Recuperate > ally cleanse > reactive counter-CC. A held key
-        // remains consent for a later distinct episode after the animation
-        // lock from an earlier accepted action has cleared.
-        var recuperate = smartRecuperate.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
-            metadata.RecuperateVerified,
-            guardActive,
-            hasPurifyRemovableCrowdControl ||
-            purifyClaimedPriority ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset);
-        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
-        var rescue = allyRescue.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            allyRescueConfigurationEnabled,
-            configuration.AllyRescueOnHeldGameplayKey,
-            emergencyInputFrame,
-            now,
-            AllyRescueBufferRules.DefaultBufferMilliseconds,
-            hardReset,
-            dispatchAllowed:
-                !purifyClaimedPriority &&
-                !smartRecuperateClaimedPriority &&
-                !emergencyInputFrame.IsConsumed);
-        var allyRescueClaimedPriority = rescue.InputClaimed;
+        // The scheduler is ordered by the next action which may be
+        // client-accepted, not by ownership of the whole physical hold.
+        // Purify is absolute. Every job-specific physical held helper runs
+        // next, then generic self-healing/defense. A held key remains consent
+        // for a later distinct episode after an earlier accepted action clears.
+        // Reactive counter-CC has short threat/release windows, so it leads the
+        // job-specific tier. Status-bound ally cleanse remains armed and can
+        // take the next free frame without losing its exact target/key lease.
         // The native hook may enqueue after this framework scan began. Refresh
         // the monotonic clock immediately before draining so a same-frame start
         // marker is never rejected as if it came from the future.
@@ -607,8 +583,6 @@ internal sealed class PersonalStatusService : IDisposable
             miracleInterceptConfigurationEnabled,
             configuration.ReactiveCcOnHeldKey,
             !purifyClaimedPriority &&
-            !smartRecuperateClaimedPriority &&
-            !allyRescueClaimedPriority &&
             !emergencyInputFrame.IsConsumed,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
@@ -624,6 +598,114 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        var rescue = allyRescue.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            allyRescueConfigurationEnabled,
+            configuration.AllyRescueOnHeldGameplayKey,
+            emergencyInputFrame,
+            now,
+            AllyRescueBufferRules.DefaultBufferMilliseconds,
+            hardReset,
+            dispatchAllowed:
+                !purifyClaimedPriority &&
+                !miracle.InputClaimed &&
+                !emergencyInputFrame.IsConsumed);
+        var allyRescueClaimedPriority = rescue.InputClaimed;
+        var defense = defensiveUtility.ObserveGuardian(
+            localPlayer,
+            isCrystallineConflict,
+            paladinGuardianConfigurationEnabled,
+            configuration.PaladinGuardianOnHeldKey,
+            guardActive,
+            purifyClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset,
+            beginsFrame: true);
+        // Guardian may return client-accepted a millisecond after this frame's
+        // original timestamp. Refresh before handing the exact episode to the
+        // same-frame communication consumer so it is never misclassified as a
+        // future event.
+        now = Math.Max(now, Environment.TickCount64);
+        guardianCommunication.Observe(
+            localPlayer,
+            context,
+            defense.LastAcceptedGuardianEpisode,
+            now,
+            hardReset);
+        var guardianClaimedPriority = defense.InputClaimed;
+        now = Environment.TickCount64;
+        var ninja = ninjaSeiton.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            ninjaSeitonConfigurationEnabled,
+            metadata.SeitonVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var scholar = scholarCriticalStrategy.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            scholarCriticalStrategyConfigurationEnabled,
+            metadata.ScholarCriticalStrategyVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            ninja.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var plunge = darkKnightPlunge.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            darkKnightPlungeConfigurationEnabled,
+            metadata.DarkKnightPlungeVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            allyRescueClaimedPriority ||
+            rescue.UseActionAttempted ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            ninja.InputClaimed ||
+            scholar.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+
+        var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority ||
+                                             miracle.InputClaimed ||
+                                             guardianClaimedPriority ||
+                                             ninja.InputClaimed ||
+                                             scholar.InputClaimed ||
+                                             plunge.InputClaimed;
+        var recuperate = smartRecuperate.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
+            metadata.RecuperateVerified,
+            guardActive,
+            hasPurifyRemovableCrowdControl ||
+            purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
             isCrystallineConflict,
@@ -638,41 +720,15 @@ internal sealed class PersonalStatusService : IDisposable
             hasPurifyRemovableCrowdControl,
             guardActive,
             purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
             smartRecuperateClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
-            hardReset);
-        var defense = defensiveUtility.ObserveGuardian(
-            localPlayer,
-            isCrystallineConflict,
-            paladinGuardianConfigurationEnabled,
-            configuration.PaladinGuardianOnHeldKey,
-            guardActive,
-            purifyClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
-            guardDefense.InputClaimed ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset: false);
-        // Guardian may return client-accepted a millisecond after this frame's
-        // original timestamp. Refresh before handing the exact episode to the
-        // same-frame communication consumer so it is never misclassified as a
-        // future event.
-        now = Math.Max(now, Environment.TickCount64);
-        guardianCommunication.Observe(
-            localPlayer,
-            context,
-            defense.LastAcceptedGuardianEpisode,
-            now,
-            hardReset);
+            hardReset: false,
+            prioritizedGuardianPass: defense);
         var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||
-                                               defense.InputClaimed;
+                                               guardianClaimedPriority;
         now = Environment.TickCount64;
         var pressureEscape = pressureEscapeSprint.Observe(
             localPlayer,
@@ -683,9 +739,8 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.Enabled && configuration.EnablePressureEscapeSprintOnHeldKey,
             guardActive,
             purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
             smartRecuperateClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
             defensiveUtilityClaimedPriority,
             emergencyInputFrame,
             now,
@@ -698,47 +753,11 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.SmartKardiaVerified,
             guardActive,
             purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
             smartRecuperateClaimedPriority ||
             defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
             emergencyInputFrame.IsConsumed,
-            now,
-            hardReset);
-        var ninja = ninjaSeiton.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            ninjaSeitonConfigurationEnabled,
-            metadata.SeitonVerified,
-            guardActive,
-            purifyClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority ||
-            pressureEscapeClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
-            kardia.UseActionAttempted ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset);
-        var scholar = scholarCriticalStrategy.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            scholarCriticalStrategyConfigurationEnabled,
-            metadata.ScholarCriticalStrategyVerified,
-            guardActive,
-            purifyClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority ||
-            pressureEscapeClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
-            kardia.UseActionAttempted ||
-            ninja.InputClaimed ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
             now,
             hardReset);
         var monk = monkEarthReply.Observe(
@@ -754,36 +773,12 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MonkEarthReplyHpPercent,
             configuration.MonkEarthReplyExpirySeconds,
             purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
             smartRecuperateClaimedPriority ||
             defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
             kardia.UseActionAttempted ||
-            ninja.InputClaimed ||
-            scholar.InputClaimed ||
             emergencyInputFrame.IsConsumed,
-            now,
-            hardReset);
-        var plunge = darkKnightPlunge.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            darkKnightPlungeConfigurationEnabled,
-            metadata.DarkKnightPlungeVerified,
-            guardActive,
-            purifyClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority ||
-            pressureEscapeClaimedPriority ||
-            allyRescueClaimedPriority ||
-            rescue.UseActionAttempted ||
-            miracle.InputClaimed ||
-            kardia.UseActionAttempted ||
-            ninja.InputClaimed ||
-            scholar.InputClaimed ||
-            monk.UseActionAttempted ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
             now,
             hardReset);
 
@@ -796,23 +791,14 @@ internal sealed class PersonalStatusService : IDisposable
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
-                recuperate.InputClaimed,
-                recuperate.CastCancellationRequest) ??
+                miracle.InputClaimed,
+                miracle.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 rescue.InputClaimed,
                 rescue.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
-                miracle.InputClaimed,
-                miracle.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                guardDefense.InputClaimed,
-                guardDefense.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
                 defense.InputClaimed,
                 defense.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                pressureEscape.InputClaimed,
-                pressureEscape.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 ninja.InputClaimed,
                 ninja.CastCancellationRequest) ??
@@ -821,7 +807,16 @@ internal sealed class PersonalStatusService : IDisposable
                 scholar.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 plunge.InputClaimed,
-                plunge.CastCancellationRequest);
+                plunge.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                recuperate.InputClaimed,
+                recuperate.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                guardDefense.InputClaimed,
+                guardDefense.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                pressureEscape.InputClaimed,
+                pressureEscape.CastCancellationRequest);
         heldCastCancellation.Observe(
             localPlayer,
             configuration.Enabled &&

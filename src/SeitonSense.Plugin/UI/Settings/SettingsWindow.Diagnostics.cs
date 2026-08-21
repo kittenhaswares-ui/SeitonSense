@@ -157,7 +157,8 @@ internal sealed partial class SettingsWindow
             $"{miracle.GuardFollowupPromotionCount}/{miracle.GuardFollowupExpiredCount}/" +
             $"{miracle.GuardFollowupRetiredCount}, last={miracle.GuardFollowupLastEvent}");
         ImGui.TextWrapped(
-            $"Reactive CC protection-end hold/rank: consent={miracle.ProtectionEndHeldConsentActive}/" +
+            $"Reactive CC protection-end hold/rank (pressure >0 bonus; zero/unknown/stale neutral; then HP/MP/ID): " +
+            $"consent={miracle.ProtectionEndHeldConsentActive}/" +
             $"{miracle.ProtectionEndHeldConsentKey}, last-winner pressure={protectionEndRankPressure}, " +
             $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
@@ -180,8 +181,10 @@ internal sealed partial class SettingsWindow
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "Purify, Smart Recuperate, Ally Rescue, reactive CC, Guard, Guardian, pressure Sprint, Kardia, NIN, SCH, " +
-            "Monk, and Hiebsprung share the current request priority in that order. Kardia still requires its separate " +
+            "The current request order is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > " +
+            "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
+            "Kardia > event Monk. The six job-specific physical-hold helpers share the second tier; reactive comes " +
+            "before cleanse because its LB and protection-end windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +

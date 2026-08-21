@@ -66,6 +66,18 @@ public readonly record struct GuardPropagationDecision(
         ExactGuardActive || PropagationLatchActive;
 }
 
+public readonly record struct DefensiveUtilityFramePass(
+    DefensiveUtilityActionKind Action,
+    bool InputClaimed,
+    bool UseActionAttempted,
+    bool UseActionAccepted);
+
+public readonly record struct DefensiveUtilityFrameAggregation(
+    bool GuardianOwnsPresentation,
+    bool InputClaimed,
+    bool UseActionAttempted,
+    bool UseActionAccepted);
+
 /// <summary>
 /// Pure, deterministic gates for the optional defensive held-key helpers.
 /// Runtime code still revalidates actor identity, action metadata, cooldown,
@@ -80,6 +92,32 @@ public static class DefensiveUtilityRules
     // Covers the normal client/server status-propagation and action-queue window
     // without turning one Guard request into an unbounded helper lockout.
     public const long GuardPropagationLatchMilliseconds = 1_500;
+
+    /// <summary>
+    /// Combines the independent job-specific Guardian pass and later generic
+    /// Guard pass without relying on a snapshot from the previous framework
+    /// frame. Guardian owns presentation when it retained its exact held intent
+    /// or reached its native attempt boundary. A recognized but unavailable
+    /// Guardian remains useful background diagnostics only while the later
+    /// Guard pass is idle; an actual Guard claim/attempt always wins.
+    /// Aggregate claim/attempt bits remain monotonic.
+    /// </summary>
+    public static DefensiveUtilityFrameAggregation AggregateFramePasses(
+        DefensiveUtilityFramePass guardian,
+        DefensiveUtilityFramePass guard)
+    {
+        var guardianOwnsPresentation =
+            guardian.InputClaimed ||
+            guardian.UseActionAttempted ||
+            (guardian.Action == DefensiveUtilityActionKind.Guardian &&
+             !guard.InputClaimed &&
+             !guard.UseActionAttempted);
+        return new DefensiveUtilityFrameAggregation(
+            guardianOwnsPresentation,
+            guardian.InputClaimed || guard.InputClaimed,
+            guardian.UseActionAttempted || guard.UseActionAttempted,
+            guardian.UseActionAccepted || guard.UseActionAccepted);
+    }
 
     public static GuardPropagationDecision ObserveGuardPropagation(
         GuardPropagationState previous,

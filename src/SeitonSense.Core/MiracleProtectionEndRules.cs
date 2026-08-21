@@ -45,8 +45,9 @@ public readonly record struct MiracleProtectionEndAttemptDecision(
 
 /// <summary>
 /// Immutable comparison values captured from one exact, currently
-/// release-ready protection-end actor. A known team-pressure value of zero is
-/// valid. An unknown sample remains eligible but ranks after every known one.
+/// release-ready protection-end actor. Positive fresh team pressure is an
+/// optional ranking bonus. Known zero and unavailable/stale pressure are
+/// equally neutral and always remain eligible for the HP/MP/identity fallback.
 /// </summary>
 public readonly record struct MiracleProtectionEndRankCandidate(
     MiracleInterceptThreatKind Threat,
@@ -195,8 +196,9 @@ public static class MiracleProtectionEndRules
 
     /// <summary>
     /// Returns a negative value when <paramref name="left"/> ranks first.
-    /// Pressure is descending; HP and trusted MP ratios are ascending; a known
-    /// MP sample ranks before an unknown one. Exact slot/IDs close every tie.
+    /// Positive pressure is descending. Known zero and unknown/stale pressure
+    /// are neutral peers. HP and trusted MP ratios are ascending; a known MP
+    /// sample ranks before an unknown one. Exact slot/IDs close every tie.
     /// </summary>
     public static int Compare(
         MiracleProtectionEndRankCandidate left,
@@ -205,9 +207,13 @@ public static class MiracleProtectionEndRules
         if (!left.IsValid) return right.IsValid ? 1 : 0;
         if (!right.IsValid) return -1;
 
-        var pressureTrust = right.TeamTargetCountKnown.CompareTo(left.TeamTargetCountKnown);
-        if (pressureTrust != 0) return pressureTrust;
-        if (left.TeamTargetCountKnown)
+        var leftHasPositivePressure = left.TeamTargetCountKnown &&
+                                      left.TeamTargetCount > 0;
+        var rightHasPositivePressure = right.TeamTargetCountKnown &&
+                                       right.TeamTargetCount > 0;
+        var positivePressure = rightHasPositivePressure.CompareTo(leftHasPositivePressure);
+        if (positivePressure != 0) return positivePressure;
+        if (leftHasPositivePressure)
         {
             var pressure = right.TeamTargetCount.CompareTo(left.TeamTargetCount);
             if (pressure != 0) return pressure;

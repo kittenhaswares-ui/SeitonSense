@@ -236,12 +236,15 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > Smart Recuperate > Ally Rescue
-> reactive CC > Guard > Guardian > pressure Sprint > Kardia > NIN > SCH > Monk
-> Hiebsprung**. One framework frame permits at most one held-helper native
-boundary, but a continuously held key remains consent for later distinct exact
-episodes. Kardia still requires its separate accepted-Eukrasia trigger, and Monk
-remains an automatic follow-up.
+The current action-request priority is **Purify > reactive counter-CC > Ally
+Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung >
+Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event
+Monk**. The six job-specific physical-hold helpers share the second tier and use
+that deterministic urgency order; reactive counter-CC leads ally cleanse because
+its LB and protection-end windows are shorter. One framework frame permits at
+most one held-helper native boundary, but a continuously held key remains consent
+for later distinct exact episodes. Kardia and Monk retain their separate event-
+driven origins.
 
 ## Optional team-visible Attack1 focus sign
 
@@ -546,8 +549,8 @@ lookup during synchronous plugin startup.
 
 Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
-the same exact key may remain consent for a later distinct Purify, Recuperate,
-ally cleanse, counter-CC, Guard, Guardian, pressure Sprint, NIN, SCH, or DRK
+the same exact key may remain consent for a later distinct Purify, counter-CC,
+ally cleanse, Guardian, NIN, SCH, DRK, Recuperate, Guard, or pressure Sprint
 episode. Enabling an option while a key is already down still requires a release
 and new press. Release, text input, context/job/identity loss, death, metadata
 failure, or reset clears the relevant leases. Own Guard suppresses every native
@@ -583,9 +586,9 @@ are neither persisted nor uploaded.
 ## Experimental held-action cast cancellation
 
 This separate test is disabled by default. It applies only to otherwise-ready
-exact physical-hold intents for Purify, Smart Recuperate, Ally Rescue, reactive
-counter-CC, Guard, Guardian, pressure Sprint, NIN Seiton, SCH Critical Strategy,
-and DRK Hiebsprung. Smart Kardia, Monk Earth's Reply, every already-incoming
+exact physical-hold intents for Purify, reactive counter-CC, Ally Rescue,
+Guardian, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate,
+Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply, every already-incoming
 manual/Turbo redirect (including Paean), and macro helpers are excluded.
 
 For the highest-priority eligible intent, the plugin rechecks exact local and
@@ -647,7 +650,7 @@ statuses, current action identity/readiness, and native range/line-of-sight
 result are revalidated before every possible call. FFXIV remains the authority
 on whether a request queues or executes.
 
-Purify and Smart Recuperate receive the scheduler frame before Ally Rescue.
+Purify and reactive counter-CC receive the scheduler frame before Ally Rescue.
 Action-specific cooldown/resource or invalid reachability waits do not starve a
 currently usable lower helper; a globally blocked queue/animation boundary and
 the brief explicit-false retry retain priority. Only the same frozen ally/status
@@ -762,7 +765,8 @@ pass FFXIV's native 20-yalm Guardian range/line-of-sight check, and remain exact
 No custom center-distance cap is applied; the 10-yalm condition governs staying
 close enough for protection after the jump. Candidate ranking uses exact HP
 ratio, known incoming pressure, distance, and stable party identity. Purify,
-Smart Recuperate, Ally Rescue, reactive CC, and reactive Guard keep priority.
+reactive counter-CC, and Ally Rescue keep priority. Guardian precedes NIN, SCH,
+DRK, Smart Recuperate, generic Guard, and pressure Sprint.
 Guardian freezes the selected ally and may use only the common bounded exact-
 intent retry before a direct native `29066` request is accepted. It does not
 change the visible target, select an alternate action/ally, or replay input.
@@ -862,8 +866,8 @@ view cannot manufacture that fallback, and an unknown or already-owned Kardion
 state on the chosen actor ends the opportunity without selecting another actor.
 
 Smart Kardia waits for the current animation lock to clear while the trigger
-remains valid. It follows reactive CC and precedes NIN, SCH, Monk, and Hiebsprung
-in the current request order.
+remains valid. It follows pressure Sprint and precedes only event Monk in the
+current request order.
 Before at most one direct-GOID Kardia `29264` request, the trigger and frozen
 actor are spent and exact configuration, context, local Sage, causal Eukrasia,
 fresh pressure, Kardia readiness, own Guard, frozen identity, Kardion state, and
@@ -924,10 +928,11 @@ shared bounded retry policy.
 
 When multiple exact post-Purify or post-Guard releases are simultaneously
 eligible, selection reads each candidate's fresh exact team-target count,
-current/maximum HP, and trusted current/maximum MP. A known pressure sample ranks
-before unknown pressure, then higher pressure ranks first; lower HP ratio follows.
-Known trusted MP ranks before unknown MP, then lower trusted MP ratio ranks first;
-stable canonical slot/identity closes full ties. Exactly one winner is selected.
+current/maximum HP, and trusted current/maximum MP. Only a fresh exact pressure
+count above zero earns a ranking bonus, with higher positive counts first. Known
+zero, unknown, or stale pressure is neutral and never excludes or delays a
+candidate. Lower HP ratio follows, then lower trusted MP ratio and stable
+canonical slot/identity. Exactly one winner is selected.
 Every simultaneous loser is terminal and cannot become a fallback attempt. These
 values and the frozen winning actor are retained only in bounded in-memory helper
 state.
@@ -941,8 +946,8 @@ Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
 750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
 post-Purify release opportunity after 500 ms; waiting never restarts a deadline.
 
-The helper observes held gameplay-key state only after Purify, Smart Recuperate,
-and Ally Rescue. One continuous hold can authorize later distinct startup or
+The helper observes held gameplay-key state immediately after Purify and before
+every other job-specific helper. One continuous hold can authorize later distinct startup or
 protection-end episodes, but each selected episode remains one frozen intent and
 no simultaneous loser can follow it. Known action-specific unavailability keeps
 the lease without blocking a usable lower helper; a global queue/animation wait
@@ -981,10 +986,9 @@ native action range and line-of-sight check. Selection uses the lowest exact HP
 ratio, then stable enemy slot and actor identity.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Purify, Smart Recuperate, Ally Rescue,
-reactive CC, Guard, Guardian, pressure Sprint, and Kardia precede NIN in the current
-request order. Kardia uses its separate accepted-Eukrasia trigger but wins the
-update if its bounded opportunity attempts.
+and its Unsealed follow-up `29516`. Purify, reactive counter-CC, Ally Rescue, and
+PLD Guardian precede NIN in the current request order. NIN precedes SCH, DRK,
+Smart Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk.
 Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
 
@@ -1014,9 +1018,10 @@ Current English action/status/proc metadata must independently validate before
 the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
-At the configured low-HP or expiry threshold, and only after Purify, Smart
-Recuperate, Ally Rescue, reactive CC, Guard, Guardian, pressure Sprint, Kardia,
-NIN, and SCH decline or make no earlier attempt, the
+At the configured low-HP or expiry threshold, and only after Purify, reactive
+counter-CC, Ally Rescue, Guardian, NIN, SCH, Hiebsprung, Smart Recuperate,
+generic Guard, pressure Sprint, and event Kardia decline or make no earlier
+attempt, the
 continuous resonance state is marked spent before at most one normal
 self-targeted Earth's Reply `29483`
 request. The helper never activates Riddle of Earth `29482`, substitutes an
@@ -1048,8 +1053,9 @@ epoch uses final revalidation and the common bounded explicit-false retry for
 only that frozen direct target, with no selected-target mutation, alternate,
 rerank, or replay.
 
-Hiebsprung is last after Purify, Smart Recuperate, Ally Rescue, reactive CC,
-Guard, Guardian, pressure Sprint, Kardia, NIN, SCH, and Monk. Held-key state,
+Hiebsprung closes the job-specific second tier after Purify, reactive counter-CC,
+Ally Rescue, Guardian, NIN, and SCH, and before Smart Recuperate, generic Guard,
+pressure Sprint, event Kardia, and event Monk. Held-key state,
 cooldown observations, frozen identity, HP/status/reachability samples, action
 result, and aggregate diagnostics remain bounded in memory and are not stored as
 combat/key history, transmitted, or uploaded. Client acceptance does not prove
@@ -1079,8 +1085,9 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 30 is current in v0.25.0.0. The held-action cast-
-cancellation test remains explicitly off for fresh, reset, and migrated
+Configuration schema 30 remains current in v0.26.0.0; this release adds no
+setting or migration. The held-action cast-cancellation test remains explicitly
+off for fresh, reset, and migrated
 configurations. An older explicitly enabled fresh-edge NIN Seiton option still
 traverses schema 29, migrates to the replacement held-key option, and clears the
 obsolete compatibility field. Every other existing master/helper choice is

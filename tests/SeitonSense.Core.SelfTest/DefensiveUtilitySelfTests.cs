@@ -2,6 +2,82 @@ using SeitonSense.Core;
 
 internal static class DefensiveUtilitySelfTests
 {
+    public static void IndependentGuardianAndGuardPassesAggregateCurrentFrameOnly()
+    {
+        var guardianWait = new DefensiveUtilityFramePass(
+            DefensiveUtilityActionKind.Guardian,
+            InputClaimed: true,
+            UseActionAttempted: false,
+            UseActionAccepted: false);
+        var idleGuard = new DefensiveUtilityFramePass(
+            DefensiveUtilityActionKind.None,
+            InputClaimed: false,
+            UseActionAttempted: false,
+            UseActionAccepted: false);
+        var guardianOwned = DefensiveUtilityRules.AggregateFramePasses(
+            guardianWait,
+            idleGuard);
+        True(guardianOwned.GuardianOwnsPresentation, "Guardian cast/throttle wait stays visible");
+        True(guardianOwned.InputClaimed, "Guardian claim survives later Guard pass");
+        False(guardianOwned.UseActionAttempted, "waiting Guardian invents no attempt");
+
+        var idleGuardian = new DefensiveUtilityFramePass(
+            DefensiveUtilityActionKind.None,
+            InputClaimed: false,
+            UseActionAttempted: false,
+            UseActionAccepted: false);
+        var acceptedGuard = new DefensiveUtilityFramePass(
+            DefensiveUtilityActionKind.Guard,
+            InputClaimed: true,
+            UseActionAttempted: true,
+            UseActionAccepted: true);
+        var guardOwned = DefensiveUtilityRules.AggregateFramePasses(
+            idleGuardian,
+            acceptedGuard);
+        False(guardOwned.GuardianOwnsPresentation, "idle Guardian cannot mask current Guard");
+        True(guardOwned.InputClaimed, "Guard claim is aggregated");
+        True(guardOwned.UseActionAttempted, "Guard attempt is aggregated");
+        True(guardOwned.UseActionAccepted, "Guard acceptance is aggregated");
+
+        var yieldedGuardian = new DefensiveUtilityFramePass(
+            DefensiveUtilityActionKind.Guardian,
+            InputClaimed: false,
+            UseActionAttempted: false,
+            UseActionAccepted: false);
+        var guardAfterUnavailableGuardian = DefensiveUtilityRules.AggregateFramePasses(
+            yieldedGuardian,
+            acceptedGuard);
+        False(
+            guardAfterUnavailableGuardian.GuardianOwnsPresentation,
+            "unready Guardian candidate cannot mask the Guard which actually acted");
+        True(
+            guardAfterUnavailableGuardian.UseActionAttempted,
+            "later Guard attempt remains the presented frame owner");
+        True(
+            guardAfterUnavailableGuardian.UseActionAccepted,
+            "later Guard acceptance remains visible");
+
+        var unavailableGuardianWithIdleGuard = DefensiveUtilityRules.AggregateFramePasses(
+            yieldedGuardian,
+            idleGuard);
+        True(
+            unavailableGuardianWithIdleGuard.GuardianOwnsPresentation,
+            "unready Guardian remains visible while the later Guard pass is idle");
+        False(
+            unavailableGuardianWithIdleGuard.InputClaimed,
+            "background Guardian diagnostics cannot synthesize a claim");
+        False(
+            unavailableGuardianWithIdleGuard.UseActionAttempted,
+            "background Guardian diagnostics cannot synthesize an attempt");
+
+        var allIdle = DefensiveUtilityRules.AggregateFramePasses(
+            idleGuardian,
+            idleGuard);
+        False(allIdle.GuardianOwnsPresentation, "no stale prior-frame owner is synthesized");
+        False(allIdle.InputClaimed, "no stale prior-frame claim is synthesized");
+        False(allIdle.UseActionAttempted, "no stale prior-frame attempt is synthesized");
+    }
+
     public static void ExactThresholdsAreInclusiveAndSafe()
     {
         True(DefensiveUtilityRules.IsHighPressure(true, 3), "three enemies is high pressure");
