@@ -289,6 +289,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     internal SmartWardensPaeanDiagnostics SmartWardensPaeanDiagnostics =>
         smartWardensPaean.Diagnostics;
     internal IReadOnlySet<uint> VerifiedCcBrakeStatusIds => ccImmunityBrake.VerifiedStatusIds;
+    internal IReadOnlySet<uint> VerifiedCcBrakeActionIds => ccImmunityBrake.VerifiedActionIds;
 
     internal bool TryGetRecentExactLocalGuardAttempt(
         uint territoryId,

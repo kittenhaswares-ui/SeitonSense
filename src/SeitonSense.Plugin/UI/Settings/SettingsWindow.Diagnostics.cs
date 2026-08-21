@@ -123,7 +123,7 @@ internal sealed partial class SettingsWindow
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}, " +
             $"last={rescue.LastEvent}");
         ImGui.TextWrapped(
-            $"Reactive CC (WHM Wunder der Natur / Miracle of Nature; BRD Stumme Nocturne / Silent Nocturne): " +
+            $"Reactive CC (WHM Miracle; BRD Silent Nocturne; NIN Forked/Fleeting Raiju): " +
             $"{miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
             $"target={miracle.TargetGameObjectId:X}/" +
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
@@ -159,7 +159,9 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(
             $"Reactive CC protection-end hold/rank (pressure >0 bonus; zero/unknown/stale neutral; then HP/MP/ID): " +
             $"consent={miracle.ProtectionEndHeldConsentActive}/" +
-            $"{miracle.ProtectionEndHeldConsentKey}, last-winner pressure={protectionEndRankPressure}, " +
+            $"{miracle.ProtectionEndHeldConsentKey}, reserved={miracle.ProtectionEndReservedKey}, " +
+            $"expected-end={miracle.ProtectionEndExpectedRemainingMilliseconds} ms, " +
+            $"last-winner pressure={protectionEndRankPressure}, " +
             $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +

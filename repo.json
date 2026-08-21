@@ -5,8 +5,8 @@
     "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
     "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.26.0.0",
-    "Changelog": "Moves every job-specific physical-hold helper into the second priority tier immediately after Purify, in deterministic urgency order: reactive WHM Miracle / BRD Silent Nocturne, Ally Rescue, PLD Guardian, NIN Seiton, SCH Critical Strategy, then DRK Hiebsprung. Reactive counter-CC leads ally cleanse because its LB and protection-end windows are shorter; Smart Recuperate and the generic helpers now follow that tier. Simultaneous post-Purify/post-Guard selection treats only fresh positive pressure as a ranking bonus. Zero, unknown, or stale pressure is neutral and never gates a candidate; HP, trusted MP, and stable identity decide the remaining order. Schema 30 and all existing settings are preserved.",
+    "AssemblyVersion": "0.27.0.0",
+    "Changelog": "Adds event-owned reactive counter-CC reservations: the exact actor, action, and eligible held-key generation are frozen when an urgent startup, enemy Purify, or enemy Guard is observed. Validated Resilience/Guard RemainingTime is only a non-extending wake-up hint; live status absence remains mandatory. The first absent frame at the expected Resilience end is immediate, early Guard cancellation remains immediate, and release, text-input poisoning, ambiguity, or identity drift cannot substitute another key or target. NIN now joins reactive counter-CC with metadata-verified Forked Raiju and Fleeting Raiju resolved through the exact PvP combo carrier at native 20-yalm range, plus exact Stun landing confirmation. Schema 30 and all existing opt-ins are preserved.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787315937"
+    "LastUpdate": "1787329288"
   }
 ]

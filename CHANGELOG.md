@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.27.0.0
+
+- Added event-owned reservations to reactive counter-CC. An eligible physical
+  key, exact canonical actor, local counter action, and event epoch are frozen
+  when an urgent startup, enemy Purify, or first enemy Guard presence is
+  observed. A later key cannot inherit that episode; release, text-input
+  poisoning, identity drift, or ambiguity is terminal with no alternate,
+  target switch, fallback, or replay.
+- Added bounded protection-end timing hints without speculative dispatch.
+  Validated live `RemainingTime` may establish only a non-extending expected
+  Resilience/Guard end. Real status-list absence remains mandatory. Post-Purify
+  can use the first authoritative absent frame at or after its expected end;
+  early or untimed absence keeps the 150-ms anti-flicker proof. Post-Guard
+  still releases on its first authoritative absent frame, including an early
+  manual cancel. A released Guard reservation stays retired through ambiguous
+  samples until exact absence separates a later Guard episode.
+- Added PvP Ninja to reactive counter-CC with both metadata-verified variants:
+  Forked Raiju `29510` and Fleeting Raiju `29707`, each using native 20-yalm
+  reachability and the standard Purify-removable protection matrix. Landing is
+  confirmed only by exact Stun `1343` on the frozen enemy and uses the matching
+  Raiju icon. Both metadata rows must verify before NIN can arm, and the exact
+  executable variant must be exposed through the PvP Spinning Edge/Aeolian Edge
+  Combo carrier `29500`. Forked Raiju also waits while the exact local Sealed
+  Forked Raiju status `3195` is active, and both variants wait through exact
+  local Bind `1345`.
+- Ranked all same-drain urgent startup captures before arming one frozen winner:
+  MCH/SAM/VPR first, DNC second, protection-end releases third, then stable
+  event time and canonical identity. Simultaneous losers are terminal. Reactive
+  observation may remain alive while own Guard suppresses every action request.
+- Bumped the plugin version to `0.27.0.0`. Configuration schema remains `30`;
+  there is no new setting or migration, and all existing opt-ins are preserved.
+
 ## 0.26.0.0
 
 - Raised every job-specific physical-hold helper into the second priority tier,

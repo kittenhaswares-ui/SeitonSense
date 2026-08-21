@@ -126,6 +126,7 @@ internal sealed class PersonalStatusService : IDisposable
             log);
         miracleIntercept = new MiracleInterceptProbe(
             objectTable,
+            nearAssist.VerifiedCcBrakeActionIds,
             nearAssist.VerifiedCcBrakeStatusIds,
             executeTracker,
             pressureTracker,
@@ -318,6 +319,7 @@ internal sealed class PersonalStatusService : IDisposable
         var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
             EnemyCombatConstants.BardJobId;
         var isNinja = ExecuteThreshold.IsNinja(localJobId);
+        var isReactiveCcJob = isAllyRescueJob || isNinja;
         var isSage = localJobId == SmartKardiaRules.SageJobId;
         var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;
         var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
@@ -444,8 +446,7 @@ internal sealed class PersonalStatusService : IDisposable
         var miracleInterceptConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableReactiveCcUtilities &&
                                                      isCrystallineConflict &&
-                                                     isAllyRescueJob &&
-                                                     !guardActive;
+                                                     isReactiveCcJob;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                               configuration.EnableNinjaSeitonOnHeldGameplayKey &&
                                               isCrystallineConflict &&
@@ -495,13 +496,18 @@ internal sealed class PersonalStatusService : IDisposable
             (localJobId == EnemyCombatConstants.WhiteMageJobId &&
              metadata.MiracleOfNatureActionVerified) ||
             (localJobId == EnemyCombatConstants.BardJobId &&
-             metadata.SilentNocturneVerified);
+             metadata.SilentNocturneVerified) ||
+            (localJobId == EnemyCombatConstants.NinjaJobId &&
+             nearAssist.VerifiedCcBrakeActionIds.Contains(
+                  EnemyCombatConstants.ForkedRaijuActionId) &&
+              nearAssist.VerifiedCcBrakeActionIds.Contains(
+                  EnemyCombatConstants.FleetingRaijuActionId));
         var miracleInterceptHeldInputEnabled = configuration.Enabled &&
                                                configuration.EnableReactiveCcUtilities &&
                                                configuration.ReactiveCcOnHeldKey &&
                                                reactiveCcActionMetadataVerified &&
                                                isCrystallineConflict &&
-                                               isAllyRescueJob;
+                                               isReactiveCcJob;
         var scholarCriticalStrategyHeldInputEnabled =
             scholarCriticalStrategyConfigurationEnabled &&
             metadata.ScholarCriticalStrategyVerified;
@@ -582,6 +588,7 @@ internal sealed class PersonalStatusService : IDisposable
             isCrystallineConflict,
             miracleInterceptConfigurationEnabled,
             configuration.ReactiveCcOnHeldKey,
+            !guardActive &&
             !purifyClaimedPriority &&
             !emergencyInputFrame.IsConsumed,
             configuration.MiracleInterceptMchLimitBreak,

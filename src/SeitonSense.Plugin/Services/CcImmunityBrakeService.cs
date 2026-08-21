@@ -123,6 +123,7 @@ internal sealed unsafe class CcImmunityBrakeService
     }
 
     internal IReadOnlySet<uint> VerifiedStatusIds => verifiedStatusIds;
+    internal IReadOnlySet<uint> VerifiedActionIds => verifiedActionIds;
 
     internal bool ShouldBlock(
         ActionType actionType,

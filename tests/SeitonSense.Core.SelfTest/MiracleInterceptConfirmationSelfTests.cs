@@ -82,6 +82,38 @@ internal static class MiracleInterceptConfirmationSelfTests
             "popup retains the Purify-removed CC label");
     }
 
+    public static void NinjaRaijuVariantsRequireExactStunStatus()
+    {
+        foreach (var actionId in new[]
+                 {
+                     MiracleInterceptConfirmationRules.ForkedRaijuActionId,
+                     MiracleInterceptConfirmationRules.FleetingRaijuActionId,
+                 })
+        {
+            var state = Register(
+                MiracleInterceptThreatKind.PostGuardCrowdControl,
+                accepted: true,
+                now: 1_000,
+                actionId: actionId).NextState;
+            var wrong = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                state,
+                Effect(
+                    now: 1_050,
+                    actionId: actionId,
+                    effectValue: MiracleInterceptConfirmationRules.SilenceStatusId));
+            False(wrong.Confirmed, $"Raiju {actionId} cannot confirm from Silence");
+
+            var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                state,
+                Effect(
+                    now: 1_051,
+                    actionId: actionId,
+                    effectValue: MiracleInterceptConfirmationRules.StunStatusId));
+            True(exact.Confirmed, $"Raiju {actionId} confirms only exact Stun");
+            Equal(actionId, exact.TriggeredPopup!.Value.ActionId, "popup keeps exact Raiju variant");
+        }
+    }
+
     public static void CorrelationRequiresExactIdentityShapeAndWindow()
     {
         var variants = new[]

@@ -46,6 +46,11 @@ internal sealed class EmergencyActionInputFrame
 
     internal bool IsGameplayKeyPhysicallyDown(VirtualKey key) =>
         Snapshot.ProbeSucceeded && probe?.IsGameplayKeyPhysicallyDown(key) == true;
+
+    internal bool IsGameplayKeyGenerationEligible(VirtualKey key) =>
+        Snapshot.ProbeSucceeded &&
+        !Snapshot.IsTextInputActive &&
+        probe?.IsGameplayKeyGenerationEligible(key) == true;
 }
 
 /// <summary>
