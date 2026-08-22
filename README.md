@@ -2,10 +2,10 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.29.0.0 adds a separate default-off
-NIN held helper that uses Shukuchi on one exact enemy strictly below 20% HP while
-that enemy has live Guard / Wehr, then hard-targets only that same enemy after a
-client-accepted jump. The explicit manual `/panicshu` command remains immediate,
+assistance, and target highlights. Version 0.29.0.1 hotfixes the default-off
+NIN Auto-Seiton helper so it skips Guardian-covered enemies, the invulnerable
+Paladin during Phalanx, and a Dark Knight protected by Eventide. Guard / Wehr
+itself remains a valid Seiton target. The explicit manual `/panicshu` command remains immediate,
 target-free, and the sole helper allowed from the local player's own Guard. It retains
 v0.27.1's bounded reactive held-key attachment, exact post-Purify/post-Guard
 episode memory, native pre-rank reachability, three-second NIN protection-end
@@ -544,6 +544,15 @@ exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
+Before ranking and again at every frozen retry, optional cast-cancel request,
+and final native action boundary, Seiton Sense checks the exact actor for the
+target-side Guardian `Covered` rows, Phalanx's Paladin-only `Hallowed Ground`,
+and Eventide's `Undead Redemption`. Those targets are ineligible until the
+status disappears. The covering Paladin, Phalanx's party-wide 33% mitigation,
+and Guard / Wehr are not blockers. Execute/PREP cues clear for protected actors,
+and a metadata mismatch disables automated Seiton fail-closed; manual Seiton is
+never intercepted.
+
 Ninja Seiton follows Purify, reactive counter-CC, Ally Rescue, PLD Guardian, and
 NIN Guard-Shukuchi. It precedes SCH Critical Strategy, DRK Hiebsprung,
 Smart Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk.
@@ -556,7 +565,8 @@ maximum; acceptance or ambiguity is terminal. A genuine accepted base-to-
 Unsealed action transition can create a later distinct epoch on the same hold,
 but rejected base Seiton can never substitute the follow-up. The same frozen
 S-slot and actor identity are resolved before every possible request, and that
-exact actor's HP is read again. Exactly 50% or higher cancels the intent. This minimizes wasted
+exact actor's HP and protection are read again. Exactly 50% or higher or newly
+observed Covered/LB invulnerability cancels and retires that exact intent. This minimizes wasted
 LBs when healing races the selection, but cannot eliminate the unavoidable
 interval between the final client read, request, and server execution. The
 helper never mutates a hard, soft, or focus target and never swallows the
@@ -1317,7 +1327,7 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 31 is current in v0.29.0.0. The new NIN Guard-Shukuchi held
+Configuration schema 31 is current in v0.29.0.1. The NIN Guard-Shukuchi held
 option is forced off for upgrading configurations and remains off for fresh and
 Reset Defaults configurations because it both initiates an action and may change
 the exact hard target after client acceptance. `/panicshu` remains command-only and uses the existing global
@@ -1572,6 +1582,15 @@ snapshot contents, pressure evidence, MCH marker/sound timing, optional action
 helpers, and the macro helpers with both normal macros and Turbo Hotbar should be
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
+
+For v0.29.0.1, source checks pin the Auto-Seiton blocker catalog to the exact
+target-side Covered rows plus Paladin Hallowed Ground and Dark Knight Undead
+Redemption. They also pin the checks before candidate ranking, frozen retry,
+cast cancellation, and the sole final `UseAction` boundary, including terminal
+retirement of a protection-drifted Unsealed epoch and cue suppression. These
+checks do not prove the live server application frame; Guardian, Phalanx,
+Eventide, expiry, and Guard-only behavior remain current-patch in-game A/B
+boundaries.
 
 For v0.29.0.0, source checks pin the new default-off NIN Guard-Shukuchi held
 helper to exact Crystalline Conflict, exact PvP NIN, one living and targetable

@@ -49,7 +49,31 @@ internal static class PvPMetadataGuard
                    unsealed.Icon == 214945 &&
                    unsealed.Description.ToString().Contains(
                        "Able to execute Seiton Tenchu.",
-                       StringComparison.Ordinal);
+                       StringComparison.Ordinal) &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId,
+                       "Covered") &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.CoveredStatusId,
+                       "Covered") &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId,
+                       "Covered") &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
+                       "Covered") &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId,
+                       "Hallowed Ground") &&
+                   ValidateSeitonProtectionStatus(
+                       statuses,
+                       NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
+                       "Undead Redemption");
         });
 
         var autoLowMpFocusProbeVerified = ValidateFeature("Auto Low-MP Focus probe", log, () =>
@@ -1035,6 +1059,17 @@ internal static class PvPMetadataGuard
         !action.CanTargetAlly &&
         !action.TargetArea &&
         action.RequiresLineOfSight;
+
+    private static bool ValidateSeitonProtectionStatus(
+        ExcelSheet<Status> statuses,
+        uint statusId,
+        string expectedName) =>
+        NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(statusId) &&
+        statuses.TryGetRow(statusId, out var status) &&
+        string.Equals(
+            status.Name.ToString(),
+            expectedName,
+            StringComparison.Ordinal);
 
     private static bool ValidateWarningDebuff(
         Status status,

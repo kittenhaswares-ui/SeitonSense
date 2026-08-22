@@ -5,8 +5,8 @@
     "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
     "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, explicit PvP macros, low-MP Focus, assists, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.29.0.0",
-    "Changelog": "Adds a default-off exact CC NIN held helper for enemies strictly below 20% HP while live Guard/Wehr is active. It freezes one canonical S-slot actor, uses current-patch Shukuchi 29513 at that actor's revalidated position within 20 yalms, and hard-targets only that same enemy after a client-accepted jump. Positive fresh pressure is only a ranking bonus; missing pressure and unrelated enemy slots never block. Own Guard suppresses the automatic helper, /panicshu remains the sole own-Guard exception, and Purify/reactive CC/Rescue/Guardian retain priority. Proven client-false retries stay same-actor and bounded; continuous hold needs a real cooldown-unavailable to ready epoch before another jump. Adds schema 31 with the option off for new, upgraded, and reset configurations.",
+    "AssemblyVersion": "0.29.0.1",
+    "Changelog": "Hotfixes the default-off exact-CC NIN Auto-Seiton helper so it never ranks or dispatches into Guardian's target-side Covered status, a Paladin's Phalanx self-invulnerability, or Dark Knight Eventide's Undead Redemption. Guard/Wehr itself, the covering Paladin, and Phalanx's party mitigation remain valid. The frozen actor is rechecked before retry, optional cast cancellation, and the final native request; protection drift retires that exact epoch without a call, alternate, or replay. Seiton execute/preparation cues clear while protected, metadata drift disables the helper, and diagnostics expose the blocking status. Manual Seiton and /panicshu are unchanged; schema 31 and every existing option are preserved.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -32,6 +32,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787368875"
+    "LastUpdate": "1787373604"
   }
 ]

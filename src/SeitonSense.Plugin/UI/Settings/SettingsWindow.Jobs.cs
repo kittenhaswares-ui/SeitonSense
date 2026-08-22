@@ -113,7 +113,9 @@ internal sealed partial class SettingsWindow
                 "Default off and exact Crystalline Conflict only. On PvP Ninja, continuous held-key consent can request " +
                 "the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
                 "exact canonical S1-S5 enemies that are living, targetable, below 50% HP, and accepted by FFXIV's native " +
-                "range/line-of-sight check; the lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
+                "range/line-of-sight check. A target with Guardian's Covered status, a Paladin's Phalanx self-" +
+                "invulnerability, or a Dark Knight's Eventide invulnerability is excluded; Guard itself remains valid. " +
+                "The lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
                 "its bounded propagation gate blocks the helper, and existing higher-priority helpers win the shared " +
                 "scheduler frame.");
             ImGui.TextDisabled(
@@ -122,7 +124,8 @@ internal sealed partial class SettingsWindow
                 "epoch immediately. A later genuine 29515-to-29516 follow-up epoch may use the continuing hold, but a " +
                 "rejected base action is never replaced by the follow-up. Seiton Sense never changes the target, selects " +
                 "again inside an epoch, chooses an alternate, falls back, or replays. The frozen actor and its HP are " +
-                "read again at the latest safe point before every request; exactly 50% or higher cancels the intent. " +
+                "read again at the latest safe point before every request; exactly 50% or higher or newly observed " +
+                "Covered/LB invulnerability cancels the intent. " +
                 "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
                 "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
             ImGui.TextDisabled(

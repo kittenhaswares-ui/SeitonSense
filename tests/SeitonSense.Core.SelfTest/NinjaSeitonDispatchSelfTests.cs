@@ -4,6 +4,43 @@ internal static class NinjaSeitonDispatchSelfTests
 {
     private static readonly TargetPressureActorIdentity LocalPlayer = new(10_000, 1_000);
 
+    public static void ExecuteBlockingProtectionStatusSetIsExact()
+    {
+        var blocked = new uint[]
+        {
+            NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId,
+            NinjaSeitonProtectionStatusCatalog.CoveredStatusId,
+            NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId,
+            NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
+            NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId,
+            NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
+        };
+        foreach (var statusId in blocked)
+        {
+            True(
+                NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(statusId),
+                $"status {statusId} blocks Seiton");
+        }
+
+        foreach (var statusId in new uint[]
+                 {
+                     80,    // Cover: covering Paladin, not the protected target.
+                     1_300, // Cover duplicate.
+                     2_412, // Current Cover row.
+                     3_210, // Phalanx: 33% mitigation, not invulnerability.
+                     3_250, // Blade of Faith Ready.
+                     3_033, // Blackblood.
+                     3_837, // Scorn legacy row.
+                     4_290, // Scorn current row.
+                     3_054, // Guard, handled independently by the action itself.
+                 })
+        {
+            False(
+                NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(statusId),
+                $"status {statusId} does not block Seiton");
+        }
+    }
+
     public static void CandidateEligibilityIsExactAndStrict()
     {
         var valid = Candidate(slot: 1, gameObjectId: 20_001, entityId: 2_001, hp: 49, maxHp: 100);
@@ -15,6 +52,10 @@ internal static class NinjaSeitonDispatchSelfTests
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { ExactCanonicalIdentity = false }, LocalPlayer), "noncanonical actor");
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { Alive = false }, LocalPlayer), "dead actor flag");
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { Targetable = false }, LocalPlayer), "untargetable actor");
+        False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with
+        {
+            ExecuteBlockingStatusId = NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
+        }, LocalPlayer), "Covered or invulnerable actor");
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { HasValidActionTarget = false }, LocalPlayer), "native target rejection");
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { HasNativeRangeAndLineOfSight = false }, LocalPlayer), "native range or line of sight rejection");
         False(NinjaSeitonDispatchRules.IsEligibleCandidate(valid with { EnemySlot = 0 }, LocalPlayer), "invalid S-slot");
@@ -46,6 +87,53 @@ internal static class NinjaSeitonDispatchSelfTests
             1,
             NinjaSeitonDispatchRules.SelectBestCandidateIndex(equalRatio, LocalPlayer),
             "equivalent fractions use stable S-slot");
+    }
+
+    public static void ProtectedTargetsAreSkippedAndFrozenProtectionDriftCancels()
+    {
+        var protectedLowest = Candidate(
+            1,
+            20_001,
+            2_001,
+            5,
+            100,
+            executeBlockingStatusId: NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId);
+        var eligible = Candidate(2, 20_002, 2_002, 20, 100);
+        var candidates = new[] { protectedLowest, eligible };
+
+        Equal(
+            1,
+            NinjaSeitonDispatchRules.SelectBestCandidateIndex(candidates, LocalPlayer),
+            "protected lowest target is skipped without invalidating the canonical set");
+
+        foreach (var actionId in new[]
+                 {
+                     NinjaSeitonDispatchRules.BaseActionId,
+                     NinjaSeitonDispatchRules.FollowUpActionId,
+                 })
+        {
+            var intent = new NinjaSeitonDispatchIntent(actionId, eligible.EnemySlot, eligible.Actor);
+            True(
+                NinjaSeitonDispatchRules.CanUseExactIntent(
+                    intent,
+                    eligible,
+                    LocalPlayer,
+                    actionId,
+                    actionLocallyReady: true),
+                $"action {actionId} accepts unchanged unprotected frozen target");
+            False(
+                NinjaSeitonDispatchRules.CanUseExactIntent(
+                    intent,
+                    eligible with
+                    {
+                        ExecuteBlockingStatusId =
+                            NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
+                    },
+                    LocalPlayer,
+                    actionId,
+                    actionLocallyReady: true),
+                $"action {actionId} cancels when frozen target gains protection");
+        }
     }
 
     public static void AmbiguousCanonicalCandidatesFailClosed()
@@ -226,6 +314,15 @@ internal static class NinjaSeitonDispatchSelfTests
                 NinjaSeitonDispatchRules.FollowUpActionId),
             "adjusted follow-up is one distinct epoch");
 
+        var retiredFollowUp = NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(
+            acceptedBase,
+            NinjaSeitonDispatchRules.FollowUpActionId);
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                retiredFollowUp,
+                NinjaSeitonDispatchRules.FollowUpActionId),
+            "spent follow-up epoch cannot reopen after terminal drift");
+
         var acceptedFollowUp = NinjaSeitonDispatchRules.BeginAcceptedHold(
             0x57,
             NinjaSeitonDispatchRules.FollowUpActionId);
@@ -265,7 +362,8 @@ internal static class NinjaSeitonDispatchSelfTests
         ulong gameObjectId,
         uint entityId,
         uint hp,
-        uint maxHp) => new(
+        uint maxHp,
+        uint executeBlockingStatusId = 0) => new(
         slot,
         new TargetPressureActorIdentity(gameObjectId, entityId),
         ExactCanonicalIdentity: true,
@@ -273,6 +371,7 @@ internal static class NinjaSeitonDispatchSelfTests
         Targetable: true,
         hp,
         maxHp,
+        ExecuteBlockingStatusId: executeBlockingStatusId,
         HasValidActionTarget: true,
         HasNativeRangeAndLineOfSight: true);
 

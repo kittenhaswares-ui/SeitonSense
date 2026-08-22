@@ -17,8 +17,10 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     uint TargetEntityId,
     uint RevalidatedCurrentHp,
     uint RevalidatedMaximumHp,
+    uint ExecuteBlockingStatusId,
     bool BoundaryThresholdRevalidated,
     bool ThresholdDriftCancelled,
+    bool ProtectionDriftCancelled,
     bool LocallyReady,
     VirtualKey FreshGameplayKey,
     bool InputClaimed,
@@ -28,6 +30,7 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     long AttemptCount,
     long AcceptedCount,
     long ThresholdDriftCancellationCount,
+    long ProtectionDriftCancellationCount,
     string CandidateResolution,
     string LastEvent)
 {
@@ -41,6 +44,8 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
         0,
         0,
         0,
+        0,
+        false,
         false,
         false,
         false,
@@ -49,6 +54,7 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
         null,
         false,
         false,
+        0,
         0,
         0,
         0,
@@ -74,6 +80,7 @@ internal sealed class NinjaSeitonDispatchProbe
     private long attemptCount;
     private long acceptedCount;
     private long thresholdDriftCancellationCount;
+    private long protectionDriftCancellationCount;
     private long frozenIntentEpochToken;
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
@@ -193,6 +200,8 @@ internal sealed class NinjaSeitonDispatchProbe
         var revalidatedMaximumHp = 0u;
         var boundaryThresholdRevalidated = false;
         var thresholdDriftCancelled = false;
+        var protectionDriftCancelled = false;
+        var observedBlockingStatusId = 0u;
         NinjaSeitonDispatchCandidate? observedCandidate = null;
         if (frozenRetry is { } retry)
         {
@@ -240,11 +249,19 @@ internal sealed class NinjaSeitonDispatchProbe
                             finalResolvedActionId,
                             finalActionReady))
                     {
+                        protectionDriftCancelled =
+                            finalCandidate is { HasExecuteBlockingProtection: true };
                         thresholdDriftCancelled =
+                            !protectionDriftCancelled &&
                             finalCandidate is { } thresholdCandidate &&
                             IsValidAtOrAboveHalf(thresholdCandidate);
+                        if (protectionDriftCancelled)
+                            observedBlockingStatusId =
+                                finalCandidate!.Value.ExecuteBlockingStatusId;
                         SpendFrozenEpisode(retry, latchCircuitBreaker: false);
-                        lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact target/range/threshold drift";
+                        lastEvent = protectionDriftCancelled
+                            ? $"S{retry.Intent.EnemySlot} frozen Seiton cancelled by protection status {finalCandidate!.Value.ExecuteBlockingStatusId}"
+                            : $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact target/range/threshold drift";
                     }
                     else
                     {
@@ -265,9 +282,19 @@ internal sealed class NinjaSeitonDispatchProbe
                             {
                                 castCancellationRequest = CreateCastCancellationRequest(
                                     localPlayer!,
-                                    retry);
-
-                                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton waiting for global native boundary";
+                                    retry,
+                                    out var castBlockingStatusId);
+                                if (castBlockingStatusId != 0)
+                                {
+                                    protectionDriftCancelled = true;
+                                    observedBlockingStatusId = castBlockingStatusId;
+                                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton protection {castBlockingStatusId} blocked cast cancellation";
+                                }
+                                else
+                                {
+                                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton waiting for global native boundary";
+                                }
                             }
                             else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
                                          retry.Retry,
@@ -283,20 +310,28 @@ internal sealed class NinjaSeitonDispatchProbe
                                     out attempted,
                                     out var boundaryCandidate,
                                     out boundaryThresholdRevalidated,
-                                    out thresholdDriftCancelled);
+                                    out thresholdDriftCancelled,
+                                    out protectionDriftCancelled);
                                 observedCandidate = boundaryCandidate ?? observedCandidate;
                                 if (boundaryCandidate is { } observedBoundaryCandidate)
                                 {
                                     revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
                                     revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
+                                    if (observedBoundaryCandidate.HasExecuteBlockingProtection)
+                                    {
+                                        observedBlockingStatusId =
+                                            observedBoundaryCandidate.ExecuteBlockingStatusId;
+                                    }
                                 }
 
                                 accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                                 CompleteAttempt(retry, outcome, nowMilliseconds);
-                                lastEvent = DescribeAttempt(
-                                    retry.Intent,
-                                    retry.Retry.NativeAttemptCount + 1,
-                                    outcome);
+                                lastEvent = protectionDriftCancelled
+                                    ? $"S{retry.Intent.EnemySlot} protection status {observedBlockingStatusId} blocked native Seiton"
+                                    : DescribeAttempt(
+                                        retry.Intent,
+                                        retry.Retry.NativeAttemptCount + 1,
+                                        outcome);
                             }
                         }
                     }
@@ -324,7 +359,8 @@ internal sealed class NinjaSeitonDispatchProbe
                 out attempted,
                 out var boundaryCandidate,
                 out boundaryThresholdRevalidated,
-                out thresholdDriftCancelled);
+                out thresholdDriftCancelled,
+                out protectionDriftCancelled);
             observedCandidate = boundaryCandidate;
             if (boundaryCandidate is { } observedBoundaryCandidate)
             {
@@ -338,10 +374,19 @@ internal sealed class NinjaSeitonDispatchProbe
             {
                 castCancellationRequest = CreateCastCancellationRequest(
                     localPlayer!,
-                    retryIntent);
+                    retryIntent,
+                    out var castBlockingStatusId);
+                if (castBlockingStatusId != 0)
+                {
+                    protectionDriftCancelled = true;
+                    observedBlockingStatusId = castBlockingStatusId;
+                    SpendFrozenEpisode(retryIntent, latchCircuitBreaker: false);
+                }
             }
 
-            lastEvent = DescribeAttempt(intent, 1, outcome);
+            lastEvent = protectionDriftCancelled
+                ? $"S{intent.EnemySlot} protection status {observedBlockingStatusId} blocked Seiton"
+                : DescribeAttempt(intent, 1, outcome);
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -349,6 +394,8 @@ internal sealed class NinjaSeitonDispatchProbe
 
         if (thresholdDriftCancelled)
             Interlocked.Increment(ref thresholdDriftCancellationCount);
+        if (protectionDriftCancelled)
+            Interlocked.Increment(ref protectionDriftCancellationCount);
 
         var selectedCandidate = observedCandidate ?? (decision.SelectedCandidateIndex >= 0 &&
                                 decision.SelectedCandidateIndex < candidates.Count
@@ -364,8 +411,12 @@ internal sealed class NinjaSeitonDispatchProbe
             selectedCandidate?.Actor.EntityId ?? 0,
             revalidatedCurrentHp,
             revalidatedMaximumHp,
+            observedBlockingStatusId != 0
+                ? observedBlockingStatusId
+                : selectedCandidate?.ExecuteBlockingStatusId ?? 0,
             boundaryThresholdRevalidated,
             thresholdDriftCancelled,
+            protectionDriftCancelled,
             actionLocallyReady,
             frozenRetry?.HeldKey ??
             (acceptedHold.OwnsHold ? (VirtualKey)acceptedHold.HeldKeyCode : input.HeldGameplayKey),
@@ -376,6 +427,7 @@ internal sealed class NinjaSeitonDispatchProbe
             Interlocked.Read(ref attemptCount),
             Interlocked.Read(ref acceptedCount),
             Interlocked.Read(ref thresholdDriftCancellationCount),
+            Interlocked.Read(ref protectionDriftCancellationCount),
             candidateResolution,
             lastEvent);
         Volatile.Write(ref snapshot, result);
@@ -394,6 +446,8 @@ internal sealed class NinjaSeitonDispatchProbe
             AcceptedCount = Interlocked.Read(ref acceptedCount),
             ThresholdDriftCancellationCount =
                 Interlocked.Read(ref thresholdDriftCancellationCount),
+            ProtectionDriftCancellationCount =
+                Interlocked.Read(ref protectionDriftCancellationCount),
             LastEvent = lastEvent,
         });
     }
@@ -416,6 +470,8 @@ internal sealed class NinjaSeitonDispatchProbe
             AcceptedCount = Interlocked.Read(ref acceptedCount),
             ThresholdDriftCancellationCount =
                 Interlocked.Read(ref thresholdDriftCancellationCount),
+            ProtectionDriftCancellationCount =
+                Interlocked.Read(ref protectionDriftCancellationCount),
             LastEvent = lastEvent,
         };
         Volatile.Write(ref snapshot, result);
@@ -570,7 +626,10 @@ internal sealed class NinjaSeitonDispatchProbe
             }
         }
 
-        resolution = $"Exact coherent set: {candidates.Count} candidates";
+        var protectedCandidates = candidates.Count(
+            static candidate => candidate.HasExecuteBlockingProtection);
+        resolution =
+            $"Exact coherent set: {candidates.Count} candidates, protected={protectedCandidates}";
         return candidates;
     }
 
@@ -619,6 +678,10 @@ internal sealed class NinjaSeitonDispatchProbe
                                       target,
                                       actionId,
                                       out _);
+        NinjaSeitonProtectionProbe.TryFindExecuteBlockingStatus(
+            target,
+            out var executeBlockingStatusId,
+            out _);
         return new NinjaSeitonDispatchCandidate(
             enemySlot,
             expectedTarget,
@@ -627,6 +690,7 @@ internal sealed class NinjaSeitonDispatchProbe
             target.IsTargetable,
             target.CurrentHp,
             target.MaxHp,
+            executeBlockingStatusId,
             validActionTarget,
             rangeAndLineOfSight);
     }
@@ -637,12 +701,14 @@ internal sealed class NinjaSeitonDispatchProbe
         out bool attempted,
         out NinjaSeitonDispatchCandidate? boundaryCandidate,
         out bool boundaryThresholdRevalidated,
-        out bool thresholdDriftCancelled)
+        out bool thresholdDriftCancelled,
+        out bool protectionDriftCancelled)
     {
         attempted = false;
         boundaryCandidate = null;
         boundaryThresholdRevalidated = false;
         thresholdDriftCancelled = false;
+        protectionDriftCancelled = false;
         if (!HasValidNativeIdentity(localPlayer) ||
             !intent.IsValid)
         {
@@ -657,6 +723,7 @@ internal sealed class NinjaSeitonDispatchProbe
         NinjaSeitonDispatchCandidate? candidateAtBoundary = null;
         var thresholdRevalidatedAtBoundary = false;
         var thresholdDriftAtBoundary = false;
+        var protectionDriftAtBoundary = false;
         var boundaryBefore = default(ClientActionAttemptFingerprint);
         var boundaryAfter = default(ClientActionAttemptFingerprint);
         try
@@ -697,7 +764,11 @@ internal sealed class NinjaSeitonDispatchProbe
                         resolvedActionId,
                         actionLocallyReady: true))
                 {
-                    thresholdDriftAtBoundary = IsValidAtOrAboveHalf(frozenCandidate);
+                    protectionDriftAtBoundary =
+                        frozenCandidate.HasExecuteBlockingProtection;
+                    thresholdDriftAtBoundary =
+                        !protectionDriftAtBoundary &&
+                        IsValidAtOrAboveHalf(frozenCandidate);
                     return false;
                 }
 
@@ -707,12 +778,20 @@ internal sealed class NinjaSeitonDispatchProbe
                 var thresholdResult = ReadFrozenThresholdAtUseActionBoundary(
                     intent,
                     out var currentHp,
-                    out var maximumHp);
+                    out var maximumHp,
+                    out var executeBlockingStatusId);
                 candidateAtBoundary = frozenCandidate with
                 {
                     CurrentHp = currentHp,
                     MaximumHp = maximumHp,
+                    ExecuteBlockingStatusId = executeBlockingStatusId,
                 };
+                if (thresholdResult == BoundaryThresholdResult.Protected)
+                {
+                    protectionDriftAtBoundary = true;
+                    return false;
+                }
+
                 if (thresholdResult != BoundaryThresholdResult.BelowHalf)
                 {
                     thresholdDriftAtBoundary =
@@ -762,16 +841,19 @@ internal sealed class NinjaSeitonDispatchProbe
             boundaryCandidate = candidateAtBoundary;
             boundaryThresholdRevalidated = thresholdRevalidatedAtBoundary;
             thresholdDriftCancelled = thresholdDriftAtBoundary;
+            protectionDriftCancelled = protectionDriftAtBoundary;
         }
     }
 
     private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary(
         NinjaSeitonDispatchIntent intent,
         out uint currentHp,
-        out uint maximumHp)
+        out uint maximumHp,
+        out uint executeBlockingStatusId)
     {
         currentHp = 0;
         maximumHp = 0;
+        executeBlockingStatusId = 0;
         var target = EnemySlotResolver.Resolve(objectTable, intent.EnemySlot);
         if (!HasValidNativeIdentity(target) ||
             target!.GameObjectId != intent.Target.GameObjectId ||
@@ -796,6 +878,14 @@ internal sealed class NinjaSeitonDispatchProbe
             !ExecuteThreshold.HasValidHp(currentHp, maximumHp))
         {
             return BoundaryThresholdResult.InvalidTarget;
+        }
+
+        if (NinjaSeitonProtectionProbe.TryFindExecuteBlockingStatus(
+                target,
+                out executeBlockingStatusId,
+                out _))
+        {
+            return BoundaryThresholdResult.Protected;
         }
 
         return ExecuteThreshold.IsBelowHalf(currentHp, maximumHp)
@@ -833,11 +923,51 @@ internal sealed class NinjaSeitonDispatchProbe
                HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
     }
 
-    private static HeldCastCancellationRequest? CreateCastCancellationRequest(
+    private HeldCastCancellationRequest? CreateCastCancellationRequest(
         IPlayerCharacter localPlayer,
-        FrozenSeitonRetry frozen)
+        FrozenSeitonRetry frozen,
+        out uint executeBlockingStatusId)
     {
-        if (!IsCastCancellationBoundaryReady(localPlayer)) return null;
+        executeBlockingStatusId = 0;
+        if (!IsCastCancellationBoundaryReady(localPlayer) ||
+            !HasValidNativeIdentity(localPlayer))
+        {
+            return null;
+        }
+
+        var currentLocalIdentity = new TargetPressureActorIdentity(
+            localPlayer.GameObjectId,
+            localPlayer.EntityId);
+        if (currentLocalIdentity != frozen.LocalPlayer ||
+            !SeitonReadinessProbe.TryGetReadyAction(
+                localPlayer,
+                out var resolvedActionId) ||
+            resolvedActionId != frozen.Intent.ActionId ||
+            !IsActionResourceReady(resolvedActionId))
+        {
+            return null;
+        }
+
+        var exactCandidate = ResolveFrozenIntent(
+            localPlayer,
+            frozen.Intent,
+            resolvedActionId);
+        if (exactCandidate is not { } candidate) return null;
+        if (candidate.HasExecuteBlockingProtection)
+        {
+            executeBlockingStatusId = candidate.ExecuteBlockingStatusId;
+            return null;
+        }
+
+        if (!NinjaSeitonDispatchRules.CanUseExactIntent(
+                frozen.Intent,
+                candidate,
+                currentLocalIdentity,
+                resolvedActionId,
+                actionLocallyReady: true))
+        {
+            return null;
+        }
 
         var request = new HeldCastCancellationRequest(
             HeldCastCancellationHelperKind.NinjaSeiton,
@@ -884,6 +1014,7 @@ internal sealed class NinjaSeitonDispatchProbe
         InvalidTarget = 1,
         AtOrAboveHalf = 2,
         BelowHalf = 3,
+        Protected = 4,
     }
 
     private static unsafe GameObject* GetNativeObject(IPlayerCharacter? player)
@@ -943,6 +1074,9 @@ internal sealed class NinjaSeitonDispatchProbe
         bool latchCircuitBreaker)
     {
         frozenRetry = null;
+        acceptedHold = NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(
+            acceptedHold,
+            frozen.Intent.ActionId);
         if (latchCircuitBreaker)
             terminalHeldKey = frozen.HeldKey;
     }

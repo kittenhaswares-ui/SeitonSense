@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.29.0.1
+
+- Hotfixed the default-off exact-CC NIN Auto-Seiton helper to exclude an enemy
+  carrying Guardian's target-side `Covered` / `Gedeckt` status, the Paladin
+  caster's Phalanx `Hallowed Ground` self-invulnerability, or Dark Knight
+  Eventide's `Undead Redemption` HP-floor status. Guard / Wehr itself remains a
+  valid Seiton target; the covering Paladin and Phalanx's 33% party mitigation
+  are deliberately not blockers.
+- Applied the same exact numeric-status check before initial ranking, every
+  frozen retry, optional held-cast cancellation, and the latest safe native
+  request boundary. Protection appearing after commitment retires only that
+  exact action/actor epoch without `UseAction`, reranking, an alternate target,
+  or reopening the same Unsealed follow-up while the key stays held.
+- Seiton execute and preparation cues now clear while the exact enemy is
+  protected. Current English status metadata is validated fail-closed, and
+  `/seiton debug` reports the blocking status plus protection-cancel counters.
+  Added two pure Core tests; all `367` Core tests pass.
+- Bumped the plugin version to `0.29.0.1`. Configuration schema remains `31`;
+  this hotfix adds no setting or migration, and manual Seiton plus `/panicshu`
+  are unchanged.
+
 ## 0.29.0.0
 
 - Added a separate default-off NIN held helper for exact Crystalline Conflict.

@@ -309,8 +309,14 @@ internal sealed class ExecuteTracker : IDisposable
             var preparationBand = PersistentSeitonCueRules.IsPreparationBand(
                 player.CurrentHp,
                 player.MaxHp);
+            var executeProtected =
+                NinjaSeitonProtectionProbe.TryFindExecuteBlockingStatus(
+                    player,
+                    out _,
+                    out _);
+            var seitonTargetReady = seitonResourceReady && !executeProtected;
             var inRange = false;
-            if (seitonResourceReady && (belowHalf || preparationBand))
+            if (seitonTargetReady && (belowHalf || preparationBand))
             {
                 inRange = SeitonReadinessProbe.HasRangeAndLineOfSight(
                     localPlayer,
@@ -322,7 +328,7 @@ internal sealed class ExecuteTracker : IDisposable
 
             var cueDecision = PersistentSeitonCueRules.Observe(
                 state.SeitonCue,
-                seitonResourceReady,
+                seitonTargetReady,
                 targetPresent: true,
                 trustedHealthSample: true,
                 player.CurrentHp,
@@ -330,7 +336,9 @@ internal sealed class ExecuteTracker : IDisposable
                 inRange,
                 configuration.ShowSeitonPreparation,
                 now,
-                hardReset: !isNinja || !metadata.SeitonVerified);
+                hardReset: !isNinja ||
+                           !metadata.SeitonVerified ||
+                           executeProtected);
             state.SeitonCue = cueDecision.NextState;
             var showSeiton = cueDecision.Cue == SeitonCueKind.Execute;
             if (showSeiton) seitonSlots++;
