@@ -23,6 +23,7 @@ internal sealed partial class SettingsWindow
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
         var protectionEndRankPressure = !protectionEndRankPresent
@@ -164,6 +165,19 @@ internal sealed partial class SettingsWindow
             $"last-winner pressure={protectionEndRankPressure}, " +
             $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
+            $"NIN Guard-Shukuchi: {guardShukuchi.Decision}/{guardShukuchi.Reason}, " +
+            $"ready/action={guardShukuchi.LocallyReady}/{guardShukuchi.ResolvedActionId}, " +
+            $"candidates={guardShukuchi.CandidateCount}, S={guardShukuchi.EnemySlot}, " +
+            $"target={guardShukuchi.TargetGameObjectId:X}/{guardShukuchi.TargetEntityId:X}, " +
+            $"HP={guardShukuchi.RevalidatedCurrentHp}/{guardShukuchi.RevalidatedMaximumHp}, " +
+            $"guard/distance={guardShukuchi.RevalidatedGuardActive}/{guardShukuchi.RevalidatedDistanceYalms:0.00}, " +
+            $"pressure={guardShukuchi.PressureKnown}/{guardShukuchi.TeamTargetCount}, " +
+            $"key={guardShukuchi.HeldGameplayKey}, claim={guardShukuchi.InputClaimed}, " +
+            $"attempt/accepted/targeted={guardShukuchi.UseActionAttempted}/" +
+            $"{guardShukuchi.UseActionAccepted}/{guardShukuchi.HardTargetConfirmed}, " +
+            $"count={guardShukuchi.AttemptCount}/{guardShukuchi.AcceptedCount}/" +
+            $"{guardShukuchi.TargetConfirmedCount}, last={guardShukuchi.LastEvent}");
+        ImGui.TextWrapped(
             $"Monk Earth's Reply: {monk.Phase}/{monk.Decision}, reason={monk.Reason}, trigger={monk.Trigger}, " +
             $"resonance={monk.ResonancePresent}/{monk.ResonanceRemainingMilliseconds} ms, " +
             $"HP={monk.CurrentHp}/{monk.MaximumHp}, adjusted={monk.AdjustedActionId}, " +
@@ -179,13 +193,14 @@ internal sealed partial class SettingsWindow
             "option is enabled, a fresh living Combat Frame enemy row may write that exact S-slot once as the hard " +
             "target on click and publish it through the two native mouseover slots while hovered; external replacement " +
             "wins, cleanup is ownership-checked, and soft and Focus Targets remain unchanged. Every other module leaves " +
-            "selected hard, soft, Focus, and mouseover targets unchanged. Seiton Sense uploads no gameplay data to an external " +
+            "selected hard, soft, Focus, and mouseover targets unchanged, except that an explicitly enabled NIN " +
+            "Guard-Shukuchi may set its exact jumped-to enemy once after client acceptance. Seiton Sense uploads no gameplay data to an external " +
             "service. Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > " +
+            "The current request order is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > " +
             "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The six job-specific physical-hold helpers share the second tier; reactive comes " +
+            "Kardia > event Monk. The seven job-specific physical-hold helpers share the second tier; reactive comes " +
             "before cleanse because its LB and protection-end windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +

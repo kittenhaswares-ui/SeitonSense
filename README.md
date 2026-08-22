@@ -2,19 +2,17 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.28.0.1 simplifies the explicit
-manual NIN `/panicshu` macro command: each invocation computes one exact terrain
-point 19.5 yalms along the character's facing and immediately makes at most one
-native Shukuchi request, including from the local player's own Guard. It has no
-pending state, 500-ms lease, wait, expiry, automatic trigger, chat-result spam,
-retry, shorter-distance fallback, cursor/target change, or destination
-recomputation. It retains
+assistance, and target highlights. Version 0.29.0.0 adds a separate default-off
+NIN held helper that uses Shukuchi on one exact enemy strictly below 20% HP while
+that enemy has live Guard / Wehr, then hard-targets only that same enemy after a
+client-accepted jump. The explicit manual `/panicshu` command remains immediate,
+target-free, and the sole helper allowed from the local player's own Guard. It retains
 v0.27.1's bounded reactive held-key attachment, exact post-Purify/post-Guard
 episode memory, native pre-rank reachability, three-second NIN protection-end
 lease, and source-sequence-bound automatic landing confirmation; v0.27's
 metadata-verified Forked and Fleeting Raiju variants; plus v0.26's
-Purify-first scheduler and six job-specific second-tier order, optional positive
-pressure ranking, v0.25's stable held-key leases across all ten physical-hold
+Purify-first scheduler and seven job-specific second-tier order, optional positive
+pressure ranking, v0.25's stable held-key leases across all eleven physical-hold
 helpers, separate default-off native cast-cancellation test, and 50-ms/eight-call
 explicit-rejection retry; v0.23's exact ranked post-Purify/post-Guard dispatch;
 v0.21's optional Combat
@@ -495,6 +493,34 @@ its status effect on the protected target. Unknown, missing, stale,
 unsupported, or ambiguous job/action/target/protection state passes through
 unchanged rather than inventing a decision.
 
+## Ninja Guard-Shukuchi held-key helper
+
+The separate **Shukuchi to a guarded enemy below 20% HP on held key** experiment
+is disabled by default and runs only on PvP Ninja in exact Crystalline Conflict.
+It independently resolves canonical `S1`-`S5` actors, so a missing unrelated slot
+does not disable an otherwise exact candidate. The chosen enemy must be alive,
+targetable, strictly below 20% HP, carry a finite positive live Guard / Wehr row
+`3054` or `3673`, and have a finite current position inside Shukuchi's native
+three-dimensional 20-yalm range. Exactly 20%, unknown identity, no live Guard,
+or Three Mudra changing Shukuchi `29513` into Doton `29514` fails closed.
+
+Fresh positive team pressure is an optional ranking bonus; zero, unknown, stale,
+or unavailable pressure is neutral and never gates the helper. Remaining order is
+lowest exact HP ratio, then S-slot and stable actor identity. Selection freezes
+one actor, not a substitute or fallback. Every possible request re-resolves that
+same actor and uses its latest revalidated position. Only a proven client-false
+result may use the common bounded same-actor retry.
+
+The helper calls the ground-targeted Shukuchi location boundary first. Only after
+the client returns accepted does Seiton Sense re-resolve and hard-target that same
+living enemy once. Rejection, ambiguous acceptance, identity drift, death, or
+readback mismatch never changes the selected target. Own Guard and its bounded
+propagation latch block this automatic helper; `/panicshu` remains the sole
+own-Guard exception. A continuing hold may authorize a later Shukuchi only after
+the cooldown was positively observed unavailable and then ready again. It runs
+after PLD Guardian and before NIN Seiton, so Seiton does not spend the frame on a
+Guarded execute target first.
+
 ## Ninja Seiton cues
 
 When your Seiton resource is ready, an enemy is strictly below 50% HP, and the
@@ -518,8 +544,8 @@ exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
 verified Unsealed follow-up `29516`.
 
-Ninja is fifth in the complete request order, after Purify, reactive counter-CC,
-Ally Rescue, and PLD Guardian. It precedes SCH Critical Strategy, DRK Hiebsprung,
+Ninja Seiton follows Purify, reactive counter-CC, Ally Rescue, PLD Guardian, and
+NIN Guard-Shukuchi. It precedes SCH Critical Strategy, DRK Hiebsprung,
 Smart Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk.
 Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
@@ -560,7 +586,7 @@ remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
 The current request order before Scholar is Purify, reactive counter-CC, Ally
-Rescue, PLD Guardian, then NIN Seiton. DRK Hiebsprung follows SCH before Smart
+Rescue, PLD Guardian, NIN Guard-Shukuchi, then NIN Seiton. DRK Hiebsprung follows SCH before Smart
 Recuperate and the generic helpers. Continuous held consent
 can produce a frozen Critical Strategy intent for a distinct eligible episode.
 The frozen enemy is revalidated for exact identity, action readiness, live Guard,
@@ -593,7 +619,7 @@ recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
 target, with no visible target change, alternate, rerank, or replay. The current
-order is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton >
+order is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton >
 SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard >
 pressure Sprint > event Kardia > event Monk**.
 
@@ -898,9 +924,9 @@ client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
 The current request order is **Purify > reactive counter-CC > Ally Rescue > PLD
-Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart
+Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart
 Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**.
-The six job-specific physical-hold helpers share the second tier; reactive
+The seven job-specific physical-hold helpers share the second tier; reactive
 counter-CC wins its deterministic urgency order before ally cleanse because the
 LB and protection-end windows are shorter. Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
@@ -1264,6 +1290,7 @@ focus module to avoid drawing both over the same actor.
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
 | Optional DRK Hiebsprung held-key helper | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
+| Optional NIN Guard-Shukuchi held-key helper | Yes | No | No |
 | Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
@@ -1290,8 +1317,10 @@ Action Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are
 under Job Tools. Reset Defaults clears previews and restores every action,
 target-write, party-visible communication, and Combat Frames master to off.
 
-Configuration schema 30 remains current in v0.28.0.1; this release adds no
-setting or migration. `/panicshu` is command-only and uses the existing global
+Configuration schema 31 is current in v0.29.0.0. The new NIN Guard-Shukuchi held
+option is forced off for upgrading configurations and remains off for fresh and
+Reset Defaults configurations because it both initiates an action and may change
+the exact hard target after client acceptance. `/panicshu` remains command-only and uses the existing global
 plugin enable plus the existing Wolves' Den testing option. The held-action
 cast-cancellation test is explicitly off
 for fresh, reset, and migrated
@@ -1341,7 +1370,7 @@ update through the same repository.
 - `/seiton debug` - print bounded diagnostics, including recent Near Assist,
   selected-target CC-brake resolution, isolation/reactive-defense state, Smart
   Recuperate, accepted-Eukrasia Smart Kardia, Combat Frames interaction/LB
-  telemetry, Auto Low-MP Focus, DRK Hiebsprung/Shadowbringer, Panic Shukuchi,
+  telemetry, Auto Low-MP Focus, NIN Guard-Shukuchi, DRK Hiebsprung/Shadowbringer, Panic Shukuchi,
   retained reactive counter-CC opportunity results, and the held-action cast-
   cancel request/epoch state
 - `/seiton reset` - restore defaults
@@ -1396,9 +1425,9 @@ Help can each replace only the target ID of one explicitly armed, already incomi
 macro action. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
 action helpers use this current request priority: **Purify > reactive counter-CC >
-Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK
+Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK
 Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia >
-event Monk**. The six job-specific physical-hold helpers share the second tier
+event Monk**. The seven job-specific physical-hold helpers share the second tier
 and use that deterministic urgency order; reactive counter-CC leads ally cleanse
 because its LB and protection-end windows are shorter. Kardia requires its
 separate accepted-Eukrasia trigger and does not originate from the physical key;
@@ -1413,7 +1442,7 @@ request. Manual game actions remain outside that protection. Ally Rescue labels 
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-For the ten physical-hold helpers, key choice prefers stable movement, then any
+For the eleven physical-hold helpers, key choice prefers stable movement, then any
 other stable held gameplay key, then fresh movement and fresh other gameplay
 keys as fallbacks. Each helper evaluates its held lease before fresh input and
 retains the exact frozen key until its normal release, ineligibility, reset, or
@@ -1422,8 +1451,9 @@ from displacing a valid long-held WASD lease.
 
 The separate **Cancel my active cast for an otherwise-ready held helper** test
 is disabled by default. It applies only to exact frozen physical-hold intents
-for Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Seiton, SCH Critical
-Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint. Smart
+for Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, NIN
+Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and
+pressure Sprint. Smart
 Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
 all macro helpers are excluded as well.
@@ -1543,6 +1573,22 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
+For v0.29.0.0, source checks pin the new default-off NIN Guard-Shukuchi held
+helper to exact Crystalline Conflict, exact PvP NIN, one living and targetable
+canonical `S1`-`S5` enemy strictly below 20% HP, and a finite positive live
+Guard / Wehr status `3054` or `3673`. Missing unrelated enemy slots and absent,
+zero, unknown, or stale pressure do not block; only fresh positive pressure is a
+ranking bonus before exact HP and stable identity. The selected actor is frozen,
+revalidated without reranking, and used as the sole Shukuchi destination inside
+the native three-dimensional 20-yalm range. Checks pin one reviewed
+`UseActionLocation` boundary, the Three Mudra/Doton block, same-actor bounded
+explicit-false retries, and a single hard-target write only after
+`ClientAccepted`. Own Guard blocks this automatic path, while explicit manual
+`/panicshu` remains the sole own-Guard exception. A continuing hold needs a
+proven cooldown-unavailable to ready transition before another accepted jump.
+These checks cannot prove current-client terrain, line of sight, movement, or
+hard-target timing; those remain live Crystalline Conflict validation points.
+
 For v0.28.0.1, source checks pin `/panicshu` as an explicit NIN-only command with
 one exact 19.5-yalm forward terrain projection and at most one immediate native
 location-action call in the command callback. They prove the absence of pending,
@@ -1566,13 +1612,13 @@ identity drift, and other ambiguity are terminal. Tests cover exact action,
 actor, status/episode memory, bounded current-key attachment followed by strict
 key freezing, no rerank/alternate/target mutation, and
 the priority **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN
-Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic
-Guard > pressure Sprint > event Kardia > event Monk**. The six job-specific
+Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart
+Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**. The seven job-specific
 physical-hold helpers occupy the second tier in that deterministic urgency order;
 Kardia and Monk retain their separate event-driven origins.
 
 The same checks pin stable-movement, stable-other, fresh-movement, then fresh-
-other key selection and held-lease-before-fresh behavior for all ten physical-
+other key selection and held-lease-before-fresh behavior for all eleven physical-
 hold helpers. Cast-cancel checks cover the separate schema-30 default-off toggle,
 exact inclusion/exclusion list, one native cancel request per observed cast,
 void/requested-only diagnostics, no same-frame helper action, fully revalidated
@@ -1610,7 +1656,7 @@ Self gauge trust, remote `LB ?` before complete native-HUD calibration, no charg
 time estimate, live-RemainingTime-origin duration with at most 150 ms of non-
 extending last-expiry preservation, the 1.8-second instant card, and direct
 ally ActionEffect damage without HP-delta inference. Configuration checks pin
-schema 30 migration, fresh/reset defaults, and default-off action/communication/
+schema 31 migration, fresh/reset defaults, and default-off action/communication/
 Combat Frame masters. Hiebsprung checks cover exact DRK/CC context, inclusive
 30% HP, strict 10-yalm plus native reachability, local Bind, Guard/readiness gates,
 one accepted action per proven cooldown epoch, and no target mutation. Reactive
@@ -1622,9 +1668,9 @@ as an optional bonus before HP/trusted MP/stable identity while zero, unknown,
 and stale pressure stay neutral, independent per-`S1`-`S5` Purify
 tracking, one terminal winner, bounded retry for only the selected exact episode,
 a later distinct release epoch without key release, the full priority chain, and
-job-specific native reachability. Configuration checks pin unchanged schema 30,
-the existing cast-cancellation explicit-off migration, and the prior NIN opt-in
-migration to held consent.
+job-specific native reachability. Configuration checks pin schema 31, the new
+Guard-Shukuchi explicit-off migration, the existing cast-cancellation explicit-
+off migration, and the prior NIN opt-in migration to held consent.
 They cannot prove live Eukrasia hook ordering, MP-tick and held-input timing,
 native action acceptance/effects, current client range/line of sight, Combat
 Frame appearance/calibration, native status/resource telemetry, reactive

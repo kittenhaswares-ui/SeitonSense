@@ -20,6 +20,7 @@ internal static class HeldCastCancellationSelfTests
             HeldCastCancellationHelperKind.ReactiveCounterCc,
             HeldCastCancellationHelperKind.AllyRescue,
             HeldCastCancellationHelperKind.Guardian,
+            HeldCastCancellationHelperKind.NinjaGuardShukuchi,
             HeldCastCancellationHelperKind.NinjaSeiton,
             HeldCastCancellationHelperKind.ScholarCriticalStrategy,
             HeldCastCancellationHelperKind.DarkKnightPlunge,

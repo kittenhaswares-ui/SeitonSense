@@ -35,6 +35,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
     private readonly SmartKardiaProbe smartKardia;
+    private readonly NinjaGuardShukuchiProbe ninjaGuardShukuchi;
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly MonkEarthReplyProbe monkEarthReply;
@@ -61,6 +62,7 @@ internal sealed class PersonalStatusService : IDisposable
     internal PersonalStatusService(
         IClientState clientState,
         IObjectTable objectTable,
+        ITargetManager targetManager,
         IPartyList partyList,
         IFramework framework,
         IDutyState dutyState,
@@ -143,6 +145,13 @@ internal sealed class PersonalStatusService : IDisposable
             pressureTracker,
             nearAssist,
             log);
+        ninjaGuardShukuchi = new NinjaGuardShukuchiProbe(
+            clientState,
+            objectTable,
+            targetManager,
+            pressureTracker,
+            nearAssist,
+            log);
         ninjaSeiton = new NinjaSeitonDispatchProbe(
             objectTable,
             executeTracker,
@@ -179,6 +188,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
     internal SmartKardiaProbeSnapshot SmartKardiaDiagnostics => smartKardia.Snapshot;
+    internal NinjaGuardShukuchiProbeSnapshot NinjaGuardShukuchiDiagnostics =>
+        ninjaGuardShukuchi.Snapshot;
     internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
@@ -263,6 +274,7 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
             smartKardia.FailClosed();
+            ninjaGuardShukuchi.FailClosed();
             ninjaSeiton.FailClosed();
             scholarCriticalStrategy.FailClosed();
             monkEarthReply.FailClosed(now);
@@ -303,6 +315,7 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescue.Reset();
             miracleIntercept.Reset();
             smartKardia.Reset();
+            ninjaGuardShukuchi.Reset();
             ninjaSeiton.Reset();
             scholarCriticalStrategy.Reset();
             monkEarthReply.Reset();
@@ -451,6 +464,10 @@ internal sealed class PersonalStatusService : IDisposable
                                               configuration.EnableNinjaSeitonOnHeldGameplayKey &&
                                               isCrystallineConflict &&
                                               isNinja;
+        var ninjaGuardShukuchiConfigurationEnabled = configuration.Enabled &&
+                                                     configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey &&
+                                                     isCrystallineConflict &&
+                                                     isNinja;
         var smartKardiaConfigurationEnabled = configuration.Enabled &&
                                                configuration.EnableSageKardiaAfterEukrasia &&
                                                isCrystallineConflict &&
@@ -520,6 +537,10 @@ internal sealed class PersonalStatusService : IDisposable
                                                isDarkKnight;
         var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&
                                           metadata.SeitonVerified;
+        var ninjaGuardShukuchiHeldInputEnabled =
+            ninjaGuardShukuchiConfigurationEnabled &&
+            metadata.PanicShukuchiVerified &&
+            metadata.GuardVerified;
         var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||
                                             defensiveUtilityHeldInputEnabled ||
                                             paladinGuardianHeldInputEnabled ||
@@ -529,6 +550,7 @@ internal sealed class PersonalStatusService : IDisposable
                                             scholarCriticalStrategyHeldInputEnabled ||
                                             pressureEscapeSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
+                                            ninjaGuardShukuchiHeldInputEnabled ||
                                             ninjaSeitonHeldInputEnabled;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
@@ -540,6 +562,7 @@ internal sealed class PersonalStatusService : IDisposable
              paladinGuardianConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
              miracleInterceptConfigurationEnabled ||
+             ninjaGuardShukuchiHeldInputEnabled ||
              ninjaSeitonHeldInputEnabled ||
              scholarCriticalStrategyHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
@@ -554,6 +577,7 @@ internal sealed class PersonalStatusService : IDisposable
             scholarCriticalStrategyHeldInputEnabled,
             pressureEscapeSprintHeldInputEnabled,
             darkKnightPlungeHeldInputEnabled,
+            ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled,
             ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
@@ -579,6 +603,8 @@ internal sealed class PersonalStatusService : IDisposable
         // Reactive counter-CC has short threat/release windows, so it leads the
         // job-specific tier. Status-bound ally cleanse remains armed and can
         // take the next free frame without losing its exact target/key lease.
+        // Guard-Shukuchi precedes Seiton so a guarded execute target is not
+        // consumed by Seiton before the requested positioning action.
         // The native hook may enqueue after this framework scan began. Refresh
         // the monotonic clock immediately before draining so a same-frame start
         // marker is never rejected as if it came from the future.
@@ -646,6 +672,21 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset);
         var guardianClaimedPriority = defense.InputClaimed;
         now = Environment.TickCount64;
+        var guardShukuchi = ninjaGuardShukuchi.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            ninjaGuardShukuchiConfigurationEnabled,
+            metadata.PanicShukuchiVerified && metadata.GuardVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            allyRescueClaimedPriority ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        now = Environment.TickCount64;
         var ninja = ninjaSeiton.Observe(
             localPlayer,
             isCrystallineConflict,
@@ -656,6 +697,7 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
+            guardShukuchi.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -670,6 +712,7 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
+            guardShukuchi.InputClaimed ||
             ninja.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
@@ -686,6 +729,7 @@ internal sealed class PersonalStatusService : IDisposable
             rescue.UseActionAttempted ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
+            guardShukuchi.InputClaimed ||
             ninja.InputClaimed ||
             scholar.InputClaimed ||
             emergencyInputFrame.IsConsumed,
@@ -696,6 +740,7 @@ internal sealed class PersonalStatusService : IDisposable
         var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority ||
                                              miracle.InputClaimed ||
                                              guardianClaimedPriority ||
+                                             guardShukuchi.InputClaimed ||
                                              ninja.InputClaimed ||
                                              scholar.InputClaimed ||
                                              plunge.InputClaimed;
@@ -806,6 +851,9 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 defense.InputClaimed,
                 defense.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                guardShukuchi.InputClaimed,
+                guardShukuchi.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 ninja.InputClaimed,
                 ninja.CastCancellationRequest) ??
@@ -1191,6 +1239,7 @@ internal sealed class PersonalStatusService : IDisposable
         allyRescue.Reset();
         miracleIntercept.Reset();
         smartKardia.Reset();
+        ninjaGuardShukuchi.Reset();
         ninjaSeiton.Reset();
         scholarCriticalStrategy.Reset();
         monkEarthReply.Reset();

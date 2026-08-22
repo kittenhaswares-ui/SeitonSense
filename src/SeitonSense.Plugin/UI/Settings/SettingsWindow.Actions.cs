@@ -13,8 +13,8 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK " +
-            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The six " +
+            "Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK " +
+            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The seven " +
             "job-specific physical-hold helpers share the second tier; their deterministic urgency order puts reactive " +
             "counter-CC before ally cleanse because its LB and protection-end windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +

@@ -12,8 +12,8 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH " +
-            "Critical Strategy > DRK Hiebsprung. Reactive counter-CC leads because its LB and protection-end windows " +
+            "in deterministic urgency order: reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "NIN Seiton > SCH Critical Strategy > DRK Hiebsprung. Reactive counter-CC leads because its LB and protection-end windows " +
             "are shorter. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
@@ -73,15 +73,37 @@ internal sealed partial class SettingsWindow
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
                 "missed rather than guessed. The shared order is Purify > reactive counter-CC > Ally Rescue > PLD " +
-                "Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
+                "Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
                 "pressure Sprint > event Kardia > event Monk.");
             ImGui.PopTextWrapPos();
         }
 
         ImGui.Separator();
 
-        if (ImGui.CollapsingHeader("Ninja — Seiton", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Ninja — Guard Shukuchi + Seiton", ImGuiTreeNodeFlags.DefaultOpen))
         {
+            changed |= Checkbox(
+                "Shukuchi to a guarded enemy below 20% HP on held key (experimental)",
+                configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey,
+                value => configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off, PvP Ninja, and exact Crystalline Conflict only. An independently resolved exact S1-S5 " +
+                "enemy must be alive, targetable, strictly below 20% HP, and currently have live Guard / Wehr. " +
+                "Shukuchi (29513) uses that same actor's current finite ground position within the native 20-yalm " +
+                "range. Missing unrelated enemy slots and missing pressure never block an otherwise exact target.");
+            ImGui.TextDisabled(
+                "Known positive team pressure is only a ranking bonus; otherwise the lowest exact HP ratio wins, then " +
+                "stable S-slot and actor identity. The helper freezes one actor and never substitutes or reranks. " +
+                "Only a proven client-false result may use the common bounded same-actor retry. Own Guard and its " +
+                "propagation latch block this automatic helper; the explicit /panicshu command remains separate.");
+            ImGui.TextDisabled(
+                "Only after Shukuchi returns client-accepted does Seiton Sense re-resolve and hard-target that exact " +
+                "same living enemy once. Rejection, unknown acceptance, identity drift, or target readback failure never " +
+                "changes your target. A continuing hold may let enabled NIN Seiton use a later framework frame.");
+            ImGui.PopTextWrapPos();
+
+            ImGui.Spacing();
             changed |= Checkbox(
                 "Seiton on held gameplay key (experimental)",
                 configuration.EnableNinjaSeitonOnHeldGameplayKey,
