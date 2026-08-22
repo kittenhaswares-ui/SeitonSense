@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.29.0.0
+
+- Added a separate default-off NIN held helper for exact Crystalline Conflict.
+  It selects only an independently resolved canonical S1-S5 enemy that is alive,
+  targetable, strictly below `20%` HP, currently has live Guard / Wehr status
+  `3054` or `3673`, and is within Shukuchi's native three-dimensional `20`-yalm
+  range. Exactly `20%`, stale identity, missing Guard, Three Mudra's adjusted
+  Doton `29514`, and non-finite positions fail closed.
+- The helper freezes one exact actor and calls ground-targeted Shukuchi `29513`
+  at that actor's latest revalidated position. Positive fresh team pressure is
+  an optional ranking bonus; zero, unknown, stale, or unavailable pressure is
+  neutral and never blocks. Missing unrelated enemy slots do not disable an
+  otherwise exact target. A frozen intent never reranks or substitutes another
+  enemy; only proven client-false feedback may use the common bounded same-actor
+  retry.
+- After a client-accepted Shukuchi, the helper re-resolves and hard-targets that
+  exact same living enemy once. Rejection, unknown acceptance, identity drift,
+  death, or readback mismatch never changes the target. The automatic helper is
+  suppressed by the local player's own Guard and propagation latch; explicit
+  `/panicshu` remains the sole own-Guard-breaking exception.
+- Inserted Guard-Shukuchi after PLD Guardian and before NIN Seiton in the shared
+  scheduler and optional cast-cancel order. A continuing hold can open another
+  Guard-Shukuchi only after a real cooldown-unavailable to ready epoch; frame
+  jitter cannot replay it. Added live diagnostics and nine pure Core tests.
+- Bumped the plugin to `0.29.0.0` and configuration schema to `31`. The new
+  target-mutating action helper is off for new, upgraded, and reset configs.
+
 ## 0.28.0.1
 
 - Simplified the explicit manual NIN `/panicshu` macro into one immediate action

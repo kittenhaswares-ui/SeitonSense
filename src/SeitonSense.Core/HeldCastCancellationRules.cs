@@ -12,12 +12,13 @@ public enum HeldCastCancellationHelperKind : byte
     ReactiveCounterCc = 2,
     AllyRescue = 3,
     Guardian = 4,
-    NinjaSeiton = 5,
-    ScholarCriticalStrategy = 6,
-    DarkKnightPlunge = 7,
-    SmartRecuperate = 8,
-    Guard = 9,
-    PressureEscapeSprint = 10,
+    NinjaGuardShukuchi = 5,
+    NinjaSeiton = 6,
+    ScholarCriticalStrategy = 7,
+    DarkKnightPlunge = 8,
+    SmartRecuperate = 9,
+    Guard = 10,
+    PressureEscapeSprint = 11,
 }
 
 /// <summary>

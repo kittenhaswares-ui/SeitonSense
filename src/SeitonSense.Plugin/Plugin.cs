@@ -197,6 +197,7 @@ public sealed class Plugin : IDalamudPlugin
         personalStatus = new PersonalStatusService(
             clientState,
             objectTable,
+            targetManager,
             partyList,
             framework,
             dutyState,
@@ -643,6 +644,7 @@ public sealed class Plugin : IDalamudPlugin
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
                 var kardia = personalStatus.SmartKardiaDiagnostics;
+                var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
@@ -822,6 +824,24 @@ public sealed class Plugin : IDalamudPlugin
                     $"rejected={limitBreakRuntime.RejectedActivations}/" +
                     $"{limitBreakRuntime.RejectedDamageEvents}]");
                 chatGui.Print($"[Seiton Sense] combat-lb-gauge[{limitBreakGauge.ToTraceLine()}]");
+                chatGui.Print(
+                    $"[Seiton Sense] ninja-guard-shukuchi[decision={guardShukuchi.Decision}," +
+                    $"reason={guardShukuchi.Reason},ready={guardShukuchi.LocallyReady}," +
+                    $"action={guardShukuchi.ResolvedActionId},candidates={guardShukuchi.CandidateCount}," +
+                    $"S={guardShukuchi.EnemySlot},target={guardShukuchi.TargetGameObjectId:X}/" +
+                    $"{guardShukuchi.TargetEntityId:X},hp={guardShukuchi.RevalidatedCurrentHp}/" +
+                    $"{guardShukuchi.RevalidatedMaximumHp},guard={guardShukuchi.RevalidatedGuardActive}," +
+                    $"distance={guardShukuchi.RevalidatedDistanceYalms:0.00}," +
+                    $"destination={guardShukuchi.Destination.X:0.00}/" +
+                    $"{guardShukuchi.Destination.Y:0.00}/{guardShukuchi.Destination.Z:0.00}," +
+                    $"pressure={guardShukuchi.PressureKnown}/{guardShukuchi.TeamTargetCount}," +
+                    $"key={guardShukuchi.HeldGameplayKey},claimed={guardShukuchi.InputClaimed}," +
+                    $"attempt/accepted/target={guardShukuchi.UseActionAttempted}/" +
+                    $"{guardShukuchi.UseActionAccepted}/{guardShukuchi.HardTargetConfirmed}," +
+                    $"count={guardShukuchi.AttemptCount}/{guardShukuchi.AcceptedCount}/" +
+                    $"{guardShukuchi.TargetConfirmedCount},rejected/unknown=" +
+                    $"{guardShukuchi.RejectedCount}/{guardShukuchi.UnknownCount}," +
+                    $"resolve={guardShukuchi.CandidateResolution},last={guardShukuchi.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] ninja-seiton[decision={ninja.Decision},reason={ninja.Reason}," +
                     $"ready={ninja.LocallyReady},action={ninja.ResolvedActionId}," +

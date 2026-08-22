@@ -21,6 +21,9 @@ $darkKnightShadowbringerSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightS
 $panicShukuchiServicePath = Join-Path $pluginServicesRoot 'PanicShukuchiService.cs'
 $panicShukuchiRulesPath = Join-Path $coreRoot 'PanicShukuchiRules.cs'
 $panicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'PanicShukuchiSelfTests.cs'
+$ninjaGuardShukuchiProbePath = Join-Path $pluginServicesRoot 'NinjaGuardShukuchiProbe.cs'
+$ninjaGuardShukuchiRulesPath = Join-Path $coreRoot 'NinjaGuardShukuchiRules.cs'
+$ninjaGuardShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'NinjaGuardShukuchiSelfTests.cs'
 $darkKnightPlungeProbePath = Join-Path $pluginServicesRoot 'DarkKnightPlungeProbe.cs'
 $darkKnightPlungeRulesPath = Join-Path $coreRoot 'DarkKnightPlungeRules.cs'
 $darkKnightPlungeSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightPlungeSelfTests.cs'
@@ -60,6 +63,7 @@ foreach ($check in $forbiddenChecks.GetEnumerator()) {
         # Auto Low-MP Focus owns one reviewed empty-to-exact FocusTarget write.
         # Combat Frame interaction owns one exact hard-target write plus its two
         # exact mouseover publication slots (including conditional exact clears).
+        # NIN Guard-Shukuchi owns one exact accepted-action hard-target write.
         # Every other managed or native target mutation remains globally fatal.
         $matches = @($matches | Where-Object {
             -not (($_.Path -eq $autoLowMpFocusTargetServicePath -and
@@ -69,7 +73,9 @@ foreach ($check in $forbiddenChecks.GetEnumerator()) {
                   ($_.Path -eq $combatFramesTargetingServicePath -and
                    $_.Line -match '^\s*targetManager\.MouseOverNameplateTarget\s*=\s*target;\s*$') -or
                   ($_.Path -eq $combatFramesTargetingServicePath -and
-                   $_.Line -match '^\s*targetManager\.MouseOverTarget\s*=\s*target;\s*$'))
+                   $_.Line -match '^\s*targetManager\.MouseOverTarget\s*=\s*target;\s*$') -or
+                  ($_.Path -eq $ninjaGuardShukuchiProbePath -and
+                   $_.Line -match '^\s*targetManager\.Target\s*=\s*target;\s*$'))
         })
     }
     if ($matches.Count -gt 0) {
@@ -241,6 +247,7 @@ $allowedUnsafe = @(
     $autoLowMpFocusTargetServicePath,
     $darkKnightShadowbringerServicePath,
     $panicShukuchiServicePath,
+    $ninjaGuardShukuchiProbePath,
     $darkKnightPlungeProbePath,
     $combatFrameLimitGaugeServicePath,
     $combatLimitBreakCaptureBufferPath
@@ -309,18 +316,21 @@ foreach ($allowed in $allowedUnsafe) {
 # Target highlighting may read the current and focus targets in one dedicated
 # renderer. Auto Low-MP Focus owns one reviewed empty-to-exact FocusTarget write.
 # Combat Frame interaction owns one reviewed hard-target write plus two managed
-# mouseover slots. Plugin.cs only injects the API.
+# mouseover slots. NIN Guard-Shukuchi owns one accepted-only exact actor target
+# write. Plugin.cs and PersonalStatusService.cs only inject the API.
 $targetManagerMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bITargetManager\b')
 $unexpectedTargetManager = @($targetManagerMatches | Where-Object {
     $_.Path -notin @(
         $pluginPath,
+        $personalStatusPath,
         $targetHighlightPath,
         $autoLowMpFocusTargetServicePath,
-        $combatFramesTargetingServicePath)
+        $combatFramesTargetingServicePath,
+        $ninjaGuardShukuchiProbePath)
 })
 if ($unexpectedTargetManager.Count -gt 0) {
     $locations = $unexpectedTargetManager | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "ITargetManager is allowed only for constructor injection, the read-only renderer, Auto Low-MP Focus, and exact Combat Frame interaction: $($locations -join ', ')"
+    throw "ITargetManager is allowed only for constructor injection, the read-only renderer, Auto Low-MP Focus, exact Combat Frame interaction, and accepted-only NIN Guard-Shukuchi targeting: $($locations -join ', ')"
 }
 $targetHighlight = Read-RequiredSource $targetHighlightPath 'Target highlight renderer'
 Assert-Literals $targetHighlight @(
@@ -342,9 +352,9 @@ if ($targetHighlight -match '(?m)^\s*private\s+(?:readonly\s+)?IGameObject\??\s+
     throw 'Target wrappers must be resolved and discarded within the current draw frame.'
 }
 
-# There are exactly four reviewed managed target-property setter sites: one
-# frozen FocusTarget write, one frozen hard-target write, and two mouseover
-# helper writes whose only null path is a conditional exact owned clear.
+# There are exactly five reviewed managed target-property setter sites: one
+# frozen FocusTarget write, two accepted/revalidated hard-target writes, and two
+# mouseover helper writes whose only null path is a conditional exact owned clear.
 $managedTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\.(Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)')
 $reviewedFocusSetterMatches = @($managedTargetSetterMatches | Where-Object {
     $_.Path -eq $autoLowMpFocusTargetServicePath -and
@@ -354,6 +364,10 @@ $reviewedCombatFrameHardSetterMatches = @($managedTargetSetterMatches | Where-Ob
     $_.Path -eq $combatFramesTargetingServicePath -and
     $_.Line -match '^\s*targetManager\.Target\s*=\s*exactTarget;\s*$'
 })
+$reviewedNinjaGuardShukuchiHardSetterMatches = @($managedTargetSetterMatches | Where-Object {
+    $_.Path -eq $ninjaGuardShukuchiProbePath -and
+    $_.Line -match '^\s*targetManager\.Target\s*=\s*target;\s*$'
+})
 $reviewedCombatFrameMouseOverSetterMatches = @($managedTargetSetterMatches | Where-Object {
     $_.Path -eq $combatFramesTargetingServicePath -and
     $_.Line -match '^\s*targetManager\.MouseOverTarget\s*=\s*target;\s*$'
@@ -362,13 +376,14 @@ $reviewedCombatFrameNameplateMouseOverSetterMatches = @($managedTargetSetterMatc
     $_.Path -eq $combatFramesTargetingServicePath -and
     $_.Line -match '^\s*targetManager\.MouseOverNameplateTarget\s*=\s*target;\s*$'
 })
-if ($managedTargetSetterMatches.Count -ne 4 -or
+if ($managedTargetSetterMatches.Count -ne 5 -or
     $reviewedFocusSetterMatches.Count -ne 1 -or
     $reviewedCombatFrameHardSetterMatches.Count -ne 1 -or
+    $reviewedNinjaGuardShukuchiHardSetterMatches.Count -ne 1 -or
     $reviewedCombatFrameMouseOverSetterMatches.Count -ne 1 -or
     $reviewedCombatFrameNameplateMouseOverSetterMatches.Count -ne 1) {
     $locations = $managedTargetSetterMatches | ForEach-Object { "$($_.Path):$($_.LineNumber):$($_.Line.Trim())" }
-    throw "Exactly four reviewed managed target setter sites are allowed: $($locations -join ', ')"
+    throw "Exactly five reviewed managed target setter sites are allowed: $($locations -join ', ')"
 }
 $nativeTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '(?-i:\b(?:TargetManager|TargetSystem|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget)\b)|->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)')
 if ($nativeTargetSetterMatches.Count -gt 0) {
@@ -1239,6 +1254,95 @@ if ([regex]::Matches($panicShukuchiSelfTests, '(?m)^\s*public static void \w+\(\
     throw 'All eight pure immediate Panic Shukuchi tests and their exact Core registry entries must remain pinned.'
 }
 
+# The automatic NIN Guard-Shukuchi helper is deliberately separate from the
+# immediate /panicshu command. It owns one exact held actor intent, one reviewed
+# location boundary, and one post-acceptance exact hard-target setter.
+$ninjaGuardShukuchiRules = Read-RequiredSource $ninjaGuardShukuchiRulesPath 'NIN Guard-Shukuchi rules'
+$ninjaGuardShukuchiProbe = Read-RequiredSource $ninjaGuardShukuchiProbePath 'NIN Guard-Shukuchi probe'
+$ninjaGuardShukuchiSelfTests = Read-RequiredSource $ninjaGuardShukuchiSelfTestsPath 'NIN Guard-Shukuchi self-tests'
+$normalizedNinjaGuardShukuchiRules = $ninjaGuardShukuchiRules -replace '\s+', ' '
+$normalizedNinjaGuardShukuchiProbe = $ninjaGuardShukuchiProbe -replace '\s+', ' '
+Assert-Literals $ninjaGuardShukuchiRules @(
+    'public const uint NinjaJobId = 30',
+    'public const uint ActionId = 29_513',
+    'public const uint GuardStatusId = 3_054',
+    'public const uint GuardStatusAlternateId = 3_673',
+    'public const float NativeMaximumRangeYalms = 20f',
+    '(ulong)currentHp * 100UL < (ulong)maximumHp * 20UL',
+    'candidate.GuardActive',
+    'candidate.WithinNativeRange',
+    'candidate.Position.IsFinite',
+    'leftPositivePressure',
+    'HasUnambiguousCandidateIdentities',
+    'NinjaGuardShukuchiHoldState BeginAcceptedHold',
+    'ObservedCooldownUnavailable = true',
+    'TrySpendReadyEpoch('
+) 'Pure exact NIN Guard-Shukuchi policy'
+if ($ninjaGuardShukuchiRules -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|IPlayerCharacter|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    $normalizedNinjaGuardShukuchiRules -notmatch 'public static bool IsStrictlyBelowTwentyPercent\(uint currentHp, uint maximumHp\).*?\(ulong\)currentHp \* 100UL < \(ulong\)maximumHp \* 20UL;' -or
+    $normalizedNinjaGuardShukuchiRules -notmatch 'public static bool CanUseExactIntent\(.*?currentCandidate\.EnemySlot == intent\.EnemySlot && currentCandidate\.Actor == intent\.Target && IsEligibleCandidate\(currentCandidate, currentLocal\);') {
+    throw 'Guard-Shukuchi Core must stay pure, use strict overflow-safe <20%, and revalidate only the frozen exact actor.'
+}
+
+Assert-Literals $ninjaGuardShukuchiProbe @(
+    'private const ulong DefaultTargetSentinel = 0xE0000000UL',
+    'MaximumPressureAgeMilliseconds = 250',
+    'EnemySlotResolver.Resolve(objectTable, slot)',
+    'NinjaGuardShukuchiRules.CanUseExactIntent(',
+    'actionManager->GetAdjustedActionId(',
+    'actionManager->IsActionOffCooldown(',
+    'actionManager->CheckActionResources(',
+    'actionManager->UseActionLocation(',
+    'ActionType.Action',
+    'DefaultTargetSentinel',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'outcome == ClientActionAttemptOutcome.ClientAccepted',
+    'TrySetExactHardTargetOnce(intent)',
+    'targetManager.Target = target;',
+    'MatchesExactTarget(targetManager.Target, target)',
+    'HeldCastCancellationHelperKind.NinjaGuardShukuchi',
+    'HeldActionRetryRules.Complete(',
+    'NinjaGuardShukuchiRules.ObserveAcceptedHold(',
+    'NinjaGuardShukuchiRules.TrySpendReadyEpoch(',
+    'IsOwnGuardActiveOrPropagating(localPlayer)',
+    'DefensiveUtilityProbe.HasActiveGuard(localPlayer)',
+    'nearAssist.TryGetRecentExactLocalGuardAttempt(',
+    'DefensiveUtilityRules.GuardPropagationLatchMilliseconds',
+    'float.IsFinite(status.RemainingTime)',
+    'status.RemainingTime > 0f'
+) 'Reviewed held NIN Guard-Shukuchi native and target boundary'
+if ([regex]::Matches($ninjaGuardShukuchiProbe, '\bUseActionLocation\s*\(').Count -ne 1 -or
+    [regex]::Matches($ninjaGuardShukuchiProbe, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
+    [regex]::Matches($ninjaGuardShukuchiProbe, '(?m)^\s*targetManager\.Target\s*=\s*target;\s*$').Count -ne 1 -or
+    $normalizedNinjaGuardShukuchiProbe -notmatch 'NinjaGuardShukuchiRules\.ObserveAcceptedHold\( acceptedHold, hardReset,.*?readinessKnown && resolvedActionId == NinjaGuardShukuchiRules\.ActionId, cooldownReady\);' -or
+    $normalizedNinjaGuardShukuchiProbe -notmatch 'var destination = new Vector3\(.*?if \(IsOwnGuardActiveOrPropagating\(localPlayer\)\) return false; before = ClientActionAttemptBoundary\.Capture\(actionManager, intent\.ActionId\); attemptedAtBoundary = true; var accepted = actionManager->UseActionLocation\(' -or
+    $normalizedNinjaGuardShukuchiProbe -notmatch 'var outcome = attemptedAtBoundary.*?if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\) hardTargetConfirmed = TrySetExactHardTargetOnce\(intent\); return outcome;' -or
+    $normalizedNinjaGuardShukuchiProbe -notmatch 'private bool TrySetExactHardTargetOnce\(NinjaGuardShukuchiIntent intent\).*?EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!?\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\).*?tableTarget!?\.Address != target\.Address.*?targetManager\.Target = target; return MatchesExactTarget\(targetManager\.Target, target\);' -or
+    $ninjaGuardShukuchiProbe -match '\b(?:BGCollisionModule|RaycastMaterialFilter|ResolveWolvesDenDuelOpponent|RetryAction|RetryDispatch|FallbackTarget|AlternateTarget|MouseOverTarget|FocusTarget|SoftTarget)\b') {
+    throw 'Held Guard-Shukuchi must own exactly one same-actor location call and one exact post-client-acceptance hard-target write, with no terrain reroute, alternate, fallback, or other target mutation.'
+}
+
+$ninjaGuardShukuchiTestMethods = @(
+    'ConstantsAndStrictThresholdAreExact',
+    'NativeRangeAndPositionAreExact',
+    'CandidateRequiresEveryGuardLowHpGate',
+    'PositivePressureIsOnlyARankingBonus',
+    'PartialSlotsWorkButAmbiguityFailsClosed',
+    'DispatchRequiresEveryStaticAndInputGate',
+    'FrozenIntentCannotRerankOrDrift',
+    'CastCancellationAndRetryKeepExactIntent',
+    'ContinuousHoldRequiresProvenCooldownRearm'
+)
+foreach ($method in $ninjaGuardShukuchiTestMethods) {
+    Assert-Literals $ninjaGuardShukuchiSelfTests @("public static void $method()") "NIN Guard-Shukuchi test $method"
+    Assert-Literals $panicShukuchiProgram @("NinjaGuardShukuchiSelfTests.$method") "NIN Guard-Shukuchi registration $method"
+}
+if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 9 -or
+    [regex]::Matches($panicShukuchiProgram, '\bNinjaGuardShukuchiSelfTests\.\w+').Count -ne 9 -or
+    $ninjaGuardShukuchiSelfTests -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|IPlayerCharacter|ITargetManager|TargetManager)\b') {
+    throw 'All nine pure Guard-Shukuchi tests and their exact Core registry entries must remain pinned.'
+}
+
 # Action initiation remains globally forbidden except for one exact self-Purify,
 # one exact job-gated ally-rescue, the exact defensive Guard/Guardian boundary,
 # one exact WHM/BRD/NIN reactive-CC boundary, one exact default-off NIN Seiton
@@ -1256,7 +1360,7 @@ $unexpectedAction = @($actionMatches | Where-Object {
         $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedPanicLocationBoundary =
-        $_.Path -eq $panicShukuchiServicePath -and
+        $_.Path -in @($panicShukuchiServicePath, $ninjaGuardShukuchiProbePath) -and
         $_.Line -match '\bUseActionLocation\b'
     $reviewedBrakeDocumentation =
         $_.Path -eq $ccImmunityBrakeTargetRulesPath -and
@@ -1268,7 +1372,7 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only the reviewed action probes, bounded shared macro detour, and explicit PanicShukuchiService location boundary may initiate actions: $($locations -join ', ')"
+    throw "Only the reviewed action probes, bounded shared macro detour, explicit PanicShukuchiService, and held NIN Guard-Shukuchi location boundaries may initiate actions: $($locations -join ', ')"
 }
 
 # All party-visible commands share one closed, typed dispatcher. It remains the
@@ -2485,8 +2589,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 356) {
-    throw 'All four shared protection-end tests and the exact 356-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 365) {
+    throw 'All four shared protection-end tests and the exact 365-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -2661,6 +2765,8 @@ Assert-Literals $emergencyInputCoordinator @(
     'pressureEscapeHeldWasEnabled',
     'darkKnightPlungeHeldEnabled',
     'darkKnightPlungeHeldWasEnabled',
+    'ninjaGuardShukuchiHeldEnabled',
+    'ninjaGuardShukuchiHeldWasEnabled',
     'ninjaSeitonHeldEnabled',
     'ninjaSeitonHeldWasEnabled',
     'IsGameplayKeyPhysicallyDown(VirtualKey key)',
@@ -2668,7 +2774,7 @@ Assert-Literals $emergencyInputCoordinator @(
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared physical-hold input ownership for Purify > reactive CC > Ally Rescue > PLD Guardian > NIN > SCH > DRK Plunge > Smart Recuperate > generic Guard > pressure Sprint'
+) 'Shared physical-hold input ownership for Purify > reactive CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH > DRK Plunge > Smart Recuperate > generic Guard > pressure Sprint'
 if ($normalizedEmergencyInputCoordinator -notmatch 'internal bool FreshGameplayKeyPressed => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.FreshGameplayKeyPressed;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool HeldGameplayKeyEligible => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.HeldGameplayKeyEligible;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;' -or
@@ -2799,12 +2905,13 @@ Assert-Literals $heldCastCancellationRules @(
     'ReactiveCounterCc = 2,',
     'AllyRescue = 3,',
     'Guardian = 4,',
-    'NinjaSeiton = 5,',
-    'ScholarCriticalStrategy = 6,',
-    'DarkKnightPlunge = 7,',
-    'SmartRecuperate = 8,',
-    'Guard = 9,',
-    'PressureEscapeSprint = 10,',
+    'NinjaGuardShukuchi = 5,',
+    'NinjaSeiton = 6,',
+    'ScholarCriticalStrategy = 7,',
+    'DarkKnightPlunge = 8,',
+    'SmartRecuperate = 9,',
+    'Guard = 10,',
+    'PressureEscapeSprint = 11,',
     'HeldCastCancellationRequest(',
     'TargetPressureActorIdentity LocalPlayer,',
     'TargetPressureActorIdentity Target,',
@@ -2818,7 +2925,7 @@ Assert-Literals $heldCastCancellationRules @(
     'HeldCastCancellationDecisionReason.CastSignalChangedWithoutClear',
     'HeldCastCancellationDecisionReason.LocalPlayerChanged',
     'next = next with { CancellationRequested = true };'
-) 'Exact ten-helper cast cancellation request and once-per-cast state'
+) 'Exact eleven-helper cast cancellation request and once-per-cast state'
 if ($normalizedHeldCastCancellationRules -notmatch 'var anyCastSignal = observation\.LocalPlayerIsCasting \|\| observation\.CastActionId != 0; if \(!anyCastSignal\).*?CastEpochActive = false, CancellationRequested = false, CastSignalMismatch = false, ObservedCastActionId = 0, ObservedLocalPlayer = default, LocalPlayerIdentityMismatch = false,' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(state\.ObservedCastActionId != 0 && observation\.CastActionId != 0 && state\.ObservedCastActionId != observation\.CastActionId\).*?CastSignalMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(next\.ObservedLocalPlayer != observation\.CurrentLocalPlayer\).*?LocalPlayerIdentityMismatch = true' -or
@@ -2898,6 +3005,7 @@ $castRequestProducers = @(
     [pscustomobject]@{ Path = $miracleInterceptProbePath; Kind = 'ReactiveCounterCc'; Count = 1 },
     [pscustomobject]@{ Path = $allyRescueProbePath; Kind = 'AllyRescue'; Count = 1 },
     [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guardian'; Count = 1 },
+    [pscustomobject]@{ Path = $ninjaGuardShukuchiProbePath; Kind = 'NinjaGuardShukuchi'; Count = 1 },
     [pscustomobject]@{ Path = $ninjaSeitonProbePath; Kind = 'NinjaSeiton'; Count = 1 },
     [pscustomobject]@{ Path = $scholarCriticalStrategyProbePath; Kind = 'ScholarCriticalStrategy'; Count = 1 },
     [pscustomobject]@{ Path = $darkKnightPlungeProbePath; Kind = 'DarkKnightPlunge'; Count = 1 },
@@ -2909,8 +3017,8 @@ $castRequestProducerPaths = @($castRequestProducers.Path | Sort-Object -Unique)
 $allCastRequestProducerSource = ($castRequestProducerPaths | ForEach-Object {
     Read-RequiredSource $_ "Held cast cancellation request producer $_"
 }) -join "`n"
-if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 10) {
-    throw 'Production runtime must construct exactly ten cast-cancellation request shapes, one for each physical-hold helper.'
+if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 11) {
+    throw 'Production runtime must construct exactly eleven cast-cancellation request shapes, one for each physical-hold helper.'
 }
 foreach ($producer in $castRequestProducers) {
     $producerSource = Read-RequiredSource $producer.Path "Cast-cancellation producer $($producer.Kind)"
@@ -2930,10 +3038,10 @@ $castSelection = [regex]::Match(
     $normalizedHeldCastPersonalStatus,
     'var castCancellationRequest =(?<Body>.*?)heldCastCancellation\.Observe\(')
 if (-not $castSelection.Success -or
-    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 10 -or
-    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
+    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 11 -or
+    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
     $castSelection.Groups['Body'].Value -match '\b(kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > reactive CC > Rescue > Guardian > NIN > SCH > DRK > Recuperate > Guard > Sprint order, excluding Kardia and Monk.'
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > reactive CC > Rescue > Guardian > Guard-Shukuchi > NIN > SCH > DRK > Recuperate > Guard > Sprint order, excluding Kardia and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -2962,9 +3070,9 @@ $normalizedCastConfiguration = $castConfiguration -replace '\s+', ' '
 if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*$' -or
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?Version = 30;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 30;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 30 must keep held-helper cast cancellation plain default-false, force it off on migration, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 31;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 31 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -3216,6 +3324,15 @@ Assert-Literals $personalStatus @(
     'configuration.ReactiveCcDancerLimitBreak',
     'configuration.ReactiveCcAfterEnemyPurify',
     'configuration.ReactiveCcAfterEnemyGuard',
+    'configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey',
+    'ninjaGuardShukuchiConfigurationEnabled',
+    'new NinjaGuardShukuchiProbe(',
+    'NinjaGuardShukuchiProbeSnapshot NinjaGuardShukuchiDiagnostics',
+    'metadata.PanicShukuchiVerified && metadata.GuardVerified',
+    'ninjaGuardShukuchi.Observe(',
+    'guardShukuchi.InputClaimed',
+    'ninjaGuardShukuchi.FailClosed()',
+    'ninjaGuardShukuchi.Reset()',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'ninjaSeitonConfigurationEnabled',
     'new NinjaSeitonDispatchProbe(',
@@ -3253,8 +3370,10 @@ Assert-Literals $personalStatus @(
     'var scholarCriticalStrategyHeldInputEnabled =',
     'var pressureEscapeSprintHeldInputEnabled = configuration.Enabled &&',
     'var darkKnightPlungeHeldInputEnabled = darkKnightPlungeConfigurationEnabled &&',
+    'var ninjaGuardShukuchiHeldInputEnabled =',
     'var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&',
     'var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||',
+    'ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled',
     'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled'
 ) 'Guard-independent persistent physical held-input observation gates'
 if ($normalizedPersonalStatus -notmatch 'miracleIntercept = new MiracleInterceptProbe\( objectTable, nearAssist\.VerifiedCcBrakeActionIds, nearAssist\.VerifiedCcBrakeStatusIds, executeTracker, pressureTracker, nearAssist, machinistLimitBreakCapture, log, metadata\);' -or
@@ -3278,6 +3397,7 @@ Assert-Literals $personalStatus @(
     'hasPurifyRemovableCrowdControl ||',
     'var allyRescueClaimedPriority = rescue.InputClaimed;',
     'var guardianClaimedPriority = defense.InputClaimed;',
+    'guardShukuchi.InputClaimed ||',
     'var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority ||',
     'plunge.InputClaimed;',
     'var smartRecuperateClaimedPriority = recuperate.InputClaimed;',
@@ -3286,20 +3406,23 @@ Assert-Literals $personalStatus @(
     'guardianClaimedPriority;',
     'var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
+    'configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey',
+    'ninjaGuardShukuchiHeldEnabled:',
     'ninjaSeitonHeldEnabled:',
     'ninja.InputClaimed ||',
     'scholar.InputClaimed ||',
     'emergencyInputFrame.IsConsumed'
 ) 'Frame-local absolute priority claims across every held helper'
 if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?purifyClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: true\)' -or
-    $normalizedPersonalStatus -notmatch 'var ninja = ninjaSeiton\.Observe\(.*?purifyClaimedPriority \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?guardianClaimedPriority \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
-    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
-    throw 'The runtime must propagate frame-local priority exactly as Purify > reactive CC > Rescue > Guardian > NIN > SCH > DRK > Recuperate > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
+    $normalizedPersonalStatus -notmatch 'var guardShukuchi = ninjaGuardShukuchi\.Observe\(.*?guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var ninja = ninjaSeiton\.Observe\(.*?guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
+    throw 'The runtime must propagate frame-local priority exactly as Purify > reactive CC > Rescue > Guardian > Guard-Shukuchi > NIN > SCH > DRK > Recuperate > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
 }
-if ($normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
+if ($normalizedPersonalStatus -notmatch 'var ninjaGuardShukuchiConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaGuardShukuchiOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
+    $normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
     $normalizedPersonalStatus -match '\bsmartKardiaHeldEnabled\b' -or
     $normalizedPersonalStatus -notmatch 'var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var kardia = smartKardia\.Observe\(.*?pressureEscapeClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var monk = monkEarthReply\.Observe\(.*?kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
-    throw 'Event Kardia and event Monk must remain last after all ten physical-hold helpers, with no held-Kardia slot and no consumed-frame overtake.'
+    throw 'Event Kardia and event Monk must remain last after all eleven physical-hold helpers, with no held-Kardia slot and no consumed-frame overtake.'
 }
 if ($personalStatus -match '\bstatus\.Address\b|\bStatusAddress\b') {
     throw 'Personal status scanning must never gate on status.Address.'
@@ -7150,7 +7273,14 @@ Assert-Literals $settingsWindow @(
     'configuration.PaladinGuardianOnHeldKey',
     'Purify, reactive counter-CC, and Ally Rescue keep priority. Guardian then wins before NIN, SCH, DRK,',
     'Smart Recuperate, generic Guard, and pressure Sprint.',
-    'Ninja — Seiton',
+    'Ninja — Guard Shukuchi + Seiton',
+    'Shukuchi to a guarded enemy below 20% HP on held key (experimental)',
+    'configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey',
+    'strictly below 20% HP, and currently have live Guard / Wehr',
+    'Missing unrelated enemy slots and missing pressure never block an otherwise exact target.',
+    'Known positive team pressure is only a ranking bonus',
+    'Only after Shukuchi returns client-accepted does Seiton Sense re-resolve and hard-target that exact',
+    'A continuing hold may let enabled NIN Seiton use a later framework frame.',
     'Seiton on held gameplay key (experimental)',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'Default off and exact Crystalline Conflict only.',
@@ -7249,7 +7379,7 @@ Assert-Literals $settingsWindow @(
     'Warn when no party ally is within 20y and line of sight',
     'configuration.WarnWhenIsolated',
     'configuration.EnableAutoEnemyFocusMark',
-    'Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK',
+    'Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK',
     'Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk.',
     'Enable held-key Purify for enabled removable CC',
     'Also allow a key that was already held when the debuff appeared (includes WASD)',
@@ -7681,10 +7811,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.28.0.1</Version>',
-    '<AssemblyVersion>0.28.0.1</AssemblyVersion>',
-    '<FileVersion>0.28.0.1</FileVersion>'
-) 'v0.28.0.1 project version'
+    '<Version>0.29.0.0</Version>',
+    '<AssemblyVersion>0.29.0.0</AssemblyVersion>',
+    '<FileVersion>0.29.0.0</FileVersion>'
+) 'v0.29.0.0 project version'
 Assert-Literals $pluginManifest @(
     'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
@@ -7698,20 +7828,19 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.28.0.1 plugin manifest metadata'
+) 'v0.29.0.0 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.28.0.1"',
-    'Simplifies the explicit NIN /panicshu macro into one immediate Shukuchi request',
-    'terrain point 19.5 yalms along the character''s facing',
-    'intentionally allowed from own Guard so Shukuchi may break it',
-    'former pending state, 500-ms lease, scheduler/Purify priority, wait, expiry, cast/queue/animation-lock gate, cooldown/resource precheck',
-    'FFXIV immediately accepts or rejects its sole native request',
-    'no automatic retry or replay',
-    'opt-in Wolves'' Den testing',
-    'Three Mudra/Doton block',
-    'no cursor/target mutation, shorter fallback, alternate action, or destination recomputation',
-    'Schema 30 is unchanged.'
-) 'v0.28.0.1 immediate manual Panic Shukuchi repository metadata'
+    '"AssemblyVersion": "0.29.0.0"',
+    'default-off exact CC NIN held helper',
+    'strictly below 20% HP while live Guard/Wehr is active',
+    'Shukuchi 29513 at that actor''s revalidated position within 20 yalms',
+    'hard-targets only that same enemy after a client-accepted jump',
+    'Positive fresh pressure is only a ranking bonus',
+    'Own Guard suppresses the automatic helper',
+    '/panicshu remains the sole own-Guard exception',
+    'continuous hold needs a real cooldown-unavailable to ready epoch',
+    'schema 31 with the option off for new, upgraded, and reset configurations'
+) 'v0.29.0.0 NIN Guard-Shukuchi repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7727,9 +7856,10 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.28.0.1 simplifies the explicit manual NIN `/panicshu` macro command',
-    'immediately makes at most one native Shukuchi request, including from the local player''s own Guard',
-    'no pending state, 500-ms lease, wait, expiry, automatic trigger, chat-result spam, retry, shorter-distance fallback, cursor/target change, or destination recomputation',
+    'Version 0.29.0.0 adds a separate default-off NIN held helper',
+    'one exact enemy strictly below 20% HP while that enemy has live Guard / Wehr',
+    'hard-targets only that same enemy after a client-accepted jump',
+    'manual `/panicshu` command remains immediate, target-free, and the sole helper allowed from the local player''s own Guard',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end',
     'bind only at authoritative protection end inside the original 500-ms release window',
@@ -7739,16 +7869,16 @@ Assert-Literals $normalizedReadme @(
     'pre-rank native reachability/blocker filtering',
     'the NIN-only 3-second protection-end lease',
     'exact source-sequence confirmation',
-    'Purify-first scheduler and six job-specific second-tier order',
+    'Purify-first scheduler and seven job-specific second-tier order',
     'optional positive pressure ranking',
-    'stable held-key leases across all ten physical-hold helpers',
+    'stable held-key leases across all eleven physical-hold helpers',
     '**Experimental held-action cast cancellation:** a separate default-off test',
     'never requests the helper in that same frame, synthesizes movement or Escape, clears the queue, or changes a target',
     'void cancel call reports only `requested`, not confirmed',
-    'For the ten physical-hold helpers, key choice prefers stable movement, then any other stable held gameplay key, then fresh movement and fresh other gameplay keys as fallbacks',
+    'For the eleven physical-hold helpers, key choice prefers stable movement, then any other stable held gameplay key, then fresh movement and fresh other gameplay keys as fallbacks',
     'Each helper evaluates its held lease before fresh input and retains the exact frozen key until its normal release, ineligibility, reset, or terminal action-specific boundary',
     'Cancel my active cast for an otherwise-ready held helper',
-    'Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
+    'Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
     'Smart Kardia and Monk Earth''s Reply are excluded because they do not originate from held input',
     'every already-incoming manual/Turbo redirect, including Paean, and all macro helpers are excluded as well',
     'When the highest-priority frozen intent passes its ordinary action, actor/ target, status/episode, key, context, Guard, resource, cooldown, range, line-of- sight, empty-queue, and animation-lock gates and only the local cast remains in the way',
@@ -7760,10 +7890,24 @@ Assert-Literals $normalizedReadme @(
     'later frame that observes both cast signals clear may run the normal complete helper preflight again',
     'does not synthesize movement or Escape, clear the native action queue, write cast state, or mutate a selected target',
     'Stationary casts and mobile BRD Powerful Shot / MCH Blast Charge still require current-patch live validation',
-    'Configuration schema 30 remains current in v0.28.0.1',
-    'this release adds no setting or migration',
+    'Configuration schema 31 is current in v0.29.0.0',
+    'NIN Guard-Shukuchi held option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test is explicitly off for fresh, reset, and migrated configurations'
-) 'v0.28.0.1 immediate Panic Shukuchi plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+) 'v0.29.0.0 Guard-Shukuchi plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.29.0.0',
+    'separate default-off NIN held helper for exact Crystalline Conflict',
+    'strictly below `20%` HP',
+    'live Guard / Wehr status `3054` or `3673`',
+    'freezes one exact actor and calls ground-targeted Shukuchi `29513` at that actor''s latest revalidated position',
+    'Positive fresh team pressure is an optional ranking bonus',
+    'hard-targets that exact same living enemy once',
+    '`/panicshu` remains the sole own-Guard-breaking exception',
+    'after PLD Guardian and before NIN Seiton',
+    'real cooldown-unavailable to ready epoch',
+    'configuration schema to `31`',
+    'off for new, upgraded, and reset configs'
+) 'v0.29.0.0 NIN Guard-Shukuchi release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.28.0.1',
     'Simplified the explicit manual NIN `/panicshu` macro into one immediate action path',
@@ -7808,8 +7952,8 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 30 remains current in v0.28.0.1'
-) 'v0.28.0.1 Panic Shukuchi transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
+    'Configuration schema 31 is current in v0.29.0.0'
+) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
     'Fixed the v0.27 reactive held-key regression without widening any event deadline',
@@ -7898,7 +8042,7 @@ Assert-Literals $normalizedChangelog @(
 Assert-Literals $normalizedPrivacy @(
     '## Experimental held-action cast cancellation',
     'This separate test is disabled by default',
-    'exact physical-hold intents for Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
+    'exact physical-hold intents for Purify, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, and pressure Sprint',
     'Smart Kardia, Monk Earth''s Reply, every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded',
     'highest-priority eligible intent',
     'rechecks exact local and target identity, held key, context, own Guard, helper action/readiness/resources, empty queue, and nonblocking animation lock',
@@ -7912,16 +8056,16 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 30 remains current in v0.28.0.1',
-    'this release adds no setting or migration',
+    'Configuration schema 31 is current in v0.29.0.0',
+    'new NIN Guard-Shukuchi held- key option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.28.0.1 simplifies the explicit manual NIN `/panicshu` macro command',
+    'Version 0.29.0.0 adds a separate default-off NIN held helper',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end inside the original 500-ms release window',
     'no different key can inherit the intent after binding',
-    'stable held-key leases across all ten physical-hold helpers',
+    'stable held-key leases across all eleven physical-hold helpers',
     'off native cast-cancellation test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
@@ -8354,14 +8498,14 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 30 remains current in v0.28.0.1; this release adds no setting or migration',
+    'Configuration schema 31 is current in v0.29.0.0',
+    'NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
     'Every other existing master/helper choice is preserved',
-    'Fresh and reset configurations keep Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-helper masters off',
     'post-Guard defaults on only behind the disabled reactive-counter master',
     'Older configurations still traverse the earlier migrations first'
-) 'v0.27.1.0 retained Auto Focus/exact Den-dummy DRK transient-data plus unchanged schema-30 disclosure'
+) 'v0.29.0.0 retained Auto Focus/exact Den-dummy DRK transient-data plus schema-31 disclosure'
 Assert-Literals $normalizedPrivacy @(
     'When its separate interaction option is enabled, Combat Frames may set one freshly revalidated living enemy row as the hard target on click and publish that exact actor to FFXIV''s two native mouseover slots only while hovered',
     'ownership-checked cleanup never overwrites an external replacement',
@@ -8447,10 +8591,10 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 30 remains current in v0.28.0.1; this release adds no'
+    'Configuration schema 31 is current in v0.29.0.0'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
+    'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
     'One framework frame permits at most one held-helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
 ) 'v0.27.1.0 exact action-request priority privacy disclosure'
@@ -8512,7 +8656,7 @@ $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConf
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 30',
+    'public int Version { get; set; } = 31',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -8604,6 +8748,7 @@ Assert-Literals $configuration @(
     'if (Version < 26)',
     'public bool EnableSageKardiaAfterEukrasia { get; set; }',
     'public bool EnableSmartRecuperateOnHeldKey { get; set; }',
+    'public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }',
     'public bool AllowHeldHelpersToCancelOwnCast { get; set; }',
     'public bool PaladinGuardianOnHeldKey { get; set; } = true',
     'var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;',
@@ -8630,7 +8775,9 @@ Assert-Literals $configuration @(
     'EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;',
     'if (Version < 30)',
     'AllowHeldHelpersToCancelOwnCast = false;',
-    'Version = 30',
+    'if (Version < 31)',
+    'EnableNinjaGuardShukuchiOnHeldGameplayKey = false;',
+    'Version = 31',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -8657,7 +8804,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-30 cast-cancel default-off plus retained NIN held-consent, post-Guard, Combat Frames interaction/LB, DRK Hiebsprung, Survival, Smart Kardia, Guardian, Auto Focus/DRK, and prior migrations'
+) 'Schema-31 Guard-Shukuchi and cast-cancel default-off plus retained NIN held-consent, post-Guard, Combat Frames interaction/LB, DRK Hiebsprung, Survival, Smart Kardia, Guardian, Auto Focus/DRK, and prior migrations'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -8739,9 +8886,14 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaSeitonOnFreshGamepl
     [regex]::Matches($configuration, '\bEnableNinjaSeitonOnHeldGameplayKey\s*=\s*EnableNinjaSeitonOnFreshGameplayKey\s*;').Count -ne 1) {
     throw 'Schema 29 must migrate only an explicit legacy NIN fresh-edge opt-in to held consent, clear the compatibility field, and keep fresh/reset NIN automation off.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*30\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 30\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?if \(Version < 25\).*?EnableSageKardiaOnHeldKey = false;.*?if \(Version < 26\).*?var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;.*?PaladinGuardianLowAlly = guardianWasEnabled;.*?PaladinGuardianOnHeldKey = DefensiveUtilitiesOnHeldKey;.*?EnableSageKardiaAfterEukrasia = EnableSageKardiaOnHeldKey;.*?EnableSageKardiaOnHeldKey = false;.*?EnableSmartRecuperateOnHeldKey = false;.*?PreGuardOnLowHpPressure = false;.*?ShowCombatFrames = false;.*?if \(Version < 27\).*?EnableDarkKnightPlungeOnHeldKey = false;.*?CombatFramesEnableInteraction = false;.*?CombatFramesShowLimitBreaks = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?if \(Version < 28\).*?ReactiveCcAfterEnemyGuard = false;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?Version = 30;') {
-    throw 'Schema 30 must fast-path current settings, preserve every earlier migration including the explicit legacy NIN opt-in mapping, force the new cast-cancel side effect off, and retain all reviewed default-off action/target-write boundaries.'
+if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*$' -or
+    [regex]::Matches($configuration, '\bEnableNinjaGuardShukuchiOnHeldGameplayKey\s*=\s*false\s*;').Count -lt 2 -or
+    $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
+}
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*31\s*;').Count -lt 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 31\).*?return;.*?if \(Version < 17\).*?EnableDefensiveUtilities = false;.*?EnableReactiveCcUtilities = ExperimentalMiracleInterceptOnHeldKey;.*?ReactiveCcDancerLimitBreak = false;.*?ReactiveCcAfterEnemyPurify = MiracleInterceptAfterPurifiedStun;.*?if \(Version < 18\).*?NearHelpPreferIncomingPressure = true;.*?if \(Version < 19\).*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 20\).*?PaladinGuardianAnnounceAndMark = false;.*?if \(Version < 21\).*?EnableScholarCriticalStrategyOnHeldKey = false;.*?if \(Version < 22\).*?EnableBardWardensPaeanPressureRedirect = false;.*?if \(Version < 23\).*?ShowHighPressureWarning = false;.*?PlayHighPressureWarningSound = false;.*?HighPressureWarningSoundId = 6;.*?EnablePressureEscapeSprintOnHeldKey = false;.*?if \(Version < 24\).*?EnableAutoLowMpFocusTarget = false;.*?EnableDarkKnightShadowbringerMacro = false;.*?if \(Version < 25\).*?EnableSageKardiaOnHeldKey = false;.*?if \(Version < 26\).*?var guardianWasEnabled = EnableDefensiveUtilities && PaladinGuardianLowAlly;.*?PaladinGuardianLowAlly = guardianWasEnabled;.*?PaladinGuardianOnHeldKey = DefensiveUtilitiesOnHeldKey;.*?EnableSageKardiaAfterEukrasia = EnableSageKardiaOnHeldKey;.*?EnableSageKardiaOnHeldKey = false;.*?EnableSmartRecuperateOnHeldKey = false;.*?PreGuardOnLowHpPressure = false;.*?ShowCombatFrames = false;.*?if \(Version < 27\).*?EnableDarkKnightPlungeOnHeldKey = false;.*?CombatFramesEnableInteraction = false;.*?CombatFramesShowLimitBreaks = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?if \(Version < 28\).*?ReactiveCcAfterEnemyGuard = false;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?Version = 31;') {
+    throw 'Schema 31 must fast-path current settings, preserve every earlier migration including the explicit legacy NIN opt-in mapping, keep cast cancellation off, force Guard-Shukuchi off, and retain all reviewed default-off action/target-write boundaries.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -8805,4 +8957,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.28.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 30 and the exact 356-test Core registry. /panicshu remains an explicit manual NIN command with one immediate 19.5-yalm terrain request in its command callback, intentionally allowed from own Guard, and no pending state, 500-ms lease, wait, expiry, scheduler/readiness gate, routine chat-result output, automatic trigger, target/cursor mutation, retry, fallback, or alternate action. Runtime held-helper priority remains Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. Reactive episodes remember exact actor/action/event identity first: urgent startup may attach only the first eligible generation inside its original lease, while Purify/Guard bind the current exact key only at authoritative protection end or inside the original 500-ms release opportunity. Once bound, release, text-input poisoning, identity drift, and ambiguity cannot substitute another key or target. Exact sequenced self-Purify action evidence is allowed without an exposed recovered-status tuple, but positive live Resilience and later authoritative absence remain mandatory. Blocker-free native reachability filters protection-end candidates before pressure/HP/MP ranking. WHM/BRD retain 1,500 ms while NIN gets exactly 3,000 ms for its verified 2.5-second Raiju recast plus the existing release allowance. Reactive-CC and Ally Rescue confirmations require a client-accepted request and its advanced non-zero exact SourceSequence, so manual actions cannot claim AUTO. No reactive path owns a native queue/timer or mutates a selected target. The ordinary exact-intent retry remains bounded to explicit client rejection after 50 ms with eight calls maximum; acceptance and ambiguity are terminal."
+Write-Host "Seiton Sense v0.29.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 31 and the exact 365-test Core registry. The default-off exact-CC NIN Guard-Shukuchi helper requires one canonical living enemy strictly below 20% HP with live Guard 3054/3673, freezes that actor, uses only Shukuchi 29513 at its revalidated position inside 20 yalms, and may hard-target only that same actor after ClientAccepted. Fresh positive pressure is a ranking bonus but never a gate; missing unrelated slots remain allowed. Own Guard blocks this automatic helper while explicit /panicshu remains the sole own-Guard exception. Runtime held-helper priority is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. A continuous hold requires a proven cooldown-unavailable to ready transition before another accepted Guard-Shukuchi. Exact-intent explicit-client-false retries remain same-actor and bounded; acceptance and ambiguity are terminal."

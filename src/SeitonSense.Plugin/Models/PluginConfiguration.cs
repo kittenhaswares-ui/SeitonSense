@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 30;
+    public int Version { get; set; } = 31;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -48,6 +48,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     // Schema-28 compatibility only. Runtime and UI use continuous held consent.
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
     public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
+    public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
@@ -219,7 +220,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 30)
+        if (Version >= 31)
         {
             if (repaired) Save();
             return;
@@ -521,7 +522,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             AllowHeldHelpersToCancelOwnCast = false;
         }
 
-        Version = 30;
+        if (Version < 31)
+        {
+            // This helper can initiate a ground-targeted Shukuchi and then set
+            // one exact hard target. Every upgrading user must opt in.
+            EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
+        }
+
+        Version = 31;
         ClampSettings();
         Save();
     }
@@ -530,7 +538,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 30;
+        Version = 31;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -542,6 +550,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowSeitonPreparation = true;
         EnableNinjaSeitonOnFreshGameplayKey = false;
         EnableNinjaSeitonOnHeldGameplayKey = false;
+        EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
