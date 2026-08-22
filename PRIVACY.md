@@ -1143,6 +1143,15 @@ living, targetable, hostile, strictly below 50% HP, and accepted by FFXIV's
 native action range and line-of-sight check. Selection uses the lowest exact HP
 ratio, then stable enemy slot and actor identity.
 
+Automated Seiton also reads the exact candidate's live status IDs. Guardian's
+target-side Covered rows, the Paladin's Phalanx self Hallowed Ground, and Dark
+Knight Eventide's Undead Redemption make that actor ineligible. The covering
+Paladin, Phalanx's party mitigation, and Guard itself are not blockers. The
+same exact status check is repeated for a frozen retry, before any optional
+cast-cancel request, and immediately before the native action request. A
+metadata mismatch disables this helper; no localized status text is used at
+runtime.
+
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
 and its Unsealed follow-up `29516`. Purify, reactive counter-CC, Ally Rescue, and
 PLD Guardian precede Guard-Shukuchi, which precedes NIN Seiton in the current
@@ -1156,11 +1165,12 @@ Known unavailable states wait, and only a clean explicit rejection may use the
 shared bounded same-intent retry. A later genuine adjusted-action transition
 from base Seiton to its Unsealed follow-up can create a distinct epoch on the
 same hold; a rejected base action can never substitute the follow-up. Changed
-identity, health, or reachability; acceptance; ambiguity; or exception is
+identity, health, protection, or reachability; acceptance; ambiguity; or exception is
 terminal without another selection, alternate target, fallback action, or
 replay. The frozen S-slot and actor identity are resolved before every possible
-request and the same actor's current HP is re-read. A value at exactly 50% or
-higher cancels the intent; this last client-side sample does
+request and the same actor's current HP and protection are re-read. A value at
+exactly 50% or higher or an execute-blocking status cancels and retires the
+intent; this last client-side sample does
 not prove what HP the server observes when processing the request. The original
 gameplay key is neither swallowed nor replayed. The local request
 return may be kept as a bounded aggregate `client-accepted` diagnostic, but it
@@ -1245,7 +1255,7 @@ opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections.
 
-Configuration schema 31 is current in v0.29.0.0. The new NIN Guard-Shukuchi held-
+Configuration schema 31 is current in v0.29.0.1. The NIN Guard-Shukuchi held-
 key option is forced off for upgrading configurations and remains off for fresh
 and Reset Defaults configurations because it initiates an action and may set the
 exact hard target after client acceptance. Panic Shukuchi remains command-only

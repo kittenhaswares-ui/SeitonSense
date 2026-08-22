@@ -8,8 +8,39 @@ public readonly record struct NinjaSeitonDispatchCandidate(
     bool Targetable,
     uint CurrentHp,
     uint MaximumHp,
+    uint ExecuteBlockingStatusId,
     bool HasValidActionTarget,
-    bool HasNativeRangeAndLineOfSight);
+    bool HasNativeRangeAndLineOfSight)
+{
+    public bool HasExecuteBlockingProtection =>
+        NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+            ExecuteBlockingStatusId);
+}
+
+/// <summary>
+/// Installed Patch 7.55 status rows that make a Ninja Seiton request useless
+/// or redirect it away from the selected enemy. All same-semantic Covered
+/// rows are retained because exact CC has used duplicate status rows across
+/// game-data revisions; the covering Paladin's Cover rows are deliberately
+/// excluded.
+/// </summary>
+public static class NinjaSeitonProtectionStatusCatalog
+{
+    public const uint CoveredLegacyStatusId = 81;
+    public const uint CoveredStatusId = 1_301;
+    public const uint CoveredPvpStatusId = 2_413;
+    public const uint CoveredPvpAlternateStatusId = 4_352;
+    public const uint HallowedGroundStatusId = 1_302;
+    public const uint UndeadRedemptionStatusId = 3_039;
+
+    public static bool IsExecuteBlockingStatus(uint statusId) =>
+        statusId is CoveredLegacyStatusId or
+            CoveredStatusId or
+            CoveredPvpStatusId or
+            CoveredPvpAlternateStatusId or
+            HallowedGroundStatusId or
+            UndeadRedemptionStatusId;
+}
 
 public readonly record struct NinjaSeitonDispatchIntent(
     uint ActionId,
@@ -25,7 +56,8 @@ public readonly record struct NinjaSeitonDispatchIntent(
 public readonly record struct NinjaSeitonAcceptedHoldState(
     bool OwnsHold,
     int HeldKeyCode,
-    uint LastAcceptedActionId)
+    uint LastAcceptedActionId,
+    bool FollowUpEpochSpent)
 {
     public static NinjaSeitonAcceptedHoldState Initial => default;
 }
@@ -106,8 +138,21 @@ public static class NinjaSeitonDispatchRules
         int heldKeyCode,
         uint acceptedActionId) =>
         heldKeyCode > 0 && IsExactSeitonAction(acceptedActionId)
-            ? new NinjaSeitonAcceptedHoldState(true, heldKeyCode, acceptedActionId)
+            ? new NinjaSeitonAcceptedHoldState(
+                true,
+                heldKeyCode,
+                acceptedActionId,
+                acceptedActionId == FollowUpActionId)
             : NinjaSeitonAcceptedHoldState.Initial;
+
+    public static NinjaSeitonAcceptedHoldState RetireAdjustedActionEpoch(
+        NinjaSeitonAcceptedHoldState state,
+        uint actionId) =>
+        state.OwnsHold &&
+        state.LastAcceptedActionId == BaseActionId &&
+        actionId == FollowUpActionId
+            ? state with { FollowUpEpochSpent = true }
+            : state;
 
     public static NinjaSeitonAcceptedHoldState ObserveAcceptedHold(
         NinjaSeitonAcceptedHoldState state,
@@ -124,6 +169,7 @@ public static class NinjaSeitonDispatchRules
         uint resolvedActionId) =>
         state.OwnsHold &&
         state.LastAcceptedActionId == BaseActionId &&
+        !state.FollowUpEpochSpent &&
         resolvedActionId == FollowUpActionId;
 
     public static NinjaSeitonDispatchDecision Observe(
@@ -173,6 +219,7 @@ public static class NinjaSeitonDispatchRules
         candidate.Alive &&
         candidate.Targetable &&
         ExecuteThreshold.IsBelowHalf(candidate.CurrentHp, candidate.MaximumHp) &&
+        !candidate.HasExecuteBlockingProtection &&
         candidate.HasValidActionTarget &&
         candidate.HasNativeRangeAndLineOfSight;
 

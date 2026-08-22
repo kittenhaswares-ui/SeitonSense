@@ -848,9 +848,12 @@ public sealed class Plugin : IDalamudPlugin
                     $"candidates={ninja.CandidateCount},S={ninja.EnemySlot}," +
                     $"target={ninja.TargetGameObjectId:X}/{ninja.TargetEntityId:X}," +
                     $"hp={ninja.RevalidatedCurrentHp}/{ninja.RevalidatedMaximumHp}," +
+                    $"protection={ninja.ExecuteBlockingStatusId}," +
                     $"boundary<50={ninja.BoundaryThresholdRevalidated}," +
                     $"threshold-cancel={ninja.ThresholdDriftCancelled}/" +
                     $"{ninja.ThresholdDriftCancellationCount}," +
+                    $"protection-cancel={ninja.ProtectionDriftCancelled}/" +
+                    $"{ninja.ProtectionDriftCancellationCount}," +
                     $"fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}," +
                     $"attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}," +
                     $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +

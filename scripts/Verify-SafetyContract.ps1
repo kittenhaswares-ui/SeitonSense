@@ -108,6 +108,7 @@ $defensiveUtilityProbePath = Join-Path $pluginServicesRoot 'DefensiveUtilityProb
 $pressureEscapeSprintProbePath = Join-Path $pluginServicesRoot 'PressureEscapeSprintProbe.cs'
 $highPressureWarningSoundPath = Join-Path $pluginServicesRoot 'HighPressureWarningSound.cs'
 $ninjaSeitonProbePath = Join-Path $pluginServicesRoot 'NinjaSeitonDispatchProbe.cs'
+$ninjaSeitonProtectionProbePath = Join-Path $pluginServicesRoot 'NinjaSeitonProtectionProbe.cs'
 $scholarCriticalStrategyProbePath = Join-Path $pluginServicesRoot 'ScholarCriticalStrategyProbe.cs'
 $isolationAwarenessPath = Join-Path $pluginServicesRoot 'IsolationAwarenessService.cs'
 $autoEnemyFocusMarkPath = Join-Path $pluginServicesRoot 'AutoEnemyFocusMarkService.cs'
@@ -2589,8 +2590,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 365) {
-    throw 'All four shared protection-end tests and the exact 365-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 367) {
+    throw 'All four shared protection-end tests and the exact 367-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -4434,10 +4435,21 @@ Assert-Literals $ninjaSeitonRules @(
     'BeginAcceptedHold(',
     'ObserveAcceptedHold(',
     'CanOpenAdjustedActionEpoch(',
+    'RetireAdjustedActionEpoch(',
+    'FollowUpEpochSpent',
     'HeldGameplayKeyEligible',
     'ActionHelpersSuppressedByGuard',
     'HigherPriorityClaimed',
     'ExactCanonicalIdentity',
+    'ExecuteBlockingStatusId',
+    'HasExecuteBlockingProtection',
+    'CoveredLegacyStatusId = 81',
+    'CoveredStatusId = 1_301',
+    'CoveredPvpStatusId = 2_413',
+    'CoveredPvpAlternateStatusId = 4_352',
+    'HallowedGroundStatusId = 1_302',
+    'UndeadRedemptionStatusId = 3_039',
+    '!candidate.HasExecuteBlockingProtection',
     'ExecuteThreshold.IsBelowHalf',
     'HasValidActionTarget',
     'HasNativeRangeAndLineOfSight',
@@ -4459,10 +4471,14 @@ Assert-Literals $ninjaSeitonRules @(
 if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
     throw 'NIN Seiton policy must require default-off enablement, exact CC/NIN/local identity, verified metadata, no Guard or higher claim, one exact held non-text key epoch, and exact ready 29515/29516.'
 }
-if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
+if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?!candidate\.HasExecuteBlockingProtection.*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
     $normalizedNinjaSeitonRules -notmatch 'if \(!occupiedSlots\.Add\(candidate\.EnemySlot\) \|\| !occupiedActors\.Add\(candidate\.Actor\)\) \{ return -1; \}.*?if \(bestIndex < 0 \|\| Compare\(candidate, candidates\[bestIndex\]\) < 0\) bestIndex = index;' -or
     $normalizedNinjaSeitonRules -notmatch '\(\(ulong\)leftCurrent \* rightMaximum\)\.CompareTo\( \(ulong\)rightCurrent \* leftMaximum\)') {
     throw 'NIN Seiton selection must fail closed on duplicate exact slots/actors and rank only eligible sub-50 targets by overflow-safe exact HP ratio.'
+}
+if ($normalizedNinjaSeitonRules -notmatch 'public static bool IsExecuteBlockingStatus\(uint statusId\) => statusId is CoveredLegacyStatusId or CoveredStatusId or CoveredPvpStatusId or CoveredPvpAlternateStatusId or HallowedGroundStatusId or UndeadRedemptionStatusId;' -or
+    [regex]::Matches($normalizedNinjaSeitonRules, 'StatusId = ').Count -ne 6) {
+    throw 'NIN Seiton protection metadata must remain the exact six target-side Covered, Hallowed Ground, and Undead Redemption rows.'
 }
 if ($normalizedNinjaSeitonRules -notmatch 'var health = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\); if \(health != 0\) return health; var slot = left\.EnemySlot\.CompareTo\(right\.EnemySlot\); if \(slot != 0\) return slot; var entity = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entity != 0 \? entity : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
     $normalizedNinjaSeitonRules -notmatch 'intent\.IsValid && actionLocallyReady && resolvedActionId == intent\.ActionId && candidate\.EnemySlot == intent\.EnemySlot && candidate\.Actor == intent\.Target && IsEligibleCandidate\(candidate, localPlayer\)') {
@@ -4482,9 +4498,12 @@ Assert-Literals $ninjaSeiton @(
     'UseActionAccepted',
     'RevalidatedCurrentHp',
     'RevalidatedMaximumHp',
+    'ExecuteBlockingStatusId',
     'BoundaryThresholdRevalidated',
     'ThresholdDriftCancelled',
+    'ProtectionDriftCancelled',
     'ThresholdDriftCancellationCount',
+    'ProtectionDriftCancellationCount',
     'CandidateCount',
     'CandidateResolution',
     'executeTracker.Diagnostics',
@@ -4519,6 +4538,8 @@ Assert-Literals $ninjaSeiton @(
     'NinjaSeitonDispatchRules.CanUseExactIntent(',
     'var outcome = TryUseSeitonOnce(',
     'ReadFrozenThresholdAtUseActionBoundary(',
+    'NinjaSeitonProtectionProbe.TryFindExecuteBlockingStatus(',
+    'BoundaryThresholdResult.Protected',
     'BoundaryThresholdResult.AtOrAboveHalf',
     'thresholdResult != BoundaryThresholdResult.BelowHalf',
     'thresholdRevalidatedAtBoundary = true;',
@@ -4529,6 +4550,7 @@ Assert-Literals $ninjaSeiton @(
     'HeldActionRetryRules.Complete(',
     'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
     'NinjaSeitonDispatchRules.BeginAcceptedHold(',
+    'NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(',
     'ActionType.Action',
     'ActionManager.UseActionMode.None',
     'HeldActionRetryRules.MaximumNativeAttempts'
@@ -4547,10 +4569,10 @@ if ($normalizedNinjaSeiton -notmatch 'for \(var slot = EnemySlotRules\.FirstSlot
 if ($normalizedNinjaSeiton -notmatch 'var eligibleCurrentSlots = currentSlots \.Where\(static entry => IsLivePlayer\(entry\.Player\) && entry\.Player\.IsTargetable && ExecuteThreshold\.HasValidHp\(entry\.Player\.CurrentHp, entry\.Player\.MaxHp\)\) \.ToArray\(\); if \(eligibleCurrentSlots\.Length != diagnosticsBefore\.ValidEnemySlots \|\| eligibleCurrentSlots\.Length != snapshots\.Length\).*?foreach \(var \(slot, player\) in eligibleCurrentSlots\).*?!snapshotsBySlot\.TryGetValue\(slot, out var snapshotEnemy\).*?snapshotEnemy\.GameObjectId != player\.GameObjectId.*?snapshotEnemy\.EntityId != player\.EntityId.*?return \[\];.*?var candidate = BuildExactSlotCandidate\( localPlayer, actionId, slot, expectedTarget\); if \(candidate is not \{ \} exact\).*?return \[\];.*?candidates\.Add\(exact\);') {
     throw 'Every current live, targetable, valid-HP enemy must exactly match one tracker slot and pass native action validation; incomplete or stale eligible sets must fail closed.'
 }
-if ($normalizedNinjaSeiton -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?resolution = \$"Exact coherent set: \{candidates\.Count\} candidates"; return candidates;') {
+if ($normalizedNinjaSeiton -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?var protectedCandidates = candidates\.Count\( static candidate => candidate\.HasExecuteBlockingProtection\); resolution = \$"Exact coherent set: \{candidates\.Count\} candidates, protected=\{protectedCandidates\}"; return candidates;') {
     throw 'NIN Seiton must re-resolve the complete native e1-e5 identity set unchanged before returning any ranked candidates.'
 }
-if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\)') {
+if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out var executeBlockingStatusId, out _\).*?executeBlockingStatusId, validActionTarget, rangeAndLineOfSight') {
     throw 'Every NIN Seiton candidate must re-resolve one canonical e-slot, match both exact actor IDs/address, and pass FFXIV native range/LoS.'
 }
 $ninjaConsume = [regex]::Match($ninjaSeiton, 'inputClaimed\s*=\s*true\s*;\s*\r?\n\s*inputFrame\.Consume\(\);')
@@ -4586,22 +4608,48 @@ $ninjaTryUseBody = $ninjaTryUseMethod.Groups['Body'].Value
 $ninjaBoundaryThresholdBody = $ninjaBoundaryThresholdMethod.Groups['Body'].Value
 if (-not $ninjaTryUseMethod.Success -or
     -not $ninjaBoundaryThresholdMethod.Success -or
-    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp\).*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); attemptedAtBoundary = true; var clientAccepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); boundaryAfter = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); return clientAccepted;.*?return attemptedAtBoundary \? ClientActionAttemptBoundaryRules\.Classify\( accepted, intent\.ActionId, boundaryBefore, boundaryAfter\) : softUnavailableAtBoundary \? ClientActionAttemptOutcome\.SoftUnavailable : ClientActionAttemptOutcome\.NotInvoked;' -or
+    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp, out var executeBlockingStatusId\).*?ExecuteBlockingStatusId = executeBlockingStatusId.*?if \(thresholdResult == BoundaryThresholdResult\.Protected\).*?protectionDriftAtBoundary = true; return false;.*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); attemptedAtBoundary = true; var clientAccepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); boundaryAfter = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); return clientAccepted;.*?return attemptedAtBoundary \? ClientActionAttemptBoundaryRules\.Classify\( accepted, intent\.ActionId, boundaryBefore, boundaryAfter\) : softUnavailableAtBoundary \? ClientActionAttemptOutcome\.SoftUnavailable : ClientActionAttemptOutcome\.NotInvoked;' -or
     $ninjaTryUseBody -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(|\bexecuteTracker\.Enemies\b') {
     throw 'At the NIN UseAction boundary, the internal bypass must revalidate only the same frozen action/S-slot/GOID/EID, perform the latest strict sub-50 HP read, and classify the complete pre/post native fingerprint with no rerank or alternate.'
 }
-if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
+if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out executeBlockingStatusId, out _\).*?BoundaryThresholdResult\.Protected.*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
     [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.CurrentHp\b').Count -ne 1 -or
     [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.MaxHp\b').Count -ne 1) {
     throw 'The final NIN threshold read must resolve only the frozen S-slot and exact GOID/EID/address, read that actor HP once, reject invalid/dead/untargetable state, and treat exactly 50 percent or higher as terminal cancellation.'
 }
+$ninjaSeitonProtectionProbe = Read-RequiredSource $ninjaSeitonProtectionProbePath 'NIN Seiton protection probe'
+Assert-Literals $ninjaSeitonProtectionProbe @(
+    'foreach (var status in player.StatusList)',
+    'NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(',
+    'statusId = status.StatusId',
+    'remainingTime = status.RemainingTime'
+) 'Exact live NIN Seiton protection status scan'
+if ($ninjaSeitonProtectionProbe -match '(?i)status\.Name|Name\.TextValue' -or
+    [regex]::Matches($ninjaSeiton, 'NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\s*\(').Count -ne 2) {
+    throw 'NIN Seiton protection must use only exact numeric status metadata at candidate, cast-cancel, and final native boundaries.'
+}
+$ninjaSeitonExecuteTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'ExecuteTracker.cs') 'NIN Seiton cue tracker'
+$normalizedNinjaSeitonExecuteTracker = $ninjaSeitonExecuteTracker -replace '\s+', ' '
+if ($normalizedNinjaSeitonExecuteTracker -notmatch 'var executeProtected = NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( player, out _, out _\); var seitonTargetReady = seitonResourceReady && !executeProtected;.*?PersistentSeitonCueRules\.Observe\( state\.SeitonCue, seitonTargetReady,.*?hardReset: !isNinja \|\| !metadata\.SeitonVerified \|\| executeProtected\)') {
+    throw 'Persistent Seiton execute/preparation cues must clear while the exact enemy has execute-blocking protection.'
+}
+$ninjaCastCancellationMethod = [regex]::Match(
+    $normalizedNinjaSeiton,
+    'private HeldCastCancellationRequest\? CreateCastCancellationRequest\(.*?\) \{(?<Body>.*?)\} private ulong NextIntentEpochToken')
+if (-not $ninjaCastCancellationMethod.Success -or
+    $ninjaCastCancellationMethod.Groups['Body'].Value -notmatch 'ResolveFrozenIntent\( localPlayer, frozen\.Intent, resolvedActionId\).*?candidate\.HasExecuteBlockingProtection.*?executeBlockingStatusId = candidate\.ExecuteBlockingStatusId; return null;.*?NinjaSeitonDispatchRules\.CanUseExactIntent\( frozen\.Intent, candidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?new HeldCastCancellationRequest\(') {
+    throw 'NIN Seiton may request cast cancellation only after exact frozen actor and execute-protection revalidation.'
+}
 $ninjaSeitonSelfTests = Read-RequiredSource $ninjaSeitonDispatchSelfTestsPath 'NIN Seiton dispatch self-tests'
 Assert-Literals $ninjaSeitonSelfTests @(
+    'public static void ExecuteBlockingProtectionStatusSetIsExact()',
+    'public static void ProtectedTargetsAreSkippedAndFrozenProtectionDriftCancels()',
     'public static void HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime()',
     'NinjaSeitonDispatchRules.BeginAcceptedHold(',
     'NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(',
     '"same accepted base epoch cannot repeat"',
     '"adjusted follow-up is one distinct epoch"',
+    '"spent follow-up epoch cannot reopen after terminal drift"',
     '"accepted follow-up cannot repeat"',
     '"key release ends accepted ownership"',
     'alternate with { CurrentHp = 50, MaximumHp = 100 }',
@@ -4610,6 +4658,8 @@ Assert-Literals $ninjaSeitonSelfTests @(
     '"healing above half cancels the frozen intent"'
 ) 'NIN exact-50 and above-50 frozen-target cancellation tests'
 Assert-Literals $coreSelfTestProgramForGuardian @(
+    'NinjaSeitonDispatchSelfTests.ExecuteBlockingProtectionStatusSetIsExact',
+    'NinjaSeitonDispatchSelfTests.ProtectedTargetsAreSkippedAndFrozenProtectionDriftCancels',
     'NinjaSeitonDispatchSelfTests.HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime'
 ) 'NIN held base/follow-up accepted-epoch test registration'
 if ($ninjaSeiton -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
@@ -4623,9 +4673,12 @@ Assert-Literals $pluginSource @(
     'ready={ninja.LocallyReady},action={ninja.ResolvedActionId}',
     'candidates={ninja.CandidateCount},S={ninja.EnemySlot}',
     'hp={ninja.RevalidatedCurrentHp}/{ninja.RevalidatedMaximumHp}',
+    'protection={ninja.ExecuteBlockingStatusId}',
     'boundary<50={ninja.BoundaryThresholdRevalidated}',
     'threshold-cancel={ninja.ThresholdDriftCancelled}/',
     '{ninja.ThresholdDriftCancellationCount}',
+    'protection-cancel={ninja.ProtectionDriftCancelled}/',
+    '{ninja.ProtectionDriftCancellationCount}',
     'fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}',
     'attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}',
     'count={ninja.AttemptCount}/{ninja.AcceptedCount}',
@@ -7285,10 +7338,13 @@ Assert-Literals $settingsWindow @(
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'Default off and exact Crystalline Conflict only.',
     'exact canonical S1-S5 enemies',
+    'A target with Guardian''s Covered status, a Paladin''s Phalanx self-',
+    'invulnerability, or a Dark Knight''s Eventide invulnerability is excluded; Guard itself remains valid.',
     'the lowest exact HP ratio wins, then stable slot/actor identity',
     'Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same',
     'A later genuine 29515-to-29516 follow-up epoch may use the continuing hold',
-    'read again at the latest safe point before every request; exactly 50% or higher cancels the intent.',
+    'read again at the latest safe point before every request; exactly 50% or higher or newly observed',
+    'Covered/LB invulnerability cancels the intent.',
     'A client-accepted return is dispatch feedback only',
     'Scholar — Critical Strategy',
     'configuration.EnableScholarCriticalStrategyOnHeldKey',
@@ -7554,6 +7610,14 @@ Assert-Literals $metadata @(
     'SeitonReadinessProbe.BaseActionId',
     'SeitonReadinessProbe.FollowUpActionId',
     'SeitonReadinessProbe.UnsealedStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId',
+    'NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId',
+    'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
+    'ValidateSeitonProtectionStatus(',
+    'NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(statusId)',
     'Seiton Tenchu',
     'Unsealed Seiton Tenchu',
     'RequiresLineOfSight',
@@ -7811,10 +7875,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.29.0.0</Version>',
-    '<AssemblyVersion>0.29.0.0</AssemblyVersion>',
-    '<FileVersion>0.29.0.0</FileVersion>'
-) 'v0.29.0.0 project version'
+    '<Version>0.29.0.1</Version>',
+    '<AssemblyVersion>0.29.0.1</AssemblyVersion>',
+    '<FileVersion>0.29.0.1</FileVersion>'
+) 'v0.29.0.1 project version'
 Assert-Literals $pluginManifest @(
     'Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.',
     'fixed Self/S1-S5 combat frames',
@@ -7828,19 +7892,19 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.29.0.0 plugin manifest metadata'
+) 'v0.29.0.1 plugin manifest metadata'
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.29.0.0"',
-    'default-off exact CC NIN held helper',
-    'strictly below 20% HP while live Guard/Wehr is active',
-    'Shukuchi 29513 at that actor''s revalidated position within 20 yalms',
-    'hard-targets only that same enemy after a client-accepted jump',
-    'Positive fresh pressure is only a ranking bonus',
-    'Own Guard suppresses the automatic helper',
-    '/panicshu remains the sole own-Guard exception',
-    'continuous hold needs a real cooldown-unavailable to ready epoch',
-    'schema 31 with the option off for new, upgraded, and reset configurations'
-) 'v0.29.0.0 NIN Guard-Shukuchi repository metadata'
+    '"AssemblyVersion": "0.29.0.1"',
+    'Hotfixes the default-off exact-CC NIN Auto-Seiton helper',
+    'Guardian''s target-side Covered status',
+    'Paladin''s Phalanx self-invulnerability',
+    'Dark Knight Eventide''s Undead Redemption',
+    'Guard/Wehr itself, the covering Paladin, and Phalanx''s party mitigation remain valid',
+    'rechecked before retry, optional cast cancellation, and the final native request',
+    'protection drift retires that exact epoch without a call, alternate, or replay',
+    'Seiton execute/preparation cues clear while protected',
+    'Manual Seiton and /panicshu are unchanged; schema 31 and every existing option are preserved'
+) 'v0.29.0.1 Auto-Seiton protection hotfix repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7856,9 +7920,9 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.29.0.0 adds a separate default-off NIN held helper',
-    'one exact enemy strictly below 20% HP while that enemy has live Guard / Wehr',
-    'hard-targets only that same enemy after a client-accepted jump',
+    'Version 0.29.0.1 hotfixes the default-off NIN Auto-Seiton helper',
+    'skips Guardian-covered enemies, the invulnerable Paladin during Phalanx, and a Dark Knight protected by Eventide',
+    'Guard / Wehr itself remains a valid Seiton target',
     'manual `/panicshu` command remains immediate, target-free, and the sole helper allowed from the local player''s own Guard',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end',
@@ -7890,10 +7954,24 @@ Assert-Literals $normalizedReadme @(
     'later frame that observes both cast signals clear may run the normal complete helper preflight again',
     'does not synthesize movement or Escape, clear the native action queue, write cast state, or mutate a selected target',
     'Stationary casts and mobile BRD Powerful Shot / MCH Blast Charge still require current-patch live validation',
-    'Configuration schema 31 is current in v0.29.0.0',
+    'Configuration schema 31 is current in v0.29.0.1',
     'NIN Guard-Shukuchi held option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test is explicitly off for fresh, reset, and migrated configurations'
-) 'v0.29.0.0 Guard-Shukuchi plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+) 'v0.29.0.1 protection hotfix plus retained scheduler, strict held lease, cast-cancel, and schema user contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.29.0.1',
+    'Guardian''s target-side `Covered` / `Gedeckt` status',
+    'Phalanx `Hallowed Ground` self-invulnerability',
+    'Eventide''s `Undead Redemption` HP-floor status',
+    'Guard / Wehr itself remains a valid Seiton target',
+    'before initial ranking, every frozen retry, optional held-cast cancellation, and the latest safe native request boundary',
+    'without `UseAction`, reranking, an alternate target, or reopening the same Unsealed follow-up',
+    'metadata is validated fail-closed',
+    'all `367` Core tests pass',
+    'plugin version to `0.29.0.1`',
+    'Configuration schema remains `31`',
+    'manual Seiton plus `/panicshu` are unchanged'
+) 'v0.29.0.1 Auto-Seiton protection hotfix release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.29.0.0',
     'separate default-off NIN held helper for exact Crystalline Conflict',
@@ -7952,7 +8030,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 31 is current in v0.29.0.0'
+    'Configuration schema 31 is current in v0.29.0.1'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8056,12 +8134,12 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 31 is current in v0.29.0.0',
-    'new NIN Guard-Shukuchi held- key option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
+    'Configuration schema 31 is current in v0.29.0.1',
+    'NIN Guard-Shukuchi held- key option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.29.0.0 adds a separate default-off NIN held helper',
+    'Version 0.29.0.1 hotfixes the default-off NIN Auto-Seiton helper',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Purify/Guard retain their exact enemy episode while protection is live and bind only at authoritative protection end inside the original 500-ms release window',
     'no different key can inherit the intent after binding',
@@ -8498,7 +8576,7 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 31 is current in v0.29.0.0',
+    'Configuration schema 31 is current in v0.29.0.1',
     'NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, the Combat Frames master, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -8591,7 +8669,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 31 is current in v0.29.0.0'
+    'Configuration schema 31 is current in v0.29.0.1'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -8957,4 +9035,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.29.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 31 and the exact 365-test Core registry. The default-off exact-CC NIN Guard-Shukuchi helper requires one canonical living enemy strictly below 20% HP with live Guard 3054/3673, freezes that actor, uses only Shukuchi 29513 at its revalidated position inside 20 yalms, and may hard-target only that same actor after ClientAccepted. Fresh positive pressure is a ranking bonus but never a gate; missing unrelated slots remain allowed. Own Guard blocks this automatic helper while explicit /panicshu remains the sole own-Guard exception. Runtime held-helper priority is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. A continuous hold requires a proven cooldown-unavailable to ready transition before another accepted Guard-Shukuchi. Exact-intent explicit-client-false retries remain same-actor and bounded; acceptance and ambiguity are terminal."
+Write-Host "Seiton Sense v0.29.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 31 and the exact 367-test Core registry. Auto-Seiton excludes exact target-side Guardian Covered rows, PLD Phalanx Hallowed Ground, and DRK Eventide Undead Redemption at candidate, frozen retry, optional cast-cancel, and final native boundaries; Guard itself remains eligible. Protection drift retires the frozen epoch without a native call, alternate, replay, or duplicate threshold counter. The default-off exact-CC NIN Guard-Shukuchi helper remains one frozen canonical enemy strictly below 20% HP with live Guard 3054/3673 and exact Shukuchi 29513. Runtime held-helper priority remains Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk."
