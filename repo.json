@@ -27,7 +27,7 @@
       "survival",
       "utility"
     ],
-    "IsHide": false,
+    "IsHide": true,
     "IsTestingExclusive": false,
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
