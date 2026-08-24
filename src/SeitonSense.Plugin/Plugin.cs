@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.31.0.1";
+    private const string CurrentReleaseVersion = "0.32.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -318,9 +318,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Viper reliability hotfix: Serpentiner Geist now watches its native transformed carrier directly every frame instead of depending on proof of the preceding attack.",
-                "Hold any eligible gameplay key, including WASD: when the exact follow-up and your current hard target are usable, it fires immediately and retains only bounded same-intent retries.",
-                "Purify remains first. Viper still never changes your target or cancels your cast, is suppressed by your own Guard, and keeps Wolves' Den testing dummy-only.",
+                "Emergency Teleport is a new default-off held helper for MNK, BLM, SGE, and VPR: below your HP/MP limits and at or above the direct-focus minimum it makes one exact jump to the safest distant party member.",
+                "Scholar Smart Spread is a separate default-off held lane: it prioritizes Biolysis coverage, reserves Deployment Tactics for the next DoT opportunity, and never adopts a manually started chain.",
+                "Purify remains first; Emergency Teleport follows Smart Recuperate, while Scholar waits independently for the real cast, queue, and animation boundary. Schema 35; all 423 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -728,6 +728,7 @@ public sealed class Plugin : IDalamudPlugin
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
                 var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
                 var recuperate = personalStatus.SmartRecuperateDiagnostics;
+                var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
                 var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
@@ -737,6 +738,7 @@ public sealed class Plugin : IDalamudPlugin
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var viper = personalStatus.ViperSerpentTailDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
+                var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
@@ -758,9 +760,9 @@ public sealed class Plugin : IDalamudPlugin
                     $"trigger={personal.Purify.InputTrigger}, ready={personal.Purify.LocallyReady}, " +
                     $"fresh={personal.Purify.FreshGameplayKey}, held={personal.Purify.HeldGameplayKey}, " +
                     $"attempt={personal.Purify.UseActionAttempted}/{personal.Purify.UseActionAccepted}, " +
-                    $"mchlb[hook={mchLimitBreak.CaptureRunning},q={mchLimitBreak.QueueDepth}," +
+                    $"actionfx[hook={mchLimitBreak.CaptureRunning},mch-q={mchLimitBreak.QueueDepth}," +
                     $"accepted={mchLimitBreak.AcceptedWarnings},active={mchLimitBreak.WarningActive}," +
-                    $"errors={mchLimitBreak.CaptureErrors},drops={mchLimitBreak.DroppedWarnings}], " +
+                    $"shared-errors={mchLimitBreak.CaptureErrors},mch-drops={mchLimitBreak.DroppedWarnings}], " +
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
@@ -835,6 +837,23 @@ public sealed class Plugin : IDalamudPlugin
                     $"claimed={recuperate.InputClaimed},attempt={recuperate.UseActionAttempted}/" +
                     $"{recuperate.UseActionAccepted},count={recuperate.AttemptCount}/" +
                     $"{recuperate.AcceptedCount},last={recuperate.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] emergency-teleport[decision={emergencyTeleport.Decision}," +
+                    $"reason={emergencyTeleport.Reason},danger={emergencyTeleport.Danger}," +
+                    $"action={emergencyTeleport.ResolvedActionId},hp={emergencyTeleport.CurrentHp}/" +
+                    $"{emergencyTeleport.MaximumHp},mp={emergencyTeleport.CurrentMp}/" +
+                    $"{emergencyTeleport.MaximumMp},pressure={emergencyTeleport.DirectPressureKnown}/" +
+                    $"{emergencyTeleport.DirectEnemyCount},episode={emergencyTeleport.EpisodeToken}/" +
+                    $"{emergencyTeleport.EpisodeOpen}/{emergencyTeleport.EpisodeSpent}," +
+                    $"candidates={emergencyTeleport.CandidateCount},P={emergencyTeleport.PartySlot}," +
+                    $"target={emergencyTeleport.TargetGameObjectId:X}/{emergencyTeleport.TargetEntityId:X}," +
+                    $"distance={emergencyTeleport.TravelDistanceYalms:0.0},nearby=" +
+                    $"{emergencyTeleport.NearbyEnemyCount},clearance=" +
+                    $"{emergencyTeleport.MinimumEnemyClearanceYalms:0.0},key=" +
+                    $"{emergencyTeleport.HeldGameplayKey},claimed={emergencyTeleport.InputClaimed}," +
+                    $"attempt={emergencyTeleport.UseActionAttempted}/{emergencyTeleport.NativeOutcome}," +
+                    $"count={emergencyTeleport.AttemptCount}/{emergencyTeleport.AcceptedCount}," +
+                    $"last={emergencyTeleport.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] cast-cancel[enabled=" +
                     $"{configuration.AllowHeldHelpersToCancelOwnCast}," +
@@ -978,6 +997,27 @@ public sealed class Plugin : IDalamudPlugin
                     $"attempt={scholar.UseActionAttempted}/{scholar.UseActionAccepted}," +
                     $"count={scholar.AttemptCount}/{scholar.AcceptedCount}," +
                     $"resolve={scholar.CandidateResolution},last={scholar.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] scholar-spread[phase={scholarSpread.Phase},kind={scholarSpread.Kind}," +
+                    $"plan/intent/effect={scholarSpread.PlanReason}/{scholarSpread.IntentReason}/" +
+                    $"{scholarSpread.EffectReason},capture={scholarSpread.CaptureRunning}/" +
+                    $"{scholarSpread.CaptureQueueDepth}/{scholarSpread.CaptureCount}/" +
+                    $"{scholarSpread.CaptureDropCount},raw-held/consumed=" +
+                    $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}," +
+                    $"key={scholarSpread.HeldGameplayKey},next={scholarSpread.NextActionId},charges=" +
+                    $"{scholarSpread.DeploymentCharges},deploy/bio=" +
+                    $"{scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
+                    $"{scholarSpread.BiolysisRemainingMilliseconds},boundary=" +
+                    $"{scholarSpread.NativeBoundaryClear},dot/shield=" +
+                    $"{scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount},slot=" +
+                    $"{scholarSpread.TargetSlot},target={scholarSpread.TargetGameObjectId:X}/" +
+                    $"{scholarSpread.TargetEntityId:X},coverage=" +
+                    $"{scholarSpread.PredictedAffectedCount}/{scholarSpread.CurrentAffectedCount}," +
+                    $"crystal={scholarSpread.TacticalCrystalResolved}/" +
+                    $"{scholarSpread.TacticalCrystalPriorityRadiusYalms:0.0},attempt=" +
+                    $"{scholarSpread.UseActionAttempted}/{scholarSpread.NativeOutcome},confirm=" +
+                    $"{scholarSpread.SetupConfirmationCount}/{scholarSpread.DeploymentConfirmationCount}," +
+                    $"manual={scholarSpread.ManualConflictCount},last={scholarSpread.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +

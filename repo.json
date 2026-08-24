@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Exact PvP nameplate/LB cues, reliable held helpers, Smart Tab, and survival tools.",
-    "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, DPS Smart Tab, optional Viper, Smart Action, and assist helpers, local MP sounds, survival/job tools, team communication, and target highlights.",
+    "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
+    "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, Scholar Smart Spread, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.31.0.1",
-    "Changelog": "Viper reliability hotfix: the default-off Serpentiner-Geist held helper now observes native carrier 39183 directly every active VPR frame, without preceding-action, queue-drain, or accepted-epoch proof. Hold any eligible gameplay key including WASD; when an exact 39174-39182 follow-up and the current hard target are usable, it acts immediately. Each carrier exposure is spent once, a single false sample cannot rearm it, and a distinct follow-up such as 39177 to 39178 remains available under the same continuous hold. Purify remains first. CC stays exact S1-S5; Wolves' Den remains exact-current-dummy-only. No target change or cast cancellation. Schema 34; all 404 Core tests pass.",
+    "AssemblyVersion": "0.32.0.0",
+    "Changelog": "Added two default-off held helpers. Emergency Teleport supports MNK, BLM, SGE, and VPR after Smart Recuperate: below configured HP/MP with fresh direct focus, it makes one exact no-retry/no-fallback jump to the safest distant party member without changing targets. Scholar Smart Spread runs in an independent raw-hold lane, requires complete exact five-player views, maximizes Biolysis coverage first, permits Adloquium spread only when the next DoT Deployment remains available, and advances only from plugin-owned exact ActionEffect/source-sequence evidence; manual Scholar actions are never adopted and unrelated shared-hook parser errors cannot cancel it. Schema 35; all 423 Core tests pass.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,6 +33,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787594300"
+    "LastUpdate": "1787603106"
   }
 ]

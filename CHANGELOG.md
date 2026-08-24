@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.32.0.0
+
+- Added a default-off **Emergency Teleport** held helper for PvP MNK, BLM, SGE,
+  and VPR. When the exact local player is strictly below the configurable HP and
+  MP limits and has fresh direct enemy focus, it ranks exact party destinations
+  by fewest nearby enemies, farthest safe travel, clearance, and stable identity.
+  The default requires at least one focusing enemy, at least 10 yalms of travel,
+  and no enemy within 10 yalms of the destination.
+- Emergency Teleport runs directly after Smart Recuperate and before generic
+  Guard/Sprint. It freezes one exact ally and action, uses no visible target
+  change, and spends the danger episode before at most one native call. Rejection,
+  ambiguous acceptance, exception, target drift, or missing safety data never
+  retries or falls back; a new episode requires a clearly observed safe interval.
+- Its final boundary keeps the held-key snapshot readable until after exact
+  commit, checks native target-specific action usability as well as range/line of
+  sight, rejects duplicate party identities fail-closed, and retires any failed
+  final preflight instead of silently examining the plan again next frame.
+- Added default-off **Scholar Smart Spread** in exact Crystalline Conflict. Its
+  independent raw-held-key lane does not consume the shared Purify/Recuperate/job
+  scheduler. It selects the reachable enemy seed with maximum new 15-yalm
+  Biolysis coverage before considering an Adloquium shield spread. A one-charge
+  shield spend is allowed only when Deployment Tactics will return by the next
+  Biolysis opportunity; two charges are immediately safe.
+- Scholar setup and Deployment remain bound to one frozen actor. The existing
+  shared ActionEffect hook confirms only the exact locally generated action,
+  target, nonzero source sequence, and expected status pair. Manual Adloquium,
+  Biolysis, or Deployment Tactics never starts or gets adopted by the automatic
+  workflow. Scholar never changes targets, consumes the shared held frame, or
+  cancels a cast; it waits for the real native animation/cast/queue boundary.
+- Scholar planning and final revalidation now require the complete exact five-
+  enemy or five-member party roster. Every terminal frozen-plan failure stays
+  retired until the held key is released, and Scholar packet parsing has its own
+  error epoch so an unrelated consumer of the shared hook cannot cancel or skip
+  this workflow.
+- Bumped the plugin to `0.32.0.0` and configuration schema to `35`. Both new
+  helpers are off for upgrades, fresh installs, and Reset Defaults. All `423`
+  Core tests pass in this source snapshot.
+
 ## 0.31.0.1
 
 - Reworked the default-off Viper Serpentiner-Geist held helper around the native

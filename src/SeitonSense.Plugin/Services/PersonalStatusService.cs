@@ -30,6 +30,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
+    private readonly EmergencyTeleportProbe emergencyTeleport;
     private readonly PressureEscapeSprintProbe pressureEscapeSprint;
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
@@ -39,6 +40,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly ViperSerpentTailProbe viperSerpentTail;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
+    private readonly ScholarSpreadProbe scholarSpread;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly DarkKnightPlungeProbe darkKnightPlunge;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
@@ -160,6 +162,14 @@ internal sealed class PersonalStatusService : IDisposable
             executeTracker,
             nearAssist,
             log);
+        emergencyTeleport = new EmergencyTeleportProbe(
+            clientState,
+            objectTable,
+            dutyState,
+            configuration,
+            pressureTracker,
+            nearAssist,
+            log);
         viperSerpentTail = new ViperSerpentTailProbe(
             clientState,
             objectTable,
@@ -173,6 +183,14 @@ internal sealed class PersonalStatusService : IDisposable
             executeTracker,
             pressureTracker,
             nearAssist,
+            log);
+        scholarSpread = new ScholarSpreadProbe(
+            clientState,
+            objectTable,
+            dutyState,
+            configuration,
+            nearAssist,
+            machinistLimitBreakCapture,
             log);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         darkKnightPlunge = new DarkKnightPlungeProbe(
@@ -191,6 +209,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal AutoGuardProtectionDiagnostics AutoGuardProtectionDiagnostics =>
         nearAssist.AutoGuardProtectionDiagnostics;
     internal SmartRecuperateProbeSnapshot SmartRecuperateDiagnostics => smartRecuperate.Snapshot;
+    internal EmergencyTeleportProbeSnapshot EmergencyTeleportDiagnostics =>
+        emergencyTeleport.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
         pressureEscapeSprint.Snapshot;
     internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
@@ -205,6 +225,7 @@ internal sealed class PersonalStatusService : IDisposable
         viperSerpentTail.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
+    internal ScholarSpreadProbeSnapshot ScholarSpreadDiagnostics => scholarSpread.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal DarkKnightPlungeProbeSnapshot DarkKnightPlungeDiagnostics =>
         darkKnightPlunge.Snapshot;
@@ -252,7 +273,7 @@ internal sealed class PersonalStatusService : IDisposable
         {
             log.Warning(
                 exception,
-                "Seiton Sense MCH limit-break capture is unavailable; other features remain active.");
+                "Seiton Sense shared action-effect capture is unavailable; dependent MCH, pressure, reactive, and Scholar signals are disabled while other features remain active.");
         }
         framework.Update += OnFrameworkUpdate;
     }
@@ -266,8 +287,9 @@ internal sealed class PersonalStatusService : IDisposable
             objectTable.LocalPlayer,
             ResolveSupportedPvPContext(),
             Environment.TickCount64);
-        machinistLimitBreakCapture.Dispose();
         ResetRuntime();
+        scholarSpread.Dispose();
+        machinistLimitBreakCapture.Dispose();
     }
 
     private void OnFrameworkUpdate(IFramework _)
@@ -292,6 +314,7 @@ internal sealed class PersonalStatusService : IDisposable
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
+            emergencyTeleport.FailClosed();
             pressureEscapeSprint.FailClosed(now, exception);
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
@@ -301,6 +324,7 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaSeiton.FailClosed();
             viperSerpentTail.FailClosed();
             scholarCriticalStrategy.FailClosed();
+            scholarSpread.FailClosed();
             monkEarthReply.FailClosed(now);
             darkKnightPlunge.FailClosed();
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
@@ -334,6 +358,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyPurify.Reset();
             defensiveUtility.Reset();
             smartRecuperate.Reset();
+            emergencyTeleport.Reset();
             pressureEscapeSprint.Reset();
             guardianCommunication.Reset();
             allyRescue.Reset();
@@ -343,6 +368,7 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaSeiton.Reset();
             viperSerpentTail.Reset();
             scholarCriticalStrategy.Reset();
+            scholarSpread.Reset();
             monkEarthReply.Reset();
             darkKnightPlunge.Reset();
         }
@@ -368,6 +394,8 @@ internal sealed class PersonalStatusService : IDisposable
         var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
         var isDarkKnight = localJobId == DarkKnightPlungeRules.DarkKnightJobId;
         var isViper = localJobId == ViperSerpentTailRules.ViperJobId;
+        var isEmergencyTeleportJob =
+            EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
         var defensiveUtilitiesConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableDefensiveUtilities &&
@@ -511,6 +539,11 @@ internal sealed class PersonalStatusService : IDisposable
                                                            configuration.EnableScholarCriticalStrategyOnHeldKey &&
                                                            isCrystallineConflict &&
                                                            isScholar;
+        var scholarSpreadConfigurationEnabled = configuration.Enabled &&
+                                                configuration.EnableScholarSpreadOnHeldKey &&
+                                                isCrystallineConflict &&
+                                                isScholar &&
+                                                metadata.ScholarSpreadVerified;
         var darkKnightPlungeConfigurationEnabled = configuration.Enabled &&
                                                     configuration.EnableDarkKnightPlungeOnHeldKey;
 
@@ -563,6 +596,11 @@ internal sealed class PersonalStatusService : IDisposable
         var scholarCriticalStrategyHeldInputEnabled =
             scholarCriticalStrategyConfigurationEnabled &&
             metadata.ScholarCriticalStrategyVerified;
+        var emergencyTeleportHeldInputEnabled = configuration.Enabled &&
+                                                configuration.EnableEmergencyTeleportOnHeldKey &&
+                                                isSupportedPvPContext &&
+                                                isEmergencyTeleportJob &&
+                                                metadata.IsEmergencyTeleportVerified(localJobId);
         var pressureEscapeSprintHeldInputEnabled = configuration.Enabled &&
                                                    configuration.EnablePressureEscapeSprintOnHeldKey &&
                                                    isCrystallineConflict;
@@ -586,9 +624,11 @@ internal sealed class PersonalStatusService : IDisposable
                                             paladinGuardianHeldInputEnabled ||
                                             smartRecuperateHeldInputEnabled ||
                                             allyRescueHeldInputEnabled ||
-                                            miracleInterceptHeldInputEnabled ||
-                                            scholarCriticalStrategyHeldInputEnabled ||
-                                            pressureEscapeSprintHeldInputEnabled ||
+                                             miracleInterceptHeldInputEnabled ||
+                                             scholarCriticalStrategyHeldInputEnabled ||
+                                             scholarSpreadConfigurationEnabled ||
+                                             emergencyTeleportHeldInputEnabled ||
+                                             pressureEscapeSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
                                             ninjaGuardShukuchiHeldInputEnabled ||
                                             ninjaSeitonHeldInputEnabled ||
@@ -607,6 +647,8 @@ internal sealed class PersonalStatusService : IDisposable
              ninjaSeitonHeldInputEnabled ||
              viperSerpentTailHeldInputEnabled ||
              scholarCriticalStrategyHeldInputEnabled ||
+             scholarSpreadConfigurationEnabled ||
+             emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
              pressureEscapeSprintHeldInputEnabled ||
              darkKnightPlungeHeldInputEnabled),
@@ -617,6 +659,7 @@ internal sealed class PersonalStatusService : IDisposable
             allyRescueHeldInputEnabled,
             miracleInterceptHeldInputEnabled,
             scholarCriticalStrategyHeldInputEnabled,
+            emergencyTeleportHeldInputEnabled,
             pressureEscapeSprintHeldInputEnabled,
             darkKnightPlungeHeldInputEnabled,
             ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled,
@@ -820,6 +863,21 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset);
         var smartRecuperateClaimedPriority = recuperate.InputClaimed;
+        now = Environment.TickCount64;
+        var teleport = emergencyTeleport.Observe(
+            localPlayer,
+            context,
+            emergencyTeleportHeldInputEnabled,
+            metadata.IsEmergencyTeleportVerified(localJobId),
+            guardActive,
+            purifyClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
+            smartRecuperateClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var emergencyTeleportClaimedPriority = teleport.InputClaimed;
         var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
             isCrystallineConflict,
@@ -836,6 +894,7 @@ internal sealed class PersonalStatusService : IDisposable
             purifyClaimedPriority ||
             jobSpecificHeldClaimedPriority ||
             smartRecuperateClaimedPriority ||
+            emergencyTeleportClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -853,9 +912,10 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.Enabled && configuration.EnablePressureEscapeSprintOnHeldKey,
             guardActive,
             purifyClaimedPriority ||
-            jobSpecificHeldClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority,
+             jobSpecificHeldClaimedPriority ||
+             smartRecuperateClaimedPriority ||
+             emergencyTeleportClaimedPriority ||
+             defensiveUtilityClaimedPriority,
             emergencyInputFrame,
             now,
             hardReset || !alive);
@@ -867,9 +927,10 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.SmartKardiaVerified,
             guardActive,
             purifyClaimedPriority ||
-            jobSpecificHeldClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority ||
+             jobSpecificHeldClaimedPriority ||
+             smartRecuperateClaimedPriority ||
+             emergencyTeleportClaimedPriority ||
+             defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             now,
@@ -887,9 +948,10 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MonkEarthReplyHpPercent,
             configuration.MonkEarthReplyExpirySeconds,
             purifyClaimedPriority ||
-            jobSpecificHeldClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            defensiveUtilityClaimedPriority ||
+             jobSpecificHeldClaimedPriority ||
+             smartRecuperateClaimedPriority ||
+             emergencyTeleportClaimedPriority ||
+             defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
             kardia.UseActionAttempted ||
             emergencyInputFrame.IsConsumed,
@@ -929,6 +991,9 @@ internal sealed class PersonalStatusService : IDisposable
                 recuperate.InputClaimed,
                 recuperate.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                teleport.InputClaimed,
+                teleport.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 guardDefense.InputClaimed,
                 guardDefense.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -945,6 +1010,20 @@ internal sealed class PersonalStatusService : IDisposable
             request: castCancellationRequest,
             inputFrame: emergencyInputFrame,
             hardReset: hardReset);
+
+        // Scholar owns a separate recast lane. It reads the immutable raw held
+        // snapshot after the entire shared scheduler/cast-cancel pass, never
+        // consumes that frame, and simply waits for the real native boundary.
+        now = Environment.TickCount64;
+        scholarSpread.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            scholarSpreadConfigurationEnabled,
+            metadata.ScholarSpreadVerified,
+            guardActive,
+            emergencyInputFrame,
+            now,
+            hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
             configuration.Enabled && isSupportedPvPContext && alive && !hardReset,
@@ -1296,6 +1375,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyPurify.Reset();
         defensiveUtility.Reset();
         smartRecuperate.Reset();
+        emergencyTeleport.Reset();
         pressureEscapeSprint.Reset();
         guardianCommunication.Reset();
         allyRescue.Reset();
@@ -1305,6 +1385,7 @@ internal sealed class PersonalStatusService : IDisposable
         ninjaSeiton.Reset();
         viperSerpentTail.Reset();
         scholarCriticalStrategy.Reset();
+        scholarSpread.Reset();
         monkEarthReply.Reset();
         darkKnightPlunge.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);

@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 34;
+    public int Version { get; set; } = 35;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -51,10 +51,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
     public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
+    public bool EnableScholarSpreadOnHeldKey { get; set; }
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
     public bool EnableSmartRecuperateOnHeldKey { get; set; }
+    public bool EnableEmergencyTeleportOnHeldKey { get; set; }
+    public int EmergencyTeleportHpPercent { get; set; } = 50;
+    public int EmergencyTeleportMpThreshold { get; set; } = 4000;
+    public int EmergencyTeleportMinimumFocusedEnemies { get; set; } = 1;
+    public float EmergencyTeleportMinimumTravelYalms { get; set; } = 10f;
+    public float EmergencyTeleportEnemySafetyRadiusYalms { get; set; } = 10f;
+    public int EmergencyTeleportMaximumNearbyEnemies { get; set; }
     public bool EnableViperSerpentTailOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
@@ -231,7 +239,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 34)
+        if (Version >= 35)
         {
             if (repaired) Save();
             return;
@@ -575,7 +583,21 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableViperSerpentTailOnHeldKey = false;
         }
 
-        Version = 34;
+        if (Version < 35)
+        {
+            // Both helpers initiate new PvP actions and therefore remain
+            // explicit opt-ins for every upgrading installation.
+            EnableEmergencyTeleportOnHeldKey = false;
+            EmergencyTeleportHpPercent = 50;
+            EmergencyTeleportMpThreshold = 4000;
+            EmergencyTeleportMinimumFocusedEnemies = 1;
+            EmergencyTeleportMinimumTravelYalms = 10f;
+            EmergencyTeleportEnemySafetyRadiusYalms = 10f;
+            EmergencyTeleportMaximumNearbyEnemies = 0;
+            EnableScholarSpreadOnHeldKey = false;
+        }
+
+        Version = 35;
         ClampSettings();
         Save();
     }
@@ -584,7 +606,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 34;
+        Version = 35;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -598,9 +620,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNinjaSeitonOnHeldGameplayKey = false;
         EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
+        EnableScholarSpreadOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
+        EnableEmergencyTeleportOnHeldKey = false;
+        EmergencyTeleportHpPercent = 50;
+        EmergencyTeleportMpThreshold = 4000;
+        EmergencyTeleportMinimumFocusedEnemies = 1;
+        EmergencyTeleportMinimumTravelYalms = 10f;
+        EmergencyTeleportEnemySafetyRadiusYalms = 10f;
+        EmergencyTeleportMaximumNearbyEnemies = 0;
         EnableViperSerpentTailOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
         EnableDarkKnightPlungeOnHeldKey = false;
@@ -831,6 +861,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ? Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)
             : 25f;
         changed |= AssignIfChanged(NearAssistMaxAllyDistance, clamped, value => NearAssistMaxAllyDistance = value);
+        changed |= Clamp(
+            EmergencyTeleportMinimumTravelYalms,
+            3f,
+            25f,
+            10f,
+            value => EmergencyTeleportMinimumTravelYalms = value);
+        changed |= Clamp(
+            EmergencyTeleportEnemySafetyRadiusYalms,
+            3f,
+            20f,
+            10f,
+            value => EmergencyTeleportEnemySafetyRadiusYalms = value);
         changed |= Clamp(PressureNumberPixelSize, 36f, 128f, 80f, value => PressureNumberPixelSize = value);
         changed |= Clamp(PressureIconSize, 16f, 72f, 38f, value => PressureIconSize = value);
         changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
@@ -860,6 +902,40 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (monkEarthReplyHpPercent != MonkEarthReplyHpPercent)
         {
             MonkEarthReplyHpPercent = monkEarthReplyHpPercent;
+            changed = true;
+        }
+
+        var emergencyTeleportHpPercent = Math.Clamp(EmergencyTeleportHpPercent, 10, 90);
+        if (emergencyTeleportHpPercent != EmergencyTeleportHpPercent)
+        {
+            EmergencyTeleportHpPercent = emergencyTeleportHpPercent;
+            changed = true;
+        }
+
+        var emergencyTeleportMpThreshold = Math.Clamp(EmergencyTeleportMpThreshold, 0, 10_000);
+        if (emergencyTeleportMpThreshold != EmergencyTeleportMpThreshold)
+        {
+            EmergencyTeleportMpThreshold = emergencyTeleportMpThreshold;
+            changed = true;
+        }
+
+        var emergencyTeleportMinimumFocusedEnemies = Math.Clamp(
+            EmergencyTeleportMinimumFocusedEnemies,
+            1,
+            5);
+        if (emergencyTeleportMinimumFocusedEnemies != EmergencyTeleportMinimumFocusedEnemies)
+        {
+            EmergencyTeleportMinimumFocusedEnemies = emergencyTeleportMinimumFocusedEnemies;
+            changed = true;
+        }
+
+        var emergencyTeleportMaximumNearbyEnemies = Math.Clamp(
+            EmergencyTeleportMaximumNearbyEnemies,
+            0,
+            5);
+        if (emergencyTeleportMaximumNearbyEnemies != EmergencyTeleportMaximumNearbyEnemies)
+        {
+            EmergencyTeleportMaximumNearbyEnemies = emergencyTeleportMaximumNearbyEnemies;
             changed = true;
         }
 

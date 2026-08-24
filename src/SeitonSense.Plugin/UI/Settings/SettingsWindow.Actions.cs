@@ -14,11 +14,12 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
             "Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK " +
-            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The eight " +
+            "Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. The eight " +
             "job-specific physical-hold helpers share the second tier. NIN Seiton and VPR Serpentiner Geist get their first job slot; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
-            "frame. Kardia and Monk retain their separate event-driven origins.");
+            "frame. Scholar Smart Spread reads the same raw hold in an independent recast lane after this scheduler; " +
+            "Kardia and Monk retain their separate event-driven origins.");
 
         if (ImGui.CollapsingHeader(
                 "Held-action cast cancellation (experimental)",
@@ -32,6 +33,10 @@ internal sealed partial class SettingsWindow
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Smart Recuperate", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawSmartRecuperateControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Emergency Teleport", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawEmergencyTeleportControls();
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Ally Rescue: Paean / Aquaveil", ImGuiTreeNodeFlags.DefaultOpen))
@@ -98,7 +103,7 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Purify, the job-specific second tier, Smart Recuperate, and generic Guard keep priority. Known " +
+            "Purify, the job-specific second tier, Smart Recuperate, Emergency Teleport, and generic Guard keep priority. Known " +
             "unavailability waits for free; only an explicit client rejection may retry the same exact Sprint " +
             "episode. Any later manual action ends FFXIV's native PvP Sprint.");
         return changed;
@@ -201,13 +206,87 @@ internal sealed partial class SettingsWindow
             "is not ready, it waits without blocking a currently usable lower-priority helper.");
         ImGui.TextDisabled(
             "Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before " +
-            "generic Guard and pressure Sprint, while " +
+            "Emergency Teleport, generic Guard, and pressure Sprint, while " +
             "active Guard and its short propagation latch block Recuperate so the helper cannot cancel Guard. The " +
             "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms, up " +
             "to eight calls total. Temporary readiness/MP, higher-priority, and Guard states wait without spending " +
             "a call; dropping below the HP threshold cancels the current intent. Acceptance ends that epoch, and a " +
             "later one requires an observed cooldown unavailable-to-ready transition. Retry exhaustion or an " +
             "ambiguous/invalid exact outcome latches only this helper until the frozen key is released.");
+        ImGui.PopTextWrapPos();
+        return changed;
+    }
+
+    private bool DrawEmergencyTeleportControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Emergency Teleport on held gameplay key (MNK / BLM / SGE / VPR)",
+            configuration.EnableEmergencyTeleportOnHeldKey,
+            value => configuration.EnableEmergencyTeleportOnHeldKey = value);
+        changed |= SliderInt(
+            "Trigger below HP",
+            configuration.EmergencyTeleportHpPercent,
+            10,
+            90,
+            value => configuration.EmergencyTeleportHpPercent = value,
+            "%d%%");
+        changed |= SliderInt(
+            "Trigger below MP",
+            configuration.EmergencyTeleportMpThreshold,
+            0,
+            10_000,
+            value => configuration.EmergencyTeleportMpThreshold = value,
+            "%d MP");
+        changed |= SliderInt(
+            "Minimum enemies focusing you",
+            configuration.EmergencyTeleportMinimumFocusedEnemies,
+            1,
+            5,
+            value => configuration.EmergencyTeleportMinimumFocusedEnemies = value,
+            "%d");
+        changed |= Slider(
+            "Minimum jump distance",
+            configuration.EmergencyTeleportMinimumTravelYalms,
+            3f,
+            25f,
+            value => configuration.EmergencyTeleportMinimumTravelYalms = value,
+            "%.1f y");
+        changed |= Slider(
+            "Enemy safety radius at destination",
+            configuration.EmergencyTeleportEnemySafetyRadiusYalms,
+            3f,
+            20f,
+            value => configuration.EmergencyTeleportEnemySafetyRadiusYalms = value,
+            "%.1f y");
+        changed |= SliderInt(
+            "Maximum enemies inside safety radius",
+            configuration.EmergencyTeleportMaximumNearbyEnemies,
+            0,
+            5,
+            value => configuration.EmergencyTeleportMaximumNearbyEnemies = value,
+            "%d");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off. In exact Crystalline Conflict (or Wolves' Den with the explicit test toggle), on MNK, " +
+             "BLM, SGE, or VPR, a continuously held physical gameplay key " +
+             "including WASD may create one escape episode after Smart Recuperate. Own HP and MP must both be " +
+             "strictly below the configured limits, and fresh direct enemy hard/cast targeting must meet the " +
+             "focus count. It uses Thunderclap, Aetherial Manipulation, Icarus, or Slither on one exact non-self " +
+             "party member without visibly changing your target. An MP limit of 0 can never pass the strict below " +
+             "check; turn the helper off instead when you do not want it.");
+        ImGui.TextDisabled(
+            "Destinations must pass the action's native target-specific usability, range and line of sight, the " +
+            "minimum real hitbox-edge travel distance, and a complete exact enemy-safety snapshot. Duplicate party " +
+            "identity fails closed. Fewest nearby enemies wins, then the " +
+            "farthest ally and greatest enemy clearance. With the default maximum of zero, no enemy may stand " +
+            "inside the configured destination radius; if no safe ally exists, nothing happens.");
+        ImGui.TextDisabled(
+            "One danger episode makes at most one native action call: accepted, rejected, ambiguous, or thrown " +
+            "outcomes all stop it. There is no target fallback and no retry. The episode rearms only after the " +
+            "danger condition has clearly ended. Purify and the job-specific tier remain above Recup; Emergency " +
+            "Teleport is directly after Recup and before generic Guard/Sprint. Optional held-cast cancellation " +
+            "applies to this frozen emergency intent.");
         ImGui.PopTextWrapPos();
         return changed;
     }

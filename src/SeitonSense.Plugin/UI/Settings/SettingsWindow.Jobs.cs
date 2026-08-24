@@ -39,7 +39,7 @@ internal sealed partial class SettingsWindow
                 "rank by higher pressure, then lower exact HP. Both Guard and Guardian readiness are revalidated.");
             ImGui.TextDisabled(
                 "Purify keeps global priority. On PLD, Guardian follows the unavailable NIN/reactive/cleanse paths and wins before SCH, DRK, " +
-                "Smart Recuperate, generic Guard, and pressure Sprint. Continuous " +
+                "Smart Recuperate, Emergency Teleport, generic Guard, and pressure Sprint. Continuous " +
                 "held consent freezes one exact Guardian intent; only a clean client rejection may use the common " +
                 "bounded same-intent retry. There is no selected-target change, alternate, fallback, or replay. " +
                 "CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
@@ -74,7 +74,7 @@ internal sealed partial class SettingsWindow
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
                 "missed rather than guessed. The shared order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD " +
-                "Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
+                "Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > " +
                 "pressure Sprint > event Kardia > event Monk.");
             ImGui.PopTextWrapPos();
         }
@@ -267,7 +267,37 @@ internal sealed partial class SettingsWindow
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.TextDisabled(
                 "Purify, NIN Seiton / VPR Serpentiner Geist, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. DRK Hiebsprung closes the " +
-                "job-specific second tier before Smart Recuperate and the generic helpers.");
+                "job-specific second tier before Smart Recuperate, Emergency Teleport, and the generic helpers.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Scholar — Smart Spread", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Biolysis / Adloquium → Deployment Tactics on held gameplay key",
+                configuration.EnableScholarSpreadOnHeldKey,
+                value => configuration.EnableScholarSpreadOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off, PvP Scholar, and exact Crystalline Conflict only. Any continuously held physical " +
+                "gameplay key, including WASD, supplies consent. When Biolysis and Deployment Tactics are ready, " +
+                "the helper requires the complete exact S1-S5 roster, then chooses the reachable enemy whose " +
+                "15-yalm spread reaches the most " +
+                "living enemies, then applies Biolysis and deploys only that plugin-owned exact status.");
+            ImGui.TextDisabled(
+                "When the DoT route is not ready, an Adloquium shield spread is allowed only if spending Deployment " +
+                "still leaves, or regenerates, a charge by the next Biolysis opportunity. It requires a complete " +
+                "exact five-member party view. If exactly one language-" +
+                "independent tactical-crystal actor is resolved, a party member within its conservative 5-yalm " +
+                "hitbox-edge priority radius is preferred; otherwise the lowest exact HP percentage wins. A shield " +
+                "route must reach at least one additional party member.");
+            ImGui.TextDisabled(
+                "This is an independent held lane because all three actions use their own recasts. It never consumes " +
+                "or blocks Purify, Recup, Emergency Teleport, or another job helper; it simply waits for the real " +
+                "animation/cast/queue boundary and follows immediately afterward. It never cancels your cast. Manual " +
+                "Adloquium, Biolysis, or Deployment Tactics never starts or adopts an automatic chain: only a client-" +
+                "accepted carrier action issued by this helper can own its exact follow-up target.");
             ImGui.PopTextWrapPos();
         }
 

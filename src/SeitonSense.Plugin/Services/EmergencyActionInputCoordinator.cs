@@ -7,9 +7,11 @@ namespace SeitonSense.Plugin.Services;
 /// One framework-frame view of the shared physical gameplay-key generations.
 /// Canonical order is Purify, Ninja Seiton / VPR Serpent's Tail, reactive
 /// counter-CC, Ally Rescue, PLD Guardian, NIN Guard-Shukuchi, Scholar Critical
-/// Strategy, DRK Hiebsprung, Smart Recuperate, reactive Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia and
-/// Monk Earth's Reply do not originate from this physical-key frame, but their
-/// attempts still suppress lower work in the runtime priority chain.
+/// Strategy, DRK Hiebsprung, Smart Recuperate, Emergency Teleport, reactive
+/// Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia, the independent
+/// Scholar spread lane, and Monk Earth's Reply do not originate from shared
+/// physical-input ownership. Scholar only observes the immutable held snapshot
+/// after that whole priority chain and never suppresses or consumes it.
 /// Consumption is deliberately frame-local: one helper can own the current
 /// framework frame without destroying the still-held physical consent needed
 /// by a later distinct action episode.
@@ -65,6 +67,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool defensiveUtilityHeldWasEnabled;
     private bool paladinGuardianHeldWasEnabled;
     private bool smartRecuperateHeldWasEnabled;
+    private bool emergencyTeleportHeldWasEnabled;
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
     private bool scholarCriticalStrategyHeldWasEnabled;
@@ -88,6 +91,7 @@ internal sealed class EmergencyActionInputCoordinator
         bool allyRescueHeldEnabled,
         bool miracleInterceptHeldEnabled,
         bool scholarCriticalStrategyHeldEnabled,
+        bool emergencyTeleportHeldEnabled = false,
         bool pressureEscapeHeldEnabled = false,
         bool darkKnightPlungeHeldEnabled = false,
         bool ninjaGuardShukuchiHeldEnabled = false,
@@ -111,6 +115,7 @@ internal sealed class EmergencyActionInputCoordinator
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
             (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
+            (emergencyTeleportHeldEnabled && !emergencyTeleportHeldWasEnabled) ||
             (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
             (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
             (ninjaGuardShukuchiHeldEnabled && !ninjaGuardShukuchiHeldWasEnabled) ||
@@ -123,6 +128,7 @@ internal sealed class EmergencyActionInputCoordinator
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
+        emergencyTeleportHeldWasEnabled = emergencyTeleportHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
         darkKnightPlungeHeldWasEnabled = darkKnightPlungeHeldEnabled;
         ninjaGuardShukuchiHeldWasEnabled = ninjaGuardShukuchiHeldEnabled;
@@ -159,6 +165,7 @@ internal sealed class EmergencyActionInputCoordinator
             allyRescueHeldEnabled,
             miracleInterceptHeldEnabled: false,
             scholarCriticalStrategyHeldEnabled: false,
+            emergencyTeleportHeldEnabled: false,
             pressureEscapeHeldEnabled: false);
 
     internal void Reset()
@@ -171,6 +178,7 @@ internal sealed class EmergencyActionInputCoordinator
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
         scholarCriticalStrategyHeldWasEnabled = false;
+        emergencyTeleportHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
         darkKnightPlungeHeldWasEnabled = false;
         ninjaGuardShukuchiHeldWasEnabled = false;

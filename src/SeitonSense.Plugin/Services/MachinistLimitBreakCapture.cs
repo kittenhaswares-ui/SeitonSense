@@ -56,7 +56,7 @@ internal readonly record struct MiracleInterceptLandedEffect(
     uint GlobalSequence,
     ushort SourceSequence);
 
-internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
+internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarSpreadActionEffectCapture
 {
     private const int EffectSlotsPerTarget = 8;
     private const int MaximumQueuedWarnings = 64;
@@ -64,10 +64,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private const int MaximumQueuedMiracleInterceptThreats = 64;
     private const int MaximumQueuedMiracleInterceptConfirmations = 64;
     private const int MaximumQueuedPressureEvents = 128;
+    private const int MaximumQueuedScholarSpreadEffects = 64;
     private const int MaximumTargetsPerAction = 32;
     private const uint WardensPaeanActionId = 29400;
     private const uint AquaveilActionId = 29227;
     private const byte RemoveStatusEffectType = 0x10;
+    private const byte AddStatusEffectType = 0x0E;
 
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
@@ -77,6 +79,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private readonly ConcurrentQueue<MiracleInterceptThreatEvent> pendingMiracleInterceptThreats = new();
     private readonly ConcurrentQueue<MiracleInterceptLandedEffect> pendingMiracleInterceptConfirmations = new();
     private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
+    private readonly ConcurrentQueue<ScholarSpreadCapturedActionEffect> pendingScholarSpreadEffects = new();
 
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private int machinistLocalEntityIdBits;
@@ -86,13 +89,17 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private int miracleCleanseFollowupLocalEntityIdBits;
     private int miracleCleanseFollowupGeneration;
     private int pressureLocalEntityIdBits;
+    private int scholarSpreadLocalEntityIdBits;
+    private int scholarSpreadGeneration;
     private int queuedWarningCount;
     private int queuedAllyRescueCleanseCount;
     private int queuedMiracleInterceptThreatCount;
     private int queuedMiracleInterceptConfirmationCount;
     private int queuedPressureEventCount;
+    private int queuedScholarSpreadEffectCount;
     private int captureBlocked = 1;
     private long captureErrors;
+    private long scholarSpreadCaptureErrors;
     private long droppedWarnings;
     private long capturedAllyRescueCleanses;
     private long droppedAllyRescueCleanses;
@@ -101,6 +108,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     private long capturedMiracleInterceptConfirmations;
     private long droppedMiracleInterceptConfirmations;
     private long droppedPressureEvents;
+    private long capturedScholarSpreadEffects;
+    private long droppedScholarSpreadEffects;
     private bool disposed;
 
     public MachinistLimitBreakCapture(IGameInteropProvider interop, IPluginLog log)
@@ -118,12 +127,16 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         unchecked((uint)Volatile.Read(ref miracleCleanseFollowupLocalEntityIdBits));
     public int CurrentMiracleCleanseFollowupGeneration => Volatile.Read(ref miracleCleanseFollowupGeneration);
     public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
+    public uint CurrentScholarSpreadLocalEntityId =>
+        unchecked((uint)Volatile.Read(ref scholarSpreadLocalEntityIdBits));
+    public int CurrentScholarSpreadGeneration => Volatile.Read(ref scholarSpreadGeneration);
     public int QueueDepth => Math.Max(0, Volatile.Read(ref queuedWarningCount));
     public int AllyRescueCleanseQueueDepth => Math.Max(0, Volatile.Read(ref queuedAllyRescueCleanseCount));
     public int MiracleInterceptQueueDepth => Math.Max(0, Volatile.Read(ref queuedMiracleInterceptThreatCount));
     public int MiracleInterceptConfirmationQueueDepth =>
         Math.Max(0, Volatile.Read(ref queuedMiracleInterceptConfirmationCount));
     public int PressureQueueDepth => Math.Max(0, Volatile.Read(ref queuedPressureEventCount));
+    public int ScholarSpreadQueueDepth => Math.Max(0, Volatile.Read(ref queuedScholarSpreadEffectCount));
     public long CaptureErrors => Interlocked.Read(ref captureErrors);
     public long DroppedWarnings => Interlocked.Read(ref droppedWarnings);
     public long CapturedAllyRescueCleanses => Interlocked.Read(ref capturedAllyRescueCleanses);
@@ -133,6 +146,9 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
     public long CapturedMiracleInterceptConfirmations => Interlocked.Read(ref capturedMiracleInterceptConfirmations);
     public long DroppedMiracleInterceptConfirmations => Interlocked.Read(ref droppedMiracleInterceptConfirmations);
     public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
+    public long CapturedScholarSpreadEffects => Interlocked.Read(ref capturedScholarSpreadEffects);
+    public long DroppedScholarSpreadEffects => Interlocked.Read(ref droppedScholarSpreadEffects);
+    public long ScholarSpreadCaptureErrors => Interlocked.Read(ref scholarSpreadCaptureErrors);
     internal CombatLimitBreakCaptureBuffer CombatLimitBreakCaptureBuffer => combatLimitBreakCaptureBuffer;
 
     public void Start()
@@ -208,6 +224,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (previous != normalized) ClearPressureEvents();
     }
 
+    public void SetScholarSpreadLocalEntityId(uint entityId)
+    {
+        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
+        var previous = unchecked((uint)Interlocked.Exchange(
+            ref scholarSpreadLocalEntityIdBits,
+            unchecked((int)normalized)));
+        if (previous == normalized) return;
+
+        Interlocked.Increment(ref scholarSpreadGeneration);
+        ClearScholarSpreadEffects();
+    }
+
     public bool TryDequeue(out MachinistLimitBreakWarning warning)
     {
         if (!pendingWarnings.TryDequeue(out warning)) return false;
@@ -243,6 +271,13 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return true;
     }
 
+    public bool TryDequeueScholarSpreadEffect(out ScholarSpreadCapturedActionEffect effect)
+    {
+        if (!pendingScholarSpreadEffects.TryDequeue(out effect)) return false;
+        Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
+        return true;
+    }
+
     public void ClearWarnings()
     {
         while (pendingWarnings.TryDequeue(out _))
@@ -273,6 +308,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
             Interlocked.Decrement(ref queuedPressureEventCount);
     }
 
+    public void ClearScholarSpreadEffects()
+    {
+        while (pendingScholarSpreadEffects.TryDequeue(out _))
+            Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
+    }
+
     public void Dispose()
     {
         if (disposed) return;
@@ -285,6 +326,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         Interlocked.Exchange(ref miracleCleanseFollowupLocalEntityIdBits, 0);
         Interlocked.Increment(ref miracleCleanseFollowupGeneration);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
+        Interlocked.Exchange(ref scholarSpreadLocalEntityIdBits, 0);
+        Interlocked.Increment(ref scholarSpreadGeneration);
         combatLimitBreakCaptureBuffer.SetEnabled(false);
         actionEffectHook?.Dispose();
         IsRunning = false;
@@ -293,6 +336,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         ClearMiracleInterceptThreats();
         ClearMiracleInterceptConfirmations();
         ClearPressureEvents();
+        ClearScholarSpreadEffects();
     }
 
     private void ActionEffectDetour(
@@ -308,39 +352,73 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         MiracleInterceptThreatEvent? capturedMiracleInterceptThreat = null;
         MiracleInterceptLandedEffect? capturedMiracleInterceptConfirmation = null;
         TargetPressureCaptureEvent? capturedPressure = null;
+        ScholarSpreadCapturedActionEffect? capturedScholarSpreadEffect = null;
         try
         {
             if (Volatile.Read(ref captureBlocked) == 0)
             {
-                capturedWarning = TryCaptureMachinistWarning(casterEntityId, header, effects, targetEntityIds);
-                capturedAllyRescueCleanse = TryCaptureAllyRescueCleanse(
-                    casterEntityId,
-                    header,
-                    effects,
-                    targetEntityIds);
-                capturedMiracleInterceptThreat = TryCaptureMiracleInterceptThreat(
-                    casterEntityId,
-                    header,
-                    effects,
-                    targetEntityIds);
-                capturedMiracleInterceptConfirmation = TryCaptureMiracleInterceptConfirmation(
-                    casterEntityId,
-                    header,
-                    effects,
-                    targetEntityIds);
-                capturedPressure = TryCapturePressure(casterEntityId, header, effects, targetEntityIds);
-                combatLimitBreakCaptureBuffer.Capture(
-                    casterEntityId,
-                    header,
-                    effects,
-                    targetEntityIds);
+                try
+                {
+                    capturedWarning = TryCaptureMachinistWarning(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                    capturedAllyRescueCleanse = TryCaptureAllyRescueCleanse(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                    capturedMiracleInterceptThreat = TryCaptureMiracleInterceptThreat(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                    capturedMiracleInterceptConfirmation = TryCaptureMiracleInterceptConfirmation(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                    capturedPressure = TryCapturePressure(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                }
+                catch (Exception exception)
+                {
+                    RecordCaptureError(exception, scholarSpread: false);
+                }
+
+                // Scholar reliability is isolated from all older consumers of
+                // this shared detour: an unrelated parser failure cannot skip
+                // or invalidate the independent Scholar workflow.
+                try
+                {
+                    capturedScholarSpreadEffect = TryCaptureScholarSpreadEffect(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                }
+                catch (Exception exception)
+                {
+                    RecordCaptureError(exception, scholarSpread: true);
+                }
+
+                try
+                {
+                    combatLimitBreakCaptureBuffer.Capture(
+                        casterEntityId,
+                        header,
+                        effects,
+                        targetEntityIds);
+                }
+                catch (Exception exception)
+                {
+                    RecordCaptureError(exception, scholarSpread: false);
+                }
             }
-        }
-        catch (Exception exception)
-        {
-            var errorCount = Interlocked.Increment(ref captureErrors);
-            if (errorCount <= 3 || errorCount % 100 == 0)
-                log.Error(exception, "Seiton Sense failed closed while reading a bounded action-effect signal; error #{Count}.", errorCount);
         }
         finally
         {
@@ -360,6 +438,34 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         if (capturedMiracleInterceptConfirmation is { } miracleConfirmation)
             EnqueueMiracleInterceptConfirmation(miracleConfirmation);
         if (capturedPressure is { } pressure) EnqueuePressure(pressure);
+        if (capturedScholarSpreadEffect is { } scholarSpreadEffect)
+            EnqueueScholarSpreadEffect(scholarSpreadEffect);
+    }
+
+    private void RecordCaptureError(Exception exception, bool scholarSpread)
+    {
+        var errorCount = Interlocked.Increment(ref captureErrors);
+        var scholarErrorCount = scholarSpread
+            ? Interlocked.Increment(ref scholarSpreadCaptureErrors)
+            : 0;
+        if (errorCount <= 3 || errorCount % 100 == 0 || scholarErrorCount is 1 or 2 or 3)
+        {
+            if (scholarSpread)
+            {
+                log.Error(
+                    exception,
+                    "Seiton Sense Scholar action-effect capture failed closed; Scholar error #{ScholarCount}, shared error #{Count}.",
+                    scholarErrorCount,
+                    errorCount);
+            }
+            else
+            {
+                log.Error(
+                    exception,
+                    "Seiton Sense failed closed while reading a bounded action-effect signal; shared error #{Count}.",
+                    errorCount);
+            }
+        }
     }
 
     private MachinistLimitBreakWarning? TryCaptureMachinistWarning(
@@ -697,6 +803,71 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         return null;
     }
 
+    private ScholarSpreadCapturedActionEffect? TryCaptureScholarSpreadEffect(
+        uint casterEntityId,
+        ActionEffectHandler.Header* header,
+        ActionEffectHandler.TargetEffects* effects,
+        GameObjectId* targetEntityIds)
+    {
+        var localEntityId = CurrentScholarSpreadLocalEntityId;
+        var featureGeneration = CurrentScholarSpreadGeneration;
+        if (!IsNetworkEntityId(localEntityId) ||
+            casterEntityId != localEntityId ||
+            header == null ||
+            effects == null ||
+            targetEntityIds == null ||
+            header->NumTargets is 0 or > MaximumTargetsPerAction)
+        {
+            return null;
+        }
+
+        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
+        if (!ScholarSpreadRules.IsRelevantAction(actionId)) return null;
+        if (actionId != ScholarSpreadRules.DeploymentTacticsActionId &&
+            header->NumTargets != 1)
+        {
+            return null;
+        }
+
+        var primaryTargetEntityId = targetEntityIds[0].ObjectId;
+        if (!IsNetworkEntityId(primaryTargetEntityId)) return null;
+
+        var dotPairObserved = false;
+        var shieldPairObserved = false;
+        var targetsToScan = actionId == ScholarSpreadRules.DeploymentTacticsActionId
+            ? (int)header->NumTargets
+            : 1;
+        for (var targetIndex = 0; targetIndex < targetsToScan; targetIndex++)
+        {
+            var targetEffects = effects[targetIndex].Effects;
+            dotPairObserved |= HasExactAddedStatusPair(
+                targetEffects,
+                ScholarSpreadRules.BiolysisStatusId,
+                ScholarSpreadRules.BiolyticStatusId);
+            shieldPairObserved |= HasExactAddedStatusPair(
+                targetEffects,
+                ScholarSpreadRules.GalvanizeStatusId,
+                ScholarSpreadRules.CatalyzeStatusId);
+        }
+
+        if (featureGeneration != CurrentScholarSpreadGeneration ||
+            localEntityId != CurrentScholarSpreadLocalEntityId)
+        {
+            return null;
+        }
+
+        return new ScholarSpreadCapturedActionEffect(
+            Environment.TickCount64,
+            casterEntityId,
+            primaryTargetEntityId,
+            actionId,
+            dotPairObserved,
+            shieldPairObserved,
+            featureGeneration,
+            header->GlobalSequence,
+            header->SourceSequence);
+    }
+
     private void Enqueue(MachinistLimitBreakWarning warning)
     {
         if (disposed ||
@@ -813,6 +984,29 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         pendingPressureEvents.Enqueue(pressureEvent);
     }
 
+    private void EnqueueScholarSpreadEffect(ScholarSpreadCapturedActionEffect effect)
+    {
+        if (disposed ||
+            Volatile.Read(ref captureBlocked) != 0 ||
+            effect.CasterEntityId != CurrentScholarSpreadLocalEntityId ||
+            effect.FeatureGeneration != CurrentScholarSpreadGeneration ||
+            !IsNetworkEntityId(effect.PrimaryTargetEntityId))
+        {
+            return;
+        }
+
+        var depth = Interlocked.Increment(ref queuedScholarSpreadEffectCount);
+        if (depth > MaximumQueuedScholarSpreadEffects)
+        {
+            Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
+            Interlocked.Increment(ref droppedScholarSpreadEffects);
+            return;
+        }
+
+        pendingScholarSpreadEffects.Enqueue(effect);
+        Interlocked.Increment(ref capturedScholarSpreadEffects);
+    }
+
     private static bool HasHarmfulPressureEffect(ActionEffectHandler.TargetEffects* targetEffects)
     {
         var slots = targetEffects->Effects;
@@ -832,6 +1026,25 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
         }
 
         return true;
+    }
+
+    private static bool HasExactAddedStatusPair(
+        Span<ActionEffectHandler.Effect> effects,
+        uint firstStatusId,
+        uint secondStatusId)
+    {
+        var firstCount = 0;
+        var secondCount = 0;
+        foreach (var effect in effects)
+        {
+            if (effect.Type != AddStatusEffectType) continue;
+            if (effect.Value == firstStatusId)
+                firstCount++;
+            else if (effect.Value == secondStatusId)
+                secondCount++;
+        }
+
+        return firstCount == 1 && secondCount == 1;
     }
 
     private static bool IsEmpty(ActionEffectHandler.Effect effect) =>

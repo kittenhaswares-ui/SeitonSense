@@ -25,6 +25,7 @@ internal static class HeldCastCancellationSelfTests
             HeldCastCancellationHelperKind.ScholarCriticalStrategy,
             HeldCastCancellationHelperKind.DarkKnightPlunge,
             HeldCastCancellationHelperKind.SmartRecuperate,
+            HeldCastCancellationHelperKind.EmergencyTeleport,
             HeldCastCancellationHelperKind.Guard,
             HeldCastCancellationHelperKind.PressureEscapeSprint,
         };

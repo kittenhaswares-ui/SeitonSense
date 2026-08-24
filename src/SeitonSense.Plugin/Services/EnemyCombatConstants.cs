@@ -21,6 +21,33 @@ internal static class EnemyCombatConstants
     internal const ushort ScholarCriticalStrategyRecast100ms = 200;
     internal const int ScholarCriticalStrategySheetRange = 25;
 
+    internal const uint ScholarAdloquiumActionId = 29232;
+    internal const uint ScholarAdloquiumIconId = 9283;
+    internal const ushort ScholarAdloquiumRecast100ms = 120;
+    internal const uint ScholarBiolysisActionId = 29233;
+    internal const uint ScholarBiolysisIconId = 9390;
+    internal const ushort ScholarBiolysisRecast100ms = 160;
+    internal const uint ScholarDeploymentTacticsActionId = 29234;
+    internal const uint ScholarDeploymentTacticsIconId = 9612;
+    internal const ushort ScholarDeploymentTacticsRecast100ms = 120;
+    internal const uint ScholarGalvanizeStatusId = 3087;
+    internal const uint ScholarCatalyzeStatusId = 3088;
+    internal const uint ScholarBiolysisStatusId = 3089;
+    internal const uint ScholarBiolyticStatusId = 3090;
+    internal const uint TacticalCrystalBattleNpcNameId = 11350;
+
+    internal const uint EmergencyTeleportMonkActionId = 29484;
+    internal const uint EmergencyTeleportMonkActionIconId = 9645;
+    internal const uint EmergencyTeleportBlackMageActionId = 29660;
+    internal const uint EmergencyTeleportBlackMageActionIconId = 9245;
+    internal const uint EmergencyTeleportSageActionId = 29261;
+    internal const uint EmergencyTeleportSageActionIconId = 9579;
+    internal const uint EmergencyTeleportViperActionId = 39184;
+    internal const uint EmergencyTeleportViperActionIconId = 9724;
+    internal const uint MonkJobId = 20;
+    internal const uint BlackMageJobId = 25;
+    internal const uint SageJobId = 40;
+
     internal const uint RecuperateActionId = 29711;
     internal const uint RecuperateIconId = 9108;
     internal const uint RecuperateMpCost = 2000;

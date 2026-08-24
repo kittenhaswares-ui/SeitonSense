@@ -17,8 +17,9 @@ public enum HeldCastCancellationHelperKind : byte
     ScholarCriticalStrategy = 7,
     DarkKnightPlunge = 8,
     SmartRecuperate = 9,
-    Guard = 10,
-    PressureEscapeSprint = 11,
+    EmergencyTeleport = 10,
+    Guard = 11,
+    PressureEscapeSprint = 12,
 }
 
 /// <summary>

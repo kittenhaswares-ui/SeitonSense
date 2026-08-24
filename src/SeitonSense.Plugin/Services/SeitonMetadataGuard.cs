@@ -27,13 +27,28 @@ internal sealed record PvPMetadataValidation(
     bool FuriousBacklashVerified,
     bool MonkEarthReplyVerified,
     bool ScholarCriticalStrategyVerified,
+    bool ScholarSpreadVerified,
+    bool EmergencyTeleportMonkVerified,
+    bool EmergencyTeleportBlackMageVerified,
+    bool EmergencyTeleportSageVerified,
+    bool EmergencyTeleportViperVerified,
     bool SmartKardiaVerified,
     bool AutoLowMpFocusProbeVerified,
     bool DarkKnightPlungeVerified)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false);
+        false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false);
+
+    internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
+    {
+        EnemyCombatConstants.MonkJobId => EmergencyTeleportMonkVerified,
+        EnemyCombatConstants.BlackMageJobId => EmergencyTeleportBlackMageVerified,
+        EnemyCombatConstants.SageJobId => EmergencyTeleportSageVerified,
+        EnemyCombatConstants.ViperJobId => EmergencyTeleportViperVerified,
+        _ => false,
+    };
 }
 
 internal static class PvPMetadataGuard
@@ -257,6 +272,105 @@ internal static class PvPMetadataGuard
                        "Halves the defensive bonus of Guard instead when targeting enemies under its effect.",
                        StringComparison.Ordinal);
         });
+
+        var scholarSpreadVerified = ValidateFeature("Scholar held spread", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            var battleNpcNames = dataManager.GetExcelSheet<BNpcName>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.ScholarAdloquiumActionId, out var adloquium) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.ScholarAdloquiumActionId, out var adloquiumText) ||
+                !actions.TryGetRow(EnemyCombatConstants.ScholarBiolysisActionId, out var biolysis) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.ScholarBiolysisActionId, out var biolysisText) ||
+                !actions.TryGetRow(EnemyCombatConstants.ScholarDeploymentTacticsActionId, out var deployment) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.ScholarDeploymentTacticsActionId, out var deploymentText) ||
+                !statuses.TryGetRow(EnemyCombatConstants.ScholarGalvanizeStatusId, out var galvanize) ||
+                !statuses.TryGetRow(EnemyCombatConstants.ScholarCatalyzeStatusId, out var catalyze) ||
+                !statuses.TryGetRow(EnemyCombatConstants.ScholarBiolysisStatusId, out var biolysisStatus) ||
+                !statuses.TryGetRow(EnemyCombatConstants.ScholarBiolyticStatusId, out var biolytic) ||
+                !battleNpcNames.TryGetRow(EnemyCombatConstants.TacticalCrystalBattleNpcNameId, out var tacticalCrystal))
+            {
+                return false;
+            }
+
+            return ValidateScholarAdloquium(adloquium, adloquiumText.Description.ToString()) &&
+                   ValidateScholarBiolysis(biolysis, biolysisText.Description.ToString()) &&
+                   ValidateScholarDeployment(deployment, deploymentText.Description.ToString()) &&
+                   ValidateScholarSpreadStatus(galvanize, "Galvanize", 212_801, 1, "barrier") &&
+                   ValidateScholarSpreadStatus(catalyze, "Catalyze", 212_814, 1, "Damage taken is reduced") &&
+                   ValidateScholarSpreadStatus(biolysisStatus, "Biolysis", 212_812, 2, "damage over time") &&
+                   ValidateScholarSpreadStatus(biolytic, "Biolytic", 210_506, 2, "HP recovery") &&
+                   string.Equals(
+                       tacticalCrystal.Singular.ToString(),
+                       "tactical crystal",
+                       StringComparison.Ordinal);
+        });
+
+        var emergencyTeleportMonkVerified = ValidateFeature(
+            "Emergency Teleport: Monk",
+            log,
+            () => ValidateEmergencyTeleportAction(
+                dataManager,
+                EnemyCombatConstants.EmergencyTeleportMonkActionId,
+                "Thunderclap",
+                EnemyCombatConstants.EmergencyTeleportMonkActionIconId,
+                EnemyCombatConstants.MonkJobId,
+                21,
+                20,
+                80,
+                6,
+                71,
+                2,
+                needToFaceTarget: false));
+        var emergencyTeleportBlackMageVerified = ValidateFeature(
+            "Emergency Teleport: Black Mage",
+            log,
+            () => ValidateEmergencyTeleportAction(
+                dataManager,
+                EnemyCombatConstants.EmergencyTeleportBlackMageActionId,
+                "Aetherial Manipulation",
+                EnemyCombatConstants.EmergencyTeleportBlackMageActionIconId,
+                EnemyCombatConstants.BlackMageJobId,
+                26,
+                25,
+                80,
+                4,
+                0,
+                0,
+                needToFaceTarget: true));
+        var emergencyTeleportSageVerified = ValidateFeature(
+            "Emergency Teleport: Sage",
+            log,
+            () => ValidateEmergencyTeleportAction(
+                dataManager,
+                EnemyCombatConstants.EmergencyTeleportSageActionId,
+                "Icarus",
+                EnemyCombatConstants.EmergencyTeleportSageActionIconId,
+                EnemyCombatConstants.SageJobId,
+                181,
+                25,
+                100,
+                3,
+                71,
+                2,
+                needToFaceTarget: false));
+        var emergencyTeleportViperVerified = ValidateFeature(
+            "Emergency Teleport: Viper",
+            log,
+            () => ValidateEmergencyTeleportAction(
+                dataManager,
+                EnemyCombatConstants.EmergencyTeleportViperActionId,
+                "Slither",
+                EnemyCombatConstants.EmergencyTeleportViperActionIconId,
+                EnemyCombatConstants.ViperJobId,
+                196,
+                20,
+                120,
+                4,
+                71,
+                2,
+                needToFaceTarget: true));
 
         var smartKardiaVerified = ValidateFeature("Smart Kardia", log, () =>
         {
@@ -1009,6 +1123,11 @@ internal static class PvPMetadataGuard
             furiousBacklashVerified,
             monkEarthReplyVerified,
             scholarCriticalStrategyVerified,
+            scholarSpreadVerified,
+            emergencyTeleportMonkVerified,
+            emergencyTeleportBlackMageVerified,
+            emergencyTeleportSageVerified,
+            emergencyTeleportViperVerified,
             smartKardiaVerified,
             autoLowMpFocusProbeVerified,
             darkKnightPlungeVerified);
@@ -1020,7 +1139,9 @@ internal static class PvPMetadataGuard
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
-            "ScholarCriticalStrategy={ScholarCriticalStrategy}, SmartKardia={SmartKardia}, " +
+            "ScholarCriticalStrategy={ScholarCriticalStrategy}, ScholarSpread={ScholarSpread}, " +
+            "EmergencyTeleport={EmergencyTeleportMonk}/{EmergencyTeleportBlackMage}/" +
+            "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}.",
             validation.SeitonVerified,
             validation.ViperSerpentTailVerified,
@@ -1041,6 +1162,11 @@ internal static class PvPMetadataGuard
             validation.FuriousBacklashVerified,
             validation.MonkEarthReplyVerified,
             validation.ScholarCriticalStrategyVerified,
+            validation.ScholarSpreadVerified,
+            validation.EmergencyTeleportMonkVerified,
+            validation.EmergencyTeleportBlackMageVerified,
+            validation.EmergencyTeleportSageVerified,
+            validation.EmergencyTeleportViperVerified,
             validation.SmartKardiaVerified,
             validation.AutoLowMpFocusProbeVerified,
             validation.DarkKnightPlungeVerified);
@@ -1155,6 +1281,215 @@ internal static class PvPMetadataGuard
                description.Contains("Adds 3 seconds of charge to the limit gauge", StringComparison.Ordinal) &&
                description.Contains("This action cannot be assigned to a hotbar.", StringComparison.Ordinal);
     }
+
+    private static bool ValidateEmergencyTeleportAction(
+        IDataManager dataManager,
+        uint actionId,
+        string expectedName,
+        uint expectedIcon,
+        uint expectedJobId,
+        uint expectedJobCategoryId,
+        sbyte expectedRange,
+        ushort expectedRecast100ms,
+        byte expectedCooldownGroup,
+        byte expectedAdditionalCooldownGroup,
+        byte expectedMaximumCharges,
+        bool needToFaceTarget)
+    {
+        var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+        var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+        if (!actions.TryGetRow(actionId, out var action) ||
+            !descriptions.TryGetRow(actionId, out var transient))
+        {
+            return false;
+        }
+
+        return string.Equals(action.Name.ToString(), expectedName, StringComparison.Ordinal) &&
+               action.Icon == expectedIcon &&
+               action.IsPvP &&
+               action.IsPlayerAction &&
+               action.ClassJob.IsValid &&
+               action.ClassJob.RowId == expectedJobId &&
+               action.ClassJobCategory.IsValid &&
+               action.ClassJobCategory.RowId == expectedJobCategoryId &&
+               action.ActionCategory.IsValid &&
+               action.ActionCategory.RowId == 4 &&
+               action.Range == expectedRange &&
+               action.EffectRange == 0 &&
+               action.Cast100ms == 0 &&
+               action.Recast100ms == expectedRecast100ms &&
+               action.PrimaryCostType == 0 &&
+               action.PrimaryCostValue == 0 &&
+               action.SecondaryCostType == 0 &&
+               action.SecondaryCostValue.RowId == 0 &&
+               action.CooldownGroup == expectedCooldownGroup &&
+               action.AdditionalCooldownGroup == expectedAdditionalCooldownGroup &&
+               action.MaxCharges == expectedMaximumCharges &&
+               !action.CanTargetSelf &&
+               action.CanTargetParty &&
+               action.CanTargetAlliance &&
+               action.CanTargetHostile &&
+               action.CanTargetAlly &&
+               !action.CanTargetOwnPet &&
+               !action.CanTargetPartyPet &&
+               !action.TargetArea &&
+               action.RequiresLineOfSight &&
+               action.NeedToFaceTarget == needToFaceTarget &&
+               action.AffectsPosition &&
+               action.CastType == 1 &&
+               transient.Description.ToString().Contains(
+                   "Rush to a target's side.",
+                   StringComparison.Ordinal);
+    }
+
+    private static bool ValidateScholarAdloquium(
+        ActionSheet action,
+        string description) =>
+        ValidateScholarActionBase(
+            action,
+            EnemyCombatConstants.ScholarAdloquiumActionId,
+            "Adloquium",
+            EnemyCombatConstants.ScholarAdloquiumIconId,
+            actionCategoryId: 2,
+            range: 30,
+            effectRange: 0,
+            EnemyCombatConstants.ScholarAdloquiumRecast100ms,
+            cooldownGroup: 7,
+            additionalCooldownGroup: 58,
+            maximumCharges: 2,
+            canTargetSelf: true,
+            canTargetParty: true,
+            canTargetAlliance: true,
+            canTargetHostile: false,
+            canTargetAlly: true,
+            needToFaceTarget: false,
+            castType: 1) &&
+        description.Contains("Grants Galvanize and Catalyze to target", StringComparison.Ordinal) &&
+        description.Contains("Duration: 12s", StringComparison.Ordinal);
+
+    private static bool ValidateScholarBiolysis(
+        ActionSheet action,
+        string description) =>
+        ValidateScholarActionBase(
+            action,
+            EnemyCombatConstants.ScholarBiolysisActionId,
+            "Biolysis",
+            EnemyCombatConstants.ScholarBiolysisIconId,
+            actionCategoryId: 2,
+            range: 25,
+            effectRange: 0,
+            EnemyCombatConstants.ScholarBiolysisRecast100ms,
+            cooldownGroup: 1,
+            additionalCooldownGroup: 58,
+            maximumCharges: 0,
+            canTargetSelf: false,
+            canTargetParty: false,
+            canTargetAlliance: false,
+            canTargetHostile: true,
+            canTargetAlly: false,
+            needToFaceTarget: true,
+            castType: 1) &&
+        description.Contains("Afflicts target with Biolysis and Biolytic.", StringComparison.Ordinal) &&
+        description.Contains("Duration: 12s", StringComparison.Ordinal);
+
+    private static bool ValidateScholarDeployment(
+        ActionSheet action,
+        string description) =>
+        ValidateScholarActionBase(
+            action,
+            EnemyCombatConstants.ScholarDeploymentTacticsActionId,
+            "Deployment Tactics",
+            EnemyCombatConstants.ScholarDeploymentTacticsIconId,
+            actionCategoryId: 4,
+            range: 30,
+            effectRange: 15,
+            EnemyCombatConstants.ScholarDeploymentTacticsRecast100ms,
+            cooldownGroup: 2,
+            additionalCooldownGroup: 71,
+            maximumCharges: 2,
+            canTargetSelf: true,
+            canTargetParty: true,
+            canTargetAlliance: false,
+            canTargetHostile: true,
+            canTargetAlly: false,
+            needToFaceTarget: false,
+            castType: 2) &&
+        description.Contains(
+            "Extends Galvanize and Catalyze effects cast on self or target",
+            StringComparison.Ordinal) &&
+        description.Contains(
+            "extends Biolysis and Biolytic effects to other nearby enemies",
+            StringComparison.Ordinal) &&
+        description.Contains("effects applied by you", StringComparison.Ordinal);
+
+    private static bool ValidateScholarActionBase(
+        ActionSheet action,
+        uint actionId,
+        string expectedName,
+        uint expectedIcon,
+        uint actionCategoryId,
+        sbyte range,
+        byte effectRange,
+        ushort recast100ms,
+        byte cooldownGroup,
+        byte additionalCooldownGroup,
+        byte maximumCharges,
+        bool canTargetSelf,
+        bool canTargetParty,
+        bool canTargetAlliance,
+        bool canTargetHostile,
+        bool canTargetAlly,
+        bool needToFaceTarget,
+        byte castType) =>
+        action.RowId == actionId &&
+        string.Equals(action.Name.ToString(), expectedName, StringComparison.Ordinal) &&
+        action.Icon == expectedIcon &&
+        action.IsPvP &&
+        action.IsPlayerAction &&
+        action.ClassJob.IsValid &&
+        action.ClassJob.RowId == EnemyCombatConstants.ScholarJobId &&
+        action.ClassJobCategory.IsValid &&
+        action.ClassJobCategory.RowId == 29 &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == actionCategoryId &&
+        action.Range == range &&
+        action.EffectRange == effectRange &&
+        action.Cast100ms == 0 &&
+        action.Recast100ms == recast100ms &&
+        action.PrimaryCostType == 0 &&
+        action.PrimaryCostValue == 0 &&
+        action.SecondaryCostType == 0 &&
+        action.SecondaryCostValue.RowId == 0 &&
+        action.CooldownGroup == cooldownGroup &&
+        action.AdditionalCooldownGroup == additionalCooldownGroup &&
+        action.MaxCharges == maximumCharges &&
+        action.CanTargetSelf == canTargetSelf &&
+        action.CanTargetParty == canTargetParty &&
+        action.CanTargetAlliance == canTargetAlliance &&
+        action.CanTargetHostile == canTargetHostile &&
+        action.CanTargetAlly == canTargetAlly &&
+        !action.CanTargetOwnPet &&
+        !action.CanTargetPartyPet &&
+        !action.TargetArea &&
+        action.RequiresLineOfSight &&
+        action.NeedToFaceTarget == needToFaceTarget &&
+        !action.AffectsPosition &&
+        action.CastType == castType;
+
+    private static bool ValidateScholarSpreadStatus(
+        Status status,
+        string expectedName,
+        uint expectedIcon,
+        byte expectedCategory,
+        string expectedDescriptionFragment) =>
+        string.Equals(status.Name.ToString(), expectedName, StringComparison.Ordinal) &&
+        status.Icon == expectedIcon &&
+        status.StatusCategory == expectedCategory &&
+        !status.CanDispel &&
+        !status.IsPermanent &&
+        status.Description.ToString().Contains(
+            expectedDescriptionFragment,
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool ValidateFeature(string feature, IPluginLog log, Func<bool> validate)
     {

@@ -22,10 +22,12 @@ internal sealed partial class SettingsWindow
         var defense = personalStatus.DefensiveUtilityDiagnostics;
         var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
+        var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
         var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
         var viper = personalStatus.ViperSerpentTailDiagnostics;
+        var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
         var protectionEndRankPressure = !protectionEndRankPresent
@@ -60,9 +62,10 @@ internal sealed partial class SettingsWindow
                     : "none")}, " +
             $"last={personal.Purify.LastEvent}");
         ImGui.TextWrapped(
-            $"MCH LB capture: hook={mchLimitBreak.CaptureRunning}, queue={mchLimitBreak.QueueDepth}, " +
-            $"accepted={mchLimitBreak.AcceptedWarnings}, active={mchLimitBreak.WarningActive}, " +
-            $"errors={mchLimitBreak.CaptureErrors}, drops={mchLimitBreak.DroppedWarnings}");
+            $"Shared ActionEffect hook / MCH LB queue: hook={mchLimitBreak.CaptureRunning}, " +
+            $"mch-queue={mchLimitBreak.QueueDepth}, mch-accepted={mchLimitBreak.AcceptedWarnings}, " +
+            $"mch-active={mchLimitBreak.WarningActive}, shared-errors={mchLimitBreak.CaptureErrors}, " +
+            $"mch-drops={mchLimitBreak.DroppedWarnings}");
         ImGui.TextWrapped(
             $"High-pressure escape: active={pressureEscape.Active}, visual/sound/sprint=" +
             $"{pressureEscape.WarningEnabled}/{configuration.PlayHighPressureWarningSound}/" +
@@ -106,6 +109,39 @@ internal sealed partial class SettingsWindow
             $"rejected/unknown/soft={recuperate.RejectedCount}/{recuperate.UnknownCount}/" +
             $"{recuperate.SoftWaitCount}, " +
             $"last={recuperate.LastEvent}");
+        ImGui.TextWrapped(
+            $"Emergency Teleport: {emergencyTeleport.Decision}/{emergencyTeleport.Reason}, " +
+            $"danger={emergencyTeleport.Danger}, action={emergencyTeleport.ResolvedActionId}, " +
+            $"HP={emergencyTeleport.CurrentHp}/{emergencyTeleport.MaximumHp}, " +
+            $"MP={emergencyTeleport.CurrentMp}/{emergencyTeleport.MaximumMp}, pressure=" +
+            $"{emergencyTeleport.DirectPressureKnown}/{emergencyTeleport.DirectEnemyCount}, " +
+            $"episode={emergencyTeleport.EpisodeToken}/{emergencyTeleport.EpisodeOpen}/" +
+            $"{emergencyTeleport.EpisodeSpent}, candidates={emergencyTeleport.CandidateCount}, " +
+            $"P={emergencyTeleport.PartySlot}, target={emergencyTeleport.TargetGameObjectId:X}/" +
+            $"{emergencyTeleport.TargetEntityId:X}, distance={emergencyTeleport.TravelDistanceYalms:0.0}, " +
+            $"nearby/clearance={emergencyTeleport.NearbyEnemyCount}/" +
+            $"{emergencyTeleport.MinimumEnemyClearanceYalms:0.0}, key={emergencyTeleport.HeldGameplayKey}, " +
+            $"claim={emergencyTeleport.InputClaimed}, attempt={emergencyTeleport.UseActionAttempted}/" +
+            $"{emergencyTeleport.NativeOutcome}, count={emergencyTeleport.AttemptCount}/" +
+            $"{emergencyTeleport.AcceptedCount}, last={emergencyTeleport.LastEvent}");
+        ImGui.TextWrapped(
+            $"Scholar Smart Spread (independent lane): {scholarSpread.Phase}/{scholarSpread.Kind}, " +
+            $"plan/intent/effect={scholarSpread.PlanReason}/{scholarSpread.IntentReason}/" +
+            $"{scholarSpread.EffectReason}, capture={scholarSpread.CaptureRunning}/" +
+            $"{scholarSpread.CaptureQueueDepth}/{scholarSpread.CaptureCount}/" +
+            $"{scholarSpread.CaptureDropCount}, raw-held/consumed=" +
+            $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}, " +
+            $"key={scholarSpread.HeldGameplayKey}, next={scholarSpread.NextActionId}, charges=" +
+            $"{scholarSpread.DeploymentCharges}, deploy/bio={scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
+            $"{scholarSpread.BiolysisRemainingMilliseconds} ms, boundary={scholarSpread.NativeBoundaryClear}, " +
+            $"dot/shield candidates={scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount}, " +
+            $"slot={scholarSpread.TargetSlot}, target={scholarSpread.TargetGameObjectId:X}/" +
+            $"{scholarSpread.TargetEntityId:X}, coverage={scholarSpread.PredictedAffectedCount}/" +
+            $"{scholarSpread.CurrentAffectedCount}, crystal={scholarSpread.TacticalCrystalResolved}/" +
+            $"{scholarSpread.TacticalCrystalPriorityRadiusYalms:0.0}y, attempt=" +
+            $"{scholarSpread.UseActionAttempted}/{scholarSpread.NativeOutcome}, confirmations=" +
+            $"{scholarSpread.SetupConfirmationCount}/{scholarSpread.DeploymentConfirmationCount}, " +
+            $"manual-conflicts={scholarSpread.ManualConflictCount}, last={scholarSpread.LastEvent}");
         ImGui.TextWrapped(
             $"Viper Serpentiner Geist: {viper.Phase}/{viper.Decision}/{viper.Reason}, " +
             $"action/generation={viper.ResolvedActionId}/{viper.ExposureGeneration}, " +
@@ -219,11 +255,12 @@ internal sealed partial class SettingsWindow
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
             "The current request order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
-            "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
+            "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
             "Kardia > event Monk. The job-specific physical-hold helpers share the second tier; NIN Seiton and VPR Serpentiner Geist are first for their jobs, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof and never changes a target or cancels a cast. " +
+            "Scholar Smart Spread reads the same raw hold independently and never consumes the shared priority lane. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
             "blocked while your own Guard is active. The " +

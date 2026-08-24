@@ -316,6 +316,8 @@ internal sealed class TargetPressureTracker : IDisposable
         var isReactiveCounterCcJob = isAllyRescueJob ||
                                      localJobId == EnemyCombatConstants.NinjaJobId;
         var isScholar = localJobId == EnemyCombatConstants.ScholarJobId;
+        var isEmergencyTeleportJob =
+            EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var isBard = localJobId == EnemyCombatConstants.BardJobId;
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
         var condition = dutyState.ContentFinderCondition;
@@ -348,9 +350,14 @@ internal sealed class TargetPressureTracker : IDisposable
                                        configuration.EnableAutoEnemyFocusMark ||
                                        configuration.ShowHighPressureWarning ||
                                        configuration.PlayHighPressureWarningSound ||
-                                       configuration.EnablePressureEscapeSprintOnHeldKey;
+                                       configuration.EnablePressureEscapeSprintOnHeldKey ||
+                                       (isEmergencyTeleportJob &&
+                                        configuration.EnableEmergencyTeleportOnHeldKey);
         var pressureEnabledForContext = pressureFeaturesEnabled &&
-                                        (!isWolvesDen || configuration.PressureIncludeWolvesDen);
+                                        (!isWolvesDen ||
+                                         configuration.PressureIncludeWolvesDen ||
+                                         (isEmergencyTeleportJob &&
+                                          configuration.EnableEmergencyTeleportOnHeldKey));
         var incomingAllyPressureEnabledForContext =
             supportedContext == SupportedPvPContext.CrystallineConflict &&
             ((isAllyRescueJob &&

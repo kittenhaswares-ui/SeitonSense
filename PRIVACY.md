@@ -85,7 +85,7 @@ following data already available in the local FFXIV client:
   Quick Chat row-35 metadata, the bounded client-accepted Guardian episode and
   exact party slot, and current Bind2/Bind1 targets and marker timestamps needed
   to skip occupied/uncertain signs and prove cleanup ownership;
-- when the Scholar held-key helper is enabled, the exact local job and held-key
+- when the Scholar Critical Strategy held-key helper is enabled, the exact local job and held-key
   generation, Critical Strategy `29716` readiness/metadata, the complete unique
   canonical `S1`-`S5` actor set, live Guard `3054`/`3673`, exact HP and trusted
   team-pressure observations, and FFXIV's native 25-yalm range/line-of-sight
@@ -102,6 +102,17 @@ following data already available in the local FFXIV client:
   current exact CC or explicitly enabled Wolves' Den context, and exact PvP
   Recuperate `29711` metadata/readiness needed for one frozen self/context intent
   and its bounded native calls;
+- when Emergency Teleport is enabled, the exact local job/identity, HP/MP, fresh
+  direct-enemy focus count, held-key generation, supported PvP context, reviewed
+  friendly movement action/readiness, exact non-self party identities and
+  positions, complete current enemy positions, native target action status,
+  range/line-of-sight result, destination safety counts/clearance, and one-shot
+  danger-episode state;
+- when Scholar Smart Spread is enabled, the exact local Scholar identity and raw
+  held-key state, current Biolysis/Adloquium/Deployment recasts and charges,
+  canonical enemy and party identities, local-source status pairs, positions,
+  native target action/range/line-of-sight results, the uniquely resolved tactical-
+  crystal actor/position, and bounded plugin-owned ActionEffect source sequences;
 - when the Viper Serpentiner-Geist helper is enabled, the directly observed
   adjusted carrier/follow-up action, its in-memory exposure generation/spent
   state, exact local/current-hard-target identities, context, territory, own
@@ -274,14 +285,15 @@ accepted or applied by the server.
 
 The current action-request priority is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
-Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint
+Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint
 > event Kardia > event Monk**. The eight job-specific physical-hold helpers share the
 second tier and use that deterministic urgency order; NIN and VPR use the first
 job-exclusive slot, while reactive counter-CC leads ally cleanse because
 its LB and protection-end windows are shorter. One framework frame permits at
 most one held-helper native boundary, but a continuously held key remains consent
 for later distinct exact episodes. Kardia and Monk retain their separate event-
-driven origins.
+driven origins. Scholar Smart Spread is independent of this shared priority and
+never claims or consumes its physical-input frame.
 
 ## Optional team-visible Attack1 focus sign
 
@@ -668,14 +680,14 @@ Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
 the same exact key may remain consent for a later distinct Purify, counter-CC,
 NIN Seiton, VPR Serpentiner Geist, ally cleanse, Guardian, NIN Guard-Shukuchi,
-SCH, DRK, Recuperate,
+SCH Critical Strategy, DRK, Recuperate, Emergency Teleport,
 Guard, or pressure Sprint episode. Enabling an option while a key is already
 down still requires a release and new press. Release, text input, context/job/identity loss, death, metadata
 failure, or reset clears the relevant leases. Own Guard suppresses every native
 helper boundary without consuming the physical hold; individual frozen episodes
 either wait or cancel according to their exact action-specific contract.
 
-The twelve physical-hold helpers prefer an already-held movement key, then another
+The thirteen shared physical-hold helpers prefer an already-held movement key, then another
 stable held gameplay key, before fresh movement/other fallback. Each helper
 checks its held lease before fresh input and retains the exact frozen key until
 release, ineligibility, reset, or its action-specific terminal outcome. A short
@@ -710,11 +722,13 @@ are neither persisted nor uploaded.
 This separate test is disabled by default. It applies only to otherwise-ready
 exact physical-hold intents for Purify, NIN Seiton, reactive counter-CC, Ally
 Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung,
-Smart Recuperate, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
+Smart Recuperate, Emergency Teleport, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
-Viper Serpentiner Geist is also excluded because its exact opportunity is
-trigger-driven after an accepted qualifying action. Cast cancellation therefore
-remains available to eleven of the twelve physical-hold helpers.
+Viper Serpentiner Geist is also excluded because it polls the currently
+transformed carrier and deliberately does not cancel a cast. Scholar Smart Spread also
+has no cast-cancel path because its independent lane waits for the native boundary.
+Cast cancellation therefore remains available to twelve of the thirteen shared
+physical-hold helpers.
 
 For the highest-priority eligible intent, the plugin rechecks exact local and
 target identity, held key, context, own Guard, helper action/readiness/resources,
@@ -883,6 +897,33 @@ released. No selected target is read or changed and no other action is
 substituted.
 The transient observations and aggregate diagnostics are not stored or uploaded.
 
+## Experimental Emergency Teleport held-key helper
+
+This persisted option is disabled by default. It supports exact PvP MNK
+Thunderclap `29484`, BLM Aetherial Manipulation `29660`, SGE Icarus `29261`, and
+VPR Slither `39184` in Crystalline Conflict and explicitly enabled Wolves' Den
+testing. It runs after Smart Recuperate and before generic Guard. The default
+danger gates are strictly below 50% HP, strictly below 4,000 MP, and at least one
+fresh direct enemy hard/cast target; settings also control the minimum travel,
+destination safety radius, and maximum nearby-enemy count.
+
+Each exact living, targetable non-self party candidate is checked against the
+reviewed job action, native target-specific action status, range/line of sight,
+minimum edge-to-edge travel, and one complete current enemy-position snapshot.
+Ranking minimizes nearby enemies first, then maximizes travel and clearance, with
+stable identity tie-breaks. Duplicate party identities, incomplete enemy geometry,
+unknown pressure, or any native uncertainty fails closed.
+
+The chosen action, local player, ally, key, context, settings, and danger episode
+are frozen. The final preflight rechecks all of them before one native request;
+the shared frame is consumed only after this check so its own held-key evidence
+remains readable. The episode is marked spent before the native call. Final
+preflight drift, rejection, exception, ambiguity, or any other outcome cannot
+retry, rerank, or select a fallback. A later episode requires a stable known-safe
+state. No target is changed, no input is generated or replayed, and the bounded
+episode/diagnostic state remains memory-only. Client acceptance does not prove
+that FFXIV moved the player.
+
 ## Experimental Viper Serpentiner Geist held-key helper
 
 This independent persisted option is disabled by default and runs only on PvP
@@ -948,7 +989,8 @@ exact. No custom center-distance cap is applied; the 10-yalm condition governs
 staying close enough for protection after the jump. Purify, NIN Seiton / VPR
 Serpentiner Geist,
 reactive counter-CC, and Ally Rescue keep priority. Guardian precedes NIN Guard-
-Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, and pressure Sprint.
+Shukuchi, SCH Critical Strategy, DRK, Smart Recuperate, Emergency Teleport,
+generic Guard, and pressure Sprint.
 Guardian freezes the selected ally and may use only the common bounded exact-
 intent retry before a direct native `29066` request is accepted. It does not
 change the visible target, select an alternate action/ally, or replay input.
@@ -1019,6 +1061,39 @@ state and diagnostics remain local in memory and are not saved as combat,
 target, or key history or uploaded. A client-accepted request does not prove
 that Critical Strategy landed or changed Guard; exact dispatch and effect
 behavior remain current-patch live-validation boundaries.
+
+## Experimental Scholar Smart Spread held-key helper
+
+This separate persisted option is disabled by default and runs only for PvP
+Scholar in exact Crystalline Conflict. It reads immutable raw held-key consent in
+an independent lane. It never claims the shared helper frame/generation and never
+requests cast cancellation; it waits for FFXIV's real GCD, cast, queue, and
+animation-lock boundary instead.
+
+The DoT path requires a complete exact canonical five-enemy roster and reads
+local-source Biolysis/Biolytic statuses, position, and native reachability to
+choose the exact seed with the largest new 15-yalm coverage of at least two
+targets. Unknown coverage for any of those five enemies blocks the ranking. The
+shield path is considered only when no DoT plan is ready and
+requires a complete exact five-member party view. It reads exact party
+HP/status/position and the
+single language-independent tactical-crystal battle-NPC identity; when that actor
+is uniquely resolved, candidates inside a conservative 5-yalm edge radius rank
+first, then lower HP and stable identity. Unknown coverage for any party member
+blocks this ranking. Adloquium spread is permitted only when
+two Deployment charges exist or native recast timing proves the next charge will
+return no later than the next Biolysis window.
+
+Every plugin-owned Adloquium/Biolysis/Deployment request freezes one action,
+actor, episode, and nonzero source sequence. Only its matching local-source
+ActionEffect and expected paired status evidence can advance the workflow.
+Separately pressed Scholar actions are not adopted; a manual Deployment conflict
+cancels the automatic plan to avoid double-spending. Final identity/status/action
+drift, unknown evidence, or packet ambiguity ends the plan without fallback or
+stale retry. All plans, source sequences, confirmations, conflicts, and aggregate
+diagnostics are bounded in local memory and are not persisted or uploaded.
+Client dispatch/packet evidence does not prove the status spread; current-patch
+ActionEffect correlation and the conservative crystal radius require live testing.
 
 ## Experimental Sage Smart Kardia after accepted Eukrasia
 
@@ -1297,7 +1372,8 @@ and its Unsealed follow-up `29516`. Purify alone precedes NIN Seiton on Ninja in
 the current request order; Viper's job-exclusive Serpentiner-Geist slot has the
 same rank but can never coexist with NIN at runtime. NIN Seiton precedes reactive
 counter-CC, Ally Rescue, PLD
-Guardian, Guard-Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, pressure
+Guardian, Guard-Shukuchi, SCH Critical Strategy, DRK, Smart Recuperate,
+Emergency Teleport, generic Guard, pressure
 Sprint, event Kardia, and event Monk.
 Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
@@ -1331,8 +1407,8 @@ Wolves' Den test mode; other PvP contexts fail closed.
 
 At the configured low-HP or expiry threshold, and only after Purify, NIN Seiton
 or VPR Serpentiner Geist,
-reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH,
-Hiebsprung, Smart Recuperate, generic Guard, pressure Sprint, and event Kardia
+reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy,
+Hiebsprung, Smart Recuperate, Emergency Teleport, generic Guard, pressure Sprint, and event Kardia
 decline or make no earlier attempt, the
 continuous resonance state is marked spent before at most one normal
 self-targeted Earth's Reply `29483`
@@ -1368,7 +1444,7 @@ rerank, or replay.
 Hiebsprung closes the job-specific second tier after Purify, the job-exclusive
 NIN Seiton / VPR Serpentiner-Geist slot, reactive counter-CC, Ally Rescue,
 Guardian, NIN Guard-Shukuchi, and SCH, and before Smart
-Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk. Held-
+Recuperate, Emergency Teleport, generic Guard, pressure Sprint, event Kardia, and event Monk. Held-
 key state, cooldown observations, frozen identity, HP/status/reachability samples, action
 result, and aggregate diagnostics remain bounded in memory and are not stored as
 combat/key history, transmitted, or uploaded. Client acceptance does not prove
@@ -1386,7 +1462,8 @@ target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
 Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
 opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
-trigger opt-ins, the separate held Smart Recuperate opt-in, the independent PLD
+trigger opt-ins, the separate held Smart Recuperate and Emergency Teleport opt-ins
+plus the six local Emergency thresholds, the independent PLD
 Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN reactive
 counter-CC master/held-key/post-Purify/post-Guard/per-startup-trigger opt-ins,
 the team-visible Attack1 marker
@@ -1396,7 +1473,7 @@ local MP sounds and their two built-in sound IDs, the local What's New
 acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
-Critical Strategy held-key opt-in,
+Critical Strategy and independent Scholar Smart Spread held-key opt-ins,
 the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist held-
 key opt-in, the DRK Shadowbringer macro opt-in, the separate DRK Hiebsprung held-
 key opt-in, the held-action cast-
@@ -1405,13 +1482,16 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 34 is current in v0.31.0.1. It forces the new action-
-initiating Viper Serpentiner-Geist option off for every upgrade, fresh install,
-and Reset Defaults. The historical schema-33 migration still leaves Smart Tab
+Configuration schema 35 is current in v0.32.0.0. It forces Emergency Teleport
+and Scholar Smart Spread off for every upgrade, fresh install, and Reset Defaults;
+Emergency initializes to 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
+travel, 10-yalm destination radius, and zero nearby enemies. The historical
+schema-34 migration still forces Viper Serpentiner Geist off. The historical
+schema-33 migration still leaves Smart Tab
 off while preserving an older explicitly enabled shared macro-helper opt-in as
-the separate Smart Action option. Smart Tab, Smart Action, and the Viper helper
-are all off for fresh and reset configurations; unrelated existing opt-ins are
-preserved.
+the separate Smart Action option. Smart Tab, Smart Action, Viper, Emergency
+Teleport, and Scholar Smart Spread are all off for fresh and reset configurations;
+unrelated existing opt-ins are preserved.
 
 Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key
 option off for upgrading configurations and left it off for fresh
@@ -1429,7 +1509,7 @@ including schema 28's default-off post-Guard migration. Schema 32 forces the
 retired Combat Frames master off, maps its optional name preference to the ally
 LB feed, enables the replacement LB surfaces, and initializes local MP sounds to
 built-in IDs 4 and 6. Fresh and reset configurations keep NIN Guard-Shukuchi,
-Smart Recuperate, Hiebsprung, Smart Action/other macro
+Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro
 helpers, and all other
 action-helper masters off; post-Guard defaults on only behind the disabled
 reactive-counter master. The replacement LB and local-MP presentation options
@@ -1438,6 +1518,7 @@ save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground
 destinations, Viper carrier exposures/frozen action-actor-context-key intents,
+Emergency danger/destination episodes, Scholar spread plans/source sequences,
 ActionEffect confirmation state, or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
