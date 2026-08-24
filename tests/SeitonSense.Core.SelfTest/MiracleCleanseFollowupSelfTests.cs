@@ -229,15 +229,38 @@ internal static class MiracleCleanseFollowupSelfTests
         var releaseState = ReachReleaseOpportunity(target, now: 6_000);
         var beforeOpportunityEnd = MiracleCleanseFollowupRules.Observe(
             releaseState,
-            Observation(null, Candidate(target), 6_749, higherPriority: true));
-        False(beforeOpportunityEnd.ShouldPromote, "priority wait remains inside 500ms opportunity");
+            Observation(null, Candidate(target), 9_249, higherPriority: true));
+        False(beforeOpportunityEnd.ShouldPromote,
+            "bound priority wait remains inside the original three-second held lease");
         var opportunityExpired = MiracleCleanseFollowupRules.Observe(
             beforeOpportunityEnd.NextState,
-            Observation(null, Candidate(target), 6_750));
+            Observation(null, Candidate(target), 9_250));
         Equal(
             MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
             opportunityExpired.CancelReason,
-            "exact 500ms release boundary cannot promote late");
+            "exact three-second bound release boundary cannot promote late");
+
+        var unboundState = ArmWithResilience(target, now: 14_000);
+        var unboundMissing = MiracleCleanseFollowupRules.Observe(
+            unboundState,
+            Observation(
+                null,
+                Candidate(target, reservationKey: 0, reservedKeyDown: false),
+                14_100));
+        var unboundRelease = MiracleCleanseFollowupRules.Observe(
+            unboundMissing.NextState,
+            Observation(
+                null,
+                Candidate(target, reservationKey: 0, reservedKeyDown: false),
+                14_250,
+                higherPriority: true));
+        var unboundExpired = MiracleCleanseFollowupRules.Observe(
+            unboundRelease.NextState,
+            Observation(null, Candidate(target), 14_750));
+        Equal(
+            MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
+            unboundExpired.CancelReason,
+            "unbound key acquisition remains strict at the original 500 ms boundary");
     }
 
     internal static void HigherPriorityWaitsWithoutDestroyingOpportunity()
@@ -255,12 +278,18 @@ internal static class MiracleCleanseFollowupSelfTests
 
         var free = MiracleCleanseFollowupRules.Observe(
             priority.NextState,
-            Observation(null, Candidate(target), 1_252));
-        True(free.ShouldPromote, "later free dispatcher slot receives promotion");
+            Observation(
+                null,
+                Candidate(target, reservationKey: 66, reservedKeyDown: true),
+                1_850));
+        True(free.ShouldPromote,
+            "dispatcher clearing after 500 ms receives the original bound promotion");
         Equal(
             1_250L,
             free.PromotionIntent!.Value.ReleasedAtMilliseconds,
-            "priority wait cannot restart the 500ms release opportunity");
+            "priority wait cannot restart the three-second held lease");
+        Equal(65, free.PromotionIntent.Value.GameplayKeyToken,
+            "a later reported key cannot replace the exact frozen key");
     }
 
     internal static void TeamPressureHasNoMinimumAndUnknownRemainsEligible()
@@ -298,22 +327,19 @@ internal static class MiracleCleanseFollowupSelfTests
                 null,
                 Candidate(target, counterActionReachable: false),
                 2_751));
-        False(unreachable.ShouldPromote, "an out-of-range release cannot be frozen into dispatch");
-        Equal(MiracleCleanseFollowupPhase.ReleaseOpportunity, unreachable.NextState.Phase,
-            "reachability may recover only inside the original release window");
-        var reachable = MiracleCleanseFollowupRules.Observe(
-            unreachable.NextState,
-            Observation(null, Candidate(target), 2_752));
-        True(reachable.ShouldPromote, "native reachability recovery inside the same window promotes immediately");
+        True(unreachable.ShouldPromote,
+            "an exact out-of-range release freezes now and waits in the bounded dispatcher lease");
+        Equal(MiracleCleanseFollowupPhase.WaitingForSignal, unreachable.NextState.Phase,
+            "promotion retires the short release window before the dispatcher waits for native reachability");
 
         releaseState = ReachReleaseOpportunity(target, now: 3_000);
         var expired = MiracleCleanseFollowupRules.Observe(
             releaseState,
-            Observation(null, Candidate(target), 3_750));
+            Observation(null, Candidate(target), 6_250));
         Equal(
             MiracleCleanseFollowupCancelReason.ReleaseOpportunityExpired,
             expired.CancelReason,
-            "the exact deadline is still terminal without a pressure gate");
+            "the exact held-lease deadline is terminal without a pressure gate");
     }
 
     internal static void IdentityAmbiguityAndConcurrencyFailClosed()

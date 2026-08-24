@@ -57,6 +57,14 @@ internal sealed record DefensiveUtilityProbeSnapshot(
     GuardianTriggerPopup? GuardianPopup,
     string LastEvent)
 {
+    internal int GuardianCriticalCandidateCount { get; init; }
+    internal int GuardianProactiveCandidateCount { get; init; }
+    internal PaladinGuardianRiskTier GuardianSelectedRiskTier { get; init; }
+    internal uint GuardianSelectedCurrentHp { get; init; }
+    internal uint GuardianSelectedMaximumHp { get; init; }
+    internal int? GuardianSelectedIncomingEnemyCount { get; init; }
+    internal long GuardianPressureAgeMilliseconds { get; init; } = -1;
+
     internal static DefensiveUtilityProbeSnapshot Initial { get; } = new(
         false,
         DefensiveUtilityActionKind.None,
@@ -235,6 +243,7 @@ internal sealed class DefensiveUtilityProbe
                           !higherPriorityClaimed;
         var selectedKey = heldKey != VirtualKey.NO_KEY ? heldKey : freshKey;
         var guardActionSpecificallyReady = guardMetadataVerified &&
+                                           nearAssist.CanProtectAutomaticGuard &&
                                            IsActionSpecificallyReady(
                                                EnemyCombatConstants.GuardActionId);
         if (frozenGuardRetry is { } frozenGuard)
@@ -433,17 +442,33 @@ internal sealed class DefensiveUtilityProbe
             ? CreateFrameSnapshotBase(guardActive)
             : Snapshot;
         var localIdentityValid = HasValidLocalPlayer(localPlayer);
-        HashSet<TargetPressureActorIdentity> criticalGuardianActors = [];
+        HashSet<TargetPressureActorIdentity> guardianRiskActors = [];
+        var guardianPressureAgeMilliseconds = -1L;
         var guardianCandidates = guardianConfigurationEnabled &&
                                  isCrystallineConflict &&
                                  localIdentityValid &&
                                  IsPaladin(localPlayer!)
-            ? BuildGuardianCandidates(localPlayer!, out criticalGuardianActors)
+            ? BuildGuardianCandidates(
+                localPlayer!,
+                nowMilliseconds,
+                out guardianRiskActors,
+                out guardianPressureAgeMilliseconds)
             : [];
         if (!guardianConfigurationEnabled || !isCrystallineConflict)
             guardianSpentActors.Clear();
         else
-            guardianSpentActors.RemoveWhere(actor => !criticalGuardianActors.Contains(actor));
+            guardianSpentActors.RemoveWhere(actor => !guardianRiskActors.Contains(actor));
+
+        var criticalGuardianCandidateCount = guardianCandidates.Count(candidate =>
+            DefensiveUtilityRules.IsGuardianCandidate(candidate) &&
+            DefensiveUtilityRules.ClassifyGuardianRisk(candidate) ==
+            PaladinGuardianRiskTier.Critical);
+        var proactiveGuardianCandidateCount = guardianCandidates.Count(candidate =>
+            DefensiveUtilityRules.IsGuardianCandidate(candidate) &&
+            DefensiveUtilityRules.ClassifyGuardianRisk(candidate) ==
+            PaladinGuardianRiskTier.ProactiveHighPressure);
+        var eligibleGuardianCandidateCount =
+            criticalGuardianCandidateCount + proactiveGuardianCandidateCount;
 
         var input = inputFrame.Snapshot;
         var freshKey = inputFrame.FreshGameplayKeyPressed
@@ -463,12 +488,19 @@ internal sealed class DefensiveUtilityProbe
         var targetGameObjectId = 0UL;
         var targetEntityId = 0U;
         var selectedGuardianPartySlot = 0;
+        var selectedGuardianRiskTier = PaladinGuardianRiskTier.None;
+        var selectedGuardianCurrentHp = 0U;
+        var selectedGuardianMaximumHp = 0U;
+        int? selectedGuardianIncomingEnemyCount = null;
         var lastEvent = DescribeGuardianWaitingState(
             guardianConfigurationEnabled,
             isCrystallineConflict,
             localIdentityValid,
             guardActive,
-            higherPriorityClaimed);
+            higherPriorityClaimed,
+            criticalGuardianCandidateCount,
+            proactiveGuardianCandidateCount,
+            guardianPressureAgeMilliseconds);
 
         var canDispatch = guardianConfigurationEnabled &&
                           isCrystallineConflict &&
@@ -497,6 +529,11 @@ internal sealed class DefensiveUtilityProbe
             var exactCandidate = guardianCandidates.FirstOrDefault(candidate =>
                 candidate.PartySlot == frozenGuardian.Intent.PartySlot &&
                 candidate.Actor == frozenGuardian.Intent.Actor);
+            selectedGuardianRiskTier = DefensiveUtilityRules.ClassifyGuardianRisk(
+                exactCandidate);
+            selectedGuardianCurrentHp = exactCandidate.CurrentHp;
+            selectedGuardianMaximumHp = exactCandidate.MaximumHp;
+            selectedGuardianIncomingEnemyCount = exactCandidate.IncomingEnemyCount;
             var exactRetryContext = guardianConfigurationEnabled &&
                                     isCrystallineConflict &&
                                     currentIdentity == frozenGuardian.LocalPlayer &&
@@ -510,7 +547,10 @@ internal sealed class DefensiveUtilityProbe
             {
                 frozenGuardianRetry = null;
                 guardianSpentActors.Add(frozenGuardian.Intent.Actor);
-                lastEvent = $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} retry cancelled by exact target/context drift";
+                lastEvent =
+                    $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} " +
+                    $"({DescribeGuardianRisk(frozenGuardian.Intent, guardianPressureAgeMilliseconds)}) " +
+                    "retry cancelled by exact target/context drift";
             }
             else if (!higherPriorityClaimed &&
                      !inputFrame.IsConsumed &&
@@ -530,20 +570,28 @@ internal sealed class DefensiveUtilityProbe
                         frozenGuardian,
                         guardianActionsSpecificallyReady);
                     lastEvent = castCancellationRequest is not null
-                        ? $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} waiting for active cast cancellation"
-                        : $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} waiting for global native boundary";
+                        ? $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} " +
+                          $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) " +
+                          "waiting for active cast cancellation"
+                        : $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} " +
+                          $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) " +
+                          "waiting for global native boundary";
                 }
                 else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
                              frozenGuardian.Retry,
                              nowMilliseconds))
                 {
-                    lastEvent = $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} retaining retry throttle priority";
+                    lastEvent =
+                        $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} " +
+                        $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) " +
+                        "retaining retry throttle priority";
                 }
                 else
                 {
                     var outcome = TryUseGuardianOnce(
                         localPlayer!,
                         frozenGuardian.Intent,
+                        exactCandidate,
                         out attempted);
                     accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     CompleteGuardianAttempt(frozenGuardian, outcome, nowMilliseconds);
@@ -566,7 +614,8 @@ internal sealed class DefensiveUtilityProbe
                     }
 
                     lastEvent = DescribeAttempt(
-                        $"Guardian P{frozenGuardian.Intent.PartySlot} retry",
+                        $"Guardian P{frozenGuardian.Intent.PartySlot} " +
+                        $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) retry",
                         frozenGuardian.Retry.NativeAttemptCount + 1,
                         outcome);
                 }
@@ -576,7 +625,7 @@ internal sealed class DefensiveUtilityProbe
             canDispatch &&
             guardianActionsSpecificallyReady &&
             IsPaladin(localPlayer!) &&
-            guardianCandidates.Count > 0)
+            eligibleGuardianCandidateCount > 0)
         {
             var selectedIndex = DefensiveUtilityRules.SelectGuardianCandidateIndex(
                 guardianCandidates,
@@ -589,6 +638,10 @@ internal sealed class DefensiveUtilityProbe
                 targetGameObjectId = selected.GameObjectId;
                 targetEntityId = selected.EntityId;
                 selectedGuardianPartySlot = selected.PartySlot;
+                selectedGuardianRiskTier = DefensiveUtilityRules.ClassifyGuardianRisk(selected);
+                selectedGuardianCurrentHp = selected.CurrentHp;
+                selectedGuardianMaximumHp = selected.MaximumHp;
+                selectedGuardianIncomingEnemyCount = selected.IncomingEnemyCount;
                 inputClaimed = true;
                 inputFrame.Consume();
                 var frozen = new FrozenGuardianRetry(
@@ -607,12 +660,20 @@ internal sealed class DefensiveUtilityProbe
                         frozen,
                         guardianActionsSpecificallyReady);
                     lastEvent = castCancellationRequest is not null
-                        ? $"Frozen Guardian P{selected.PartySlot} waiting for active cast cancellation"
-                        : $"Frozen Guardian P{selected.PartySlot} waiting for global native boundary";
+                        ? $"Frozen Guardian P{selected.PartySlot} " +
+                          $"({DescribeGuardianRisk(selected, guardianPressureAgeMilliseconds)}) " +
+                          "waiting for active cast cancellation"
+                        : $"Frozen Guardian P{selected.PartySlot} " +
+                          $"({DescribeGuardianRisk(selected, guardianPressureAgeMilliseconds)}) " +
+                          "waiting for global native boundary";
                 }
                 else
                 {
-                    var outcome = TryUseGuardianOnce(localPlayer!, selected, out attempted);
+                    var outcome = TryUseGuardianOnce(
+                        localPlayer!,
+                        selected,
+                        selected,
+                        out attempted);
                     accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     CompleteGuardianAttempt(frozen, outcome, nowMilliseconds);
                     if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
@@ -635,7 +696,11 @@ internal sealed class DefensiveUtilityProbe
                             selected.PartySlot);
                     }
 
-                    lastEvent = DescribeAttempt($"Guardian P{selected.PartySlot} initial", 1, outcome);
+                    lastEvent = DescribeAttempt(
+                        $"Guardian P{selected.PartySlot} " +
+                        $"({DescribeGuardianRisk(selected, guardianPressureAgeMilliseconds)}) initial",
+                        1,
+                        outcome);
                 }
             }
         }
@@ -667,7 +732,14 @@ internal sealed class DefensiveUtilityProbe
             Action = guardianActed ? action : prior.Action,
             Trigger = guardianActed ? trigger : prior.Trigger,
             GuardActive = guardActive,
-            GuardianCandidateCount = guardianCandidates.Count,
+            GuardianCandidateCount = eligibleGuardianCandidateCount,
+            GuardianCriticalCandidateCount = criticalGuardianCandidateCount,
+            GuardianProactiveCandidateCount = proactiveGuardianCandidateCount,
+            GuardianSelectedRiskTier = selectedGuardianRiskTier,
+            GuardianSelectedCurrentHp = selectedGuardianCurrentHp,
+            GuardianSelectedMaximumHp = selectedGuardianMaximumHp,
+            GuardianSelectedIncomingEnemyCount = selectedGuardianIncomingEnemyCount,
+            GuardianPressureAgeMilliseconds = guardianPressureAgeMilliseconds,
             TargetGameObjectId = guardianActed
                 ? targetGameObjectId
                 : prior.TargetGameObjectId,
@@ -733,6 +805,15 @@ internal sealed class DefensiveUtilityProbe
                 ? guardianPass.Trigger
                 : guardPass.Trigger,
             GuardianCandidateCount = guardianPass.GuardianCandidateCount,
+            GuardianCriticalCandidateCount = guardianPass.GuardianCriticalCandidateCount,
+            GuardianProactiveCandidateCount = guardianPass.GuardianProactiveCandidateCount,
+            GuardianSelectedRiskTier = guardianPass.GuardianSelectedRiskTier,
+            GuardianSelectedCurrentHp = guardianPass.GuardianSelectedCurrentHp,
+            GuardianSelectedMaximumHp = guardianPass.GuardianSelectedMaximumHp,
+            GuardianSelectedIncomingEnemyCount =
+                guardianPass.GuardianSelectedIncomingEnemyCount,
+            GuardianPressureAgeMilliseconds =
+                guardianPass.GuardianPressureAgeMilliseconds,
             TargetGameObjectId = aggregate.GuardianOwnsPresentation
                 ? guardianPass.TargetGameObjectId
                 : guardPass.TargetGameObjectId,
@@ -839,9 +920,22 @@ internal sealed class DefensiveUtilityProbe
 
     private unsafe List<PaladinGuardianCandidate> BuildGuardianCandidates(
         IPlayerCharacter localPlayer,
-        out HashSet<TargetPressureActorIdentity> criticalActors)
+        long nowMilliseconds,
+        out HashSet<TargetPressureActorIdentity> riskActors,
+        out long pressureAgeMilliseconds)
     {
-        criticalActors = [];
+        riskActors = [];
+        pressureAgeMilliseconds = -1;
+        var pressureViewFresh =
+            pressureTracker.TryCaptureIncomingAllyPressure(
+                out var incomingPressureByActor,
+                out var pressurePublishedAtMilliseconds) &&
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(
+                nowMilliseconds,
+                pressurePublishedAtMilliseconds);
+        if (pressureViewFresh)
+            pressureAgeMilliseconds = nowMilliseconds - pressurePublishedAtMilliseconds;
+
         var candidates = new List<PaladinGuardianCandidate>(7);
         var sourceObject = GetNativeObject(localPlayer);
         foreach (var (slot, ally) in ResolveExactPartyMembers())
@@ -853,15 +947,6 @@ internal sealed class DefensiveUtilityProbe
             }
 
             var actor = new TargetPressureActorIdentity(ally.GameObjectId, ally.EntityId);
-            if (IsLivePlayer(ally) &&
-                DefensiveUtilityRules.IsAtOrBelowHpPercent(
-                    ally.CurrentHp,
-                    ally.MaxHp,
-                    DefensiveUtilityRules.GuardianAllyHpPercent))
-            {
-                criticalActors.Add(actor);
-            }
-
             var targetObject = GetNativeObject(ally);
             var nativeTargetValid = sourceObject != null && targetObject != null;
             var rangeResult = nativeTargetValid
@@ -870,13 +955,14 @@ internal sealed class DefensiveUtilityProbe
                     sourceObject,
                     targetObject)
                 : uint.MaxValue;
-            int? incomingPressure = pressureTracker.TryGetIncomingAllyPressure(
-                ally.GameObjectId,
-                ally.EntityId,
-                out var uniqueEnemyCount)
+            int? incomingPressure = pressureViewFresh &&
+                                    incomingPressureByActor.TryGetValue(
+                                        actor,
+                                        out var uniqueEnemyCount) &&
+                                    uniqueEnemyCount is >= 0 and <= EnemySlotRules.LastSlot
                 ? uniqueEnemyCount
                 : null;
-            candidates.Add(new PaladinGuardianCandidate(
+            var candidate = new PaladinGuardianCandidate(
                 ally.GameObjectId,
                 ally.EntityId,
                 slot,
@@ -889,7 +975,14 @@ internal sealed class DefensiveUtilityProbe
                 IsAlive: IsLivePlayer(ally),
                 ally.IsTargetable,
                 nativeTargetValid,
-                SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult)));
+                SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult));
+            candidates.Add(candidate);
+            if (IsLivePlayer(ally) &&
+                DefensiveUtilityRules.ClassifyGuardianRisk(candidate) !=
+                PaladinGuardianRiskTier.None)
+            {
+                riskActors.Add(actor);
+            }
         }
 
         return candidates;
@@ -901,6 +994,7 @@ internal sealed class DefensiveUtilityProbe
     {
         attempted = false;
         if (!guardMetadataVerified ||
+            !nearAssist.CanProtectAutomaticGuard ||
             !HasValidLocalPlayer(localPlayer) ||
             HasActiveGuard(localPlayer))
         {
@@ -955,10 +1049,20 @@ internal sealed class DefensiveUtilityProbe
 
             if (outcome == ClientActionAttemptOutcome.ClientAccepted)
             {
+                if (!nearAssist.TryArmAcceptedAutoGuardProtection(
+                    localPlayer.GameObjectId,
+                    localPlayer.EntityId,
+                    generationBeforeCall))
+                {
+                    log.Warning(
+                        "Seiton Sense accepted automatic Guard but could not prove exact protection ownership.");
+                }
+
+                var acceptedAt = Environment.TickCount64;
                 ObserveGuardSuppression(
                     exactGuardActive: false,
-                    observedGuardAttemptAtMilliseconds: Environment.TickCount64,
-                    nowMilliseconds: Environment.TickCount64);
+                    observedGuardAttemptAtMilliseconds: acceptedAt,
+                    nowMilliseconds: acceptedAt);
             }
 
             return outcome;
@@ -973,6 +1077,7 @@ internal sealed class DefensiveUtilityProbe
     private unsafe ClientActionAttemptOutcome TryUseGuardianOnce(
         IPlayerCharacter localPlayer,
         PaladinGuardianCandidate intent,
+        PaladinGuardianCandidate currentCandidate,
         out bool attempted)
     {
         attempted = false;
@@ -980,7 +1085,9 @@ internal sealed class DefensiveUtilityProbe
             !guardianMetadataVerified ||
             !HasValidLocalPlayer(localPlayer) ||
             !IsPaladin(localPlayer) ||
-            HasActiveGuard(localPlayer))
+            HasActiveGuard(localPlayer) ||
+            currentCandidate.Actor != intent.Actor ||
+            currentCandidate.PartySlot != intent.PartySlot)
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -1029,6 +1136,7 @@ internal sealed class DefensiveUtilityProbe
             {
                 CurrentHp = ally.CurrentHp,
                 MaximumHp = ally.MaxHp,
+                IncomingEnemyCount = currentCandidate.IncomingEnemyCount,
                 DistanceSquared = Vector3.DistanceSquared(localPlayer.Position, ally.Position),
                 IsAlive = IsLivePlayer(ally),
                 IsTargetable = ally.IsTargetable,
@@ -1470,14 +1578,34 @@ internal sealed class DefensiveUtilityProbe
         bool isCrystallineConflict,
         bool localIdentityValid,
         bool guardActive,
-        bool higherPriorityClaimed)
+        bool higherPriorityClaimed,
+        int criticalCandidateCount,
+        int proactiveCandidateCount,
+        long pressureAgeMilliseconds)
     {
         if (!configurationEnabled) return "Paladin Guardian disabled";
         if (!isCrystallineConflict) return "Paladin Guardian outside Crystalline Conflict";
         if (!localIdentityValid) return "Paladin Guardian local player invalid";
         if (guardActive) return "Active or propagating Guard blocks Guardian";
         if (higherPriorityClaimed) return "Guardian waiting behind higher-priority survival helper";
-        return "Guardian waiting for low-HP party ally and gameplay key";
+        var pressureAge = pressureAgeMilliseconds >= 0
+            ? $"{pressureAgeMilliseconds}ms"
+            : "unknown";
+        return $"Guardian waiting; exact candidates=critical:{criticalCandidateCount}/" +
+               $"proactive:{proactiveCandidateCount}, pressure-age={pressureAge}, gameplay key required";
+    }
+
+    private static string DescribeGuardianRisk(
+        PaladinGuardianCandidate candidate,
+        long pressureAgeMilliseconds)
+    {
+        var tier = DefensiveUtilityRules.ClassifyGuardianRisk(candidate);
+        var pressure = candidate.IncomingEnemyCount?.ToString() ?? "unknown";
+        var age = candidate.IncomingEnemyCount.HasValue && pressureAgeMilliseconds >= 0
+            ? $"{pressureAgeMilliseconds}ms"
+            : "unknown";
+        return $"tier={tier}, HP={candidate.CurrentHp}/{candidate.MaximumHp}, " +
+               $"pressure={pressure}, pressure-age={age}";
     }
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)

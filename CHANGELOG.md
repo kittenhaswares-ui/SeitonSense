@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.30.0.0
+
+- Replaced Smart-Seiton policy experiments with one simple tactical switch.
+  `/autoseiton`, its clickable action-bar-style NIN tile, and distinct ON/OFF
+  icons control whether held-key Auto-Seiton is available. A ready sparkle shows
+  the resolved action state. Ongoing physical held-key consent remains required;
+  Purify stays first and enabled NIN Seiton now gets the next scheduler slot.
+- Added `/smarttab` (`/sstarget`) for one exact incoming harmful PvP macro action.
+  It requires no selected target, uses the actual action's native range/line of
+  sight, excludes live Guard, and ranks reach tier, lowest HP%, fresh team
+  pressure, observed Guard cooldown unavailability, trusted MP%, and stable
+  S-slot. The authored `<t>` line is the only fallback; no target selection,
+  rerank, alternate, retry, or generated action is added.
+- Made WHM Miracle, BRD Silent Nocturne, and NIN Raiju protection-end follow-ups
+  freeze the exact actor/key at authoritative Purify/Guard release and wait for
+  transient range, LoS, cast, queue, and animation gates inside a non-extending
+  3-second held lease. Positive pressure improves ranking but is never required.
+- Made the default-off PLD Guardian helper act earlier without guessing: the
+  original `<=20%` rescue remains unconditional; `21-35%` is eligible only from
+  a fresh exact `3+` incoming hard/cast-target count. Critical candidates always
+  precede proactive ones and the frozen target never reranks.
+- A client-accepted automatic Guard now owns a cancellation shield before any
+  macro redirect is consumed. It bridges the exact 1.5-second status propagation
+  window, then follows the live Guard status; ordinary Action/PvPAction presses
+  cannot end it accidentally. Manual Guard is never owned, Guard reuse remains
+  the deliberate release path, `/panicshu` remains an explicit emergency
+  override, and a six-second hard cap fails open. Auto-Guard does not dispatch
+  if its protection hook is unavailable.
+- Removed the unusable fixed Combat Frames, their targeting/mouseover path, and
+  calibrated gauge runtime. Enemy LB activation icons now sit above exact native
+  nameplates with verified duration or a brief instant flash. A separate safe
+  top-center self `LB ACTIVATED!` banner and left-side ally `player -> target`
+  damage feed retain the useful notifications without covering HP/MP bars.
+- Added local-player MP sounds at downward crossings of `4,000` and `2,000`, with
+  independent hysteresis and the critical cue winning a direct double crossing.
+  Added a compact one-time What's New window after each plugin version update;
+  closing it records that version without chat spam.
+- Bumped the plugin to `0.30.0.0` and configuration schema to `32`. The custom-
+  repository listing is visible again. All `388` Core tests pass.
+
 ## 0.29.0.1
 
 - Hotfixed the default-off exact-CC NIN Auto-Seiton helper to exclude an enemy

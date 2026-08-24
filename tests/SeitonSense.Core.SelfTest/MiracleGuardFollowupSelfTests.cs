@@ -107,8 +107,11 @@ internal static class MiracleGuardFollowupSelfTests
             release.NextState,
             Observation(
                 Candidate(target, guardCount: 0, teamTargetCountKnown: false),
-                1_200));
-        True(unknown.ShouldPromote, "unknown pressure remains an eligible fallback");
+                1_700));
+        True(unknown.ShouldPromote,
+            "priority clearing after 500 ms still promotes the original bound lease");
+        Equal(1_100L, unknown.PromotionIntent!.Value.ReleasedAtMilliseconds,
+            "priority wait cannot restart the three-second held lease");
 
         present = MiracleGuardFollowupRules.Observe(
             unknown.NextState,
@@ -130,14 +133,21 @@ internal static class MiracleGuardFollowupSelfTests
         release = MiracleGuardFollowupRules.Observe(
             present.NextState,
             Observation(
-                Candidate(target, guardCount: 0, teamTargetCountKnown: false),
+                Candidate(
+                    target,
+                    guardCount: 0,
+                    teamTargetCountKnown: false,
+                    reservationKey: 0,
+                    reservedKeyDown: false),
                 3_100,
                 higherPriority: true));
         var boundary = MiracleGuardFollowupRules.Observe(
             release.NextState,
-            Observation(Candidate(target, guardCount: 0, teamTargetCount: 0), 3_600));
-        False(boundary.ShouldPromote, "500 ms boundary is already expired");
-        Equal(1, boundary.ExpiredOpportunityCount, "expiry is diagnosed exactly once");
+            Observation(
+                Candidate(target, guardCount: 0, teamTargetCount: 0),
+                3_600));
+        False(boundary.ShouldPromote, "unbound 500 ms acquisition boundary is already expired");
+        Equal(1, boundary.ExpiredOpportunityCount, "unbound expiry is diagnosed exactly once");
     }
 
     internal static void SimultaneousReleaseUsesPositivePressureBonusThenFallbacks()
@@ -313,9 +323,67 @@ internal static class MiracleGuardFollowupSelfTests
                         counterActionReachable: true),
                 ],
                 5_001));
-        True(reachableWins.ShouldPromote, "one reachable release remains dispatchable beside a stronger unreachable candidate");
-        Equal(reachableLowPressure, reachableWins.PromotionIntent!.Value.Target,
-            "range and line of sight filter before pressure, HP, and MP ranking");
+        True(reachableWins.ShouldPromote, "one exact release freezes immediately even while range is transient");
+        Equal(unreachableHighPressure, reachableWins.PromotionIntent!.Value.Target,
+            "ranking freezes the strongest exact release before range/line-of-sight dispatcher wait");
+
+        var frozenWinner = Target(slot: 1, entityId: 107);
+        var simultaneousLoser = Target(slot: 2, entityId: 108);
+        present = MiracleGuardFollowupRules.Observe(
+            reachableWins.NextState,
+            Observation(
+                [Candidate(frozenWinner, guardCount: 1), Candidate(simultaneousLoser, guardCount: 1)],
+                6_000));
+        var frozenBehindPriority = MiracleGuardFollowupRules.Observe(
+            present.NextState,
+            Observation(
+                [
+                    Candidate(frozenWinner, guardCount: 0, teamTargetCount: 5, hp: 1_000),
+                    Candidate(simultaneousLoser, guardCount: 0, teamTargetCount: 0, hp: 9_000),
+                ],
+                6_001,
+                higherPriority: true));
+        False(frozenBehindPriority.ShouldPromote, "higher-priority work still owns dispatch");
+        Equal(1, frozenBehindPriority.RetiredOtherOpportunityCount,
+            "simultaneous loser retires before the priority wait");
+        Equal(MiracleGuardFollowupPhase.ReleaseOpportunity,
+            Find(frozenBehindPriority.NextState, 1).Phase,
+            "selected actor owns the held lease");
+        Equal(MiracleGuardFollowupPhase.WaitingForGuard,
+            Find(frozenBehindPriority.NextState, 2).Phase,
+            "loser cannot remain available for later reranking");
+
+        var noRerank = MiracleGuardFollowupRules.Observe(
+            frozenBehindPriority.NextState,
+            Observation(
+                [
+                    Candidate(frozenWinner, guardCount: 0, teamTargetCount: 0, hp: 9_000),
+                    Candidate(simultaneousLoser, guardCount: 0, teamTargetCount: 9, hp: 1_000),
+                ],
+                6_601));
+        True(noRerank.ShouldPromote,
+            "the selected held lease remains promotable after the 500 ms acquisition edge");
+        Equal(frozenWinner, noRerank.PromotionIntent!.Value.Target,
+            "later rank changes cannot replace the frozen actor");
+        Equal(65, noRerank.PromotionIntent.Value.GameplayKeyToken,
+            "later promotion keeps the exact frozen key");
+        Equal(6_001L, noRerank.PromotionIntent.Value.ReleasedAtMilliseconds,
+            "held lease remains measured from authoritative Guard end");
+
+        var frozenActorMissing = MiracleGuardFollowupRules.Observe(
+            frozenBehindPriority.NextState,
+            Observation(
+                Candidate(
+                    simultaneousLoser,
+                    guardCount: 0,
+                    teamTargetCount: 9,
+                    hp: 1_000),
+                6_601));
+        False(frozenActorMissing.ShouldPromote,
+            "losing the frozen actor terminally retires the held lease");
+        Equal(MiracleGuardFollowupPhase.WaitingForGuard,
+            Find(frozenActorMissing.NextState, 2).Phase,
+            "a simultaneous loser cannot replace a missing frozen actor");
     }
 
     internal static void IdentityLifeAndStatusAmbiguityBreakTheEpisode()
@@ -560,6 +628,32 @@ internal static class MiracleGuardFollowupSelfTests
             MiracleGuardFollowupPhase.WaitingForGuard,
             Find(releasedFrozenKey.NextState, 3).Phase,
             "the same already-absent Guard cannot acquire a replacement key");
+
+        var leaseTarget = Target(slot: 4, entityId: 64);
+        var leasePresent = MiracleGuardFollowupRules.Observe(
+            MiracleGuardFollowupState.Initial,
+            Observation(Candidate(leaseTarget, guardCount: 1), 6_000));
+        var held = MiracleGuardFollowupRules.Observe(
+            leasePresent.NextState,
+            Observation(
+                Candidate(leaseTarget, guardCount: 0, reservationKey: 68),
+                6_100,
+                higherPriority: true));
+        var lastInsideHeldLease = MiracleGuardFollowupRules.Observe(
+            held.NextState,
+            Observation(
+                Candidate(leaseTarget, guardCount: 0, reservationKey: 69),
+                9_099,
+                higherPriority: true));
+        False(lastInsideHeldLease.ShouldPromote, "priority still owns the last millisecond");
+        Equal(68, Find(lastInsideHeldLease.NextState, 4).GameplayKeyToken,
+            "a different reported key cannot replace the frozen key");
+        var heldLeaseBoundary = MiracleGuardFollowupRules.Observe(
+            lastInsideHeldLease.NextState,
+            Observation(Candidate(leaseTarget, guardCount: 0), 9_100));
+        False(heldLeaseBoundary.ShouldPromote, "exact three-second held boundary is terminal");
+        Equal(1, heldLeaseBoundary.ExpiredOpportunityCount,
+            "held-lease expiry is diagnosed exactly once");
     }
 
     private static MiracleGuardFollowupTargetIdentity Target(int slot, uint entityId) =>

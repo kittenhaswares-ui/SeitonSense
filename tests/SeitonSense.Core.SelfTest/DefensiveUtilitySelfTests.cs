@@ -205,6 +205,158 @@ internal static class DefensiveUtilitySelfTests
             "wrong local identity cannot retract");
     }
 
+    public static void AutoGuardProtectionOwnershipRequiresTheExactAcceptedAttempt()
+    {
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        True(
+            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                latestGuardAttemptGeneration: 42,
+                generationBeforeCall: 41,
+                latestTerritoryId: 250,
+                currentTerritoryId: 250,
+                latestLocalPlayer: local,
+                currentLocalPlayer: local,
+                observedAtMilliseconds: 1_000,
+                nowMilliseconds: 1_001),
+            "the exact hook generation accepted by the automatic helper may own Guard");
+        False(
+            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                41,
+                41,
+                250,
+                250,
+                local,
+                local,
+                1_000,
+                1_001),
+            "a manual or missing hook generation cannot own Guard");
+        False(
+            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                42,
+                41,
+                250,
+                250,
+                local,
+                local with { EntityId = 0x2002 },
+                1_000,
+                1_001),
+            "local identity drift cannot own Guard");
+        True(
+            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                1,
+                long.MaxValue,
+                250,
+                250,
+                local,
+                local,
+                1_000,
+                1_001),
+            "generation wrap remains exact");
+    }
+
+    public static void AutoGuardProtectionBridgesPropagationAndFollowsTheExactStatus()
+    {
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
+        True(armed.IsArmed, "a validated accepted automatic Guard arms protection");
+
+        var propagation = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, exactGuardActive: false, actionCanCancelGuard: true, now: 1_000));
+        True(propagation.ShouldBlockAction, "a cancelling action is blocked during propagation");
+        Equal(1_500L, propagation.RemainingMilliseconds, "propagation interval is exact");
+
+        var confirmed = AutoGuardProtectionRules.Observe(
+            propagation.NextState,
+            ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: false, now: 1_100));
+        True(confirmed.NextState.ExactGuardObserved, "the exact live Guard status takes ownership");
+
+        var protectedLate = AutoGuardProtectionRules.Observe(
+            confirmed.NextState,
+            ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: true, now: 5_500));
+        True(protectedLate.ShouldBlockAction, "protection follows the full live automatic Guard status");
+
+        var ended = AutoGuardProtectionRules.Observe(
+            protectedLate.NextState,
+            ProtectionObservation(local, exactGuardActive: false, actionCanCancelGuard: true, now: 5_501));
+        False(ended.ShouldBlockAction, "the first exact absent frame releases normal actions");
+        False(ended.NextState.IsArmed, "ended Guard cannot retain stale ownership");
+        Equal(AutoGuardProtectionDecisionReason.GuardEnded, ended.Reason, "status-end reason");
+    }
+
+    public static void AutoGuardProtectionHasExplicitAndBoundedReleasePaths()
+    {
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
+        var explicitRelease = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(
+                local,
+                exactGuardActive: true,
+                actionCanCancelGuard: false,
+                now: 1_100,
+                explicitGuardReuse: true));
+        False(explicitRelease.ShouldBlockAction, "Guard reuse is never suppressed");
+        False(explicitRelease.NextState.IsArmed, "Guard reuse atomically releases ownership");
+        Equal(
+            AutoGuardProtectionDecisionReason.ExplicitGuardReuse,
+            explicitRelease.Reason,
+            "explicit release reason");
+
+        var confirmed = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: false, now: 1_100));
+        var maximum = AutoGuardProtectionRules.Observe(
+            confirmed.NextState,
+            ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: true, now: 7_000));
+        False(maximum.ShouldBlockAction, "the hard maximum boundary fails open");
+        False(maximum.NextState.IsArmed, "the hard maximum clears stale status ownership");
+
+        var neverAppeared = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, exactGuardActive: false, actionCanCancelGuard: true, now: 2_500));
+        False(neverAppeared.ShouldBlockAction, "missing status releases at the propagation boundary");
+        Equal(
+            AutoGuardProtectionDecisionReason.PropagationExpired,
+            neverAppeared.Reason,
+            "propagation timeout reason");
+    }
+
+    public static void AutoGuardProtectionContextDriftAlwaysFailsOpen()
+    {
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
+
+        var disabled = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, true, true, 1_100) with { RuntimeEnabled = false });
+        False(disabled.ShouldBlockAction, "disabling Auto-Guard releases input");
+
+        var territory = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, true, true, 1_100) with { TerritoryId = 251 });
+        False(territory.ShouldBlockAction, "territory drift releases input");
+
+        var player = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, true, true, 1_100) with
+            {
+                LocalPlayer = local with { EntityId = 0x2002 },
+            });
+        False(player.ShouldBlockAction, "player identity drift releases input");
+
+        var unavailable = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, true, true, 1_100) with { LocalPlayerLive = false });
+        False(unavailable.ShouldBlockAction, "death or unavailable local state releases input");
+
+        var unknownAction = AutoGuardProtectionRules.Observe(
+            armed,
+            ProtectionObservation(local, true, actionCanCancelGuard: false, now: 1_100));
+        False(unknownAction.ShouldBlockAction, "unknown action resolution fails open");
+        True(unknownAction.NextState.IsArmed, "one unknown action does not destroy valid ownership");
+    }
+
     public static void GuardianEligibilityUsesNativeReachability()
     {
         var valid = Candidate(10, hp: 20, maxHp: 100, distance: 15f);
@@ -232,6 +384,67 @@ internal static class DefensiveUtilitySelfTests
             "invalid identity rejected");
     }
 
+    public static void GuardianProactiveRiskRequiresExactHighPressure()
+    {
+        var proactive = Candidate(10, hp: 35, maxHp: 100, pressure: 3);
+        Equal(
+            PaladinGuardianRiskTier.ProactiveHighPressure,
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive),
+            "exactly 35 percent with exact 3+ pressure enters the proactive tier");
+        True(
+            DefensiveUtilityRules.IsGuardianCandidate(proactive),
+            "proactive risk remains subject to the ordinary exact actor and native reachability gates");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { CurrentHp = 36 }),
+            "above 35 percent is not proactive");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { IncomingEnemyCount = 2 }),
+            "two enemies do not raise the legacy threshold");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { IncomingEnemyCount = null }),
+            "unknown or stale pressure does not raise the legacy threshold");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { IncomingEnemyCount = 6 }),
+            "malformed impossible pressure fails closed");
+        Equal(
+            PaladinGuardianRiskTier.Critical,
+            DefensiveUtilityRules.ClassifyGuardianRisk(
+                proactive with { CurrentHp = 20, IncomingEnemyCount = null }),
+            "the original 20-percent boundary stays unconditional");
+        Equal(
+            PaladinGuardianRiskTier.Critical,
+            DefensiveUtilityRules.ClassifyGuardianRisk(
+                proactive with { CurrentHp = 20, IncomingEnemyCount = 99 }),
+            "malformed pressure cannot disable a critical rescue");
+        False(
+            DefensiveUtilityRules.IsGuardianCandidate(
+                proactive with { HasNativeRangeAndLineOfSight = false }),
+            "high pressure never bypasses native reachability");
+    }
+
+    public static void GuardianPressurePublicationFreshnessIsBounded()
+    {
+        True(
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(1_000, 750),
+            "the exact 250-ms pressure-age boundary is inclusive");
+        False(
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(1_000, 749),
+            "pressure older than 250 ms cannot raise the legacy threshold");
+        False(
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(1_000, 1_001),
+            "a future pressure publication fails closed");
+        False(
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(-1, 0),
+            "an invalid current clock fails closed");
+        False(
+            DefensiveUtilityRules.IsFreshGuardianPressurePublication(0, -1),
+            "an invalid publication clock fails closed");
+    }
+
     public static void GuardianRankingIsDeterministic()
     {
         var candidates = new[]
@@ -250,6 +463,27 @@ internal static class DefensiveUtilitySelfTests
             "spent exact actor is excluded without changing target identity");
         Equal(-1, DefensiveUtilityRules.SelectGuardianCandidateIndex(null),
             "missing candidates fail closed");
+
+        var tiered = new[]
+        {
+            Candidate(50, hp: 21, maxHp: 100, pressure: 5, partySlot: 2),
+            Candidate(60, hp: 20, maxHp: 100, pressure: 0, partySlot: 3),
+        };
+        Equal(
+            1,
+            DefensiveUtilityRules.SelectGuardianCandidateIndex(tiered),
+            "the unconditional critical tier always precedes proactive pressure");
+
+        var proactive = new[]
+        {
+            Candidate(70, hp: 21, maxHp: 100, pressure: 3, distance: 2f, partySlot: 2),
+            Candidate(80, hp: 34, maxHp: 100, pressure: 5, distance: 8f, partySlot: 3),
+            Candidate(90, hp: 25, maxHp: 100, pressure: 5, distance: 4f, partySlot: 4),
+        };
+        Equal(
+            2,
+            DefensiveUtilityRules.SelectGuardianCandidateIndex(proactive),
+            "inside the proactive tier pressure wins first, then exact HP");
     }
 
     public static void GuardianTriggerPopupIsAcceptedOnlyAndBounded()
@@ -390,6 +624,22 @@ internal static class DefensiveUtilitySelfTests
             IsTargetable: true,
             HasValidNativeTarget: true,
             HasNativeRangeAndLineOfSight: true);
+
+    private static AutoGuardProtectionObservation ProtectionObservation(
+        TargetPressureActorIdentity local,
+        bool exactGuardActive,
+        bool actionCanCancelGuard,
+        long now,
+        bool explicitGuardReuse = false) =>
+        new(
+            RuntimeEnabled: true,
+            TerritoryId: 250,
+            LocalPlayer: local,
+            LocalPlayerLive: true,
+            ExactGuardActive: exactGuardActive,
+            ActionCanCancelGuard: actionCanCancelGuard,
+            IsExplicitGuardReuse: explicitGuardReuse,
+            NowMilliseconds: now);
 
     private static void True(bool condition, string label)
     {

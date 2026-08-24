@@ -79,10 +79,14 @@ public readonly record struct MiracleProtectionEndRankCandidate(
 
 public static class MiracleProtectionEndRules
 {
-    public const long HeldLeaseMilliseconds = 1_500;
-    // Both verified PvP Raiju rows have a 2.5-second recast. One full recast
-    // plus the existing 500-ms release opportunity keeps the intent alive long
-    // enough to reach the next GCD without delaying an immediately ready use.
+    // Protection-end consent must survive one ordinary 2.5-second GCD plus the
+    // release edge. This matters most for casting BRD/WHM gameplay: the exact
+    // actor/key can now be frozen immediately when protection ends and wait for
+    // the first clear native queue frame instead of being lost to a cast that
+    // happened to overlap the old 1.5-second lease.
+    public const long HeldLeaseMilliseconds = 3_000;
+    // Keep the named NIN value for call-site clarity. Raiju shares the same
+    // one-GCD protection-end lease as every other counter-CC action.
     public const long NinjaWeaponskillHeldLeaseMilliseconds = 3_000;
     public const long NativeRetryThrottleMilliseconds =
         HeldActionRetryRules.NativeRetryThrottleMilliseconds;

@@ -20,6 +20,7 @@ internal sealed partial class SettingsWindow
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var pressureEscape = personalStatus.PressureEscapeDiagnostics;
         var defense = personalStatus.DefensiveUtilityDiagnostics;
+        var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
@@ -84,6 +85,13 @@ internal sealed partial class SettingsWindow
             $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
+        ImGui.TextWrapped(
+            $"Auto-Guard protection: hook={autoGuardProtection.HookAvailable}, " +
+            $"armed/status={autoGuardProtection.Armed}/{autoGuardProtection.ExactGuardObserved}, " +
+            $"remaining={autoGuardProtection.RemainingMilliseconds} ms, " +
+            $"armed/blocked/released={autoGuardProtection.ArmedCount}/" +
+            $"{autoGuardProtection.BlockedActionCount}/{autoGuardProtection.ReleasedCount}, " +
+            $"last={autoGuardProtection.LastEvent}");
         ImGui.TextWrapped(
             $"Smart Recuperate: {recuperate.Phase}/{recuperate.Decision}/{recuperate.Reason}, " +
             $"action={recuperate.ResolvedActionId}, " +
@@ -189,19 +197,17 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. The separate default-off Auto Low-MP Focus setter may fill an empty " +
-            "native Focus Target; it never clears, replaces, restores, or retries one. When its explicit interaction " +
-            "option is enabled, a fresh living Combat Frame enemy row may write that exact S-slot once as the hard " +
-            "target on click and publish it through the two native mouseover slots while hovered; external replacement " +
-            "wins, cleanup is ownership-checked, and soft and Focus Targets remain unchanged. Every other module leaves " +
-            "selected hard, soft, Focus, and mouseover targets unchanged, except that an explicitly enabled NIN " +
+            "native Focus Target; it never clears, replaces, restores, or retries one. The retired Combat Frames add no " +
+            "click or mouseover mutation path. Every remaining module leaves selected hard, soft, Focus, and mouseover " +
+            "targets unchanged, except that an explicitly enabled NIN " +
             "Guard-Shukuchi may set its exact jumped-to enemy once after client acceptance. Seiton Sense uploads no gameplay data to an external " +
-            "service. Near Assist, Near Help, and Far Help may replace only " +
+            "service. Smart Target, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > " +
+            "The current request order is Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
             "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The seven job-specific physical-hold helpers share the second tier; reactive comes " +
-            "before cleanse because its LB and protection-end windows are shorter. Kardia still requires its separate " +
+            "Kardia > event Monk. The seven job-specific physical-hold helpers share the second tier; NIN Seiton is first, " +
+            "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +

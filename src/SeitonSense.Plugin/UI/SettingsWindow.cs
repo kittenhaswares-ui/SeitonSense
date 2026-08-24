@@ -16,7 +16,6 @@ internal sealed partial class SettingsWindow : Window
     private readonly TargetPressureTracker pressureTracker;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
-    private readonly CombatFramesRenderer combatFrames;
     private SettingsPage selectedPage = SettingsPage.Start;
 
     public SettingsWindow(
@@ -26,8 +25,7 @@ internal sealed partial class SettingsWindow : Window
         OverlayRenderer overlay,
         TargetPressureTracker pressureTracker,
         IsolationAwarenessService isolationAwareness,
-        PressureCounterWindow pressureCounter,
-        CombatFramesRenderer combatFrames)
+        PressureCounterWindow pressureCounter)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
@@ -37,7 +35,6 @@ internal sealed partial class SettingsWindow : Window
         this.pressureTracker = pressureTracker;
         this.isolationAwareness = isolationAwareness;
         this.pressureCounter = pressureCounter;
-        this.combatFrames = combatFrames;
         Size = new Vector2(880f, 760f);
         SizeCondition = ImGuiCond.FirstUseEver;
     }
@@ -61,7 +58,6 @@ internal sealed partial class SettingsWindow : Window
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
-                combatFrames.PreviewEnabled = false;
             });
 
         ImGui.Separator();
@@ -78,7 +74,6 @@ internal sealed partial class SettingsWindow : Window
                 SettingsPage.Start => DrawStartPage(),
                 SettingsPage.Alerts => DrawAlertsPage(),
                 SettingsPage.HudAndNameplates => DrawHudAndNameplatesPage(),
-                SettingsPage.CombatFrames => DrawCombatFramesPage(),
                 SettingsPage.ActionHelpers => DrawActionHelpersPage(),
                 SettingsPage.JobTools => DrawJobToolsPage(),
                 SettingsPage.MacroHelpers => DrawMacroHelpersPage(),
@@ -100,7 +95,6 @@ internal sealed partial class SettingsWindow : Window
         overlay.IsolationWarningPreviewEnabled = false;
         overlay.HighPressureWarningPreviewEnabled = false;
         pressureCounter.PreviewEnabled = false;
-        combatFrames.PreviewEnabled = false;
     }
 
     private void DrawSidebar()
@@ -109,7 +103,6 @@ internal sealed partial class SettingsWindow : Window
         DrawPageChoice(SettingsPage.Start, "Start");
         DrawPageChoice(SettingsPage.Alerts, "Alerts");
         DrawPageChoice(SettingsPage.HudAndNameplates, "HUD & Nameplates");
-        DrawPageChoice(SettingsPage.CombatFrames, "Combat Frames");
         DrawPageChoice(SettingsPage.ActionHelpers, "Action Helpers");
         DrawPageChoice(SettingsPage.JobTools, "Job Tools");
         DrawPageChoice(SettingsPage.MacroHelpers, "Macro Helpers");
@@ -136,7 +129,6 @@ internal sealed partial class SettingsWindow : Window
         Start,
         Alerts,
         HudAndNameplates,
-        CombatFrames,
         ActionHelpers,
         JobTools,
         MacroHelpers,

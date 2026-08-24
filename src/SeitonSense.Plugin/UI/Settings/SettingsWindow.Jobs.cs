@@ -12,14 +12,14 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
-            "NIN Seiton > SCH Critical Strategy > DRK Hiebsprung. Reactive counter-CC leads because its LB and protection-end windows " +
-            "are shorter. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
+            "in deterministic urgency order: NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung. Enabled NIN Seiton gets the first job slot; " +
+            "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Guardian for an exact ally at 20% HP or lower",
+                "Guardian for an exact critical or 3+-pressure ally",
                 configuration.PaladinGuardianLowAlly,
                 value => configuration.PaladinGuardianLowAlly = value);
             changed |= Checkbox(
@@ -33,11 +33,12 @@ internal sealed partial class SettingsWindow
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "Default off and exact Crystalline Conflict only. The exact non-self party ally must be alive, " +
-                "targetable, at 20% HP or lower, and accepted by FFXIV's native 20-yalm range/line-of-sight check; " +
-                "both your own Guard state and Guardian readiness are revalidated. Lowest exact HP ratio wins, then " +
-                "known higher incoming pressure, shorter distance, party slot, and stable actor identity.");
+                "targetable, and accepted by FFXIV's native 20-yalm range/line-of-sight check. The original 20% HP " +
+                "boundary is unconditional; 21-35% HP is eligible only with a fresh exact current hard/cast-target " +
+                "count of at least three enemies. Critical targets always precede proactive targets; proactive ties " +
+                "rank by higher pressure, then lower exact HP. Both Guard and Guardian readiness are revalidated.");
             ImGui.TextDisabled(
-                "Purify, reactive counter-CC, and Ally Rescue keep priority. Guardian then wins before NIN, SCH, DRK, " +
+                "Purify keeps global priority. On PLD, Guardian follows the unavailable NIN/reactive/cleanse paths and wins before SCH, DRK, " +
                 "Smart Recuperate, generic Guard, and pressure Sprint. Continuous " +
                 "held consent freezes one exact Guardian intent; only a clean client rejection may use the common " +
                 "bounded same-intent retry. There is no selected-target change, alternate, fallback, or replay. " +
@@ -72,8 +73,8 @@ internal sealed partial class SettingsWindow
                 "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
-                "missed rather than guessed. The shared order is Purify > reactive counter-CC > Ally Rescue > PLD " +
-                "Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
+                "missed rather than guessed. The shared order is Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD " +
+                "Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
                 "pressure Sprint > event Kardia > event Monk.");
             ImGui.PopTextWrapPos();
         }
@@ -116,8 +117,8 @@ internal sealed partial class SettingsWindow
                 "range/line-of-sight check. A target with Guardian's Covered status, a Paladin's Phalanx self-" +
                 "invulnerability, or a Dark Knight's Eventide invulnerability is excluded; Guard itself remains valid. " +
                 "The lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
-                "its bounded propagation gate blocks the helper, and existing higher-priority helpers win the shared " +
-                "scheduler frame.");
+                "its bounded propagation gate blocks the helper. When enabled, Auto-Seiton is the first held helper " +
+                "after Purify and can claim before every other job-specific helper in that framework frame.");
             ImGui.TextDisabled(
                 "Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same " +
                 "intent after a short delay while every gate and the same key remain valid; client acceptance ends the " +
@@ -129,8 +130,9 @@ internal sealed partial class SettingsWindow
                 "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
                 "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
             ImGui.TextDisabled(
-                "In the job-specific second tier, Purify, reactive counter-CC, Ally Rescue, and PLD Guardian precede " +
-                "NIN; SCH and DRK follow it before Smart Recuperate and the generic helpers.");
+                "Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF. The tile " +
+                "shows separate ON/OFF icons and sparkles when the resolved Seiton action is ready. ON still requires " +
+                "a currently held gameplay key; it never creates no-input automatic actions.");
             ImGui.PopTextWrapPos();
 
             ImGui.Spacing();
@@ -232,7 +234,7 @@ internal sealed partial class SettingsWindow
                 "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.TextDisabled(
-                "Purify, reactive counter-CC, Ally Rescue, Guardian, and NIN precede SCH. DRK Hiebsprung closes the " +
+                "Purify, NIN Seiton, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. DRK Hiebsprung closes the " +
                 "job-specific second tier before Smart Recuperate and the generic helpers.");
             ImGui.PopTextWrapPos();
         }

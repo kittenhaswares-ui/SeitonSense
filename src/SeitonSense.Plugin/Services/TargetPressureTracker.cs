@@ -330,13 +330,10 @@ internal sealed class TargetPressureTracker : IDisposable
             condition.IsValid && condition.Value.CrystallineConflictCasualRoulette,
             condition.IsValid && condition.Value.CrystallineConflictRankedRoulette);
         var isWolvesDen = supportedContext == SupportedPvPContext.WolvesDen;
-        var combatFrameProtectionsEnabled =
-            configuration.ShowCombatFrames &&
-            configuration.CombatFramesShowStatuses;
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
-                                      configuration.ShowCombatFrames ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
+                                      configuration.EnableNearAssistMacro ||
                                        configuration.NearAssistPreferTeamPressure ||
                                        configuration.ShowCurrentTargetInfoHud ||
                                        configuration.EnableDefensiveUtilities ||
@@ -366,12 +363,10 @@ internal sealed class TargetPressureTracker : IDisposable
             pressureEnabledForContext || incomingAllyPressureEnabledForContext;
         var wolvesTrackingEnabled = isWolvesDen &&
                                     (configuration.ShowCcProtection ||
-                                     combatFrameProtectionsEnabled ||
                                      pressureEnabledForContext ||
                                      incomingAllyPressureEnabledForContext);
         var normalPvPTrackingEnabled = clientState.IsPvPExcludingDen &&
                                        (configuration.ShowCcProtection ||
-                                        combatFrameProtectionsEnabled ||
                                         pressureEnabledForContext ||
                                         incomingAllyPressureEnabledForContext);
         var supported = configuration.Enabled &&
@@ -658,9 +653,7 @@ internal sealed class TargetPressureTracker : IDisposable
         long now,
         bool isLargeScalePvP)
     {
-        var protectionsEnabled = configuration.ShowCcProtection ||
-                                 (configuration.ShowCombatFrames &&
-                                  configuration.CombatFramesShowStatuses);
+        var protectionsEnabled = configuration.ShowCcProtection;
         if (!protectionsEnabled || verifiedProtectionStatusIds.Count == 0)
         {
             protectionStates.Remove(identity);

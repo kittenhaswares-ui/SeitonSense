@@ -51,6 +51,7 @@ internal sealed class PanicShukuchiService
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly IDutyState dutyState;
+    private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private readonly bool metadataVerified;
 
@@ -70,6 +71,7 @@ internal sealed class PanicShukuchiService
         IClientState clientState,
         IObjectTable objectTable,
         IDutyState dutyState,
+        NearAssistRedirector nearAssist,
         IPluginLog log,
         PvPMetadataValidation metadata)
     {
@@ -77,6 +79,7 @@ internal sealed class PanicShukuchiService
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.dutyState = dutyState;
+        this.nearAssist = nearAssist;
         this.log = log;
         metadataVerified = metadata.PanicShukuchiVerified;
         lastEvent = metadataVerified
@@ -210,6 +213,7 @@ internal sealed class PanicShukuchiService
             bool accepted;
             try
             {
+                using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak();
                 accepted = actionManager->UseActionLocation(
                     ActionType.Action,
                     PanicShukuchiRules.ActionId,

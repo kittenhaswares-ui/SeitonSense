@@ -267,9 +267,11 @@ public readonly record struct MiracleCleanseFollowupDecision(
 /// reactive-CC dispatcher. Positive fresh total-team pressure is an optional
 /// bonus for simultaneous releases. Known zero and unavailable/stale pressure
 /// are neutral peers and always remain eligible for HP/MP/identity fallback.
-/// The shared dispatcher owns fresh/held input, native
-/// range/LoS, protection checks, input consumption, and the sole action call.
-/// RemainingTime is only an advisory wake-up hint; live absence is mandatory.
+/// Exact input may bind only inside the 500-ms release edge; once bound it may
+/// wait inside the shared 3-second held lease from that original release time.
+/// The shared dispatcher owns native range/LoS, protection checks, input
+/// consumption, and the sole action call. RemainingTime is only an advisory
+/// wake-up hint; live absence is mandatory.
 /// </summary>
 public static class MiracleCleanseFollowupRules
 {
@@ -698,7 +700,14 @@ public static class MiracleCleanseFollowupRules
                 MiracleCleanseFollowupCancelReason.ClockMovedBackwards);
         }
 
-        if (releaseAge >= ReleaseOpportunityMilliseconds)
+        // The unbound release may acquire consent only inside the original
+        // 500-ms edge. Once bound, that exact actor/key retains the original
+        // ReleasedAt timestamp and may wait behind dispatcher priority for the
+        // existing 3-second held lease; this never reopens acquisition.
+        var releaseLifetime = state.GameplayKeyToken > 0
+            ? MiracleProtectionEndRules.HeldLeaseMilliseconds
+            : ReleaseOpportunityMilliseconds;
+        if (releaseAge >= releaseLifetime)
         {
             return Cancelled(
                 StopTracking(state, observation.NowMilliseconds),
@@ -728,11 +737,15 @@ public static class MiracleCleanseFollowupRules
         }
 
         // Immediate MCH/SAM/VPR events keep priority without destroying this
-        // opportunity. Promotion remains bounded by the original release edge.
+        // exact bound lease. The original release timestamp remains authoritative.
         if (observation.HigherPriorityClaimed)
             return Waiting(state);
 
-        if (state.GameplayKeyToken <= 0 || !candidate.CounterActionReachable)
+        // Freeze the exact actor/key at the authoritative Resilience end even
+        // when range/LoS is temporarily unavailable. The shared dispatcher
+        // revalidates and waits inside the bounded lease; promotion no longer
+        // has to land in the same 500-ms window as a cast or movement frame.
+        if (state.GameplayKeyToken <= 0)
             return Waiting(state);
 
         if (state.ActiveSignal is not { } signal)
