@@ -2,11 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.31.0.0 extends the default-off,
-exact-CC Smart Tab replacement to reviewed ranged DPS: BRD, BLM, SMN, MCH, RDM,
-and PCT use 25 yalms, while DNC uses 15. It also adds explicitly enabled Wolves'
-Den testing for held Smart Recuperate and a separate default-off PvP Viper
-Serpentiner-Geist follow-up helper. `/smarttab` (`/sstarget`) toggles the native
+assistance, and target highlights. Version 0.31.0.1 makes the default-off PvP
+Viper Serpentiner-Geist helper react directly to its transformed native carrier:
+hold any eligible gameplay key, including WASD, and an exact usable follow-up is
+attempted on the current hard target without preceding-action proof. It retains
+v0.31's ranged Smart Tab and explicit Wolves' Den testing additions. `/smarttab`
+(`/sstarget`) toggles the native
 forward-target replacement; paired handler/helper hooks preserve the game's own
 binding and UI/input gates. The v0.30 line moved the optional harmful-action
 redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the
@@ -60,7 +61,7 @@ and Super Focus Glow into one configurable custom-repository plugin.
   same frame, synthesizes movement or Escape, clears the queue, or changes a
   target; the later helper frame repeats full validation. The void cancel call
   reports only `requested`, not confirmed, and current-patch BRD/MCH live proof
-  remains pending. The trigger-driven Viper Serpentiner-Geist helper is
+  remains pending. The carrier-polled Viper Serpentiner-Geist helper is
   deliberately excluded from cast cancellation.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
@@ -112,13 +113,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
   key consent requirement. Base Seiton and the verified Unsealed follow-up are
   distinct epochs; a rejected base request can never substitute the follow-up.
 - **Experimental Viper Serpentiner Geist helper:** a separate default-off option
-  can arm only after the client accepts a qualifying PvP Viper action. While the
-  opportunity is live, any eligible held gameplay key including WASD may supply
-  consent; the triggering action does not freeze its invocation key. Carrier
-  `39183` must adjust to its expected exact follow-up `39174`-`39182` on the same
-  frozen actor and context. The currently held key freezes only when that exact
-  follow-up intent forms. The helper never
-  changes the selected target, substitutes a follow-up, or cancels your cast.
+  checks FFXIV's currently transformed Serpent's Tail carrier `39183` while any
+  eligible gameplay key, including WASD, remains held. If the carrier exposes
+  one reviewed follow-up `39174`-`39182`, the helper may use that exact action on
+  the exact current hard target when usable. It does not capture, require, or
+  prove a preceding Viper action. The exact action, current hard target, and held
+  key freeze for the attempt/retry episode. The helper never changes the selected
+  target, substitutes a follow-up, dispatches carrier `39183`, or cancels your cast.
   Exact CC uses canonical `S1`-`S5`; explicitly enabled Wolves' Den testing uses
   only the exact current hard-target combat striking dummy with NameId `541`.
 - **Experimental Scholar Critical Strategy helper:** a separate default-off
@@ -740,42 +741,33 @@ not a healing-effect claim.
 ## Viper Serpentiner Geist held-key helper
 
 The separate **Serpentiner-Geist-Folgeaktion on held gameplay key** experiment
-is disabled by default and runs only on PvP Viper. It does not scan for an
-unrelated proc or create an action from nothing. After the client accepts one
-qualifying Viper action, Seiton Sense may retain one exact five-second trigger
-containing that action's expected follow-up, actor, context, territory, and
-target identity. A direct execution must advance FFXIV's native action sequence
-without leaving an action queued. An early normal hotbar/Turbo input can arm only
-when FFXIV later presents the exact queued action type, adjusted trigger action,
-canonical target, extra parameter, and combo route and then drains that queue with
-a nonzero action-sequence advance. The initial queueing call and any arbitrary or
-uncertain Queue call do nothing. A newer proven qualifying-action epoch invalidates
-an older buffered intent even when action and target look identical. Explicit actor
-IDs are accepted directly; a native zero/default-
-target carrier is accepted only when the original and forwarded IDs are unchanged,
-no redirect deliberately suppressed the target, and the native hard target proves
-the same canonical actor before and immediately after the accepted call. It stores
-no invocation key. Any eligible gameplay key that is currently held when the
-follow-up becomes usable, including WASD, may provide consent; that current key is
-frozen only when the exact follow-up intent forms.
+is disabled by default and runs only on PvP Viper. While any eligible gameplay
+key, including WASD, remains held, Seiton Sense polls FFXIV's currently transformed
+Serpent's Tail / Serpentiner Geist carrier `39183` every active framework frame.
+If that carrier exposes one reviewed follow-up `39174`-`39182`, the exposed action
+itself is the complete opportunity signal. The helper does not hook, record,
+require, or attempt to prove the preceding Viper action, its invocation mode, or
+its native queue history. Normal hotbar, Turbo, combo, macro, and queued preceding
+actions therefore converge on the same rule once FFXIV exposes the transformed
+carrier.
 
-FFXIV itself must adjust Serpent's Tail / Serpentiner Geist carrier `39183` to
-the expected exact follow-up `39174`-`39182`. Carrier `39183` is never dispatched.
+Carrier `39183` itself is never dispatched.
 The ranged Uncoiled follow-ups `39177` and `39178` use their native 20-yalm range;
-the other reviewed follow-ups use 5 yalms. The exact adjusted action, frozen
-actor, context, territory, physical key, readiness, native range, and line of
-sight are revalidated before every possible call. Purify retains absolute
-priority, and Viper occupies the first job-specific slot after Purify. Own Guard
-blocks it; target Guard is not an added blocker. Action/resource/target-status or
-range unavailability retains the frozen opportunity but yields the framework frame
-to a usable lower-priority helper. Only an otherwise-ready exact intent waiting on
-the native boundary or its retry throttle keeps Viper's priority. The five-second
-deadline remains authoritative after intent formation and at the final native
-boundary. Only a clean client rejection may use the shared 50-ms/eight-call same-
-intent retry. Acceptance, ambiguity, retry exhaustion, trigger expiry, key release,
-or any identity/action/context drift is terminal without an alternate, rerank,
-target change, or replay; ambiguity or retry exhaustion also requires the frozen
-key to be released before another Viper episode can use held consent.
+the other reviewed follow-ups use 5 yalms. The exact adjusted action, current
+hard-target actor, context, territory, physical key, readiness, native range,
+and line of sight are frozen and revalidated before every possible call.
+Purify retains absolute priority, and Viper occupies the first job-specific slot
+after Purify. Own Guard blocks it; target Guard is not an added blocker. Action,
+resource, target-status, or range unavailability yields the framework frame to a
+usable lower-priority helper. Only an otherwise-ready exact intent waiting on the
+native boundary or its retry throttle keeps Viper's priority. Only a clean client
+rejection may use the shared bounded same-intent retry. Acceptance, ambiguity,
+retry exhaustion, key release, stable carrier loss, or any identity/action/context
+drift is terminal for that frozen episode without an alternate, rerank, target
+change, or replay. One false carrier sample is treated as flicker and cannot
+rearm a spent exposure. A newly exposed reviewed carrier action is a distinct
+opportunity; the Uncoiled `39177` to `39178` transformation is handled by that
+same carrier rule.
 
 In exact Crystalline Conflict the target must remain one canonical `S1`-`S5`
 enemy. Wolves' Den is available only with the separate testing option and only
@@ -1489,7 +1481,7 @@ Helpers; independent PLD Guardian, accepted-Eukrasia Smart Kardia, and the Viper
 Serpentiner-Geist helper are under Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 34 is current in v0.31.0.0. It forces the new action-
+Configuration schema 34 is current in v0.31.0.1. It forces the new action-
 initiating Viper Serpentiner-Geist option off for every upgrade, fresh install,
 and Reset Defaults. The historical schema-33 migration still leaves the target-
 writing Smart Tab option off while preserving an older explicitly enabled shared
@@ -1655,8 +1647,8 @@ pressure Sprint. Smart
 Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
 all macro helpers are excluded as well. Viper Serpentiner Geist is also excluded:
-it is trigger-driven after a client-accepted qualifying action and deliberately
-cannot cancel the current cast. The cast-cancellation experiment therefore still
+it polls only the currently transformed carrier and deliberately cannot cancel
+the current cast. The cast-cancellation experiment therefore still
 covers exactly eleven of the twelve physical-hold helpers.
 
 When the highest-priority frozen intent passes its ordinary action, actor/
@@ -1776,7 +1768,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.31.0.0, the exact 404-test Core registry and source checks pin
+For current v0.31.0.1, the exact 404-test Core registry and source checks pin
 configuration schema 34, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 and the separate default-off Viper helper. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only
@@ -1788,10 +1780,11 @@ paths. Smart Action remains a separate one-shot harmful-action macro contract.
 
 The same current checks pin Smart Recuperate's exact CC-or-enabled-Den context
 freeze and no cross-context drift. Viper checks pin carrier `39183`, follow-ups
-`39174`-`39182`, their 5/20-yalm ranges, the five-second accepted trigger, one
-exact actor/action/context/territory/key intent, shared clean-false retry, and the
-strict NameId-`541` Den dummy path. They also pin default-off schema-34 migration
-and the deliberate absence of Viper cast cancellation. These checks validate
+`39174`-`39182`, their 5/20-yalm ranges, direct per-frame carrier exposure without
+preceding-action or queue provenance, one exact current-hard-target/action/context/
+territory/key intent, shared clean-false retry, and the strict NameId-`541` Den
+dummy path. They also pin default-off schema-34 migration and the deliberate
+absence of Viper cast cancellation. These checks validate
 source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
 enabled-Den testing remains required.

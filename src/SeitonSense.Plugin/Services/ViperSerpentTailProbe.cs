@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
 
@@ -13,7 +14,9 @@ internal sealed record ViperSerpentTailProbeSnapshot(
     ViperSerpentTailDecisionReason Reason,
     ViperSerpentTailPhase Phase,
     uint ResolvedActionId,
-    long TriggerToken,
+    long ExposureGeneration,
+    bool ExposureSpent,
+    int NonFollowUpObservations,
     int EnemySlot,
     ulong TargetGameObjectId,
     uint TargetEntityId,
@@ -38,6 +41,8 @@ internal sealed record ViperSerpentTailProbeSnapshot(
         ViperSerpentTailPhase.Waiting,
         0,
         0,
+        false,
+        0,
         0,
         0,
         0,
@@ -54,14 +59,15 @@ internal sealed record ViperSerpentTailProbeSnapshot(
         0,
         0,
         0,
-        "Waiting for an accepted Viper action");
+        "Waiting for transformed Serpent's Tail");
 }
 
 /// <summary>
-/// Converts one accepted Viper action into one exact held Serpent's Tail
-/// follow-up. The action, target, context, physical key generation, and native
-/// addresses are frozen before bounded retries. It never changes selected
-/// target state, never substitutes an action or actor, and never cancels casts.
+/// Observes the native Serpent's Tail carrier continuously and converts one
+/// currently exposed follow-up into one exact held action. The action, current
+/// hard target, context, physical key generation, and native addresses are
+/// frozen before bounded retries. It never changes selected target state,
+/// substitutes an action or actor, or cancels casts.
 /// </summary>
 internal sealed unsafe class ViperSerpentTailProbe
 {
@@ -70,9 +76,11 @@ internal sealed unsafe class ViperSerpentTailProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private ViperSerpentTailState state = ViperSerpentTailState.Initial;
+    private ViperSerpentTailExposureState exposure =
+        ViperSerpentTailExposureState.Initial;
     private ViperSerpentTailProbeSnapshot snapshot = ViperSerpentTailProbeSnapshot.Initial;
     private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
-    private long frozenTriggerToken;
+    private long frozenExposureGeneration;
     private uint frozenTerritoryId;
     private nint frozenLocalAddress;
     private nint frozenTargetAddress;
@@ -82,7 +90,7 @@ internal sealed unsafe class ViperSerpentTailProbe
     private long unknownCount;
     private long softWaitCount;
     private long nextErrorLogAt;
-    private string lastEvent = "Waiting for an accepted Viper action";
+    private string lastEvent = "Waiting for transformed Serpent's Tail";
 
     internal ViperSerpentTailProbe(
         IClientState clientState,
@@ -137,9 +145,9 @@ internal sealed unsafe class ViperSerpentTailProbe
     internal void Reset()
     {
         state = ViperSerpentTailState.Initial;
+        exposure = ViperSerpentTailExposureState.Initial;
         terminalHeldKey = VirtualKey.NO_KEY;
         ClearFrozenRuntime();
-        nearAssist.ClearViperSerpentTailTrigger();
         lastEvent = "Reset";
         PublishTerminalSnapshot(
             ViperSerpentTailDecisionKind.None,
@@ -153,19 +161,9 @@ internal sealed unsafe class ViperSerpentTailProbe
             ? (VirtualKey)intent.FrozenKeyCode
             : terminalHeldKey;
         state = ViperSerpentTailState.Initial;
+        exposure = ViperSerpentTailExposureState.Initial;
         terminalHeldKey = failedKey;
         ClearFrozenRuntime();
-        try
-        {
-            nearAssist.ClearViperSerpentTailTrigger();
-        }
-        catch (Exception exception)
-        {
-            LogFailure(
-                exception,
-                Environment.TickCount64,
-                "Seiton Sense Viper trigger clear failed while closing safely.");
-        }
 
         lastEvent = "Failed closed";
         return PublishTerminalSnapshot(
@@ -190,9 +188,9 @@ internal sealed unsafe class ViperSerpentTailProbe
         if (effectiveHardReset)
         {
             state = ViperSerpentTailState.Initial;
+            exposure = ViperSerpentTailExposureState.Initial;
             terminalHeldKey = VirtualKey.NO_KEY;
             ClearFrozenRuntime();
-            nearAssist.ClearViperSerpentTailTrigger();
         }
 
         if (terminalHeldKey != VirtualKey.NO_KEY &&
@@ -231,9 +229,9 @@ internal sealed unsafe class ViperSerpentTailProbe
         {
             effectiveHardReset = true;
             state = ViperSerpentTailState.Initial;
+            exposure = ViperSerpentTailExposureState.Initial;
             terminalHeldKey = VirtualKey.NO_KEY;
             ClearFrozenRuntime();
-            nearAssist.ClearViperSerpentTailTrigger();
         }
 
         var featureGateReady = !effectiveHardReset &&
@@ -262,56 +260,61 @@ internal sealed unsafe class ViperSerpentTailProbe
                 out nativeBoundaryReady);
         }
 
+        // The native carrier is the source of truth. This observation runs on
+        // every active VPR frame, even without a held key or while Purify owns
+        // the scheduler frame.
+        exposure = ViperSerpentTailRules.ObserveCarrierExposure(
+            exposure,
+            resolvedActionId,
+            hardReset: !featureGateReady);
+
         var input = inputFrame.Snapshot;
-        var currentAcceptedActionEpoch =
-            nearAssist.GetCurrentViperSerpentTailAcceptedEpoch();
         var frozenKeyStillDown = state.Intent is { IsValid: true } heldIntent &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(
                                      (VirtualKey)heldIntent.FrozenKeyCode);
-        ViperSerpentTailTrigger? trigger = null;
-        if (state.Phase == ViperSerpentTailPhase.Waiting &&
-            featureGateReady &&
-            nearAssist.TryPeekViperSerpentTailTrigger(
-                nowMilliseconds,
-                territoryId,
-                context,
-                localIdentity,
-                out var pendingTrigger))
+        var currentIntentStillTracked = state.Intent is { IsValid: true } currentIntent &&
+                                        ViperSerpentTailRules.IsTrackedUnspentExposure(
+                                            exposure,
+                                            currentIntent.ExposureGeneration,
+                                            currentIntent.ActionId);
+        var expectedActionId = currentIntentStillTracked
+            ? state.Intent!.Value.ActionId
+            : exposure.CurrentActionId;
+        RuntimeCandidate? runtimeCandidate = null;
+        if (exactLocal is not null &&
+            ViperSerpentTailRules.IsExactFollowUpAction(expectedActionId))
         {
-            trigger = pendingTrigger;
+            runtimeCandidate = currentIntentStillTracked
+                ? ResolveExactCandidate(
+                    exactLocal,
+                    context,
+                    state.Intent!.Value.EnemySlot,
+                    state.Intent.Value.Target,
+                    expectedActionId,
+                    wolvesDenDummyMetadataVerified)
+                : ResolveCurrentExactCandidate(
+                    exactLocal,
+                    context,
+                    expectedActionId,
+                    wolvesDenDummyMetadataVerified);
         }
 
-        var expectedActionId = state.Intent?.ActionId ??
-                               trigger?.ExpectedAdjustedActionId ??
-                               resolvedActionId;
-        var expectedSlot = state.Intent?.EnemySlot ?? trigger?.EnemySlot ?? 0;
-        var expectedTarget = state.Intent?.Target ?? trigger?.Target ?? default;
-        var runtimeCandidate = exactLocal is not null &&
-                               ViperSerpentTailRules.IsExactFollowUpAction(
-                                   expectedActionId)
-            ? ResolveExactCandidate(
-                exactLocal,
-                context,
-                expectedSlot,
-                expectedTarget,
-                expectedActionId,
-                wolvesDenDummyMetadataVerified)
-            : null;
-        if (state.Intent is { IsValid: true } &&
-            runtimeCandidate is { } frozenCandidate &&
-            frozenCandidate.Target.Address != frozenTargetAddress)
+        if (currentIntentStillTracked &&
+            runtimeCandidate is { } trackedCandidate &&
+            trackedCandidate.Target.Address != frozenTargetAddress)
         {
             runtimeCandidate = null;
         }
-        var exactActionLocallyReady = actionLocallyReady &&
-                                      runtimeCandidate?.TargetActionReady == true;
 
+        var exactActionLocallyReady = actionLocallyReady &&
+                                      resolvedActionId == expectedActionId &&
+                                      runtimeCandidate?.TargetActionReady == true;
+        var previousIntent = state.Intent;
         var decision = ViperSerpentTailRules.Observe(
             state,
             new ViperSerpentTailObservation(
                 ConfigurationEnabled: configurationEnabled,
                 Context: context,
-                TerritoryId: territoryId,
                 LocalPlayer: localIdentity,
                 IsLocalPlayerAlive: localAlive,
                 LocalJobId: localJobId,
@@ -324,40 +327,35 @@ internal sealed unsafe class ViperSerpentTailProbe
                                          inputFrame.HeldGameplayKeyEligible,
                 HeldGameplayKeyCode: (int)input.HeldGameplayKey,
                 FrozenKeyStillDown: frozenKeyStillDown,
-                ResolvedAdjustedActionId: resolvedActionId,
+                Exposure: exposure,
                 ActionLocallyReady: exactActionLocallyReady,
                 NativeBoundaryReady: nativeBoundaryReady,
-                CurrentAcceptedActionEpoch: currentAcceptedActionEpoch,
-                Trigger: trigger,
                 Candidate: runtimeCandidate?.Core,
                 HardReset: effectiveHardReset,
                 NowMilliseconds: nowMilliseconds));
 
-        if (decision.ConsumeTrigger)
+        if (decision.NextState.Intent is { IsValid: true } nextIntent &&
+            (!previousIntent.HasValue || previousIntent.Value != nextIntent))
         {
-            if (decision.Intent is not { IsValid: true } consumedIntent ||
-                runtimeCandidate is not { } consumedCandidate ||
+            if (runtimeCandidate is not { } frozenCandidate ||
                 exactLocal is null ||
-                !nearAssist.TryConsumeViperSerpentTailTrigger(
-                    consumedIntent.TriggerToken,
-                    Environment.TickCount64,
-                    territoryId,
-                    context,
-                    localIdentity))
+                frozenCandidate.Core.Context != nextIntent.Context ||
+                frozenCandidate.Core.EnemySlot != nextIntent.EnemySlot ||
+                frozenCandidate.Core.Actor != nextIntent.Target)
             {
                 decision = new ViperSerpentTailDecision(
                     ViperSerpentTailState.Initial,
                     ViperSerpentTailDecisionKind.Cancelled,
-                    ViperSerpentTailDecisionReason.TriggerExpiredOrDrifted);
+                    ViperSerpentTailDecisionReason.CandidateUnavailable);
                 ClearFrozenRuntime();
             }
             else
             {
                 FreezeRuntime(
-                    consumedIntent,
+                    nextIntent,
                     territoryId,
                     exactLocal.Address,
-                    consumedCandidate.Target.Address);
+                    frozenCandidate.Target.Address);
             }
         }
 
@@ -392,6 +390,14 @@ internal sealed unsafe class ViperSerpentTailProbe
                 state,
                 nativeOutcome,
                 nowMilliseconds);
+            if (completion.SpendExposure)
+            {
+                exposure = ViperSerpentTailRules.MarkCarrierExposureSpent(
+                    exposure,
+                    intent.ExposureGeneration,
+                    intent.ActionId);
+            }
+
             state = completion.NextState;
             accepted = completion.ClientAccepted;
             if (completion.SoftWait) Interlocked.Increment(ref softWaitCount);
@@ -401,28 +407,8 @@ internal sealed unsafe class ViperSerpentTailProbe
             {
                 terminalHeldKey = (VirtualKey)intent.FrozenKeyCode;
             }
-            lastEvent = DescribeNativeResult(intent, nativeOutcome, completion);
 
-            if (accepted &&
-                intent.ActionId ==
-                ViperSerpentTailRules.UncoiledTwinfangActionId)
-            {
-                try
-                {
-                    nearAssist.ArmAcceptedViperSerpentTailFollowUp(
-                        intent,
-                        Environment.TickCount64);
-                }
-                catch (Exception exception)
-                {
-                    // The accepted native action is terminal. Never repeat it
-                    // merely because capture of its distinct next epoch failed.
-                    LogFailure(
-                        exception,
-                        nowMilliseconds,
-                        "Seiton Sense could not arm the accepted Viper 39178 follow-up.");
-                }
-            }
+            lastEvent = DescribeNativeResult(intent, nativeOutcome, completion);
         }
         else
         {
@@ -439,7 +425,9 @@ internal sealed unsafe class ViperSerpentTailProbe
             decision.Reason,
             state.Phase,
             resolvedActionId,
-            activeIntent?.TriggerToken ?? trigger?.Token ?? 0,
+            activeIntent?.ExposureGeneration ?? exposure.Generation,
+            exposure.IsSpent,
+            exposure.ConsecutiveNonFollowUpObservations,
             activeIntent?.EnemySlot ?? selectedCandidate?.EnemySlot ?? 0,
             activeIntent?.Target.GameObjectId ?? selectedCandidate?.Actor.GameObjectId ?? 0,
             activeIntent?.Target.EntityId ?? selectedCandidate?.Actor.EntityId ?? 0,
@@ -478,7 +466,7 @@ internal sealed unsafe class ViperSerpentTailProbe
     {
         attempted = false;
         if (!intent.IsValid ||
-            frozenTriggerToken != intent.TriggerToken ||
+            frozenExposureGeneration != intent.ExposureGeneration ||
             frozenTerritoryId == 0 ||
             frozenLocalAddress == nint.Zero ||
             frozenTargetAddress == nint.Zero)
@@ -540,7 +528,8 @@ internal sealed unsafe class ViperSerpentTailProbe
                 var exactKey = (VirtualKey)intent.FrozenKeyCode;
                 var exactGenerationEligible =
                     inputFrame.IsGameplayKeyGenerationEligible(exactKey);
-                if (!ViperSerpentTailRules.CanUseFrozenIntent(
+                if (adjustedActionId != intent.ActionId ||
+                    !ViperSerpentTailRules.CanUseFrozenIntent(
                         intent,
                         configurationEnabled,
                         context,
@@ -552,10 +541,8 @@ internal sealed unsafe class ViperSerpentTailProbe
                         metadataVerified,
                         guardSuppressed,
                         higherPriorityClaimed,
-                        adjustedActionId,
+                        exposure,
                         actionLocallyReady,
-                        nearAssist.GetCurrentViperSerpentTailAcceptedEpoch(),
-                        boundaryNow,
                         (int)inputFrame.Snapshot.HeldGameplayKey,
                         exactGenerationEligible,
                         candidate.Value.Core))
@@ -591,37 +578,26 @@ internal sealed unsafe class ViperSerpentTailProbe
                     return false;
                 }
 
-                if (!nearAssist.TryRunForCurrentViperSerpentTailAcceptedEpoch(
-                        intent.AcceptedActionEpoch,
-                        () =>
-                        {
-                            attemptedAtBoundary = true;
-                            var accepted = actionManager->UseAction(
-                                ActionType.Action,
-                                intent.ActionId,
-                                intent.Target.GameObjectId,
-                                0,
-                                ActionManager.UseActionMode.None,
-                                0);
-                            after = ClientActionAttemptBoundary.Capture(
-                                actionManager,
-                                intent.ActionId);
-                            carrierAfter = actionManager->GetAdjustedActionId(
-                                ViperSerpentTailRules.CarrierActionId);
-                            targetStatusAfter = actionManager->GetActionStatus(
-                                ActionType.Action,
-                                intent.ActionId,
-                                intent.Target.GameObjectId,
-                                checkRecastActive: true,
-                                checkCastingActive: true);
-                            return accepted;
-                        },
-                        out var epochAccepted))
-                {
-                    return false;
-                }
-
-                return epochAccepted;
+                attemptedAtBoundary = true;
+                var accepted = actionManager->UseAction(
+                    ActionType.Action,
+                    intent.ActionId,
+                    intent.Target.GameObjectId,
+                    0,
+                    ActionManager.UseActionMode.None,
+                    0);
+                after = ClientActionAttemptBoundary.Capture(
+                    actionManager,
+                    intent.ActionId);
+                carrierAfter = actionManager->GetAdjustedActionId(
+                    ViperSerpentTailRules.CarrierActionId);
+                targetStatusAfter = actionManager->GetActionStatus(
+                    ActionType.Action,
+                    intent.ActionId,
+                    intent.Target.GameObjectId,
+                    checkRecastActive: true,
+                    checkCastingActive: true);
+                return accepted;
             });
 
             if (!attemptedAtBoundary)
@@ -659,6 +635,67 @@ internal sealed unsafe class ViperSerpentTailProbe
         }
     }
 
+    private RuntimeCandidate? ResolveCurrentExactCandidate(
+        IPlayerCharacter localPlayer,
+        SupportedPvPContext context,
+        uint actionId,
+        bool wolvesDenDummyMetadataVerified)
+    {
+        if (!ViperSerpentTailRules.IsExactFollowUpAction(actionId)) return null;
+
+        switch (context)
+        {
+            case SupportedPvPContext.CrystallineConflict:
+            {
+                var nativeHardTargetId = GetNativeHardTargetId(localPlayer);
+                if (!IsNetworkObjectId(nativeHardTargetId)) return null;
+                for (var slot = EnemySlotRules.FirstSlot;
+                     slot <= EnemySlotRules.LastSlot;
+                     slot++)
+                {
+                    var enemy = EnemySlotResolver.Resolve(objectTable, slot);
+                    if (!HasValidNativeIdentity(enemy) ||
+                        !ActorIdMatches(nativeHardTargetId, enemy!))
+                    {
+                        continue;
+                    }
+
+                    var enemyIdentity = new TargetPressureActorIdentity(
+                        enemy!.GameObjectId,
+                        enemy.EntityId);
+                    return ResolveExactCandidate(
+                        localPlayer,
+                        context,
+                        slot,
+                        enemyIdentity,
+                        actionId,
+                        wolvesDenDummyMetadataVerified);
+                }
+
+                return null;
+            }
+            case SupportedPvPContext.WolvesDen:
+                return StrictWolvesDenStrikingDummyResolver
+                    .TryResolveExactCurrentHardTarget(
+                        objectTable,
+                        wolvesDenDummyMetadataVerified,
+                        localPlayer,
+                        out _,
+                        out var identity,
+                        out _)
+                    ? ResolveExactCandidate(
+                        localPlayer,
+                        context,
+                        0,
+                        identity,
+                        actionId,
+                        wolvesDenDummyMetadataVerified)
+                    : null;
+            default:
+                return null;
+        }
+    }
+
     private RuntimeCandidate? ResolveExactCandidate(
         IPlayerCharacter localPlayer,
         SupportedPvPContext context,
@@ -682,7 +719,14 @@ internal sealed unsafe class ViperSerpentTailProbe
         {
             case SupportedPvPContext.CrystallineConflict:
             {
-                if (!EnemySlotRules.IsValidSlot(enemySlot)) return null;
+                if (!EnemySlotRules.IsValidSlot(enemySlot) ||
+                    !ActorIdMatches(
+                        GetNativeHardTargetId(localPlayer),
+                        expectedTarget))
+                {
+                    return null;
+                }
+
                 var player = EnemySlotResolver.Resolve(objectTable, enemySlot);
                 if (!HasValidNativeIdentity(player) ||
                     player!.GameObjectId != expectedTarget.GameObjectId ||
@@ -842,7 +886,7 @@ internal sealed unsafe class ViperSerpentTailProbe
         nint localAddress,
         nint targetAddress)
     {
-        frozenTriggerToken = intent.TriggerToken;
+        frozenExposureGeneration = intent.ExposureGeneration;
         frozenTerritoryId = territoryId;
         frozenLocalAddress = localAddress;
         frozenTargetAddress = targetAddress;
@@ -853,7 +897,7 @@ internal sealed unsafe class ViperSerpentTailProbe
         uint territoryId,
         nint localAddress) =>
         intent.IsValid &&
-        frozenTriggerToken == intent.TriggerToken &&
+        frozenExposureGeneration == intent.ExposureGeneration &&
         frozenTerritoryId == territoryId &&
         frozenLocalAddress != nint.Zero &&
         frozenLocalAddress == localAddress &&
@@ -861,7 +905,7 @@ internal sealed unsafe class ViperSerpentTailProbe
 
     private void ClearFrozenRuntime()
     {
-        frozenTriggerToken = 0;
+        frozenExposureGeneration = 0;
         frozenTerritoryId = 0;
         frozenLocalAddress = nint.Zero;
         frozenTargetAddress = nint.Zero;
@@ -964,6 +1008,27 @@ internal sealed unsafe class ViperSerpentTailProbe
             ? native
             : null;
     }
+
+    private static ulong GetNativeHardTargetId(IPlayerCharacter localPlayer)
+    {
+        if (!HasValidNativeIdentity(localPlayer)) return 0;
+        var character = (Character*)localPlayer.Address;
+        return character == null ? 0 : character->GetTargetId().Id;
+    }
+
+    private static bool ActorIdMatches(
+        ulong actorId,
+        TargetPressureActorIdentity actor) =>
+        actor.IsValid &&
+        (actorId == actor.GameObjectId ||
+         actorId <= uint.MaxValue && (uint)actorId == actor.EntityId);
+
+    private static bool ActorIdMatches(ulong actorId, IGameObject actor) =>
+        ActorIdMatches(
+            actorId,
+            new TargetPressureActorIdentity(
+                actor.GameObjectId,
+                actor.EntityId));
 
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000 and not uint.MaxValue;

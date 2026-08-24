@@ -157,11 +157,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
-    private readonly bool wolvesDenStrikingDummyMetadataVerified;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
     private readonly object smartKardiaTriggerGate = new();
-    private readonly object viperSerpentTailTriggerGate = new();
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
     private readonly Hook<ActionManager.Delegates.UseActionLocation>? useActionLocationHook;
@@ -184,8 +182,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private string autoGuardProtectionLastEvent = "Not armed";
     private SmartKardiaEukrasiaTrigger? pendingSmartKardiaTrigger;
     private long smartKardiaTriggerSequence;
-    private ViperSerpentTailTrigger? pendingViperSerpentTailTrigger;
-    private long viperSerpentTailTriggerSequence;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
@@ -224,7 +220,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
         DarkKnightShadowbringerMacroService darkKnightShadowbringer,
-        bool wolvesDenStrikingDummyMetadataVerified,
         IPluginLog log)
     {
         this.configuration = configuration;
@@ -239,7 +234,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
         this.darkKnightShadowbringer = darkKnightShadowbringer;
-        this.wolvesDenStrikingDummyMetadataVerified = wolvesDenStrikingDummyMetadataVerified;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
 
@@ -567,180 +561,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         pressureTracker.CancelIncomingAllyPressureCapture(
             acceptedAtMilliseconds);
-    }
-
-    internal bool TryPeekViperSerpentTailTrigger(
-        long nowMilliseconds,
-        uint territoryId,
-        SupportedPvPContext context,
-        TargetPressureActorIdentity localPlayer,
-        out ViperSerpentTailTrigger trigger)
-    {
-        lock (viperSerpentTailTriggerGate)
-        {
-            if (pendingViperSerpentTailTrigger is { } pending &&
-                pending.AcceptedActionEpoch == viperSerpentTailTriggerSequence &&
-                ViperSerpentTailRules.IsTriggerCurrent(
-                    pending,
-                    nowMilliseconds,
-                    territoryId,
-                    context,
-                    localPlayer))
-            {
-                trigger = pending;
-                return true;
-            }
-
-            pendingViperSerpentTailTrigger = null;
-            trigger = default;
-            return false;
-        }
-    }
-
-    internal long GetCurrentViperSerpentTailAcceptedEpoch()
-    {
-        lock (viperSerpentTailTriggerGate)
-            return viperSerpentTailTriggerSequence;
-    }
-
-    /// <summary>
-    /// Holds the accepted-action epoch stable across the final native call.
-    /// A newer accepted qualifying VPR action therefore cannot interleave
-    /// between the final epoch check and spending the frozen intent.
-    /// </summary>
-    internal bool TryRunForCurrentViperSerpentTailAcceptedEpoch(
-        long acceptedActionEpoch,
-        Func<bool> action,
-        out bool result)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-        result = false;
-        if (acceptedActionEpoch <= 0) return false;
-
-        lock (viperSerpentTailTriggerGate)
-        {
-            if (viperSerpentTailTriggerSequence != acceptedActionEpoch)
-                return false;
-            result = action();
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Spends only the exact accepted VPR action opportunity before terminal
-    /// target/action validation. A later failure can never reuse this trigger.
-    /// </summary>
-    internal bool TryConsumeViperSerpentTailTrigger(
-        long token,
-        long nowMilliseconds,
-        uint territoryId,
-        SupportedPvPContext context,
-        TargetPressureActorIdentity localPlayer)
-    {
-        if (token <= 0 || nowMilliseconds < 0) return false;
-        lock (viperSerpentTailTriggerGate)
-        {
-            if (pendingViperSerpentTailTrigger is not { } pending ||
-                pending.Token != token ||
-                viperSerpentTailTriggerSequence != token)
-            {
-                return false;
-            }
-
-            if (!ViperSerpentTailRules.IsTriggerCurrent(
-                    pending,
-                    nowMilliseconds,
-                    territoryId,
-                    context,
-                    localPlayer))
-            {
-                pendingViperSerpentTailTrigger = null;
-                return false;
-            }
-
-            pendingViperSerpentTailTrigger = null;
-            return true;
-        }
-    }
-
-    internal void ClearViperSerpentTailTrigger()
-    {
-        lock (viperSerpentTailTriggerGate)
-            pendingViperSerpentTailTrigger = null;
-    }
-
-    private bool TryClearViperSerpentTailTrigger(long token)
-    {
-        if (token <= 0) return false;
-        lock (viperSerpentTailTriggerGate)
-        {
-            if (pendingViperSerpentTailTrigger is not { } pending ||
-                pending.Token != token)
-            {
-                return false;
-            }
-
-            pendingViperSerpentTailTrigger = null;
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// The automatic Uncoiled Twinfang call deliberately bypasses trigger
-    /// capture in the native detour. A client-accepted result may arm its one
-    /// exact Uncoiled Twinblood continuation through this explicit path.
-    /// </summary>
-    internal void ArmAcceptedViperSerpentTailFollowUp(
-        ViperSerpentTailIntent acceptedIntent,
-        long acceptedAtMilliseconds)
-    {
-        try
-        {
-            if (!acceptedIntent.IsValid ||
-                acceptedIntent.ActionId != ViperSerpentTailRules.UncoiledTwinfangActionId ||
-                acceptedAtMilliseconds < 0)
-            {
-                return;
-            }
-
-            var preflight = new ViperSerpentTailPreflight(
-                clientState.TerritoryType,
-                acceptedIntent.Context,
-                acceptedIntent.LocalPlayer,
-                acceptedIntent.ActionId,
-                acceptedIntent.EnemySlot,
-                acceptedIntent.Target,
-                UsedNativeDefaultTarget: false,
-                NativeHardTargetId: 0,
-                InvocationKind: ViperSerpentTailTriggerInvocationKind.Direct,
-                NativeBefore: default);
-            var chainedAcceptedActionEpoch = 0L;
-            try
-            {
-                if (!TryReserveChainedViperSerpentTailAcceptedEpoch(
-                        acceptedIntent.AcceptedActionEpoch,
-                        out chainedAcceptedActionEpoch))
-                {
-                    return;
-                }
-
-                InstallReservedViperSerpentTailTrigger(
-                    preflight,
-                    acceptedAtMilliseconds,
-                    chainedAcceptedActionEpoch);
-            }
-            catch
-            {
-                TryClearViperSerpentTailTrigger(chainedAcceptedActionEpoch);
-                throw;
-            }
-        }
-        catch (Exception exception)
-        {
-            LogFailure(
-                exception,
-                "Seiton Sense Viper follow-up trigger failed closed after Uncoiled Twinfang.");
-        }
     }
 
     internal void Start()
@@ -1217,7 +1037,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         ClearToken("Reset");
         ClearSmartKardiaTrigger();
-        ClearViperSerpentTailTrigger();
         ClearAutoGuardProtection("Reset");
     }
 
@@ -1229,7 +1048,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         started = false;
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
-        ClearViperSerpentTailTrigger();
         lock (guardAttemptGate)
         {
             latestLocalGuardActionAttempt = null;
@@ -1659,18 +1477,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             helperTokenConsumed,
             targetSuppressedByRedirect,
             out var smartKardiaPreflight);
-        var hasViperSerpentTailPreflight = TryCaptureViperSerpentTailPreflight(
-            thisPtr,
-            actionType,
-            actionId,
-            mode,
-            targetId,
-            forwardedTargetId,
-            extraParam,
-            comboRouteId,
-            bypassRedirect,
-            targetSuppressedByRedirect,
-            out var viperSerpentTailPreflight);
         ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
         var clientAccepted = useActionHook!.Original(
             thisPtr,
@@ -1681,23 +1487,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             mode,
             comboRouteId,
             outOptAreaTargeted);
-        var viperSerpentTailAfter = hasViperSerpentTailPreflight
-            ? ClientActionAttemptBoundary.Capture(
-                thisPtr,
-                viperSerpentTailPreflight.TriggerActionId)
-            : default;
-        if (hasViperSerpentTailPreflight &&
-            ViperSerpentTailRules.ClassifyAcceptedTriggerBoundary(
-                viperSerpentTailPreflight.InvocationKind,
-                clientAccepted,
-                viperSerpentTailPreflight.NativeBefore,
-                viperSerpentTailAfter) ==
-            ViperSerpentTailTriggerPromotionDisposition.ExecutedAccepted)
-        {
-            ArmAcceptedViperSerpentTailTrigger(
-                viperSerpentTailPreflight,
-                Environment.TickCount64);
-        }
         smartWardensPaean.RecordNativeResult(smartPaeanResult, clientAccepted);
         if (clientAccepted && hasSmartKardiaPreflight)
             ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
@@ -1860,299 +1649,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var next = current + 1;
             if (Interlocked.CompareExchange(
                     ref smartKardiaTriggerSequence,
-                    next,
-                    current) == current)
-            {
-                return next;
-            }
-        }
-    }
-
-    private bool TryCaptureViperSerpentTailPreflight(
-        ActionManager* actionManager,
-        ActionType actionType,
-        uint actionId,
-        ActionManager.UseActionMode mode,
-        ulong originalTargetId,
-        ulong forwardedTargetId,
-        uint extraParam,
-        uint comboRouteId,
-        bool bypassRedirect,
-        bool targetSuppressedByRedirect,
-        out ViperSerpentTailPreflight preflight)
-    {
-        preflight = default;
-        try
-        {
-            var invocationKind = ViperSerpentTailRules.ClassifyTriggerInvocationMode(
-                (uint)mode,
-                exactNativeQueueDrainProvenance: false);
-            var directInvocation =
-                invocationKind == ViperSerpentTailTriggerInvocationKind.Direct;
-            var queueDrainInvocation =
-                mode == ActionManager.UseActionMode.Queue;
-            if (bypassRedirect ||
-                targetSuppressedByRedirect ||
-                (!directInvocation && !queueDrainInvocation) ||
-                !IsSupportedActionType(actionType) ||
-                !configuration.Enabled ||
-                !configuration.EnableViperSerpentTailOnHeldKey)
-            {
-                return false;
-            }
-
-            var triggerActionId = ResolveActionId(actionManager, actionType, actionId);
-            if (!ViperSerpentTailRules.TryGetExpectedFollowUp(triggerActionId, out _))
-                return false;
-
-            var context = ResolveViperSerpentTailContext();
-            if (context is not (SupportedPvPContext.CrystallineConflict or
-                SupportedPvPContext.WolvesDen))
-            {
-                return false;
-            }
-
-            var local = objectTable.LocalPlayer;
-            if (!IsLivePlayer(local) ||
-                !local!.ClassJob.IsValid ||
-                local.ClassJob.RowId != ViperSerpentTailRules.ViperJobId ||
-                GetNativeObject(local) == null)
-            {
-                return false;
-            }
-
-            var localIdentity = new TargetPressureActorIdentity(
-                local.GameObjectId,
-                local.EntityId);
-            var usedNativeDefaultTarget =
-                CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(forwardedTargetId) &&
-                forwardedTargetId == originalTargetId &&
-                !targetSuppressedByRedirect;
-            var nativeHardTargetId = usedNativeDefaultTarget
-                ? GetNativeHardTargetId(local)
-                : 0;
-            var effectiveTargetId = CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(
-                originalTargetId,
-                forwardedTargetId,
-                nativeHardTargetId,
-                targetSuppressedByRedirect);
-            if (!localIdentity.IsValid ||
-                !TryResolveViperSerpentTailTarget(
-                    local,
-                    context,
-                    effectiveTargetId,
-                    out var enemySlot,
-                    out var target))
-            {
-                return false;
-            }
-
-            var nativeBefore = ClientActionAttemptBoundary.Capture(
-                actionManager,
-                triggerActionId);
-            if (!nativeBefore.Captured)
-                return false;
-
-            if (directInvocation)
-            {
-                if (nativeBefore.ActionQueued) return false;
-            }
-            else
-            {
-                // UseActionMode.Queue is accepted only as the synchronous
-                // drain of the exact native queue entry already present before
-                // this call. A caller that merely supplies Queue mode cannot
-                // manufacture trigger provenance.
-                var queuedActionType = (ActionType)nativeBefore.QueuedActionType;
-                var queuedResolvedActionId = IsSupportedActionType(queuedActionType)
-                    ? ResolveActionId(
-                        actionManager,
-                        queuedActionType,
-                        nativeBefore.QueuedActionId)
-                    : 0;
-                if (!ViperSerpentTailRules.HasExactNativeQueueDrainProvenance(
-                        queueDrainInvocation,
-                        IsSupportedActionType(actionType),
-                        (uint)actionType,
-                        triggerActionId,
-                        effectiveTargetId,
-                        extraParam,
-                        comboRouteId,
-                        queuedResolvedActionId,
-                        target,
-                        nativeBefore))
-                {
-                    return false;
-                }
-
-                invocationKind = ViperSerpentTailRules.ClassifyTriggerInvocationMode(
-                    (uint)mode,
-                    exactNativeQueueDrainProvenance: true);
-                if (invocationKind !=
-                    ViperSerpentTailTriggerInvocationKind.ProvenNativeQueueDrain)
-                {
-                    return false;
-                }
-            }
-
-            preflight = new ViperSerpentTailPreflight(
-                clientState.TerritoryType,
-                context,
-                localIdentity,
-                triggerActionId,
-                enemySlot,
-                target,
-                usedNativeDefaultTarget,
-                nativeHardTargetId,
-                invocationKind,
-                nativeBefore);
-            return true;
-        }
-        catch (Exception exception)
-        {
-            LogFailure(
-                exception,
-                "Seiton Sense Viper ignored an unprovable Serpent's Tail trigger.");
-            return false;
-        }
-    }
-
-    private void ArmAcceptedViperSerpentTailTrigger(
-        ViperSerpentTailPreflight preflight,
-        long acceptedAtMilliseconds)
-    {
-        var acceptedActionEpoch = 0L;
-        try
-        {
-            // Every proven newer accepted VPR action first advances the epoch
-            // and invalidates its predecessor. Post-accept target/context drift
-            // may prevent a replacement trigger, but can never resurrect the
-            // older consumed or pending action opportunity.
-            lock (viperSerpentTailTriggerGate)
-            {
-                pendingViperSerpentTailTrigger = null;
-                acceptedActionEpoch = NextViperSerpentTailTriggerToken();
-            }
-
-            InstallReservedViperSerpentTailTrigger(
-                preflight,
-                acceptedAtMilliseconds,
-                acceptedActionEpoch);
-        }
-        catch (Exception exception)
-        {
-            TryClearViperSerpentTailTrigger(acceptedActionEpoch);
-            LogFailure(
-                exception,
-                "Seiton Sense Viper failed closed while arming Serpent's Tail.");
-        }
-    }
-
-    /// <summary>
-    /// Atomically advances the accepted-action epoch for the automatic
-    /// 39177-to-39178 chain. If a newer accepted VPR call has already advanced
-    /// the epoch, its pending trigger is left untouched and this stale chain is
-    /// skipped.
-    /// </summary>
-    private bool TryReserveChainedViperSerpentTailAcceptedEpoch(
-        long completedAcceptedActionEpoch,
-        out long chainedAcceptedActionEpoch)
-    {
-        chainedAcceptedActionEpoch = 0;
-        lock (viperSerpentTailTriggerGate)
-        {
-            var pendingAcceptedActionEpoch =
-                pendingViperSerpentTailTrigger?.AcceptedActionEpoch ?? 0;
-            if (!ViperSerpentTailRules.CanReserveChainedAcceptedActionEpoch(
-                    completedAcceptedActionEpoch,
-                    viperSerpentTailTriggerSequence,
-                    pendingAcceptedActionEpoch))
-            {
-                return false;
-            }
-
-            pendingViperSerpentTailTrigger = null;
-            chainedAcceptedActionEpoch = NextViperSerpentTailTriggerToken();
-            return chainedAcceptedActionEpoch > 0;
-        }
-    }
-
-    /// <summary>
-    /// Installs only the exact epoch reserved by either a normal accepted call
-    /// or the atomic chained compare-and-advance path.
-    /// </summary>
-    private void InstallReservedViperSerpentTailTrigger(
-        ViperSerpentTailPreflight preflight,
-        long acceptedAtMilliseconds,
-        long acceptedActionEpoch)
-    {
-        if (acceptedAtMilliseconds < 0 ||
-            acceptedActionEpoch <= 0 ||
-            !configuration.Enabled ||
-            !configuration.EnableViperSerpentTailOnHeldKey ||
-            clientState.TerritoryType != preflight.TerritoryId ||
-            ResolveViperSerpentTailContext() != preflight.Context)
-        {
-            return;
-        }
-
-        var local = objectTable.LocalPlayer;
-        var localIdentity = IsLivePlayer(local) && GetNativeObject(local!) != null
-            ? new TargetPressureActorIdentity(local!.GameObjectId, local.EntityId)
-            : default;
-        if (local is null ||
-            localIdentity != preflight.LocalPlayer ||
-            (preflight.UsedNativeDefaultTarget
-                ? !ActorIdMatches(preflight.NativeHardTargetId, preflight.Target) ||
-                  !ActorIdMatches(GetNativeHardTargetId(local), preflight.Target)
-                : preflight.NativeHardTargetId != 0) ||
-            !TryResolveViperSerpentTailTarget(
-                local,
-                preflight.Context,
-                preflight.Target.GameObjectId,
-                out var currentSlot,
-                out var currentTarget) ||
-            currentSlot != preflight.EnemySlot ||
-            currentTarget != preflight.Target)
-        {
-            return;
-        }
-
-        if (!ViperSerpentTailRules.TryCreateAcceptedTrigger(
-                acceptedActionEpoch,
-                preflight.TerritoryId,
-                preflight.Context,
-                preflight.LocalPlayer,
-                preflight.TriggerActionId,
-                preflight.EnemySlot,
-                preflight.Target,
-                acceptedAtMilliseconds,
-                out var trigger))
-        {
-            return;
-        }
-
-        lock (viperSerpentTailTriggerGate)
-        {
-            if (viperSerpentTailTriggerSequence != acceptedActionEpoch ||
-                trigger.AcceptedActionEpoch != acceptedActionEpoch)
-            {
-                return;
-            }
-
-            pendingViperSerpentTailTrigger = trigger;
-        }
-    }
-
-    private long NextViperSerpentTailTriggerToken()
-    {
-        while (true)
-        {
-            var current = Volatile.Read(ref viperSerpentTailTriggerSequence);
-            if (current == long.MaxValue) return 0;
-            var next = current + 1;
-            if (Interlocked.CompareExchange(
-                    ref viperSerpentTailTriggerSequence,
                     next,
                     current) == current)
             {
@@ -3041,17 +2537,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         try
         {
-            UpdateViperSerpentTailTriggerLifecycle();
-        }
-        catch (Exception exception)
-        {
-            LogFailure(
-                exception,
-                "Seiton Sense Viper trigger lifecycle failed closed.");
-        }
-
-        try
-        {
             UpdateAutoGuardProtectionLifecycle();
         }
         catch (Exception exception)
@@ -3097,42 +2582,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 localIdentity))
         {
             ClearSmartKardiaTrigger();
-        }
-    }
-
-    private void UpdateViperSerpentTailTriggerLifecycle()
-    {
-        ViperSerpentTailTrigger? pending;
-        lock (viperSerpentTailTriggerGate)
-            pending = pendingViperSerpentTailTrigger;
-        if (pending is null) return;
-
-        try
-        {
-            var local = objectTable.LocalPlayer;
-            var localIdentity = IsLivePlayer(local) && GetNativeObject(local!) != null
-                ? new TargetPressureActorIdentity(local!.GameObjectId, local.EntityId)
-                : default;
-            var now = Environment.TickCount64;
-            var context = ResolveViperSerpentTailContext();
-            if (!configuration.Enabled ||
-                !configuration.EnableViperSerpentTailOnHeldKey ||
-                !ViperSerpentTailRules.IsTriggerCurrent(
-                    pending.Value,
-                    now,
-                    clientState.TerritoryType,
-                    context,
-                    localIdentity))
-            {
-                TryClearViperSerpentTailTrigger(pending.Value.Token);
-            }
-        }
-        catch
-        {
-            // Clear only the lifecycle snapshot we actually inspected. A newer
-            // accepted action may already have installed its replacement.
-            TryClearViperSerpentTailTrigger(pending.Value.Token);
-            throw;
         }
     }
 
@@ -3210,79 +2659,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         return result;
-    }
-
-    private bool TryResolveViperSerpentTailTarget(
-        IPlayerCharacter localPlayer,
-        SupportedPvPContext context,
-        ulong targetId,
-        out int enemySlot,
-        out TargetPressureActorIdentity target)
-    {
-        enemySlot = 0;
-        target = default;
-        if (!IsLivePlayer(localPlayer) || !IsNetworkObjectId(targetId))
-            return false;
-
-        if (context == SupportedPvPContext.WolvesDen)
-        {
-            if (!configuration.EnableWolvesDenTesting ||
-                !StrictWolvesDenStrikingDummyResolver.TryResolveExactCurrentHardTarget(
-                    objectTable,
-                    wolvesDenStrikingDummyMetadataVerified,
-                    localPlayer,
-                    out _,
-                    out var dummyIdentity,
-                    out var nativeHardTargetId) ||
-                !ActorIdMatches(targetId, dummyIdentity) ||
-                !ActorIdMatches(nativeHardTargetId, dummyIdentity))
-            {
-                return false;
-            }
-
-            target = dummyIdentity;
-            return true;
-        }
-
-        if (context != SupportedPvPContext.CrystallineConflict) return false;
-
-        var canonical = ResolveCanonicalEnemies(localPlayer, GetPartyEntityIds());
-        CanonicalEnemy? exact = null;
-        var seenEntities = new HashSet<uint>();
-        foreach (var candidate in canonical.Values)
-        {
-            if (!seenEntities.Add(candidate.Player.EntityId) ||
-                !ActorIdMatches(
-                    targetId,
-                    new TargetPressureActorIdentity(
-                        candidate.Player.GameObjectId,
-                        candidate.Player.EntityId)))
-            {
-                continue;
-            }
-
-            if (exact is not null) return false;
-            exact = candidate;
-        }
-
-        if (exact is not { } match) return false;
-        var current = EnemySlotResolver.Resolve(objectTable, match.Slot);
-        if (!IsLivePlayer(current) ||
-            current!.Address != match.Player.Address ||
-            current.GameObjectId != match.Player.GameObjectId ||
-            current.EntityId != match.Player.EntityId)
-        {
-            return false;
-        }
-
-        var identity = new TargetPressureActorIdentity(
-            current.GameObjectId,
-            current.EntityId);
-        if (!identity.IsValid) return false;
-
-        enemySlot = match.Slot;
-        target = identity;
-        return true;
     }
 
     private FarHelpEnemySnapshot ResolveFarHelpEnemySnapshot(
@@ -3440,22 +2816,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             clientState.IsPvP,
             clientState.IsPvPExcludingDen,
             includeWolvesDenTesting: false,
-            clientState.TerritoryType,
-            conditionValid,
-            conditionValid && condition.Value.PvP,
-            conditionValid ? condition.Value.ContentUICategory.RowId : 0,
-            conditionValid && condition.Value.CrystallineConflictCasualRoulette,
-            conditionValid && condition.Value.CrystallineConflictRankedRoulette);
-    }
-
-    private SupportedPvPContext ResolveViperSerpentTailContext()
-    {
-        var condition = dutyState.ContentFinderCondition;
-        var conditionValid = condition.IsValid;
-        return PvPMatchRules.ResolveSupportedContext(
-            clientState.IsPvP,
-            clientState.IsPvPExcludingDen,
-            configuration.EnableWolvesDenTesting,
             clientState.TerritoryType,
             conditionValid,
             conditionValid && condition.Value.PvP,
@@ -3972,13 +3332,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private static bool IsNetworkObjectId(ulong objectId) =>
         objectId is not 0 and not InvalidObjectId;
 
-    private static bool ActorIdMatches(
-        ulong actorId,
-        TargetPressureActorIdentity actor) =>
-        actor.IsValid &&
-        (actorId == actor.GameObjectId ||
-         actorId <= uint.MaxValue && (uint)actorId == actor.EntityId);
-
     private static ulong GetNativeHardTargetId(IPlayerCharacter player)
     {
         var character = (Character*)player.Address;
@@ -4021,18 +3374,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint TerritoryId,
         TargetPressureActorIdentity LocalPlayer,
         SmartKardiaEukrasiaEvidence Before);
-
-    private readonly record struct ViperSerpentTailPreflight(
-        uint TerritoryId,
-        SupportedPvPContext Context,
-        TargetPressureActorIdentity LocalPlayer,
-        uint TriggerActionId,
-        int EnemySlot,
-        TargetPressureActorIdentity Target,
-        bool UsedNativeDefaultTarget,
-        ulong NativeHardTargetId,
-        ViperSerpentTailTriggerInvocationKind InvocationKind,
-        ClientActionAttemptFingerprint NativeBefore);
 
     private readonly record struct FarHelpEnemyThreat(float X, float Z, float HitboxRadius);
 

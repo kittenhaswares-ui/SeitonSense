@@ -102,11 +102,11 @@ following data already available in the local FFXIV client:
   current exact CC or explicitly enabled Wolves' Den context, and exact PvP
   Recuperate `29711` metadata/readiness needed for one frozen self/context intent
   and its bounded native calls;
-- when the Viper Serpentiner-Geist helper is enabled, the accepted qualifying
-  action and its bounded trigger time, exact local/target identities, context,
-  territory, adjusted carrier/follow-up action, own Guard, readiness, and native
-  range/line-of-sight result; the accepted trigger stores no input key, and a
-  held-key generation is read only when the follow-up intent forms. Wolves' Den
+- when the Viper Serpentiner-Geist helper is enabled, the directly observed
+  adjusted carrier/follow-up action, its in-memory exposure generation/spent
+  state, exact local/current-hard-target identities, context, territory, own
+  Guard, held-key generation, readiness, and native range/line-of-sight result.
+  No preceding-action or native-queue history is recorded. Wolves' Den
   additionally
   reads only the exact current hard-target combat striking dummy identity and
   NameId `541`;
@@ -887,49 +887,44 @@ The transient observations and aggregate diagnostics are not stored or uploaded.
 
 This independent persisted option is disabled by default and runs only on PvP
 Viper in exact Crystalline Conflict or explicitly enabled Wolves' Den testing.
-It observes an already incoming qualifying Viper action through the existing
-local action boundary. Only a client-accepted result may create one in-memory
-trigger lasting less than five seconds. That trigger freezes the expected exact
-follow-up, target identity, supported context, territory, and accepted time; it
-does not store the qualifying action's invocation key, macro text, or create
-physical input. Direct execution must leave the native queue empty and advance the
-action sequence. An early queued input is recognized only at a later exact native
-queue drain whose queued action type, adjusted action ID, canonical target, extra
-parameter, and combo route all match and whose successful result clears the queue
-and advances the sequence. Initial queueing, arbitrary Queue calls, and uncertain
-transitions do not arm or overwrite a trigger. A newer proven qualifying-action
-epoch invalidates every older buffered intent. A concrete target ID is used
-directly. A native zero/default-
-target carrier is resolved only when the original and forwarded values are
-unchanged, no Seiton redirect suppressed the target, and the same native hard-
-target identity is proven immediately before and after client acceptance.
+It polls FFXIV's currently adjusted Serpent's Tail carrier directly on each
+active framework frame. No preceding action, invocation mode, sequence advance,
+native queue drain, accepted-action epoch, or invented wall-clock trigger is
+recorded or required. The carrier's exact exposed follow-up defines one local
+in-memory generation. The current hard target is resolved only when that
+follow-up is actually exposed and consent is available; no macro text is read
+and no physical input is created.
 
 FFXIV must adjust Serpent's Tail / Serpentiner Geist carrier `39183` to the exact
 expected follow-up `39174`-`39182`. The carrier itself is never submitted.
 Follow-ups `39177` and `39178` use their native 20-yalm range; the other reviewed
 follow-ups use 5 yalms. Any eligible currently held physical gameplay key,
-including WASD, may supply consent when the follow-up intent forms. Only then is
-that current key frozen for the episode; the same key, actor, action, context,
-territory, local Viper identity, own-Guard state,
+including WASD, may supply consent while the follow-up is exposed, including
+when the proc appeared before the hold. Only then are that key and the exact
+current hard target frozen for the episode; the same key, actor, action,
+context, territory, local Viper identity, own-Guard state,
 metadata, readiness, native target validity, range, and line of sight are checked
 again before a possible native call. Purify keeps absolute priority. Temporary
 action/resource/target-status or reachability unavailability retains the frozen
 opportunity while yielding the current frame to a usable lower-priority helper.
 Only an otherwise-ready exact intent waiting on the native boundary or retry
-throttle retains Viper's scheduler frame. The original five-second deadline is
-rechecked after intent formation and at the final boundary. Only a clean explicit
-client rejection may use the shared bounded retry for the same frozen intent.
-Acceptance, ambiguity, retry exhaustion, expiry, key release, or drift is terminal
-without an alternate, rerank, fallback, target mutation, or replay. Ambiguity or
-retry exhaustion additionally latches the frozen key until its physical release.
+throttle retains Viper's scheduler frame. Each exact carrier exposure can be
+spent once. One false carrier sample is treated as flicker and cannot rearm a
+spent exposure; stable absence allows a later same-ID proc, while a different
+exact follow-up such as `39177` to `39178` becomes a new generation immediately.
+Only a clean explicit client rejection may use the shared bounded retry for the
+same frozen intent. Acceptance, ambiguity, retry exhaustion, key release, or
+drift is terminal without an alternate, rerank, fallback, target mutation, or
+replay. Ambiguity or retry exhaustion additionally latches the frozen key until
+its physical release.
 
 In Crystalline Conflict the frozen target must remain one exact canonical
 `S1`-`S5` enemy. In Wolves' Den, the separate testing option must remain enabled
 and the target must remain the exact current hard-target living, targetable combat
 striking dummy with NameId `541`. Duel players, arbitrary NPCs, synthetic enemy
 slots, Frontline, and Rival Wings fail closed. The helper deliberately cannot
-request held-action cast cancellation. Trigger, intent, retry, native-result, and
-aggregate diagnostic state remain bounded in memory and are not persisted,
+request held-action cast cancellation. Exposure, intent, retry, native-result,
+and aggregate diagnostic state remain bounded in memory and are not persisted,
 transmitted, or uploaded. Client acceptance does not prove server execution or
 damage.
 
@@ -1410,7 +1405,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 34 is current in v0.31.0.0. It forces the new action-
+Configuration schema 34 is current in v0.31.0.1. It forces the new action-
 initiating Viper Serpentiner-Geist option off for every upgrade, fresh install,
 and Reset Defaults. The historical schema-33 migration still leaves Smart Tab
 off while preserving an older explicitly enabled shared macro-helper opt-in as
@@ -1442,7 +1437,7 @@ default on but neither submits an action nor changes a target. Configuration doe
 save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground
-destinations, Viper accepted triggers/frozen action-actor-context-key intents,
+destinations, Viper carrier exposures/frozen action-actor-context-key intents,
 ActionEffect confirmation state, or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone

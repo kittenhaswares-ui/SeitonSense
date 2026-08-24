@@ -1,33 +1,35 @@
 namespace SeitonSense.Core;
 
-public readonly record struct ViperSerpentTailTrigger(
-    long Token,
-    uint TerritoryId,
-    SupportedPvPContext Context,
-    TargetPressureActorIdentity LocalPlayer,
-    uint TriggerActionId,
-    uint ExpectedAdjustedActionId,
-    int EnemySlot,
-    TargetPressureActorIdentity Target,
-    long AcceptedAtMilliseconds,
-    long ExpiresAtMilliseconds)
+public readonly record struct ViperSerpentTailExposureState(
+    long Generation,
+    uint EpisodeActionId,
+    bool IsCurrentlyExposed,
+    bool IsSpent,
+    int ConsecutiveNonFollowUpObservations)
 {
-    public long AcceptedActionEpoch => Token;
+    public static ViperSerpentTailExposureState Initial => default;
+
+    public bool HasTrackedEpisode =>
+        Generation > 0 &&
+        ViperSerpentTailRules.IsExactFollowUpAction(EpisodeActionId);
+
+    public bool HasCurrentFollowUp =>
+        HasTrackedEpisode && IsCurrentlyExposed;
+
+    public uint CurrentActionId => HasCurrentFollowUp ? EpisodeActionId : 0;
 
     public bool IsValid =>
-        Token > 0 &&
-        TerritoryId != 0 &&
-        Context is SupportedPvPContext.CrystallineConflict or SupportedPvPContext.WolvesDen &&
-        LocalPlayer.IsValid &&
-        ViperSerpentTailRules.TryGetExpectedFollowUp(
-            TriggerActionId,
-            out var expectedActionId) &&
-        expectedActionId == ExpectedAdjustedActionId &&
-        ViperSerpentTailRules.IsContextSlotValid(Context, EnemySlot) &&
-        Target.IsValid &&
-        Target != LocalPlayer &&
-        AcceptedAtMilliseconds >= 0 &&
-        ExpiresAtMilliseconds > AcceptedAtMilliseconds;
+        Generation >= 0 &&
+        ConsecutiveNonFollowUpObservations is >= 0 and <= 2 &&
+        (Generation == 0
+            ? EpisodeActionId == 0 && !IsCurrentlyExposed && !IsSpent
+            : EpisodeActionId == 0
+                ? !IsCurrentlyExposed && !IsSpent &&
+                  ConsecutiveNonFollowUpObservations == 2
+                : ViperSerpentTailRules.IsExactFollowUpAction(EpisodeActionId) &&
+                  (IsCurrentlyExposed
+                      ? ConsecutiveNonFollowUpObservations == 0
+                      : ConsecutiveNonFollowUpObservations == 1));
 }
 
 public readonly record struct ViperSerpentTailCandidate(
@@ -41,25 +43,21 @@ public readonly record struct ViperSerpentTailCandidate(
     bool HasNativeRangeAndLineOfSight);
 
 public readonly record struct ViperSerpentTailIntent(
-    long TriggerToken,
+    long ExposureGeneration,
     SupportedPvPContext Context,
     int EnemySlot,
     TargetPressureActorIdentity LocalPlayer,
     TargetPressureActorIdentity Target,
     uint ActionId,
-    long ExpiresAtMilliseconds,
     int FrozenKeyCode)
 {
-    public long AcceptedActionEpoch => TriggerToken;
-
     public bool IsValid =>
-        TriggerToken > 0 &&
+        ExposureGeneration > 0 &&
         ViperSerpentTailRules.IsContextSlotValid(Context, EnemySlot) &&
         LocalPlayer.IsValid &&
         Target.IsValid &&
         Target != LocalPlayer &&
         ViperSerpentTailRules.IsExactFollowUpAction(ActionId) &&
-        ExpiresAtMilliseconds > 0 &&
         FrozenKeyCode > 0;
 }
 
@@ -87,7 +85,6 @@ public readonly record struct ViperSerpentTailState(
 public readonly record struct ViperSerpentTailObservation(
     bool ConfigurationEnabled,
     SupportedPvPContext Context,
-    uint TerritoryId,
     TargetPressureActorIdentity LocalPlayer,
     bool IsLocalPlayerAlive,
     uint LocalJobId,
@@ -99,11 +96,9 @@ public readonly record struct ViperSerpentTailObservation(
     bool HeldGameplayKeyEligible,
     int HeldGameplayKeyCode,
     bool FrozenKeyStillDown,
-    uint ResolvedAdjustedActionId,
+    ViperSerpentTailExposureState Exposure,
     bool ActionLocallyReady,
     bool NativeBoundaryReady,
-    long CurrentAcceptedActionEpoch,
-    ViperSerpentTailTrigger? Trigger,
     ViperSerpentTailCandidate? Candidate,
     bool HardReset,
     long NowMilliseconds);
@@ -131,15 +126,15 @@ public enum ViperSerpentTailDecisionReason : byte
     TextInputActive,
     GuardSuppressed,
     HigherPriorityClaimed,
-    TriggerUnavailable,
-    TriggerSuperseded,
-    TriggerExpiredOrDrifted,
-    AdjustedActionUnavailable,
+    CarrierUnavailable,
+    ExposureSpent,
+    ExposureSuperseded,
     CandidateUnavailable,
     CandidateInvalid,
     NoHeldGameplayKey,
     ExactKeyReleased,
     ActionNotReady,
+    TargetNotReady,
     NativeBoundaryUnavailable,
     NativeRetryThrottle,
     NativeRetryLimitReached,
@@ -151,8 +146,7 @@ public readonly record struct ViperSerpentTailDecision(
     ViperSerpentTailDecisionKind Kind,
     ViperSerpentTailDecisionReason Reason,
     ViperSerpentTailIntent? Intent = null,
-    bool InputClaimed = false,
-    bool ConsumeTrigger = false)
+    bool InputClaimed = false)
 {
     public bool ShouldDispatch =>
         Kind == ViperSerpentTailDecisionKind.Dispatch &&
@@ -166,31 +160,11 @@ public readonly record struct ViperSerpentTailNativeAttemptDecision(
     bool RetryScheduled,
     bool ClientAccepted,
     bool Terminal,
+    bool SpendExposure,
     bool SoftWait = false);
-
-public enum ViperSerpentTailTriggerPromotionDisposition : byte
-{
-    UnsupportedInvocationMode = 0,
-    ClientRejected = 1,
-    NativeQueueOwned = 2,
-    AcceptanceUnknown = 3,
-    ExecutedAccepted = 4,
-}
-
-public enum ViperSerpentTailTriggerInvocationKind : byte
-{
-    Unsupported = 0,
-    Direct = 1,
-    ProvenNativeQueueDrain = 2,
-}
 
 public static class ViperSerpentTailRules
 {
-    public const uint DirectUseActionMode = 0;
-    public const uint QueueUseActionMode = 1;
-    public const uint MacroUseActionMode = 2;
-    public const uint ComboUseActionMode = 3;
-    public const uint LegacyMacroUseActionMode = 100;
     public const uint ViperJobId = 41;
     public const uint WolvesDenStrikingDummyNameId = 541;
     public const uint CarrierActionId = 39_183;
@@ -203,7 +177,6 @@ public static class ViperSerpentTailRules
     public const uint SecondLegacyActionId = 39_180;
     public const uint ThirdLegacyActionId = 39_181;
     public const uint FourthLegacyActionId = 39_182;
-    public const long TriggerLifetimeMilliseconds = 5_000;
 
     public static bool IsExactFollowUpAction(uint actionId) => actionId is
         DeathRattleActionId or
@@ -225,165 +198,97 @@ public static class ViperSerpentTailRules
         _ => 0,
     };
 
-    public static bool TryGetExpectedFollowUp(uint triggerActionId, out uint actionId)
+    /// <summary>
+    /// Converts the carrier's currently adjusted action into a monotone local
+    /// exposure generation. A different exact follow-up is immediately a new
+    /// episode. One non-follow-up sample retains the old episode as a flicker;
+    /// two consecutive samples reset it so the same action may later rearm.
+    /// </summary>
+    public static ViperSerpentTailExposureState ObserveCarrierExposure(
+        ViperSerpentTailExposureState previous,
+        uint resolvedCarrierActionId,
+        bool hardReset = false)
     {
-        actionId = triggerActionId switch
-        {
-            39_161 or 39_163 => DeathRattleActionId,
-            39_166 => TwinfangBiteActionId,
-            39_167 => TwinbloodBiteActionId,
-            39_168 => UncoiledTwinfangActionId,
-            UncoiledTwinfangActionId => UncoiledTwinbloodActionId,
-            39_169 => FirstLegacyActionId,
-            39_170 => SecondLegacyActionId,
-            39_171 => ThirdLegacyActionId,
-            39_172 => FourthLegacyActionId,
-            _ => 0,
-        };
-        return IsExactFollowUpAction(actionId);
-    }
+        if (hardReset) return ViperSerpentTailExposureState.Initial;
+        if (!previous.IsValid) previous = ViperSerpentTailExposureState.Initial;
 
-    public static bool TryCreateAcceptedTrigger(
-        long token,
-        uint territoryId,
-        SupportedPvPContext context,
-        TargetPressureActorIdentity localPlayer,
-        uint triggerActionId,
-        int enemySlot,
-        TargetPressureActorIdentity target,
-        long acceptedAtMilliseconds,
-        out ViperSerpentTailTrigger trigger)
-    {
-        trigger = default;
-        if (!TryGetExpectedFollowUp(triggerActionId, out var expectedActionId) ||
-            token <= 0 || territoryId == 0 || !localPlayer.IsValid || !target.IsValid ||
-            target == localPlayer || !IsContextSlotValid(context, enemySlot) ||
-            acceptedAtMilliseconds < 0 ||
-            acceptedAtMilliseconds > long.MaxValue - TriggerLifetimeMilliseconds)
+        if (IsExactFollowUpAction(resolvedCarrierActionId))
         {
-            return false;
+            if (previous.HasTrackedEpisode &&
+                previous.EpisodeActionId == resolvedCarrierActionId)
+            {
+                return previous with
+                {
+                    IsCurrentlyExposed = true,
+                    ConsecutiveNonFollowUpObservations = 0,
+                };
+            }
+
+            var nextGeneration = NextExposureGeneration(previous.Generation);
+            return nextGeneration > 0
+                ? new ViperSerpentTailExposureState(
+                    nextGeneration,
+                    resolvedCarrierActionId,
+                    IsCurrentlyExposed: true,
+                    IsSpent: false,
+                    ConsecutiveNonFollowUpObservations: 0)
+                : new ViperSerpentTailExposureState(
+                    previous.Generation,
+                    0,
+                    IsCurrentlyExposed: false,
+                    IsSpent: false,
+                    ConsecutiveNonFollowUpObservations: 2);
         }
 
-        trigger = new ViperSerpentTailTrigger(
-            token,
-            territoryId,
-            context,
-            localPlayer,
-            triggerActionId,
-            expectedActionId,
-            enemySlot,
-            target,
-            acceptedAtMilliseconds,
-            acceptedAtMilliseconds + TriggerLifetimeMilliseconds);
-        return trigger.IsValid;
-    }
-
-    public static bool IsTriggerCurrent(
-        ViperSerpentTailTrigger trigger,
-        long nowMilliseconds,
-        uint territoryId,
-        SupportedPvPContext context,
-        TargetPressureActorIdentity localPlayer) =>
-        trigger.IsValid &&
-        nowMilliseconds >= trigger.AcceptedAtMilliseconds &&
-        nowMilliseconds < trigger.ExpiresAtMilliseconds &&
-        territoryId == trigger.TerritoryId &&
-        context == trigger.Context &&
-        localPlayer == trigger.LocalPlayer;
-
-    public static bool IsCurrentAcceptedActionEpoch(
-        long expectedEpoch,
-        long currentEpoch) =>
-        expectedEpoch > 0 && currentEpoch == expectedEpoch;
-
-    /// <summary>
-    /// A plugin-owned accepted follow-up may advance the chain only while the
-    /// accepted action that produced it is still the current epoch. A pending
-    /// trigger may be absent (the predecessor was already consumed) or belong
-    /// to that exact predecessor; a replacement epoch is never invalidated.
-    /// </summary>
-    public static bool CanReserveChainedAcceptedActionEpoch(
-        long completedAcceptedActionEpoch,
-        long currentAcceptedActionEpoch,
-        long pendingAcceptedActionEpoch) =>
-        IsCurrentAcceptedActionEpoch(
-            completedAcceptedActionEpoch,
-            currentAcceptedActionEpoch) &&
-        (pendingAcceptedActionEpoch == 0 ||
-         pendingAcceptedActionEpoch == completedAcceptedActionEpoch);
-
-    public static ViperSerpentTailTriggerInvocationKind ClassifyTriggerInvocationMode(
-        uint useActionMode,
-        bool exactNativeQueueDrainProvenance) =>
-        useActionMode switch
+        var misses = Math.Min(
+            2,
+            previous.ConsecutiveNonFollowUpObservations + 1);
+        if (previous.HasTrackedEpisode && misses == 1)
         {
-            DirectUseActionMode or MacroUseActionMode or ComboUseActionMode or
-                LegacyMacroUseActionMode => ViperSerpentTailTriggerInvocationKind.Direct,
-            QueueUseActionMode when exactNativeQueueDrainProvenance =>
-                ViperSerpentTailTriggerInvocationKind.ProvenNativeQueueDrain,
-            _ => ViperSerpentTailTriggerInvocationKind.Unsupported,
-        };
-
-    /// <summary>
-    /// Promotes only a synchronously executed action. Unsupported invocations
-    /// are rejected; Queue is eligible only after its exact native provenance
-    /// was proven by <see cref="HasExactNativeQueueDrainProvenance"/>. A direct
-    /// call that merely fills the queue is not execution. Both direct and
-    /// proven-drain paths require a clear post-call queue and an advanced
-    /// native action sequence.
-    /// </summary>
-    public static ViperSerpentTailTriggerPromotionDisposition
-        ClassifyAcceptedTriggerBoundary(
-            ViperSerpentTailTriggerInvocationKind invocationKind,
-            bool clientReturnedAccepted,
-            ClientActionAttemptFingerprint before,
-            ClientActionAttemptFingerprint after)
-    {
-        if (invocationKind is not (ViperSerpentTailTriggerInvocationKind.Direct or
-            ViperSerpentTailTriggerInvocationKind.ProvenNativeQueueDrain))
-            return ViperSerpentTailTriggerPromotionDisposition.UnsupportedInvocationMode;
-        if (!clientReturnedAccepted)
-            return ViperSerpentTailTriggerPromotionDisposition.ClientRejected;
-        if (!before.Captured || !after.Captured)
-            return ViperSerpentTailTriggerPromotionDisposition.AcceptanceUnknown;
-        if (after.ActionQueued ||
-            (invocationKind == ViperSerpentTailTriggerInvocationKind.Direct &&
-             before.ActionQueued) ||
-            (invocationKind == ViperSerpentTailTriggerInvocationKind.ProvenNativeQueueDrain &&
-             !before.ActionQueued))
-        {
-            return ViperSerpentTailTriggerPromotionDisposition.NativeQueueOwned;
+            return previous with
+            {
+                IsCurrentlyExposed = false,
+                ConsecutiveNonFollowUpObservations = 1,
+            };
         }
-        return after.LastUsedActionSequence != 0 &&
-               before.LastUsedActionSequence != after.LastUsedActionSequence
-            ? ViperSerpentTailTriggerPromotionDisposition.ExecutedAccepted
-            : ViperSerpentTailTriggerPromotionDisposition.AcceptanceUnknown;
+
+        return new ViperSerpentTailExposureState(
+            previous.Generation,
+            0,
+            IsCurrentlyExposed: false,
+            IsSpent: false,
+            ConsecutiveNonFollowUpObservations: misses);
     }
 
-    public static bool HasExactNativeQueueDrainProvenance(
-        bool isQueueInvocation,
-        bool actionTypeSupported,
-        uint incomingActionType,
-        uint incomingResolvedActionId,
-        ulong incomingEffectiveTargetId,
-        uint incomingExtraParam,
-        uint incomingComboRouteId,
-        uint queuedResolvedActionId,
-        TargetPressureActorIdentity canonicalTarget,
-        ClientActionAttemptFingerprint before) =>
-        isQueueInvocation &&
-        actionTypeSupported &&
-        incomingActionType != 0 &&
-        before.Captured &&
-        before.ActionQueued &&
-        before.QueuedActionType == incomingActionType &&
-        before.QueuedActionId != 0 &&
-        TryGetExpectedFollowUp(incomingResolvedActionId, out _) &&
-        queuedResolvedActionId == incomingResolvedActionId &&
-        ActorIdMatches(incomingEffectiveTargetId, canonicalTarget) &&
-        ActorIdMatches(before.QueuedTargetId, canonicalTarget) &&
-        before.QueuedExtraParam == incomingExtraParam &&
-        before.QueuedComboRouteId == incomingComboRouteId;
+    public static ViperSerpentTailExposureState MarkCarrierExposureSpent(
+        ViperSerpentTailExposureState state,
+        long generation,
+        uint actionId) =>
+        state.IsValid &&
+        state.HasTrackedEpisode &&
+        generation > 0 &&
+        state.Generation == generation &&
+        state.EpisodeActionId == actionId
+            ? state with { IsSpent = true }
+            : state;
+
+    public static bool IsCurrentUnspentExposure(
+        ViperSerpentTailExposureState exposure,
+        long generation,
+        uint actionId) =>
+        IsTrackedUnspentExposure(exposure, generation, actionId) &&
+        exposure.IsCurrentlyExposed;
+
+    public static bool IsTrackedUnspentExposure(
+        ViperSerpentTailExposureState exposure,
+        long generation,
+        uint actionId) =>
+        exposure.IsValid &&
+        exposure.HasTrackedEpisode &&
+        !exposure.IsSpent &&
+        generation > 0 &&
+        exposure.Generation == generation &&
+        exposure.EpisodeActionId == actionId;
 
     /// <summary>
     /// A false return is retryable only when the exact target-aware status is
@@ -445,9 +350,38 @@ public static class ViperSerpentTailRules
         if (permanentFailure != ViperSerpentTailDecisionReason.None)
             return None(ViperSerpentTailState.Initial, permanentFailure);
 
-        return previous.Phase == ViperSerpentTailPhase.Buffered
-            ? ObserveBuffered(previous, observation)
-            : TryCreateIntent(observation);
+        if (previous.Phase != ViperSerpentTailPhase.Buffered)
+            return TryCreateIntent(observation);
+
+        if (previous.Intent is not { IsValid: true } intent)
+        {
+            return Cancelled(
+                ViperSerpentTailState.Initial,
+                ViperSerpentTailDecisionReason.NativeAcceptanceUnknown);
+        }
+
+        if (!IsTrackedUnspentExposure(
+                observation.Exposure,
+                intent.ExposureGeneration,
+                intent.ActionId))
+        {
+            // A genuinely different exact carrier action is a new proc now,
+            // not one framework frame later.
+            if (observation.Exposure.HasCurrentFollowUp &&
+                !observation.Exposure.IsSpent)
+            {
+                return TryCreateIntent(observation);
+            }
+
+            return Cancelled(
+                ViperSerpentTailState.Initial,
+                observation.Exposure.IsSpent &&
+                observation.Exposure.Generation == intent.ExposureGeneration
+                    ? ViperSerpentTailDecisionReason.ExposureSpent
+                    : ViperSerpentTailDecisionReason.ExposureSuperseded);
+        }
+
+        return ObserveBuffered(previous, observation);
     }
 
     public static ViperSerpentTailNativeAttemptDecision ApplyNativeAttemptOutcome(
@@ -458,7 +392,7 @@ public static class ViperSerpentTailRules
         if (current.Phase != ViperSerpentTailPhase.Buffered ||
             current.Intent is not { IsValid: true } || nowMilliseconds < 0)
         {
-            return TerminalUnknown(current, nowMilliseconds);
+            return TerminalUnknown();
         }
 
         var shared = HeldActionRetryRules.Complete(current.Retry, nowMilliseconds, outcome);
@@ -468,12 +402,12 @@ public static class ViperSerpentTailRules
                 Stamp(current with { LastNativeOutcome = outcome }, nowMilliseconds),
                 ViperSerpentTailDecisionReason.NativeBoundaryUnavailable,
                 shared.Disposition,
-                false, false, false, true),
+                false, false, false, false, true),
             HeldActionRetryDisposition.AcceptedTerminal => new(
                 ViperSerpentTailState.Initial,
                 ViperSerpentTailDecisionReason.None,
                 shared.Disposition,
-                false, true, true),
+                false, true, true, true),
             HeldActionRetryDisposition.RetryScheduled => new(
                 Stamp(current with
                 {
@@ -482,13 +416,13 @@ public static class ViperSerpentTailRules
                 }, nowMilliseconds),
                 ViperSerpentTailDecisionReason.NativeRetryThrottle,
                 shared.Disposition,
-                true, false, false),
+                true, false, false, false),
             HeldActionRetryDisposition.RejectedTerminal => new(
                 ViperSerpentTailState.Initial,
                 ViperSerpentTailDecisionReason.NativeRetryLimitReached,
                 shared.Disposition,
-                false, false, true),
-            _ => TerminalUnknown(current, nowMilliseconds, shared.Disposition),
+                false, false, true, true),
+            _ => TerminalUnknown(),
         };
     }
 
@@ -502,21 +436,19 @@ public static class ViperSerpentTailRules
         bool metadataVerified,
         bool guardSuppressed,
         bool higherPriorityClaimed,
-        uint adjustedActionId,
+        ViperSerpentTailExposureState exposure,
         bool actionLocallyReady,
-        long currentAcceptedActionEpoch,
-        long nowMilliseconds,
         int currentHeldKeyCode,
         bool frozenKeyStillDown,
         ViperSerpentTailCandidate candidate) =>
         intent.IsValid && configurationEnabled && context == intent.Context &&
         localPlayer == intent.LocalPlayer && localAlive && localJobId == ViperJobId &&
         metadataVerified && !guardSuppressed && !higherPriorityClaimed &&
-        IsCurrentAcceptedActionEpoch(
-            intent.AcceptedActionEpoch,
-            currentAcceptedActionEpoch) &&
-        adjustedActionId == intent.ActionId && actionLocallyReady &&
-        nowMilliseconds >= 0 && nowMilliseconds < intent.ExpiresAtMilliseconds &&
+        IsCurrentUnspentExposure(
+            exposure,
+            intent.ExposureGeneration,
+            intent.ActionId) &&
+        actionLocallyReady &&
         currentHeldKeyCode == intent.FrozenKeyCode && frozenKeyStillDown &&
         IsExactCandidate(intent, candidate) && candidate.HasValidActionTarget &&
         candidate.HasNativeRangeAndLineOfSight;
@@ -524,51 +456,31 @@ public static class ViperSerpentTailRules
     private static ViperSerpentTailDecision TryCreateIntent(
         ViperSerpentTailObservation observation)
     {
-        if (observation.ActionHelpersSuppressedByGuard)
-            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.GuardSuppressed);
         if (observation.HigherPriorityClaimed)
             return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.HigherPriorityClaimed);
-        if (observation.Trigger is not { IsValid: true } trigger)
-            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.TriggerUnavailable);
-        if (!IsCurrentAcceptedActionEpoch(
-                trigger.AcceptedActionEpoch,
-                observation.CurrentAcceptedActionEpoch))
-        {
-            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.TriggerSuperseded);
-        }
-        if (!IsTriggerCurrent(
-                trigger,
-                observation.NowMilliseconds,
-                observation.TerritoryId,
-                observation.Context,
-                observation.LocalPlayer))
-        {
-            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.TriggerExpiredOrDrifted);
-        }
-        if (observation.ResolvedAdjustedActionId != trigger.ExpectedAdjustedActionId)
-            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.AdjustedActionUnavailable);
+        if (observation.ActionHelpersSuppressedByGuard)
+            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.GuardSuppressed);
+        if (!observation.Exposure.IsValid || !observation.Exposure.HasCurrentFollowUp)
+            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.CarrierUnavailable);
+        if (observation.Exposure.IsSpent)
+            return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.ExposureSpent);
         if (observation.Candidate is not { } candidate)
             return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.CandidateUnavailable);
-        if (!IsExactCandidate(trigger, candidate) ||
-            !candidate.HasValidActionTarget ||
-            !candidate.HasNativeRangeAndLineOfSight)
-        {
+        if (!IsExactCandidate(observation, candidate))
             return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.CandidateInvalid);
-        }
         if (!observation.HeldGameplayKeyEligible || observation.HeldGameplayKeyCode <= 0)
             return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.NoHeldGameplayKey);
 
         var intent = new ViperSerpentTailIntent(
-            trigger.Token,
-            trigger.Context,
-            trigger.EnemySlot,
-            trigger.LocalPlayer,
-            trigger.Target,
-            trigger.ExpectedAdjustedActionId,
-            trigger.ExpiresAtMilliseconds,
+            observation.Exposure.Generation,
+            observation.Context,
+            candidate.EnemySlot,
+            observation.LocalPlayer,
+            candidate.Actor,
+            observation.Exposure.CurrentActionId,
             observation.HeldGameplayKeyCode);
         if (!intent.IsValid)
-            return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.TriggerExpiredOrDrifted);
+            return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.ExposureSuperseded);
 
         var buffered = new ViperSerpentTailState(
             ViperSerpentTailPhase.Buffered,
@@ -576,24 +488,7 @@ public static class ViperSerpentTailRules
             HeldActionRetryState.Initial,
             observation.NowMilliseconds,
             ClientActionAttemptOutcome.None);
-        if (!observation.ActionLocallyReady)
-            return Armed(
-                buffered,
-                ViperSerpentTailDecisionReason.ActionNotReady,
-                inputClaimed: false,
-                consumeTrigger: true);
-        return observation.NativeBoundaryReady
-            ? Dispatch(buffered, intent, consumeTrigger: true)
-            : Armed(
-                buffered,
-                ViperSerpentTailDecisionReason.NativeBoundaryUnavailable,
-                HeldActionRetryRules.RetainsSchedulerFrame(
-                    buffered.Retry,
-                    observation.NowMilliseconds,
-                    exactIntentValid: true,
-                    actionSpecificReady: true,
-                    targetSpecificReady: true),
-                consumeTrigger: true);
+        return EvaluateReadyIntent(buffered, intent, observation);
     }
 
     private static ViperSerpentTailDecision ObserveBuffered(
@@ -603,65 +498,84 @@ public static class ViperSerpentTailRules
         var intent = previous.Intent;
         if (intent is not { IsValid: true })
             return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.NativeAcceptanceUnknown);
-        if (!IsCurrentAcceptedActionEpoch(
-                intent.Value.AcceptedActionEpoch,
-                observation.CurrentAcceptedActionEpoch))
+        if (!observation.Exposure.IsCurrentlyExposed)
         {
-            return Cancelled(
-                ViperSerpentTailState.Initial,
-                ViperSerpentTailDecisionReason.TriggerSuperseded);
+            return Armed(
+                Stamp(previous, observation.NowMilliseconds),
+                ViperSerpentTailDecisionReason.CarrierUnavailable,
+                inputClaimed: false);
         }
-        if (observation.NowMilliseconds >= intent.Value.ExpiresAtMilliseconds)
-            return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.TriggerExpiredOrDrifted);
         if (!observation.FrozenKeyStillDown)
             return None(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.ExactKeyReleased);
         if (observation.HigherPriorityClaimed)
             return None(Stamp(previous, observation.NowMilliseconds), ViperSerpentTailDecisionReason.HigherPriorityClaimed);
         if (observation.ActionHelpersSuppressedByGuard)
             return None(Stamp(previous, observation.NowMilliseconds), ViperSerpentTailDecisionReason.GuardSuppressed);
-        if (observation.ResolvedAdjustedActionId != intent.Value.ActionId)
-            return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.AdjustedActionUnavailable);
         if (observation.Candidate is not { } candidate || !IsExactCandidate(intent.Value, candidate))
             return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.CandidateUnavailable);
         if (!candidate.Alive || !candidate.Targetable || !candidate.ExactCanonicalIdentity)
             return Cancelled(ViperSerpentTailState.Initial, ViperSerpentTailDecisionReason.CandidateInvalid);
-        if (!candidate.HasValidActionTarget || !candidate.HasNativeRangeAndLineOfSight ||
-            !observation.ActionLocallyReady)
+
+        return EvaluateReadyIntent(
+            Stamp(previous, observation.NowMilliseconds),
+            intent.Value,
+            observation);
+    }
+
+    private static ViperSerpentTailDecision EvaluateReadyIntent(
+        ViperSerpentTailState buffered,
+        ViperSerpentTailIntent intent,
+        ViperSerpentTailObservation observation)
+    {
+        if (!observation.ActionLocallyReady)
         {
             return Armed(
-                Stamp(previous, observation.NowMilliseconds),
-                observation.ActionLocallyReady
-                    ? ViperSerpentTailDecisionReason.CandidateInvalid
-                    : ViperSerpentTailDecisionReason.ActionNotReady,
-                HeldActionRetryRules.RetainsSchedulerFrame(
-                    previous.Retry,
-                    observation.NowMilliseconds,
-                    exactIntentValid: true,
-                    actionSpecificReady: observation.ActionLocallyReady,
-                    targetSpecificReady: candidate.HasValidActionTarget &&
-                                         candidate.HasNativeRangeAndLineOfSight));
+                buffered,
+                ViperSerpentTailDecisionReason.ActionNotReady,
+                inputClaimed: false);
         }
-        if (!observation.NativeBoundaryReady)
+
+        var targetReady = observation.Candidate is { } candidate &&
+                          IsExactCandidate(intent, candidate) &&
+                          candidate.HasValidActionTarget &&
+                          candidate.HasNativeRangeAndLineOfSight;
+        if (!targetReady)
+        {
             return Armed(
-                Stamp(previous, observation.NowMilliseconds),
+                buffered,
+                ViperSerpentTailDecisionReason.TargetNotReady,
+                inputClaimed: false);
+        }
+
+        if (!observation.NativeBoundaryReady)
+        {
+            return Armed(
+                buffered,
                 ViperSerpentTailDecisionReason.NativeBoundaryUnavailable,
                 HeldActionRetryRules.RetainsSchedulerFrame(
-                    previous.Retry,
+                    buffered.Retry,
                     observation.NowMilliseconds,
                     exactIntentValid: true,
                     actionSpecificReady: true,
                     targetSpecificReady: true));
-        if (!HeldActionRetryRules.CanAttemptFrozenIntent(previous.Retry, observation.NowMilliseconds))
+        }
+
+        if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                buffered.Retry,
+                observation.NowMilliseconds))
+        {
             return Armed(
-                Stamp(previous, observation.NowMilliseconds),
+                buffered,
                 ViperSerpentTailDecisionReason.NativeRetryThrottle,
                 HeldActionRetryRules.RetainsSchedulerFrame(
-                    previous.Retry,
+                    buffered.Retry,
                     observation.NowMilliseconds,
                     exactIntentValid: true,
                     actionSpecificReady: true,
                     targetSpecificReady: true));
-        return Dispatch(Stamp(previous, observation.NowMilliseconds), intent.Value);
+        }
+
+        return Dispatch(buffered, intent);
     }
 
     private static ViperSerpentTailDecisionReason GetPermanentGateFailure(
@@ -680,61 +594,57 @@ public static class ViperSerpentTailRules
     }
 
     private static bool IsExactCandidate(
-        ViperSerpentTailTrigger trigger,
+        ViperSerpentTailObservation observation,
         ViperSerpentTailCandidate candidate) =>
-        candidate.Context == trigger.Context && candidate.EnemySlot == trigger.EnemySlot &&
-        candidate.Actor == trigger.Target && candidate.ExactCanonicalIdentity &&
-        candidate.Alive && candidate.Targetable;
+        observation.Exposure.HasCurrentFollowUp &&
+        candidate.Context == observation.Context &&
+        IsContextSlotValid(candidate.Context, candidate.EnemySlot) &&
+        candidate.Actor.IsValid &&
+        candidate.Actor != observation.LocalPlayer &&
+        candidate.ExactCanonicalIdentity &&
+        candidate.Alive &&
+        candidate.Targetable;
 
     private static bool IsExactCandidate(
         ViperSerpentTailIntent intent,
         ViperSerpentTailCandidate candidate) =>
-        candidate.Context == intent.Context && candidate.EnemySlot == intent.EnemySlot &&
-        candidate.Actor == intent.Target && candidate.ExactCanonicalIdentity &&
-        candidate.Alive && candidate.Targetable;
+        candidate.Context == intent.Context &&
+        candidate.EnemySlot == intent.EnemySlot &&
+        candidate.Actor == intent.Target &&
+        candidate.ExactCanonicalIdentity &&
+        candidate.Alive &&
+        candidate.Targetable;
 
-    private static bool ActorIdMatches(
-        ulong actorId,
-        TargetPressureActorIdentity actor) =>
-        actor.IsValid &&
-        (actorId == actor.GameObjectId ||
-         actorId <= uint.MaxValue && (uint)actorId == actor.EntityId);
+    private static long NextExposureGeneration(long current) =>
+        current is >= 0 and < long.MaxValue ? current + 1 : 0;
 
     private static ViperSerpentTailState Stamp(ViperSerpentTailState state, long now) =>
         state with { LastObservedAtMilliseconds = now };
 
-    private static ViperSerpentTailNativeAttemptDecision TerminalUnknown(
-        ViperSerpentTailState current,
-        long now,
-        HeldActionRetryDisposition disposition =
-            HeldActionRetryDisposition.AmbiguousTerminal) => new(
+    private static ViperSerpentTailNativeAttemptDecision TerminalUnknown() => new(
         ViperSerpentTailState.Initial,
         ViperSerpentTailDecisionReason.NativeAcceptanceUnknown,
-        disposition,
-        false, false, true);
+        HeldActionRetryDisposition.AmbiguousTerminal,
+        false, false, true, true);
 
     private static ViperSerpentTailDecision Dispatch(
         ViperSerpentTailState state,
-        ViperSerpentTailIntent intent,
-        bool consumeTrigger = false) => new(
+        ViperSerpentTailIntent intent) => new(
         state,
         ViperSerpentTailDecisionKind.Dispatch,
         ViperSerpentTailDecisionReason.None,
         intent,
-        InputClaimed: true,
-        ConsumeTrigger: consumeTrigger);
+        InputClaimed: true);
 
     private static ViperSerpentTailDecision Armed(
         ViperSerpentTailState state,
         ViperSerpentTailDecisionReason reason,
-        bool inputClaimed,
-        bool consumeTrigger = false) => new(
+        bool inputClaimed) => new(
         state,
         ViperSerpentTailDecisionKind.Armed,
         reason,
         state.Intent,
-        InputClaimed: inputClaimed,
-        ConsumeTrigger: consumeTrigger);
+        InputClaimed: inputClaimed);
 
     private static ViperSerpentTailDecision None(
         ViperSerpentTailState state,

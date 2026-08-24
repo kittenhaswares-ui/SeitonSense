@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.31.0.0";
+    private const string CurrentReleaseVersion = "0.31.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -206,7 +206,6 @@ public sealed class Plugin : IDalamudPlugin
             smartWardensPaean,
             ccImmunityBrake,
             darkKnightShadowbringer,
-            metadata.WolvesDenStrikingDummyVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
             configuration,
@@ -319,9 +318,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Tab now replaces forward Tab targeting in exact CC for reviewed DPS: melee keeps its reach tiers; BRD, BLM, SMN, MCH, RDM, and PCT use 25 yalms, while DNC uses 15.",
-                "Held Smart Recuperate can now be tested in Wolves' Den through the existing explicit testing toggle.",
-                "New default-off Viper Serpentiner Geist recognizes direct or exactly proven native queue-drained Viper actions, then uses any held gameplay key including WASD for the frozen follow-up; Den testing is dummy-only.",
+                "Viper reliability hotfix: Serpentiner Geist now watches its native transformed carrier directly every frame instead of depending on proof of the preceding attack.",
+                "Hold any eligible gameplay key, including WASD: when the exact follow-up and your current hard target are usable, it fires immediately and retains only bounded same-intent retries.",
+                "Purify remains first. Viper still never changes your target or cancels your cast, is suppressed by your own Guard, and keeps Wolves' Den testing dummy-only.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -960,7 +959,8 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print(
                     $"[Seiton Sense] viper-serpent-tail[phase={viper.Phase}," +
                     $"decision={viper.Decision},reason={viper.Reason},action={viper.ResolvedActionId}," +
-                    $"trigger={viper.TriggerToken},S={viper.EnemySlot}," +
+                    $"exposure={viper.ExposureGeneration}/{viper.ExposureSpent}/" +
+                    $"{viper.NonFollowUpObservations},S={viper.EnemySlot}," +
                     $"target={viper.TargetGameObjectId:X}/{viper.TargetEntityId:X}," +
                     $"ready/boundary={viper.LocallyReady}/{viper.NativeBoundaryReady}," +
                     $"key={viper.HeldGameplayKey},claimed={viper.InputClaimed}," +

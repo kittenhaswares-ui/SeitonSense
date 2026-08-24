@@ -569,9 +569,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
         if (Version < 34)
         {
-            // This helper can issue the exact VPR follow-up exposed by
-            // Serpent's Tail after a client-accepted qualifying action. It is a
-            // new hostile action path, so every upgrading user must opt in.
+            // This helper can issue the exact VPR follow-up currently exposed
+            // by the transformed Serpent's Tail carrier. It is a new hostile
+            // action path, so every upgrading user must opt in.
             EnableViperSerpentTailOnHeldKey = false;
         }
 

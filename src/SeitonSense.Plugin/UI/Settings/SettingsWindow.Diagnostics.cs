@@ -108,7 +108,8 @@ internal sealed partial class SettingsWindow
             $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
             $"Viper Serpentiner Geist: {viper.Phase}/{viper.Decision}/{viper.Reason}, " +
-            $"action/trigger={viper.ResolvedActionId}/{viper.TriggerToken}, S={viper.EnemySlot}, " +
+            $"action/generation={viper.ResolvedActionId}/{viper.ExposureGeneration}, " +
+            $"spent/reset={viper.ExposureSpent}/{viper.NonFollowUpObservations}, S={viper.EnemySlot}, " +
             $"target={viper.TargetGameObjectId:X}/{viper.TargetEntityId:X}, ready/boundary=" +
             $"{viper.LocallyReady}/{viper.NativeBoundaryReady}, key={viper.HeldGameplayKey}, " +
             $"claim={viper.InputClaimed}, attempt={viper.UseActionAttempted}/{viper.UseActionAccepted}, " +
@@ -221,7 +222,8 @@ internal sealed partial class SettingsWindow
             "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
             "Kardia > event Monk. The job-specific physical-hold helpers share the second tier; NIN Seiton and VPR Serpentiner Geist are first for their jobs, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
-            "accepted-Eukrasia trigger. " +
+            "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
+            "it requires no preceding-action proof and never changes a target or cancels a cast. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
             "blocked while your own Guard is active. The " +

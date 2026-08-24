@@ -210,22 +210,19 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Viper — Serpentiner Geist", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Serpentiner-Geist-Folgeaktion on held gameplay key (experimental)",
+                "Use transformed Serpentiner Geist while a gameplay key is held (includes WASD)",
                 configuration.EnableViperSerpentTailOnHeldKey,
                 value => configuration.EnableViperSerpentTailOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Viper only. After the client accepts a qualifying Viper action, Seiton Sense " +
-                "waits for FFXIV itself to adjust Serpent's Tail / Serpentiner Geist (39183) to the exact available " +
-                "follow-up (39174-39182). Direct execution needs an action-sequence advance; an early native queue " +
-                "counts only when FFXIV later proves and drains the exact same action, target, parameters, and combo route. " +
-                "Initial or uncertain queue calls do nothing, and every newer proven Viper action invalidates an older " +
-                "buffered opportunity. Any continuing held gameplay key, including WASD, may then request that one " +
-                "follow-up; it does not need to be the key that invoked the qualifying Viper action. The key present " +
-                "when the follow-up intent forms is frozen only for that exact attempt/retry episode against " +
-                "the exact same frozen target within the original five-second opportunity. Native current-target " +
-                "carriers are accepted only when the same hard target is proven around client acceptance. It does not select, rerank, " +
-                "or visibly change a target, and it never substitutes a different follow-up.");
+                "Default off and PvP Viper only. While any eligible gameplay key, including WASD, remains held, " +
+                "Seiton Sense checks FFXIV's currently transformed Serpent's Tail / Serpentiner Geist carrier (39183) " +
+                "each frame. When FFXIV exposes one reviewed follow-up (39174-39182), the helper may use that exact " +
+                "action on your exact current hard target once it is usable. The transformed carrier is the complete " +
+                "opportunity signal: Seiton Sense does not record, require, or try to prove a preceding Viper action. " +
+                "Carrier 39183 itself is never dispatched. The action, held key, and current hard target freeze for the " +
+                "exact attempt/retry episode. The helper does not select, rerank, visibly change, or substitute a target " +
+                "or a different follow-up.");
             ImGui.TextDisabled(
                 "Purify keeps absolute priority; this is Viper's first held helper after Purify. Own Guard blocks it, " +
                 "while enemy Guard remains valid because these follow-ups natively ignore Guard when dealing damage. " +

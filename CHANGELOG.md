@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.31.0.1
+
+- Reworked the default-off Viper Serpentiner-Geist held helper around the native
+  transformed carrier `39183`. It is now observed directly on every active VPR
+  framework frame; no preceding-action hook, synchronous acceptance proof,
+  native queue-drain provenance, accepted-action epoch, or five-second trigger
+  window is required.
+- Any eligible currently held gameplay key, including WASD, can authorize the
+  exact exposed `39174`-`39182` follow-up as soon as its current hard target,
+  native readiness, range, line of sight, and action boundary are valid. A proc
+  may appear before the hold. Each exact carrier exposure is spent once, one
+  false carrier sample cannot rearm it, and a genuinely distinct follow-up such
+  as `39177` to `39178` remains available under the same continuous hold.
+- Purify remains ahead of Viper in the shared scheduler. Own Guard still
+  suppresses the helper; CC remains exact canonical `S1`-`S5`, Wolves' Den
+  remains exact-current-hard-target striking-dummy-only, and Viper still never
+  changes the selected target or cancels a cast. Only a clean native `false`
+  keeps the exact bounded retry; ambiguous acceptance is terminal.
+- Bumped the plugin to `0.31.0.1`. Configuration schema remains `34`, preserving
+  the user's existing Viper and Wolves' Den test toggles. All `404` Core tests
+  pass in this source snapshot.
+
 ## 0.31.0.0
 
 - Extended the default-off Smart Tab replacement to the reviewed ranged DPS jobs
