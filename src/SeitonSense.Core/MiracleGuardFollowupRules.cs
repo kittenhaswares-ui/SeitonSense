@@ -170,9 +170,11 @@ public readonly record struct MiracleGuardFollowupDecision(
 /// Pure one-episode policy for counter-CC after an enemy Guard ends. An exact
 /// live Guard row must first be observed on one unchanged canonical S1-S5 actor.
 /// The first later framework observation with both exact Guard rows absent opens
-/// one 500-ms opportunity. Absence alone can never arm an episode. A promotion
-/// retires every concurrently release-ready Guard opportunity before runtime
-/// dispatch, so one input can never produce a delayed second action.
+/// one 500-ms key-acquisition opportunity. A selected exact actor/key may then
+/// wait inside the shared 3-second held lease from that original release edge.
+/// Absence alone can never arm an episode. Selection retires every concurrent
+/// release opportunity before a priority wait or runtime dispatch, so one input
+/// can never rerank into a delayed second action.
 /// </summary>
 public static class MiracleGuardFollowupRules
 {
@@ -269,26 +271,52 @@ public static class MiracleGuardFollowupRules
         var releaseReady = state.Actors
             .Where(actor => actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity)
             .Select(actor => (Actor: actor, Candidate: candidates[actor.Target.EnemySlot]))
-            .Where(pair => IsInsideReleaseWindow(pair.Actor, observation.NowMilliseconds))
+            .Where(pair => IsInsideReleaseOrHeldWindow(
+                pair.Actor,
+                observation.NowMilliseconds))
             .ToArray();
-        if (observation.HigherPriorityClaimed)
+
+        // A previously selected release owns this lease. If its exact actor/key
+        // disappears or expires, no concurrent or later release may replace it.
+        var previouslyFrozen = previous.Actors
+            .Where(static actor =>
+                actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity &&
+                actor.GameplayKeyToken > 0)
+            .OrderBy(static actor => actor.ReleasedAtMilliseconds)
+            .ThenBy(static actor => actor.Target.EnemySlot)
+            .FirstOrDefault();
+        var hadPreviouslyFrozen = previouslyFrozen.Target.IsValid;
+
+        // Select once before honoring dispatcher priority. Unbound releases may
+        // acquire a key only inside the original 500-ms edge; after selection,
+        // the exact actor/key waits only inside the 3-second held lease measured
+        // from that same ReleasedAt timestamp.
+        var selected = hadPreviouslyFrozen
+            ? releaseReady.FirstOrDefault(pair =>
+                pair.Actor.Target == previouslyFrozen.Target &&
+                pair.Actor.GameplayKeyToken == previouslyFrozen.GameplayKeyToken &&
+                pair.Actor.ReleasedAtMilliseconds == previouslyFrozen.ReleasedAtMilliseconds)
+            : releaseReady
+                .Where(static pair => pair.Actor.GameplayKeyToken > 0)
+                .OrderBy(static pair => pair.Candidate, ProtectionEndRankComparer.Instance)
+                .FirstOrDefault();
+        if (hadPreviouslyFrozen && !selected.Candidate.IsValid)
         {
+            var retiredReleaseActors = state.Actors
+                .Select(actor => actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity
+                    ? MiracleGuardFollowupActorState.Waiting(actor.Target)
+                    : actor)
+                .ToImmutableArray();
             return Waiting(
-                state,
+                new MiracleGuardFollowupState(
+                    retiredReleaseActors,
+                    observation.NowMilliseconds),
                 newGuardEpisodes,
                 newReleaseOpportunities,
-                expiredOpportunities);
+                expiredOpportunities,
+                releaseReady.Length);
         }
 
-        // Only a currently reachable release with an exact key acquired after
-        // Guard ended may compete for promotion. Pressure/HP/MP cannot freeze an
-        // out-of-range actor ahead of a dispatchable one.
-        var selected = releaseReady
-            .Where(static pair =>
-                pair.Actor.GameplayKeyToken > 0 &&
-                pair.Candidate.CounterActionReachable)
-            .OrderBy(static pair => pair.Candidate, ProtectionEndRankComparer.Instance)
-            .FirstOrDefault();
         if (!selected.Candidate.IsValid)
         {
             return Waiting(
@@ -298,7 +326,28 @@ public static class MiracleGuardFollowupRules
                 expiredOpportunities);
         }
 
-        var retiredActors = state.Actors
+        var retiredOtherOpportunities = Math.Max(0, releaseReady.Length - 1);
+        var frozenActors = state.Actors
+            .Select(actor =>
+                actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity &&
+                actor.Target != selected.Actor.Target
+                    ? MiracleGuardFollowupActorState.Waiting(actor.Target)
+                    : actor)
+            .ToImmutableArray();
+        var frozenState = new MiracleGuardFollowupState(
+            frozenActors,
+            observation.NowMilliseconds);
+        if (observation.HigherPriorityClaimed)
+        {
+            return Waiting(
+                frozenState,
+                newGuardEpisodes,
+                newReleaseOpportunities,
+                expiredOpportunities,
+                retiredOtherOpportunities);
+        }
+
+        var retiredActors = frozenState.Actors
             .Select(actor => actor.Phase == MiracleGuardFollowupPhase.ReleaseOpportunity
                 ? MiracleGuardFollowupActorState.Waiting(actor.Target)
                 : actor)
@@ -326,7 +375,7 @@ public static class MiracleGuardFollowupRules
             newGuardEpisodes,
             newReleaseOpportunities,
             expiredOpportunities,
-            Math.Max(0, releaseReady.Length - 1));
+            retiredOtherOpportunities);
     }
 
     public static bool IsExactGuardStatus(uint statusId) =>
@@ -398,7 +447,7 @@ public static class MiracleGuardFollowupRules
         if (previous.Phase != MiracleGuardFollowupPhase.ReleaseOpportunity)
             return MiracleGuardFollowupActorState.Waiting(candidate.Target);
 
-        if (IsInsideReleaseWindow(previous, nowMilliseconds))
+        if (IsInsideReleaseOrHeldWindow(previous, nowMilliseconds))
         {
             return previous.GameplayKeyToken == 0 &&
                    candidate.ReservationGameplayKeyToken > 0 &&
@@ -419,6 +468,15 @@ public static class MiracleGuardFollowupRules
         actor.ReleasedAtMilliseconds >= 0 &&
         nowMilliseconds >= actor.ReleasedAtMilliseconds &&
         nowMilliseconds - actor.ReleasedAtMilliseconds < ReleaseOpportunityMilliseconds;
+
+    private static bool IsInsideReleaseOrHeldWindow(
+        MiracleGuardFollowupActorState actor,
+        long nowMilliseconds) =>
+        actor.GameplayKeyToken > 0
+            ? MiracleProtectionEndRules.IsInsideHeldLease(
+                actor.ReleasedAtMilliseconds,
+                nowMilliseconds)
+            : IsInsideReleaseWindow(actor, nowMilliseconds);
 
     private static long UpdateExpectedProtectionEnd(
         long currentExpectedEndMilliseconds,
@@ -521,7 +579,8 @@ public static class MiracleGuardFollowupRules
         MiracleGuardFollowupState state,
         int newGuardEpisodes,
         int newReleaseOpportunities,
-        int expiredOpportunities) =>
+        int expiredOpportunities,
+        int retiredOtherOpportunityCount = 0) =>
         new(
             state,
             state.Actors.Any(static actor =>
@@ -533,7 +592,7 @@ public static class MiracleGuardFollowupRules
             newGuardEpisodes,
             newReleaseOpportunities,
             expiredOpportunities,
-            0);
+            retiredOtherOpportunityCount);
 
     private static MiracleGuardFollowupDecision Cancelled(
         MiracleGuardFollowupState state,

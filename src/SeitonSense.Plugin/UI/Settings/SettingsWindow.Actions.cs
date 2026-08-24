@@ -13,10 +13,10 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy > DRK " +
+            "Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK " +
             "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The seven " +
-            "job-specific physical-hold helpers share the second tier; their deterministic urgency order puts reactive " +
-            "counter-CC before ally cleanse because its LB and protection-end windows are shorter. A continuously held " +
+            "job-specific physical-hold helpers share the second tier. Enabled NIN Seiton gets its requested first slot; " +
+            "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
             "frame. Kardia and Monk retain their separate event-driven origins.");
 
@@ -176,7 +176,12 @@ internal sealed partial class SettingsWindow
             "key may authorize that later distinct Guard episode; client acceptance of Purify remains terminal for " +
             "the Purify episode. The former speculative 50%-HP " +
             "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
-            "every Seiton Sense action-request helper is blocked so none can cancel it.");
+            "every Seiton Sense action-request helper is blocked so none can cancel it. A client-accepted automatic " +
+            "Guard also owns a native input shield: ordinary Action/PvPAction presses are ignored through the exact " +
+            "live Guard status, while pressing Guard again remains the deliberate release path. Manual Guard is never " +
+            "owned, the explicit /panicshu emergency-location command remains an intentional override, and stale " +
+            "ownership expires after six seconds. Auto-Guard waits instead of dispatching if the protection hook is " +
+            "unavailable.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -223,7 +228,7 @@ internal sealed partial class SettingsWindow
             "CC-only and self-excluding. BRD uses The Warden's Paean; WHM uses Aquaveil, independent of client " +
             "language. The target must be an exact party member in the action's native range and line of sight. " +
             "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
-            "distance and stable party order. Purify and reactive counter-CC win the current scheduler frame; Ally " +
+            "distance and stable party order. Purify wins globally; on BRD/WHM, reactive counter-CC wins before Ally " +
             "Rescue then wins before Guardian, NIN, SCH, DRK, Recuperate, Guard, and Sprint. " +
             "Known action-specific cooldown, resource, and reachability blocks wait in the background without " +
             "starving a usable lower helper. Global cast, occupied-queue, blocking-animation-lock waits and the " +
@@ -349,8 +354,8 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
-            "simultaneous loser can. Only Purify keeps priority; reactive counter-CC leads the job-specific second " +
-            "tier because its LB and protection-end windows are shorter. Known action-specific " +
+            "simultaneous loser can. Purify remains first; enabled NIN Seiton is next, while reactive counter-CC leads " +
+            "the BRD/WHM helpers because its LB and protection-end windows are shorter. Known action-specific " +
             "unavailability waits without blocking a usable lower helper; only a clean client rejection may retry " +
             "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
             "change, alternate, fallback, or replay. The blue AUTO CC " +

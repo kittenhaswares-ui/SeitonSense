@@ -35,7 +35,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 31;
+    public int Version { get; set; } = 32;
+    public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
     public bool ShowNameplateSeiton { get; set; } = true;
@@ -84,6 +85,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
     public bool MchLimitBreakSoundEnabled { get; set; } = true;
     public int MchLimitBreakSoundId { get; set; } = 6;
+    public bool PlayLocalMpWarningSounds { get; set; } = true;
+    public int LocalMpWarning4000SoundId { get; set; } = 4;
+    public int LocalMpWarning2000SoundId { get; set; } = 6;
     public bool ExperimentalPurifyOnNextKey { get; set; }
     public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
     public bool PurifyOnHeldGameplayKey { get; set; }
@@ -173,6 +177,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowCombatFrames { get; set; }
     public bool CombatFramesEnableInteraction { get; set; } = true;
     public bool CombatFramesShowLimitBreaks { get; set; } = true;
+    public bool ShowEnemyLimitBreaksOnNameplates { get; set; } = true;
+    public bool ShowLimitBreakActivationMessages { get; set; } = true;
+    public bool LimitBreakFeedShowNames { get; set; } = true;
+    public float LimitBreakNameplateScale { get; set; } = 1f;
     public bool ShowAllyLimitBreakDamageEvents { get; set; } = true;
     public bool CombatFramesShowNames { get; set; } = true;
     public bool CombatFramesShowExactValues { get; set; } = true;
@@ -220,7 +228,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 31)
+        if (Version >= 32)
         {
             if (repaired) Save();
             return;
@@ -529,7 +537,24 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         }
 
-        Version = 31;
+        if (Version < 32)
+        {
+            // The unusable fixed Combat Frames are retired. Preserve their
+            // trustworthy action/status LB presentation as exact nameplate and
+            // notification features, and make the requested local-MP warnings
+            // available immediately with explicit toggles.
+            ShowCombatFrames = false;
+            ShowEnemyLimitBreaksOnNameplates = true;
+            ShowLimitBreakActivationMessages = true;
+            LimitBreakFeedShowNames = CombatFramesShowNames;
+            LimitBreakNameplateScale = 1f;
+            ShowAllyLimitBreakDamageEvents = true;
+            PlayLocalMpWarningSounds = true;
+            LocalMpWarning4000SoundId = 4;
+            LocalMpWarning2000SoundId = 6;
+        }
+
+        Version = 32;
         ClampSettings();
         Save();
     }
@@ -538,7 +563,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 31;
+        Version = 32;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -585,6 +610,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         MarksmanSpiteWarningScale = 1.45f;
         MchLimitBreakSoundEnabled = true;
         MchLimitBreakSoundId = 6;
+        PlayLocalMpWarningSounds = true;
+        LocalMpWarning4000SoundId = 4;
+        LocalMpWarning2000SoundId = 6;
         ExperimentalPurifyOnNextKey = false;
         ExperimentalPurifyBufferMilliseconds = 750;
         PurifyOnHeldGameplayKey = false;
@@ -634,6 +662,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowCombatFrames = false;
         CombatFramesEnableInteraction = true;
         CombatFramesShowLimitBreaks = true;
+        ShowEnemyLimitBreaksOnNameplates = true;
+        ShowLimitBreakActivationMessages = true;
+        LimitBreakFeedShowNames = true;
+        LimitBreakNameplateScale = 1f;
         ShowAllyLimitBreakDamageEvents = true;
         CombatFramesShowNames = true;
         CombatFramesShowExactValues = true;
@@ -784,6 +816,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(IsolationWarningScale, 0.75f, 1.75f, 1f, value => IsolationWarningScale = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
         changed |= Clamp(CcProtectionEmblemScale, 0.75f, 1.75f, 1f, value => CcProtectionEmblemScale = value);
+        changed |= Clamp(LimitBreakNameplateScale, 0.75f, 1.75f, 1f, value => LimitBreakNameplateScale = value);
         changed |= Clamp(CombatFramesEnemyScreenX, 0.02f, 0.98f, 0.82f, value => CombatFramesEnemyScreenX = value);
         changed |= Clamp(CombatFramesEnemyScreenY, 0.02f, 0.98f, 0.48f, value => CombatFramesEnemyScreenY = value);
         changed |= Clamp(CombatFramesSelfScreenX, 0.02f, 0.98f, 0.5f, value => CombatFramesSelfScreenX = value);
@@ -838,6 +871,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (highPressureSoundId != HighPressureWarningSoundId)
         {
             HighPressureWarningSoundId = highPressureSoundId;
+            changed = true;
+        }
+
+        var localMp4000SoundId = Math.Clamp(LocalMpWarning4000SoundId, 1, 16);
+        if (localMp4000SoundId != LocalMpWarning4000SoundId)
+        {
+            LocalMpWarning4000SoundId = localMp4000SoundId;
+            changed = true;
+        }
+
+        var localMp2000SoundId = Math.Clamp(LocalMpWarning2000SoundId, 1, 16);
+        if (localMp2000SoundId != LocalMpWarning2000SoundId)
+        {
+            LocalMpWarning2000SoundId = localMp2000SoundId;
             changed = true;
         }
 

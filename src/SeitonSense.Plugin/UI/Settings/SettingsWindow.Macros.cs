@@ -55,7 +55,7 @@ internal sealed partial class SettingsWindow
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "MACRO TARGET HELPERS (OPT-IN)");
         changed |= Checkbox(
-            "Enable one-shot /nearassist, /nearhelp, and /farhelp targeting",
+            "Enable one-shot /smarttab, /nearassist, /nearhelp, and /farhelp targeting",
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
         ImGui.TextUnformatted("Near Assist preferences");
@@ -87,6 +87,30 @@ internal sealed partial class SettingsWindow
             "Lowest exact HP is the anchor and always wins at 25% HP or lower. Otherwise, a trusted live pressure " +
             "view may prefer the highest incoming enemy count only within 10 HP percentage points of that anchor; " +
             "lower HP and distance break ties. Missing data inside that window falls back to lowest HP.");
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("Smart Target macro — harmful action", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextUnformatted("Smart target first, current <t> only as the authored fallback:");
+            ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
+            ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/smarttab");
+            ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
+            ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Crystalline Conflict only. /smarttab arms one 750 ms token and resolves the actual harmful PvP " +
+                "action on the next line. No selected target is required. Only living, targetable exact S1-S5 " +
+                "enemies inside that action's native range and line of sight are considered; live Guard is excluded.");
+            ImGui.TextDisabled(
+                "Inside the relevant reach tier, ranking is lowest exact HP%, then highest fresh team pressure, " +
+                "observed Guard cooldown unavailable, lowest trusted MP%, and stable S-slot. Melee jobs first prefer " +
+                "5-yalm melee reach, then enemies no farther than that job's own reviewed gap-closer range. " +
+                "The <e1> line is only a carrier. When no exact smart target survives final revalidation, Seiton " +
+                "invalidates that carrier and leaves the following <t> line as the only fallback. It never visibly " +
+                "changes your target, retries, reranks after commitment, or sends an action by itself. /sstarget is " +
+                "the collision-free alias.");
+            ImGui.PopTextWrapPos();
+        }
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Near Assist macro — hostile ally-target assist", ImGuiTreeNodeFlags.DefaultOpen))

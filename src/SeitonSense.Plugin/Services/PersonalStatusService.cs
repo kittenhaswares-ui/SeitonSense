@@ -52,6 +52,7 @@ internal sealed class PersonalStatusService : IDisposable
     private long acceptedMachinistLimitBreakWarnings;
     private long purifyMissingObservedAt = -1;
     private DebouncedVisibilityState resiliencePresence = DebouncedVisibilityState.Initial;
+    private LocalMpWarningState localMpWarningState = LocalMpWarningState.Initial;
     private MachinistLimitBreakThreatState? machinistLimitBreakThreat;
     private uint activeTerritory = uint.MaxValue;
     private ulong activeLocalPlayerId;
@@ -180,6 +181,8 @@ internal sealed class PersonalStatusService : IDisposable
 
     internal PersonalAlertSnapshot Snapshot => Volatile.Read(ref snapshot);
     internal DefensiveUtilityProbeSnapshot DefensiveUtilityDiagnostics => defensiveUtility.Snapshot;
+    internal AutoGuardProtectionDiagnostics AutoGuardProtectionDiagnostics =>
+        nearAssist.AutoGuardProtectionDiagnostics;
     internal SmartRecuperateProbeSnapshot SmartRecuperateDiagnostics => smartRecuperate.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
         pressureEscapeSprint.Snapshot;
@@ -216,6 +219,16 @@ internal sealed class PersonalStatusService : IDisposable
     internal bool PlayHighPressureWarningSoundPreview() =>
         pressureEscapeSprint.PlayWarningSoundPreview(
             Math.Clamp(configuration.HighPressureWarningSoundId, 1, 16));
+
+    internal bool PlayLocalMpWarning4000SoundPreview() =>
+        PlayLocalMpWarningSound(
+            configuration.LocalMpWarning4000SoundId,
+            "4,000 MP warning preview");
+
+    internal bool PlayLocalMpWarning2000SoundPreview() =>
+        PlayLocalMpWarningSound(
+            configuration.LocalMpWarning2000SoundId,
+            "2,000 MP warning preview");
 
     internal void Start()
     {
@@ -266,6 +279,7 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture.ClearWarnings();
             machinistLimitBreakThreat = null;
             emergencyInput.Reset();
+            localMpWarningState = LocalMpWarningState.Initial;
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
@@ -325,6 +339,11 @@ internal sealed class PersonalStatusService : IDisposable
         var isSupportedPvPContext = context != SupportedPvPContext.None;
         var isCrystallineConflict = context == SupportedPvPContext.CrystallineConflict;
         var alive = IsAlive(localPlayer);
+        ObserveLocalMpWarnings(
+            localPlayer,
+            isSupportedPvPContext,
+            alive,
+            hardReset);
         var localJobId = localPlayer?.ClassJob.IsValid == true
             ? localPlayer.ClassJob.RowId
             : 0;
@@ -597,14 +616,24 @@ internal sealed class PersonalStatusService : IDisposable
         var purifyClaimedPriority = purify.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
-        // Purify is absolute. Every job-specific physical held helper runs
-        // next, then generic self-healing/defense. A held key remains consent
-        // for a later distinct episode after an earlier accepted action clears.
-        // Reactive counter-CC has short threat/release windows, so it leads the
-        // job-specific tier. Status-bound ally cleanse remains armed and can
-        // take the next free frame without losing its exact target/key lease.
-        // Guard-Shukuchi precedes Seiton so a guarded execute target is not
-        // consumed by Seiton before the requested positioning action.
+        // Purify is absolute. Auto-Seiton is the next action-level priority;
+        // once it claims this frame, every later held helper observes that
+        // claim and stays armed for a later free frame.
+        now = Environment.TickCount64;
+        var ninja = ninjaSeiton.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            ninjaSeitonConfigurationEnabled,
+            metadata.SeitonVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        // Reactive counter-CC and the remaining job-specific helpers follow
+        // Auto-Seiton, then generic self-healing/defense. A held key remains
+        // consent for a later distinct episode after an accepted action clears.
         // The native hook may enqueue after this framework scan began. Refresh
         // the monotonic clock immediately before draining so a same-frame start
         // marker is never rejected as if it came from the future.
@@ -616,6 +645,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ReactiveCcOnHeldKey,
             !guardActive &&
             !purifyClaimedPriority &&
+            !ninja.InputClaimed &&
             !emergencyInputFrame.IsConsumed,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
@@ -642,6 +672,7 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset,
             dispatchAllowed:
                 !purifyClaimedPriority &&
+                !ninja.InputClaimed &&
                 !miracle.InputClaimed &&
                 !emergencyInputFrame.IsConsumed);
         var allyRescueClaimedPriority = rescue.InputClaimed;
@@ -652,6 +683,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.PaladinGuardianOnHeldKey,
             guardActive,
             purifyClaimedPriority ||
+            ninja.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             emergencyInputFrame.IsConsumed,
@@ -679,25 +711,10 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.PanicShukuchiVerified && metadata.GuardVerified,
             guardActive,
             purifyClaimedPriority ||
+            ninja.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset);
-        now = Environment.TickCount64;
-        var ninja = ninjaSeiton.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            ninjaSeitonConfigurationEnabled,
-            metadata.SeitonVerified,
-            guardActive,
-            purifyClaimedPriority ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
-            guardianClaimedPriority ||
-            guardShukuchi.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -737,11 +754,11 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset);
 
-        var jobSpecificHeldClaimedPriority = allyRescueClaimedPriority ||
+        var jobSpecificHeldClaimedPriority = ninja.InputClaimed ||
+                                             allyRescueClaimedPriority ||
                                              miracle.InputClaimed ||
                                              guardianClaimedPriority ||
                                              guardShukuchi.InputClaimed ||
-                                             ninja.InputClaimed ||
                                              scholar.InputClaimed ||
                                              plunge.InputClaimed;
         var recuperate = smartRecuperate.Observe(
@@ -843,6 +860,9 @@ internal sealed class PersonalStatusService : IDisposable
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                ninja.InputClaimed,
+                ninja.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 miracle.InputClaimed,
                 miracle.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -854,9 +874,6 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 guardShukuchi.InputClaimed,
                 guardShukuchi.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                ninja.InputClaimed,
-                ninja.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 scholar.InputClaimed,
                 scholar.CastCancellationRequest) ??
@@ -1252,12 +1269,70 @@ internal sealed class PersonalStatusService : IDisposable
         instanceTokens.Clear();
         lastPresentations.Clear();
         pulseStartedAt.Clear();
+        localMpWarningState = LocalMpWarningState.Initial;
         machinistLimitBreakWarningSound.Reset();
         ClearMachinistLimitBreakThreat();
         purifyMissingObservedAt = -1;
         resiliencePresence = DebouncedVisibilityState.Initial;
         alertStates = [];
     }
+
+    private void ObserveLocalMpWarnings(
+        IPlayerCharacter? localPlayer,
+        bool isSupportedPvPContext,
+        bool alive,
+        bool hardReset)
+    {
+        var telemetryTrusted =
+            configuration.Enabled &&
+            isSupportedPvPContext &&
+            HasTrustedLocalPlayerIdentity(localPlayer) &&
+            localPlayer!.MaxMp == CombatFrameRules.ExpectedMaximumMp &&
+            localPlayer.CurrentMp <= localPlayer.MaxMp;
+        var decision = LocalMpWarningRules.Observe(
+            localMpWarningState,
+            localPlayer?.CurrentMp ?? 0,
+            localPlayer?.MaxMp ?? 0,
+            telemetryTrusted,
+            alive,
+            hardReset || !configuration.Enabled || !isSupportedPvPContext);
+        localMpWarningState = decision.NextState;
+
+        if (!configuration.PlayLocalMpWarningSounds ||
+            !configuration.Enabled ||
+            !isSupportedPvPContext ||
+            !alive ||
+            decision.Edges == LocalMpWarningEdge.None)
+        {
+            return;
+        }
+
+        // A one-frame drop through both thresholds emits only the more urgent
+        // cue. The Core state still consumes both edges, so 4,000 never leaks
+        // into a later frame as a stale second sound.
+        if (decision.MostSevereEdge == LocalMpWarningEdge.TwoThousand)
+        {
+            PlayLocalMpWarningSound(
+                configuration.LocalMpWarning2000SoundId,
+                "2,000 MP warning");
+            return;
+        }
+
+        PlayLocalMpWarningSound(
+            configuration.LocalMpWarning4000SoundId,
+            "4,000 MP warning");
+    }
+
+    private bool PlayLocalMpWarningSound(int configuredSoundId, string label) =>
+        MachinistLimitBreakWarningSound.TryPlayShared(
+            Math.Clamp(configuredSoundId, 1, 16),
+            log,
+            $"Seiton Sense local-player {label} failed closed.");
+
+    private static bool HasTrustedLocalPlayerIdentity(IPlayerCharacter? localPlayer) =>
+        localPlayer is not null &&
+        localPlayer.GameObjectId is not 0 and not 0xE0000000 &&
+        localPlayer.EntityId is not 0 and not 0xE0000000;
 
     private static bool IsAlive(IPlayerCharacter? localPlayer) =>
         localPlayer is not null &&

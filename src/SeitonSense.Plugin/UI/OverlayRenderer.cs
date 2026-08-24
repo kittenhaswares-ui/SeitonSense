@@ -9,7 +9,7 @@ using SeitonSense.Plugin.Services;
 
 namespace SeitonSense.Plugin.UI;
 
-internal sealed class OverlayRenderer
+internal sealed partial class OverlayRenderer
 {
     private const long MaximumAnchorAgeMilliseconds = 250;
 
@@ -168,7 +168,9 @@ internal sealed class OverlayRenderer
             DrawLiveSeitonDecisionStack(now);
         }
 
-        if (tracker.IsActive || pressureTracker.IsActive)
+        if (tracker.IsActive ||
+            pressureTracker.IsActive ||
+            GetCombatLimitBreakNameplateSnapshot().Active)
             DrawLiveNameplateIndicators(now);
 
         // The confirmation popup belongs to the explicitly enabled Ally Rescue
@@ -1170,13 +1172,33 @@ internal sealed class OverlayRenderer
             .GroupBy(static enemy => (enemy.GameObjectId, enemy.EntityId))
             .Where(static group => group.Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.Single());
+        var limitBreakSnapshot = GetCombatLimitBreakNameplateSnapshot();
+        IReadOnlyDictionary<(ulong GameObjectId, uint EntityId), CombatLimitBreakActorState> limitBreakByIdentity =
+            limitBreakSnapshot.Active
+            ? limitBreakSnapshot.Actors
+                .Where(static state =>
+                    state.Side == CombatLimitBreakRosterSide.Enemy &&
+                    state.Actor.IsValid)
+                .GroupBy(static state => (state.Actor.GameObjectId, state.Actor.EntityId))
+                .Where(static group => group.Count() == 1)
+                .ToDictionary(static group => group.Key, static group => group.Single())
+            : new Dictionary<(ulong GameObjectId, uint EntityId), CombatLimitBreakActorState>();
         var drawn = new HashSet<(ulong GameObjectId, uint EntityId)>();
         foreach (var enemy in tracker.Enemies)
         {
             var identity = (enemy.GameObjectId, enemy.EntityId);
             if (!byIdentity.TryGetValue(identity, out var anchor)) continue;
             pressureByIdentity.TryGetValue(identity, out var pressure);
-            DrawIndicatorSlots(anchor, enemy, pressure, now);
+            var limitBreak = limitBreakByIdentity.TryGetValue(identity, out var state)
+                ? state
+                : (CombatLimitBreakActorState?)null;
+            DrawIndicatorSlots(
+                anchor,
+                enemy,
+                pressure,
+                limitBreak,
+                limitBreakSnapshot.PublishedAtMilliseconds,
+                now);
             drawn.Add(identity);
         }
 
@@ -1189,7 +1211,34 @@ internal sealed class OverlayRenderer
                 continue;
             }
 
-            DrawIndicatorSlots(anchor, null, pressure, now);
+            var limitBreak = limitBreakByIdentity.TryGetValue(identity, out var state)
+                ? state
+                : (CombatLimitBreakActorState?)null;
+            DrawIndicatorSlots(
+                anchor,
+                null,
+                pressure,
+                limitBreak,
+                limitBreakSnapshot.PublishedAtMilliseconds,
+                now);
+            drawn.Add(identity);
+        }
+
+        foreach (var pair in limitBreakByIdentity)
+        {
+            if (drawn.Contains(pair.Key) ||
+                !byIdentity.TryGetValue(pair.Key, out var anchor))
+            {
+                continue;
+            }
+
+            DrawIndicatorSlots(
+                anchor,
+                null,
+                null,
+                pair.Value,
+                limitBreakSnapshot.PublishedAtMilliseconds,
+                now);
         }
     }
 
@@ -1197,6 +1246,8 @@ internal sealed class OverlayRenderer
         NamePlateAnchorSnapshot anchor,
         EnemyHudSnapshot? enemy,
         TargetPressureOpponentSnapshot? pressure,
+        CombatLimitBreakActorState? limitBreak,
+        long limitBreakSnapshotPublishedAtMilliseconds,
         long now)
     {
         var nativeHeight = Math.Max(1f, anchor.Height);
@@ -1262,8 +1313,12 @@ internal sealed class OverlayRenderer
                 pressure.HasDirectIncomingIntent ? IncomingPressureColor : RecentPressureColor);
         }
 
-        if (configuration.ShowCcProtection && activeProtections.Length > 0)
-            DrawCcProtectionEmblem(anchor, activeProtections, now);
+        DrawStackedNameplateEmblems(
+            anchor,
+            activeProtections,
+            limitBreak,
+            limitBreakSnapshotPublishedAtMilliseconds,
+            now);
     }
 
     private void DrawCcProtectionEmblem(
@@ -1719,7 +1774,7 @@ internal sealed class OverlayRenderer
                 214891,
                 CcProtectionKind.FullImmunity,
                 now + 1_900)]);
-        DrawIndicatorSlots(anchor, enemy, pressurePreview, now);
+        DrawIndicatorSlots(anchor, enemy, pressurePreview, null, -1, now);
 
         var mchWarning = new PersonalStatusSnapshot(
             EnemyCombatConstants.MarksmanSpiteActionId,

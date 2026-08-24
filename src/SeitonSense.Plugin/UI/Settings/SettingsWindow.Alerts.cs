@@ -60,6 +60,54 @@ internal sealed partial class SettingsWindow
             "the top-left isolation alert. At 0 opacity, text, icons, and borders remain visible.");
 
         ImGui.Separator();
+        ImGui.TextUnformatted("Your MP");
+        changed |= Checkbox(
+            "Play local MP threshold sounds",
+            configuration.PlayLocalMpWarningSounds,
+            value => configuration.PlayLocalMpWarningSounds = value);
+        changed |= SliderInt(
+            "4,000 MP warning sound",
+            configuration.LocalMpWarning4000SoundId,
+            1,
+            16,
+            value => configuration.LocalMpWarning4000SoundId = value,
+            "Sound %d");
+        if (ImGui.Button("Test 4,000 MP sound"))
+            personalStatus.PlayLocalMpWarning4000SoundPreview();
+        changed |= SliderInt(
+            "2,000 MP critical sound",
+            configuration.LocalMpWarning2000SoundId,
+            1,
+            16,
+            value => configuration.LocalMpWarning2000SoundId = value,
+            "Sound %d");
+        if (ImGui.Button("Test 2,000 MP sound"))
+            personalStatus.PlayLocalMpWarning2000SoundPreview();
+        ImGui.TextDisabled(
+            "Local player only. Each cue plays once when your trusted 10,000-MP value crosses downward through the " +
+            "threshold, then rearms after recovery. A direct drop through both thresholds plays only the urgent 2,000-MP cue.");
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("Limit Break activations");
+        changed |= Checkbox(
+            "Show my LB ACTIVATED banner",
+            configuration.ShowLimitBreakActivationMessages,
+            value => configuration.ShowLimitBreakActivationMessages = value);
+        changed |= Checkbox(
+            "Show ally LB damage cards on the left",
+            configuration.ShowAllyLimitBreakDamageEvents,
+            value => configuration.ShowAllyLimitBreakDamageEvents = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Use player names",
+            configuration.LimitBreakFeedShowNames,
+            value => configuration.LimitBreakFeedShowNames = value);
+        ImGui.TextDisabled(
+            "Duration LBs keep the banner, icon, and verified timer until they end. Instant LBs flash briefly. " +
+            "Ally damage cards show player -> enemy and the captured damage. The banner uses a separate top-center " +
+            "lane and never replaces or covers the removed combat-frame HP/MP panel.");
+
+        ImGui.Separator();
         ImGui.TextUnformatted("Focused by several enemies");
         changed |= Checkbox(
             "Warn when 3+ enemies are directly targeting you",

@@ -15,6 +15,13 @@ public enum DefensiveUtilityTrigger
     PaladinGuardianLowAlly = 3,
 }
 
+public enum PaladinGuardianRiskTier : byte
+{
+    None = 0,
+    ProactiveHighPressure = 1,
+    Critical = 2,
+}
+
 public readonly record struct PaladinGuardianCandidate(
     ulong GameObjectId,
     uint EntityId,
@@ -87,6 +94,8 @@ public static class DefensiveUtilityRules
 {
     public const int RequiredIncomingEnemyCount = 3;
     public const int GuardianAllyHpPercent = 20;
+    public const int GuardianProactiveAllyHpPercent = 35;
+    public const long GuardianMaximumPressureAgeMilliseconds = 250;
     public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
     // Covers the normal client/server status-propagation and action-queue window
@@ -249,11 +258,43 @@ public static class DefensiveUtilityRules
                candidate.HasNativeRangeAndLineOfSight &&
                float.IsFinite(candidate.DistanceSquared) &&
                candidate.DistanceSquared >= 0f &&
+               ClassifyGuardianRisk(candidate) != PaladinGuardianRiskTier.None;
+    }
+
+    /// <summary>
+    /// Preserves the original unconditional critical rescue boundary while
+    /// allowing a bounded earlier rescue only from a trusted exact 3+ incoming
+    /// pressure observation. Runtime owns freshness and represents unknown or
+    /// stale pressure as null.
+    /// </summary>
+    public static PaladinGuardianRiskTier ClassifyGuardianRisk(
+        PaladinGuardianCandidate candidate)
+    {
+        if (IsAtOrBelowHpPercent(
+                candidate.CurrentHp,
+                candidate.MaximumHp,
+                GuardianAllyHpPercent))
+        {
+            return PaladinGuardianRiskTier.Critical;
+        }
+
+        return IsTrustedIncomingEnemyCount(candidate.IncomingEnemyCount) &&
+               candidate.IncomingEnemyCount >= RequiredIncomingEnemyCount &&
                IsAtOrBelowHpPercent(
                    candidate.CurrentHp,
                    candidate.MaximumHp,
-                   GuardianAllyHpPercent);
+                   GuardianProactiveAllyHpPercent)
+            ? PaladinGuardianRiskTier.ProactiveHighPressure
+            : PaladinGuardianRiskTier.None;
     }
+
+    public static bool IsFreshGuardianPressurePublication(
+        long nowMilliseconds,
+        long publishedAtMilliseconds) =>
+        nowMilliseconds >= 0 &&
+        publishedAtMilliseconds >= 0 &&
+        publishedAtMilliseconds <= nowMilliseconds &&
+        nowMilliseconds - publishedAtMilliseconds <= GuardianMaximumPressureAgeMilliseconds;
 
     public static int SelectGuardianCandidateIndex(
         IReadOnlyList<PaladinGuardianCandidate>? candidates,
@@ -282,13 +323,26 @@ public static class DefensiveUtilityRules
         PaladinGuardianCandidate left,
         PaladinGuardianCandidate right)
     {
-        var leftScaledHp = (ulong)left.CurrentHp * right.MaximumHp;
-        var rightScaledHp = (ulong)right.CurrentHp * left.MaximumHp;
-        var hp = leftScaledHp.CompareTo(rightScaledHp);
+        var leftTier = ClassifyGuardianRisk(left);
+        var rightTier = ClassifyGuardianRisk(right);
+        var tier = rightTier.CompareTo(leftTier);
+        if (tier != 0) return tier;
+
+        // Proactive candidates are all still above the unconditional critical
+        // boundary, so stronger exact focus is the useful first discriminator.
+        // Critical candidates retain the legacy lowest-HP-first behavior.
+        if (leftTier == PaladinGuardianRiskTier.ProactiveHighPressure)
+        {
+            var proactivePressure = right.IncomingEnemyCount!.Value.CompareTo(
+                left.IncomingEnemyCount!.Value);
+            if (proactivePressure != 0) return proactivePressure;
+        }
+
+        var hp = CompareGuardianHpRatio(left, right);
         if (hp != 0) return hp;
 
-        var leftPressureKnown = left.IncomingEnemyCount.HasValue;
-        var rightPressureKnown = right.IncomingEnemyCount.HasValue;
+        var leftPressureKnown = IsTrustedIncomingEnemyCount(left.IncomingEnemyCount);
+        var rightPressureKnown = IsTrustedIncomingEnemyCount(right.IncomingEnemyCount);
         if (leftPressureKnown != rightPressureKnown) return leftPressureKnown ? -1 : 1;
         if (leftPressureKnown)
         {
@@ -306,6 +360,18 @@ public static class DefensiveUtilityRules
         var entity = left.EntityId.CompareTo(right.EntityId);
         return entity != 0 ? entity : left.GameObjectId.CompareTo(right.GameObjectId);
     }
+
+    private static int CompareGuardianHpRatio(
+        PaladinGuardianCandidate left,
+        PaladinGuardianCandidate right)
+    {
+        var leftScaledHp = (ulong)left.CurrentHp * right.MaximumHp;
+        var rightScaledHp = (ulong)right.CurrentHp * left.MaximumHp;
+        return leftScaledHp.CompareTo(rightScaledHp);
+    }
+
+    private static bool IsTrustedIncomingEnemyCount(int? incomingEnemyCount) =>
+        incomingEnemyCount is >= 0 and <= EnemySlotRules.LastSlot;
 
     private static long SaturatingAdd(long left, long right) =>
         left > long.MaxValue - right ? long.MaxValue : left + right;

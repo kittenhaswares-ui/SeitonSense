@@ -46,6 +46,15 @@ internal readonly record struct NearAssistDiagnostics(
     string LastEvent,
     string RecentTrace);
 
+internal readonly record struct SmartTargetDiagnostics(
+    bool Armed,
+    long RemainingMilliseconds,
+    long ArmedCount,
+    long RedirectedCount,
+    long FallbackCount,
+    int LastEnemySlot,
+    string LastEvent);
+
 internal enum NearHelpArmOutcome
 {
     Armed,
@@ -101,9 +110,19 @@ internal readonly record struct LocalGuardActionAttempt(
     long ObservedAtMilliseconds,
     long Generation);
 
+internal readonly record struct AutoGuardProtectionDiagnostics(
+    bool HookAvailable,
+    bool Armed,
+    bool ExactGuardObserved,
+    long RemainingMilliseconds,
+    long ArmedCount,
+    long BlockedActionCount,
+    long ReleasedCount,
+    string LastEvent);
+
 /// <summary>
-/// Owns mutually exclusive, short-lived target redirects selected by the /nearassist
-/// /nearhelp, and /farhelp macro lines.
+/// Owns mutually exclusive, short-lived target redirects selected by the /nearassist,
+/// /smarttab, /nearhelp, and /farhelp macro lines.
 /// It never mutates the game's hard, soft, or focus target and never dispatches an action.
 /// The next bounded supported action is forwarded to the native function exactly once, with
 /// either the revalidated canonical enemy ID, the caller's original target ID unchanged,
@@ -115,9 +134,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     [ThreadStatic]
     private static int internalRedirectBypassDepth;
 
+    [ThreadStatic]
+    private static int explicitAutoGuardBreakBypassDepth;
+
     internal const int TokenLifetimeMilliseconds = 750;
     internal const float MinimumAllyDistance = 5f;
     internal const float MaximumAllyDistance = 30f;
+    private const long MaximumSmartTargetPressureAgeMilliseconds = 250;
+    private const float SmartTargetMeleeRangeYalms = 5f;
 
     private const ulong InvalidObjectId = 0xE0000000;
     private const ulong InvalidCarrierTargetId = 0;
@@ -130,6 +154,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly IFramework framework;
     private readonly IPluginLog log;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly ExecuteTracker executeTracker;
     private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
@@ -138,9 +163,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly object smartKardiaTriggerGate = new();
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
+    private readonly Hook<ActionManager.Delegates.UseActionLocation>? useActionLocationHook;
 
     private ArmedNearAssistTarget? armedTarget;
     private NearAssistOneShotState oneShotState = NearAssistOneShotState.Initial;
+    private ArmedSmartTarget? armedSmartTarget;
     private ArmedNearHelpTarget? armedHelpTarget;
     private NearHelpOneShotState nearHelpState = NearHelpOneShotState.Initial;
     private ArmedFarHelpTarget? armedFarHelpTarget;
@@ -149,12 +176,22 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         FarHelpFallbackSuppressionState.Initial;
     private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
     private long localGuardActionAttemptGeneration;
+    private AutoGuardProtectionState autoGuardProtectionState = AutoGuardProtectionState.Initial;
+    private long autoGuardProtectionArmedCount;
+    private long autoGuardProtectionBlockedActionCount;
+    private long autoGuardProtectionReleasedCount;
+    private string autoGuardProtectionLastEvent = "Not armed";
     private SmartKardiaEukrasiaTrigger? pendingSmartKardiaTrigger;
     private long smartKardiaTriggerSequence;
     private uint observedTerritory;
     private long armedCount;
     private long redirectedCount;
     private long fallbackCount;
+    private long smartTargetArmedCount;
+    private long smartTargetRedirectedCount;
+    private long smartTargetFallbackCount;
+    private int smartTargetLastEnemySlot;
+    private string smartTargetLastEvent = "Not started";
     private long helpArmedCount;
     private long helpRedirectedCount;
     private long helpFallbackCount;
@@ -180,6 +217,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         IGameInteropProvider interop,
         IFramework framework,
         TargetPressureTracker pressureTracker,
+        ExecuteTracker executeTracker,
         SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
         DarkKnightShadowbringerMacroService darkKnightShadowbringer,
@@ -193,6 +231,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.dataManager = dataManager;
         this.framework = framework;
         this.pressureTracker = pressureTracker;
+        this.executeTracker = executeTracker;
         this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
         this.darkKnightShadowbringer = darkKnightShadowbringer;
@@ -210,6 +249,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             lastEvent = "Native action hook unavailable";
             LogFailure(exception, "Seiton Sense Near Assist action hook is unavailable; the feature remains off.");
+        }
+
+        try
+        {
+            useActionLocationHook =
+                interop.HookFromAddress<ActionManager.Delegates.UseActionLocation>(
+                    ActionManager.MemberFunctionPointers.UseActionLocation,
+                    UseActionLocationDetour);
+        }
+        catch (Exception exception)
+        {
+            autoGuardProtectionLastEvent = "Native location-action hook unavailable";
+            LogFailure(
+                exception,
+                "Seiton Sense automatic Guard location-action hook is unavailable; Auto-Guard remains fail-closed.");
         }
     }
 
@@ -326,9 +380,67 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    internal SmartTargetDiagnostics SmartTargetDiagnostics
+    {
+        get
+        {
+            lock (tokenGate)
+            {
+                var now = Environment.TickCount64;
+                var token = armedSmartTarget;
+                var remaining = token is null
+                    ? 0
+                    : Math.Max(0, token.Value.ExpiresAtMilliseconds - now);
+                return new SmartTargetDiagnostics(
+                    token is not null && remaining > 0,
+                    remaining,
+                    smartTargetArmedCount,
+                    smartTargetRedirectedCount,
+                    smartTargetFallbackCount,
+                    smartTargetLastEnemySlot,
+                    smartTargetLastEvent);
+            }
+        }
+    }
+
     internal long CaptureLocalGuardAttemptGeneration()
     {
         lock (guardAttemptGate) return localGuardActionAttemptGeneration;
+    }
+
+    internal bool CanProtectAutomaticGuard =>
+        !disposed &&
+        started &&
+        useActionHook?.IsEnabled == true &&
+        useActionLocationHook?.IsEnabled == true;
+
+    internal AutoGuardProtectionDiagnostics AutoGuardProtectionDiagnostics
+    {
+        get
+        {
+            lock (guardAttemptGate)
+            {
+                var now = Environment.TickCount64;
+                var state = autoGuardProtectionState;
+                var deadline = !state.IsArmed
+                    ? -1
+                    : state.ExactGuardObserved
+                        ? state.MaximumExpiresAtMilliseconds
+                        : Math.Min(
+                            state.MaximumExpiresAtMilliseconds,
+                            state.AcceptedAtMilliseconds +
+                            AutoGuardProtectionRules.StatusPropagationMilliseconds);
+                return new AutoGuardProtectionDiagnostics(
+                    CanProtectAutomaticGuard,
+                    state.IsArmed && deadline > now,
+                    state.ExactGuardObserved,
+                    state.IsArmed ? Math.Max(0, deadline - now) : 0,
+                    autoGuardProtectionArmedCount,
+                    autoGuardProtectionBlockedActionCount,
+                    autoGuardProtectionReleasedCount,
+                    autoGuardProtectionLastEvent);
+            }
+        }
     }
 
     /// <summary>
@@ -465,6 +577,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         catch (Exception exception)
         {
             LogFailure(exception, "Seiton Sense Near Assist action hook could not be enabled; the feature remains off.");
+        }
+
+
+        try
+        {
+            useActionLocationHook?.Enable();
+        }
+        catch (Exception exception)
+        {
+            lock (guardAttemptGate)
+                autoGuardProtectionLastEvent = "Location-action hook could not be enabled";
+            LogFailure(
+                exception,
+                "Seiton Sense automatic Guard location-action hook could not be enabled; Auto-Guard remains fail-closed.");
         }
 
         started = true;
@@ -640,6 +766,136 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    /// <summary>
+    /// Arms cancellation protection only when the immediately preceding hook
+    /// observation is the exact Guard call which the automatic helper has just
+    /// proven client-accepted. Manual Guard and ambiguous acceptance never own it.
+    /// </summary>
+    internal bool TryArmAcceptedAutoGuardProtection(
+        ulong localGameObjectId,
+        uint localEntityId,
+        long generationBeforeCall)
+    {
+        var now = Environment.TickCount64;
+        var currentLocal = new TargetPressureActorIdentity(localGameObjectId, localEntityId);
+        lock (guardAttemptGate)
+        {
+            if (latestLocalGuardActionAttempt is not { } attempt ||
+                !AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                    attempt.Generation,
+                    generationBeforeCall,
+                    attempt.TerritoryId,
+                    clientState.TerritoryType,
+                    new TargetPressureActorIdentity(
+                        attempt.LocalGameObjectId,
+                        attempt.LocalEntityId),
+                    currentLocal,
+                    attempt.ObservedAtMilliseconds,
+                    now))
+            {
+                autoGuardProtectionLastEvent =
+                    "Accepted automatic Guard had no exact hook-owned attempt";
+                return false;
+            }
+
+            var armed = AutoGuardProtectionRules.Arm(
+                attempt.Generation,
+                attempt.TerritoryId,
+                currentLocal,
+                now);
+            if (!armed.IsArmed)
+            {
+                autoGuardProtectionLastEvent = "Automatic Guard ownership failed closed";
+                return false;
+            }
+
+            autoGuardProtectionState = armed;
+            autoGuardProtectionArmedCount++;
+            autoGuardProtectionLastEvent =
+                $"Protected accepted automatic Guard generation {attempt.Generation}";
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Preserves the documented /panicshu contract: this explicit command may
+    /// deliberately break even an automatically owned Guard. The scope stays
+    /// separate from the generic redirect bypass so no other location action
+    /// inherits the override.
+    /// </summary>
+    internal IDisposable EnterExplicitAutoGuardBreak()
+    {
+        explicitAutoGuardBreakBypassDepth++;
+        return new ExplicitAutoGuardBreakScope();
+    }
+
+    internal NearAssistArmResult ArmSmartTarget()
+    {
+        ClearToken("Replaced or cleared by a new Smart Target arm request");
+
+        if (disposed || !started || !configuration.Enabled || !configuration.EnableNearAssistMacro)
+            return SmartTargetArmFailure(NearAssistArmOutcome.Disabled, "Smart Target arm ignored: feature disabled");
+        if (useActionHook is null || !useActionHook.IsEnabled)
+            return SmartTargetArmFailure(NearAssistArmOutcome.HookUnavailable, "Smart Target arm ignored: hook unavailable");
+        var context = ResolveContext();
+        if (context != SupportedPvPContext.CrystallineConflict)
+            return SmartTargetArmFailure(
+                NearAssistArmOutcome.NotCrystallineConflict,
+                "Smart Target arm ignored: not in Crystalline Conflict");
+
+        var localPlayer = objectTable.LocalPlayer;
+        if (!IsLivePlayer(localPlayer))
+            return SmartTargetArmFailure(
+                NearAssistArmOutcome.LocalPlayerUnavailable,
+                "Smart Target arm ignored: local player unavailable");
+
+        try
+        {
+            var partyEntityIds = GetPartyEntityIds();
+            var canonicalEnemies = ResolveCanonicalEnemies(localPlayer!, partyEntityIds);
+            CanonicalEnemy? carrier = null;
+            foreach (var enemy in canonicalEnemies.Values)
+            {
+                if (enemy.Slot != EnemySlotRules.FirstSlot) continue;
+                carrier = enemy;
+                break;
+            }
+
+            if (carrier is not { } exactCarrier)
+            {
+                return SmartTargetArmFailure(
+                    NearAssistArmOutcome.NoCanonicalEnemySlots,
+                    "Smart Target failed closed: exact S1 carrier unavailable");
+            }
+
+            var now = Environment.TickCount64;
+            var token = new ArmedSmartTarget(
+                clientState.TerritoryType,
+                localPlayer!.EntityId,
+                localPlayer.GameObjectId,
+                exactCarrier.Player.EntityId,
+                exactCarrier.Player.GameObjectId,
+                now + TokenLifetimeMilliseconds);
+            lock (tokenGate)
+            {
+                armedSmartTarget = token;
+                smartTargetArmedCount++;
+                smartTargetLastEnemySlot = 0;
+                smartTargetLastEvent = "Armed; waiting for exact harmful action";
+                RecordTraceLocked($"smart-arm ctx={context} carrier=S1");
+            }
+
+            return new NearAssistArmResult(NearAssistArmOutcome.Armed, 0, 0f);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(exception, "Seiton Sense Smart Target arm failed closed.");
+            return SmartTargetArmFailure(
+                NearAssistArmOutcome.FailedClosed,
+                "Smart Target arm failed closed: canonical scan failed");
+        }
+    }
+
     internal NearHelpArmResult ArmHelp()
     {
         ClearToken("Replaced or cleared by a new Near Help arm request");
@@ -782,6 +1038,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         ClearToken("Reset");
         ClearSmartKardiaTrigger();
+        ClearAutoGuardProtection("Reset");
     }
 
     public void Dispose()
@@ -792,8 +1049,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         started = false;
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
-        lock (guardAttemptGate) latestLocalGuardActionAttempt = null;
+        lock (guardAttemptGate)
+        {
+            latestLocalGuardActionAttempt = null;
+            autoGuardProtectionState = AutoGuardProtectionState.Initial;
+            autoGuardProtectionLastEvent = "Disposed";
+        }
         useActionHook?.Dispose();
+        useActionLocationHook?.Dispose();
     }
 
     private bool UseActionDetour(
@@ -806,8 +1069,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint comboRouteId,
         bool* outOptAreaTargeted)
     {
+        // This runs before any redirect/token work. A random action cannot both
+        // cancel an automatically owned Guard and consume a macro one-shot.
+        if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
+            return false;
+
         var forwardedTargetId = targetId;
         var consumedFallbackCarrier = false;
+        var handlingSmartTarget = false;
         var handlingNearHelp = false;
         var handlingFarHelp = false;
         var suppressingLegacyFarHelpFallback = false;
@@ -848,6 +1117,52 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     farHelpLastEvent = "Suppressed legacy selected-target mobility fallback";
                     RecordTraceLocked(
                         $"far-legacy-suppress type={(uint)actionType} id={actionId} mode={(uint)mode}");
+                }
+            }
+            else if (!bypassRedirect &&
+                     IsEligibleRedirectAction(thisPtr, actionType, actionId, mode) &&
+                     TryConsumeEligibleSmartTargetToken(
+                         actionType,
+                         mode,
+                         targetId,
+                         out var smartToken,
+                         out consumedFallbackCarrier))
+            {
+                helperTokenConsumed = true;
+                handlingSmartTarget = true;
+                forwardedTargetId = TryResolveSmartTargetRedirect(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    mode,
+                    targetId,
+                    smartToken,
+                    out var rewritten,
+                    out var selectedSlot,
+                    out var reason);
+                if (!rewritten && consumedFallbackCarrier)
+                {
+                    forwardedTargetId = InvalidCarrierTargetId;
+                    targetSuppressedByRedirect = true;
+                }
+
+                lock (tokenGate)
+                {
+                    if (rewritten)
+                    {
+                        smartTargetRedirectedCount++;
+                        smartTargetLastEnemySlot = selectedSlot;
+                    }
+                    else
+                    {
+                        smartTargetFallbackCount++;
+                        smartTargetLastEnemySlot = 0;
+                    }
+
+                    smartTargetLastEvent = reason;
+                    RecordTraceLocked(
+                        $"smart-action type={(uint)actionType} id={actionId} mode={(uint)mode} " +
+                        $"result={(rewritten ? $"S{selectedSlot}" : reason)}");
                 }
             }
             else if (!bypassRedirect &&
@@ -1023,10 +1338,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
         catch (Exception exception)
         {
+            var failedSmartTarget = handlingSmartTarget;
             var failedNearHelp = handlingNearHelp;
             var failedFarHelp = handlingFarHelp || suppressingLegacyFarHelpFallback;
             lock (tokenGate)
             {
+                failedSmartTarget |= armedSmartTarget is not null;
                 failedNearHelp |= armedHelpTarget is not null || nearHelpState.IsArmed;
                 failedFarHelp |= armedFarHelpTarget is not null ||
                                  farHelpState.IsArmed ||
@@ -1040,10 +1357,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             {
                 armedTarget = null;
                 oneShotState = NearAssistOneShotState.Initial;
+                armedSmartTarget = null;
                 armedHelpTarget = null;
                 nearHelpState = NearHelpOneShotState.Initial;
                 armedFarHelpTarget = null;
                 farHelpState = FarHelpOneShotState.Initial;
+                if (failedSmartTarget)
+                {
+                    smartTargetLastEnemySlot = 0;
+                    smartTargetLastEvent =
+                        "Redirect failed closed; one-shot Smart Target token cleared";
+                }
                 if (failedFarHelp)
                 {
                     forwardedTargetId = InvalidCarrierTargetId;
@@ -1079,6 +1403,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     ? "Seiton Sense Far Help redirect failed closed without a selected-target fallback."
                     : failedNearHelp
                         ? "Seiton Sense Near Help redirect failed closed with its authored fallback policy."
+                        : failedSmartTarget
+                            ? "Seiton Sense Smart Target redirect failed closed and cleared its one-shot token."
                         : "Seiton Sense Near Assist redirect failed closed with its authored fallback policy.");
         }
 
@@ -1166,6 +1492,37 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (clientAccepted && hasSmartKardiaPreflight)
             ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
         return clientAccepted;
+    }
+
+    private bool UseActionLocationDetour(
+        ActionManager* thisPtr,
+        ActionType actionType,
+        uint actionId,
+        ulong targetId,
+        Vector3* location,
+        uint extraParam,
+        byte a7)
+    {
+        if (explicitAutoGuardBreakBypassDepth > 0)
+        {
+            // Spending the explicit command gives up ownership before the native
+            // call, even if Shukuchi is then rejected. A same-frame action must
+            // not remain trapped behind Guard the user deliberately chose to exit.
+            ClearAutoGuardProtection("Released: explicit /panicshu override");
+        }
+        else if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
+        {
+            return false;
+        }
+
+        return useActionLocationHook!.Original(
+            thisPtr,
+            actionType,
+            actionId,
+            targetId,
+            location,
+            extraParam,
+            a7);
     }
 
     private bool TryCaptureSmartKardiaEukrasiaPreflight(
@@ -1383,6 +1740,119 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private bool TryBlockOwnedAutoGuardCancellation(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId)
+    {
+        lock (guardAttemptGate)
+        {
+            if (!autoGuardProtectionState.IsArmed) return false;
+        }
+
+        try
+        {
+            var supportedActionType = IsSupportedActionType(actionType);
+            var resolvedActionId = supportedActionType
+                ? ResolveActionId(actionManager, actionType, actionId)
+                : 0;
+            var explicitGuardReuse = supportedActionType &&
+                                     (actionId == EnemyCombatConstants.GuardActionId ||
+                                      resolvedActionId == EnemyCombatConstants.GuardActionId);
+            // Unknown action resolution is deliberately fail-open. Only a
+            // verified Action/PvPAction row can be suppressed.
+            var actionCanCancelGuard = supportedActionType &&
+                                       resolvedActionId != 0 &&
+                                       TryGetActionMetadata(
+                                           actionType,
+                                           actionId,
+                                           resolvedActionId,
+                                           out var action) &&
+                                       action.IsPvP &&
+                                       !explicitGuardReuse;
+            return ApplyAutoGuardProtectionObservation(
+                actionCanCancelGuard,
+                explicitGuardReuse,
+                hardReset: false);
+        }
+        catch (Exception exception)
+        {
+            ClearAutoGuardProtection("Action classification failed open");
+            LogFailure(
+                exception,
+                "Seiton Sense automatic Guard protection failed open for one action.");
+            return false;
+        }
+    }
+
+    private bool ApplyAutoGuardProtectionObservation(
+        bool actionCanCancelGuard,
+        bool explicitGuardReuse,
+        bool hardReset)
+    {
+        var local = objectTable.LocalPlayer;
+        var localLive = IsLivePlayer(local);
+        var localIdentity = localLive
+            ? new TargetPressureActorIdentity(local!.GameObjectId, local.EntityId)
+            : default;
+        var exactGuardActive = localLive && HasActiveGuardStatus(local!);
+        var observation = new AutoGuardProtectionObservation(
+            configuration.Enabled &&
+            configuration.EnableDefensiveUtilities &&
+            configuration.GuardOnStunPressure &&
+            clientState.IsLoggedIn &&
+            ResolveContext() == SupportedPvPContext.CrystallineConflict,
+            clientState.TerritoryType,
+            localIdentity,
+            localLive,
+            exactGuardActive,
+            actionCanCancelGuard,
+            explicitGuardReuse,
+            Environment.TickCount64,
+            hardReset);
+
+        lock (guardAttemptGate)
+        {
+            var wasArmed = autoGuardProtectionState.IsArmed;
+            var exactGuardWasObserved = autoGuardProtectionState.ExactGuardObserved;
+            var decision = AutoGuardProtectionRules.Observe(
+                autoGuardProtectionState,
+                observation);
+            autoGuardProtectionState = decision.NextState;
+            if (decision.ShouldBlockAction)
+            {
+                autoGuardProtectionBlockedActionCount++;
+                autoGuardProtectionLastEvent =
+                    $"Blocked Guard-cancelling action ({decision.RemainingMilliseconds} ms protected)";
+                return true;
+            }
+
+            if (wasArmed && !decision.NextState.IsArmed)
+            {
+                autoGuardProtectionReleasedCount++;
+                autoGuardProtectionLastEvent = $"Released: {decision.Reason}";
+            }
+            else if (decision.NextState.IsArmed &&
+                     decision.NextState.ExactGuardObserved &&
+                     !exactGuardWasObserved)
+            {
+                autoGuardProtectionLastEvent = "Exact automatic Guard status confirmed";
+            }
+
+            return false;
+        }
+    }
+
+    private void ClearAutoGuardProtection(string reason)
+    {
+        lock (guardAttemptGate)
+        {
+            if (autoGuardProtectionState.IsArmed) autoGuardProtectionReleasedCount++;
+            autoGuardProtectionState = AutoGuardProtectionState.Initial;
+            autoGuardProtectionLastEvent = reason;
+        }
+    }
+
     private bool IsLocalGuardActiveOrPropagating()
     {
         try
@@ -1404,6 +1874,199 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             // An uncertain local Guard view must never enable a target rewrite.
             return true;
         }
+    }
+
+    private ulong TryResolveSmartTargetRedirect(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode,
+        ulong originalTargetId,
+        ArmedSmartTarget token,
+        out bool rewritten,
+        out int selectedSlot,
+        out string reason)
+    {
+        rewritten = false;
+        selectedSlot = 0;
+        reason = "Smart Target fallback: invalid context";
+
+        var now = Environment.TickCount64;
+        var localPlayer = objectTable.LocalPlayer;
+        var localIdentityValid = IsLivePlayer(localPlayer) &&
+                                 localPlayer!.EntityId == token.LocalEntityId &&
+                                 localPlayer.GameObjectId == token.LocalGameObjectId;
+        var supportedContext = configuration.Enabled &&
+                               configuration.EnableNearAssistMacro &&
+                               token.ExpiresAtMilliseconds >= now &&
+                               clientState.TerritoryType == token.TerritoryId &&
+                               ResolveContext() == SupportedPvPContext.CrystallineConflict &&
+                               localIdentityValid;
+        var supportedMode = IsCertifiedMacroInvocationMode(mode) &&
+                            mode != ActionManager.UseActionMode.Queue;
+        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        GameAction action = default;
+        var hasActionMetadata = resolvedActionId != 0 &&
+                                TryGetActionMetadata(actionType, actionId, resolvedActionId, out action);
+        var supportedAction = IsSupportedActionType(actionType) &&
+                              hasActionMetadata &&
+                              action.IsPvP &&
+                              action.CanTargetHostile &&
+                              !action.TargetArea &&
+                              action.Range > 0;
+        if (!supportedContext || !supportedMode || !supportedAction || actionManager == null)
+        {
+            reason = "Smart Target fallback: context/action/mode changed";
+            return originalTargetId;
+        }
+
+        var local = localPlayer!;
+        var localActor = new TargetPressureActorIdentity(local.GameObjectId, local.EntityId);
+        var partyEntityIds = GetPartyEntityIds();
+        var sourceObject = GetNativeObject(local);
+        if (sourceObject == null)
+        {
+            reason = "Smart Target fallback: native local actor unavailable";
+            return originalTargetId;
+        }
+
+        var candidates = new List<SmartTargetRuntimeCandidate>(5);
+        var seenGameObjectIds = new HashSet<ulong>();
+        var seenEntityIds = new HashSet<uint>();
+        for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
+        {
+            var enemy = EnemySlotResolver.Resolve(objectTable, slot);
+            if (!IsLivePlayer(enemy) ||
+                enemy!.GameObjectId == local.GameObjectId ||
+                IsAlly(enemy, partyEntityIds))
+            {
+                continue;
+            }
+
+            if (!seenGameObjectIds.Add(enemy.GameObjectId) ||
+                !seenEntityIds.Add(enemy.EntityId))
+            {
+                reason = "Smart Target fallback: ambiguous canonical enemy identities";
+                return originalTargetId;
+            }
+
+            if (HasActiveGuardStatus(enemy)) continue;
+            if (!TryResolveSmartTargetReachTier(local, enemy, out var reachTier)) continue;
+
+            var targetObject = GetNativeObject(enemy);
+            var hasValidActionTarget = targetObject != null;
+            var rangeResult = hasValidActionTarget
+                ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, targetObject)
+                : uint.MaxValue;
+            var actor = new TargetPressureActorIdentity(enemy.GameObjectId, enemy.EntityId);
+            int? freshTeamPressure = pressureTracker.TryGetFreshTeamTargetCount(
+                localActor,
+                actor,
+                now,
+                MaximumSmartTargetPressureAgeMilliseconds,
+                out var teamPressure)
+                ? teamPressure
+                : null;
+
+            var guardAvailability = GuardAvailability.Unknown;
+            var hasTrustedMp = false;
+            var currentMp = 0u;
+            var maximumMp = 0u;
+            var exactHudMatches = executeTracker.Enemies
+                .Where(snapshot =>
+                    snapshot.Slot == slot &&
+                    snapshot.GameObjectId == enemy.GameObjectId &&
+                    snapshot.EntityId == enemy.EntityId)
+                .Take(2)
+                .ToArray();
+            if (exactHudMatches.Length == 1)
+            {
+                var hud = exactHudMatches[0];
+                guardAvailability = hud.GuardUnavailable
+                    ? GuardAvailability.Unavailable
+                    : GuardAvailability.Unknown;
+                hasTrustedMp = hud.HasTrustedMp;
+                currentMp = hud.CurrentMp;
+                maximumMp = hud.MaxMp;
+            }
+
+            var selection = new SmartTargetSelectionCandidate(
+                slot,
+                actor,
+                ExactCanonicalIdentity: true,
+                IsHostile: true,
+                Alive: true,
+                Targetable: true,
+                enemy.CurrentHp,
+                enemy.MaxHp,
+                reachTier,
+                hasValidActionTarget,
+                SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
+                freshTeamPressure,
+                guardAvailability,
+                hasTrustedMp,
+                currentMp,
+                maximumMp);
+            candidates.Add(new SmartTargetRuntimeCandidate(enemy, selection));
+        }
+
+        var selectionCandidates = candidates.Select(static candidate => candidate.Selection).ToArray();
+        if (!SmartTargetSelectionRules.TryCreateIntent(
+                resolvedActionId,
+                selectionCandidates,
+                localActor,
+                out var intent))
+        {
+            reason = "Smart Target fallback: no exact reachable candidate";
+            return originalTargetId;
+        }
+
+        var selected = candidates.SingleOrDefault(candidate =>
+            candidate.Selection.EnemySlot == intent.EnemySlot &&
+            candidate.Selection.Actor == intent.Target);
+        if (selected.Player is null)
+        {
+            reason = "Smart Target fallback: selected actor became ambiguous";
+            return originalTargetId;
+        }
+
+        // Revalidate the frozen tuple immediately before forwarding the sole
+        // incoming native call. Never rerun ranking or select a second actor.
+        var currentEnemy = EnemySlotResolver.Resolve(objectTable, intent.EnemySlot);
+        var currentTargetObject = IsLivePlayer(currentEnemy) &&
+                                  currentEnemy!.GameObjectId == intent.Target.GameObjectId &&
+                                  currentEnemy.EntityId == intent.Target.EntityId &&
+                                  !IsAlly(currentEnemy, partyEntityIds) &&
+                                  !HasActiveGuardStatus(currentEnemy)
+            ? GetNativeObject(currentEnemy)
+            : null;
+        var finalRange = currentTargetObject != null
+            ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, currentTargetObject)
+            : uint.MaxValue;
+        var finalCandidate = selected.Selection with
+        {
+            Alive = IsLivePlayer(currentEnemy),
+            Targetable = currentEnemy?.IsTargetable == true,
+            CurrentHp = currentEnemy?.CurrentHp ?? 0,
+            MaximumHp = currentEnemy?.MaxHp ?? 0,
+            HasValidActionTarget = currentTargetObject != null,
+            HasNativeRangeAndLineOfSight =
+                SeitonRangeRules.HasNativeRangeAndLineOfSight(finalRange),
+        };
+        if (!SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                finalCandidate,
+                localActor,
+                resolvedActionId))
+        {
+            reason = "Smart Target fallback: frozen actor/range changed";
+            return originalTargetId;
+        }
+
+        rewritten = true;
+        selectedSlot = intent.EnemySlot;
+        reason = $"Smart Target redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
+        return intent.Target.GameObjectId;
     }
 
     private ulong TryResolveRedirect(
@@ -1872,6 +2535,31 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 exception,
                 "Seiton Sense Smart Kardia trigger lifecycle failed closed.");
         }
+
+        try
+        {
+            UpdateAutoGuardProtectionLifecycle();
+        }
+        catch (Exception exception)
+        {
+            ClearAutoGuardProtection("Lifecycle observation failed open");
+            LogFailure(
+                exception,
+                "Seiton Sense automatic Guard protection lifecycle failed open.");
+        }
+    }
+
+    private void UpdateAutoGuardProtectionLifecycle()
+    {
+        lock (guardAttemptGate)
+        {
+            if (!autoGuardProtectionState.IsArmed) return;
+        }
+
+        ApplyAutoGuardProtectionObservation(
+            actionCanCancelGuard: false,
+            explicitGuardReuse: false,
+            hardReset: false);
     }
 
     private void UpdateSmartKardiaTriggerLifecycle()
@@ -1919,6 +2607,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             if (armedTarget is { } token)
             {
                 shouldClear |= token.ExpiresAtMilliseconds <= Environment.TickCount64;
+            }
+            if (armedSmartTarget is { } smartTargetToken)
+            {
+                shouldClear |= smartTargetToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
             if (armedHelpTarget is { } helpToken)
             {
@@ -2149,6 +2841,39 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return result;
     }
 
+    private bool TryConsumeEligibleSmartTargetToken(
+        ActionType actionType,
+        ActionManager.UseActionMode mode,
+        ulong incomingTargetId,
+        out ArmedSmartTarget token,
+        out bool fallbackCarrier)
+    {
+        lock (tokenGate)
+        {
+            if (armedSmartTarget is not { } candidate ||
+                !IsPotentialMacroAction(actionType, mode))
+            {
+                token = default;
+                fallbackCarrier = false;
+                return false;
+            }
+
+            token = candidate;
+            var currentPlayer = objectTable.LocalPlayer;
+            var currentHardTargetId = IsLivePlayer(currentPlayer)
+                ? GetNativeHardTargetId(currentPlayer!)
+                : 0;
+            fallbackCarrier = NearAssistCarrierRules.IsFallbackCarrier(
+                currentHardTargetId,
+                incomingTargetId,
+                candidate.CarrierEnemyGameObjectId,
+                candidate.CarrierEnemyEntityId);
+            armedSmartTarget = null;
+            smartTargetLastEvent = $"Consumed target={incomingTargetId:X}; selecting for action";
+            return true;
+        }
+    }
+
     private bool TryConsumeEligibleToken(
         ActionType actionType,
         ActionManager.UseActionMode mode,
@@ -2268,17 +2993,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         lock (tokenGate)
         {
             var hadToken = armedTarget is not null || oneShotState.IsArmed ||
+                           armedSmartTarget is not null ||
                            armedHelpTarget is not null || nearHelpState.IsArmed ||
                            armedFarHelpTarget is not null || farHelpState.IsArmed ||
                            farHelpFallbackSuppressionState.IsArmed;
             armedTarget = null;
             oneShotState = NearAssistOneShotState.Initial;
+            armedSmartTarget = null;
             armedHelpTarget = null;
             nearHelpState = NearHelpOneShotState.Initial;
             armedFarHelpTarget = null;
             farHelpState = FarHelpOneShotState.Initial;
             farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState.Initial;
             lastEvent = reason;
+            smartTargetLastEvent = reason;
             helpLastEvent = reason;
             farHelpLastEvent = reason;
             if (hadToken) RecordTraceLocked(reason);
@@ -2292,6 +3020,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             lastEvent = reason;
             RecordTraceLocked($"arm-fail {outcome}: {reason}");
         }
+        return new NearAssistArmResult(outcome, 0, 0f);
+    }
+
+    private NearAssistArmResult SmartTargetArmFailure(
+        NearAssistArmOutcome outcome,
+        string reason)
+    {
+        lock (tokenGate)
+        {
+            smartTargetLastEvent = reason;
+            RecordTraceLocked($"smart-arm-fail {outcome}: {reason}");
+        }
+
         return new NearAssistArmResult(outcome, 0, 0f);
     }
 
@@ -2524,6 +3265,78 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private static bool TryResolveSmartTargetReachTier(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter enemy,
+        out SmartTargetReachTier tier)
+    {
+        tier = SmartTargetReachTier.RangedOrOther;
+        var localJobId = localPlayer.ClassJob.IsValid ? localPlayer.ClassJob.RowId : 0;
+        if (NearAssistSelectionRules.ClassifyPlayableJob(localJobId) !=
+            NearAssistAllyRole.MeleeDamage)
+        {
+            return true;
+        }
+
+        var localPosition = localPlayer.Position;
+        var enemyPosition = enemy.Position;
+        var localHitbox = localPlayer.HitboxRadius;
+        var enemyHitbox = enemy.HitboxRadius;
+        if (!float.IsFinite(localPosition.X) ||
+            !float.IsFinite(localPosition.Y) ||
+            !float.IsFinite(localPosition.Z) ||
+            !float.IsFinite(enemyPosition.X) ||
+            !float.IsFinite(enemyPosition.Y) ||
+            !float.IsFinite(enemyPosition.Z) ||
+            !float.IsFinite(localHitbox) ||
+            !float.IsFinite(enemyHitbox) ||
+            localHitbox < 0f ||
+            enemyHitbox < 0f)
+        {
+            return false;
+        }
+
+        var centerDistance = Vector3.Distance(localPosition, enemyPosition);
+        if (!float.IsFinite(centerDistance)) return false;
+        var edgeDistance = MathF.Max(0f, centerDistance - localHitbox - enemyHitbox);
+        if (edgeDistance <= SmartTargetMeleeRangeYalms)
+        {
+            tier = SmartTargetReachTier.Melee;
+            return true;
+        }
+
+        var gapCloserRange = localJobId switch
+        {
+            20 => 20f, // MNK Thunderclap
+            22 => 20f, // DRG High Jump
+            30 => 20f, // NIN Forked Raiju
+            34 => 20f, // SAM Hissatsu: Soten
+            39 => 15f, // RPR Hell's Ingress forward dash
+            41 => 20f, // VPR Slither
+            _ => 0f,
+        };
+        if (gapCloserRange <= 0f || edgeDistance > gapCloserRange) return false;
+        tier = SmartTargetReachTier.GapCloser;
+        return true;
+    }
+
+    private static bool HasActiveGuardStatus(IPlayerCharacter player)
+    {
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId is not (EnemyCombatConstants.GuardStatusId or
+                EnemyCombatConstants.GuardStatusAlternateId))
+            {
+                continue;
+            }
+
+            if (float.IsFinite(status.RemainingTime) && status.RemainingTime > 0f)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool IsAlly(IPlayerCharacter player, HashSet<uint> partyEntityIds) =>
         partyEntityIds.Contains(player.EntityId) ||
         (player.StatusFlags & (StatusFlags.PartyMember | StatusFlags.AllianceMember)) != 0;
@@ -2567,6 +3380,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             : null;
     }
 
+    private sealed class ExplicitAutoGuardBreakScope : IDisposable
+    {
+        private int disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            explicitAutoGuardBreakBypassDepth = Math.Max(
+                0,
+                explicitAutoGuardBreakBypassDepth - 1);
+        }
+    }
+
     private static NearAssistAllyRole GetRolePreference(IPlayerCharacter player)
     {
         var jobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
@@ -2607,6 +3433,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint CarrierEnemyEntityId,
         ulong CarrierEnemyGameObjectId,
         long ExpiresAtMilliseconds);
+
+    private readonly record struct ArmedSmartTarget(
+        uint TerritoryId,
+        uint LocalEntityId,
+        ulong LocalGameObjectId,
+        uint CarrierEnemyEntityId,
+        ulong CarrierEnemyGameObjectId,
+        long ExpiresAtMilliseconds);
+
+    private readonly record struct SmartTargetRuntimeCandidate(
+        IPlayerCharacter Player,
+        SmartTargetSelectionCandidate Selection);
 
     private readonly record struct ArmedNearHelpTarget(
         uint TerritoryId,

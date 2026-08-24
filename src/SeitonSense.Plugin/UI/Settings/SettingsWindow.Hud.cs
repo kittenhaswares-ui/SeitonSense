@@ -51,6 +51,25 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Enemy Limit Break activations", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Show active enemy LB icons above exact native nameplates",
+                configuration.ShowEnemyLimitBreaksOnNameplates,
+                value => configuration.ShowEnemyLimitBreaksOnNameplates = value);
+            changed |= Slider(
+                "LB nameplate icon size",
+                configuration.LimitBreakNameplateScale,
+                0.75f,
+                1.75f,
+                value => configuration.LimitBreakNameplateScale = value,
+                "%.2f x");
+            ImGui.TextDisabled(
+                "Duration LBs keep their verified countdown. Instant LBs flash briefly. Exact actor identity and a " +
+                "fresh native nameplate are required; unknown duration is never guessed.");
+        }
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Low-resource aura", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawResourceAuraControls();
 

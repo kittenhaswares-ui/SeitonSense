@@ -2,11 +2,11 @@
   {
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
-    "Punchline": "Interactive PvP combat frames, reliable held-action scheduling, LB cues, and survival helpers.",
-    "Description": "A local PvP HUD with fixed Self/S1-S5 combat frames, optional exact row targeting and mouseover, calibrated LB gauges, direct ally LB damage, pressure and CC cues, a bounded held-action scheduler, reactive counter-CC, survival and job helpers, explicit PvP macros, low-MP Focus, assists, team communication, and target highlights.",
+    "Punchline": "Exact PvP nameplate/LB cues, reliable held helpers, Smart Target, and survival tools.",
+    "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, Smart Target and assist macros, local MP sounds, survival/job helpers, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.29.0.1",
-    "Changelog": "Hotfixes the default-off exact-CC NIN Auto-Seiton helper so it never ranks or dispatches into Guardian's target-side Covered status, a Paladin's Phalanx self-invulnerability, or Dark Knight Eventide's Undead Redemption. Guard/Wehr itself, the covering Paladin, and Phalanx's party mitigation remain valid. The frozen actor is rechecked before retry, optional cast cancellation, and the final native request; protection drift retires that exact epoch without a call, alternate, or replay. Seiton execute/preparation cues clear while protected, metadata drift disables the helper, and diagnostics expose the blocking status. Manual Seiton and /panicshu are unchanged; schema 31 and every existing option are preserved.",
+    "AssemblyVersion": "0.30.0.0",
+    "Changelog": "Adds a visible /autoseiton ON/OFF tile with ready sparkle while retaining held-key consent and Purify-first priority; /smarttab ranks exact reachable harmful-action targets with <t> fallback. BRD/WHM/NIN protection-end counter-CC now freezes at release and waits inside a 3-second lease, while Guardian can rescue 21-35% HP allies only under fresh exact 3+ pressure. A client-accepted automatic Guard now blocks accidental Action/PvPAction cancellation through its exact live status, while Guard reuse remains deliberate release. Retires Combat Frames and moves enemy LB icons/durations to native nameplates, with a safe self LB banner and ally LB damage feed. Adds local 4000/2000 MP sounds and a one-time What's New popup for every release. Custom-repo listing is visible again; schema 32.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -21,17 +21,17 @@
       "focus-target",
       "dark-knight",
       "sage",
-      "combat-frames",
+      "smart-target",
       "limit-break",
       "targeting",
       "survival",
       "utility"
     ],
-    "IsHide": true,
+    "IsHide": false,
     "IsTestingExclusive": false,
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787373604"
+    "LastUpdate": "1787565467"
   }
 ]

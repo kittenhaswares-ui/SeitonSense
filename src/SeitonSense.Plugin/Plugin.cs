@@ -13,10 +13,14 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
+    private const string CurrentReleaseVersion = "0.30.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
     private const string NearAssistAliasCommand = "/ssassist";
+    private const string SmartTargetCommand = "/smarttab";
+    private const string SmartTargetAliasCommand = "/sstarget";
+    private const string AutoSeitonCommand = "/autoseiton";
     private const string NearHelpCommand = "/nearhelp";
     private const string NearHelpAliasCommand = "/sshelp";
     private const string FarHelpCommand = "/farhelp";
@@ -36,6 +40,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoLowMpFocusTargetService autoLowMpFocusTarget;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
+    private readonly AutoSeitonToggleWindow autoSeitonToggle;
+    private readonly WhatsNewWindow whatsNew;
     private readonly NearAssistRedirector nearAssist;
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly PanicShukuchiService panicShukuchi;
@@ -43,14 +49,14 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
-    private readonly CombatFramesSnapshotService combatFramesSnapshots;
+    private readonly LimitBreakNotificationRenderer limitBreakNotifications;
     private readonly CombatLimitBreakRuntimeService combatLimitBreakRuntime;
-    private readonly CombatFrameLimitGaugeService combatFrameLimitGauge;
-    private readonly CombatFramesTargetingService combatFramesTargeting;
-    private readonly CombatFramesRenderer combatFrames;
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
+    private readonly bool smartTargetCommandRegistered;
+    private readonly bool smartTargetAliasRegistered;
+    private readonly bool autoSeitonCommandRegistered;
     private readonly bool nearHelpCommandRegistered;
     private readonly bool nearHelpAliasRegistered;
     private readonly bool farHelpCommandRegistered;
@@ -107,8 +113,8 @@ public sealed class Plugin : IDalamudPlugin
             machinistLimitBreakCapture.CombatLimitBreakCaptureBuffer,
             combatLimitBreakMetadata,
             () => configuration.Enabled &&
-                  configuration.ShowCombatFrames &&
-                  (configuration.CombatFramesShowLimitBreaks ||
+                  (configuration.ShowEnemyLimitBreaksOnNameplates ||
+                   configuration.ShowLimitBreakActivationMessages ||
                    configuration.ShowAllyLimitBreakDamageEvents),
             () => configuration.ShowAllyLimitBreakDamageEvents);
         pressureTracker = new TargetPressureTracker(
@@ -190,6 +196,7 @@ public sealed class Plugin : IDalamudPlugin
             interop,
             framework,
             pressureTracker,
+            tracker,
             smartWardensPaean,
             ccImmunityBrake,
             darkKnightShadowbringer,
@@ -216,6 +223,7 @@ public sealed class Plugin : IDalamudPlugin
             clientState,
             objectTable,
             dutyState,
+            nearAssist,
             log,
             metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
@@ -245,73 +253,69 @@ public sealed class Plugin : IDalamudPlugin
             resourceAuraAnchors,
             gameGui,
             textureProvider);
-        combatFramesSnapshots = new CombatFramesSnapshotService(
-            objectTable,
-            framework,
-            log,
-            tracker,
-            pressureTracker,
-            metadata,
-            () => configuration.Enabled && configuration.ShowCombatFrames,
-            () =>
-            {
-                var current = targetManager.Target;
-                var focus = targetManager.FocusTarget;
-                return new CombatFrameTargetSelection(
-                    current is not null && current.Address != nint.Zero && current.IsValid()
-                        ? new TargetPressureActorIdentity(current.GameObjectId, current.EntityId)
-                        : default,
-                    focus is not null && focus.Address != nint.Zero && focus.IsValid()
-                        ? new TargetPressureActorIdentity(focus.GameObjectId, focus.EntityId)
-                     : default);
-            });
-        combatFrameLimitGauge = new CombatFrameLimitGaugeService(
-            clientState,
-            objectTable,
-            framework,
-            gameGui,
-            tracker,
-            log,
-            () => configuration.Enabled &&
-                  configuration.ShowCombatFrames &&
-                  configuration.CombatFramesShowLimitBreaks);
-        combatFramesTargeting = new CombatFramesTargetingService(
-            clientState,
-            objectTable,
-            targetManager,
-            framework,
-            tracker,
-            log);
-        combatFrames = new CombatFramesRenderer(
-            combatFramesSnapshots,
-            combatFramesTargeting,
+        overlay.AttachCombatLimitBreakRuntime(
             combatLimitBreakRuntime,
-            combatFrameLimitGauge,
+            () => configuration.Enabled && configuration.ShowEnemyLimitBreaksOnNameplates);
+        limitBreakNotifications = new LimitBreakNotificationRenderer(
+            combatLimitBreakRuntime,
             gameGui,
             textureProvider,
             log,
-            () => new CombatFramesOptions(
-                configuration.Enabled && configuration.ShowCombatFrames,
-                false,
-                configuration.CombatFramesEnableInteraction,
-                configuration.CombatFramesEnemyScreenX,
-                configuration.CombatFramesEnemyScreenY,
-                configuration.CombatFramesSelfScreenX,
-                configuration.CombatFramesSelfScreenY,
-                configuration.CombatFramesScale,
-                configuration.CombatFramesBackgroundOpacity,
-                configuration.CombatFramesShowNames,
-                configuration.CombatFramesShowExactValues,
-                configuration.CombatFramesShowStatuses,
-                configuration.CombatFramesShowPressure,
-                configuration.CombatFramesShowLimitBreaks,
-                configuration.ShowAllyLimitBreakDamageEvents));
+            () => new LimitBreakNotificationOptions(
+                configuration.Enabled,
+                configuration.ShowLimitBreakActivationMessages,
+                configuration.ShowAllyLimitBreakDamageEvents,
+                configuration.LimitBreakFeedShowNames,
+                configuration.PersonalWarningScale,
+                configuration.PersonalWarningBackgroundOpacity));
         pressureCounter = new PressureCounterWindow(
             configuration,
             pressureTracker,
             textureProvider,
             gameGui,
             pluginInterface);
+        autoSeitonToggle = new AutoSeitonToggleWindow(
+            objectTable,
+            textureProvider,
+            gameGui,
+            log,
+            () =>
+            {
+                var diagnostics = tracker.Diagnostics;
+                var context = diagnostics.IsCrystallineConflict
+                    ? SupportedPvPContext.CrystallineConflict
+                    : diagnostics.IsWolvesDen
+                        ? SupportedPvPContext.WolvesDen
+                        : SupportedPvPContext.None;
+                return new AutoSeitonToggleWidgetOptions(
+                    configuration.Enabled,
+                    context,
+                    diagnostics.SeitonMetadataVerified,
+                    configuration.EnableNinjaSeitonOnHeldGameplayKey);
+            },
+            enabled =>
+            {
+                configuration.EnableNinjaSeitonOnHeldGameplayKey = enabled;
+                configuration.Save();
+            });
+        whatsNew = new WhatsNewWindow(
+            CurrentReleaseVersion,
+            [
+                "Auto-Seiton now has a visible ON/OFF action-bar tile and /autoseiton macro toggle; held-key consent is still required.",
+                "Smart Target (/smarttab) picks a reachable harmful-action target, while your selected target stays the fallback.",
+                "Held BRD/WHM follow-ups and Paladin Guardian react earlier; accepted Auto-Guard now resists accidental action presses.",
+                "Enemy LB icons moved to native nameplates; your LB banner and ally LB damage feed remain without Combat Frames.",
+                "Your own MP can now play separate one-shot warnings at 4,000 and 2,000 MP.",
+            ],
+            () => !string.Equals(
+                configuration.LastSeenReleaseNotesVersion,
+                CurrentReleaseVersion,
+                StringComparison.Ordinal),
+            () =>
+            {
+                configuration.LastSeenReleaseNotesVersion = CurrentReleaseVersion;
+                configuration.Save();
+            });
         settingsWindow = new SettingsWindow(
             configuration,
             tracker,
@@ -319,9 +323,10 @@ public sealed class Plugin : IDalamudPlugin
             overlay,
             pressureTracker,
             isolationAwareness,
-            pressureCounter,
-            combatFrames);
+            pressureCounter);
         windowSystem.AddWindow(pressureCounter);
+        windowSystem.AddWindow(autoSeitonToggle);
+        windowSystem.AddWindow(whatsNew);
         windowSystem.AddWindow(settingsWindow);
 
         const string help =
@@ -359,6 +364,48 @@ public sealed class Plugin : IDalamudPlugin
                 (nearAssistAliasRegistered
                     ? "Disable it and reload, or use /ssassist meanwhile."
                     : "Disable it and reload before using the integrated helper."));
+        }
+
+        const string smartTargetHelp =
+            "CC-only one-shot harmful-action target selector. Macro: /smarttab, then /pvpac with <e1>, then the same action with <t>. The current target is fallback only.";
+        smartTargetCommandRegistered = commandManager.AddHandler(
+            SmartTargetCommand,
+            new CommandInfo(OnSmartTargetCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = smartTargetHelp,
+            });
+        smartTargetAliasRegistered = commandManager.AddHandler(
+            SmartTargetAliasCommand,
+            new CommandInfo(OnSmartTargetCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = smartTargetHelp,
+            });
+        if (!smartTargetCommandRegistered)
+        {
+            log.Warning(
+                "/smarttab is already owned by another plugin; /sstarget registered={Registered}.",
+                smartTargetAliasRegistered);
+            chatGui.PrintError(
+                "[Seiton Sense] /smarttab is owned by another plugin. " +
+                (smartTargetAliasRegistered
+                    ? "Use /sstarget meanwhile."
+                    : "Disable the conflicting plugin and reload."));
+        }
+
+        autoSeitonCommandRegistered = commandManager.AddHandler(
+            AutoSeitonCommand,
+            new CommandInfo(OnAutoSeitonCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = "Toggle NIN Auto-Seiton. Optional argument: on, off, or toggle.",
+            });
+        if (!autoSeitonCommandRegistered)
+        {
+            log.Warning("/autoseiton is already owned by another plugin; the Auto-Seiton toggle command is unavailable.");
+            chatGui.PrintError(
+                "[Seiton Sense] /autoseiton is owned by another plugin. Disable the conflict and reload before using the toggle macro.");
         }
 
         const string nearHelpHelp =
@@ -475,9 +522,6 @@ public sealed class Plugin : IDalamudPlugin
         nearAssist.Start();
         personalStatus.Start();
         combatLimitBreakRuntime.Start();
-        combatFrameLimitGauge.Start();
-        combatFramesSnapshots.Start();
-        combatFramesTargeting.Start();
     }
 
     public void Dispose()
@@ -487,6 +531,9 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
         if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
+        if (smartTargetCommandRegistered) commandManager.RemoveHandler(SmartTargetCommand);
+        if (smartTargetAliasRegistered) commandManager.RemoveHandler(SmartTargetAliasCommand);
+        if (autoSeitonCommandRegistered) commandManager.RemoveHandler(AutoSeitonCommand);
         if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
         if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand);
@@ -498,9 +545,6 @@ public sealed class Plugin : IDalamudPlugin
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
-        combatFramesTargeting.Dispose();
-        combatFramesSnapshots.Dispose();
-        combatFrameLimitGauge.Dispose();
         combatLimitBreakRuntime.Dispose();
         personalStatus.Dispose();
         nearAssist.Dispose();
@@ -517,12 +561,10 @@ public sealed class Plugin : IDalamudPlugin
 
     private void Draw()
     {
-        // Submit transparent combat-frame hit regions before ordinary windows so
-        // settings and other plugin windows retain normal input priority.
-        combatFrames.Draw();
         windowSystem.Draw();
         targetHighlights.Draw();
         overlay.Draw();
+        limitBreakNotifications.Draw();
     }
 
     private void OpenSettings() => settingsWindow.IsOpen = true;
@@ -625,7 +667,6 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
-                combatFrames.PreviewEnabled = false;
                 break;
             case "preview":
                 overlay.PreviewEnabled = !overlay.PreviewEnabled;
@@ -638,6 +679,7 @@ public sealed class Plugin : IDalamudPlugin
                 var personal = personalStatus.Snapshot;
                 var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
+                var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
                 var recuperate = personalStatus.SmartRecuperateDiagnostics;
                 var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
@@ -651,8 +693,8 @@ public sealed class Plugin : IDalamudPlugin
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
-                var limitBreakGauge = combatFrameLimitGauge.Diagnostics;
                 var assist = nearAssist.Diagnostics;
+                var smartTarget = nearAssist.SmartTargetDiagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
@@ -673,6 +715,11 @@ public sealed class Plugin : IDalamudPlugin
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
+                    $"smart-target[cmd={smartTargetCommandRegistered},alias={smartTargetAliasRegistered}," +
+                    $"armed={smartTarget.Armed},ttl={smartTarget.RemainingMilliseconds}," +
+                    $"arm={smartTarget.ArmedCount},redirect={smartTarget.RedirectedCount}," +
+                    $"fallback={smartTarget.FallbackCount},S={smartTarget.LastEnemySlot}," +
+                    $"last={smartTarget.LastEvent}], " +
                     $"help[cmd={nearHelpCommandRegistered},armed={help.Armed},ttl={help.RemainingMilliseconds}," +
                     $"arm={help.ArmedCount},redirect={help.RedirectedCount},fallback={help.FallbackCount}," +
                     $"last={help.LastEvent}], " +
@@ -722,6 +769,12 @@ public sealed class Plugin : IDalamudPlugin
                     $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)}," +
                     $"meta={defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}," +
                     $"last={defense.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] auto-guard-protection[hook={autoGuardProtection.HookAvailable}," +
+                    $"armed={autoGuardProtection.Armed},status={autoGuardProtection.ExactGuardObserved}," +
+                    $"remaining={autoGuardProtection.RemainingMilliseconds}," +
+                    $"count={autoGuardProtection.ArmedCount}/{autoGuardProtection.BlockedActionCount}/" +
+                    $"{autoGuardProtection.ReleasedCount},last={autoGuardProtection.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] smart-recuperate[decision={recuperate.Decision}," +
                     $"reason={recuperate.Reason},action={recuperate.ResolvedActionId}," +
@@ -801,11 +854,6 @@ public sealed class Plugin : IDalamudPlugin
                     $"attempt={kardia.UseActionAttempted}/{kardia.UseActionAccepted}," +
                     $"count={kardia.AttemptCount}/{kardia.AcceptedCount}," +
                     $"resolve={kardia.CandidateResolution},last={kardia.LastEvent}]");
-                var combatFrameSnapshot = combatFramesSnapshots.Snapshot;
-                chatGui.Print(
-                    $"[Seiton Sense] combat-frames[enabled={configuration.ShowCombatFrames}," +
-                    $"active={combatFrameSnapshot.Active},published={combatFrameSnapshot.PublishedAtMilliseconds}," +
-                    $"enemies={combatFrameSnapshot.Enemies.Count},preview={combatFrames.PreviewEnabled}]");
                 chatGui.Print(
                     $"[Seiton Sense] combat-lb[meta={limitBreakRuntime.MetadataVerified}," +
                     $"activations={limitBreakRuntime.VerifiedActivationActions}/" +
@@ -823,7 +871,6 @@ public sealed class Plugin : IDalamudPlugin
                     $"{limitBreakRuntime.AcceptedAllyDamageEvents}," +
                     $"rejected={limitBreakRuntime.RejectedActivations}/" +
                     $"{limitBreakRuntime.RejectedDamageEvents}]");
-                chatGui.Print($"[Seiton Sense] combat-lb-gauge[{limitBreakGauge.ToTraceLine()}]");
                 chatGui.Print(
                     $"[Seiton Sense] ninja-guard-shukuchi[decision={guardShukuchi.Decision}," +
                     $"reason={guardShukuchi.Reason},ready={guardShukuchi.LocallyReady}," +
@@ -912,7 +959,6 @@ public sealed class Plugin : IDalamudPlugin
                 overlay.IsolationWarningPreviewEnabled = false;
                 overlay.HighPressureWarningPreviewEnabled = false;
                 pressureCounter.PreviewEnabled = false;
-                combatFrames.PreviewEnabled = false;
                 pressureCounter.ResetWindowPosition();
                 break;
             case "help":
@@ -940,12 +986,14 @@ public sealed class Plugin : IDalamudPlugin
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
             "show/hide enable or disable the entire plugin; reset restores all plugin settings. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
+            "/smarttab and /sstarget arm the one-shot harmful-action Smart Target helper. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
             "CC or enabled Wolves' Den striking-dummy testing. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
+            "/autoseiton [on|off|toggle] controls whether held-key NIN Auto-Seiton is available. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");
@@ -976,6 +1024,51 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Near Help command failed closed.");
+        }
+    }
+
+    private void OnSmartTargetCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.ArmSmartTarget();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Smart Target command failed closed.");
+        }
+    }
+
+    private void OnAutoSeitonCommand(string _, string arguments)
+    {
+        try
+        {
+            var normalized = arguments.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "":
+                case "toggle":
+                    configuration.EnableNinjaSeitonOnHeldGameplayKey =
+                        !configuration.EnableNinjaSeitonOnHeldGameplayKey;
+                    break;
+                case "on":
+                    configuration.EnableNinjaSeitonOnHeldGameplayKey = true;
+                    break;
+                case "off":
+                    configuration.EnableNinjaSeitonOnHeldGameplayKey = false;
+                    break;
+                default:
+                    chatGui.PrintError("[Seiton Sense] Usage: /autoseiton [on|off|toggle].");
+                    return;
+            }
+
+            configuration.Save();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Auto-Seiton toggle command failed.");
         }
     }
 

@@ -1,12 +1,12 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.29.0.1</Version>
-    <AssemblyVersion>0.29.0.1</AssemblyVersion>
-    <FileVersion>0.29.0.1</FileVersion>
+    <Version>0.30.0.0</Version>
+    <AssemblyVersion>0.30.0.0</AssemblyVersion>
+    <FileVersion>0.30.0.0</FileVersion>
     <AssemblyName>SeitonSense.Plugin</AssemblyName>
     <RootNamespace>SeitonSense.Plugin</RootNamespace>
     <Authors>kittenhaswares-ui</Authors>
-    <Description>Fixed PvP combat frames with optional exact interaction and LB telemetry, pressure and CC cues, fail-closed reactive counter-CC, survival and job helpers, explicit PvP macros, low-MP Focus, assists, team communication, and target clarity.</Description>
+    <Description>Exact PvP nameplate and LB cues, reliable held-action scheduling, Smart Target macros, survival and job helpers, local MP warnings, and target clarity.</Description>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

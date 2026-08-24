@@ -3,19 +3,20 @@
 Seiton Sense has no account, independent server, telemetry, or external gameplay
 upload. Optional gameplay helpers can submit ordinary action, target-sign, or
 Quick Chat commands to FFXIV, and the separate default-off Auto Low-MP Focus
-helper can set only an empty local native Focus Target. When its separate
-interaction option is enabled, Combat Frames may set one freshly revalidated
-living enemy row as the hard target on click and publish that exact actor to
-FFXIV's two native mouseover slots only while hovered; ownership-checked cleanup
-never overwrites an external replacement. The separate default-off NIN Guard-
+helper can set only an empty local native Focus Target. The retired Combat
+Frames runtime has no target-click or native-mouseover path. Smart Target can
+replace only the target ID on one already incoming, exact harmful PvP macro
+action after an explicit `/smarttab` or `/sstarget` token; it does not change a
+visible hard, soft, Focus, or mouseover target. The separate default-off NIN Guard-
 Shukuchi helper may set only the exact jumped-to enemy as the hard target, and
 only after its one ground-targeted Shukuchi location request returns client-
 accepted. In particular, the separate default-off Guardian
 communication option can send one standardized Crystalline Conflict Quick Chat
 and party-visible marker commands through the normal FFXIV service after an
 automatic Guardian request is client-accepted. It embeds no character name or
-free text. Fixed Combat Frames may display character names read from the live
-client, but the plugin does not persist or transmit those names, Home Worlds,
+free text. The optional ally LB notification cards may display current character
+names read from the live client, but the plugin does not persist or transmit
+those names, Home Worlds,
 combat, target, status, or key history. Ally Rescue attempt,
 client-accepted, and confirmed-cleanse counters exist only in memory for the
 current match/plugin session and are never uploaded. To diagnose the explicitly
@@ -42,21 +43,22 @@ following data already available in the local FFXIV client:
   transiently for equality with the resolved actor and is not retained;
 - when its optional visual module is enabled, your current hard/Focus Target and
   locally available job, HP, distance, CC slot, and pressure state;
-- when fixed Combat Frames are enabled, the exact local player and canonical
-  `S1`-`S5` identities, transient character names, jobs, HP, trusted MP, relevant
-  Guard/CC/execute states, direct pressure and team-focus counts, current/Focus
-  Target identity, exact local LimitBreakController gauge, and reviewed LB
-  activation/status evidence needed to draw the six stable screen-space rows;
-- when Combat Frame interaction is enabled, the fresh exact living enemy row
-  identity, click press/release intent, current hard target, and native mouseover
-  slots needed for one revalidated target write and bounded hover ownership;
-- when remote Combat Frame LB gauges are requested, the current native CC HUD
-  instance/layout fingerprints and transient rendered track/fill rectangles used
-  to calibrate them against the exact local gauge; until that live proof is
-  complete, every remote gauge remains unknown;
+- when Smart Target is enabled and one local macro token is live, the exact
+  incoming non-area PvP action, unique canonical `S1`-`S5` candidates, Guard,
+  current HP, fresh optional team pressure, trusted MP ratio, native action
+  range/line-of-sight result, and one frozen action/actor intent;
+- when enemy LB nameplates are enabled, fresh exact canonical `S1`-`S5`
+  identities, visible native nameplate anchors, reviewed LB activation evidence,
+  and matching live status duration needed for a bounded icon/countdown or flash;
+- when self or ally LB notifications are enabled, exact local/party identities,
+  reviewed activation evidence, and optional current ally names needed for the
+  local banner or at most three transient ally cards;
 - when the ally LB damage feed is enabled, bounded ActionEffect caster, target,
   reviewed LB action, sequence, effect type, and directly decoded damage amount
   needed to attribute one event without inferring an HP delta;
+- when local MP sounds are enabled, exact local identity, a trusted current and
+  maximum MP sample, and two in-memory crossing/hysteresis latches for 4,000 and
+  2,000 MP; only built-in local FFXIV sound IDs are invoked;
 - when Auto Low-MP Focus is enabled, the native Focus Target's empty/occupied
   state, the complete exact canonical `S1`-`S5` set, trusted HP/MP samples and
   low-MP latches, local identity/text-input state, and FFXIV's native 20-yalm
@@ -161,40 +163,35 @@ slot or UI node. Actor identities, row names, bounds, and resource samples are
 not logged, persisted, transmitted, or uploaded. Exact current-patch native row
 placement remains a live-validation boundary.
 
-## Fixed Combat Frames
+## Limit Break nameplates and notifications
 
-The separate default-off Combat Frames feature runs only in exact Crystalline
-Conflict. It builds one local Self frame and exactly five stable canonical
-`S1`-`S5` rows from the live client. Each row may display the transient character
-name, job icon, current/maximum HP, trusted current/maximum MP with 2,000-MP
-divisions, relevant Guard/CC/execute states, direct incoming pressure, team
-focus, whether the exact actor is the current hard or Focus Target, and optional
-Limit Break evidence. Self's gauge is read from the exact native controller.
-Remote gauges remain `LB ?` until the current native HUD instance proves a live
-mapping against Self; elapsed time and job charge times are never used to guess
-them. Activation cards require exact reviewed action evidence. A duration
-countdown originates only from a matching live status `RemainingTime`; one
-missing sample of at most 150 ms may preserve the last exact expiry but never
-extend it. Instant cards last 1.8 seconds. The optional ally damage feed accepts
-only direct ActionEffect damage attributed to an exact ally caster/reviewed LB
-action, never HP deltas.
-Unknown,
-stale, duplicate, or ambiguous identity/resource data remains visibly unknown;
-dead or temporarily unresolved actors keep their assigned row instead of moving
-another actor into it.
+The fixed Combat Frames runtime, remote-gauge calibration, clickable rows, and
+native-mouseover publication are retired. No replacement surface draws player
+frames, guesses a remote gauge, or changes a target. The optional enemy LB cue
+runs only in exact Crystalline Conflict and only for a fresh, unique canonical
+`S1`-`S5` enemy with a visible native nameplate anchor. A reviewed activation may
+draw an icon above that nameplate. A numeric countdown is shown only while a
+matching live status provides a confirmed duration; instant or otherwise
+unconfirmed activations receive only a bounded flash. The cue stacks with the CC
+emblem without writing to or moving the native nameplate.
 
-The frames are drawn at fixed screen-space positions and never use world
-projection or native nameplate placement. With the separate interaction option,
-only a fresh, living, exact canonical enemy row accepts input: a completed click
-freezes and revalidates that actor before one hard-target write, while hover may
-publish it through FFXIV's native mouseover slots. Self, preview, dead/unknown
-rows, stale snapshots, and gaps are click-through. There is no retry, and an
-external mouseover replacement wins. Soft and Focus Targets are not changed.
-The plugin never hides or edits FFXIV's parameter bar or enemy list; users must
-hide those elements manually in HUD Layout if they want the overlay to visually
-replace them. Names, actor identities, resource/status/LB samples, damage events,
-interaction intents, pressure, target accents, and layout snapshots remain
-bounded in memory and are not logged, persisted, transmitted, or uploaded.
+Separate local-only notification options can draw a top-center self
+`LB ACTIVATED!` banner and up to three left-side ally damage cards. Ally cards
+accept only a direct ActionEffect positive-damage record attributed to an exact
+party caster and reviewed LB action, never an inferred HP delta. The optional
+name leaf reads only the ally's current client name for that transient card.
+Activation evidence, names, actor identities, durations, damage events, card
+state, and nameplate bounds remain bounded in memory and are not logged,
+persisted, transmitted, or uploaded.
+
+## Local MP warning sounds
+
+This optional local-only feature requires an exact trusted 10,000 maximum-MP
+sample. It watches only downward crossings of 4,000 and 2,000 MP with independent
+hysteresis latches. A direct crossing of both thresholds plays only the critical
+2,000-MP sound. It invokes configured built-in FFXIV sound IDs; it does not
+download, record, persist, transmit, or upload audio or MP history. Unknown or
+untrusted MP fails closed, and the latches reset with context/player lifetime.
 
 ## Pressure tracking
 
@@ -216,7 +213,7 @@ actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
 When optional Ally Rescue, Near Help pressure preference, reactive Guard,
-Paladin Guardian, NIN Guard-Shukuchi, Smart Paean, or Combat Frames are enabled,
+Paladin Guardian, NIN Guard-Shukuchi, Smart Paean, or Smart Target are enabled,
 the same current-frame enemy hard/cast identities can also be reduced to unique
 incoming-pressure counts for the local player and/or exact party members. Smart Kardia does not
 keep this ally scan running while idle: one client-accepted Eukrasia trigger
@@ -256,10 +253,10 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > reactive counter-CC > Ally
-Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH Critical Strategy
-> DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event
-Kardia > event Monk**. The seven job-specific physical-hold helpers share the
+The current action-request priority is **Purify > NIN Seiton > reactive
+counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
+Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint
+> event Kardia > event Monk**. The seven job-specific physical-hold helpers share the
 second tier and use that deterministic urgency order; reactive counter-CC leads ally cleanse because
 its LB and protection-end windows are shorter. One framework frame permits at
 most one held-helper native boundary, but a continuously held key remains consent
@@ -410,6 +407,24 @@ block does not invoke the downstream/original function. Aggregate resolution
 counts and the latest original, forwarded, and effective target IDs, invocation
 mode, and resolution result are retained only in memory for diagnostics.
 Incoming identities and protection state are not persisted or transmitted.
+
+## One-shot Smart Target
+
+Smart Target shares the default-off macro-helper master and runs only in exact
+Crystalline Conflict. `/smarttab` or `/sstarget` creates one local token lasting
+at most 750 ms. The authored macro then supplies the harmful action first with
+`<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
+does not read or retain the macro text and does not require a current target.
+
+Only an exact non-area PvP hostile action and one complete, unique canonical
+`S1`-`S5` set may qualify. Live Guard is excluded. Candidates rank by native
+reach tier first (melee, gap closer, then ranged/other), followed by lowest HP,
+fresh positive team pressure, known Guard-cooldown unavailability, trusted MP
+ratio, and stable S-slot/identity. The token is consumed before selection. One
+action and actor freeze and are finally revalidated; drift suppresses that
+carrier call without reranking, alternate, or retry, leaving only the authored
+`<t>` line. The plugin creates no action, changes no selected target, stores no
+input, and persists or uploads none of these observations.
 
 ## One-shot Near Assist
 
@@ -605,7 +620,7 @@ lookup during synchronous plugin startup.
 Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
 the same exact key may remain consent for a later distinct Purify, counter-CC,
-ally cleanse, Guardian, NIN Guard-Shukuchi, NIN Seiton, SCH, DRK, Recuperate,
+NIN Seiton, ally cleanse, Guardian, NIN Guard-Shukuchi, SCH, DRK, Recuperate,
 Guard, or pressure Sprint episode. Enabling an option while a key is already
 down still requires a release and new press. Release, text input, context/job/identity loss, death, metadata
 failure, or reset clears the relevant leases. Own Guard suppresses every native
@@ -645,8 +660,8 @@ are neither persisted nor uploaded.
 ## Experimental held-action cast cancellation
 
 This separate test is disabled by default. It applies only to otherwise-ready
-exact physical-hold intents for Purify, reactive counter-CC, Ally Rescue,
-Guardian, NIN Guard-Shukuchi, NIN Seiton, SCH Critical Strategy, DRK Hiebsprung,
+exact physical-hold intents for Purify, NIN Seiton, reactive counter-CC, Ally
+Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung,
 Smart Recuperate, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
 
@@ -823,14 +838,17 @@ Guardian readiness, physical gameplay-key generation, and FFXIV's native
 Guardian range/line-of-sight result. It does not depend on the reactive-Guard
 module's master setting.
 
-The exact living, targetable, non-self party member must be at or below 20% HP,
-pass FFXIV's native 20-yalm Guardian range/line-of-sight check, and remain exact.
-No custom center-distance cap is applied; the 10-yalm condition governs staying
-close enough for protection after the jump. Candidate ranking uses exact HP
-ratio, known incoming pressure, distance, and stable party identity. Purify,
+An exact living, targetable, non-self party member at or below 20% HP is a
+critical candidate without a pressure requirement. From 21% through 35% HP, a
+candidate is proactive-only and requires at least three exact incoming hard/cast
+targets from a publication no older than 250 ms. A critical candidate always
+beats a proactive candidate; proactive ties rank higher pressure first, then
+lower exact HP, before deterministic identity tie-breakers. The frozen winner
+must pass FFXIV's native 20-yalm Guardian range/line-of-sight check and remain
+exact. No custom center-distance cap is applied; the 10-yalm condition governs
+staying close enough for protection after the jump. Purify, NIN Seiton,
 reactive counter-CC, and Ally Rescue keep priority. Guardian precedes NIN Guard-
-Shukuchi, NIN Seiton, SCH, DRK, Smart Recuperate, generic Guard, and pressure
-Sprint.
+Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, and pressure Sprint.
 Guardian freezes the selected ally and may use only the common bounded exact-
 intent retry before a direct native `29066` request is accepted. It does not
 change the visible target, select an alternate action/ally, or replay input.
@@ -948,18 +966,28 @@ boundaries.
 
 When own Guard is active, every scheduled or automatic Seiton Sense action-
 request helper is suppressed. The explicit manual `/panicshu` command is the
-sole exception and may intentionally break own Guard with one immediate request.
-The bounded reactive observer may keep an already eligible enemy startup,
-Purify, or Guard reservation in memory, but it cannot dispatch that reservation
-through own Guard.
-The same in-memory suppression begins immediately after an exact local Guard
-request and expires after 1.5 seconds unless the real Guard status takes over; the
-same observed request cannot extend or rearm it. This prevents the plugin from
-cancelling Guard; it does not intercept or prevent manual FFXIV actions or action
-requests from another plugin. All observations, pending state, and aggregate
-attempt diagnostics are bounded in memory and are not stored as combat/key
-history or uploaded. Exact client/server action ordering remains a live-validation
-boundary.
+sole helper exception and may intentionally break own Guard with one immediate
+request. The bounded reactive observer may keep an already eligible enemy
+startup, Purify, or Guard reservation in memory, but it cannot dispatch that
+reservation through own Guard.
+
+In addition, only an exact client-accepted Guard request produced by the plugin's
+automatic Guard helper can arm temporary cancellation ownership. Auto-Guard does
+not dispatch unless both central `UseAction` and `UseActionLocation` hooks are
+enabled. Before any macro token can be consumed, those boundaries block only a
+metadata-resolved PvP `Action`/`PvPAction` that is not Guard; the location boundary
+also covers deferred and ground-location calls. The first 1.5 seconds bridge
+native acceptance to a full exact live Guard-status observation; after that
+observation, protection follows the status until it ends. An explicit Guard reuse
+is always allowed and atomically releases ownership whether its incoming or
+resolved ID is Guard. Manual Guard is observed but never owned. The dedicated
+`/panicshu` scope releases ownership before forwarding its location request even
+if native Shukuchi rejects it. Disabled/runtime or context, territory, player,
+identity, and availability drift, unknown or non-PvP action resolution, status
+end, missing propagation, exceptions, and a hard six-second maximum all release
+or fail open. All ownership state and aggregate diagnostics remain bounded in
+memory and are not persisted or uploaded; source checks do not prove server-side
+Guard timing.
 
 ## Experimental WHM/BRD/NIN reactive counter-CC
 
@@ -986,8 +1014,10 @@ action, and event epoch without binding a key. A finite, positive,
 catalog-bounded `RemainingTime` may establish only a non-extending expected end;
 live status-list membership remains authoritative. The first real absent frame
 at or after that end is eligible immediately, while early or untimed absence
-still requires 150 ms of continuous proof. The signal dispatches directly to
-the frozen actor without
+still requires 150 ms of continuous proof. Proven absence opens a strict,
+non-extending 500-ms edge in which the current exact key may bind; it does not
+invent or carry a key while protection is live. The signal dispatches directly
+to the frozen actor without
 requiring or changing the selected target. There is no minimum team-pressure
 count. Each verified Resilience end creates only a bounded exact protection-end
 episode in memory. The runtime keeps at most one active post-Purify state per
@@ -1003,31 +1033,34 @@ The separate optional post-Guard path observes only exact Guard `3054` or `3673`
 present on one live canonical `S1`-`S5` enemy. Its first exact presence remembers
 the actor, local action, Guard epoch, and the same kind of bounded non-extending
 duration hint without binding a key. The first verified framework observation
-that finds Guard absent exposes one bounded exact protection-end opportunity,
-including an early manual Guard cancel. At that authoritative absence, or only
-inside its original 500-ms release window, the episode may bind the current
-eligible held/fresh generation. After binding, key release retires that intent;
+that finds Guard absent exposes one strict, non-extending 500-ms key-acquisition
+opportunity, including an early manual Guard cancel. Only a current eligible
+held/fresh generation acquired inside that original edge can bind the episode.
+After binding, key release retires that intent;
 the same uninterrupted Guard remains retired through missing or ambiguous
 samples until exact absence separates a later episode. It retains only the exact
 identity, optional bound key, hint, and bounded lifecycle in memory, with no
 minimum team-pressure count. Any identity, context, protection,
-native range, or line-of-sight uncertainty fails closed. It never requires or
+native range, or line-of-sight uncertainty prevents dispatch. It never requires or
 switches the selected target, chooses an alternate action/actor, or replays
 input. Only a clean native rejection may retain the same frozen intent under the
 shared bounded retry policy.
 
 When multiple exact post-Purify or post-Guard releases are simultaneously
-eligible, each actor must first pass exact counter-specific protection, native
-range, and line-of-sight checks. Selection then reads each remaining candidate's
-fresh exact team-target count, current/maximum HP, and trusted current/maximum
-MP. Only a fresh exact pressure
+eligible, selection occurs once an exact key is acquired inside the original
+500-ms protection-end edge, before native range and line-of-sight are used as
+dispatch gates. Selection reads each candidate's fresh exact team-target count,
+current/maximum HP, and trusted current/maximum MP. Only a fresh exact pressure
 count above zero earns a ranking bonus, with higher positive counts first. Known
 zero, unknown, or stale pressure is neutral and never excludes or delays a
 candidate. Lower HP ratio follows, then lower trusted MP ratio and stable
-canonical slot/identity. Exactly one winner is selected.
-Every simultaneous loser is terminal and cannot become a fallback attempt. These
-values and the frozen winning actor are retained only in bounded in-memory helper
-state.
+canonical slot/identity. Exactly one winner is selected. Every simultaneous
+loser is terminal and cannot become a fallback attempt. Guard retires every
+simultaneous loser before a higher-priority wait, so no later rank change or alternate can
+replace the winner. The winning actor and key freeze once; cast,
+queue, animation-lock, range, and line-of-sight gates may wait only until three
+seconds from the original release. These values and the frozen winning actor are
+retained only in bounded in-memory helper state.
 
 At dispatch, the enemy identity, expected triggering job, life/targetable state,
 exact still-eligible key generation, and action-specific verified protection
@@ -1041,11 +1074,12 @@ sight and the standard Purify-removable protection matrix. Forked Raiju also
 requires the exact local Sealed Forked Raiju status `3195` to be absent, and both
 variants require exact local Bind `1345` to be absent. VPR requires live
 Hardened Scales `4096` to be actually absent. The DNC opportunity expires after
-750 ms, existing MCH/SAM opportunities after 500 ms, VPR after 250 ms, and the
-post-Purify/post-Guard release opportunity after 500 ms; waiting never restarts
-a deadline. WHM and BRD keep the normal 1.5-second protection-end held lease.
-NIN alone uses 3 seconds so one verified 2.5-second Raiju recast plus the
-existing release window can complete without extending the underlying episode.
+750 ms, existing MCH/SAM opportunities after 500 ms, and VPR after 250 ms.
+Every bound post-Purify/post-Guard action uses the same three-second
+protection-end deadline measured from its original release, so one ordinary
+2.5-second GCD plus its release allowance can finish; key acquisition, waiting,
+and retry never restart or extend that deadline. An unbound opportunity still
+expires at the strict 500-ms acquisition boundary.
 
 The helper observes held gameplay-key state immediately after Purify and before
 every other job-specific helper. An urgent startup may bind the first current
@@ -1054,9 +1088,9 @@ lease. Expired or disabled leases retire, and its exact local job, action, and
 enemy are revalidated before new packets are compared.
 A later exact urgent startup may replace only an unattempted lower-priority
 reactive lease; equal/lower events and every attempted lease remain frozen.
-Purify and Guard remember the exact enemy episode while protection is
-live and may bind the current eligible generation only when authoritative
-absence opens, or inside the original 500-ms release opportunity. Once bound, a
+Purify and Guard remember the exact enemy episode while protection is live.
+Authoritative absence opens the original strict 500-ms acquisition edge, and
+only a current eligible generation acquired inside it may bind. Once bound, a
 later key cannot inherit that episode, and text input poisons the exact
 generation until real release. One continuous hold can authorize later distinct
 startup or protection-end episodes, but each selected episode remains one frozen intent and
@@ -1124,7 +1158,8 @@ the character or that Shukuchi reached the intended location.
 The local player's own Guard and bounded post-request Guard-propagation latch
 block this automatic helper. The explicit manual `/panicshu` command remains the
 sole own-Guard exception. In the shared scheduler and optional cast-cancel order,
-Guard-Shukuchi runs after PLD Guardian and before NIN Seiton. After an accepted
+Guard-Shukuchi runs after PLD Guardian and before SCH Critical Strategy; NIN
+Seiton has already had its higher-priority opportunity immediately after Purify. After an accepted
 request, the same continuously held physical key can authorize another Guard-
 Shukuchi only after the cooldown is positively observed unavailable and then
 ready again; an unknown state or a missed transition between framework samples
@@ -1143,6 +1178,11 @@ living, targetable, hostile, strictly below 50% HP, and accepted by FFXIV's
 native action range and line-of-sight check. Selection uses the lowest exact HP
 ratio, then stable enemy slot and actor identity.
 
+The `/autoseiton [on|off|toggle]` command and the NIN-only action-bar-style
+ON/OFF tile change only the same persisted opt-in. A click or command does not
+itself submit an action: a physical gameplay key must still be held when an exact
+eligible Seiton episode is selected.
+
 Automated Seiton also reads the exact candidate's live status IDs. Guardian's
 target-side Covered rows, the Paladin's Phalanx self Hallowed Ground, and Dark
 Knight Eventide's Undead Redemption make that actor ineligible. The covering
@@ -1153,10 +1193,10 @@ metadata mismatch disables this helper; no localized status text is used at
 runtime.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Purify, reactive counter-CC, Ally Rescue, and
-PLD Guardian precede Guard-Shukuchi, which precedes NIN Seiton in the current
-request order. NIN Seiton precedes SCH, DRK, Smart Recuperate, generic Guard,
-pressure Sprint, event Kardia, and event Monk.
+and its Unsealed follow-up `29516`. Purify alone precedes NIN Seiton in the
+current request order. NIN Seiton precedes reactive counter-CC, Ally Rescue, PLD
+Guardian, Guard-Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, pressure
+Sprint, event Kardia, and event Monk.
 Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
 the helper never changes the visible hard, soft, or focus target.
 
@@ -1187,8 +1227,8 @@ Current English action/status/proc metadata must independently validate before
 the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
-At the configured low-HP or expiry threshold, and only after Purify, reactive
-counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, NIN Seiton, SCH,
+At the configured low-HP or expiry threshold, and only after Purify, NIN Seiton,
+reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH,
 Hiebsprung, Smart Recuperate, generic Guard, pressure Sprint, and event Kardia
 decline or make no earlier attempt, the
 continuous resonance state is marked spent before at most one normal
@@ -1222,8 +1262,8 @@ epoch uses final revalidation and the common bounded explicit-false retry for
 only that frozen direct target, with no selected-target mutation, alternate,
 rerank, or replay.
 
-Hiebsprung closes the job-specific second tier after Purify, reactive counter-CC,
-Ally Rescue, Guardian, NIN Guard-Shukuchi, NIN Seiton, and SCH, and before Smart
+Hiebsprung closes the job-specific second tier after Purify, NIN Seiton,
+reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, and SCH, and before Smart
 Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk. Held-
 key state, cooldown observations, frozen identity, HP/status/reachability samples, action
 result, and aggregate diagnostics remain bounded in memory and are not stored as
@@ -1235,7 +1275,7 @@ server execution or damage.
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the high-pressure warning/native-sound/Sprint
-opt-ins and sound selection, the shared Near Assist/Near Help/Far Help opt-in,
+opt-ins and sound selection, the shared Smart Target/Near Assist/Near Help/Far Help opt-in,
 Near Assist search/preferences, the Near Help incoming-pressure preference,
 target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
 Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
@@ -1245,17 +1285,21 @@ trigger opt-ins, the separate held Smart Recuperate opt-in, the independent PLD
 Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN reactive
 counter-CC master/held-key/post-Purify/post-Guard/per-startup-trigger opt-ins,
 the team-visible Attack1 marker
-opt-in, resource-aura surfaces/thresholds/appearance, fixed Combat Frames master/
-interaction/LB information/layout options and ally LB damage-feed leaf, the Monk
+opt-in, resource-aura surfaces/thresholds/appearance, enemy LB nameplates and
+scale, self/ally LB activation messages, optional ally names and ally LB damage,
+local MP sounds and their two built-in sound IDs, the local What's New
+acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
 Critical Strategy held-key opt-in,
 the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
 opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
-per-action selections.
+per-action selections. Retired Combat Frames properties remain only as legacy
+configuration compatibility fields; no current runtime or settings page reads
+them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 31 is current in v0.29.0.1. The NIN Guard-Shukuchi held-
+Configuration schema 32 is current in v0.30.0.0. The NIN Guard-Shukuchi held-
 key option is forced off for upgrading configurations and remains off for fresh
 and Reset Defaults configurations because it initiates an action and may set the
 exact hard target after client acceptance. Panic Shukuchi remains command-only
@@ -1267,11 +1311,14 @@ configurations. An older explicitly enabled fresh-edge NIN Seiton option still
 traverses schema 29, migrates to the replacement held-key option, and clears the
 obsolete compatibility field. Every other existing master/helper choice is
 preserved. Older configurations still traverse the earlier migrations first,
-including schema 28's default-off post-Guard migration. Fresh and reset
-configurations keep NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, the Combat
-Frames master, and all other action-helper masters off; post-Guard defaults on
-only behind the disabled reactive-counter master. Interaction and both LB
-details also default on behind the disabled frame master. Configuration does not
+including schema 28's default-off post-Guard migration. Schema 32 forces the
+retired Combat Frames master off, maps its optional name preference to the ally
+LB feed, enables the replacement LB surfaces, and initializes local MP sounds to
+built-in IDs 4 and 6. Fresh and reset configurations keep NIN Guard-Shukuchi,
+Smart Recuperate, Hiebsprung, Smart Target/other macro helpers, and all other
+action-helper masters off; post-Guard defaults on only behind the disabled
+reactive-counter master. The replacement LB and local-MP presentation options
+default on but neither submits an action nor changes a target. Configuration does not
 save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground

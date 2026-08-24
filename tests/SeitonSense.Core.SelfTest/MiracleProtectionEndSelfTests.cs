@@ -220,7 +220,8 @@ internal static class MiracleProtectionEndSelfTests
     internal static void HeldLeaseSurvivesPriorityAndRetriesOnlyInsideItsBound()
     {
         const long observedAt = 1_000;
-        Equal(1_500L, MiracleProtectionEndRules.HeldLeaseMilliseconds, "held episode lease");
+        Equal(3_000L, MiracleProtectionEndRules.HeldLeaseMilliseconds,
+            "every protection-end counter keeps one ordinary GCD plus its release allowance");
         Equal(3_000L, MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds,
             "NIN keeps one verified 2.5-second weaponskill recast plus the 500 ms release allowance");
         True(
@@ -241,14 +242,14 @@ internal static class MiracleProtectionEndSelfTests
             MiracleProtectionEndRules.CanAttempt(
                 HeldActionRetryState.Initial,
                 observedAt,
-                nowMilliseconds: 1_600),
-            "a higher-priority accepted action may finish before exact counter-CC dispatch");
+                nowMilliseconds: 3_999),
+            "a cast or higher-priority accepted action may finish before exact counter-CC dispatch");
         False(
             MiracleProtectionEndRules.CanAttempt(
                 HeldActionRetryState.Initial,
                 observedAt,
-                nowMilliseconds: 2_500),
-            "the 1500 ms deadline remains exclusive");
+                nowMilliseconds: 4_000),
+            "the shared 3000 ms deadline remains exclusive");
         True(
             MiracleProtectionEndRules.CanAttempt(
                 HeldActionRetryState.Initial,
