@@ -63,7 +63,7 @@ internal static class SmartTabSelectionSelfTests
             valid with { CurrentHp = 0 },
             valid with { MaximumHp = 0 },
             valid with { CurrentHp = 101, MaximumHp = 100 },
-            valid with { ReachTier = SmartTargetReachTier.RangedOrOther },
+            valid with { ReachTier = (SmartTargetReachTier)255 },
         };
         foreach (var candidate in ineligible)
         {
@@ -71,6 +71,12 @@ internal static class SmartTabSelectionSelfTests
                 "every exact live hostile non-Guard melee gate is required");
             Equal(-1, Select([candidate]), "an ineligible candidate cannot be selected");
         }
+
+        True(
+            SmartTabSelectionRules.IsEligibleCandidate(
+                valid with { ReachTier = SmartTargetReachTier.RangedOrOther },
+                LocalPlayer),
+            "a caller-proven reviewed ranged tier is eligible");
 
         Equal(-1, Select([
             Candidate(1),

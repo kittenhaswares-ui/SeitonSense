@@ -92,7 +92,7 @@ internal sealed record SmartTabTargetingDiagnostics(
 
 /// <summary>
 /// Replaces only FFXIV's native world-target forward cycle in exact CC on
-/// reviewed melee jobs. FFXIV reaches this function after its own logical
+/// reviewed melee and ranged DPS jobs. FFXIV reaches this function after its own logical
 /// TARGET_NEXT binding and UI/input gates, so remaps remain native while reverse
 /// targeting and unrelated inputs never become owned requests. Toggle-off,
 /// unsupported jobs, and unsupported contexts call the original cycle unchanged.
@@ -340,7 +340,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
                 InsideNativeTargetingHandler: nativeTargetingHandlerDepth > 0,
                 ExactCrystallineConflict:
                     IsExactCrystallineConflictContext(executeTracker.Diagnostics),
-                ReviewedMeleeJob: SmartTargetReachRules.IsReviewedMeleeJob(localJobId),
+                ReviewedSmartTabJob: SmartTargetReachRules.IsReviewedSmartTabJob(localJobId),
                 LocalPlayerAvailable: localPlayerAvailable,
                 NativeWorldForwardCycle: true);
             if (!SmartTabInterceptionRules.ShouldConsumeNativeForwardTarget(observation))
@@ -423,13 +423,13 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
 
             var local = localPlayer!;
             var localJobId = local.ClassJob.IsValid ? local.ClassJob.RowId : 0;
-            if (!SmartTargetReachRules.IsReviewedMeleeJob(localJobId))
+            if (!SmartTargetReachRules.IsReviewedSmartTabJob(localJobId))
             {
                 return Reject(
                     SmartTabTargetingOutcome.UnsupportedJob,
                     configured,
                     true,
-                    "Smart Tab ignored: current job is not a reviewed melee DPS",
+                    "Smart Tab ignored: current job is not a reviewed DPS",
                     localJobId);
             }
 

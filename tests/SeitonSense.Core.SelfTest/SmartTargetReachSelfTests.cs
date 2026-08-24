@@ -22,11 +22,35 @@ internal static class SmartTargetReachSelfTests
                 $"job {pair.Key} gap cap");
         }
 
-        foreach (var job in new uint[] { 0, 19, 21, 23, 25, 27, 31, 35, 38, 42, 99 })
+        var expectedRanged = new Dictionary<uint, float>
+        {
+            [23] = 25f,
+            [25] = 25f,
+            [27] = 25f,
+            [31] = 25f,
+            [35] = 25f,
+            [38] = 15f,
+            [42] = 25f,
+        };
+        foreach (var pair in expectedRanged)
+        {
+            True(SmartTargetReachRules.IsReviewedRangedJob(pair.Key),
+                $"job {pair.Key} is reviewed ranged");
+            True(SmartTargetReachRules.IsReviewedSmartTabJob(pair.Key),
+                $"job {pair.Key} is reviewed for Smart Tab");
+            Equal(pair.Value, SmartTargetReachRules.GetReviewedRangedRangeYalms(pair.Key),
+                $"job {pair.Key} ranged cap");
+        }
+
+        foreach (var job in new uint[] { 0, 19, 21, 24, 26, 28, 32, 33, 36, 37, 40, 99 })
         {
             False(SmartTargetReachRules.IsReviewedMeleeJob(job), $"job {job} is not reviewed melee");
+            False(SmartTargetReachRules.IsReviewedRangedJob(job), $"job {job} is not reviewed ranged");
+            False(SmartTargetReachRules.IsReviewedSmartTabJob(job), $"job {job} is unsupported");
             Equal(0f, SmartTargetReachRules.GetReviewedGapCloserRangeYalms(job),
                 $"job {job} has no invented gap cap");
+            Equal(0f, SmartTargetReachRules.GetReviewedRangedRangeYalms(job),
+                $"job {job} has no invented ranged cap");
         }
     }
 
@@ -45,11 +69,21 @@ internal static class SmartTargetReachSelfTests
         True(Try(job: 39, enemyCenterX: 16f, out var reaperCap), "exact RPR 15-yalm edge is reachable");
         Equal(SmartTargetReachTier.GapCloser, reaperCap, "RPR cap tier");
         False(Try(job: 39, enemyCenterX: 16.001f, out _), "past RPR cap is rejected");
+
+        True(Try(job: 23, enemyCenterX: 26f, out var bardCap),
+            "exact BRD 25-yalm edge is reachable");
+        Equal(SmartTargetReachTier.RangedOrOther, bardCap, "BRD has one ranged tier");
+        False(Try(job: 23, enemyCenterX: 26.001f, out _), "past BRD cap is rejected");
+
+        True(Try(job: 38, enemyCenterX: 16f, out var dancerCap),
+            "exact DNC 15-yalm edge is reachable");
+        Equal(SmartTargetReachTier.RangedOrOther, dancerCap, "DNC has one ranged tier");
+        False(Try(job: 38, enemyCenterX: 16.001f, out _), "past DNC cap is rejected");
     }
 
     public static void UnknownJobsAndInvalidGeometryFailClosed()
     {
-        False(Try(job: 23, enemyCenterX: 2f, out _), "ranged job is rejected even inside melee distance");
+        False(Try(job: 24, enemyCenterX: 2f, out _), "unsupported healer is rejected even nearby");
         False(SmartTargetReachRules.TryResolveReachTier(
                 30,
                 new Vector3(float.NaN, 0f, 0f),

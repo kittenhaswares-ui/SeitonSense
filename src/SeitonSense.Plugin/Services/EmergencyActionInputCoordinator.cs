@@ -5,9 +5,9 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations.
-/// Canonical order is Purify, reactive counter-CC, Ally Rescue, PLD Guardian,
-/// NIN Guard-Shukuchi, Ninja Seiton, Scholar Critical Strategy, DRK Hiebsprung,
-/// Smart Recuperate, reactive Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia and
+/// Canonical order is Purify, Ninja Seiton / VPR Serpent's Tail, reactive
+/// counter-CC, Ally Rescue, PLD Guardian, NIN Guard-Shukuchi, Scholar Critical
+/// Strategy, DRK Hiebsprung, Smart Recuperate, reactive Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia and
 /// Monk Earth's Reply do not originate from this physical-key frame, but their
 /// attempts still suppress lower work in the runtime priority chain.
 /// Consumption is deliberately frame-local: one helper can own the current
@@ -72,6 +72,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool darkKnightPlungeHeldWasEnabled;
     private bool ninjaGuardShukuchiHeldWasEnabled;
     private bool ninjaSeitonHeldWasEnabled;
+    private bool viperSerpentTailHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -90,7 +91,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool pressureEscapeHeldEnabled = false,
         bool darkKnightPlungeHeldEnabled = false,
         bool ninjaGuardShukuchiHeldEnabled = false,
-        bool ninjaSeitonHeldEnabled = false)
+        bool ninjaSeitonHeldEnabled = false,
+        bool viperSerpentTailHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -112,7 +114,8 @@ internal sealed class EmergencyActionInputCoordinator
             (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
             (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
             (ninjaGuardShukuchiHeldEnabled && !ninjaGuardShukuchiHeldWasEnabled) ||
-            (ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled);
+            (ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled) ||
+            (viperSerpentTailHeldEnabled && !viperSerpentTailHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         paladinGuardianHeldWasEnabled = paladinGuardianHeldEnabled;
@@ -124,6 +127,7 @@ internal sealed class EmergencyActionInputCoordinator
         darkKnightPlungeHeldWasEnabled = darkKnightPlungeHeldEnabled;
         ninjaGuardShukuchiHeldWasEnabled = ninjaGuardShukuchiHeldEnabled;
         ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;
+        viperSerpentTailHeldWasEnabled = viperSerpentTailHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -171,5 +175,6 @@ internal sealed class EmergencyActionInputCoordinator
         darkKnightPlungeHeldWasEnabled = false;
         ninjaGuardShukuchiHeldWasEnabled = false;
         ninjaSeitonHeldWasEnabled = false;
+        viperSerpentTailHeldWasEnabled = false;
     }
 }

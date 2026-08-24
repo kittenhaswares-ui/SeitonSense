@@ -20,6 +20,7 @@ internal static class SmartRecuperateSelfTests
         var intent = exact.Intent ?? throw new InvalidOperationException("missing intent");
         Equal(SmartRecuperateRules.ActionId, intent.ActionId, "frozen action");
         Equal(LocalPlayer, intent.LocalPlayer, "frozen self");
+        Equal(SupportedPvPContext.CrystallineConflict, intent.Context, "frozen context");
         Equal(HeldKey, intent.FrozenKeyCode, "frozen exact key");
         Equal(84_000u, intent.TriggerCurrentHp, "frozen HP event");
         Equal(100_000u, intent.TriggerMaximumHp, "frozen max HP");
@@ -49,7 +50,10 @@ internal static class SmartRecuperateSelfTests
     public static void EveryInitialSafetyGateFailsClosed()
     {
         Gate(Observation() with { ConfigurationEnabled = false }, SmartRecuperateDecisionReason.ConfigurationDisabled);
-        Gate(Observation() with { IsCrystallineConflict = false }, SmartRecuperateDecisionReason.OutsideCrystallineConflict);
+        Gate(Observation() with { Context = SupportedPvPContext.None }, SmartRecuperateDecisionReason.OutsideSupportedPvPContext);
+        Dispatch(
+            Observe(Observation() with { Context = SupportedPvPContext.WolvesDen }),
+            "explicit Wolves' Den test context");
         Gate(Observation() with { LocalPlayer = default }, SmartRecuperateDecisionReason.LocalPlayerIdentityInvalid);
         Gate(Observation() with { IsLocalPlayerAlive = false }, SmartRecuperateDecisionReason.LocalPlayerDead);
         Gate(Observation() with { IsLocalPlayerTargetable = false }, SmartRecuperateDecisionReason.LocalPlayerUntargetable);
@@ -78,7 +82,8 @@ internal static class SmartRecuperateSelfTests
         var intent = Intent();
         True(CanUse(intent), "exact frozen intent");
         False(CanUse(intent, configurationEnabled: false), "configuration drift");
-        False(CanUse(intent, isCrystallineConflict: false), "context drift");
+        False(CanUse(intent, currentContext: SupportedPvPContext.None), "context ended");
+        False(CanUse(intent, currentContext: SupportedPvPContext.WolvesDen), "context drift");
         False(CanUse(intent, currentLocalPlayer: new(10_002, 1_002)), "identity drift");
         False(CanUse(intent, isLocalPlayerAlive: false), "death drift");
         False(CanUse(intent, isLocalPlayerTargetable: false), "targetability drift");
@@ -93,6 +98,44 @@ internal static class SmartRecuperateSelfTests
         False(CanUse(intent, currentHeldKeyCode: 66), "key substitution");
         False(CanUse(intent, frozenKeyStillDown: false), "key released");
         False(CanUse(default), "missing intent");
+
+        var bufferedCc = Observe(Observation() with { NativeBoundaryReady = false });
+        var ccToDen = SmartRecuperateRules.Observe(
+            bufferedCc.NextState,
+            Observation() with
+            {
+                Context = SupportedPvPContext.WolvesDen,
+                NowMilliseconds = 1_001,
+            });
+        Equal(SmartRecuperateDecisionKind.Cancelled, ccToDen.Kind, "buffered CC-to-Den drift cancels");
+        Equal(SmartRecuperateDecisionReason.ContextChanged, ccToDen.Reason, "buffered context reason");
+        False(ccToDen.InputClaimed, "context cancellation never claims input");
+
+        var bufferedDen = Observe(Observation() with
+        {
+            Context = SupportedPvPContext.WolvesDen,
+            NativeBoundaryReady = false,
+        });
+        var denToCc = SmartRecuperateRules.Observe(
+            bufferedDen.NextState,
+            Observation() with { NowMilliseconds = 1_001 });
+        Equal(SmartRecuperateDecisionKind.Cancelled, denToCc.Kind, "buffered Den-to-CC drift cancels");
+        Equal(SmartRecuperateDecisionReason.ContextChanged, denToCc.Reason, "reverse context reason");
+
+        var acceptedStart = Observe(Observation());
+        var acceptedCooldown = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            acceptedStart.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+        var acceptedDrift = SmartRecuperateRules.Observe(
+            acceptedCooldown.NextState,
+            Observation() with
+            {
+                Context = SupportedPvPContext.WolvesDen,
+                NowMilliseconds = 1_001,
+            });
+        Equal(SmartRecuperateDecisionKind.Cancelled, acceptedDrift.Kind, "accepted cooldown drift cancels");
+        Equal(SmartRecuperateDecisionReason.ContextChanged, acceptedDrift.Reason, "accepted context reason");
     }
 
     public static void CleanFalseRetriesAreBounded()
@@ -210,6 +253,7 @@ internal static class SmartRecuperateSelfTests
     private static SmartRecuperateIntent Intent() => new(
         SmartRecuperateRules.ActionId,
         LocalPlayer,
+        SupportedPvPContext.CrystallineConflict,
         HeldKey,
         84_000,
         100_000,
@@ -217,7 +261,7 @@ internal static class SmartRecuperateSelfTests
 
     private static SmartRecuperateObservation Observation() => new(
         ConfigurationEnabled: true,
-        IsCrystallineConflict: true,
+        Context: SupportedPvPContext.CrystallineConflict,
         LocalPlayer,
         IsLocalPlayerAlive: true,
         IsLocalPlayerTargetable: true,
@@ -245,7 +289,7 @@ internal static class SmartRecuperateSelfTests
     private static bool CanUse(
         SmartRecuperateIntent intent,
         bool configurationEnabled = true,
-        bool isCrystallineConflict = true,
+        SupportedPvPContext currentContext = SupportedPvPContext.CrystallineConflict,
         TargetPressureActorIdentity? currentLocalPlayer = null,
         bool isLocalPlayerAlive = true,
         bool isLocalPlayerTargetable = true,
@@ -263,7 +307,7 @@ internal static class SmartRecuperateSelfTests
         SmartRecuperateRules.CanUseFrozenIntent(
             intent,
             configurationEnabled,
-            isCrystallineConflict,
+            currentContext,
             currentLocalPlayer ?? LocalPlayer,
             isLocalPlayerAlive,
             isLocalPlayerTargetable,

@@ -9,6 +9,8 @@ namespace SeitonSense.Plugin.Services;
 
 internal sealed record PvPMetadataValidation(
     bool SeitonVerified,
+    bool ViperSerpentTailVerified,
+    bool WolvesDenStrikingDummyVerified,
     bool GuardVerified,
     bool GuardianVerified,
     bool RecuperateVerified,
@@ -29,7 +31,9 @@ internal sealed record PvPMetadataValidation(
     bool AutoLowMpFocusProbeVerified,
     bool DarkKnightPlungeVerified)
 {
-    public static PvPMetadataValidation None { get; } = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static PvPMetadataValidation None { get; } = new(
+        false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false);
 }
 
 internal static class PvPMetadataGuard
@@ -75,6 +79,150 @@ internal static class PvPMetadataGuard
                        NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
                        "Undead Redemption");
         });
+
+        var viperSerpentTailVerified = ValidateFeature("Viper Serpent's Tail", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+
+            return ValidateViperSerpentTailCarrier(actions, descriptions) &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_161, ViperSerpentTailRules.DeathRattleActionId,
+                       "Barbarous Bite", 9_702, false, 5, 0, 1, 25,
+                       0, 0, 136, 58, 0, 0, 39_159, false,
+                       "potency of 7,000",
+                       "Combo Action: Hunter's Sting",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_163, ViperSerpentTailRules.DeathRattleActionId,
+                       "Ravenous Bite", 9_704, false, 5, 0, 1, 25,
+                       0, 0, 136, 58, 0, 0, 39_160, false,
+                       "potency of 7,000",
+                       "Combo Action: Swiftskin's Sting",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_166, ViperSerpentTailRules.TwinfangBiteActionId,
+                       "Bloodcoil", 9_707, true, 5, 0, 1, 100,
+                       0, 0, 145, 1, 58, 0, 0, true,
+                       "potency of 10,000",
+                       "Absorbs 100% of damage dealt as HP",
+                       "Action changes to Sanguine Feast upon execution.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_167, ViperSerpentTailRules.TwinbloodBiteActionId,
+                       "Sanguine Feast", 9_708, false, 5, 0, 1, 25,
+                       0, 0, 145, 58, 0, 0, 39_166, true,
+                       "potency of 10,000",
+                       "Combo Action: Bloodcoil",
+                       "Absorbs 100% of damage dealt as HP",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_168, ViperSerpentTailRules.UncoiledTwinfangActionId,
+                       "Uncoiled Fury", 9_714, true, 20, 5, 2, 200,
+                       0, 0, 0, 2, 58, 2, 0, true,
+                       "potency of 8,000 for the first enemy, and 4,000 for all remaining enemies",
+                       "Maximum Charges: 2",
+                       "This weaponskill does not share a recast timer with any other actions.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_169, ViperSerpentTailRules.FirstLegacyActionId,
+                       "First Generation", 9_709, false, 5, 5, 2, 15,
+                       89, 1, 18, 58, 0, 0, 0, true,
+                       "potency of 8,000",
+                       "Combo Action: World-swallower",
+                       "Can only be executed while under the effect of Reawakened.",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_170, ViperSerpentTailRules.SecondLegacyActionId,
+                       "Second Generation", 9_710, false, 5, 5, 2, 15,
+                       89, 1, 18, 58, 0, 0, 0, true,
+                       "potency of 8,000",
+                       "Combo Action: First Generation",
+                       "Can only be executed while under the effect of Reawakened.",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_171, ViperSerpentTailRules.ThirdLegacyActionId,
+                       "Third Generation", 9_711, false, 5, 5, 2, 15,
+                       89, 1, 18, 58, 0, 0, 0, true,
+                       "potency of 8,000",
+                       "Combo Action: Second Generation",
+                       "Can only be executed while under the effect of Reawakened.",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailTrigger(
+                       actions, descriptions,
+                       39_172, ViperSerpentTailRules.FourthLegacyActionId,
+                       "Fourth Generation", 9_712, false, 5, 5, 2, 15,
+                       89, 1, 18, 58, 0, 0, 0, true,
+                       "potency of 8,000",
+                       "Combo Action: Third Generation",
+                       "Can only be executed while under the effect of Reawakened.",
+                       "This action cannot be assigned to a hotbar.") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.DeathRattleActionId,
+                       "Death Rattle", 9_715, 10, 5, 0, 1, 198, 4_085,
+                       "Barbarous Bite or Ravenous Bite") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.TwinfangBiteActionId,
+                       "Twinfang Bite", 9_716, 10, 5, 0, 1, 199, 4_086,
+                       "Bloodcoil") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.TwinbloodBiteActionId,
+                       "Twinblood Bite", 9_717, 10, 5, 0, 1, 200, 4_087,
+                       "Sanguine Feast") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.UncoiledTwinfangActionId,
+                       "Uncoiled Twinfang", 9_722, 7, 20, 5, 2, 201, 4_088,
+                       "Uncoiled Fury") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.UncoiledTwinbloodActionId,
+                       "Uncoiled Twinblood", 9_723, 7, 20, 5, 2, 202, 4_089,
+                       "Uncoiled Twinfang") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.FirstLegacyActionId,
+                       "First Legacy", 9_718, 10, 5, 5, 2, 203, 4_090,
+                       "First Generation") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.SecondLegacyActionId,
+                       "Second Legacy", 9_719, 10, 5, 5, 2, 204, 4_091,
+                       "Second Generation") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.ThirdLegacyActionId,
+                       "Third Legacy", 9_720, 10, 5, 5, 2, 205, 4_092,
+                       "Third Generation") &&
+                   ValidateViperSerpentTailFollowUp(
+                       actions, descriptions, procStatuses,
+                       ViperSerpentTailRules.FourthLegacyActionId,
+                       "Fourth Legacy", 9_721, 10, 5, 5, 2, 206, 4_093,
+                       "Fourth Generation");
+        });
+
+        var wolvesDenStrikingDummyVerified = ValidateFeature(
+            "Wolves' Den striking dummy",
+            log,
+            () =>
+            {
+                var names = dataManager.GetExcelSheet<BNpcName>(ClientLanguage.English);
+                return names.TryGetRow(
+                           ViperSerpentTailRules.WolvesDenStrikingDummyNameId,
+                           out var strikingDummy) &&
+                       strikingDummy.Singular.ToString() == "striking dummy" &&
+                       strikingDummy.Plural.ToString() == "striking dummies";
+            });
 
         var autoLowMpFocusProbeVerified = ValidateFeature("Auto Low-MP Focus probe", log, () =>
         {
@@ -929,6 +1077,8 @@ internal static class PvPMetadataGuard
 
         var validation = new PvPMetadataValidation(
             seitonVerified,
+            viperSerpentTailVerified,
+            wolvesDenStrikingDummyVerified,
             guardVerified,
             guardianVerified,
             recuperateVerified,
@@ -950,7 +1100,8 @@ internal static class PvPMetadataGuard
             darkKnightPlungeVerified);
 
         log.Information(
-            "Seiton Sense metadata: Seiton={Seiton}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
+            "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
+            "WolvesDenStrikingDummy={WolvesDenStrikingDummy}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
@@ -958,6 +1109,8 @@ internal static class PvPMetadataGuard
             "ScholarCriticalStrategy={ScholarCriticalStrategy}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}.",
             validation.SeitonVerified,
+            validation.ViperSerpentTailVerified,
+            validation.WolvesDenStrikingDummyVerified,
             validation.GuardVerified,
             validation.GuardianVerified,
             validation.RecuperateVerified,
@@ -979,6 +1132,191 @@ internal static class PvPMetadataGuard
             validation.DarkKnightPlungeVerified);
 
         return validation;
+    }
+
+    private static bool ValidateViperSerpentTailCarrier(
+        ExcelSheet<ActionSheet> actions,
+        ExcelSheet<ActionTransient> descriptions)
+    {
+        if (!actions.TryGetRow(ViperSerpentTailRules.CarrierActionId, out var action) ||
+            !descriptions.TryGetRow(ViperSerpentTailRules.CarrierActionId, out var transient))
+        {
+            return false;
+        }
+
+        var description = transient.Description.ToString();
+        return action.Name.ToString() == "Serpent's Tail" &&
+               action.Icon == 9_726 &&
+               action.IsPvP &&
+               action.IsPlayerAction &&
+               action.ClassJob.IsValid &&
+               action.ClassJob.RowId == ViperSerpentTailRules.ViperJobId &&
+               action.ClassJobCategory.IsValid &&
+               action.ClassJobCategory.RowId == 196 &&
+               action.ActionCategory.IsValid &&
+               action.ActionCategory.RowId == 4 &&
+               action.Range == 0 &&
+               action.EffectRange == 0 &&
+               action.CastType == 0 &&
+               action.Cast100ms == 0 &&
+               action.Recast100ms == 10 &&
+               action.CooldownGroup == 3 &&
+               action.AdditionalCooldownGroup == 0 &&
+               action.MaxCharges == 0 &&
+               action.ActionProcStatus.RowId == 0 &&
+               !action.CanTargetSelf &&
+               !action.CanTargetParty &&
+               !action.CanTargetAlliance &&
+               !action.CanTargetHostile &&
+               !action.CanTargetAlly &&
+               !action.CanTargetOwnPet &&
+               !action.CanTargetPartyPet &&
+               !action.TargetArea &&
+               action.RequiresLineOfSight &&
+               action.NeedToFaceTarget &&
+               action.PreservesCombo &&
+               !action.AffectsPosition &&
+               description.Contains("Changes to Death Rattle, Twinfang Bite, Twinblood Bite", StringComparison.Ordinal) &&
+               description.Contains("Uncoiled Twinfang, Uncoiled Twinblood", StringComparison.Ordinal) &&
+               description.Contains("First Legacy, Second Legacy, Third Legacy, or Fourth Legacy", StringComparison.Ordinal);
+    }
+
+    private static bool ValidateViperSerpentTailFollowUp(
+        ExcelSheet<ActionSheet> actions,
+        ExcelSheet<ActionTransient> descriptions,
+        ExcelSheet<ActionProcStatus> procStatuses,
+        uint actionId,
+        string expectedName,
+        uint expectedIcon,
+        ushort expectedRecast100ms,
+        sbyte expectedRange,
+        byte expectedEffectRange,
+        byte expectedCastType,
+        uint expectedProcStatusId,
+        uint expectedHiddenStatusId,
+        string expectedPrerequisite)
+    {
+        if (!ViperSerpentTailRules.IsExactFollowUpAction(actionId) ||
+            !actions.TryGetRow(actionId, out var action) ||
+            !descriptions.TryGetRow(actionId, out var transient) ||
+            !procStatuses.TryGetRow(expectedProcStatusId, out var procStatus))
+        {
+            return false;
+        }
+
+        var description = transient.Description.ToString();
+        return action.Name.ToString() == expectedName &&
+               action.Icon == expectedIcon &&
+               action.IsPvP &&
+               !action.IsPlayerAction &&
+               action.ClassJob.IsValid &&
+               action.ClassJob.RowId == ViperSerpentTailRules.ViperJobId &&
+               action.ClassJobCategory.IsValid &&
+               action.ClassJobCategory.RowId == 196 &&
+               action.ActionCategory.IsValid &&
+               action.ActionCategory.RowId == 4 &&
+               action.Range == expectedRange &&
+               action.EffectRange == expectedEffectRange &&
+               action.CastType == expectedCastType &&
+               action.Cast100ms == 0 &&
+               action.Recast100ms == expectedRecast100ms &&
+               action.CooldownGroup == 3 &&
+               action.AdditionalCooldownGroup == 0 &&
+               action.MaxCharges == 0 &&
+               action.ActionProcStatus.RowId == expectedProcStatusId &&
+               procStatus.Status.RowId == expectedHiddenStatusId &&
+               !action.CanTargetSelf &&
+               !action.CanTargetParty &&
+               !action.CanTargetAlliance &&
+               action.CanTargetHostile &&
+               !action.CanTargetAlly &&
+               !action.CanTargetOwnPet &&
+               !action.CanTargetPartyPet &&
+               !action.TargetArea &&
+               action.RequiresLineOfSight &&
+               action.NeedToFaceTarget &&
+               action.PreservesCombo &&
+               !action.AffectsPosition &&
+               description.Contains("potency of 4,000", StringComparison.Ordinal) &&
+               description.Contains("Ignores the effects of Guard when dealing damage.", StringComparison.Ordinal) &&
+               description.Contains("Adds 3 seconds of charge to the limit gauge", StringComparison.Ordinal) &&
+               description.Contains($"successfully landing {expectedPrerequisite}", StringComparison.Ordinal) &&
+               description.Contains("This action cannot be assigned to a hotbar.", StringComparison.Ordinal);
+    }
+
+    private static bool ValidateViperSerpentTailTrigger(
+        ExcelSheet<ActionSheet> actions,
+        ExcelSheet<ActionTransient> descriptions,
+        uint actionId,
+        uint expectedFollowUpActionId,
+        string expectedName,
+        int expectedIcon,
+        bool expectedIsPlayerAction,
+        int expectedRange,
+        int expectedEffectRange,
+        int expectedCastType,
+        int expectedRecast100ms,
+        int expectedPrimaryCostType,
+        int expectedPrimaryCostValue,
+        int expectedSecondaryCostType,
+        int expectedCooldownGroup,
+        int expectedAdditionalCooldownGroup,
+        int expectedMaxCharges,
+        uint expectedActionComboId,
+        bool expectedPreservesCombo,
+        params string[] expectedDescriptionFragments)
+    {
+        if (expectedDescriptionFragments.Length == 0 ||
+            expectedDescriptionFragments.Any(string.IsNullOrWhiteSpace) ||
+            !ViperSerpentTailRules.TryGetExpectedFollowUp(actionId, out var mappedFollowUpActionId) ||
+            mappedFollowUpActionId != expectedFollowUpActionId ||
+            !actions.TryGetRow(actionId, out var action) ||
+            !descriptions.TryGetRow(actionId, out var transient))
+        {
+            return false;
+        }
+
+        var description = transient.Description.ToString();
+        return action.Name.ToString() == expectedName &&
+               action.Icon == expectedIcon &&
+               action.IsPvP &&
+               action.IsPlayerAction == expectedIsPlayerAction &&
+               action.ClassJob.IsValid &&
+               action.ClassJob.RowId == ViperSerpentTailRules.ViperJobId &&
+               action.ClassJobCategory.IsValid &&
+               action.ClassJobCategory.RowId == 196 &&
+               action.ActionCategory.IsValid &&
+               action.ActionCategory.RowId == 3 &&
+               action.Range == expectedRange &&
+               action.EffectRange == expectedEffectRange &&
+               action.CastType == expectedCastType &&
+               action.Cast100ms == 0 &&
+               action.Recast100ms == expectedRecast100ms &&
+               action.PrimaryCostType == expectedPrimaryCostType &&
+               action.PrimaryCostValue == expectedPrimaryCostValue &&
+               action.SecondaryCostType == expectedSecondaryCostType &&
+               action.SecondaryCostValue.RowId == 0 &&
+               action.CooldownGroup == expectedCooldownGroup &&
+               action.AdditionalCooldownGroup == expectedAdditionalCooldownGroup &&
+               action.MaxCharges == expectedMaxCharges &&
+               action.ActionCombo.IsValid &&
+               action.ActionCombo.RowId == expectedActionComboId &&
+               action.ActionProcStatus.RowId == 0 &&
+               action.StatusGainSelf.RowId == 0 &&
+               !action.CanTargetSelf &&
+               !action.CanTargetParty &&
+               !action.CanTargetAlliance &&
+               action.CanTargetHostile &&
+               !action.CanTargetAlly &&
+               !action.CanTargetOwnPet &&
+               !action.CanTargetPartyPet &&
+               !action.TargetArea &&
+               action.RequiresLineOfSight &&
+               action.NeedToFaceTarget &&
+               action.PreservesCombo == expectedPreservesCombo &&
+               !action.AffectsPosition &&
+               expectedDescriptionFragments.All(
+                   fragment => description.Contains(fragment, StringComparison.Ordinal));
     }
 
     private static bool ValidateFeature(string feature, IPluginLog log, Func<bool> validate)

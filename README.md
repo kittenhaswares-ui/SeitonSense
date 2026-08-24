@@ -2,12 +2,14 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.30.0.1 makes Smart Tab a default-off,
-exact-CC melee replacement for FFXIV's normal forward world-target cycle;
-`/smarttab` (`/sstarget`) toggles it. Paired native handler/helper hooks preserve
-the game's own binding and UI/input gates. The previous optional harmful-action
-redirect moves to
-`/smartaction` (`/ssaction`) behind its own default-off setting. The v0.30 line retires the
+assistance, and target highlights. Version 0.31.0.0 extends the default-off,
+exact-CC Smart Tab replacement to reviewed ranged DPS: BRD, BLM, SMN, MCH, RDM,
+and PCT use 25 yalms, while DNC uses 15. It also adds explicitly enabled Wolves'
+Den testing for held Smart Recuperate and a separate default-off PvP Viper
+Serpentiner-Geist follow-up helper. `/smarttab` (`/sstarget`) toggles the native
+forward-target replacement; paired handler/helper hooks preserve the game's own
+binding and UI/input gates. The v0.30 line moved the optional harmful-action
+redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the
 unusable fixed Combat Frames runtime and its click/mouseover and calibrated-gauge
 paths. Useful Limit Break evidence now appears as exact enemy nameplate icons, a
 safe self activation banner, and a bounded ally damage feed. It also provides a
@@ -36,7 +38,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the same direct-enemy count is at least three. The movement key still reaches
   FFXIV. Known unavailability waits, explicit client rejection permits only the
   bounded same-intent retry, and any later native PvP action ends Sprint.
-- **Stable held-action leases:** Purify, NIN Seiton, reactive counter-CC, Ally
+- **Stable held-action leases:** Purify, NIN Seiton, VPR Serpentiner Geist,
+  reactive counter-CC, Ally
   Rescue, Guardian, NIN Guard-Shukuchi, SCH, DRK, Smart Recuperate, Guard, and
   pressure Sprint prefer an
   already-held movement key, then any other stable held key, before fresh
@@ -57,7 +60,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   same frame, synthesizes movement or Escape, clears the queue, or changes a
   target; the later helper frame repeats full validation. The void cancel call
   reports only `requested`, not confirmed, and current-patch BRD/MCH live proof
-  remains pending.
+  remains pending. The trigger-driven Viper Serpentiner-Geist helper is
+  deliberately excluded from cast cancellation.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
   the enemy is directly targeting/casting at you, recently hit you, or placed
@@ -107,6 +111,16 @@ and Super Focus Glow into one configurable custom-repository plugin.
   availability ON/OFF and show a ready sparkle, but ON never replaces the held-
   key consent requirement. Base Seiton and the verified Unsealed follow-up are
   distinct epochs; a rejected base request can never substitute the follow-up.
+- **Experimental Viper Serpentiner Geist helper:** a separate default-off option
+  can arm only after the client accepts a qualifying PvP Viper action. While the
+  opportunity is live, any eligible held gameplay key including WASD may supply
+  consent; the triggering action does not freeze its invocation key. Carrier
+  `39183` must adjust to its expected exact follow-up `39174`-`39182` on the same
+  frozen actor and context. The currently held key freezes only when that exact
+  follow-up intent forms. The helper never
+  changes the selected target, substitutes a follow-up, or cancels your cast.
+  Exact CC uses canonical `S1`-`S5`; explicitly enabled Wolves' Den testing uses
+  only the exact current hard-target combat striking dummy with NameId `541`.
 - **Experimental Scholar Critical Strategy helper:** a separate default-off
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
@@ -123,7 +137,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   HP is missing and at least 2,000 MP is available. The thresholds are inclusive;
   cooldown, MP, cast, queue, or animation-lock shortage waits without consuming
   the held consent. An explicit client rejection may retry only the same exact
-  self epoch; acceptance is terminal and is never redirected or replayed.
+  self epoch; acceptance is terminal and is never redirected or replayed. It
+  runs in exact CC and, only with the separate test option, Wolves' Den; the
+  supported context is frozen so an attempt cannot drift between them.
 - **Experimental Dark Knight Hiebsprung helper:** a separate default-off held-
   key option considers only exact canonical `S1`-`S5` enemies at 30% HP or lower
   inside a strict 10-yalm center-distance cap and native range/line of sight. A
@@ -594,8 +610,9 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar is Purify, NIN Seiton, reactive
-counter-CC, Ally Rescue, PLD Guardian, then NIN Guard-Shukuchi. DRK Hiebsprung follows SCH before Smart
+The current request order before Scholar is Purify, the job-exclusive NIN Seiton
+or VPR Serpentiner-Geist slot, reactive counter-CC, Ally Rescue, PLD Guardian,
+then NIN Guard-Shukuchi. DRK Hiebsprung follows SCH before Smart
 Recuperate and the generic helpers. Continuous held consent
 can produce a frozen Critical Strategy intent for a distinct eligible episode.
 The frozen enemy is revalidated for exact identity, action readiness, live Guard,
@@ -628,7 +645,7 @@ recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
 target, with no visible target change, alternate, rerank, or replay. The current
-order is **Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian >
+order is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian >
 NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard >
 pressure Sprint > event Kardia > event Monk**.
 
@@ -698,12 +715,14 @@ with eight native calls maximum; acceptance or ambiguity ends that CC episode.
 ReAction Turbo repeat pulses do not create physical consent.
 
 The separate **Smart Recuperate on held gameplay key** experiment is disabled by
-default and runs only in exact Crystalline Conflict. It freezes only PvP
-Recuperate `29711` on the exact local player. The local player must be alive and
-targetable, the action and metadata must be exact and locally ready, at least
-16,000 HP must be missing, and at least the exact 2,000-MP cost must be available.
-Both boundaries are inclusive: exactly 16,000 missing HP and exactly 2,000 MP are
-eligible.
+default and runs only in exact Crystalline Conflict or in Wolves' Den while the
+separate testing option is enabled. It freezes PvP Recuperate `29711`, the exact
+local player, and the current supported context. A CC/Den/context transition
+cancels that intent instead of carrying it into different content; Frontline and
+Rival Wings remain excluded. The local player must be alive and targetable, the
+action and metadata must be exact and locally ready, at least 16,000 HP must be
+missing, and at least the exact 2,000-MP cost must be available. Both boundaries
+are inclusive: exactly 16,000 missing HP and exactly 2,000 MP are eligible.
 
 Held consent may wait while Recuperate is not ready or MP is below 2,000, so the
 same hold can become eligible after the cooldown or an MP tick without starving
@@ -717,6 +736,54 @@ exhaustion or an ambiguous/invalid exact outcome latches only this helper until
 the frozen key is released. The helper never changes a target, buffers MP,
 substitutes another action or actor, or replays input, and client acceptance is
 not a healing-effect claim.
+
+## Viper Serpentiner Geist held-key helper
+
+The separate **Serpentiner-Geist-Folgeaktion on held gameplay key** experiment
+is disabled by default and runs only on PvP Viper. It does not scan for an
+unrelated proc or create an action from nothing. After the client accepts one
+qualifying Viper action, Seiton Sense may retain one exact five-second trigger
+containing that action's expected follow-up, actor, context, territory, and
+target identity. A direct execution must advance FFXIV's native action sequence
+without leaving an action queued. An early normal hotbar/Turbo input can arm only
+when FFXIV later presents the exact queued action type, adjusted trigger action,
+canonical target, extra parameter, and combo route and then drains that queue with
+a nonzero action-sequence advance. The initial queueing call and any arbitrary or
+uncertain Queue call do nothing. A newer proven qualifying-action epoch invalidates
+an older buffered intent even when action and target look identical. Explicit actor
+IDs are accepted directly; a native zero/default-
+target carrier is accepted only when the original and forwarded IDs are unchanged,
+no redirect deliberately suppressed the target, and the native hard target proves
+the same canonical actor before and immediately after the accepted call. It stores
+no invocation key. Any eligible gameplay key that is currently held when the
+follow-up becomes usable, including WASD, may provide consent; that current key is
+frozen only when the exact follow-up intent forms.
+
+FFXIV itself must adjust Serpent's Tail / Serpentiner Geist carrier `39183` to
+the expected exact follow-up `39174`-`39182`. Carrier `39183` is never dispatched.
+The ranged Uncoiled follow-ups `39177` and `39178` use their native 20-yalm range;
+the other reviewed follow-ups use 5 yalms. The exact adjusted action, frozen
+actor, context, territory, physical key, readiness, native range, and line of
+sight are revalidated before every possible call. Purify retains absolute
+priority, and Viper occupies the first job-specific slot after Purify. Own Guard
+blocks it; target Guard is not an added blocker. Action/resource/target-status or
+range unavailability retains the frozen opportunity but yields the framework frame
+to a usable lower-priority helper. Only an otherwise-ready exact intent waiting on
+the native boundary or its retry throttle keeps Viper's priority. The five-second
+deadline remains authoritative after intent formation and at the final native
+boundary. Only a clean client rejection may use the shared 50-ms/eight-call same-
+intent retry. Acceptance, ambiguity, retry exhaustion, trigger expiry, key release,
+or any identity/action/context drift is terminal without an alternate, rerank,
+target change, or replay; ambiguity or retry exhaustion also requires the frozen
+key to be released before another Viper episode can use held consent.
+
+In exact Crystalline Conflict the target must remain one canonical `S1`-`S5`
+enemy. Wolves' Den is available only with the separate testing option and only
+for the exact current hard-target living, targetable combat striking dummy with
+NameId `541`; duel players, arbitrary NPCs, and synthetic `S1`/`<e1>` identities
+are rejected. Frontline and Rival Wings remain excluded. This helper deliberately
+does not participate in held-action cast cancellation. A client-accepted return
+is bounded diagnostic feedback, not proof that the server applied damage.
 
 The separate **Ally Rescue on gameplay-key consent** experiment is also disabled
 by default and runs only in Crystalline Conflict. It is available on BRD with
@@ -848,7 +915,7 @@ both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all scheduled and automatic action requests,
-including Purify, NIN Seiton, reactive counter-CC, Ally Rescue, Guardian,
+including Purify, NIN Seiton, VPR Serpentiner Geist, reactive counter-CC, Ally Rescue, Guardian,
 NIN Guard-Shukuchi, SCH,
 Hiebsprung, Smart Recuperate, Guard, pressure Sprint, accepted-Eukrasia Kardia,
 and Monk. The explicit manual `/panicshu` command is the sole exception: its
@@ -950,11 +1017,12 @@ generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
-The current request order is **Purify > NIN Seiton > reactive counter-CC > Ally
+The current request order is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally
 Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart
 Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**.
-The seven job-specific physical-hold helpers share the second tier; enabled NIN
-Seiton gets its first slot, then reactive counter-CC remains before ally cleanse.
+The eight job-specific physical-hold helpers share the second tier; enabled NIN
+Seiton or VPR Serpentiner Geist gets its job-exclusive first slot, then reactive
+counter-CC remains before ally cleanse.
 Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
 freezes one exact-target intent;
@@ -1014,10 +1082,10 @@ event Kardia. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
 the native direct-call result and exact timer behavior still need a live test.
 
-## Melee Smart Tab native forward-target replacement
+## DPS Smart Tab native forward-target replacement
 
 Smart Tab is a separate default-off target-writing option for exact Crystalline
-Conflict and the six reviewed melee-DPS jobs. Toggle it in **Targets** or with:
+Conflict and the reviewed melee and ranged DPS jobs. Toggle it in **Targets** or with:
 
 ```text
 /smarttab [on|off|toggle]
@@ -1033,13 +1101,14 @@ commands, unsupported jobs, and contexts outside exact CC call the native paths
 unchanged.
 
 One owned forward-target press resolves unique, living, hostile, targetable,
-exact canonical `S1`-`S5` enemies and excludes live Guard. Reach is geometric because no combat
-action is being attempted: hitbox-edge distance is center distance minus both
-actors' hitbox radii, clamped at zero. At most 5 yalms is the first tier. Only if
-that tier is empty does the helper consider the reviewed gap cap: 20 yalms for
-MNK, DRG, NIN, SAM, and VPR, or 15 yalms for RPR. Tanks, ranged jobs, classes,
-limited jobs, unknown jobs, invalid geometry, and enemies beyond that job cap
-fail closed.
+exact canonical `S1`-`S5` enemies and excludes live Guard. Reach is geometric
+because no combat action is being attempted: hitbox-edge distance is center
+distance minus both actors' hitbox radii, clamped at zero. Melee jobs first use
+the 5-yalm melee tier, then the reviewed gap cap: 20 yalms for MNK, DRG, NIN,
+SAM, and VPR, or 15 yalms for RPR. Ranged jobs have no melee preference: BRD,
+BLM, SMN, MCH, RDM, and PCT use one 25-yalm tier, while DNC uses one 15-yalm
+tier. Tanks, healers, classes, limited jobs, unknown jobs, invalid geometry, and
+enemies beyond the reviewed job cap fail closed.
 
 Inside the first non-empty reach tier, ranking is lowest exact HP ratio, highest
 fresh positive team pressure, verified Guard cooldown unavailable, lowest
@@ -1380,7 +1449,7 @@ focus module to avoid drawing both over the same actor.
 | Enemy LB nameplate icons plus self/ally LB notifications | Yes | No | No |
 | Local 4,000/2,000-MP warning sounds | Yes | Yes, when test mode is enabled | No |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
-| Optional held Smart Recuperate | Yes | No | No |
+| Optional held Smart Recuperate | Yes | Yes, when test mode is enabled | No |
 | Optional reactive defensive utilities | Yes | No | No |
 | Optional PLD Guardian job tool | Yes | No | No |
 | Optional WHM/BRD/NIN reactive counter-CC | Yes | No | No |
@@ -1392,9 +1461,10 @@ focus module to avoid drawing both over the same actor.
 | Optional NIN Guard-Shukuchi held-key helper | Yes | No | No |
 | Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
+| Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, only for the exact current hard-target striking dummy when test mode is enabled | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
 | Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
-| Optional melee Smart Tab | Yes | No | No |
+| Optional DPS Smart Tab | Yes | No | No |
 | One-shot Smart Action macro | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
@@ -1415,15 +1485,17 @@ The sidebar order is Start, Alerts, HUD & Nameplates, Action Helpers, Job Tools,
 Macro Helpers, Targets, and Diagnostics. Enemy LB nameplate controls live under
 HUD & Nameplates; self/ally LB notifications and local MP sounds live under
 Alerts. Reactive defensive utilities and Smart Recuperate remain under Action
-Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are under
-Job Tools. Reset Defaults clears previews and restores every action, target-
+Helpers; independent PLD Guardian, accepted-Eukrasia Smart Kardia, and the Viper
+Serpentiner-Geist helper are under Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 33 is current in v0.30.0.1. It leaves the target-writing
-Smart Tab option off for every upgrade, fresh install, and Reset Defaults, while
-preserving an older explicitly enabled shared macro-helper opt-in as the now
-separate Smart Action option. Smart Tab and Smart Action are both off for fresh
-and reset configurations.
+Configuration schema 34 is current in v0.31.0.0. It forces the new action-
+initiating Viper Serpentiner-Geist option off for every upgrade, fresh install,
+and Reset Defaults. The historical schema-33 migration still leaves the target-
+writing Smart Tab option off while preserving an older explicitly enabled shared
+macro-helper opt-in as the separate Smart Action option. Smart Tab, Smart Action,
+and the Viper helper are all off for fresh and reset configurations; existing
+unrelated opt-ins are preserved.
 
 Historical v0.30.0.0 baseline: schema 32 disabled the retired Combat Frames
 master and mapped its optional name-display preference to the ally LB feed,
@@ -1460,7 +1532,7 @@ update through the same repository.
 ## Commands
 
 - `/seiton` or `/ssense` - open settings
-- `/smarttab [on|off|toggle]` - control the exact-CC melee replacement for
+- `/smarttab [on|off|toggle]` - control the exact-CC DPS replacement for
   FFXIV's normal forward world-target cycle
 - `/sstarget [on|off|toggle]` - collision-free alias for `/smarttab`
 - `/smartaction` - arm one optional CC-only 750 ms harmful-action target redirect;
@@ -1545,12 +1617,13 @@ armed, already incoming macro action. Smart Tab is separate: while enabled it
 may replace only an owned native forward world-target cycle with one exact hard-
 target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-action helpers use this current request priority: **Purify > NIN Seiton > reactive
+action helpers use this current request priority: **Purify > NIN Seiton / VPR Serpentiner Geist > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
 Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia >
-event Monk**. The seven job-specific physical-hold helpers share the second tier
-and use that deterministic urgency order; enabled NIN Seiton is first, and
-reactive counter-CC still leads ally cleanse. Kardia requires its
+event Monk**. The eight job-specific physical-hold helpers share the second tier
+and use that deterministic urgency order; enabled NIN Seiton or VPR Serpentiner
+Geist takes the first job-exclusive slot, and reactive counter-CC still leads ally
+cleanse. Kardia requires its
 separate accepted-Eukrasia trigger and does not originate from the physical key;
 Monk is an automatic follow-up.
 The same continuous hold can authorize later distinct exact held episodes; a
@@ -1567,7 +1640,7 @@ Manual Guard never creates this ownership. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-For the eleven physical-hold helpers, key choice prefers stable movement, then any
+For the twelve physical-hold helpers, key choice prefers stable movement, then any
 other stable held gameplay key, then fresh movement and fresh other gameplay
 keys as fallbacks. Each helper evaluates its held lease before fresh input and
 retains the exact frozen key until its normal release, ineligibility, reset, or
@@ -1581,7 +1654,10 @@ Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate, Guard, 
 pressure Sprint. Smart
 Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
-all macro helpers are excluded as well.
+all macro helpers are excluded as well. Viper Serpentiner Geist is also excluded:
+it is trigger-driven after a client-accepted qualifying action and deliberately
+cannot cancel the current cast. The cast-cancellation experiment therefore still
+covers exactly eleven of the twelve physical-hold helpers.
 
 When the highest-priority frozen intent passes its ordinary action, actor/
 target, status/episode, key, context, Guard, resource, cooldown, range, line-of-
@@ -1604,13 +1680,15 @@ with eight attempts maximum, and acceptance or ambiguity remains terminal.
 
 The separate default-off Smart Recuperate helper may freeze an exact self
 Recuperate `29711` epoch when missing HP is at least 16,000 and MP is at least
-2,000. Readiness or insufficient MP waits without starving a currently usable
-lower helper. Only an explicit client rejection may use the common bounded
-same-intent retry; acceptance or ambiguity is terminal with no target change,
-alternate, or replay.
+2,000. It runs in exact CC or explicitly enabled Wolves' Den testing and freezes
+that supported context with the intent. Readiness or insufficient MP waits
+without starving a currently usable lower helper. Only an explicit client
+rejection may use the common bounded same-intent retry; acceptance, ambiguity,
+or context drift is terminal with no target change, alternate, or replay.
 
-The separate default-off Ninja helper sits between Guardian and Scholar in the
-job-specific second tier. A
+The separate default-off Ninja helper occupies Ninja's first job-specific slot
+directly after Purify; Viper's Serpentiner-Geist helper occupies the equivalent
+job-exclusive slot on VPR. A
 continuous held gameplay key can authorize one frozen target for each exact
 adjusted-action epoch of Seiton `29515`/`29516`, selected by lowest exact HP ratio
 among canonical, reachable `S1`-`S5` enemies below 50%. A clean explicit client
@@ -1698,19 +1776,32 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.30.0.1, the exact 398-test Core registry and source checks pin
-configuration schema 33 and the separate default-off Smart Tab and Smart Action
-options. They pin Smart Tab's paired targeting-handler/helper scope, native
-binding and UI/input gates, forward-only ownership, reach-first deterministic
-ranking, complete exact actor freeze, one native hard-target setter call, and
-one exact readback. Missing candidates and pre-setter validation drift consume
-only the owned forward cycle without a target write; setter rejection or
-readback mismatch is terminal with no retry, rerank, or alternate candidate.
-OFF, reverse targeting, and helper calls outside the scoped handler retain their
-native paths. Smart Action retains the prior one-shot harmful-action macro
-contract and never becomes Smart Tab implicitly. These checks validate source
-control flow and contracts, not current-client target behavior; exact CC live
-testing remains required.
+For current v0.31.0.0, the exact 404-test Core registry and source checks pin
+configuration schema 34, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
+and the separate default-off Viper helper. Smart Tab checks retain the paired
+targeting-handler/helper scope, native binding and UI/input gates, forward-only
+ownership, complete actor freeze, one hard-target setter/readback, and no retry or
+alternate. They additionally pin one 25-yalm tier for BRD/BLM/SMN/MCH/RDM/PCT,
+one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
+OFF, reverse targeting, and calls outside the scoped handler retain their native
+paths. Smart Action remains a separate one-shot harmful-action macro contract.
+
+The same current checks pin Smart Recuperate's exact CC-or-enabled-Den context
+freeze and no cross-context drift. Viper checks pin carrier `39183`, follow-ups
+`39174`-`39182`, their 5/20-yalm ranges, the five-second accepted trigger, one
+exact actor/action/context/territory/key intent, shared clean-false retry, and the
+strict NameId-`541` Den dummy path. They also pin default-off schema-34 migration
+and the deliberate absence of Viper cast cancellation. These checks validate
+source control flow and contracts, not current-client targeting, action
+acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
+enabled-Den testing remains required.
+
+Current scheduler verification uses **Purify > NIN Seiton / VPR Serpentiner
+Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >
+SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard >
+pressure Sprint > event Kardia > event Monk**. Twelve physical-hold helpers share
+the scheduler; held-action cast cancellation remains limited to the existing
+eleven and explicitly excludes Viper.
 
 Historical v0.30.0.0 baseline: the exact 388-test Core registry and source checks
 pinned Smart Target's reach-first deterministic ranking, complete exact actor/action freeze,

@@ -37,6 +37,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly SmartKardiaProbe smartKardia;
     private readonly NinjaGuardShukuchiProbe ninjaGuardShukuchi;
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
+    private readonly ViperSerpentTailProbe viperSerpentTail;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly DarkKnightPlungeProbe darkKnightPlunge;
@@ -101,6 +102,7 @@ internal sealed class PersonalStatusService : IDisposable
             clientState,
             objectTable,
             dutyState,
+            configuration,
             nearAssist,
             log);
         pressureEscapeSprint = new PressureEscapeSprintProbe(
@@ -158,6 +160,11 @@ internal sealed class PersonalStatusService : IDisposable
             executeTracker,
             nearAssist,
             log);
+        viperSerpentTail = new ViperSerpentTailProbe(
+            clientState,
+            objectTable,
+            nearAssist,
+            log);
         scholarCriticalStrategy = new ScholarCriticalStrategyProbe(
             clientState,
             objectTable,
@@ -194,6 +201,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal NinjaGuardShukuchiProbeSnapshot NinjaGuardShukuchiDiagnostics =>
         ninjaGuardShukuchi.Snapshot;
     internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
+    internal ViperSerpentTailProbeSnapshot ViperSerpentTailDiagnostics =>
+        viperSerpentTail.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
@@ -290,6 +299,7 @@ internal sealed class PersonalStatusService : IDisposable
             smartKardia.FailClosed();
             ninjaGuardShukuchi.FailClosed();
             ninjaSeiton.FailClosed();
+            viperSerpentTail.FailClosed();
             scholarCriticalStrategy.FailClosed();
             monkEarthReply.FailClosed(now);
             darkKnightPlunge.FailClosed();
@@ -331,6 +341,7 @@ internal sealed class PersonalStatusService : IDisposable
             smartKardia.Reset();
             ninjaGuardShukuchi.Reset();
             ninjaSeiton.Reset();
+            viperSerpentTail.Reset();
             scholarCriticalStrategy.Reset();
             monkEarthReply.Reset();
             darkKnightPlunge.Reset();
@@ -356,6 +367,7 @@ internal sealed class PersonalStatusService : IDisposable
         var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;
         var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
         var isDarkKnight = localJobId == DarkKnightPlungeRules.DarkKnightJobId;
+        var isViper = localJobId == ViperSerpentTailRules.ViperJobId;
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
         var defensiveUtilitiesConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableDefensiveUtilities &&
@@ -480,9 +492,13 @@ internal sealed class PersonalStatusService : IDisposable
                                                      isCrystallineConflict &&
                                                      isReactiveCcJob;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
-                                              configuration.EnableNinjaSeitonOnHeldGameplayKey &&
-                                              isCrystallineConflict &&
-                                              isNinja;
+                                               configuration.EnableNinjaSeitonOnHeldGameplayKey &&
+                                               isCrystallineConflict &&
+                                               isNinja;
+        var viperSerpentTailConfigurationEnabled = configuration.Enabled &&
+                                                    configuration.EnableViperSerpentTailOnHeldKey &&
+                                                    isSupportedPvPContext &&
+                                                    isViper;
         var ninjaGuardShukuchiConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey &&
                                                      isCrystallineConflict &&
@@ -519,9 +535,9 @@ internal sealed class PersonalStatusService : IDisposable
                                               metadata.GuardVerified &&
                                               metadata.GuardianVerified;
         var smartRecuperateHeldInputEnabled = configuration.Enabled &&
-                                              configuration.EnableSmartRecuperateOnHeldKey &&
-                                              isCrystallineConflict &&
-                                              metadata.RecuperateVerified;
+                                               configuration.EnableSmartRecuperateOnHeldKey &&
+                                               isSupportedPvPContext &&
+                                               metadata.RecuperateVerified;
         var allyRescueHeldInputEnabled = configuration.Enabled &&
                                          configuration.ExperimentalAllyRescueOnNextKey &&
                                          configuration.AllyRescueOnHeldGameplayKey &&
@@ -556,6 +572,11 @@ internal sealed class PersonalStatusService : IDisposable
                                                isDarkKnight;
         var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&
                                           metadata.SeitonVerified;
+        var viperSerpentTailHeldInputEnabled =
+            viperSerpentTailConfigurationEnabled &&
+            metadata.ViperSerpentTailVerified &&
+            (context != SupportedPvPContext.WolvesDen ||
+             metadata.WolvesDenStrikingDummyVerified);
         var ninjaGuardShukuchiHeldInputEnabled =
             ninjaGuardShukuchiConfigurationEnabled &&
             metadata.PanicShukuchiVerified &&
@@ -570,7 +591,8 @@ internal sealed class PersonalStatusService : IDisposable
                                             pressureEscapeSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
                                             ninjaGuardShukuchiHeldInputEnabled ||
-                                            ninjaSeitonHeldInputEnabled;
+                                            ninjaSeitonHeldInputEnabled ||
+                                            viperSerpentTailHeldInputEnabled;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -583,6 +605,7 @@ internal sealed class PersonalStatusService : IDisposable
              miracleInterceptConfigurationEnabled ||
              ninjaGuardShukuchiHeldInputEnabled ||
              ninjaSeitonHeldInputEnabled ||
+             viperSerpentTailHeldInputEnabled ||
              scholarCriticalStrategyHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
              pressureEscapeSprintHeldInputEnabled ||
@@ -597,7 +620,8 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeSprintHeldInputEnabled,
             darkKnightPlungeHeldInputEnabled,
             ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled,
-            ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled);
+            ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled,
+            viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -631,6 +655,20 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        now = Environment.TickCount64;
+        var viper = viperSerpentTail.Observe(
+            localPlayer,
+            context,
+            viperSerpentTailConfigurationEnabled,
+            metadata.ViperSerpentTailVerified,
+            metadata.WolvesDenStrikingDummyVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            ninja.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
         // Reactive counter-CC and the remaining job-specific helpers follow
         // Auto-Seiton, then generic self-healing/defense. A held key remains
         // consent for a later distinct episode after an accepted action clears.
@@ -646,6 +684,7 @@ internal sealed class PersonalStatusService : IDisposable
             !guardActive &&
             !purifyClaimedPriority &&
             !ninja.InputClaimed &&
+            !viper.InputClaimed &&
             !emergencyInputFrame.IsConsumed,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
@@ -673,6 +712,7 @@ internal sealed class PersonalStatusService : IDisposable
             dispatchAllowed:
                 !purifyClaimedPriority &&
                 !ninja.InputClaimed &&
+                !viper.InputClaimed &&
                 !miracle.InputClaimed &&
                 !emergencyInputFrame.IsConsumed);
         var allyRescueClaimedPriority = rescue.InputClaimed;
@@ -684,6 +724,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             purifyClaimedPriority ||
             ninja.InputClaimed ||
+            viper.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             emergencyInputFrame.IsConsumed,
@@ -712,6 +753,7 @@ internal sealed class PersonalStatusService : IDisposable
             guardActive,
             purifyClaimedPriority ||
             ninja.InputClaimed ||
+            viper.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
@@ -726,6 +768,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ScholarCriticalStrategyVerified,
             guardActive,
             purifyClaimedPriority ||
+            viper.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
@@ -742,6 +785,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.DarkKnightPlungeVerified,
             guardActive,
             purifyClaimedPriority ||
+            viper.InputClaimed ||
             allyRescueClaimedPriority ||
             rescue.UseActionAttempted ||
             miracle.InputClaimed ||
@@ -755,6 +799,7 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset);
 
         var jobSpecificHeldClaimedPriority = ninja.InputClaimed ||
+                                             viper.InputClaimed ||
                                              allyRescueClaimedPriority ||
                                              miracle.InputClaimed ||
                                              guardianClaimedPriority ||
@@ -763,7 +808,7 @@ internal sealed class PersonalStatusService : IDisposable
                                              plunge.InputClaimed;
         var recuperate = smartRecuperate.Observe(
             localPlayer,
-            isCrystallineConflict,
+            context,
             configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
             metadata.RecuperateVerified,
             guardActive,
@@ -1258,6 +1303,7 @@ internal sealed class PersonalStatusService : IDisposable
         smartKardia.Reset();
         ninjaGuardShukuchi.Reset();
         ninjaSeiton.Reset();
+        viperSerpentTail.Reset();
         scholarCriticalStrategy.Reset();
         monkEarthReply.Reset();
         darkKnightPlunge.Reset();

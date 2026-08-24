@@ -10,7 +10,7 @@ public readonly record struct SmartTabInterceptionObservation(
     bool HookAvailable,
     bool InsideNativeTargetingHandler,
     bool ExactCrystallineConflict,
-    bool ReviewedMeleeJob,
+    bool ReviewedSmartTabJob,
     bool LocalPlayerAvailable,
     bool NativeWorldForwardCycle);
 
@@ -28,7 +28,7 @@ public static class SmartTabInterceptionRules
         observation.HookAvailable &&
         observation.InsideNativeTargetingHandler &&
         observation.ExactCrystallineConflict &&
-        observation.ReviewedMeleeJob &&
+        observation.ReviewedSmartTabJob &&
         observation.LocalPlayerAvailable &&
         observation.NativeWorldForwardCycle;
 }

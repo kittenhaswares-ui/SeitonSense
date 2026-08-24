@@ -15,7 +15,7 @@ internal static class SmartTabInterceptionSelfTests
         False(Owns(Valid() with { FeatureEnabled = false }), "toggle off stays vanilla");
         False(Owns(Valid() with { HookAvailable = false }), "missing hook stays vanilla");
         False(Owns(Valid() with { ExactCrystallineConflict = false }), "outside exact CC stays vanilla");
-        False(Owns(Valid() with { ReviewedMeleeJob = false }), "unsupported jobs stay vanilla");
+        False(Owns(Valid() with { ReviewedSmartTabJob = false }), "unsupported jobs stay vanilla");
         False(Owns(Valid() with { LocalPlayerAvailable = false }), "missing player stays vanilla");
     }
 
@@ -36,7 +36,7 @@ internal static class SmartTabInterceptionSelfTests
         HookAvailable: true,
         InsideNativeTargetingHandler: true,
         ExactCrystallineConflict: true,
-        ReviewedMeleeJob: true,
+        ReviewedSmartTabJob: true,
         LocalPlayerAvailable: true,
         NativeWorldForwardCycle: true);
 

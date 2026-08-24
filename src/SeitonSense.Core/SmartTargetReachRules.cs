@@ -4,15 +4,24 @@ namespace SeitonSense.Core;
 
 /// <summary>
 /// Action-free geometric reach policy shared by manual Smart Tab targeting.
-/// It certifies only the six reviewed melee-DPS jobs and never guesses a range
-/// for tanks, ranged jobs, classes, limited jobs, or unknown future rows.
+/// Melee jobs retain their melee-first and reviewed-gap-closer tiers. Reviewed
+/// physical/magical ranged jobs use one exact job range without a melee tier.
+/// Tanks, healers, classes, limited jobs, and unknown future rows fail closed.
 /// </summary>
 public static class SmartTargetReachRules
 {
     public const float MeleeRangeYalms = 5f;
+    public const float StandardRangedRangeYalms = 25f;
+    public const float DancerRangeYalms = 15f;
 
     public static bool IsReviewedMeleeJob(uint jobId) =>
         GetReviewedGapCloserRangeYalms(jobId) > 0f;
+
+    public static bool IsReviewedRangedJob(uint jobId) =>
+        GetReviewedRangedRangeYalms(jobId) > 0f;
+
+    public static bool IsReviewedSmartTabJob(uint jobId) =>
+        IsReviewedMeleeJob(jobId) || IsReviewedRangedJob(jobId);
 
     public static float GetReviewedGapCloserRangeYalms(uint jobId) => jobId switch
     {
@@ -22,6 +31,18 @@ public static class SmartTargetReachRules
         34 => 20f, // SAM Hissatsu: Soten
         39 => 15f, // RPR Hell's Ingress
         41 => 20f, // VPR Slither
+        _ => 0f,
+    };
+
+    public static float GetReviewedRangedRangeYalms(uint jobId) => jobId switch
+    {
+        23 => StandardRangedRangeYalms, // BRD Powerful Shot
+        25 => StandardRangedRangeYalms, // BLM Fire / Blizzard
+        27 => StandardRangedRangeYalms, // SMN Ruin III
+        31 => StandardRangedRangeYalms, // MCH Blast Charge
+        35 => StandardRangedRangeYalms, // RDM Jolt III
+        38 => DancerRangeYalms,         // DNC Cascade / Fountain
+        42 => StandardRangedRangeYalms, // PCT Fire in Red
         _ => 0f,
     };
 
@@ -35,7 +56,8 @@ public static class SmartTargetReachRules
     {
         tier = SmartTargetReachTier.RangedOrOther;
         var gapCloserRange = GetReviewedGapCloserRangeYalms(localJobId);
-        if (gapCloserRange <= 0f ||
+        var rangedRange = GetReviewedRangedRangeYalms(localJobId);
+        if ((gapCloserRange <= 0f) == (rangedRange <= 0f) ||
             !IsFinite(localPosition) ||
             !IsFinite(enemyPosition) ||
             !float.IsFinite(localHitboxRadius) ||
@@ -52,6 +74,13 @@ public static class SmartTargetReachRules
         var edgeDistance = MathF.Max(
             0f,
             centerDistance - localHitboxRadius - enemyHitboxRadius);
+        if (rangedRange > 0f)
+        {
+            if (edgeDistance > rangedRange) return false;
+            tier = SmartTargetReachTier.RangedOrOther;
+            return true;
+        }
+
         if (edgeDistance <= MeleeRangeYalms)
         {
             tier = SmartTargetReachTier.Melee;

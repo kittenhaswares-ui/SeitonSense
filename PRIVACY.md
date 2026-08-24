@@ -6,7 +6,8 @@ Quick Chat commands to FFXIV, and the separate default-off Auto Low-MP Focus
 helper can set only an empty local native Focus Target. The retired Combat
 Frames runtime has no target-click or native-mouseover path. Default-off Smart
 Tab may replace one forward world-target cycle nested inside FFXIV's native
-targeting handler with one exact visible CC melee hard target. Its paired hooks
+targeting handler with one exact visible CC reviewed-DPS hard target. Its paired
+hooks
 leave OFF, reverse, and calls outside that handler on the native paths. The
 separate default-off Smart Action macro helper can replace
 only the target ID on one already incoming exact harmful PvP action after an
@@ -97,9 +98,18 @@ following data already available in the local FFXIV client:
   optional team pressure, native 20-yalm reachability, the frozen actor, latest
   revalidated location, client action result, and exact hard-target readback;
 - when Smart Recuperate is enabled, the exact local identity, life/targetable
-  state, current/maximum HP and MP, held-key generation, own Guard state, and
-  exact PvP Recuperate `29711` metadata/readiness needed for one frozen self
-  intent and its bounded native calls;
+  state, current/maximum HP and MP, held-key generation, own Guard state,
+  current exact CC or explicitly enabled Wolves' Den context, and exact PvP
+  Recuperate `29711` metadata/readiness needed for one frozen self/context intent
+  and its bounded native calls;
+- when the Viper Serpentiner-Geist helper is enabled, the accepted qualifying
+  action and its bounded trigger time, exact local/target identities, context,
+  territory, adjusted carrier/follow-up action, own Guard, readiness, and native
+  range/line-of-sight result; the accepted trigger stores no input key, and a
+  held-key generation is read only when the follow-up intent forms. Wolves' Den
+  additionally
+  reads only the exact current hard-target combat striking dummy identity and
+  NameId `541`;
 - when the separate held-action cast-cancellation test is enabled, the exact
   highest-priority frozen helper/action/target/key/intent epoch, both current
   local cast signals and cast action ID, own Guard, queue, animation lock,
@@ -262,11 +272,12 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > NIN Seiton > reactive
+The current action-request priority is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint
-> event Kardia > event Monk**. The seven job-specific physical-hold helpers share the
-second tier and use that deterministic urgency order; reactive counter-CC leads ally cleanse because
+> event Kardia > event Monk**. The eight job-specific physical-hold helpers share the
+second tier and use that deterministic urgency order; NIN and VPR use the first
+job-exclusive slot, while reactive counter-CC leads ally cleanse because
 its LB and protection-end windows are shorter. One framework frame permits at
 most one held-helper native boundary, but a continuously held key remains consent
 for later distinct exact episodes. Kardia and Monk retain their separate event-
@@ -417,10 +428,11 @@ counts and the latest original, forwarded, and effective target IDs, invocation
 mode, and resolution result are retained only in memory for diagnostics.
 Incoming identities and protection state are not persisted or transmitted.
 
-## Melee Smart Tab
+## DPS Smart Tab
 
-Smart Tab is default off and runs only in exact Crystalline Conflict on the six
-reviewed melee-DPS jobs. When enabled, paired local native hooks scope FFXIV's
+Smart Tab is default off and runs only in exact Crystalline Conflict on the
+reviewed melee and ranged DPS jobs. When enabled, paired local native hooks scope
+FFXIV's
 own targeting handler and own only its nested forward world-target cycle after
 the game's logical binding and UI/input gates. Only that scoped forward request
 may select one exact hard target. Toggle off, reverse targeting, direct helper
@@ -429,8 +441,11 @@ jobs, and unsupported contexts call the native paths unchanged.
 
 For one owned request, the plugin transiently resolves unique, living, hostile,
 targetable canonical `S1`-`S5` enemies and excludes live Guard. It first admits
-hitbox-edge melee reach, then only the reviewed job gap-closer cap. Ranking is
-lowest HP ratio, fresh positive team pressure, known Guard-cooldown
+hitbox-edge melee reach, then only the reviewed melee job's gap-closer cap.
+Ranged jobs have one action-free geometric tier and no melee preference: BRD,
+BLM, SMN, MCH, RDM, and PCT use 25 yalms, while DNC uses 15 yalms. Ranking inside
+the first non-empty tier is lowest HP ratio, fresh positive team pressure, known
+Guard-cooldown
 unavailability, trusted MP ratio, then stable slot. One actor is frozen and
 revalidated. Missing candidates or any identity, geometry, context, or reach
 failure before the setter consume only that owned forward cycle without a target
@@ -652,14 +667,15 @@ lookup during synchronous plugin startup.
 Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
 the same exact key may remain consent for a later distinct Purify, counter-CC,
-NIN Seiton, ally cleanse, Guardian, NIN Guard-Shukuchi, SCH, DRK, Recuperate,
+NIN Seiton, VPR Serpentiner Geist, ally cleanse, Guardian, NIN Guard-Shukuchi,
+SCH, DRK, Recuperate,
 Guard, or pressure Sprint episode. Enabling an option while a key is already
 down still requires a release and new press. Release, text input, context/job/identity loss, death, metadata
 failure, or reset clears the relevant leases. Own Guard suppresses every native
 helper boundary without consuming the physical hold; individual frozen episodes
 either wait or cancel according to their exact action-specific contract.
 
-The eleven physical-hold helpers prefer an already-held movement key, then another
+The twelve physical-hold helpers prefer an already-held movement key, then another
 stable held gameplay key, before fresh movement/other fallback. Each helper
 checks its held lease before fresh input and retains the exact frozen key until
 release, ineligibility, reset, or its action-specific terminal outcome. A short
@@ -696,6 +712,9 @@ exact physical-hold intents for Purify, NIN Seiton, reactive counter-CC, Ally
 Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung,
 Smart Recuperate, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
+Viper Serpentiner Geist is also excluded because its exact opportunity is
+trigger-driven after an accepted qualifying action. Cast cancellation therefore
+remains available to eleven of the twelve physical-hold helpers.
 
 For the highest-priority eligible intent, the plugin rechecks exact local and
 target identity, held key, context, own Guard, helper action/readiness/resources,
@@ -843,23 +862,76 @@ alternate action or replay.
 ## Experimental Smart Recuperate held-key helper
 
 This independent persisted option is disabled by default and can run only in
-exact Crystalline Conflict. It reads the exact local identity, life/targetable
-state, current/maximum HP and MP, held gameplay-key generation, own Guard state,
-and verified PvP Recuperate `29711` metadata/readiness. Exactly 16,000 or more
-missing HP and at least 2,000 observed MP are required.
+exact Crystalline Conflict or in Wolves' Den while the separate testing option
+is enabled. It reads the exact local identity, life/targetable state,
+current/maximum HP and MP, held gameplay-key generation, own Guard state,
+current supported context, and verified PvP Recuperate `29711` metadata/readiness.
+Exactly 16,000 or more missing HP and at least 2,000 observed MP are required.
 
 If MP or native readiness is not yet eligible, or a higher-priority/Guard state
 temporarily blocks it, the frozen intent waits without spending a native call.
 Dropping below the missing-HP threshold cancels that intent and permits a later
 distinct health event on the same hold. Once eligible, identity, context, life,
-targetability, Guard, metadata/readiness, HP, and MP are finally revalidated
-before each possible self-targeted native call. Only a clean explicit rejection
-may use the common bounded retry. Acceptance ends that epoch; a later one needs
+targetability, Guard, metadata/readiness, HP, MP, and the same frozen supported
+context are finally revalidated before each possible self-targeted native call.
+A CC/Den/context transition cancels rather than transferring the intent. Only a
+clean explicit rejection may use the common bounded retry. Acceptance ends that
+epoch; a later one needs
 an observed cooldown unavailable-to-ready transition. Retry exhaustion or an
 ambiguous/invalid exact outcome latches this helper until the frozen key is
 released. No selected target is read or changed and no other action is
 substituted.
 The transient observations and aggregate diagnostics are not stored or uploaded.
+
+## Experimental Viper Serpentiner Geist held-key helper
+
+This independent persisted option is disabled by default and runs only on PvP
+Viper in exact Crystalline Conflict or explicitly enabled Wolves' Den testing.
+It observes an already incoming qualifying Viper action through the existing
+local action boundary. Only a client-accepted result may create one in-memory
+trigger lasting less than five seconds. That trigger freezes the expected exact
+follow-up, target identity, supported context, territory, and accepted time; it
+does not store the qualifying action's invocation key, macro text, or create
+physical input. Direct execution must leave the native queue empty and advance the
+action sequence. An early queued input is recognized only at a later exact native
+queue drain whose queued action type, adjusted action ID, canonical target, extra
+parameter, and combo route all match and whose successful result clears the queue
+and advances the sequence. Initial queueing, arbitrary Queue calls, and uncertain
+transitions do not arm or overwrite a trigger. A newer proven qualifying-action
+epoch invalidates every older buffered intent. A concrete target ID is used
+directly. A native zero/default-
+target carrier is resolved only when the original and forwarded values are
+unchanged, no Seiton redirect suppressed the target, and the same native hard-
+target identity is proven immediately before and after client acceptance.
+
+FFXIV must adjust Serpent's Tail / Serpentiner Geist carrier `39183` to the exact
+expected follow-up `39174`-`39182`. The carrier itself is never submitted.
+Follow-ups `39177` and `39178` use their native 20-yalm range; the other reviewed
+follow-ups use 5 yalms. Any eligible currently held physical gameplay key,
+including WASD, may supply consent when the follow-up intent forms. Only then is
+that current key frozen for the episode; the same key, actor, action, context,
+territory, local Viper identity, own-Guard state,
+metadata, readiness, native target validity, range, and line of sight are checked
+again before a possible native call. Purify keeps absolute priority. Temporary
+action/resource/target-status or reachability unavailability retains the frozen
+opportunity while yielding the current frame to a usable lower-priority helper.
+Only an otherwise-ready exact intent waiting on the native boundary or retry
+throttle retains Viper's scheduler frame. The original five-second deadline is
+rechecked after intent formation and at the final boundary. Only a clean explicit
+client rejection may use the shared bounded retry for the same frozen intent.
+Acceptance, ambiguity, retry exhaustion, expiry, key release, or drift is terminal
+without an alternate, rerank, fallback, target mutation, or replay. Ambiguity or
+retry exhaustion additionally latches the frozen key until its physical release.
+
+In Crystalline Conflict the frozen target must remain one exact canonical
+`S1`-`S5` enemy. In Wolves' Den, the separate testing option must remain enabled
+and the target must remain the exact current hard-target living, targetable combat
+striking dummy with NameId `541`. Duel players, arbitrary NPCs, synthetic enemy
+slots, Frontline, and Rival Wings fail closed. The helper deliberately cannot
+request held-action cast cancellation. Trigger, intent, retry, native-result, and
+aggregate diagnostic state remain bounded in memory and are not persisted,
+transmitted, or uploaded. Client acceptance does not prove server execution or
+damage.
 
 ## Experimental Paladin Guardian Job Tool
 
@@ -878,7 +950,8 @@ beats a proactive candidate; proactive ties rank higher pressure first, then
 lower exact HP, before deterministic identity tie-breakers. The frozen winner
 must pass FFXIV's native 20-yalm Guardian range/line-of-sight check and remain
 exact. No custom center-distance cap is applied; the 10-yalm condition governs
-staying close enough for protection after the jump. Purify, NIN Seiton,
+staying close enough for protection after the jump. Purify, NIN Seiton / VPR
+Serpentiner Geist,
 reactive counter-CC, and Ally Rescue keep priority. Guardian precedes NIN Guard-
 Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, and pressure Sprint.
 Guardian freezes the selected ally and may use only the common bounded exact-
@@ -1225,8 +1298,10 @@ metadata mismatch disables this helper; no localized status text is used at
 runtime.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Purify alone precedes NIN Seiton in the
-current request order. NIN Seiton precedes reactive counter-CC, Ally Rescue, PLD
+and its Unsealed follow-up `29516`. Purify alone precedes NIN Seiton on Ninja in
+the current request order; Viper's job-exclusive Serpentiner-Geist slot has the
+same rank but can never coexist with NIN at runtime. NIN Seiton precedes reactive
+counter-CC, Ally Rescue, PLD
 Guardian, Guard-Shukuchi, SCH, DRK, Smart Recuperate, generic Guard, pressure
 Sprint, event Kardia, and event Monk.
 Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
@@ -1259,7 +1334,8 @@ Current English action/status/proc metadata must independently validate before
 the helper can act. It runs in Crystalline Conflict and in explicitly enabled
 Wolves' Den test mode; other PvP contexts fail closed.
 
-At the configured low-HP or expiry threshold, and only after Purify, NIN Seiton,
+At the configured low-HP or expiry threshold, and only after Purify, NIN Seiton
+or VPR Serpentiner Geist,
 reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH,
 Hiebsprung, Smart Recuperate, generic Guard, pressure Sprint, and event Kardia
 decline or make no earlier attempt, the
@@ -1294,8 +1370,9 @@ epoch uses final revalidation and the common bounded explicit-false retry for
 only that frozen direct target, with no selected-target mutation, alternate,
 rerank, or replay.
 
-Hiebsprung closes the job-specific second tier after Purify, NIN Seiton,
-reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, and SCH, and before Smart
+Hiebsprung closes the job-specific second tier after Purify, the job-exclusive
+NIN Seiton / VPR Serpentiner-Geist slot, reactive counter-CC, Ally Rescue,
+Guardian, NIN Guard-Shukuchi, and SCH, and before Smart
 Recuperate, generic Guard, pressure Sprint, event Kardia, and event Monk. Held-
 key state, cooldown observations, frozen identity, HP/status/reachability samples, action
 result, and aggregate diagnostics remain bounded in memory and are not stored as
@@ -1325,18 +1402,21 @@ acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
 Critical Strategy held-key opt-in,
-the Sage accepted-Eukrasia Smart Kardia opt-in, the DRK Shadowbringer macro
-opt-in, the separate DRK Hiebsprung held-key opt-in, the held-action cast-
+the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist held-
+key opt-in, the DRK Shadowbringer macro opt-in, the separate DRK Hiebsprung held-
+key opt-in, the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 33 is current in v0.30.0.1. It leaves Smart Tab off for
-every upgrade, fresh install, and Reset Defaults, while preserving an older
-explicitly enabled shared macro-helper opt-in as the separate Smart Action
-option. Smart Tab and Smart Action are both off for fresh and reset
-configurations.
+Configuration schema 34 is current in v0.31.0.0. It forces the new action-
+initiating Viper Serpentiner-Geist option off for every upgrade, fresh install,
+and Reset Defaults. The historical schema-33 migration still leaves Smart Tab
+off while preserving an older explicitly enabled shared macro-helper opt-in as
+the separate Smart Action option. Smart Tab, Smart Action, and the Viper helper
+are all off for fresh and reset configurations; unrelated existing opt-ins are
+preserved.
 
 Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key
 option off for upgrading configurations and left it off for fresh
@@ -1354,14 +1434,16 @@ including schema 28's default-off post-Guard migration. Schema 32 forces the
 retired Combat Frames master off, maps its optional name preference to the ally
 LB feed, enables the replacement LB surfaces, and initializes local MP sounds to
 built-in IDs 4 and 6. Fresh and reset configurations keep NIN Guard-Shukuchi,
-Smart Recuperate, Hiebsprung, Smart Action/other macro helpers, and all other
+Smart Recuperate, Hiebsprung, Smart Action/other macro
+helpers, and all other
 action-helper masters off; post-Guard defaults on only behind the disabled
 reactive-counter master. The replacement LB and local-MP presentation options
 default on but neither submits an action nor changes a target. Configuration does not
 save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground
-destinations, ActionEffect confirmation state, or in-memory counters.
+destinations, Viper accepted triggers/frozen action-actor-context-key intents,
+ActionEffect confirmation state, or in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

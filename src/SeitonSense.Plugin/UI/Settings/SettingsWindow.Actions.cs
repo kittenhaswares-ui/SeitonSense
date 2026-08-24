@@ -13,9 +13,9 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK " +
-            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The seven " +
-            "job-specific physical-hold helpers share the second tier. Enabled NIN Seiton gets its requested first slot; " +
+            "Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK " +
+            "Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk. The eight " +
+            "job-specific physical-hold helpers share the second tier. NIN Seiton and VPR Serpentiner Geist get their first job slot; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
             "frame. Kardia and Monk retain their separate event-driven origins.");
@@ -194,7 +194,8 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableSmartRecuperateOnHeldKey = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off and exact Crystalline Conflict only. Like held-key Purify, this listens to the shared " +
+            "Default off. Available in exact Crystalline Conflict and, only with the separate Wolves' Den testing " +
+            "toggle, in Wolves' Den for controlled testing. Like held-key Purify, this listens to the shared " +
             "continuous physical gameplay-key consent, including WASD. At exactly 16,000 or more missing HP and at least " +
             "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
             "is not ready, it waits without blocking a currently usable lower-priority helper.");
@@ -354,7 +355,7 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
-            "simultaneous loser can. Purify remains first; enabled NIN Seiton is next, while reactive counter-CC leads " +
+            "simultaneous loser can. Purify remains first; enabled NIN Seiton or VPR Serpentiner Geist is next, while reactive counter-CC leads " +
             "the BRD/WHM helpers because its LB and protection-end windows are shorter. Known action-specific " +
             "unavailability waits without blocking a usable lower helper; only a clean client rejection may retry " +
             "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +

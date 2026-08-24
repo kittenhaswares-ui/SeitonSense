@@ -14,7 +14,7 @@ internal sealed partial class SettingsWindow
             "target. Smart Tab and the separate low-MP Focus helper are the only opt-ins on this page that may set " +
             "a local target.");
 
-        ImGui.TextColored(new Vector4(0.35f, 0.88f, 1f, 1f), "MELEE SMART TAB (OPT-IN)");
+        ImGui.TextColored(new Vector4(0.35f, 0.88f, 1f, 1f), "SMART TAB (OPT-IN)");
         changed |= Checkbox(
             "Replace FFXIV's forward Tab targeting with Smart Targeting",
             configuration.EnableSmartTabTargeting,
@@ -22,7 +22,7 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Toggle ON replaces FFXIV's normal forward-target command in exact Crystalline Conflict on reviewed " +
-            "melee jobs. Your usual Tab key and any remapped forward-target binding use Smart Targeting directly. " +
+            "melee and ranged DPS jobs. Your usual Tab key and any remapped forward-target binding use Smart Targeting directly. " +
             "Toggle OFF is fully vanilla. Shift+Tab/reverse targeting, chat/UI Tab input, other targeting commands, " +
             "unsupported jobs, and all other content remain unchanged. /smarttab and /sstarget toggle this option.");
         ImGui.TextDisabled(
@@ -30,6 +30,10 @@ internal sealed partial class SettingsWindow
             "the reviewed range of that melee job's gap closer. Inside the first non-empty tier it ranks lowest HP%, " +
             "highest fresh team pressure, observed Wehr cooldown unavailable, lowest trusted MP%, then stable S-slot. " +
             "An enemy with live Wehr is excluded.");
+        ImGui.TextDisabled(
+            "On BRD, MCH, BLM, SMN, RDM, and PCT, one 25-yalm tier uses the same ranking without melee preference. " +
+            "DNC uses its 15-yalm Cascade/Fountain range. Only living, targetable canonical enemies inside that exact " +
+            "hitbox-edge range are considered.");
         ImGui.TextDisabled(
             "Because no combat action is being attempted, Smart Tab uses exact geometric reach rather than pretending " +
             "to have an action-specific native range/line-of-sight result. For an owned Tab press it freezes one exact " +

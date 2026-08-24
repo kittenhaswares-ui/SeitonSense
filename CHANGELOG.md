@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.31.0.0
+
+- Extended the default-off Smart Tab replacement to the reviewed ranged DPS jobs
+  in exact Crystalline Conflict. BRD, BLM, SMN, MCH, RDM, and PCT use one
+  25-yalm geometric hitbox-edge tier; DNC uses one 15-yalm tier. Ranged jobs do
+  not receive the melee-first preference. The existing HP, positive fresh team-
+  pressure, verified Guard-cooldown, trusted-MP, and stable-slot ranking remains
+  unchanged, as do the one-setter/readback and no-retry/no-alternate boundaries.
+- Extended the separate default-off held Smart Recuperate helper to Wolves' Den
+  only while the existing testing option is enabled. The exact supported context
+  is frozen with the self intent, so a CC/Den/context transition cancels instead
+  of carrying an attempt across content. Frontline and Rival Wings remain
+  excluded.
+- Added a separate default-off PvP Viper held-key helper for Serpent's Tail /
+  Serpentiner Geist. A client-accepted qualifying Viper action may arm one exact
+  five-second opportunity; the carrier `39183` must adjust to the expected exact
+  follow-up `39174`-`39182`. Direct execution requires a clean native queue and a
+  synchronous action-sequence advance. A normally early-queued input is accepted
+  only when FFXIV later exposes the exact queued action type, adjusted action,
+  canonical target, extra parameter, and combo route before a successful native
+  queue drain with a sequence advance. The initial queueing call, arbitrary Queue
+  calls, and any uncertain queue transition never arm or replace a trigger. Every
+  newer proven qualifying-action epoch invalidates an older buffered opportunity,
+  even when its adjusted follow-up and target are unchanged. The accepted action
+  stores no input key. Any eligible
+  currently held gameplay key, including WASD, may supply consent when the
+  follow-up intent forms; only then is that exact key frozen with the same actor,
+  context, and territory. `39177`/`39178` use their native 20-yalm reach; the other
+  reviewed follow-ups use 5 yalms. Native zero/default-target carriers are accepted
+  only when the original path was not redirected or suppressed and the same exact
+  hard target is proven before and after client acceptance. Own Guard, an earlier
+  scheduler claim, readiness, target status, range, line of sight, or identity
+  uncertainty fails closed or waits without choosing another action or target.
+  Action/target waits yield lower helpers; only an otherwise-ready native-boundary
+  or retry-throttle wait retains Viper's frame. The five-second deadline remains
+  exact after intent formation. Only a clean client rejection may use the shared
+  bounded same-intent retry; ambiguity or exhaustion latches the frozen key until
+  release.
+- In Crystalline Conflict the Viper helper accepts only an exact canonical
+  `S1`-`S5` target. With the separate Wolves' Den testing option it accepts only
+  the exact current hard-target combat striking dummy with NameId `541`; duel
+  players, arbitrary NPCs, and synthetic enemy slots are rejected. It never
+  changes the visible target, never dispatches carrier `39183`, and deliberately
+  does not participate in held-action cast cancellation. Client acceptance is
+  not proof of a server-side hit.
+- The current request order is **Purify > NIN Seiton / VPR Serpentiner Geist >
+  reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
+  Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard >
+  pressure Sprint > event Kardia > event Monk**. There are now twelve physical-
+  hold helpers; the cast-cancellation experiment remains limited to its existing
+  eleven and explicitly excludes Viper.
+- Bumped the plugin to `0.31.0.0` and configuration schema to `34`. The new Viper
+  helper remains off for upgrades, fresh installs, and Reset Defaults. All `404`
+  Core tests pass in this source snapshot.
+
 ## 0.30.0.1
 
 - Changed Smart Tab into a default-off replacement for FFXIV's native logical

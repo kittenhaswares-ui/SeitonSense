@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 33;
+    public int Version { get; set; } = 34;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -55,6 +55,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
     public bool EnableSmartRecuperateOnHeldKey { get; set; }
+    public bool EnableViperSerpentTailOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
     public string SeitonKeyLabel { get; set; } = "SHIFT";
@@ -230,7 +231,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 33)
+        if (Version >= 34)
         {
             if (repaired) Save();
             return;
@@ -566,7 +567,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableSmartActionMacro = EnableNearAssistMacro;
         }
 
-        Version = 33;
+        if (Version < 34)
+        {
+            // This helper can issue the exact VPR follow-up exposed by
+            // Serpent's Tail after a client-accepted qualifying action. It is a
+            // new hostile action path, so every upgrading user must opt in.
+            EnableViperSerpentTailOnHeldKey = false;
+        }
+
+        Version = 34;
         ClampSettings();
         Save();
     }
@@ -575,7 +584,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 33;
+        Version = 34;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -592,6 +601,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
+        EnableViperSerpentTailOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
         EnableDarkKnightPlungeOnHeldKey = false;
         SeitonKeyLabel = "SHIFT";

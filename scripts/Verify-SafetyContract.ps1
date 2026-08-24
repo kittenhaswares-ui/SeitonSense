@@ -149,6 +149,10 @@ $smartKardiaSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartKardiaSelfTests.cs
 $smartRecuperateRulesPath = Join-Path $coreRoot 'SmartRecuperateRules.cs'
 $smartRecuperateProbePath = Join-Path $pluginServicesRoot 'SmartRecuperateProbe.cs'
 $smartRecuperateSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartRecuperateSelfTests.cs'
+$viperSerpentTailRulesPath = Join-Path $coreRoot 'ViperSerpentTailRules.cs'
+$viperSerpentTailProbePath = Join-Path $pluginServicesRoot 'ViperSerpentTailProbe.cs'
+$viperSerpentTailSelfTestsPath = Join-Path $coreSelfTestRoot 'ViperSerpentTailSelfTests.cs'
+$strictWolvesDenDummyResolverPath = Join-Path $pluginServicesRoot 'StrictWolvesDenStrikingDummyResolver.cs'
 $combatLimitBreakCatalogPath = Join-Path $coreRoot 'CombatLimitBreakCatalog.cs'
 $combatLimitBreakEventRulesPath = Join-Path $coreRoot 'CombatLimitBreakEventRules.cs'
 $combatLimitBreakSelfTestsPath = Join-Path $coreSelfTestRoot 'CombatLimitBreakSelfTests.cs'
@@ -232,9 +236,12 @@ $allowedUnsafe = @(
     $defensiveUtilityProbePath,
     $pressureEscapeSprintProbePath,
     $ninjaSeitonProbePath,
+    $viperSerpentTailProbePath,
     $scholarCriticalStrategyProbePath,
     $smartKardiaProbePath,
     $smartRecuperateProbePath,
+    $viperSerpentTailProbePath,
+    $strictWolvesDenDummyResolverPath,
     $smartWardensPaeanServicePath,
     $heldCastCancellationServicePath,
     $isolationAwarenessPath,
@@ -435,7 +442,7 @@ if ($normalizedSmartTabSelectionMethod -notmatch 'SmartTabSelectionRules\.TryCre
 
 $smartTabInterceptionRules = Read-RequiredSource $smartTabInterceptionRulesPath 'Smart Tab interception rules'
 $normalizedSmartTabInterceptionRules = $smartTabInterceptionRules -replace '\s+', ' '
-if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled && observation\.FeatureEnabled && observation\.HookAvailable && observation\.InsideNativeTargetingHandler && observation\.ExactCrystallineConflict && observation\.ReviewedMeleeJob && observation\.LocalPlayerAvailable && observation\.NativeWorldForwardCycle;' -or
+if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled && observation\.FeatureEnabled && observation\.HookAvailable && observation\.InsideNativeTargetingHandler && observation\.ExactCrystallineConflict && observation\.ReviewedSmartTabJob && observation\.LocalPlayerAvailable && observation\.NativeWorldForwardCycle;' -or
     $normalizedSmartTabInterceptionRules -match '\|\|') {
     throw 'Smart Tab ownership must require every exact native-forward, handler-scope, context, job, player, hook, feature, and plugin gate.'
 }
@@ -443,7 +450,9 @@ if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled &
 $smartTabSelectionRules = Read-RequiredSource $smartTabSelectionRulesPath 'Smart Tab selection rules'
 $smartTargetReachRules = Read-RequiredSource $smartTargetReachRulesPath 'Smart Target shared reach rules'
 Assert-Literals $smartTabSelectionRules @(
-    'candidate.ReachTier is SmartTargetReachTier.Melee or SmartTargetReachTier.GapCloser',
+    'candidate.ReachTier is SmartTargetReachTier.Melee or',
+    'SmartTargetReachTier.GapCloser or',
+    'SmartTargetReachTier.RangedOrOther',
     '!candidate.HasActiveGuard',
     'SmartTabSelectionIntent(',
     'SelectBestCandidateIndex(candidates, localPlayer)',
@@ -452,16 +461,35 @@ Assert-Literals $smartTabSelectionRules @(
 ) 'Smart Tab exact eligibility, frozen intent, and stable ranking'
 Assert-Literals $smartTargetReachRules @(
     'public const float MeleeRangeYalms = 5f;',
+    'public const float StandardRangedRangeYalms = 25f;',
+    'public const float DancerRangeYalms = 15f;',
+    'public static bool IsReviewedRangedJob(uint jobId)',
+    'public static bool IsReviewedSmartTabJob(uint jobId)',
     '20 => 20f',
     '22 => 20f',
     '30 => 20f',
     '34 => 20f',
     '39 => 15f',
     '41 => 20f',
+    '23 => StandardRangedRangeYalms',
+    '25 => StandardRangedRangeYalms',
+    '27 => StandardRangedRangeYalms',
+    '31 => StandardRangedRangeYalms',
+    '35 => StandardRangedRangeYalms',
+    '38 => DancerRangeYalms',
+    '42 => StandardRangedRangeYalms',
     '_ => 0f',
     'centerDistance - localHitboxRadius - enemyHitboxRadius',
+    'if ((gapCloserRange <= 0f) == (rangedRange <= 0f)',
+    'tier = SmartTargetReachTier.RangedOrOther;',
+    'if (edgeDistance > rangedRange) return false;',
     'if (edgeDistance > gapCloserRange) return false;'
-) 'Smart Tab reviewed melee hitbox-edge and gap-reach allowlist'
+) 'Smart Tab reviewed DPS hitbox-edge, gap-reach, and ranged allowlist'
+if (($smartTabTargeting -replace '\s+', ' ') -notmatch 'ReviewedSmartTabJob: SmartTargetReachRules\.IsReviewedSmartTabJob\(localJobId\)' -or
+    ($smartTabTargeting -replace '\s+', ' ') -notmatch 'if \(!SmartTargetReachRules\.IsReviewedSmartTabJob\(localJobId\)\)' -or
+    [regex]::Matches($smartTabTargeting, '\bSmartTargetReachRules\.TryResolveReachTier\s*\(').Count -ne 1) {
+    throw 'Smart Tab runtime must use the one reviewed melee-or-ranged job gate and shared exact reach-tier resolver without a second range policy.'
+}
 
 $smartTabInterceptionSelfTests = Read-RequiredSource $smartTabInterceptionSelfTestsPath 'Smart Tab interception self-tests'
 $smartTabSelectionSelfTests = Read-RequiredSource $smartTabSelectionSelfTestsPath 'Smart Tab selection self-tests'
@@ -502,6 +530,23 @@ if ([regex]::Matches($smartTabInterceptionSelfTests, '\bpublic static void\s+\w+
     [regex]::Matches($smartTargetReachSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3) {
     throw 'The exact three interception, four selection, and three shared-reach Smart Tab tests must remain pinned.'
 }
+Assert-Literals $smartTargetReachSelfTests @(
+    '[23] = 25f,',
+    '[25] = 25f,',
+    '[27] = 25f,',
+    '[31] = 25f,',
+    '[35] = 25f,',
+    '[38] = 15f,',
+    '[42] = 25f,',
+    '"exact BRD 25-yalm edge is reachable"',
+    '"BRD has one ranged tier"',
+    '"exact DNC 15-yalm edge is reachable"',
+    '"DNC has one ranged tier"'
+) 'Reviewed ranged Smart Tab jobs, exact BRD/DNC caps, and no melee-first ranged tier'
+Assert-Literals $smartTabSelectionSelfTests @(
+    'valid with { ReachTier = SmartTargetReachTier.RangedOrOther }',
+    '"a caller-proven reviewed ranged tier is eligible"'
+) 'Smart Tab caller-proven reviewed ranged-tier eligibility'
 
 $smartTabCommandMatch = [regex]::Match(
     $pluginSource,
@@ -525,8 +570,9 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartTabTargeting\s*=\s*true\s*;').Count -ne 0 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
-    $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \} Version = 33;') {
-    throw 'Schema 33 must keep Smart Tab false for upgrades/fresh/reset while migrating only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
+    $normalizedSmartTabConfiguration -notmatch 'Version = 34;') {
+    throw 'Schema 34 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -1564,8 +1610,9 @@ if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \
 # one exact WHM/BRD/NIN reactive-CC boundary, one exact default-off NIN Seiton
 # boundary, one exact default-off SCH Critical Strategy boundary, one exact
 # Eukrasia-triggered SGE Smart Kardia boundary, one exact self-only Smart
-# Recuperate boundary, one exact default-off Monk Earth's Reply call, and one
-# exact job-tier default-off DRK Plunge call, and the explicit command-only NIN
+# Recuperate boundary, one exact default-off VPR Serpent's Tail follow-up, one
+# exact default-off Monk Earth's Reply call, one exact job-tier default-off DRK
+# Plunge call, and the explicit command-only NIN
 # Panic Shukuchi location call. Near Assist/Near Help/Far Help may
 # forward an incoming action through their sole Original. The same reviewed
 # detour may issue exactly one spent DRK Shadowbringer call before leaving the
@@ -1573,7 +1620,7 @@ if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\s*\(')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $nearAssistPath) -and
+        $_.Path -in @($purifyProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $viperSerpentTailProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $nearAssistPath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedPanicLocationBoundary =
         $_.Path -in @($panicShukuchiServicePath, $ninjaGuardShukuchiProbePath) -and
@@ -2221,6 +2268,7 @@ $normalizedSmartRecuperateProbe = $smartRecuperateProbe -replace '\s+', ' '
 $smartRecuperateSelfTests = Read-RequiredSource $smartRecuperateSelfTestsPath 'Smart Recuperate self-tests'
 Assert-Literals $smartRecuperateRules @(
     'public readonly record struct SmartRecuperateIntent(',
+    'SupportedPvPContext Context,',
     'public readonly record struct SmartRecuperateState(',
     'public readonly record struct SmartRecuperateObservation(',
     'HeldActionRetryState Retry,',
@@ -2237,9 +2285,13 @@ Assert-Literals $smartRecuperateRules @(
     'public static SmartRecuperateNativeAttemptDecision ApplyNativeAttemptOutcome(',
     'SmartRecuperateDecisionReason.MissingHealthBelowThreshold',
     'SmartRecuperateDecisionReason.InsufficientMp',
+    'SmartRecuperateDecisionReason.ContextChanged',
     'public static bool CanUseFrozenIntent('
-) 'Exact inclusive and retryable Smart Recuperate policy'
-if ($smartRecuperateRules -match '\b(?:TargetManager|PartySlot|Candidate|PressureTracker|QueueAction|PendingDispatch|BufferedDispatch|Timer|Stopwatch)\b') {
+) 'Exact inclusive, context-frozen, and retryable Smart Recuperate policy'
+if ([regex]::Matches($smartRecuperateRules, '\bSmartRecuperateDecisionReason\.ContextChanged\b').Count -ne 2 -or
+    $normalizedSmartRecuperateRules -notmatch 'private static SmartRecuperateDecision ObserveBuffered\(.*?if \(observation\.Context != intent\.Value\.Context\).*?SmartRecuperateDecisionReason\.ContextChanged' -or
+    $normalizedSmartRecuperateRules -notmatch 'private static SmartRecuperateDecision ObserveAcceptedCooldown\(.*?if \(observation\.Context != intent\.Value\.Context\).*?SmartRecuperateDecisionReason\.ContextChanged' -or
+    $smartRecuperateRules -match '\b(?:TargetManager|PartySlot|Candidate|PressureTracker|QueueAction|PendingDispatch|BufferedDispatch|Timer|Stopwatch)\b') {
     throw 'Smart Recuperate Core must remain exact self-only policy with no target selection, alternate, queue, or timer ownership.'
 }
 $smartRecuperateTestMethods = @(
@@ -2259,6 +2311,16 @@ if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(
     [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 7) {
     throw 'All seven Smart Recuperate threshold, frozen-intent, retry, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
 }
+Assert-Literals $smartRecuperateSelfTests @(
+    'Equal(SupportedPvPContext.CrystallineConflict, intent.Context, "frozen context");',
+    'Observe(Observation() with { Context = SupportedPvPContext.WolvesDen })',
+    '"explicit Wolves'' Den test context"',
+    '"buffered CC-to-Den drift cancels"',
+    '"buffered Den-to-CC drift cancels"',
+    '"accepted cooldown drift cancels"',
+    'False(CanUse(intent, currentContext: SupportedPvPContext.None), "context ended");',
+    'False(CanUse(intent, currentContext: SupportedPvPContext.WolvesDen), "context drift");'
+) 'Smart Recuperate exact CC/Wolves Den context and frozen-context tests'
 Assert-Literals $smartRecuperateProbe @(
     'var inputClaimed = decision.ShouldConsumeInputGeneration;',
     'if (inputClaimed) inputFrame.Consume();',
@@ -2266,6 +2328,9 @@ Assert-Literals $smartRecuperateProbe @(
     'SmartRecuperateRules.Observe(',
     'SmartRecuperateRules.ApplyNativeAttemptOutcome(',
     'SmartRecuperateRules.CanUseFrozenIntent(',
+    'Context: context,',
+    'ResolveCurrentContext()',
+    'includeWolvesDenTesting: configuration.EnableWolvesDenTesting',
     'HeldActionRetryRules.IsNativeBoundaryNearQueueable(',
     'ClientActionAttemptBoundary.Capture(',
     'ClientActionAttemptBoundaryRules.Classify(',
@@ -2275,12 +2340,392 @@ Assert-Literals $smartRecuperateProbe @(
     'Recuperate waiting without spending retry budget'
 ) 'Shared-policy Smart Recuperate runtime'
 if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
+    $normalizedSmartRecuperateRules -notmatch 'Context is SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen' -or
+    $normalizedSmartRecuperateRules -notmatch 'intent\.IsValid && configurationEnabled && currentContext == intent\.Context' -or
+    $normalizedSmartRecuperateProbe -notmatch 'PvPMatchRules\.ResolveSupportedContext\( clientState\.IsPvP, clientState\.IsPvPExcludingDen, includeWolvesDenTesting: configuration\.EnableWolvesDenTesting,' -or
     [regex]::Matches($smartRecuperateProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -lt 2 -or
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
     $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueueAction|PendingDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
     throw 'Smart Recuperate must claim only dispatchable frames and issue one exact frozen self-GOID boundary using shared classification, with no retarget, alternate, or replay.'
+}
+
+# VPR Serpent's Tail is a separate default-off physical-hold helper. It may
+# consume only a short-lived trigger created after one accepted qualifying VPR
+# action, freeze the exact adjusted follow-up and original actor, and submit at
+# most one direct-target native request per framework frame. CC accepts only a
+# canonical S1-S5 actor; explicit Wolves' Den testing accepts only the local
+# player's exact current native hard-target striking dummy. The helper does not
+# own cast cancellation.
+$viperSerpentTailRules = Read-RequiredSource $viperSerpentTailRulesPath 'VPR Serpent Tail rules'
+$normalizedViperSerpentTailRules = $viperSerpentTailRules -replace '\s+', ' '
+$viperSerpentTailSelfTests = Read-RequiredSource $viperSerpentTailSelfTestsPath 'VPR Serpent Tail self-tests'
+$viperSerpentTailProbe = Read-RequiredSource $viperSerpentTailProbePath 'VPR Serpent Tail runtime probe'
+$normalizedViperSerpentTailProbe = $viperSerpentTailProbe -replace '\s+', ' '
+$strictWolvesDenDummyResolver = Read-RequiredSource $strictWolvesDenDummyResolverPath 'Strict Wolves Den striking-dummy resolver'
+$normalizedStrictWolvesDenDummyResolver = $strictWolvesDenDummyResolver -replace '\s+', ' '
+$viperNearAssist = Read-RequiredSource $nearAssistPath 'VPR accepted-trigger capture'
+$normalizedViperNearAssist = $viperNearAssist -replace '\s+', ' '
+$viperMetadataGuard = Read-RequiredSource (Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'VPR metadata guard'
+$normalizedViperMetadataGuard = $viperMetadataGuard -replace '\s+', ' '
+
+Assert-Literals $viperSerpentTailRules @(
+    'public const uint ViperJobId = 41;',
+    'public const uint WolvesDenStrikingDummyNameId = 541;',
+    'public const uint CarrierActionId = 39_183;',
+    'public const uint DeathRattleActionId = 39_174;',
+    'public const uint TwinfangBiteActionId = 39_175;',
+    'public const uint TwinbloodBiteActionId = 39_176;',
+    'public const uint UncoiledTwinfangActionId = 39_177;',
+    'public const uint UncoiledTwinbloodActionId = 39_178;',
+    'public const uint FirstLegacyActionId = 39_179;',
+    'public const uint SecondLegacyActionId = 39_180;',
+    'public const uint ThirdLegacyActionId = 39_181;',
+    'public const uint FourthLegacyActionId = 39_182;',
+    'public const long TriggerLifetimeMilliseconds = 5_000;',
+    'long ExpiresAtMilliseconds,',
+    '39_161 or 39_163 => DeathRattleActionId,',
+    '39_166 => TwinfangBiteActionId,',
+    '39_167 => TwinbloodBiteActionId,',
+    '39_168 => UncoiledTwinfangActionId,',
+    'UncoiledTwinfangActionId => UncoiledTwinbloodActionId,',
+    '39_169 => FirstLegacyActionId,',
+    '39_170 => SecondLegacyActionId,',
+    '39_171 => ThirdLegacyActionId,',
+    '39_172 => FourthLegacyActionId,',
+    'UncoiledTwinfangActionId or UncoiledTwinbloodActionId => 20,',
+    'FourthLegacyActionId => 5,',
+    'SupportedPvPContext.CrystallineConflict => EnemySlotRules.IsValidSlot(enemySlot),',
+    'SupportedPvPContext.WolvesDen => enemySlot == 0,',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.Complete(',
+    'HeldActionRetryDisposition Disposition,',
+    'public long AcceptedActionEpoch => Token;',
+    'public long AcceptedActionEpoch => TriggerToken;',
+    'long CurrentAcceptedActionEpoch,',
+    'TriggerSuperseded,',
+    'public enum ViperSerpentTailTriggerPromotionDisposition : byte',
+    'ExecutedAccepted = 4,',
+    'public enum ViperSerpentTailTriggerInvocationKind : byte',
+    'Direct = 1,',
+    'ProvenNativeQueueDrain = 2,',
+    'public const uint DirectUseActionMode = 0;',
+    'public const uint QueueUseActionMode = 1;',
+    'public const uint MacroUseActionMode = 2;',
+    'public const uint ComboUseActionMode = 3;',
+    'public const uint LegacyMacroUseActionMode = 100;',
+    'ClassifyTriggerInvocationMode(',
+    'CanReserveChainedAcceptedActionEpoch(',
+    'DirectUseActionMode or MacroUseActionMode or ComboUseActionMode or',
+    'LegacyMacroUseActionMode => ViperSerpentTailTriggerInvocationKind.Direct,',
+    'QueueUseActionMode when exactNativeQueueDrainProvenance =>',
+    'IsCurrentAcceptedActionEpoch(',
+    'ClassifyAcceptedTriggerBoundary(',
+    'HasExactNativeQueueDrainProvenance(',
+    'before.QueuedActionType == incomingActionType',
+    'queuedResolvedActionId == incomingResolvedActionId',
+    'ActorIdMatches(before.QueuedTargetId, canonicalTarget)',
+    'before.QueuedExtraParam == incomingExtraParam',
+    'before.QueuedComboRouteId == incomingComboRouteId',
+    'before.LastUsedActionSequence != after.LastUsedActionSequence',
+    'ClassifyFollowUpBoundary(',
+    'targetStatusBefore != 0',
+    'targetStatusAfter != 0',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'consumeTrigger: true',
+    'trigger.ExpiresAtMilliseconds,',
+    'if (observation.NowMilliseconds >= intent.Value.ExpiresAtMilliseconds)',
+    'nowMilliseconds >= 0 && nowMilliseconds < intent.ExpiresAtMilliseconds',
+    'currentHeldKeyCode == intent.FrozenKeyCode && frozenKeyStillDown',
+    'candidate.HasNativeRangeAndLineOfSight'
+) 'Exact VPR carrier/follow-up IDs, mappings, ranges, contexts, frozen intent, and shared retry policy'
+if ([regex]::Matches($viperSerpentTailRules, '\bHeldActionRetryRules\.RetainsSchedulerFrame\s*\(').Count -ne 4 -or
+    [regex]::Matches($viperSerpentTailRules, '\bIsCurrentAcceptedActionEpoch\s*\(').Count -ne 5 -or
+    [regex]::Matches($viperSerpentTailRules, '\bCanReserveChainedAcceptedActionEpoch\s*\(').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailRules, '\bpublic long AcceptedActionEpoch => Token;').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailRules, '\bpublic long AcceptedActionEpoch => TriggerToken;').Count -ne 1 -or
+    $normalizedViperSerpentTailRules -notmatch 'Context is SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen' -or
+    $normalizedViperSerpentTailRules -notmatch 'nowMilliseconds >= trigger\.AcceptedAtMilliseconds && nowMilliseconds < trigger\.ExpiresAtMilliseconds' -or
+    $normalizedViperSerpentTailRules -notmatch 'trigger\.IsValid &&.*?territoryId == trigger\.TerritoryId && context == trigger\.Context && localPlayer == trigger\.LocalPlayer' -or
+    $normalizedViperSerpentTailRules -notmatch 'ClassifyTriggerInvocationMode\( uint useActionMode, bool exactNativeQueueDrainProvenance\) => useActionMode switch \{ DirectUseActionMode or MacroUseActionMode or ComboUseActionMode or LegacyMacroUseActionMode => ViperSerpentTailTriggerInvocationKind\.Direct, QueueUseActionMode when exactNativeQueueDrainProvenance => ViperSerpentTailTriggerInvocationKind\.ProvenNativeQueueDrain, _ => ViperSerpentTailTriggerInvocationKind\.Unsupported, \};' -or
+    $normalizedViperSerpentTailRules -notmatch 'CanReserveChainedAcceptedActionEpoch\( long completedAcceptedActionEpoch, long currentAcceptedActionEpoch, long pendingAcceptedActionEpoch\) => IsCurrentAcceptedActionEpoch\( completedAcceptedActionEpoch, currentAcceptedActionEpoch\) && \(pendingAcceptedActionEpoch == 0 \|\| pendingAcceptedActionEpoch == completedAcceptedActionEpoch\);' -or
+    $normalizedViperSerpentTailRules -notmatch 'ClassifyAcceptedTriggerBoundary\( ViperSerpentTailTriggerInvocationKind invocationKind,.*?if \(invocationKind is not \(ViperSerpentTailTriggerInvocationKind\.Direct or ViperSerpentTailTriggerInvocationKind\.ProvenNativeQueueDrain\)\).*?UnsupportedInvocationMode;.*?if \(!clientReturnedAccepted\).*?ClientRejected;.*?if \(!before\.Captured \|\| !after\.Captured\).*?AcceptanceUnknown;.*?if \(after\.ActionQueued \|\| \(invocationKind == ViperSerpentTailTriggerInvocationKind\.Direct && before\.ActionQueued\) \|\| \(invocationKind == ViperSerpentTailTriggerInvocationKind\.ProvenNativeQueueDrain && !before\.ActionQueued\)\).*?NativeQueueOwned;.*?return after\.LastUsedActionSequence != 0 && before\.LastUsedActionSequence != after\.LastUsedActionSequence \? ViperSerpentTailTriggerPromotionDisposition\.ExecutedAccepted : ViperSerpentTailTriggerPromotionDisposition\.AcceptanceUnknown;' -or
+    $normalizedViperSerpentTailRules -notmatch 'HasExactNativeQueueDrainProvenance\(.*?isQueueInvocation && actionTypeSupported && incomingActionType != 0 && before\.Captured && before\.ActionQueued && before\.QueuedActionType == incomingActionType && before\.QueuedActionId != 0 && TryGetExpectedFollowUp\(incomingResolvedActionId, out _\) && queuedResolvedActionId == incomingResolvedActionId && ActorIdMatches\(incomingEffectiveTargetId, canonicalTarget\) && ActorIdMatches\(before\.QueuedTargetId, canonicalTarget\) && before\.QueuedExtraParam == incomingExtraParam && before\.QueuedComboRouteId == incomingComboRouteId;' -or
+    $normalizedViperSerpentTailRules -notmatch 'ClassifyFollowUpBoundary\(.*?if \(clientReturnedAccepted\) return ClientActionAttemptOutcome\.ClientAccepted; if \(expectedActionId == 0 \|\| targetStatusBefore != 0 \|\| targetStatusAfter != 0 \|\| carrierBefore != expectedActionId \|\| carrierAfter != expectedActionId\).*?return ClientActionAttemptOutcome\.AcceptanceUnknown;.*?return ClientActionAttemptBoundaryRules\.Classify\( false, expectedActionId, before, after\);' -or
+    $normalizedViperSerpentTailRules -notmatch 'intent\.IsValid && configurationEnabled && context == intent\.Context.*?IsCurrentAcceptedActionEpoch\( intent\.AcceptedActionEpoch, currentAcceptedActionEpoch\).*?nowMilliseconds >= 0 && nowMilliseconds < intent\.ExpiresAtMilliseconds' -or
+    $normalizedViperSerpentTailRules -notmatch 'if \(!IsCurrentAcceptedActionEpoch\( trigger\.AcceptedActionEpoch, observation\.CurrentAcceptedActionEpoch\)\).*?TriggerSuperseded' -or
+    $normalizedViperSerpentTailRules -notmatch 'if \(!IsCurrentAcceptedActionEpoch\( intent\.Value\.AcceptedActionEpoch, observation\.CurrentAcceptedActionEpoch\)\).*?TriggerSuperseded.*?if \(observation\.NowMilliseconds >= intent\.Value\.ExpiresAtMilliseconds\)' -or
+    $normalizedViperSerpentTailRules -notmatch 'candidate\.Context == intent\.Context && candidate\.EnemySlot == intent\.EnemySlot && candidate\.Actor == intent\.Target && candidate\.ExactCanonicalIdentity && candidate\.Alive && candidate\.Targetable' -or
+    $viperSerpentTailRules -match '\b(?:TargetManager|SetTarget|QueueAction|UseAction|CancelCast|Stopwatch|Timer)\b') {
+    throw 'VPR Core must keep one exact five-second accepted trigger, exact context/local/actor identity, live canonical candidate, and shared retry policy without runtime target/action ownership.'
+}
+
+$viperSerpentTailTestMethods = @(
+    'ExactCarrierFollowupsMappingsAndRangesArePinned',
+    'AcceptedTriggerIsExactAndBounded',
+    'InitialSafetyGatesAndPriorityFailClosed',
+    'ExactIntentFreezesActionTargetContextAndKey',
+    'KnownWaitsAreFreeAndCleanFalseRetriesAreBounded',
+    'ContinuousHoldUsesDistinctAcceptedFollowupTriggersOnly'
+)
+foreach ($method in $viperSerpentTailTestMethods) {
+    Assert-Literals $viperSerpentTailSelfTests @("public static void $method()") "VPR Serpent Tail self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("ViperSerpentTailSelfTests.$method") "VPR Serpent Tail test registration $method"
+}
+if ([regex]::Matches($viperSerpentTailSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bViperSerpentTailSelfTests\.\w+').Count -ne 6) {
+    throw 'All six VPR identity/range, accepted-trigger, initial-gate, frozen-intent, retry, and distinct-follow-up tests must remain registered exactly once.'
+}
+Assert-Literals $viperSerpentTailSelfTests @(
+    'False(ViperSerpentTailRules.IsExactFollowUpAction(39_183), "carrier is never dispatched");',
+    '"exclusive expiry"',
+    '"Den uses explicit no-slot target"',
+    '"Den never invents S1"',
+    '"direct normal hotbar execution promotes"',
+    '"None is a direct invocation"',
+    '"Macro is a direct invocation"',
+    '"single-button Combo is a direct invocation"',
+    '"legacy raw 100 is a direct invocation"',
+    '"Queue without exact native provenance is unsupported"',
+    '"Queue with exact native provenance is a proven drain"',
+    '"unknown execution mode stays closed"',
+    '"direct single-button Combo execution promotes"',
+    '"Combo call that initially queues never promotes"',
+    '"Combo cannot bypass a queue already owned before the call"',
+    '"initial direct true that queues never promotes"',
+    '"arbitrary unsupported invocation never promotes"',
+    '"true without an executed sequence transition never promotes"',
+    '"zero post-call sequence is never execution proof"',
+    '"exact native Queue drain provenance"',
+    '"proven native Queue drain promotes after queue clears"',
+    '"Queue drain that remains queued never promotes"',
+    '"rejected Queue drain never promotes"',
+    '"non-Queue call cannot claim Queue provenance"',
+    '"arbitrary Queue call without native queued state fails closed"',
+    '"Queue action type drift fails closed"',
+    '"Queue action ID drift fails closed"',
+    '"Queue target drift fails closed"',
+    '"Queue extra parameter drift fails closed"',
+    '"Queue combo route drift fails closed"',
+    '"own Guard suppresses"',
+    '"Purify remains first"',
+    '"trigger expiry frozen"',
+    '"expired intent"',
+    '"newer accepted action epoch invalidates frozen intent"',
+    '"soft wait spends no retry"',
+    '"soft disposition preserved"',
+    '"action wait yields lower helpers"',
+    '"range wait yields lower helpers"',
+    '"buffered expiry is terminal"',
+    '"eighth false is terminal"',
+    '"retry exhaustion disposition preserved"',
+    '"retry exhaustion latches the exact key"',
+    '"ambiguous disposition preserved"',
+    '"ambiguous acceptance latches the exact key"',
+    '"false with stable full and target-aware readiness is retryable"',
+    '"false after target-aware readiness drift is terminal ambiguous"',
+    '"false after carrier drift is terminal ambiguous"',
+    '"accepted 39177 may reserve its next epoch after predecessor consumption"',
+    '"accepted 39177 may invalidate only its matching pending predecessor"',
+    '"newer accepted VPR epoch blocks stale 39177 chain without overwrite"',
+    '"mismatched pending epoch is never invalidated by chained arm"',
+    '"invalid accepted epoch cannot start a chain"',
+    '"newer same-follow-up epoch cancels old buffered intent"',
+    '"newer same-follow-up epoch replaces old intent"',
+    '"unchanged adjusted action cannot duplicate"',
+    '"same hold may execute distinct Twinblood epoch"'
+) 'Focused VPR carrier exclusion, Den slot, Guard/priority, retry, and distinct accepted-epoch coverage'
+
+Assert-Literals $viperSerpentTailProbe @(
+    'nearAssist.TryPeekViperSerpentTailTrigger(',
+    'nearAssist.TryConsumeViperSerpentTailTrigger(',
+    'nearAssist.ClearViperSerpentTailTrigger();',
+    'ResolveExactCandidate(',
+    'EnemySlotResolver.Resolve(objectTable, enemySlot)',
+    'StrictWolvesDenStrikingDummyResolver',
+    '.TryResolveFrozenCurrentHardTarget(',
+    '.GetActionInRangeOrLoS(',
+    'ViperSerpentTailRules.CarrierActionId',
+    'ClientActionAttemptBoundary.Capture(',
+    'ViperSerpentTailRules.ClassifyFollowUpBoundary(',
+    'actionManager->GetActionStatus(',
+    'nearAssist.RunWithoutRedirect(() =>',
+    'nearAssist.GetCurrentViperSerpentTailAcceptedEpoch()',
+    'nearAssist.TryRunForCurrentViperSerpentTailAcceptedEpoch(',
+    'intent.AcceptedActionEpoch,',
+    'targetStatusBefore,',
+    'targetStatusAfter,',
+    'intent.Target.GameObjectId,',
+    'ActionManager.UseActionMode.None,',
+    'nearAssist.ArmAcceptedViperSerpentTailFollowUp(',
+    'ViperSerpentTailRules.UncoiledTwinfangActionId',
+    'completion.Disposition',
+    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
+    'boundaryNow,',
+    'inputFrame.Consume();'
+) 'VPR accepted-trigger consumption, exact candidate, direct-target native boundary, and distinct 39178 continuation'
+if ([regex]::Matches($viperSerpentTailProbe, '\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 3 -or
+    [regex]::Matches($viperSerpentTailProbe, '\bViperSerpentTailRules\.ClassifyFollowUpBoundary\s*\(').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 0 -or
+    [regex]::Matches($viperSerpentTailProbe, '\bGetActionStatus\s*\(').Count -ne 3 -or
+    [regex]::Matches($viperSerpentTailProbe, '\bTryRunForCurrentViperSerpentTailAcceptedEpoch\s*\(').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
+    $normalizedViperSerpentTailProbe -notmatch 'if \(decision\.ConsumeTrigger\).*?nearAssist\.TryConsumeViperSerpentTailTrigger\( consumedIntent\.TriggerToken, Environment\.TickCount64, territoryId, context, localIdentity\).*?FreezeRuntime\( consumedIntent, territoryId, exactLocal\.Address, consumedCandidate\.Target\.Address\);' -or
+    $normalizedViperSerpentTailProbe -notmatch 'actionManager->GetActionStatus\( ActionType\.Action, actionId, expectedTarget\.GameObjectId, checkRecastActive: true, checkCastingActive: true\) == 0' -or
+    $normalizedViperSerpentTailProbe -notmatch 'targetStatusBefore = actionManager->GetActionStatus\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\);.*?carrierBefore = actionManager->GetAdjustedActionId\( ViperSerpentTailRules\.CarrierActionId\); before = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); if \(carrierBefore != intent\.ActionId \|\| !before\.IsExactActionReady\(intent\.ActionId\) \|\| targetStatusBefore != 0\)' -or
+    $normalizedViperSerpentTailProbe -notmatch 'nearAssist\.TryRunForCurrentViperSerpentTailAcceptedEpoch\( intent\.AcceptedActionEpoch, \(\) => \{ attemptedAtBoundary = true; var accepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); after = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); carrierAfter = actionManager->GetAdjustedActionId\( ViperSerpentTailRules\.CarrierActionId\); targetStatusAfter = actionManager->GetActionStatus\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, checkRecastActive: true, checkCastingActive: true\); return accepted; \}, out var epochAccepted\)' -or
+    $normalizedViperSerpentTailProbe -notmatch 'return ViperSerpentTailRules\.ClassifyFollowUpBoundary\( clientAccepted, intent\.ActionId, targetStatusBefore, targetStatusAfter, carrierBefore, carrierAfter, before, after\);' -or
+    $normalizedViperSerpentTailProbe -notmatch 'ViperSerpentTailRules\.CanUseFrozenIntent\(.*?nearAssist\.GetCurrentViperSerpentTailAcceptedEpoch\(\), boundaryNow,' -or
+    $normalizedViperSerpentTailProbe -notmatch 'if \(completion\.Terminal && HeldActionRetryRules\.ShouldLatchHeldKeyUntilRelease\( completion\.Disposition\)\).*?terminalHeldKey = \(VirtualKey\)intent\.FrozenKeyCode;' -or
+    $viperSerpentTailProbe -match '\b(?:HeldCastCancellationRequest|HeldCastCancellationHelperKind|CancelCast|ITargetManager|TargetManager|SetTarget|QueueAction|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
+    throw 'VPR runtime must own exactly one direct frozen-target UseActionMode.None boundary with carrier before/after proof, clean-false classification, no cast cancel, no target mutation, and no alternate.'
+}
+
+Assert-Literals $strictWolvesDenDummyResolver @(
+    'ViperSerpentTailRules.WolvesDenStrikingDummyNameId;',
+    'GetExcelSheet<BNpcName>(ClientLanguage.English)',
+    'row.Singular.ToString() == "striking dummy"',
+    'row.Plural.ToString() == "striking dummies"',
+    'character->GetTargetId().Id',
+    'objectTable.SearchById(nativeHardTargetId)',
+    'objectTable.SearchByEntityId((uint)nativeHardTargetId)',
+    'BattleNpcKind: BattleNpcSubKind.Combatant',
+    'candidate.ObjectKind != ObjectKind.BattleNpc',
+    'candidate.NameId != StrikingDummyNameId',
+    '!candidate.IsTargetable',
+    'GetNativeHardTargetId(localPlayer!) != nativeHardTargetId',
+    'currentIdentity != expectedTarget'
+) 'Shared strict Wolves Den current-hard-target striking-dummy resolver'
+if ([regex]::Matches($strictWolvesDenDummyResolver, '\b541\b').Count -ne 0 -or
+    $strictWolvesDenDummyResolver -match '\b(?:WolvesDenOpponentResolver|EnemySlotResolver|UseAction|SetTarget|ITargetManager|TargetManager)\b' -or
+    $normalizedStrictWolvesDenDummyResolver -notmatch 'candidate\.GameObjectId == localPlayer\.GameObjectId \|\| candidate\.EntityId == localPlayer\.EntityId \|\| candidate\.IsDead \|\| candidate\.CurrentHp == 0 \|\| candidate\.MaxHp == 0 \|\| candidate\.CurrentHp > candidate\.MaxHp \|\| !candidate\.IsTargetable') {
+    throw 'The shared Den resolver must reference the one Core NameId constant, require the exact live targetable current native hard-target striking dummy, and never query duel/S-slot/nearest/action/target-mutation fallbacks.'
+}
+
+Assert-Literals $viperNearAssist @(
+    'internal bool TryPeekViperSerpentTailTrigger(',
+    'internal bool TryConsumeViperSerpentTailTrigger(',
+    'internal void ClearViperSerpentTailTrigger()',
+    'private bool TryClearViperSerpentTailTrigger(long token)',
+    'internal long GetCurrentViperSerpentTailAcceptedEpoch()',
+    'internal bool TryRunForCurrentViperSerpentTailAcceptedEpoch(',
+    'internal void ArmAcceptedViperSerpentTailFollowUp(',
+    'private bool TryReserveChainedViperSerpentTailAcceptedEpoch(',
+    'private void InstallReservedViperSerpentTailTrigger(',
+    'private bool TryCaptureViperSerpentTailPreflight(',
+    'private void ArmAcceptedViperSerpentTailTrigger(',
+    'ViperSerpentTailRules.TryGetExpectedFollowUp(triggerActionId, out _)',
+    'var directInvocation =',
+    'var queueDrainInvocation =',
+    'mode == ActionManager.UseActionMode.Queue;',
+    'ViperSerpentTailRules.ClassifyTriggerInvocationMode(',
+    'exactNativeQueueDrainProvenance: false',
+    'exactNativeQueueDrainProvenance: true',
+    'nativeBefore.ActionQueued',
+    'ViperSerpentTailRules.HasExactNativeQueueDrainProvenance(',
+    'ViperSerpentTailTriggerInvocationKind.Direct',
+    'ViperSerpentTailTriggerInvocationKind.ProvenNativeQueueDrain',
+    'ViperSerpentTailRules.ClassifyAcceptedTriggerBoundary(',
+    'ViperSerpentTailTriggerPromotionDisposition.ExecutedAccepted',
+    'acceptedActionEpoch = NextViperSerpentTailTriggerToken();',
+    'TryClearViperSerpentTailTrigger(pending.Value.Token);',
+    'CcImmunityBrakeTargetRules.IsDefaultTargetCarrier(forwardedTargetId)',
+    'CcImmunityBrakeTargetRules.ResolveEffectiveTargetId(',
+    'var nativeHardTargetId = usedNativeDefaultTarget',
+    'UsedNativeDefaultTarget',
+    'NativeHardTargetId',
+    'ResolveViperSerpentTailContext()',
+    'TryResolveViperSerpentTailTarget(',
+    'pendingViperSerpentTailTrigger = null;',
+    'ViperSerpentTailRules.TryCreateAcceptedTrigger(',
+    'acceptedIntent.ActionId != ViperSerpentTailRules.UncoiledTwinfangActionId',
+    'acceptedIntent.AcceptedActionEpoch,',
+    'StrictWolvesDenStrikingDummyResolver.TryResolveExactCurrentHardTarget(',
+    '!configuration.EnableWolvesDenTesting',
+    'context != SupportedPvPContext.CrystallineConflict'
+) 'Accepted VPR action capture, one-shot trigger lifecycle, exact CC actor, and strict Den dummy target'
+if ($normalizedViperNearAssist -notmatch 'var hasViperSerpentTailPreflight = TryCaptureViperSerpentTailPreflight\(.*?var clientAccepted = useActionHook!\.Original\(.*?var viperSerpentTailAfter = hasViperSerpentTailPreflight \? ClientActionAttemptBoundary\.Capture\( thisPtr, viperSerpentTailPreflight\.TriggerActionId\) : default;.*?if \(hasViperSerpentTailPreflight && ViperSerpentTailRules\.ClassifyAcceptedTriggerBoundary\( viperSerpentTailPreflight\.InvocationKind, clientAccepted, viperSerpentTailPreflight\.NativeBefore, viperSerpentTailAfter\) == ViperSerpentTailTriggerPromotionDisposition\.ExecutedAccepted\).*?ArmAcceptedViperSerpentTailTrigger\(' -or
+    $normalizedViperNearAssist -notmatch 'internal bool TryConsumeViperSerpentTailTrigger\( long token, long nowMilliseconds, uint territoryId, SupportedPvPContext context, TargetPressureActorIdentity localPlayer\).*?lock \(viperSerpentTailTriggerGate\).*?pending\.Token != token \|\| viperSerpentTailTriggerSequence != token.*?!ViperSerpentTailRules\.IsTriggerCurrent\( pending, nowMilliseconds, territoryId, context, localPlayer\).*?pendingViperSerpentTailTrigger = null; return true;' -or
+    $normalizedViperNearAssist -notmatch 'internal bool TryRunForCurrentViperSerpentTailAcceptedEpoch\( long acceptedActionEpoch, Func<bool> action, out bool result\).*?lock \(viperSerpentTailTriggerGate\).*?if \(viperSerpentTailTriggerSequence != acceptedActionEpoch\) return false; result = action\(\); return true;' -or
+    $normalizedViperNearAssist -notmatch 'internal void ArmAcceptedViperSerpentTailFollowUp\( ViperSerpentTailIntent acceptedIntent, long acceptedAtMilliseconds\).*?acceptedIntent\.ActionId != ViperSerpentTailRules\.UncoiledTwinfangActionId.*?if \(!TryReserveChainedViperSerpentTailAcceptedEpoch\( acceptedIntent\.AcceptedActionEpoch, out chainedAcceptedActionEpoch\)\).*?return;.*?InstallReservedViperSerpentTailTrigger\( preflight, acceptedAtMilliseconds, chainedAcceptedActionEpoch\);.*?catch \{ TryClearViperSerpentTailTrigger\(chainedAcceptedActionEpoch\); throw;' -or
+    $normalizedViperNearAssist -notmatch 'private bool TryReserveChainedViperSerpentTailAcceptedEpoch\( long completedAcceptedActionEpoch, out long chainedAcceptedActionEpoch\).*?chainedAcceptedActionEpoch = 0; lock \(viperSerpentTailTriggerGate\) \{ var pendingAcceptedActionEpoch = pendingViperSerpentTailTrigger\?\.AcceptedActionEpoch \?\? 0; if \(!ViperSerpentTailRules\.CanReserveChainedAcceptedActionEpoch\( completedAcceptedActionEpoch, viperSerpentTailTriggerSequence, pendingAcceptedActionEpoch\)\).*?return false;.*?pendingViperSerpentTailTrigger = null; chainedAcceptedActionEpoch = NextViperSerpentTailTriggerToken\(\); return chainedAcceptedActionEpoch > 0; \}' -or
+    $normalizedViperNearAssist -notmatch 'private void InstallReservedViperSerpentTailTrigger\( ViperSerpentTailPreflight preflight, long acceptedAtMilliseconds, long acceptedActionEpoch\).*?ViperSerpentTailRules\.TryCreateAcceptedTrigger\( acceptedActionEpoch,.*?lock \(viperSerpentTailTriggerGate\) \{ if \(viperSerpentTailTriggerSequence != acceptedActionEpoch \|\| trigger\.AcceptedActionEpoch != acceptedActionEpoch\).*?return;.*?pendingViperSerpentTailTrigger = trigger; \}' -or
+    $normalizedViperNearAssist -notmatch 'var invocationKind = ViperSerpentTailRules\.ClassifyTriggerInvocationMode\( \(uint\)mode, exactNativeQueueDrainProvenance: false\); var directInvocation = invocationKind == ViperSerpentTailTriggerInvocationKind\.Direct; var queueDrainInvocation = mode == ActionManager\.UseActionMode\.Queue; if \(bypassRedirect \|\| targetSuppressedByRedirect \|\| \(!directInvocation && !queueDrainInvocation\).*?var nativeBefore = ClientActionAttemptBoundary\.Capture\( actionManager, triggerActionId\); if \(!nativeBefore\.Captured\) return false; if \(directInvocation\) \{ if \(nativeBefore\.ActionQueued\) return false; \} else \{.*?queuedResolvedActionId.*?ViperSerpentTailRules\.HasExactNativeQueueDrainProvenance\( queueDrainInvocation, IsSupportedActionType\(actionType\), \(uint\)actionType, triggerActionId, effectiveTargetId, extraParam, comboRouteId, queuedResolvedActionId, target, nativeBefore\).*?invocationKind = ViperSerpentTailRules\.ClassifyTriggerInvocationMode\( \(uint\)mode, exactNativeQueueDrainProvenance: true\); if \(invocationKind != ViperSerpentTailTriggerInvocationKind\.ProvenNativeQueueDrain\).*?return false; \}' -or
+    $normalizedViperNearAssist -notmatch 'private void ArmAcceptedViperSerpentTailTrigger\( ViperSerpentTailPreflight preflight, long acceptedAtMilliseconds\).*?lock \(viperSerpentTailTriggerGate\) \{ pendingViperSerpentTailTrigger = null; acceptedActionEpoch = NextViperSerpentTailTriggerToken\(\); \} InstallReservedViperSerpentTailTrigger\( preflight, acceptedAtMilliseconds, acceptedActionEpoch\);.*?catch \(Exception exception\) \{ TryClearViperSerpentTailTrigger\(acceptedActionEpoch\);' -or
+    $normalizedViperNearAssist -notmatch 'private void UpdateViperSerpentTailTriggerLifecycle\(\).*?lock \(viperSerpentTailTriggerGate\) pending = pendingViperSerpentTailTrigger; if \(pending is null\) return;.*?TryClearViperSerpentTailTrigger\(pending\.Value\.Token\);.*?catch.*?TryClearViperSerpentTailTrigger\(pending\.Value\.Token\);' -or
+    $normalizedViperNearAssist -notmatch 'var usedNativeDefaultTarget = CcImmunityBrakeTargetRules\.IsDefaultTargetCarrier\(forwardedTargetId\) && forwardedTargetId == originalTargetId && !targetSuppressedByRedirect; var nativeHardTargetId = usedNativeDefaultTarget \? GetNativeHardTargetId\(local\) : 0; var effectiveTargetId = CcImmunityBrakeTargetRules\.ResolveEffectiveTargetId\( originalTargetId, forwardedTargetId, nativeHardTargetId, targetSuppressedByRedirect\);' -or
+    $normalizedViperNearAssist -notmatch '\(preflight\.UsedNativeDefaultTarget \? !ActorIdMatches\(preflight\.NativeHardTargetId, preflight\.Target\) \|\| !ActorIdMatches\(GetNativeHardTargetId\(local\), preflight\.Target\) : preflight\.NativeHardTargetId != 0\)' -or
+    $normalizedViperNearAssist -notmatch 'if \(context == SupportedPvPContext\.WolvesDen\).*?!configuration\.EnableWolvesDenTesting \|\| !StrictWolvesDenStrikingDummyResolver\.TryResolveExactCurrentHardTarget\(.*?!ActorIdMatches\(targetId, dummyIdentity\) \|\| !ActorIdMatches\(nativeHardTargetId, dummyIdentity\)' -or
+    $normalizedViperNearAssist -notmatch 'if \(context != SupportedPvPContext\.CrystallineConflict\) return false;.*?ResolveCanonicalEnemies\(localPlayer, GetPartyEntityIds\(\)\).*?EnemySlotResolver\.Resolve\(objectTable, match\.Slot\)' -or
+    $normalizedViperNearAssist -notmatch 'includeWolvesDenTesting: false.*?private SupportedPvPContext ResolveViperSerpentTailContext\(\).*?configuration\.EnableWolvesDenTesting') {
+    throw 'Near Assist must capture VPR only around the unchanged original accepted call, use a separately explicit Den context, bind the exact forwarded actor, and arm no trigger for rejected/drifted/alternate targets.'
+}
+
+Assert-Literals $viperMetadataGuard @(
+    'bool ViperSerpentTailVerified,',
+    'bool WolvesDenStrikingDummyVerified,',
+    'ValidateFeature("Viper Serpent''s Tail"',
+    'ValidateViperSerpentTailCarrier(actions, descriptions)',
+    'ValidateViperSerpentTailTrigger(',
+    '39_161, ViperSerpentTailRules.DeathRattleActionId,',
+    '39_163, ViperSerpentTailRules.DeathRattleActionId,',
+    '39_166, ViperSerpentTailRules.TwinfangBiteActionId,',
+    '39_167, ViperSerpentTailRules.TwinbloodBiteActionId,',
+    '39_168, ViperSerpentTailRules.UncoiledTwinfangActionId,',
+    '39_169, ViperSerpentTailRules.FirstLegacyActionId,',
+    '39_170, ViperSerpentTailRules.SecondLegacyActionId,',
+    '39_171, ViperSerpentTailRules.ThirdLegacyActionId,',
+    '39_172, ViperSerpentTailRules.FourthLegacyActionId,',
+    'ValidateViperSerpentTailFollowUp(',
+    'ViperSerpentTailRules.DeathRattleActionId',
+    'ViperSerpentTailRules.UncoiledTwinbloodActionId',
+    'ViperSerpentTailRules.FourthLegacyActionId',
+    '"Wolves'' Den striking dummy"',
+    'action.Name.ToString() == "Serpent''s Tail"',
+    'action.Icon == 9_726',
+    '!action.CanTargetHostile',
+    'action.CanTargetHostile',
+    'action.Range == expectedRange',
+    'action.ActionProcStatus.RowId == expectedProcStatusId',
+    'procStatus.Status.RowId == expectedHiddenStatusId',
+    'description.Contains("Ignores the effects of Guard when dealing damage.", StringComparison.Ordinal)',
+    'ViperSerpentTailRules.TryGetExpectedFollowUp(actionId, out var mappedFollowUpActionId)',
+    'mappedFollowUpActionId != expectedFollowUpActionId',
+    'action.ClassJob.RowId == ViperSerpentTailRules.ViperJobId',
+    'action.ClassJobCategory.RowId == 196',
+    'action.ActionCategory.RowId == 3',
+    'action.Range == expectedRange',
+    'action.EffectRange == expectedEffectRange',
+    'action.CastType == expectedCastType',
+    'action.Cast100ms == 0',
+    'action.Recast100ms == expectedRecast100ms',
+    'action.PrimaryCostType == expectedPrimaryCostType',
+    'action.PrimaryCostValue == expectedPrimaryCostValue',
+    'action.SecondaryCostType == expectedSecondaryCostType',
+    'action.SecondaryCostValue.RowId == 0',
+    'action.CooldownGroup == expectedCooldownGroup',
+    'action.AdditionalCooldownGroup == expectedAdditionalCooldownGroup',
+    'action.MaxCharges == expectedMaxCharges',
+    'action.ActionCombo.RowId == expectedActionComboId',
+    'action.ActionProcStatus.RowId == 0',
+    'action.StatusGainSelf.RowId == 0',
+    '!action.CanTargetSelf',
+    '!action.CanTargetParty',
+    'action.RequiresLineOfSight',
+    'action.NeedToFaceTarget',
+    'action.PreservesCombo == expectedPreservesCombo',
+    '!action.AffectsPosition',
+    'validation.ViperSerpentTailVerified',
+    'validation.WolvesDenStrikingDummyVerified'
+) 'Fail-closed English VPR carrier/follow-up/proc-status and Den dummy metadata'
+if ([regex]::Matches($viperMetadataGuard, '\bValidateViperSerpentTailFollowUp\s*\(').Count -ne 10 -or
+    [regex]::Matches($viperMetadataGuard, '\bValidateViperSerpentTailTrigger\s*\(').Count -ne 10 -or
+    [regex]::Matches($viperMetadataGuard, '\bValidateViperSerpentTailCarrier\s*\(').Count -ne 2 -or
+    $normalizedViperMetadataGuard -notmatch 'ValidateViperSerpentTailCarrier\(actions, descriptions\) && ValidateViperSerpentTailTrigger\( actions, descriptions, 39_161, ViperSerpentTailRules\.DeathRattleActionId.*?39_163, ViperSerpentTailRules\.DeathRattleActionId.*?39_166, ViperSerpentTailRules\.TwinfangBiteActionId.*?39_167, ViperSerpentTailRules\.TwinbloodBiteActionId.*?39_168, ViperSerpentTailRules\.UncoiledTwinfangActionId.*?39_169, ViperSerpentTailRules\.FirstLegacyActionId.*?39_170, ViperSerpentTailRules\.SecondLegacyActionId.*?39_171, ViperSerpentTailRules\.ThirdLegacyActionId.*?39_172, ViperSerpentTailRules\.FourthLegacyActionId.*?ValidateViperSerpentTailFollowUp\(.*?DeathRattleActionId.*?TwinfangBiteActionId.*?TwinbloodBiteActionId.*?UncoiledTwinfangActionId.*?UncoiledTwinbloodActionId.*?FirstLegacyActionId.*?SecondLegacyActionId.*?ThirdLegacyActionId.*?FourthLegacyActionId') {
+    throw 'VPR metadata must validate exactly one carrier, all nine qualifying trigger rows with their expected mapping, and all nine exact adjusted follow-ups in canonical order before enabling the helper.'
 }
 
 Assert-Literals $smartKardiaMetadata @(
@@ -2806,8 +3251,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 398) {
-    throw 'All four shared protection-end tests and the exact 398-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 404) {
+    throw 'All four shared protection-end tests and the exact 404-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -2995,12 +3440,14 @@ Assert-Literals $emergencyInputCoordinator @(
     'ninjaGuardShukuchiHeldWasEnabled',
     'ninjaSeitonHeldEnabled',
     'ninjaSeitonHeldWasEnabled',
+    'viperSerpentTailHeldEnabled',
+    'viperSerpentTailHeldWasEnabled',
     'IsGameplayKeyPhysicallyDown(VirtualKey key)',
     'IsGameplayKeyGenerationEligible(VirtualKey key)',
     'HeldMovementKey = Dalamud.Game.ClientState.Keys.VirtualKey.NO_KEY',
     'heldOptionJustEnabled',
     'probe.Reset()'
-) 'Shared physical-hold input ownership for Purify > reactive CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > NIN Seiton > SCH > DRK Plunge > Smart Recuperate > generic Guard > pressure Sprint'
+) 'Shared physical-hold input ownership for all twelve held helpers, including VPR Serpent Tail'
 if ($normalizedEmergencyInputCoordinator -notmatch 'internal bool FreshGameplayKeyPressed => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.FreshGameplayKeyPressed;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool HeldGameplayKeyEligible => !IsConsumed && Snapshot\.ProbeSucceeded && Snapshot\.HeldGameplayKeyEligible;' -or
     $normalizedEmergencyInputCoordinator -notmatch 'internal bool IsGameplayKeyPhysicallyDown\(VirtualKey key\) => Snapshot\.ProbeSucceeded && probe\?\.IsGameplayKeyPhysicallyDown\(key\) == true;' -or
@@ -3025,8 +3472,9 @@ if (-not $frameConsumeMethod.Success -or
     $frameConsumeMethod.Groups['Body'].Value -match '\bprobe\b|ConsumeHeldGameplayKeys' -or
     -not $enableEdgeMethod.Success -or
     $enableEdgeMethod.Groups['Body'].Value -notmatch 'probe\.ConsumeHeldGameplayKeys\(\)' -or
-    $normalizedEmergencyInputCoordinator -notmatch '\(ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled\).*?ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;.*?if \(heldOptionJustEnabled\)') {
-    throw 'Shared input consumption must be frame-local; physical generation priming is allowed only on a held-option enable edge and must include NIN.'
+    $normalizedEmergencyInputCoordinator -notmatch '\(ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled\).*?\(viperSerpentTailHeldEnabled && !viperSerpentTailHeldWasEnabled\).*?ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;.*?viperSerpentTailHeldWasEnabled = viperSerpentTailHeldEnabled;.*?if \(heldOptionJustEnabled\)' -or
+    [regex]::Matches($emergencyInputCoordinator, '(?m)^\s*private bool \w+HeldWasEnabled;\s*$').Count -ne 12) {
+    throw 'Shared input consumption must be frame-local; physical generation priming is allowed only on one of exactly twelve held-option enable edges and must include NIN plus VPR.'
 }
 
 # Stable physical held-key ownership is shared by every physical-hold helper.
@@ -3244,7 +3692,7 @@ $allCastRequestProducerSource = ($castRequestProducerPaths | ForEach-Object {
     Read-RequiredSource $_ "Held cast cancellation request producer $_"
 }) -join "`n"
 if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 11) {
-    throw 'Production runtime must construct exactly eleven cast-cancellation request shapes, one for each physical-hold helper.'
+    throw 'Production runtime must construct exactly eleven reviewed cast-cancellation request shapes; VPR Serpent Tail remains explicitly excluded.'
 }
 foreach ($producer in $castRequestProducers) {
     $producerSource = Read-RequiredSource $producer.Path "Cast-cancellation producer $($producer.Kind)"
@@ -3266,8 +3714,8 @@ $castSelection = [regex]::Match(
 if (-not $castSelection.Success -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 11 -or
     $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
-    $castSelection.Groups['Body'].Value -match '\b(kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH > DRK > Recuperate > Guard > Sprint order, excluding Kardia and Monk.'
+    $castSelection.Groups['Body'].Value -match '\b(viper|kardia|monk)\b') {
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH > DRK > Recuperate > Guard > Sprint order, excluding VPR, Kardia, and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -3279,6 +3727,7 @@ Assert-Literals $heldCastPersonalStatus @(
     'inputClaimed && request is { IsValid: true }'
 ) 'Canonical one-request-per-frame held cast cancellation selection'
 foreach ($excludedPath in @(
+    $viperSerpentTailProbePath,
     $smartKardiaProbePath,
     $monkEarthReplyProbePath,
     $smartWardensPaeanServicePath,
@@ -3286,7 +3735,7 @@ foreach ($excludedPath in @(
     $darkKnightShadowbringerServicePath)) {
     $excludedSource = Read-RequiredSource $excludedPath "Cast-cancellation-excluded runtime $excludedPath"
     if ($excludedSource -match '\b(HeldCastCancellationRequest|HeldCastCancellationHelperKind|CancelCast)\b') {
-        throw "Kardia, Monk, manual/Turbo redirects including Paean, and macro helpers must remain outside cast cancellation: $excludedPath"
+        throw "VPR Serpent Tail, Kardia, Monk, manual/Turbo redirects including Paean, and macro helpers must remain outside cast cancellation: $excludedPath"
     }
 }
 
@@ -3297,8 +3746,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 33;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 33 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 34;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 34 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -3468,14 +3917,16 @@ $rescueObserve = [regex]::Match($personalStatus, '\ballyRescue\.Observe\s*\(')
 $miracleObserve = [regex]::Match($personalStatus, '\bmiracleIntercept\.Observe\s*\(')
 $smartKardiaObserve = [regex]::Match($personalStatus, '\bsmartKardia\.Observe\s*\(')
 $ninjaSeitonObserve = [regex]::Match($personalStatus, '\bninjaSeiton\.Observe\s*\(')
+$viperSerpentTailObserve = [regex]::Match($personalStatus, '\bviperSerpentTail\.Observe\s*\(')
 $ninjaGuardShukuchiObserve = [regex]::Match($personalStatus, '\bninjaGuardShukuchi\.Observe\s*\(')
 $scholarCriticalStrategyObserve = [regex]::Match($personalStatus, '\bscholarCriticalStrategy\.Observe\s*\(')
 $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 $darkKnightPlungeObserve = [regex]::Match($personalStatus, '\bdarkKnightPlunge\.Observe\s*\(')
 if (-not $purifyObserve.Success -or -not $guardObserve.Success -or -not $smartRecuperateObserve.Success -or -not $guardianObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
-    -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $ninjaGuardShukuchiObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or -not $darkKnightPlungeObserve.Success -or
+    -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $viperSerpentTailObserve.Success -or -not $ninjaGuardShukuchiObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or -not $darkKnightPlungeObserve.Success -or
     $purifyObserve.Index -gt $ninjaSeitonObserve.Index -or
-    $ninjaSeitonObserve.Index -gt $miracleObserve.Index -or
+    $ninjaSeitonObserve.Index -gt $viperSerpentTailObserve.Index -or
+    $viperSerpentTailObserve.Index -gt $miracleObserve.Index -or
     $miracleObserve.Index -gt $rescueObserve.Index -or
     $rescueObserve.Index -gt $guardianObserve.Index -or
     $guardianObserve.Index -gt $guardianCommunicationObserve.Index -or
@@ -3488,7 +3939,7 @@ if (-not $purifyObserve.Success -or -not $guardObserve.Success -or -not $smartRe
     $pressureEscapeObserve.Index -gt $smartKardiaObserve.Index -or
     $smartKardiaObserve.Index -gt $monkEarthReplyObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
-    throw 'Personal status coordination must process Purify, NIN Seiton, reactive CC, Ally Rescue, Guardian, same-frame Guardian communication, Guard-Shukuchi, SCH, DRK Plunge, Smart Recuperate, generic Guard, pressure Sprint, event Kardia, then event Monk in exact order.'
+    throw 'Personal status coordination must process Purify, NIN Seiton, VPR Serpent Tail, reactive CC, Ally Rescue, Guardian, same-frame Guardian communication, Guard-Shukuchi, SCH, DRK Plunge, Smart Recuperate, generic Guard, pressure Sprint, event Kardia, then event Monk in exact order.'
 }
 Assert-Literals $personalStatus @(
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;',
@@ -3499,6 +3950,7 @@ Assert-Literals $personalStatus @(
     'var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;',
     'var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;',
     'var isDarkKnight = localJobId == DarkKnightPlungeRules.DarkKnightJobId;',
+    'var isViper = localJobId == ViperSerpentTailRules.ViperJobId;',
     'purifyClaimedPriority',
     'defensiveUtilityClaimedPriority',
     'defensiveUtilitiesConfigurationEnabled',
@@ -3570,6 +4022,16 @@ Assert-Literals $personalStatus @(
     'metadata.SeitonVerified',
     'ninjaSeiton.Observe(',
     'ninja.InputClaimed',
+    'configuration.EnableViperSerpentTailOnHeldKey',
+    'viperSerpentTailConfigurationEnabled',
+    'new ViperSerpentTailProbe(',
+    'ViperSerpentTailProbeSnapshot ViperSerpentTailDiagnostics',
+    'metadata.ViperSerpentTailVerified',
+    'metadata.WolvesDenStrikingDummyVerified',
+    'viperSerpentTail.Observe(',
+    'viper.InputClaimed',
+    'viperSerpentTail.FailClosed()',
+    'viperSerpentTail.Reset()',
     'configuration.EnableScholarCriticalStrategyOnHeldKey',
     'scholarCriticalStrategyHeldInputEnabled',
     'new ScholarCriticalStrategyProbe(',
@@ -3600,10 +4062,12 @@ Assert-Literals $personalStatus @(
     'var darkKnightPlungeHeldInputEnabled = darkKnightPlungeConfigurationEnabled &&',
     'var ninjaGuardShukuchiHeldInputEnabled =',
     'var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&',
+    'var viperSerpentTailHeldInputEnabled =',
     'var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||',
     'ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled',
-    'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled'
-) 'Guard-independent persistent physical held-input observation gates'
+    'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled',
+    'viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled'
+) 'Guard-independent persistent physical held-input observation gates for all twelve helpers'
 if ($normalizedPersonalStatus -notmatch 'miracleIntercept = new MiracleInterceptProbe\( objectTable, nearAssist\.VerifiedCcBrakeActionIds, nearAssist\.VerifiedCcBrakeStatusIds, executeTracker, pressureTracker, nearAssist, machinistLimitBreakCapture, log, metadata\);' -or
     $normalizedPersonalStatus -notmatch 'var isAllyRescueJob = localJobId is EnemyCombatConstants\.WhiteMageJobId or EnemyCombatConstants\.BardJobId; var isNinja = ExecuteThreshold\.IsNinja\(localJobId\); var isReactiveCcJob = isAllyRescueJob \|\| isNinja;' -or
     $normalizedPersonalStatus -notmatch 'var reactiveCcActionMetadataVerified = \(localJobId == EnemyCombatConstants\.WhiteMageJobId && metadata\.MiracleOfNatureActionVerified\) \|\| \(localJobId == EnemyCombatConstants\.BardJobId && metadata\.SilentNocturneVerified\) \|\| \(localJobId == EnemyCombatConstants\.NinjaJobId && nearAssist\.VerifiedCcBrakeActionIds\.Contains\( EnemyCombatConstants\.ForkedRaijuActionId\) && nearAssist\.VerifiedCcBrakeActionIds\.Contains\( EnemyCombatConstants\.FleetingRaijuActionId\)\);.*?var miracleInterceptHeldInputEnabled = configuration\.Enabled && configuration\.EnableReactiveCcUtilities && configuration\.ReactiveCcOnHeldKey && reactiveCcActionMetadataVerified && isCrystallineConflict && isReactiveCcJob;') {
@@ -3637,20 +4101,24 @@ Assert-Literals $personalStatus @(
     'configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey',
     'ninjaGuardShukuchiHeldEnabled:',
     'ninjaSeitonHeldEnabled:',
+    'viperSerpentTailHeldEnabled:',
     'ninja.InputClaimed ||',
+    'viper.InputClaimed ||',
     'scholar.InputClaimed ||',
     'emergencyInputFrame.IsConsumed'
 ) 'Frame-local absolute priority claims across every held helper'
-if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var ninja = ninjaSeiton\.Observe\(.*?purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !ninja\.InputClaimed && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !ninja\.InputClaimed && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?purifyClaimedPriority \|\| ninja\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: true\)' -or
-    $normalizedPersonalStatus -notmatch 'var guardShukuchi = ninjaGuardShukuchi\.Observe\(.*?guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
-    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = ninja\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
-    throw 'The runtime must propagate frame-local priority exactly as Purify > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH > DRK > Recuperate > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
+if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var ninja = ninjaSeiton\.Observe\(.*?purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var viper = viperSerpentTail\.Observe\(.*?purifyClaimedPriority \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?purifyClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: true\)' -or
+    $normalizedPersonalStatus -notmatch 'var guardShukuchi = ninjaGuardShukuchi\.Observe\(.*?viper\.InputClaimed \|\| allyRescueClaimedPriority.*?guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?viper\.InputClaimed.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?viper\.InputClaimed.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = ninja\.InputClaimed \|\| viper\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
+    throw 'The runtime must propagate frame-local priority exactly as Purify > NIN Seiton > VPR Serpent Tail > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH > DRK > Recuperate > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaGuardShukuchiConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaGuardShukuchiOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
     $normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
+    $normalizedPersonalStatus -notmatch 'var viperSerpentTailConfigurationEnabled = configuration\.Enabled && configuration\.EnableViperSerpentTailOnHeldKey && isSupportedPvPContext && isViper;' -or
+    $normalizedPersonalStatus -notmatch 'var viperSerpentTailHeldInputEnabled = viperSerpentTailConfigurationEnabled && metadata\.ViperSerpentTailVerified && \(context != SupportedPvPContext\.WolvesDen \|\| metadata\.WolvesDenStrikingDummyVerified\);' -or
     $normalizedPersonalStatus -match '\bsmartKardiaHeldEnabled\b' -or
     $normalizedPersonalStatus -notmatch 'var pressureEscapeClaimedPriority = pressureEscape\.InputClaimed; var kardia = smartKardia\.Observe\(.*?pressureEscapeClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var monk = monkEarthReply\.Observe\(.*?kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
-    throw 'Event Kardia and event Monk must remain last after all eleven physical-hold helpers, with no held-Kardia slot and no consumed-frame overtake.'
+    throw 'Event Kardia and event Monk must remain last after all twelve physical-hold helpers, with no held-Kardia slot and no consumed-frame overtake.'
 }
 if ($personalStatus -match '\bstatus\.Address\b|\bStatusAddress\b') {
     throw 'Personal status scanning must never gate on status.Address.'
@@ -5449,9 +5917,9 @@ if ([regex]::Matches($nearAssist, 'HookFromAddress<ActionManager\.Delegates\.Use
     throw 'Near Assist must own one ordinary and one location-action hook, each with one Original call site.'
 }
 if ([regex]::Matches($nearAssist, '->UseAction\s*\(').Count -ne 1 -or
-    $nearAssist -match '(?-i:\b(ExecuteAction|SendAction|ActionQueued|QueuedAction|QueueAction|RetryAction|RetryDispatch)\b)' -or
+    $nearAssist -match '(?-i:\b(ExecuteAction|SendAction|QueueAction|RetryAction|RetryDispatch)\b)' -or
     $nearAssist -match '(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Near Assist may own only its reviewed DRK nested call plus the two central Originals; it must never retry, queue, or visibly mutate a target.'
+    throw 'Near Assist may own only its reviewed DRK nested call plus the two central Originals; it may inspect the pinned VPR native-queue provenance but must never write/replay a queue, retry, or visibly mutate a target.'
 }
 if ($normalizedNearAssist -notmatch 'useActionHook!\.Original\s*\(\s*thisPtr\s*,\s*actionType\s*,\s*actionId\s*,\s*forwardedTargetId\s*,\s*extraParam\s*,\s*mode\s*,\s*comboRouteId\s*,\s*outOptAreaTargeted\s*\)') {
     throw 'Near Assist Original must preserve every native action argument except the bounded forwardedTargetId.'
@@ -5517,7 +5985,7 @@ if (-not $guardAttemptObserverMatch.Success) {
 }
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
-if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\);.*?return clientAccepted;' -or
+if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); var viperSerpentTailAfter = hasViperSerpentTailPreflight \? ClientActionAttemptBoundary\.Capture\( thisPtr, viperSerpentTailPreflight\.TriggerActionId\) : default; if \(hasViperSerpentTailPreflight && ViperSerpentTailRules\.ClassifyAcceptedTriggerBoundary\(.*?\) == ViperSerpentTailTriggerPromotionDisposition\.ExecutedAccepted\).*?ArmAcceptedViperSerpentTailTrigger\(.*?\);.*?smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\);.*?return clientAccepted;' -or
     $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \};' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
@@ -7303,7 +7771,9 @@ $actualSettingsPages = @([regex]::Matches(
 $settingsPageDifference = @(
     Compare-Object -ReferenceObject @($settingsPageContracts.Keys) -DifferenceObject $actualSettingsPages
 )
-if ($settingsPageDifference.Count -ne 0) {
+if ($settingsPageContracts.Count -ne 8 -or
+    $actualSettingsPages.Count -ne 8 -or
+    $settingsPageDifference.Count -ne 0) {
     $pageDetails = $settingsPageDifference | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
     throw "Settings sidebar page set drifted: $($pageDetails -join ', ')"
 }
@@ -7354,8 +7824,15 @@ Assert-Literals $settingsWindow @(
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON still requires',
     'a currently held gameplay key; it never creates no-input automatic actions.',
-    'Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >'
-) 'v0.30.0.1 replacement LB, local MP, separate Smart Tab/Smart Action, Auto-Seiton, and priority Settings copy'
+    'Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >',
+    'melee and ranged DPS jobs',
+    'Default off. Available in exact Crystalline Conflict and, only with the separate Wolves'' Den testing',
+    'Serpentiner-Geist-Folgeaktion on held gameplay key (experimental)',
+    'configuration.EnableViperSerpentTailOnHeldKey',
+    'otherwise-ready native-boundary or retry-throttle wait keeps Viper''s priority.',
+    'deliberately unavailable. A clean client rejection',
+    'exact current hard-target striking dummy (NameId 541)'
+) 'v0.31.0.0 replacement LB, ranged Smart Tab, Den Smart Recuperate, VPR, Auto-Seiton, and priority Settings copy'
 if ($settingsWindow -match 'DrawCombatFramesPage|SettingsPage\.CombatFrames|Show fixed Combat Frames') {
     throw 'Retired Combat Frames must not retain a Settings page or runtime toggle.'
 }
@@ -7436,12 +7913,11 @@ Assert-Literals $settingsWindow @(
     'DARK KNIGHT SHADOWBRINGER MACRO (OPT-IN)',
     'Enable the exact two-line /seitonbringer weave helper',
     'configuration.EnableDarkKnightShadowbringerMacro',
-    'Enable Wolves'' Den testing for Seiton, native-nameplate cues, and enabled /seitonbringer',
+    'Enable Wolves'' Den testing for supported Seiton Sense features and helpers',
     'configuration.EnableWolvesDenTesting',
-    '/seitonbringer also requires its separate Macro Helpers opt-in and',
-    'accepts only your exact current hard-target Wolves'' Den striking dummy',
-    'it never uses synthetic S1,',
-    '<e1>, or the duel opponent',
+    'Smart Recuperate is self-only.',
+    'Viper''s held Serpent''s Tail helper and /seitonbringer accept only your exact',
+    'current hard-target Wolves'' Den striking dummy; they never use synthetic S1, <e1>, or the duel opponent.',
     '/pvpac \"Souleater Combo\" <t>',
     'enable both Macro Queue and Turbo for this macro',
     'Default off and PvP Dark Knight only. Exact Crystalline Conflict is supported directly',
@@ -7771,16 +8247,16 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.30.0.1</Version>',
-    '<AssemblyVersion>0.30.0.1</AssemblyVersion>',
-    '<FileVersion>0.30.0.1</FileVersion>'
-) 'v0.30.0.1 project version'
+    '<Version>0.31.0.0</Version>',
+    '<AssemblyVersion>0.31.0.0</AssemblyVersion>',
+    '<FileVersion>0.31.0.0</FileVersion>'
+) 'v0.31.0.0 project version'
 Assert-Literals $pluginManifest @(
     'Exact PvP nameplate/LB cues, reliable held helpers, Smart Tab, and survival tools.',
     'exact native-nameplate cues',
     'LB activation and damage notifications',
-    'melee Smart Tab',
-    'optional Smart Action and assist macros',
+    'DPS Smart Tab',
+    'optional Viper, Smart Action, and assist helpers',
     'local MP sounds',
     'focus-target',
     'dark-knight',
@@ -7789,22 +8265,25 @@ Assert-Literals $pluginManifest @(
     '"nameplate"',
     '"limit-break"',
     '"targeting"',
-    '"survival"'
-) 'v0.30.0.1 plugin manifest metadata'
+    '"survival"',
+    '"viper"'
+) 'v0.31.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.30.0.1"',
-    'Default-off Smart Tab',
-    'Paired native handler/helper hooks',
-    'OFF, reverse, and calls outside that handler stay vanilla',
-    'no retry, rerank, or alternate',
-    'separate default-off /smartaction macro',
-    'Schema 33',
-    'all 398 Core tests pass',
+    '"AssemblyVersion": "0.31.0.0"',
+    'Smart Tab now supports reviewed ranged DPS',
+    'BRD/BLM/SMN/MCH/RDM/PCT use one 25-yalm tier and DNC uses 15',
+    'Held Smart Recuperate can be tested in Wolves'' Den only through the explicit test toggle',
+    'Viper Serpentiner-Geist helper follows a directly executed or exactly proven native queue-drained qualifying action',
+    '39174-39182 action on the same frozen target',
+    'newer proven actions invalidate older opportunities',
+    'Viper never cancels casts or changes targets',
+    'Schema 34',
+    'all 404 Core tests pass',
     '"IsHide": false'
-) 'v0.30.0.1 custom-repository metadata'
+) 'v0.31.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7820,33 +8299,60 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.30.0.1 makes Smart Tab a default-off, exact-CC melee replacement for FFXIV''s normal forward world-target cycle',
-    'Paired native handler/helper hooks preserve the game''s own binding and UI/input gates',
+    'Version 0.31.0.0 extends the default-off, exact-CC Smart Tab replacement to reviewed ranged DPS',
+    'BRD, BLM, SMN, MCH, RDM, and PCT use 25 yalms, while DNC uses 15',
+    'explicitly enabled Wolves'' Den testing for held Smart Recuperate',
+    'separate default-off PvP Viper Serpentiner-Geist follow-up helper',
+    'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
     'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
     'local 4,000/2,000-MP sounds',
     'version-acknowledged What''s New window',
-    '**Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
+    '**Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
     'original critical boundary remains unconditional at 20% HP',
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 33 is current in v0.30.0.1',
+    'Configuration schema 34 is current in v0.31.0.0',
+    'For current v0.31.0.0, the exact 404-test Core registry and source checks pin',
+    'Twelve physical-hold helpers share the scheduler; held-action cast cancellation remains limited to the existing eleven and explicitly excludes Viper',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.30.0.1 current README release and safety contract'
+) 'v0.31.0.0 current README release and safety contract'
+Assert-Literals $normalizedReadme @(
+    'A direct execution must advance FFXIV''s native action sequence without leaving an action queued.',
+    'An early normal hotbar/Turbo input can arm only when FFXIV later presents the exact queued action type, adjusted trigger action, canonical target, extra parameter, and combo route and then drains that queue with a nonzero action-sequence advance.',
+    'The initial queueing call and any arbitrary or uncertain Queue call do nothing.',
+    'A newer proven qualifying-action epoch invalidates an older buffered intent even when action and target look identical.'
+) 'v0.31.0.0 VPR direct/queue-drain provenance and accepted-epoch README contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.30.0.1',
-    'default-off replacement for FFXIV''s native logical forward-target command',
-    'One hook retains FFXIV''s targeting-handler scope and the second intercepts only its nested forward world-target cycle',
-    'Reverse targeting, direct cycle callers outside that handler, UI/chat input, other target commands, unsupported jobs, and other content remain unchanged',
-    'writes the visible hard target through FFXIV''s native setter once, and verifies exact readback',
-    'never retries, reranks, restores, or selects an alternate',
-    'Moved the previous optional harmful-action redirect to `/smartaction` (`/ssaction`)',
-    'Schema 33 preserves an older explicit macro-helper opt-in for Smart Action but leaves the new target-writing Smart Tab off',
-    'plugin to `0.30.0.1` and configuration schema to `33`',
-    'All `398` Core tests pass'
-) 'v0.30.0.1 release notes'
+    '## 0.31.0.0',
+    'reviewed ranged DPS jobs in exact Crystalline Conflict',
+    'BRD, BLM, SMN, MCH, RDM, and PCT use one 25-yalm geometric hitbox-edge tier; DNC uses one 15-yalm tier',
+    'Ranged jobs do not receive the melee-first preference',
+    'held Smart Recuperate helper to Wolves'' Den only while the existing testing option is enabled',
+    'Frontline and Rival Wings remain excluded',
+    'client-accepted qualifying Viper action may arm one exact five-second opportunity',
+    'carrier `39183` must adjust to the expected exact follow-up `39174`-`39182`',
+    'exact current hard-target combat striking dummy with NameId `541`',
+    'never changes the visible target, never dispatches carrier `39183`, and deliberately does not participate in held-action cast cancellation',
+    'There are now twelve physical- hold helpers',
+    'existing eleven and explicitly excludes Viper',
+    'plugin to `0.31.0.0` and configuration schema to `34`',
+    'All `404` Core tests pass'
+) 'v0.31.0.0 release notes'
+Assert-Literals $normalizedChangelog @(
+    'Direct execution requires a clean native queue and a synchronous action-sequence advance.',
+    'A normally early-queued input is accepted only when FFXIV later exposes the exact queued action type, adjusted action, canonical target, extra parameter, and combo route before a successful native queue drain with a sequence advance.',
+    'The initial queueing call, arbitrary Queue calls, and any uncertain queue transition never arm or replace a trigger.',
+    'Every newer proven qualifying-action epoch invalidates an older buffered opportunity, even when its adjusted follow-up and target are unchanged.'
+) 'v0.31.0.0 VPR direct/queue-drain provenance and epoch release notes'
+Assert-Literals $normalizedPrivacy @(
+    'Direct execution must leave the native queue empty and advance the action sequence.',
+    'An early queued input is recognized only at a later exact native queue drain whose queued action type, adjusted action ID, canonical target, extra parameter, and combo route all match and whose successful result clears the queue and advances the sequence.',
+    'Initial queueing, arbitrary Queue calls, and uncertain transitions do not arm or overwrite a trigger.',
+    'A newer proven qualifying-action epoch invalidates every older buffered intent.'
+) 'v0.31.0.0 VPR direct/queue-drain local-data and lifecycle disclosure'
 Assert-Literals $normalizedChangelog @(
     '## 0.29.0.1',
     'Guardian''s target-side `Covered` / `Gedeckt` status',
@@ -7919,7 +8425,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 33 is current in v0.30.0.1'
+    'Configuration schema 34 is current in v0.31.0.0'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8023,19 +8529,19 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 33 is current in v0.30.0.1',
+    'Configuration schema 34 is current in v0.31.0.0',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'The v0.30 line retires the unusable fixed Combat Frames runtime',
+    'The v0.30 line moved the optional harmful-action redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the unusable fixed Combat Frames runtime',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Authoritative protection end opens a strict, non-extending 500-ms key-acquisition edge',
     'When an eligible current key is acquired inside that edge, exactly one actor/key intent freezes',
     'three seconds from the original release',
     'Binding never restarts that deadline',
     'no different key can inherit the frozen intent',
-    '**Stable held-action leases:** Purify, NIN Seiton, reactive counter-CC',
+    '**Stable held-action leases:** Purify, NIN Seiton, VPR Serpentiner Geist, reactive counter-CC',
     '**Experimental held-action cast cancellation:** a separate default-off test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
@@ -8463,7 +8969,7 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 33 is current in v0.30.0.1',
+    'Configuration schema 34 is current in v0.31.0.0',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -8543,10 +9049,10 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 33 is current in v0.30.0.1'
+    'Configuration schema 34 is current in v0.31.0.0'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
+    'The current action-request priority is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
     'One framework frame permits at most one held-helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
 ) 'v0.27.1.0 exact action-request priority privacy disclosure'
@@ -8614,7 +9120,7 @@ $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConf
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 33',
+    'public int Version { get; set; } = 34',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -8749,7 +9255,10 @@ Assert-Literals $configuration @(
     'if (Version < 33)',
     'EnableSmartTabTargeting = false;',
     'EnableSmartActionMacro = EnableNearAssistMacro;',
-    'Version = 33',
+    'public bool EnableViperSerpentTailOnHeldKey { get; set; }',
+    'if (Version < 34)',
+    'EnableViperSerpentTailOnHeldKey = false;',
+    'Version = 34',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -8776,7 +9285,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-33 Smart Tab/Smart Action split plus historical replacement LB/MP defaults, default-off action helpers, and legacy Combat Frames compatibility fields'
+) 'Schema-34 default-off VPR plus retained Smart Tab/Smart Action split, historical LB/MP defaults, and legacy Combat Frames compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -8798,6 +9307,7 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ ge
     $configuration -notmatch '(?m)^\s*public bool WarnWhenIsolated \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableAutoEnemyFocusMark \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool EnableDarkKnightPlungeOnHeldKey \{ get; set; \}\s*$' -or
+    $configuration -notmatch '(?m)^\s*public bool EnableViperSerpentTailOnHeldKey \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool CombatFramesEnableInteraction \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool CombatFramesShowLimitBreaks \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool ShowAllyLimitBreakDamageEvents \{ get; set; \} = true;\s*$') {
@@ -8815,6 +9325,7 @@ if ([regex]::Matches($configuration, '\bEnableDefensiveUtilities\s*=\s*false\s*;
     [regex]::Matches($configuration, '\bPlayHighPressureWarningSound\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnablePressureEscapeSprintOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
     [regex]::Matches($configuration, '\bEnableDarkKnightPlungeOnHeldKey\s*=\s*false\s*;').Count -lt 2 -or
+    [regex]::Matches($configuration, '\bEnableViperSerpentTailOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bCombatFramesEnableInteraction\s*=\s*false\s*;').Count -ne 1 -or
     [regex]::Matches($configuration, '\bCombatFramesEnableInteraction\s*=\s*true\s*;').Count -ne 1 -or
     [regex]::Matches($configuration, '\bCombatFramesShowLimitBreaks\s*=\s*true\s*;').Count -ne 2 -or
@@ -8863,9 +9374,10 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*33\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 33\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?LimitBreakFeedShowNames = CombatFramesShowNames;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?LocalMpWarning4000SoundId = 4;.*?LocalMpWarning2000SoundId = 6;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?Version = 33;') {
-    throw 'Schema 33 must fast-path current settings, preserve earlier explicit opt-ins, retain historical schema-32 LB/MP migration, keep Smart Tab off, and migrate only the previous macro helper to separate Smart Action.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*34\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 34\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?LimitBreakFeedShowNames = CombatFramesShowNames;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?LocalMpWarning4000SoundId = 4;.*?LocalMpWarning2000SoundId = 6;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?Version = 34;' -or
+    $configuration -match '(?m)^\s*public bool EnableViperSerpentTailOnHeldKey \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 34 must fast-path current settings, preserve earlier explicit opt-ins, retain historical schema-32/33 migrations, and force the new hostile VPR helper off for upgrades, fresh installs, and Reset Defaults.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -8929,4 +9441,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.30.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 33 and the exact 398-test Core registry. The custom-repository listing is visible (IsHide false), and the deleted Combat Frames renderer, targeting/mouseover, snapshot, Settings, and calibrated-gauge runtime files remain absent. Default-off Smart Tab owns only the paired native targeting-handler/forward-world-cycle path, preserves outside-scope, reverse, and ineligible calls as vanilla, and performs at most one frozen exact SetHardTarget plus readback without Original fallback, retry, rerank, alternate, or action. The separate default-off Smart Action macro retains the bounded exact-action/actor redirect contract. Local MP sounds plus enemy-nameplate/self/ally LB surfaces remain local and action-free. Auto-Seiton remains a persisted toggle gated by held-key consent. Guardian keeps unconditional <=20% rescue and admits 21-35% only under fresh exact 3+ pressure. Accepted plugin Auto-Guard owns cancellation protection only through both central UseAction and UseActionLocation hooks, with exact PvP metadata, raw/resolved Guard and scoped /panicshu release, 1.5-second propagation, exact live-status follow-through, and a hard six-second fail-open cap. Runtime held-helper priority remains Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk."
+Write-Host "Seiton Sense v0.31.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 34 and the exact 404-test Core registry. The public custom-repository listing remains visible. Default-off Smart Tab supports the reviewed melee and ranged DPS tiers while preserving vanilla behavior outside its exact forward-cycle scope; Smart Action remains a separate bounded macro redirect. Held Smart Recuperate admits only exact CC or explicit Wolves' Den testing and freezes that context across buffered and accepted-cooldown phases. The new default-off VPR Serpentiner-Geist helper accepts only directly executed or exactly proven native queue-drained qualifying actions, invalidates older accepted epochs, freezes one exact five-second adjusted-action/actor opportunity, uses the strict current-hard-target Den dummy rule, yields action/target-specific waits to lower helpers, and never cancels casts or changes targets. Twelve physical-hold helpers share the scheduler, while exactly eleven may request cast cancellation. Runtime priority remains Purify > NIN Seiton > VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk."

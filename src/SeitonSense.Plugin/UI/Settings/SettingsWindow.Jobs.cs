@@ -12,8 +12,8 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung. Enabled NIN Seiton gets the first job slot; " +
+            "in deterministic urgency order: NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung. NIN and VPR get their first job slot directly after Purify; " +
             "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
@@ -73,7 +73,7 @@ internal sealed partial class SettingsWindow
                 "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
-                "missed rather than guessed. The shared order is Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD " +
+                "missed rather than guessed. The shared order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD " +
                 "Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > " +
                 "pressure Sprint > event Kardia > event Monk.");
             ImGui.PopTextWrapPos();
@@ -207,6 +207,41 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Viper — Serpentiner Geist", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Serpentiner-Geist-Folgeaktion on held gameplay key (experimental)",
+                configuration.EnableViperSerpentTailOnHeldKey,
+                value => configuration.EnableViperSerpentTailOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and PvP Viper only. After the client accepts a qualifying Viper action, Seiton Sense " +
+                "waits for FFXIV itself to adjust Serpent's Tail / Serpentiner Geist (39183) to the exact available " +
+                "follow-up (39174-39182). Direct execution needs an action-sequence advance; an early native queue " +
+                "counts only when FFXIV later proves and drains the exact same action, target, parameters, and combo route. " +
+                "Initial or uncertain queue calls do nothing, and every newer proven Viper action invalidates an older " +
+                "buffered opportunity. Any continuing held gameplay key, including WASD, may then request that one " +
+                "follow-up; it does not need to be the key that invoked the qualifying Viper action. The key present " +
+                "when the follow-up intent forms is frozen only for that exact attempt/retry episode against " +
+                "the exact same frozen target within the original five-second opportunity. Native current-target " +
+                "carriers are accepted only when the same hard target is proven around client acceptance. It does not select, rerank, " +
+                "or visibly change a target, and it never substitutes a different follow-up.");
+            ImGui.TextDisabled(
+                "Purify keeps absolute priority; this is Viper's first held helper after Purify. Own Guard blocks it, " +
+                "while enemy Guard remains valid because these follow-ups natively ignore Guard when dealing damage. " +
+                "Action, resource, target-status, or reach waits yield the frame to a usable lower helper; only an " +
+                "otherwise-ready native-boundary or retry-throttle wait keeps Viper's priority. Cast cancellation is " +
+                "deliberately unavailable. A clean client rejection may only use the shared bounded same-intent retry " +
+                "while the exact key, adjusted action, target, range, and line of sight stay valid. Ambiguity or retry " +
+                "exhaustion requires releasing that frozen key before another Viper episode.");
+            ImGui.TextDisabled(
+                "Available in exact Crystalline Conflict. With the separate Wolves' Den testing toggle, testing is " +
+                "restricted to the exact current hard-target striking dummy (NameId 541); duel players, arbitrary NPCs, " +
+                "and synthetic enemy slots are rejected. Client acceptance is not proof of a server-side hit.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Scholar — Critical Strategy", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
@@ -234,7 +269,7 @@ internal sealed partial class SettingsWindow
                 "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.TextDisabled(
-                "Purify, NIN Seiton, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. DRK Hiebsprung closes the " +
+                "Purify, NIN Seiton / VPR Serpentiner Geist, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. DRK Hiebsprung closes the " +
                 "job-specific second tier before Smart Recuperate and the generic helpers.");
             ImGui.PopTextWrapPos();
         }

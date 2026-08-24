@@ -25,6 +25,7 @@ internal sealed partial class SettingsWindow
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
         var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
+        var viper = personalStatus.ViperSerpentTailDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
         var protectionEndRankPressure = !protectionEndRankPresent
@@ -105,6 +106,15 @@ internal sealed partial class SettingsWindow
             $"rejected/unknown/soft={recuperate.RejectedCount}/{recuperate.UnknownCount}/" +
             $"{recuperate.SoftWaitCount}, " +
             $"last={recuperate.LastEvent}");
+        ImGui.TextWrapped(
+            $"Viper Serpentiner Geist: {viper.Phase}/{viper.Decision}/{viper.Reason}, " +
+            $"action/trigger={viper.ResolvedActionId}/{viper.TriggerToken}, S={viper.EnemySlot}, " +
+            $"target={viper.TargetGameObjectId:X}/{viper.TargetEntityId:X}, ready/boundary=" +
+            $"{viper.LocallyReady}/{viper.NativeBoundaryReady}, key={viper.HeldGameplayKey}, " +
+            $"claim={viper.InputClaimed}, attempt={viper.UseActionAttempted}/{viper.UseActionAccepted}, " +
+            $"native={viper.NativeAttemptCount}/{viper.LastNativeOutcome}, " +
+            $"count accepted/rejected/unknown/soft={viper.AcceptedCount}/{viper.RejectedCount}/" +
+            $"{viper.UnknownCount}/{viper.SoftWaitCount}, last={viper.LastEvent}");
         ImGui.TextWrapped(
             $"Held cast cancellation: enabled={configuration.AllowHeldHelpersToCancelOwnCast}, " +
             $"state={castCancellation.Decision}/{castCancellation.Reason}, " +
@@ -199,7 +209,7 @@ internal sealed partial class SettingsWindow
             "cooldowns are never guessed. The separate default-off Auto Low-MP Focus setter may fill an empty " +
             "native Focus Target; it never clears, replaces, restores, or retries one. The retired Combat Frames add no " +
             "click or mouseover mutation path. Opt-in Smart Tab replaces only the nested native forward world-target " +
-            "cycle inside FFXIV's original target handler, after its input gates, and may set one frozen exact CC melee enemy as the visible hard " +
+            "cycle inside FFXIV's original target handler, after its input gates, and may set one frozen exact CC DPS enemy as the visible hard " +
             "target after one revalidation and readback; toggle-off and unrelated input remain vanilla. An explicitly " +
             "enabled NIN Guard-Shukuchi may separately " +
             "set its exact jumped-to enemy once after client acceptance. Every other module leaves selected hard, soft, " +
@@ -207,9 +217,9 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "The current request order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
             "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The seven job-specific physical-hold helpers share the second tier; NIN Seiton is first, " +
+            "Kardia > event Monk. The job-specific physical-hold helpers share the second tier; NIN Seiton and VPR Serpentiner Geist are first for their jobs, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +

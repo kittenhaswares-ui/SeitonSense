@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "Exact PvP nameplate/LB cues, reliable held helpers, Smart Tab, and survival tools.",
-    "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, melee Smart Tab, optional Smart Action and assist macros, local MP sounds, survival/job helpers, team communication, and target highlights.",
+    "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, DPS Smart Tab, optional Viper, Smart Action, and assist helpers, local MP sounds, survival/job tools, team communication, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.30.0.1",
-    "Changelog": "Default-off Smart Tab can now replace FFXIV's forward world-target cycle for reviewed melee jobs in exact Crystalline Conflict when enabled in Targets or with /smarttab. Paired native handler/helper hooks preserve FFXIV's binding and UI/input gates; OFF, reverse, and calls outside that handler stay vanilla. Pre-setter failures consume only the owned cycle without a target write. Setter rejection or readback mismatch is terminal with no retry, rerank, or alternate. The separate default-off /smartaction macro retains the harmful-action redirect. Schema 33; all 398 Core tests pass.",
+    "AssemblyVersion": "0.31.0.0",
+    "Changelog": "Smart Tab now supports reviewed ranged DPS in exact Crystalline Conflict: BRD/BLM/SMN/MCH/RDM/PCT use one 25-yalm tier and DNC uses 15, with no melee preference. Held Smart Recuperate can be tested in Wolves' Den only through the explicit test toggle and freezes its exact context. New default-off PvP Viper Serpentiner-Geist helper follows a directly executed or exactly proven native queue-drained qualifying action with the adjusted 39174-39182 action on the same frozen target; newer proven actions invalidate older opportunities. CC uses S1-S5 and Wolves' Den accepts only the exact current hard-target striking dummy. Own Guard, identity/context drift, and unsafe native boundaries fail closed; Viper never cancels casts or changes targets. Schema 34; all 404 Core tests pass.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -15,6 +15,7 @@
       "pressure",
       "cc-immunity",
       "ninja",
+      "viper",
       "nameplate",
       "hud",
       "assist",
@@ -32,6 +33,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787571208"
+    "LastUpdate": "1787592426"
   }
 ]

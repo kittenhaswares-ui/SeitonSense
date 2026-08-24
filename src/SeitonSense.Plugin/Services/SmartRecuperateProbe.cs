@@ -4,6 +4,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
+using SeitonSense.Plugin.Models;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -66,6 +67,7 @@ internal sealed unsafe class SmartRecuperateProbe
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly IDutyState dutyState;
+    private readonly PluginConfiguration configuration;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private SmartRecuperateState state = SmartRecuperateState.Initial;
@@ -83,12 +85,14 @@ internal sealed unsafe class SmartRecuperateProbe
         IClientState clientState,
         IObjectTable objectTable,
         IDutyState dutyState,
+        PluginConfiguration configuration,
         NearAssistRedirector nearAssist,
         IPluginLog log)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.dutyState = dutyState;
+        this.configuration = configuration;
         this.nearAssist = nearAssist;
         this.log = log;
     }
@@ -97,7 +101,7 @@ internal sealed unsafe class SmartRecuperateProbe
 
     internal SmartRecuperateProbeSnapshot Observe(
         IPlayerCharacter? localPlayer,
-        bool isCrystallineConflict,
+        SupportedPvPContext context,
         bool configurationEnabled,
         bool metadataVerified,
         bool actionHelpersSuppressedByGuard,
@@ -134,7 +138,7 @@ internal sealed unsafe class SmartRecuperateProbe
             state,
             new SmartRecuperateObservation(
                 ConfigurationEnabled: configurationEnabled,
-                IsCrystallineConflict: isCrystallineConflict,
+                Context: context,
                 LocalPlayer: localIdentity,
                 IsLocalPlayerAlive: localAlive,
                 IsLocalPlayerTargetable: localTargetable,
@@ -322,7 +326,7 @@ internal sealed unsafe class SmartRecuperateProbe
             !SmartRecuperateRules.CanUseFrozenIntent(
                 intent,
                 configurationEnabled,
-                IsCurrentCrystallineConflict(),
+                ResolveCurrentContext(),
                 currentIdentity,
                 IsAlive(currentLocal),
                 currentLocal.IsTargetable,
@@ -393,7 +397,7 @@ internal sealed unsafe class SmartRecuperateProbe
             !SmartRecuperateRules.CanUseFrozenIntent(
                 intent,
                 configurationEnabled,
-                IsCurrentCrystallineConflict(),
+                ResolveCurrentContext(),
                 currentIdentity,
                 IsAlive(localPlayer),
                 localPlayer.IsTargetable,
@@ -475,21 +479,20 @@ internal sealed unsafe class SmartRecuperateProbe
             : null;
     }
 
-    private bool IsCurrentCrystallineConflict()
+    private SupportedPvPContext ResolveCurrentContext()
     {
         var condition = dutyState.ContentFinderCondition;
         var conditionValid = condition.IsValid;
         return PvPMatchRules.ResolveSupportedContext(
                    clientState.IsPvP,
                    clientState.IsPvPExcludingDen,
-                   includeWolvesDenTesting: false,
+                   includeWolvesDenTesting: configuration.EnableWolvesDenTesting,
                    clientState.TerritoryType,
                    conditionValid,
                    conditionValid && condition.Value.PvP,
                    conditionValid ? condition.Value.ContentUICategory.RowId : 0,
                    conditionValid && condition.Value.CrystallineConflictCasualRoulette,
-                   conditionValid && condition.Value.CrystallineConflictRankedRoulette) ==
-               SupportedPvPContext.CrystallineConflict;
+                   conditionValid && condition.Value.CrystallineConflictRankedRoulette);
     }
 
     private bool IsCurrentlySuppressedByGuard(

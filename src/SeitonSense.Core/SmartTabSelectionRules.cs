@@ -38,9 +38,10 @@ public readonly record struct SmartTabSelectionIntent(
 }
 
 /// <summary>
-/// Pure deterministic Smart Tab policy. Melee reach precedes reviewed gap-closer
-/// reach, then exact HP ratio, positive fresh team pressure, verified Guard
-/// cooldown unavailability, trusted MP ratio, and stable native S-slot.
+/// Pure deterministic Smart Tab policy. Reviewed melee jobs rank melee before
+/// gap-closer reach; reviewed ranged jobs supply one ranged tier. Then exact HP
+/// ratio, positive fresh team pressure, verified Guard cooldown unavailability,
+/// trusted MP ratio, and stable native S-slot decide the target.
 /// </summary>
 public static class SmartTabSelectionRules
 {
@@ -132,7 +133,9 @@ public static class SmartTabSelectionRules
         !SharesEitherId(candidate.Actor, localPlayer) &&
         EnemySlotRules.IsValidSlot(candidate.EnemySlot) &&
         candidate.ExactCanonicalIdentity &&
-        candidate.ReachTier is SmartTargetReachTier.Melee or SmartTargetReachTier.GapCloser &&
+        candidate.ReachTier is SmartTargetReachTier.Melee or
+            SmartTargetReachTier.GapCloser or
+            SmartTargetReachTier.RangedOrOther &&
         candidate.FreshTeamPressureCount is null or >= 0 &&
         Enum.IsDefined(candidate.GuardAvailability) &&
         (!candidate.HasTrustedMp ||

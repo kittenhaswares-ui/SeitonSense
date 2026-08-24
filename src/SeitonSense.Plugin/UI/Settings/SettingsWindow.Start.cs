@@ -19,7 +19,7 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextUnformatted("Testing scope");
         changed |= Checkbox(
-            "Enable Wolves' Den testing for Seiton, native-nameplate cues, and enabled /seitonbringer",
+            "Enable Wolves' Den testing for supported Seiton Sense features and helpers",
             configuration.EnableWolvesDenTesting,
             value => configuration.EnableWolvesDenTesting = value);
         changed |= Checkbox(
@@ -28,10 +28,11 @@ internal sealed partial class SettingsWindow
             value => configuration.PressureIncludeWolvesDen = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "These are independent test scopes. Seiton uses the exact hostile duel opponent as synthetic S1, " +
-            "including party-member duels. /seitonbringer also requires its separate Macro Helpers opt-in and " +
-            "accepts only your exact current hard-target Wolves' Den striking dummy; it never uses synthetic S1, " +
-            "<e1>, or the duel opponent. The pressure option controls only the counter.");
+            "These are independent test scopes. Each feature still requires its own opt-in and keeps its own strict " +
+            "target rules. Seiton uses the exact hostile duel opponent as synthetic S1, including party-member duels. " +
+            "Smart Recuperate is self-only. Viper's held Serpent's Tail helper and /seitonbringer accept only your exact " +
+            "current hard-target Wolves' Den striking dummy; they never use synthetic S1, <e1>, or the duel opponent. " +
+            "The pressure option controls only the counter.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();

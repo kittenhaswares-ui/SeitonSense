@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.30.0.1";
+    private const string CurrentReleaseVersion = "0.31.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -206,6 +206,7 @@ public sealed class Plugin : IDalamudPlugin
             smartWardensPaean,
             ccImmunityBrake,
             darkKnightShadowbringer,
+            metadata.WolvesDenStrikingDummyVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
             configuration,
@@ -318,9 +319,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Tab can now replace FFXIV's normal forward Tab targeting for melee jobs: melee reach first, then only reviewed gap-closer reach.",
-                "Toggle it in Targets or with /smarttab. Toggle OFF is fully vanilla; reverse targeting and all unrelated inputs remain untouched.",
-                "The optional invisible harmful-action redirect is separate under /smartaction. Neither feature sends an action or retries.",
+                "Smart Tab now replaces forward Tab targeting in exact CC for reviewed DPS: melee keeps its reach tiers; BRD, BLM, SMN, MCH, RDM, and PCT use 25 yalms, while DNC uses 15.",
+                "Held Smart Recuperate can now be tested in Wolves' Den through the existing explicit testing toggle.",
+                "New default-off Viper Serpentiner Geist recognizes direct or exactly proven native queue-drained Viper actions, then uses any held gameplay key including WASD for the frozen follow-up; Den testing is dummy-only.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -735,6 +736,7 @@ public sealed class Plugin : IDalamudPlugin
                 var kardia = personalStatus.SmartKardiaDiagnostics;
                 var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
+                var viper = personalStatus.ViperSerpentTailDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
@@ -956,6 +958,17 @@ public sealed class Plugin : IDalamudPlugin
                     $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +
                     $"resolve={ninja.CandidateResolution},last={ninja.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] viper-serpent-tail[phase={viper.Phase}," +
+                    $"decision={viper.Decision},reason={viper.Reason},action={viper.ResolvedActionId}," +
+                    $"trigger={viper.TriggerToken},S={viper.EnemySlot}," +
+                    $"target={viper.TargetGameObjectId:X}/{viper.TargetEntityId:X}," +
+                    $"ready/boundary={viper.LocallyReady}/{viper.NativeBoundaryReady}," +
+                    $"key={viper.HeldGameplayKey},claimed={viper.InputClaimed}," +
+                    $"attempt={viper.UseActionAttempted}/{viper.UseActionAccepted}," +
+                    $"native={viper.NativeAttemptCount}/{viper.LastNativeOutcome}," +
+                    $"count={viper.AttemptCount}/{viper.AcceptedCount}/{viper.RejectedCount}/" +
+                    $"{viper.UnknownCount}/{viper.SoftWaitCount},last={viper.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] scholar-strategy[decision={scholar.Decision},reason={scholar.Reason}," +
                     $"ready={scholar.LocallyReady},action={scholar.ResolvedActionId}," +
                     $"candidates={scholar.CandidateCount},S={scholar.EnemySlot}," +
@@ -1105,7 +1118,7 @@ public sealed class Plugin : IDalamudPlugin
             var enabled = configuration.EnableSmartTabTargeting;
             chatGui.Print(
                 enabled
-                    ? "[Seiton Sense] Smart Tab ON: FFXIV's forward target command uses melee Smart Targeting in exact CC."
+                    ? "[Seiton Sense] Smart Tab ON: FFXIV's forward target command uses reviewed DPS Smart Targeting in exact CC."
                     : "[Seiton Sense] Smart Tab OFF: FFXIV targeting is fully vanilla.");
             if (enabled && !smartTabTargeting.Diagnostics.HookAvailable)
             {

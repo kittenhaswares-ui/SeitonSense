@@ -7,6 +7,7 @@ namespace SeitonSense.Core;
 public readonly record struct SmartRecuperateIntent(
     uint ActionId,
     TargetPressureActorIdentity LocalPlayer,
+    SupportedPvPContext Context,
     int FrozenKeyCode,
     uint TriggerCurrentHp,
     uint TriggerMaximumHp,
@@ -15,6 +16,7 @@ public readonly record struct SmartRecuperateIntent(
     public bool IsValid =>
         ActionId == SmartRecuperateRules.ActionId &&
         LocalPlayer.IsValid &&
+        Context is SupportedPvPContext.CrystallineConflict or SupportedPvPContext.WolvesDen &&
         FrozenKeyCode > 0 &&
         HealthEventToken != 0 &&
         SmartRecuperateRules.HasMinimumMissingHp(
@@ -50,7 +52,7 @@ public readonly record struct SmartRecuperateState(
 
 public readonly record struct SmartRecuperateObservation(
     bool ConfigurationEnabled,
-    bool IsCrystallineConflict,
+    SupportedPvPContext Context,
     TargetPressureActorIdentity LocalPlayer,
     bool IsLocalPlayerAlive,
     bool IsLocalPlayerTargetable,
@@ -86,7 +88,7 @@ public enum SmartRecuperateDecisionReason
     None = 0,
     HardReset = 1,
     ConfigurationDisabled = 2,
-    OutsideCrystallineConflict = 3,
+    OutsideSupportedPvPContext = 3,
     LocalPlayerIdentityInvalid = 4,
     LocalPlayerDead = 5,
     LocalPlayerUntargetable = 6,
@@ -110,6 +112,7 @@ public enum SmartRecuperateDecisionReason
     WaitingForAcceptedCooldownUnavailable = 24,
     WaitingForAcceptedCooldownReady = 25,
     ClockMovedBackwards = 26,
+    ContextChanged = 27,
 }
 
 public readonly record struct SmartRecuperateDecision(
@@ -315,7 +318,7 @@ public static class SmartRecuperateRules
     public static bool CanUseFrozenIntent(
         SmartRecuperateIntent intent,
         bool configurationEnabled,
-        bool isCrystallineConflict,
+        SupportedPvPContext currentContext,
         TargetPressureActorIdentity currentLocalPlayer,
         bool isLocalPlayerAlive,
         bool isLocalPlayerTargetable,
@@ -332,7 +335,7 @@ public static class SmartRecuperateRules
         bool frozenKeyStillDown) =>
         intent.IsValid &&
         configurationEnabled &&
-        isCrystallineConflict &&
+        currentContext == intent.Context &&
         currentLocalPlayer == intent.LocalPlayer &&
         isLocalPlayerAlive &&
         isLocalPlayerTargetable &&
@@ -356,6 +359,13 @@ public static class SmartRecuperateRules
             return Cancelled(
                 SmartRecuperateState.Initial,
                 SmartRecuperateDecisionReason.NativeAcceptanceUnknown);
+
+        if (observation.Context != intent.Value.Context)
+        {
+            return Cancelled(
+                Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
+                SmartRecuperateDecisionReason.ContextChanged);
+        }
 
         if (!observation.FrozenKeyStillDown)
         {
@@ -429,7 +439,21 @@ public static class SmartRecuperateRules
         SmartRecuperateObservation observation)
     {
         var intent = previous.Intent;
-        if (intent is not { IsValid: true } || !observation.FrozenKeyStillDown)
+        if (intent is not { IsValid: true })
+        {
+            return Cancelled(
+                SmartRecuperateState.Initial,
+                SmartRecuperateDecisionReason.NativeAcceptanceUnknown);
+        }
+
+        if (observation.Context != intent.Value.Context)
+        {
+            return Cancelled(
+                Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
+                SmartRecuperateDecisionReason.ContextChanged);
+        }
+
+        if (!observation.FrozenKeyStillDown)
         {
             return None(
                 Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
@@ -511,6 +535,7 @@ public static class SmartRecuperateRules
         var intent = new SmartRecuperateIntent(
             observation.ResolvedActionId,
             observation.LocalPlayer,
+            observation.Context,
             observation.HeldGameplayKeyCode,
             observation.CurrentHp,
             observation.MaximumHp,
@@ -537,8 +562,11 @@ public static class SmartRecuperateRules
     {
         if (!observation.ConfigurationEnabled)
             return SmartRecuperateDecisionReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
-            return SmartRecuperateDecisionReason.OutsideCrystallineConflict;
+        if (observation.Context is not (SupportedPvPContext.CrystallineConflict or
+            SupportedPvPContext.WolvesDen))
+        {
+            return SmartRecuperateDecisionReason.OutsideSupportedPvPContext;
+        }
         if (!observation.LocalPlayer.IsValid)
             return SmartRecuperateDecisionReason.LocalPlayerIdentityInvalid;
         if (!observation.IsLocalPlayerAlive)
