@@ -1,8 +1,8 @@
 {
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
-  "Punchline": "Exact PvP nameplate/LB cues, reliable held helpers, Smart Target, and survival tools.",
-  "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, Smart Target and assist macros, local MP sounds, survival/job helpers, team communication, and target highlights.",
+  "Punchline": "Exact PvP nameplate/LB cues, reliable held helpers, Smart Tab, and survival tools.",
+  "Description": "A local PvP HUD with exact native-nameplate cues, LB activation and damage notifications, pressure and CC awareness, a bounded Purify-first held-action scheduler, melee Smart Tab, optional Smart Action and assist macros, local MP sounds, survival/job helpers, team communication, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

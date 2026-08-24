@@ -12,6 +12,14 @@ $pluginUiRoot = Join-Path $sourceRoot 'SeitonSense.Plugin\UI'
 $overlayRendererPath = Join-Path $pluginUiRoot 'OverlayRenderer.cs'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
 $coreSelfTestRoot = Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest'
+$pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
+$smartTabTargetingServicePath = Join-Path $pluginServicesRoot 'SmartTabTargetingService.cs'
+$smartTabInterceptionRulesPath = Join-Path $coreRoot 'SmartTabInterceptionRules.cs'
+$smartTabSelectionRulesPath = Join-Path $coreRoot 'SmartTabSelectionRules.cs'
+$smartTargetReachRulesPath = Join-Path $coreRoot 'SmartTargetReachRules.cs'
+$smartTabInterceptionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTabInterceptionSelfTests.cs'
+$smartTabSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTabSelectionSelfTests.cs'
+$smartTargetReachSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetReachSelfTests.cs'
 $autoLowMpFocusTargetServicePath = Join-Path $pluginServicesRoot 'AutoLowMpFocusTargetService.cs'
 $autoLowMpFocusTargetRulesPath = Join-Path $coreRoot 'AutoLowMpFocusTargetRules.cs'
 $autoLowMpFocusTargetSelfTestsPath = Join-Path $coreSelfTestRoot 'AutoLowMpFocusTargetSelfTests.cs'
@@ -58,6 +66,13 @@ $forbiddenChecks = [ordered]@{
 
 foreach ($check in $forbiddenChecks.GetEnumerator()) {
     $matches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern $check.Value)
+    if ($check.Key -eq 'signature scans or unmanaged hook libraries') {
+        # Plugin.cs may only receive the scanner, and Smart Tab owns the one
+        # reviewed, version-pinned native helper scan checked in detail below.
+        $matches = @($matches | Where-Object {
+            $_.Path -notin @($pluginPath, $smartTabTargetingServicePath)
+        })
+    }
     if ($check.Key -eq 'target mutation services') {
         # Auto Low-MP Focus owns one reviewed empty-to-exact FocusTarget write.
         # NIN Guard-Shukuchi owns one exact accepted-action hard-target write.
@@ -167,7 +182,6 @@ $ccImmunityBrakeMetadataGuardPath = Join-Path $pluginServicesRoot 'CcImmunityBra
 $ccImmunityBrakeTargetRulesPath = Join-Path $coreRoot 'CcImmunityBrakeTargetRules.cs'
 $personalStatusPath = Join-Path $pluginServicesRoot 'PersonalStatusService.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
-$pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
 $targetHighlightPath = Join-Path $pluginUiRoot 'TargetHighlightRenderer.cs'
 $pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
 $settingsPartsRoot = Join-Path $pluginUiRoot 'Settings'
@@ -240,7 +254,8 @@ $allowedUnsafe = @(
     $panicShukuchiServicePath,
     $ninjaGuardShukuchiProbePath,
     $darkKnightPlungeProbePath,
-    $combatLimitBreakCaptureBufferPath
+    $combatLimitBreakCaptureBufferPath,
+    $smartTabTargetingServicePath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
@@ -250,22 +265,30 @@ if ($unexpectedUnsafe.Count -gt 0) {
     throw "Unsafe code is allowed only in the reviewed native boundaries: $($locations -join ', ')"
 }
 
-# Near Assist, Near Help, and Far Help share one target-only action detour. The
+# Near Assist, Smart Action, Near Help, and Far Help share one target-only
+# action detour. Smart Tab separately owns one paired native targeting-handler
+# and world-cycle boundary. The
 # MCH/pressure capture owns the sole read-only ActionEffect receive hook and
 # forwards value-only activation/damage records to the bounded Combat LB buffer.
-# Plugin.cs only constructor-injects interop.
+# Plugin.cs only constructor-injects interop and the signature scanner.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
-    $_.Path -notin @($pluginPath, $nearAssistPath, $machinistLimitBreakCapturePath)
+    $_.Path -notin @(
+        $pluginPath,
+        $nearAssistPath,
+        $machinistLimitBreakCapturePath,
+        $smartTabTargetingServicePath)
 })
 if ($unexpectedInterop.Count -gt 0) {
     $locations = $unexpectedInterop | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only Near Assist and the read-only MCH/pressure capture may own native hooks: $($locations -join ', ')"
+    throw "Only Near Assist/Smart Action, Smart Tab, and the read-only MCH/pressure capture may own native hooks: $($locations -join ', ')"
 }
 $pluginSource = Read-RequiredSource $pluginPath 'Plugin entry point'
 if ([regex]::Matches($pluginSource, '\bIGameInteropProvider\b').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bISigScanner\b').Count -ne 1 -or
+    $pluginSource -match '\b(ScanText|SignatureAttribute|MinHook)\b' -or
     $pluginSource -match '\b(Hook<|HookFromAddress)\b') {
-    throw 'Plugin.cs may only constructor-inject one IGameInteropProvider; it may not create a hook.'
+    throw 'Plugin.cs may only constructor-inject one IGameInteropProvider and one ISigScanner; it may not scan or create a hook.'
 }
 Assert-Literals $pluginSource @(
     'NearAssistCommand = "/nearassist"',
@@ -291,8 +314,227 @@ Assert-Literals $pluginSource @(
     'if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand)',
     'nearAssist.Dispose()'
 ) 'Near Assist, Near Help, and Far Help command ownership and lifecycle'
+Assert-Literals $pluginSource @(
+    'SmartTabCommand = "/smarttab"',
+    'SmartTabAliasCommand = "/sstarget"',
+    'SmartActionCommand = "/smartaction"',
+    'SmartActionAliasCommand = "/ssaction"',
+    'new SmartTabTargetingService(',
+    'smartTabTargeting.Start()',
+    'smartTabCommandRegistered = commandManager.AddHandler(',
+    'smartTabAliasRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnSmartTabCommand)',
+    'smartActionCommandRegistered = commandManager.AddHandler(',
+    'smartActionAliasRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnSmartActionCommand)',
+    'nearAssist.ArmSmartActionTarget()',
+    'if (smartTabCommandRegistered) commandManager.RemoveHandler(SmartTabCommand)',
+    'if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand)',
+    'if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand)',
+    'if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand)',
+    'smartTabTargeting.Dispose()'
+) 'Separate Smart Tab toggle and Smart Action macro command ownership and lifecycle'
 if ($pluginSource -match 'lowest-health ally helper') {
     throw 'Near Help command copy must describe survival targeting with bounded pressure and action-gated self eligibility.'
+}
+
+$smartTabTargeting = Read-RequiredSource $smartTabTargetingServicePath 'Smart Tab native targeting service'
+$normalizedSmartTabTargeting = $smartTabTargeting -replace '\s+', ' '
+Assert-Literals $smartTabTargeting @(
+    '[ThreadStatic]',
+    'private static int nativeTargetingHandlerDepth;',
+    'private const string NativeWorldTargetCycleSignature =',
+    '"E8 ?? ?? ?? ?? BA ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 84 C0 0F 84";',
+    '[UnmanagedFunctionPointer(CallingConvention.Cdecl)]',
+    'private delegate byte NativeWorldTargetCycleDelegate(',
+    'TargetSystem* targetSystem,',
+    'nint targetingContext,',
+    'GameObjectArray* candidateArray,',
+    'byte reverse);',
+    'Hook<TargetSystem.Delegates.HandleTargetingKeybinds>? targetingKeybindsHook;',
+    'Hook<NativeWorldTargetCycleDelegate>? targetCycleHook;',
+    'var cycleAddress = sigScanner.ScanText(NativeWorldTargetCycleSignature);',
+    'interop.HookFromAddress<NativeWorldTargetCycleDelegate>(',
+    'NativeWorldTargetCycleDetour);',
+    'interop.HookFromAddress<TargetSystem.Delegates.HandleTargetingKeybinds>(',
+    'TargetSystem.MemberFunctionPointers.HandleTargetingKeybinds,',
+    'HandleTargetingKeybindsDetour);'
+) 'Smart Tab paired native handler/helper hooks, pinned helper signature, and byte ABI'
+if ([regex]::Matches($smartTabTargeting, '\bIGameInteropProvider\b').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '\bISigScanner\b').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '\bHookFromAddress\b').Count -ne 2 -or
+    [regex]::Matches($smartTabTargeting, '\bScanText\b').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '\bNativeWorldTargetCycleSignature\b').Count -ne 2 -or
+    $smartTabTargeting -match '\b(SignatureAttribute|MinHook)\b') {
+    throw 'Smart Tab must own exactly two reviewed hooks and one pinned runtime helper scan, with no unmanaged hook-library fallback.'
+}
+if ($normalizedSmartTabTargeting -notmatch '\[UnmanagedFunctionPointer\(CallingConvention\.Cdecl\)\] private delegate byte NativeWorldTargetCycleDelegate\( TargetSystem\* targetSystem, nint targetingContext, GameObjectArray\* candidateArray, byte reverse\);' -or
+    $normalizedSmartTabTargeting -notmatch 'private byte NativeWorldTargetCycleDetour\( TargetSystem\* targetSystem, nint targetingContext, GameObjectArray\* candidateArray, byte reverse\)') {
+    throw 'Smart Tab helper hook must preserve the reviewed byte-return, byte-reverse, Cdecl native ABI exactly.'
+}
+if ($normalizedSmartTabTargeting -notmatch 'createdCycleHook = interop\.HookFromAddress<NativeWorldTargetCycleDelegate>\( cycleAddress, NativeWorldTargetCycleDetour\); createdTargetingHook = interop\.HookFromAddress<TargetSystem\.Delegates\.HandleTargetingKeybinds>\( TargetSystem\.MemberFunctionPointers\.HandleTargetingKeybinds, HandleTargetingKeybindsDetour\);' -or
+    $normalizedSmartTabTargeting -notmatch 'catch \(Exception exception\) \{.*?createdTargetingHook\?\.Dispose\(\);.*?createdCycleHook\?\.Dispose\(\);.*?createdTargetingHook = null; createdCycleHook = null;' -or
+    $normalizedSmartTabTargeting -notmatch 'targetCycleHook\?\.Enable\(\); targetingKeybindsHook\?\.Enable\(\);' -or
+    $normalizedSmartTabTargeting -notmatch 'targetingKeybindsHook\?\.Disable\(\);.*?targetCycleHook\?\.Disable\(\);' -or
+    $normalizedSmartTabTargeting -notmatch 'targetingKeybindsHook\?\.Dispose\(\);.*?targetCycleHook\?\.Dispose\(\);') {
+    throw 'Smart Tab paired hooks must be created, enabled, rolled back, and disposed together while preserving vanilla targeting on failure.'
+}
+
+$smartTabHandlerDetourMatch = [regex]::Match(
+    $smartTabTargeting,
+    '(?s)private void HandleTargetingKeybindsDetour\(.*?\n    \}\r?\n\r?\n    private byte NativeWorldTargetCycleDetour')
+if (-not $smartTabHandlerDetourMatch.Success) {
+    throw 'Smart Tab targeting-handler scope detour is missing.'
+}
+$normalizedSmartTabHandlerDetour = $smartTabHandlerDetourMatch.Value -replace '\s+', ' '
+if ($normalizedSmartTabHandlerDetour -notmatch 'nativeTargetingHandlerDepth\+\+; try \{ targetingKeybindsHook!\.Original\(targetSystem\); \} finally \{ nativeTargetingHandlerDepth--; \}' -or
+    [regex]::Matches($smartTabHandlerDetourMatch.Value, 'targetingKeybindsHook!\.Original').Count -ne 1) {
+    throw 'Smart Tab must bracket exactly one original targeting-handler call with thread-local depth in try/finally.'
+}
+
+$smartTabCycleDetourMatch = [regex]::Match(
+    $smartTabTargeting,
+    '(?s)private byte NativeWorldTargetCycleDetour\(.*?\n    \}\r?\n\r?\n    private bool HooksAvailable')
+if (-not $smartTabCycleDetourMatch.Success) {
+    throw 'Smart Tab native world-cycle detour is missing.'
+}
+$smartTabCycleDetour = $smartTabCycleDetourMatch.Value
+$normalizedSmartTabCycleDetour = $smartTabCycleDetour -replace '\s+', ' '
+if ([regex]::Matches($smartTabCycleDetour, 'targetCycleHook!\.Original').Count -ne 3 -or
+    $normalizedSmartTabCycleDetour -notmatch 'if \(nativeTargetingHandlerDepth <= 0 \|\| reverse != 0\) \{ Interlocked\.Increment\(ref vanillaPassThroughCount\); return targetCycleHook!\.Original\( targetSystem, targetingContext, candidateArray, reverse\); \}' -or
+    $normalizedSmartTabCycleDetour -notmatch 'if \(!SmartTabInterceptionRules\.ShouldConsumeNativeForwardTarget\(observation\)\) \{ Interlocked\.Increment\(ref vanillaPassThroughCount\); return targetCycleHook!\.Original\( targetSystem, targetingContext, candidateArray, reverse\); \}' -or
+    $normalizedSmartTabCycleDetour -notmatch 'catch \(Exception exception\) \{ if \(owned\).*?return 0; \}.*?Interlocked\.Increment\(ref vanillaPassThroughCount\); return targetCycleHook!\.Original\( targetSystem, targetingContext, candidateArray, reverse\);') {
+    throw 'Smart Tab must preserve the original helper for outside-scope, reverse, ineligible, and pre-ownership failure paths.'
+}
+if ($normalizedSmartTabCycleDetour -notmatch 'owned = true; Interlocked\.Increment\(ref consumedRequestCount\); if \(SelectBestTargetOnce\(targetSystem\)\) return 1; Interlocked\.Increment\(ref consumedWithoutSelectionCount\); return 0;' -or
+    $normalizedSmartTabCycleDetour -notmatch 'if \(owned\) \{ LogFailure\(exception, "Smart Tab owned forward-target request failed closed; no fallback was attempted"\); Interlocked\.Increment\(ref consumedWithoutSelectionCount\); return 0; \}') {
+    throw 'Once Smart Tab owns an exact forward cycle it must consume it without native-cycle fallback, retry, or alternate selection.'
+}
+
+$smartTabSelectionMethodMatch = [regex]::Match(
+    $smartTabTargeting,
+    '(?s)private bool SelectBestTargetOnce\(.*?\n    \}\r?\n\r?\n    private bool TryCreateCandidate')
+if (-not $smartTabSelectionMethodMatch.Success) {
+    throw 'Smart Tab single-selection boundary is missing.'
+}
+$smartTabSelectionMethod = $smartTabSelectionMethodMatch.Value
+$normalizedSmartTabSelectionMethod = $smartTabSelectionMethod -replace '\s+', ' '
+if ($smartTabSelectionMethod -match 'targetCycleHook|\.Original\s*\(|\bUseAction(?:Location)?\b|\bSetSoftTarget\b' -or
+    $smartTabTargeting -match '\b(?:ActionManager|UseAction|UseActionLocation|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget|ITargetManager)\b' -or
+    $smartTabTargeting -match '->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($smartTabSelectionMethod, '\bSelectBestTargetOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, 'SmartTabSelectionRules\.TryCreateIntent').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, 'SmartTabSelectionRules\.CanSetExactIntent').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '->SetHardTarget\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '->GetHardTarget\s*\(').Count -ne 1) {
+    throw 'Smart Tab must rank once, revalidate only the frozen actor, and own exactly one native hard-target setter/readback boundary with no action or Original call.'
+}
+if ($normalizedSmartTabSelectionMethod -notmatch 'SmartTabSelectionRules\.TryCreateIntent\( selectionCandidates, localActor, out var intent\).*?var exactTarget = EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\);.*?SmartTabSelectionRules\.CanSetExactIntent\(intent, revalidated, localActor\).*?Interlocked\.Increment\(ref setterInvocationCount\); var setterAccepted = targetSystem->SetHardTarget\(\(GameObject\*\)exactTarget\.Address\); if \(!setterAccepted\).*?if \(\(nint\)targetSystem->GetHardTarget\(\) != exactTarget\.Address\).*?Interlocked\.Increment\(ref exactReadbackCount\);') {
+    throw 'Smart Tab must freeze one intent, revalidate that exact actor, invoke SetHardTarget once, and confirm exact native readback in order.'
+}
+
+$smartTabInterceptionRules = Read-RequiredSource $smartTabInterceptionRulesPath 'Smart Tab interception rules'
+$normalizedSmartTabInterceptionRules = $smartTabInterceptionRules -replace '\s+', ' '
+if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled && observation\.FeatureEnabled && observation\.HookAvailable && observation\.InsideNativeTargetingHandler && observation\.ExactCrystallineConflict && observation\.ReviewedMeleeJob && observation\.LocalPlayerAvailable && observation\.NativeWorldForwardCycle;' -or
+    $normalizedSmartTabInterceptionRules -match '\|\|') {
+    throw 'Smart Tab ownership must require every exact native-forward, handler-scope, context, job, player, hook, feature, and plugin gate.'
+}
+
+$smartTabSelectionRules = Read-RequiredSource $smartTabSelectionRulesPath 'Smart Tab selection rules'
+$smartTargetReachRules = Read-RequiredSource $smartTargetReachRulesPath 'Smart Target shared reach rules'
+Assert-Literals $smartTabSelectionRules @(
+    'candidate.ReachTier is SmartTargetReachTier.Melee or SmartTargetReachTier.GapCloser',
+    '!candidate.HasActiveGuard',
+    'SmartTabSelectionIntent(',
+    'SelectBestCandidateIndex(candidates, localPlayer)',
+    'candidate.Actor == intent.Target',
+    'return left.EnemySlot.CompareTo(right.EnemySlot);'
+) 'Smart Tab exact eligibility, frozen intent, and stable ranking'
+Assert-Literals $smartTargetReachRules @(
+    'public const float MeleeRangeYalms = 5f;',
+    '20 => 20f',
+    '22 => 20f',
+    '30 => 20f',
+    '34 => 20f',
+    '39 => 15f',
+    '41 => 20f',
+    '_ => 0f',
+    'centerDistance - localHitboxRadius - enemyHitboxRadius',
+    'if (edgeDistance > gapCloserRange) return false;'
+) 'Smart Tab reviewed melee hitbox-edge and gap-reach allowlist'
+
+$smartTabInterceptionSelfTests = Read-RequiredSource $smartTabInterceptionSelfTestsPath 'Smart Tab interception self-tests'
+$smartTabSelectionSelfTests = Read-RequiredSource $smartTabSelectionSelfTestsPath 'Smart Tab selection self-tests'
+$smartTargetReachSelfTests = Read-RequiredSource $smartTargetReachSelfTestsPath 'Smart Target reach self-tests'
+$smartTabTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Smart Tab Core test registry'
+foreach ($test in @(
+    @($smartTabInterceptionSelfTests, 'ExactNativeForwardTargetIsConsumed'),
+    @($smartTabInterceptionSelfTests, 'ToggleOffAndUnsupportedContextsStayVanilla'),
+    @($smartTabInterceptionSelfTests, 'OtherNativePathsStayVanilla'),
+    @($smartTabSelectionSelfTests, 'ReachTierPrecedesEveryCombatSignal'),
+    @($smartTabSelectionSelfTests, 'RankingOrderIsExactAndDeterministic'),
+    @($smartTabSelectionSelfTests, 'EligibilityAndAmbiguityFailClosed'),
+    @($smartTabSelectionSelfTests, 'FrozenIntentNeverReranksOrChangesActor'),
+    @($smartTargetReachSelfTests, 'ReviewedMeleeJobsAndGapCapsAreExact'),
+    @($smartTargetReachSelfTests, 'HitboxEdgeBoundariesProduceOnlyMeleeOrGapTiers'),
+    @($smartTargetReachSelfTests, 'UnknownJobsAndInvalidGeometryFailClosed')
+)) {
+    Assert-Literals $test[0] @("public static void $($test[1])()") "Smart Tab/reach self-test $($test[1])"
+}
+foreach ($registration in @(
+    'SmartTabInterceptionSelfTests.ExactNativeForwardTargetIsConsumed',
+    'SmartTabInterceptionSelfTests.ToggleOffAndUnsupportedContextsStayVanilla',
+    'SmartTabInterceptionSelfTests.OtherNativePathsStayVanilla',
+    'SmartTabSelectionSelfTests.ReachTierPrecedesEveryCombatSignal',
+    'SmartTabSelectionSelfTests.RankingOrderIsExactAndDeterministic',
+    'SmartTabSelectionSelfTests.EligibilityAndAmbiguityFailClosed',
+    'SmartTabSelectionSelfTests.FrozenIntentNeverReranksOrChangesActor',
+    'SmartTargetReachSelfTests.ReviewedMeleeJobsAndGapCapsAreExact',
+    'SmartTargetReachSelfTests.HitboxEdgeBoundariesProduceOnlyMeleeOrGapTiers',
+    'SmartTargetReachSelfTests.UnknownJobsAndInvalidGeometryFailClosed'
+)) {
+    if ([regex]::Matches($smartTabTestProgram, [regex]::Escape($registration)).Count -ne 1) {
+        throw "Smart Tab/reach self-test must be registered exactly once: $registration"
+    }
+}
+if ([regex]::Matches($smartTabInterceptionSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3 -or
+    [regex]::Matches($smartTabSelectionSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 4 -or
+    [regex]::Matches($smartTargetReachSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3) {
+    throw 'The exact three interception, four selection, and three shared-reach Smart Tab tests must remain pinned.'
+}
+
+$smartTabCommandMatch = [regex]::Match(
+    $pluginSource,
+    '(?s)private void OnSmartTabCommand\(.*?\n    \}\r?\n\r?\n    private void OnSmartActionCommand')
+$smartActionCommandMatch = [regex]::Match(
+    $pluginSource,
+    '(?s)private void OnSmartActionCommand\(.*?\n    \}\r?\n\r?\n    private void OnAutoSeitonCommand')
+if (-not $smartTabCommandMatch.Success -or -not $smartActionCommandMatch.Success -or
+    $smartTabCommandMatch.Value -match '\bnearAssist\b|ArmSmartActionTarget' -or
+    $smartActionCommandMatch.Value -match 'EnableSmartTabTargeting|\bsmartTabTargeting\b' -or
+    $smartActionCommandMatch.Value -notmatch 'nearAssist\.ArmSmartActionTarget\(\)') {
+    throw 'Smart Tab toggle and one-shot Smart Action must remain separate commands with no shared arm/toggle path.'
+}
+
+$smartTabConfigurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
+$smartTabConfiguration = Read-RequiredSource $smartTabConfigurationPath 'Schema-33 Smart Tab configuration'
+$normalizedSmartTabConfiguration = $smartTabConfiguration -replace '\s+', ' '
+if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargeting \{ get; set; \}\s*$' -or
+    $smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartActionMacro \{ get; set; \}\s*$' -or
+    [regex]::Matches($smartTabConfiguration, '\bEnableSmartTabTargeting\s*=\s*false\s*;').Count -ne 2 -or
+    [regex]::Matches($smartTabConfiguration, '\bEnableSmartTabTargeting\s*=\s*true\s*;').Count -ne 0 -or
+    [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
+    [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
+    $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \} Version = 33;') {
+    throw 'Schema 33 must keep Smart Tab false for upgrades/fresh/reset while migrating only the prior explicit macro-helper choice to separate default-off Smart Action.'
+}
+
+$normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
+if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\).*?configuration\.EnableSmartActionMacro' -or
+    $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && configuration\.EnableSmartActionMacro &&' -or
+    $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\) \{ shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
+    $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
+    throw 'The legacy one-shot harmful-action redirect must be exposed only as separately gated Smart Action, independent of the Smart Tab toggle.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -357,10 +599,11 @@ if ($managedTargetSetterMatches.Count -ne 2 -or
     $locations = $managedTargetSetterMatches | ForEach-Object { "$($_.Path):$($_.LineNumber):$($_.Line.Trim())" }
     throw "Exactly two reviewed managed target setter sites are allowed: $($locations -join ', ')"
 }
-$nativeTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '(?-i:\b(?:TargetManager|TargetSystem|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget)\b)|->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)')
+$nativeTargetSetterMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '(?-i:\b(?:TargetManager|TargetSystem|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget)\b)|->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' |
+    Where-Object { $_.Path -ne $smartTabTargetingServicePath })
 if ($nativeTargetSetterMatches.Count -gt 0) {
     $locations = $nativeTargetSetterMatches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Native target setters remain forbidden: $($locations -join ', ')"
+    throw "Native target setters remain forbidden outside the exact Smart Tab setter/readback boundary: $($locations -join ', ')"
 }
 
 # Auto Low-MP Focus is a default-off, exact-Crystalline-Conflict-only
@@ -2563,8 +2806,8 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 388) {
-    throw 'All four shared protection-end tests and the exact 388-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 398) {
+    throw 'All four shared protection-end tests and the exact 398-test Core registry must remain pinned.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -3054,8 +3297,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 32;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 32 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 33;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 33 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -4989,8 +5232,8 @@ if (-not $plungeInitialConsume.Success -or -not $plungeRepeatSpend.Success -or
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
 $normalizedTargetPressureTracker = $targetPressureTracker -replace '\s+', ' '
-if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
-    throw 'The shared Smart Target/Near Assist master must keep team-pressure production active independently of visible pressure surfaces and the Near Assist pressure preference.'
+if ($normalizedTargetPressureTracker -notmatch 'var pressureFeaturesEnabled = configuration\.ShowPressureCounter \|\| configuration\.ShowIncomingPressureOnNameplates \|\| configuration\.ShowTeamPressureOnNameplates \|\| configuration\.EnableSmartTabTargeting \|\| configuration\.EnableSmartActionMacro \|\| configuration\.EnableNearAssistMacro \|\| configuration\.NearAssistPreferTeamPressure') {
+    throw 'Smart Tab, Smart Action, and Near Assist must each keep team-pressure production active independently of visible pressure surfaces and one another.'
 }
 if ($normalizedTargetPressureTracker -notmatch 'supportedContext == SupportedPvPContext\.CrystallineConflict && \(\(isAllyRescueJob && configuration\.ExperimentalAllyRescueOnNextKey && metadata\.AllyRescueStatusesVerified\) \|\| oneShotAllyPressureRequested \|\| \(isBard && configuration\.EnableBardWardensPaeanPressureRedirect\) \|\| \(isPaladin && configuration\.PaladinGuardianLowAlly\) \|\| \(configuration\.EnableNearAssistMacro && configuration\.NearHelpPreferIncomingPressure\)\)') {
     throw 'Incoming ally pressure must remain CC-only with exact job gates for Ally Rescue, Smart Paean, and PLD Guardian, plus accepted-Eukrasia one-shot or explicit Near Help pressure.'
@@ -5846,10 +6089,10 @@ if (-not $farHelpConsumeState.Success -or $farHelpConsumeState.Index -gt $origin
     throw 'Far Help must consume its one-shot state before the sole Original call.'
 }
 if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedSmartTarget is not null \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed \|\| farHelpFallbackSuppressionState\.IsArmed;.*?armedTarget = null;.*?armedSmartTarget = null;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;.*?farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState\.Initial;') {
-    throw 'Near Assist, Smart Target, Near Help, and Far Help tokens must be mutually exclusive and cleared together.'
+    throw 'Near Assist, Smart Action, Near Help, and Far Help tokens must be mutually exclusive and cleared together.'
 }
-if ($normalizedNearAssist -notmatch 'catch \(Exception exception\) \{ var failedSmartTarget = handlingSmartTarget;.*?failedSmartTarget \|= armedSmartTarget is not null;.*?armedSmartTarget = null;.*?if \(failedSmartTarget\) \{ smartTargetLastEnemySlot = 0; smartTargetLastEvent = "Redirect failed closed; one-shot Smart Target token cleared";') {
-    throw 'The shared redirect exception path must detect an in-flight or still-armed Smart Target token, clear it, and publish fail-closed diagnostics.'
+if ($normalizedNearAssist -notmatch 'catch \(Exception exception\) \{ var failedSmartTarget = handlingSmartTarget;.*?failedSmartTarget \|= armedSmartTarget is not null;.*?armedSmartTarget = null;.*?if \(failedSmartTarget\) \{ smartTargetLastEnemySlot = 0; smartTargetLastEvent = "Redirect failed closed; one-shot Smart Action token cleared";') {
+    throw 'The shared redirect exception path must detect an in-flight or still-armed Smart Action token, clear it, and publish fail-closed diagnostics.'
 }
 
 $partySlotResolver = Read-RequiredSource $partySlotResolverPath 'Party slot resolver'
@@ -7100,15 +7343,19 @@ Assert-Literals $settingsWindow @(
     'Show ally LB damage cards on the left',
     'Show active enemy LB icons above exact native nameplates',
     'unknown duration is never guessed.',
-    'Enable one-shot /smarttab, /nearassist, /nearhelp, and /farhelp targeting',
-    'Smart Target macro — harmful action',
-    '/smarttab arms one 750 ms token',
+    'Replace FFXIV''s forward Tab targeting with Smart Targeting',
+    'Toggle OFF is fully vanilla.',
+    'retry, rerank, or alternate target.',
+    'Enable one-shot /nearassist, /nearhelp, and /farhelp targeting',
+    'Enable optional /smartaction harmful-action targeting',
+    'Smart Action macro — optional harmful-action redirect',
+    '/smartaction arms one 750 ms token',
     'invalidates that carrier and leaves the following <t> line as the only fallback.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON still requires',
     'a currently held gameplay key; it never creates no-input automatic actions.',
     'Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >'
-) 'v0.30 replacement LB, local MP, Smart Target, Auto-Seiton, and priority Settings copy'
+) 'v0.30.0.1 replacement LB, local MP, separate Smart Tab/Smart Action, Auto-Seiton, and priority Settings copy'
 if ($settingsWindow -match 'DrawCombatFramesPage|SettingsPage\.CombatFrames|Show fixed Combat Frames') {
     throw 'Retired Combat Frames must not retain a Settings page or runtime toggle.'
 }
@@ -7524,15 +7771,16 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.30.0.0</Version>',
-    '<AssemblyVersion>0.30.0.0</AssemblyVersion>',
-    '<FileVersion>0.30.0.0</FileVersion>'
-) 'v0.30.0.0 project version'
+    '<Version>0.30.0.1</Version>',
+    '<AssemblyVersion>0.30.0.1</AssemblyVersion>',
+    '<FileVersion>0.30.0.1</FileVersion>'
+) 'v0.30.0.1 project version'
 Assert-Literals $pluginManifest @(
-    'Exact PvP nameplate/LB cues, reliable held helpers, Smart Target, and survival tools.',
+    'Exact PvP nameplate/LB cues, reliable held helpers, Smart Tab, and survival tools.',
     'exact native-nameplate cues',
     'LB activation and damage notifications',
-    'Smart Target and assist macros',
+    'melee Smart Tab',
+    'optional Smart Action and assist macros',
     'local MP sounds',
     'focus-target',
     'dark-knight',
@@ -7542,21 +7790,21 @@ Assert-Literals $pluginManifest @(
     '"limit-break"',
     '"targeting"',
     '"survival"'
-) 'v0.30.0.0 plugin manifest metadata'
+) 'v0.30.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.30.0.0"',
-    'visible /autoseiton ON/OFF tile',
-    'Smart Target',
-    'Retires Combat Frames',
-    'enemy LB icons/durations to native nameplates',
-    'local 4000/2000 MP sounds',
-    'one-time What''s New popup',
-    'schema 32',
+    '"AssemblyVersion": "0.30.0.1"',
+    'Default-off Smart Tab',
+    'Paired native handler/helper hooks',
+    'OFF, reverse, and calls outside that handler stay vanilla',
+    'no retry, rerank, or alternate',
+    'separate default-off /smartaction macro',
+    'Schema 33',
+    'all 398 Core tests pass',
     '"IsHide": false'
-) 'v0.30.0.0 custom-repository metadata'
+) 'v0.30.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -7572,9 +7820,10 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.30.0.0 retires the unusable fixed Combat Frames runtime and its click/mouseover and calibrated-gauge paths',
+    'Version 0.30.0.1 makes Smart Tab a default-off, exact-CC melee replacement for FFXIV''s normal forward world-target cycle',
+    'Paired native handler/helper hooks preserve the game''s own binding and UI/input gates',
+    '`/smartaction` (`/ssaction`) behind its own default-off setting',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
-    'Smart Target macros',
     'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
     'local 4,000/2,000-MP sounds',
     'version-acknowledged What''s New window',
@@ -7583,24 +7832,21 @@ Assert-Literals $normalizedReadme @(
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 32 is current in v0.30.0.0',
+    'Configuration schema 33 is current in v0.30.0.1',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.30.0.0 current README release and safety contract'
+) 'v0.30.0.1 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.30.0.0',
-    'Ongoing physical held-key consent remains required',
-    'Purify stays first and enabled NIN Seiton now gets the next scheduler slot',
-    'Added `/smarttab` (`/sstarget`)',
-    'non-extending 3-second held lease',
-    'original `<=20%` rescue remains unconditional',
-    '`21-35%` is eligible only from a fresh exact `3+` incoming hard/cast-target count',
-    'Removed the unusable fixed Combat Frames',
-    'local-player MP sounds at downward crossings of `4,000` and `2,000`',
-    'one-time What''s New window',
-    'plugin to `0.30.0.0` and configuration schema to `32`',
-    'repository listing is visible again',
-    'All `388` Core tests pass'
-) 'v0.30.0.0 release notes'
+    '## 0.30.0.1',
+    'default-off replacement for FFXIV''s native logical forward-target command',
+    'One hook retains FFXIV''s targeting-handler scope and the second intercepts only its nested forward world-target cycle',
+    'Reverse targeting, direct cycle callers outside that handler, UI/chat input, other target commands, unsupported jobs, and other content remain unchanged',
+    'writes the visible hard target through FFXIV''s native setter once, and verifies exact readback',
+    'never retries, reranks, restores, or selects an alternate',
+    'Moved the previous optional harmful-action redirect to `/smartaction` (`/ssaction`)',
+    'Schema 33 preserves an older explicit macro-helper opt-in for Smart Action but leaves the new target-writing Smart Tab off',
+    'plugin to `0.30.0.1` and configuration schema to `33`',
+    'All `398` Core tests pass'
+) 'v0.30.0.1 release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.29.0.1',
     'Guardian''s target-side `Covered` / `Gedeckt` status',
@@ -7673,7 +7919,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 32 is current in v0.30.0.0'
+    'Configuration schema 33 is current in v0.30.0.1'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -7777,12 +8023,12 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 32 is current in v0.30.0.0',
-    'NIN Guard-Shukuchi held- key option is forced off for upgrading configurations and remains off for fresh and Reset Defaults configurations',
+    'Configuration schema 33 is current in v0.30.0.1',
+    'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.30.0.0 retires the unusable fixed Combat Frames runtime',
+    'The v0.30 line retires the unusable fixed Combat Frames runtime',
     'Reactive urgent-startup events may bind the first eligible current generation inside the original short threat lease',
     'Authoritative protection end opens a strict, non-extending 500-ms key-acquisition edge',
     'When an eligible current key is acquired inside that edge, exactly one actor/key intent freezes',
@@ -8217,8 +8463,8 @@ Assert-Literals $normalizedPrivacy @(
     'Native GCD sampling starts on the framework update thread rather than performing a local-player lookup during synchronous plugin startup',
     'separate Auto Low-MP Focus Target opt-in',
     'DRK Shadowbringer macro opt-in',
-    'Configuration schema 32 is current in v0.30.0.0',
-    'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, Smart Target/other macro helpers, and all other action-helper masters off',
+    'Configuration schema 33 is current in v0.30.0.1',
+    'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
     'Every other existing master/helper choice is preserved',
@@ -8297,7 +8543,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 32 is current in v0.30.0.0'
+    'Configuration schema 33 is current in v0.30.0.1'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -8368,7 +8614,7 @@ $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConf
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 32',
+    'public int Version { get; set; } = 33',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -8498,7 +8744,12 @@ Assert-Literals $configuration @(
     'PlayLocalMpWarningSounds = true;',
     'LocalMpWarning4000SoundId = 4;',
     'LocalMpWarning2000SoundId = 6;',
-    'Version = 32',
+    'public bool EnableSmartTabTargeting { get; set; }',
+    'public bool EnableSmartActionMacro { get; set; }',
+    'if (Version < 33)',
+    'EnableSmartTabTargeting = false;',
+    'EnableSmartActionMacro = EnableNearAssistMacro;',
+    'Version = 33',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -8525,7 +8776,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-32 replacement LB/MP defaults plus retained default-off action helpers and legacy Combat Frames compatibility fields'
+) 'Schema-33 Smart Tab/Smart Action split plus historical replacement LB/MP defaults, default-off action helpers, and legacy Combat Frames compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -8612,9 +8863,9 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*32\s*;').Count -lt 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 32\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?LimitBreakFeedShowNames = CombatFramesShowNames;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?LocalMpWarning4000SoundId = 4;.*?LocalMpWarning2000SoundId = 6;.*?Version = 32;') {
-    throw 'Schema 32 must fast-path current settings, preserve the explicit legacy NIN opt-in mapping, keep cast cancellation and Guard-Shukuchi opt-in, retire Combat Frames, and initialize the replacement LB and local-MP presentation defaults.'
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*33\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 33\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?LimitBreakFeedShowNames = CombatFramesShowNames;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?LocalMpWarning4000SoundId = 4;.*?LocalMpWarning2000SoundId = 6;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?Version = 33;') {
+    throw 'Schema 33 must fast-path current settings, preserve earlier explicit opt-ins, retain historical schema-32 LB/MP migration, keep Smart Tab off, and migrate only the previous macro helper to separate Smart Action.'
 }
 if ($configuration -notmatch '(?m)^\s*public bool EnableCcImmunityBrake \{ get; set; \}\s*$' -or
     [regex]::Matches($configuration, '\bEnableCcImmunityBrake\s*=\s*false\s*;').Count -lt 2 -or
@@ -8678,4 +8929,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.30.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 32 and the exact 388-test Core registry. The custom-repository listing is visible (IsHide false), and the deleted Combat Frames renderer, targeting/mouseover, snapshot, Settings, and calibrated-gauge runtime files remain absent. Smart Target is one-shot, exact-action/actor, pressure-aware, fallback-only, and fail-closed; local MP sounds plus enemy-nameplate/self/ally LB surfaces remain local and action-free. Auto-Seiton remains a persisted toggle gated by held-key consent. Guardian keeps unconditional <=20% rescue and admits 21-35% only under fresh exact 3+ pressure. Accepted plugin Auto-Guard owns cancellation protection only through both central UseAction and UseActionLocation hooks, with exact PvP metadata, raw/resolved Guard and scoped /panicshu release, 1.5-second propagation, exact live-status follow-through, and a hard six-second fail-open cap. Runtime held-helper priority remains Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk."
+Write-Host "Seiton Sense v0.30.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 33 and the exact 398-test Core registry. The custom-repository listing is visible (IsHide false), and the deleted Combat Frames renderer, targeting/mouseover, snapshot, Settings, and calibrated-gauge runtime files remain absent. Default-off Smart Tab owns only the paired native targeting-handler/forward-world-cycle path, preserves outside-scope, reverse, and ineligible calls as vanilla, and performs at most one frozen exact SetHardTarget plus readback without Original fallback, retry, rerank, alternate, or action. The separate default-off Smart Action macro retains the bounded exact-action/actor redirect contract. Local MP sounds plus enemy-nameplate/self/ally LB surfaces remain local and action-free. Auto-Seiton remains a persisted toggle gated by held-key consent. Guardian keeps unconditional <=20% rescue and admits 21-35% only under fresh exact 3+ pressure. Accepted plugin Auto-Guard owns cancellation protection only through both central UseAction and UseActionLocation hooks, with exact PvP metadata, raw/resolved Guard and scoped /panicshu release, 1.5-second propagation, exact live-status follow-through, and a hard six-second fail-open cap. Runtime held-helper priority remains Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > generic Guard > pressure Sprint > event Kardia > event Monk."

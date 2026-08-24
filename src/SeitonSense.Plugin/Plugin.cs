@@ -13,13 +13,15 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.30.0.0";
+    private const string CurrentReleaseVersion = "0.30.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
     private const string NearAssistAliasCommand = "/ssassist";
-    private const string SmartTargetCommand = "/smarttab";
-    private const string SmartTargetAliasCommand = "/sstarget";
+    private const string SmartTabCommand = "/smarttab";
+    private const string SmartTabAliasCommand = "/sstarget";
+    private const string SmartActionCommand = "/smartaction";
+    private const string SmartActionAliasCommand = "/ssaction";
     private const string AutoSeitonCommand = "/autoseiton";
     private const string NearHelpCommand = "/nearhelp";
     private const string NearHelpAliasCommand = "/sshelp";
@@ -43,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoSeitonToggleWindow autoSeitonToggle;
     private readonly WhatsNewWindow whatsNew;
     private readonly NearAssistRedirector nearAssist;
+    private readonly SmartTabTargetingService smartTabTargeting;
     private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
@@ -54,8 +57,10 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SettingsWindow settingsWindow;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
-    private readonly bool smartTargetCommandRegistered;
-    private readonly bool smartTargetAliasRegistered;
+    private readonly bool smartTabCommandRegistered;
+    private readonly bool smartTabAliasRegistered;
+    private readonly bool smartActionCommandRegistered;
+    private readonly bool smartActionAliasRegistered;
     private readonly bool autoSeitonCommandRegistered;
     private readonly bool nearHelpCommandRegistered;
     private readonly bool nearHelpAliasRegistered;
@@ -81,6 +86,7 @@ public sealed class Plugin : IDalamudPlugin
         IKeyState keyState,
         ITextureProvider textureProvider,
         IGameInteropProvider interop,
+        ISigScanner sigScanner,
         IPluginLog log)
     {
         this.pluginInterface = pluginInterface;
@@ -201,6 +207,17 @@ public sealed class Plugin : IDalamudPlugin
             ccImmunityBrake,
             darkKnightShadowbringer,
             log);
+        smartTabTargeting = new SmartTabTargetingService(
+            configuration,
+            clientState,
+            objectTable,
+            partyList,
+            dutyState,
+            interop,
+            sigScanner,
+            pressureTracker,
+            tracker,
+            log);
         personalStatus = new PersonalStatusService(
             clientState,
             objectTable,
@@ -301,11 +318,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto-Seiton now has a visible ON/OFF action-bar tile and /autoseiton macro toggle; held-key consent is still required.",
-                "Smart Target (/smarttab) picks a reachable harmful-action target, while your selected target stays the fallback.",
-                "Held BRD/WHM follow-ups and Paladin Guardian react earlier; accepted Auto-Guard now resists accidental action presses.",
-                "Enemy LB icons moved to native nameplates; your LB banner and ally LB damage feed remain without Combat Frames.",
-                "Your own MP can now play separate one-shot warnings at 4,000 and 2,000 MP.",
+                "Smart Tab can now replace FFXIV's normal forward Tab targeting for melee jobs: melee reach first, then only reviewed gap-closer reach.",
+                "Toggle it in Targets or with /smarttab. Toggle OFF is fully vanilla; reverse targeting and all unrelated inputs remain untouched.",
+                "The optional invisible harmful-action redirect is separate under /smartaction. Neither feature sends an action or retries.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -366,31 +381,59 @@ public sealed class Plugin : IDalamudPlugin
                     : "Disable it and reload before using the integrated helper."));
         }
 
-        const string smartTargetHelp =
-            "CC-only one-shot harmful-action target selector. Macro: /smarttab, then /pvpac with <e1>, then the same action with <t>. The current target is fallback only.";
-        smartTargetCommandRegistered = commandManager.AddHandler(
-            SmartTargetCommand,
-            new CommandInfo(OnSmartTargetCommand)
+        const string smartTabHelp =
+            "Toggle the CC-only melee override for FFXIV's native forward-target command. Optional argument: on, off, or toggle.";
+        smartTabCommandRegistered = commandManager.AddHandler(
+            SmartTabCommand,
+            new CommandInfo(OnSmartTabCommand)
             {
                 AllowedInMacros = true,
-                HelpMessage = smartTargetHelp,
+                HelpMessage = smartTabHelp,
             });
-        smartTargetAliasRegistered = commandManager.AddHandler(
-            SmartTargetAliasCommand,
-            new CommandInfo(OnSmartTargetCommand)
+        smartTabAliasRegistered = commandManager.AddHandler(
+            SmartTabAliasCommand,
+            new CommandInfo(OnSmartTabCommand)
             {
                 AllowedInMacros = true,
-                HelpMessage = smartTargetHelp,
+                HelpMessage = smartTabHelp,
             });
-        if (!smartTargetCommandRegistered)
+        if (!smartTabCommandRegistered)
         {
             log.Warning(
                 "/smarttab is already owned by another plugin; /sstarget registered={Registered}.",
-                smartTargetAliasRegistered);
+                smartTabAliasRegistered);
             chatGui.PrintError(
                 "[Seiton Sense] /smarttab is owned by another plugin. " +
-                (smartTargetAliasRegistered
+                (smartTabAliasRegistered
                     ? "Use /sstarget meanwhile."
+                    : "Disable the conflicting plugin and reload."));
+        }
+
+        const string smartActionHelp =
+            "Optional CC-only harmful-action redirect. Macro: /smartaction, then /pvpac with <e1>, then the same action with <t>.";
+        smartActionCommandRegistered = commandManager.AddHandler(
+            SmartActionCommand,
+            new CommandInfo(OnSmartActionCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = smartActionHelp,
+            });
+        smartActionAliasRegistered = commandManager.AddHandler(
+            SmartActionAliasCommand,
+            new CommandInfo(OnSmartActionCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage = smartActionHelp,
+            });
+        if (!smartActionCommandRegistered)
+        {
+            log.Warning(
+                "/smartaction is already owned by another plugin; /ssaction registered={Registered}.",
+                smartActionAliasRegistered);
+            chatGui.PrintError(
+                "[Seiton Sense] /smartaction is owned by another plugin. " +
+                (smartActionAliasRegistered
+                    ? "Use /ssaction meanwhile."
                     : "Disable the conflicting plugin and reload."));
         }
 
@@ -515,6 +558,7 @@ public sealed class Plugin : IDalamudPlugin
         namePlateAnchors.Start();
         tracker.Start();
         pressureTracker.Start();
+        smartTabTargeting.Start();
         autoEnemyFocusMark.Start();
         autoLowMpFocusTarget.Start();
         isolationAwareness.Start();
@@ -531,8 +575,10 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         if (nearAssistCommandRegistered) commandManager.RemoveHandler(NearAssistCommand);
         if (nearAssistAliasRegistered) commandManager.RemoveHandler(NearAssistAliasCommand);
-        if (smartTargetCommandRegistered) commandManager.RemoveHandler(SmartTargetCommand);
-        if (smartTargetAliasRegistered) commandManager.RemoveHandler(SmartTargetAliasCommand);
+        if (smartTabCommandRegistered) commandManager.RemoveHandler(SmartTabCommand);
+        if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand);
+        if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand);
+        if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand);
         if (autoSeitonCommandRegistered) commandManager.RemoveHandler(AutoSeitonCommand);
         if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
@@ -547,6 +593,7 @@ public sealed class Plugin : IDalamudPlugin
         commandManager.RemoveHandler(AliasCommand);
         combatLimitBreakRuntime.Dispose();
         personalStatus.Dispose();
+        smartTabTargeting.Dispose();
         nearAssist.Dispose();
         darkKnightShadowbringer.Dispose();
         isolationAwareness.Dispose();
@@ -694,7 +741,8 @@ public sealed class Plugin : IDalamudPlugin
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
                 var assist = nearAssist.Diagnostics;
-                var smartTarget = nearAssist.SmartTargetDiagnostics;
+                var smartTab = smartTabTargeting.Diagnostics;
+                var smartAction = nearAssist.SmartTargetDiagnostics;
                 var help = nearAssist.HelpDiagnostics;
                 var farHelp = nearAssist.FarHelpDiagnostics;
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
@@ -715,11 +763,13 @@ public sealed class Plugin : IDalamudPlugin
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +
-                    $"smart-target[cmd={smartTargetCommandRegistered},alias={smartTargetAliasRegistered}," +
-                    $"armed={smartTarget.Armed},ttl={smartTarget.RemainingMilliseconds}," +
-                    $"arm={smartTarget.ArmedCount},redirect={smartTarget.RedirectedCount}," +
-                    $"fallback={smartTarget.FallbackCount},S={smartTarget.LastEnemySlot}," +
-                    $"last={smartTarget.LastEvent}], " +
+                    $"smart-tab[cmd={smartTabCommandRegistered},alias={smartTabAliasRegistered}," +
+                    $"{smartTab.ToChatLine()}], " +
+                    $"smart-action[cmd={smartActionCommandRegistered},alias={smartActionAliasRegistered}," +
+                    $"armed={smartAction.Armed},ttl={smartAction.RemainingMilliseconds}," +
+                    $"arm={smartAction.ArmedCount},redirect={smartAction.RedirectedCount}," +
+                    $"fallback={smartAction.FallbackCount},S={smartAction.LastEnemySlot}," +
+                    $"last={smartAction.LastEvent}], " +
                     $"help[cmd={nearHelpCommandRegistered},armed={help.Armed},ttl={help.RemainingMilliseconds}," +
                     $"arm={help.ArmedCount},redirect={help.RedirectedCount},fallback={help.FallbackCount}," +
                     $"last={help.LastEvent}], " +
@@ -986,7 +1036,8 @@ public sealed class Plugin : IDalamudPlugin
             "Usage: /seiton [show|hide|preview|flash|debug|assist|reset|help]. " +
             "show/hide enable or disable the entire plugin; reset restores all plugin settings. " +
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
-            "/smarttab and /sstarget arm the one-shot harmful-action Smart Target helper. " +
+            "/smarttab and /sstarget [on|off|toggle] control the melee override for FFXIV's normal forward targeting. " +
+            "/smartaction and /ssaction optionally arm one harmful-action target redirect. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
@@ -1027,17 +1078,58 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private void OnSmartTargetCommand(string _, string arguments)
+    private void OnSmartTabCommand(string _, string arguments)
+    {
+        try
+        {
+            var normalized = arguments.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "":
+                case "toggle":
+                    configuration.EnableSmartTabTargeting =
+                        !configuration.EnableSmartTabTargeting;
+                    break;
+                case "on":
+                    configuration.EnableSmartTabTargeting = true;
+                    break;
+                case "off":
+                    configuration.EnableSmartTabTargeting = false;
+                    break;
+                default:
+                    chatGui.PrintError("[Seiton Sense] Usage: /smarttab [on|off|toggle].");
+                    return;
+            }
+
+            configuration.Save();
+            var enabled = configuration.EnableSmartTabTargeting;
+            chatGui.Print(
+                enabled
+                    ? "[Seiton Sense] Smart Tab ON: FFXIV's forward target command uses melee Smart Targeting in exact CC."
+                    : "[Seiton Sense] Smart Tab OFF: FFXIV targeting is fully vanilla.");
+            if (enabled && !smartTabTargeting.Diagnostics.HookAvailable)
+            {
+                chatGui.PrintError(
+                    "[Seiton Sense] Smart Tab hooks are unavailable in this load; targeting remains vanilla.");
+            }
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense Smart Tab toggle command failed.");
+        }
+    }
+
+    private void OnSmartActionCommand(string _, string arguments)
     {
         if (!string.IsNullOrWhiteSpace(arguments)) return;
 
         try
         {
-            nearAssist.ArmSmartTarget();
+            nearAssist.ArmSmartActionTarget();
         }
         catch (Exception exception)
         {
-            log.Error(exception, "Seiton Sense Smart Target command failed closed.");
+            log.Error(exception, "Seiton Sense Smart Action command failed closed.");
         }
     }
 

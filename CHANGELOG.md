@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.30.0.1
+
+- Changed Smart Tab into a default-off replacement for FFXIV's native logical
+  forward-target command in exact Crystalline Conflict on the six reviewed
+  melee-DPS jobs. The Targets checkbox or `/smarttab` (`/sstarget`)
+  `[on|off|toggle]` controls it; OFF is fully vanilla. One hook retains FFXIV's
+  targeting-handler scope and the second intercepts only its nested forward
+  world-target cycle after FFXIV's own input/UI gates. Reverse targeting,
+  direct cycle callers outside that handler, UI/chat input, other target commands,
+  unsupported jobs, and other content remain unchanged.
+- Smart Tab first admits enemies at no more than 5 yalms of hitbox-edge melee
+  distance, then the reviewed job gap cap: 20 yalms for MNK, DRG, NIN, SAM, and
+  VPR, or 15 yalms for RPR. The first non-empty reach tier ranks lowest exact HP
+  ratio, highest fresh positive team pressure, verified Guard cooldown
+  unavailable, lowest trusted MP ratio, then stable native S-slot. Live Guard is
+  excluded.
+- One owned forward-target request freezes and revalidates one exact canonical `S1`-`S5` actor, writes
+  the visible hard target through FFXIV's native setter once, and verifies exact
+  readback. Missing or ambiguous identity, invalid geometry, or context/reach
+  drift before that setter consumes only the owned cycle and leaves the current
+  target unchanged. Setter rejection or readback mismatch is terminal and never
+  retries, reranks, restores, or selects an alternate; no combat action is sent.
+- Moved the previous optional harmful-action redirect to `/smartaction`
+  (`/ssaction`) behind its own default-off `EnableSmartActionMacro` setting.
+  `/nearassist`, `/nearhelp`, and `/farhelp` retain their existing shared option.
+  Schema 33 preserves an older explicit macro-helper opt-in for Smart Action but
+  leaves the new target-writing Smart Tab off for every upgrade, fresh install,
+  and Reset Defaults.
+- Bumped the plugin to `0.30.0.1` and configuration schema to `33`. All `398`
+  Core tests pass.
+
 ## 0.30.0.0
 
 - Replaced Smart-Seiton policy experiments with one simple tactical switch.

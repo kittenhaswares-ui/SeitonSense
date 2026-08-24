@@ -11,7 +11,34 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Focus Glow renders FFXIV's native Focus Target. Current Target reads only your manually selected hard " +
-            "target. The separate opt-in below is the only feature on this page that may set a target.");
+            "target. Smart Tab and the separate low-MP Focus helper are the only opt-ins on this page that may set " +
+            "a local target.");
+
+        ImGui.TextColored(new Vector4(0.35f, 0.88f, 1f, 1f), "MELEE SMART TAB (OPT-IN)");
+        changed |= Checkbox(
+            "Replace FFXIV's forward Tab targeting with Smart Targeting",
+            configuration.EnableSmartTabTargeting,
+            value => configuration.EnableSmartTabTargeting = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Toggle ON replaces FFXIV's normal forward-target command in exact Crystalline Conflict on reviewed " +
+            "melee jobs. Your usual Tab key and any remapped forward-target binding use Smart Targeting directly. " +
+            "Toggle OFF is fully vanilla. Shift+Tab/reverse targeting, chat/UI Tab input, other targeting commands, " +
+            "unsupported jobs, and all other content remain unchanged. /smarttab and /sstarget toggle this option.");
+        ImGui.TextDisabled(
+            "One press first considers enemies within 5 yalms of hitbox-edge melee reach, then only enemies inside " +
+            "the reviewed range of that melee job's gap closer. Inside the first non-empty tier it ranks lowest HP%, " +
+            "highest fresh team pressure, observed Wehr cooldown unavailable, lowest trusted MP%, then stable S-slot. " +
+            "An enemy with live Wehr is excluded.");
+        ImGui.TextDisabled(
+            "Because no combat action is being attempted, Smart Tab uses exact geometric reach rather than pretending " +
+            "to have an action-specific native range/line-of-sight result. For an owned Tab press it freezes one exact " +
+            "S1-S5 actor, revalidates it, sets the hard target once, and verifies readback. If no valid candidate " +
+            "exists, the current target remains unchanged instead of running the vanilla cycle. There is no action, " +
+            "retry, rerank, or alternate target.");
+        ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
 
         ImGui.TextColored(new Vector4(1f, 0.72f, 0.3f, 1f), "NATIVE FOCUS TARGET SETTER (OPT-IN)");
         changed |= Checkbox(

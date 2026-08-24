@@ -35,7 +35,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 32;
+    public int Version { get; set; } = 33;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -192,6 +192,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float CombatFramesSelfScreenY { get; set; } = 0.78f;
     public float CombatFramesScale { get; set; } = 1f;
     public float CombatFramesBackgroundOpacity { get; set; } = 0.92f;
+    public bool EnableSmartTabTargeting { get; set; }
+    public bool EnableSmartActionMacro { get; set; }
     public bool EnableNearAssistMacro { get; set; }
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
     public bool NearAssistPreferDamageRoles { get; set; } = true;
@@ -228,7 +230,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 32)
+        if (Version >= 33)
         {
             if (repaired) Save();
             return;
@@ -554,7 +556,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
             LocalMpWarning2000SoundId = 6;
         }
 
-        Version = 32;
+        if (Version < 33)
+        {
+            // Smart Tab is a new explicit native forward-target replacement and
+            // visible hard-target mutation, so it must never turn on silently.
+            // Preserve the already opt-in harmful-action redirect behind its new
+            // independent switch.
+            EnableSmartTabTargeting = false;
+            EnableSmartActionMacro = EnableNearAssistMacro;
+        }
+
+        Version = 33;
         ClampSettings();
         Save();
     }
@@ -563,7 +575,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 32;
+        Version = 33;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -677,6 +689,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         CombatFramesSelfScreenY = 0.78f;
         CombatFramesScale = 1f;
         CombatFramesBackgroundOpacity = 0.92f;
+        EnableSmartTabTargeting = false;
+        EnableSmartActionMacro = false;
         EnableNearAssistMacro = false;
         NearAssistMaxAllyDistance = 25f;
         NearAssistPreferDamageRoles = true;

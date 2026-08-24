@@ -2,13 +2,18 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.30.0.0 retires the unusable fixed
-Combat Frames runtime and its click/mouseover and calibrated-gauge paths. The
-useful Limit Break evidence now appears as exact enemy nameplate icons, a safe
-self activation banner, and a bounded ally damage feed. It also adds one-shot
-Smart Target macros, a visible `/autoseiton` ON/OFF tile that still requires a
-physical held key, local 4,000/2,000-MP sounds, a version-acknowledged What's New
-window, a pressure-aware Guardian policy, and three-second protection-end leases.
+assistance, and target highlights. Version 0.30.0.1 makes Smart Tab a default-off,
+exact-CC melee replacement for FFXIV's normal forward world-target cycle;
+`/smarttab` (`/sstarget`) toggles it. Paired native handler/helper hooks preserve
+the game's own binding and UI/input gates. The previous optional harmful-action
+redirect moves to
+`/smartaction` (`/ssaction`) behind its own default-off setting. The v0.30 line retires the
+unusable fixed Combat Frames runtime and its click/mouseover and calibrated-gauge
+paths. Useful Limit Break evidence now appears as exact enemy nameplate icons, a
+safe self activation banner, and a bounded ally damage feed. It also provides a
+visible `/autoseiton` ON/OFF tile that still requires a physical held key, local
+4,000/2,000-MP sounds, a version-acknowledged What's New window, a pressure-aware
+Guardian policy, and three-second protection-end leases.
 The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
 and Super Focus Glow into one configurable custom-repository plugin.
 
@@ -234,8 +239,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   Nameplates, Action Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics.
   Shared-input actions document their real priority order, while visual,
   macro, and job-specific controls stay in their own pages. Configuration schema
-  32 retires the Combat Frames runtime while migrating its useful LB display
-  choices to exact nameplate/notification settings. The held-action cast-
+  33 separates the new native Smart Tab switch from the previous Smart Action
+  macro opt-in while retaining schema 32's Combat Frames retirement and useful
+  LB-display migration. The held-action cast-
   cancellation test remains explicitly off for fresh, reset, and migrated
   configurations. Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
@@ -1008,27 +1014,76 @@ event Kardia. The helper
 runs in Crystalline Conflict and in explicitly enabled Wolves' Den test mode;
 the native direct-call result and exact timer behavior still need a live test.
 
-## One-shot Smart Target macro
+## Melee Smart Tab native forward-target replacement
 
-`/smarttab` (`/sstarget`) arms one 750-ms Crystalline Conflict token for the
-next already incoming harmful PvP macro action. The recommended authored shape
-is `/smarttab`, the action with `<e1>` as its carrier, then the same action with
-`<t>`. No selected target is required for Smart Target; `<t>` is only the
-user-authored fallback when the carrier is deliberately invalidated.
+Smart Tab is a separate default-off target-writing option for exact Crystalline
+Conflict and the six reviewed melee-DPS jobs. Toggle it in **Targets** or with:
 
-At action time, the helper resolves the actual non-area hostile action and its
-native range/line-of-sight result. It considers only unique, living, targetable,
-exact canonical `S1`-`S5` enemies and excludes live Guard. Reach tier wins first:
-melee jobs prefer current five-yalm melee reach, then a reviewed job-specific
-gap-closer tier; ranged/other jobs use the general tier. Within a tier the order
-is lowest exact HP ratio, highest positive fresh team pressure, observed Guard-
-cooldown unavailability, lowest trusted MP ratio, then stable S-slot.
+```text
+/smarttab [on|off|toggle]
+```
+
+`/sstarget` is the collision-free alias. When ON, paired native hooks scope the
+game's own targeting handler and own only its nested forward world-target cycle,
+after FFXIV has applied its logical binding and UI/input gates. The usual Tab key
+and any remapped keyboard/gamepad binding for that command therefore use Smart
+Tab. When OFF, reverse targeting such as Shift+Tab, direct helper calls outside
+that targeting-handler scope, UI Tab navigation, chat input, other target
+commands, unsupported jobs, and contexts outside exact CC call the native paths
+unchanged.
+
+One owned forward-target press resolves unique, living, hostile, targetable,
+exact canonical `S1`-`S5` enemies and excludes live Guard. Reach is geometric because no combat
+action is being attempted: hitbox-edge distance is center distance minus both
+actors' hitbox radii, clamped at zero. At most 5 yalms is the first tier. Only if
+that tier is empty does the helper consider the reviewed gap cap: 20 yalms for
+MNK, DRG, NIN, SAM, and VPR, or 15 yalms for RPR. Tanks, ranged jobs, classes,
+limited jobs, unknown jobs, invalid geometry, and enemies beyond that job cap
+fail closed.
+
+Inside the first non-empty reach tier, ranking is lowest exact HP ratio, highest
+fresh positive team pressure, verified Guard cooldown unavailable, lowest
+trusted MP ratio, then stable native S-slot. Zero, unavailable, or stale pressure
+is neutral. The winner's exact slot, game-object ID, entity ID, address, and
+reach tier are frozen and revalidated. Missing candidates or any identity,
+geometry, context, or reach failure before the setter consume only that owned
+forward cycle without a target write, so the current hard target remains
+unchanged. Otherwise Seiton Sense invokes the visible hard-target setter once
+and verifies exact readback once. Setter rejection or readback mismatch is
+terminal: there is no retry, rerank, or alternate candidate, and the plugin does
+not claim that the pre-call target was restored. Smart Tab never sends an action
+or keeps pending work.
+
+## One-shot Smart Action macro
+
+The previous harmful-action targeting helper is now the separately default-off
+Smart Action option. `/smartaction` (`/ssaction`) arms one 750-ms Crystalline
+Conflict token for the next already incoming harmful PvP macro action. The
+recommended authored shape is:
+
+```text
+/mlock
+/smartaction
+/pvpac "Ability" <e1>
+/pvpac "Ability" <t>
+```
+
+No selected target is required; `<t>` is only the user-authored fallback when
+the carrier is deliberately invalidated. At action time, Smart Action resolves
+the actual non-area hostile action and its native range/line-of-sight result. It
+considers only unique, living, targetable exact canonical `S1`-`S5` enemies and
+excludes live Guard. Reach tier wins first: melee jobs prefer current five-yalm
+melee reach, then a reviewed job-specific gap-closer tier; ranged/other jobs use
+the general tier. Within a tier the order is lowest exact HP ratio, highest
+positive fresh team pressure, observed Guard-cooldown unavailability, lowest
+trusted MP ratio, then stable S-slot.
 
 The one-shot token is consumed before selection. The selected action/actor tuple
 is frozen and revalidated immediately before the original call is forwarded.
 Drift cancels that carrier without reranking, selecting an alternate, retrying,
 dispatching a generated action, or changing the visible hard/soft/Focus target.
-The shared macro-helper master is an explicit opt-in.
+Smart Action has its own explicit opt-in; Near Assist, Near Help, and Far Help
+continue to share their existing macro-helper option.
 
 ## One-shot Near Assist macro
 
@@ -1339,7 +1394,8 @@ focus module to avoid drawing both over the same actor.
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
 | Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
-| One-shot Smart Target | Yes | No | No |
+| Optional melee Smart Tab | Yes | No | No |
+| One-shot Smart Action macro | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
@@ -1363,10 +1419,16 @@ Helpers; independent PLD Guardian and accepted-Eukrasia Smart Kardia are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 32 is current in v0.30.0.0. The migration disables the
-retired Combat Frames master and maps its optional name-display preference to
-the ally LB feed, while enabling the replacement enemy-nameplate, self-banner,
-ally-feed, and local-MP sound defaults. Legacy Combat Frames layout/interaction
+Configuration schema 33 is current in v0.30.0.1. It leaves the target-writing
+Smart Tab option off for every upgrade, fresh install, and Reset Defaults, while
+preserving an older explicitly enabled shared macro-helper opt-in as the now
+separate Smart Action option. Smart Tab and Smart Action are both off for fresh
+and reset configurations.
+
+Historical v0.30.0.0 baseline: schema 32 disabled the retired Combat Frames
+master and mapped its optional name-display preference to the ally LB feed,
+while enabling the replacement enemy-nameplate, self-banner, ally-feed, and
+local-MP sound defaults. Legacy Combat Frames layout/interaction
 fields remain compatibility-only and have no runtime or Settings page. The NIN Guard-Shukuchi held
 option is forced off for upgrading configurations and remains off for fresh and
 Reset Defaults configurations because it both initiates an action and may change
@@ -1398,9 +1460,12 @@ update through the same repository.
 ## Commands
 
 - `/seiton` or `/ssense` - open settings
-- `/smarttab` - arm one CC-only 750 ms Smart Target token for the next harmful
-  PvP macro action; the authored `<t>` line remains the only fallback
-- `/sstarget` - collision-free alias for `/smarttab`
+- `/smarttab [on|off|toggle]` - control the exact-CC melee replacement for
+  FFXIV's normal forward world-target cycle
+- `/sstarget [on|off|toggle]` - collision-free alias for `/smarttab`
+- `/smartaction` - arm one optional CC-only 750 ms harmful-action target redirect;
+  the authored `<t>` line remains the only fallback
+- `/ssaction` - collision-free alias for `/smartaction`
 - `/autoseiton [on|off|toggle]` - change whether the held-key NIN Auto-Seiton
   helper is available; ON still requires continuous physical held-key consent
 - `/nearassist` - arm one CC-only 750 ms target choice for the immediately
@@ -1422,7 +1487,8 @@ update through the same repository.
 - `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
-- `/seiton debug` - print bounded diagnostics, including Smart Target and Near Assist,
+- `/seiton debug` - print bounded diagnostics, including Smart Tab, Smart Action,
+  and Near Assist,
   selected-target CC-brake resolution, isolation/reactive-defense state, Smart
   Recuperate, accepted-Eukrasia Smart Kardia, LB activation/damage telemetry,
   Auto Low-MP Focus, NIN Guard-Shukuchi, DRK Hiebsprung/Shadowbringer, Panic Shukuchi,
@@ -1473,9 +1539,11 @@ self, party/alliance, native identity, and exact `<e1>`-`<e5>` checks remain.
 Plugin-owned Wunder der Natur / Miracle of Nature and Stumme Nocturne / Silent
 Nocturne attempts receive the same final
 action-specific brake after redirect bypass. The brake never stores or replays
-input and never chooses another target or action. Smart Target, Near Assist, Near
-Help, and Far Help can each replace only the target ID of one explicitly armed,
-already incoming macro action. Near Help may choose the local player only when the exact resolved action
+input and never chooses another target or action. Smart Action, Near Assist,
+Near Help, and Far Help can each replace only the target ID of one explicitly
+armed, already incoming macro action. Smart Tab is separate: while enabled it
+may replace only an owned native forward world-target cycle with one exact hard-
+target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
 action helpers use this current request priority: **Purify > NIN Seiton > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
@@ -1630,8 +1698,22 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For v0.30.0.0, the exact 388-test Core registry and source checks pin Smart
-Target's reach-first deterministic ranking, complete exact actor/action freeze,
+For current v0.30.0.1, the exact 398-test Core registry and source checks pin
+configuration schema 33 and the separate default-off Smart Tab and Smart Action
+options. They pin Smart Tab's paired targeting-handler/helper scope, native
+binding and UI/input gates, forward-only ownership, reach-first deterministic
+ranking, complete exact actor freeze, one native hard-target setter call, and
+one exact readback. Missing candidates and pre-setter validation drift consume
+only the owned forward cycle without a target write; setter rejection or
+readback mismatch is terminal with no retry, rerank, or alternate candidate.
+OFF, reverse targeting, and helper calls outside the scoped handler retain their
+native paths. Smart Action retains the prior one-shot harmful-action macro
+contract and never becomes Smart Tab implicitly. These checks validate source
+control flow and contracts, not current-client target behavior; exact CC live
+testing remains required.
+
+Historical v0.30.0.0 baseline: the exact 388-test Core registry and source checks
+pinned Smart Target's reach-first deterministic ranking, complete exact actor/action freeze,
 native range/line-of-sight revalidation, live-Guard exclusion, one-shot carrier
 consumption, and `<t>`-only authored fallback. They pin `/autoseiton` plus the
 visible tile to one persisted availability switch while retaining physical held-
@@ -1641,8 +1723,8 @@ hysteresis, critical-only direct double-crossing sound, exact enemy LB nameplate
 admission/stacking, safe self/ally LB notification lanes, and version-local
 What's New acknowledgement without chat output.
 
-The same v0.30 checks require schema 32, version 0.30.0.0, the unhidden custom-
-repository entry (`IsHide: false`), and the absence of the deleted Combat Frames runtime, Settings
+The same historical v0.30.0.0 checks require schema 32, version 0.30.0.0, the
+unhidden custom-repository entry (`IsHide: false`), and the absence of the deleted Combat Frames runtime, Settings
 page, targeting/mouseover service, renderer, snapshots, and calibrated-gauge
 service. Guardian retains unconditional rescue at or below 20% HP and admits
 21-35% only from a fresh exact 3+ pressure publication. Protection-end follow-
@@ -1738,8 +1820,8 @@ separate adjusted-action epochs. It also retains Smart Kardia's accepted-
 Eukrasia trigger, causal charge/status evidence, exact pressure selection and
 direct target without a held-key scanner.
 
-The v0.30 checks prove that the deleted Combat Frames snapshot, targeting,
-renderer, options, settings-page, and remote-gauge services stay absent from the
+The historical v0.30.0.0 checks prove that the deleted Combat Frames snapshot,
+targeting, renderer, options, settings-page, and remote-gauge services stay absent from the
 runtime. Replacement LB checks pin fresh exact canonical enemies, native
 nameplate anchoring, confirmed live-duration countdowns only, bounded
 instant/unconfirmed flashes, safe stacking with the CC emblem, a local self

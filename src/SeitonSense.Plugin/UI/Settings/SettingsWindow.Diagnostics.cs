@@ -198,10 +198,13 @@ internal sealed partial class SettingsWindow
             "Guard cooldown is shown only after this client actually observed that enemy's Guard. Unknown " +
             "cooldowns are never guessed. The separate default-off Auto Low-MP Focus setter may fill an empty " +
             "native Focus Target; it never clears, replaces, restores, or retries one. The retired Combat Frames add no " +
-            "click or mouseover mutation path. Every remaining module leaves selected hard, soft, Focus, and mouseover " +
-            "targets unchanged, except that an explicitly enabled NIN " +
-            "Guard-Shukuchi may set its exact jumped-to enemy once after client acceptance. Seiton Sense uploads no gameplay data to an external " +
-            "service. Smart Target, Near Assist, Near Help, and Far Help may replace only " +
+            "click or mouseover mutation path. Opt-in Smart Tab replaces only the nested native forward world-target " +
+            "cycle inside FFXIV's original target handler, after its input gates, and may set one frozen exact CC melee enemy as the visible hard " +
+            "target after one revalidation and readback; toggle-off and unrelated input remain vanilla. An explicitly " +
+            "enabled NIN Guard-Shukuchi may separately " +
+            "set its exact jumped-to enemy once after client acceptance. Every other module leaves selected hard, soft, " +
+            "Focus, and mouseover targets unchanged. Seiton Sense uploads no gameplay data to an external service. " +
+            "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
             "The current request order is Purify > NIN Seiton > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +

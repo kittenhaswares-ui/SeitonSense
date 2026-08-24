@@ -333,10 +333,12 @@ internal sealed class TargetPressureTracker : IDisposable
         var pressureFeaturesEnabled = configuration.ShowPressureCounter ||
                                       configuration.ShowIncomingPressureOnNameplates ||
                                       configuration.ShowTeamPressureOnNameplates ||
+                                      configuration.EnableSmartTabTargeting ||
+                                      configuration.EnableSmartActionMacro ||
                                       configuration.EnableNearAssistMacro ||
-                                       configuration.NearAssistPreferTeamPressure ||
-                                       configuration.ShowCurrentTargetInfoHud ||
-                                       configuration.EnableDefensiveUtilities ||
+                                      configuration.NearAssistPreferTeamPressure ||
+                                      configuration.ShowCurrentTargetInfoHud ||
+                                      configuration.EnableDefensiveUtilities ||
                                         (isReactiveCounterCcJob &&
                                          configuration.EnableReactiveCcUtilities &&
                                          (configuration.ReactiveCcAfterEnemyPurify ||

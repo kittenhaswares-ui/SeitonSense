@@ -4,10 +4,14 @@ Seiton Sense has no account, independent server, telemetry, or external gameplay
 upload. Optional gameplay helpers can submit ordinary action, target-sign, or
 Quick Chat commands to FFXIV, and the separate default-off Auto Low-MP Focus
 helper can set only an empty local native Focus Target. The retired Combat
-Frames runtime has no target-click or native-mouseover path. Smart Target can
-replace only the target ID on one already incoming, exact harmful PvP macro
-action after an explicit `/smarttab` or `/sstarget` token; it does not change a
-visible hard, soft, Focus, or mouseover target. The separate default-off NIN Guard-
+Frames runtime has no target-click or native-mouseover path. Default-off Smart
+Tab may replace one forward world-target cycle nested inside FFXIV's native
+targeting handler with one exact visible CC melee hard target. Its paired hooks
+leave OFF, reverse, and calls outside that handler on the native paths. The
+separate default-off Smart Action macro helper can replace
+only the target ID on one already incoming exact harmful PvP action after an
+explicit `/smartaction` or `/ssaction` token; it does not change a visible hard,
+soft, Focus, or mouseover target. The separate default-off NIN Guard-
 Shukuchi helper may set only the exact jumped-to enemy as the hard target, and
 only after its one ground-targeted Shukuchi location request returns client-
 accepted. In particular, the separate default-off Guardian
@@ -43,7 +47,11 @@ following data already available in the local FFXIV client:
   transiently for equality with the resolved actor and is not retained;
 - when its optional visual module is enabled, your current hard/Focus Target and
   locally available job, HP, distance, CC slot, and pressure state;
-- when Smart Target is enabled and one local macro token is live, the exact
+- when Smart Tab is enabled and its scoped native forward world-target cycle is
+  pressed, the unique canonical `S1`-`S5` candidates, current HP, Guard, fresh
+  optional team pressure, trusted MP ratio, hitbox geometry, one frozen actor,
+  and the native setter readback;
+- when Smart Action is enabled and one local macro token is live, the exact
   incoming non-area PvP action, unique canonical `S1`-`S5` candidates, Guard,
   current HP, fresh optional team pressure, trusted MP ratio, native action
   range/line-of-sight result, and one frozen action/actor intent;
@@ -213,7 +221,8 @@ actor name, or event payload is logged or uploaded. Pet/owned action sources can
 be resolved to their visible player owner solely for the current pressure cue.
 
 When optional Ally Rescue, Near Help pressure preference, reactive Guard,
-Paladin Guardian, NIN Guard-Shukuchi, Smart Paean, or Smart Target are enabled,
+Paladin Guardian, NIN Guard-Shukuchi, Smart Paean, Smart Tab, or Smart Action are
+enabled,
 the same current-frame enemy hard/cast identities can also be reduced to unique
 incoming-pressure counts for the local player and/or exact party members. Smart Kardia does not
 keep this ally scan running while idle: one client-accepted Eukrasia trigger
@@ -408,10 +417,33 @@ counts and the latest original, forwarded, and effective target IDs, invocation
 mode, and resolution result are retained only in memory for diagnostics.
 Incoming identities and protection state are not persisted or transmitted.
 
-## One-shot Smart Target
+## Melee Smart Tab
 
-Smart Target shares the default-off macro-helper master and runs only in exact
-Crystalline Conflict. `/smarttab` or `/sstarget` creates one local token lasting
+Smart Tab is default off and runs only in exact Crystalline Conflict on the six
+reviewed melee-DPS jobs. When enabled, paired local native hooks scope FFXIV's
+own targeting handler and own only its nested forward world-target cycle after
+the game's logical binding and UI/input gates. Only that scoped forward request
+may select one exact hard target. Toggle off, reverse targeting, direct helper
+calls outside that handler, UI/chat input, other target commands, unsupported
+jobs, and unsupported contexts call the native paths unchanged.
+
+For one owned request, the plugin transiently resolves unique, living, hostile,
+targetable canonical `S1`-`S5` enemies and excludes live Guard. It first admits
+hitbox-edge melee reach, then only the reviewed job gap-closer cap. Ranking is
+lowest HP ratio, fresh positive team pressure, known Guard-cooldown
+unavailability, trusted MP ratio, then stable slot. One actor is frozen and
+revalidated. Missing candidates or any identity, geometry, context, or reach
+failure before the setter consume only that owned forward cycle without a target
+write, so the current hard target remains unchanged. Otherwise the plugin calls
+the native hard-target setter once and checks exact readback once. Setter
+rejection or readback mismatch is terminal, with no retry, rerank, or alternate
+target. The plugin does not claim that the pre-call target was restored after
+those post-setter outcomes. There is no action, persisted input, or upload.
+
+## One-shot Smart Action
+
+Smart Action has its own default-off macro-helper switch and runs only in exact
+Crystalline Conflict. `/smartaction` or `/ssaction` creates one local token lasting
 at most 750 ms. The authored macro then supplies the harmful action first with
 `<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
 does not read or retain the macro text and does not require a current target.
@@ -1275,8 +1307,9 @@ server execution or damage.
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
 MCH warning size/sound selection, the high-pressure warning/native-sound/Sprint
-opt-ins and sound selection, the shared Smart Target/Near Assist/Near Help/Far Help opt-in,
-Near Assist search/preferences, the Near Help incoming-pressure preference,
+opt-ins and sound selection, the separate Smart Tab and Smart Action opt-ins,
+the shared Near Assist/Near Help/Far Help opt-in, Near Assist search/preferences,
+the Near Help incoming-pressure preference,
 target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
 Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
 opt-ins, the separate Bard Paean pressure-redirect
@@ -1299,8 +1332,14 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 32 is current in v0.30.0.0. The NIN Guard-Shukuchi held-
-key option is forced off for upgrading configurations and remains off for fresh
+Configuration schema 33 is current in v0.30.0.1. It leaves Smart Tab off for
+every upgrade, fresh install, and Reset Defaults, while preserving an older
+explicitly enabled shared macro-helper opt-in as the separate Smart Action
+option. Smart Tab and Smart Action are both off for fresh and reset
+configurations.
+
+Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key
+option off for upgrading configurations and left it off for fresh
 and Reset Defaults configurations because it initiates an action and may set the
 exact hard target after client acceptance. Panic Shukuchi remains command-only
 and saves no dedicated option; it uses the global plugin enable and existing
@@ -1315,7 +1354,7 @@ including schema 28's default-off post-Guard migration. Schema 32 forces the
 retired Combat Frames master off, maps its optional name preference to the ally
 LB feed, enables the replacement LB surfaces, and initializes local MP sounds to
 built-in IDs 4 and 6. Fresh and reset configurations keep NIN Guard-Shukuchi,
-Smart Recuperate, Hiebsprung, Smart Target/other macro helpers, and all other
+Smart Recuperate, Hiebsprung, Smart Action/other macro helpers, and all other
 action-helper masters off; post-Guard defaults on only behind the disabled
 reactive-counter master. The replacement LB and local-MP presentation options
 default on but neither submits an action nor changes a target. Configuration does not
