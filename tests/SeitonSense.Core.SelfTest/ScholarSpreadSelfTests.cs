@@ -314,7 +314,7 @@ internal static class ScholarSpreadSelfTests
             "an objective seed still permits a proactive shield");
     }
 
-    internal static void OwnedSourceSequenceAloneAdvancesWorkflow()
+    internal static void OwnedRequestOrExactStatusPairAdvancesWorkflow()
     {
         var state = BeginDotWorkflow();
         True(ScholarSpreadRules.TryGetNextIntent(state, out var setup), "setup intent");
@@ -355,6 +355,107 @@ internal static class ScholarSpreadSelfTests
             shieldReservationStillSafe: true);
         True(unboundConfirmed.Advanced,
             "first exact nonzero server packet binds an accepted setup");
+
+        var zeroSequence = ScholarSpreadRules.RecordClientAcceptedAction(
+            BeginDotWorkflow(),
+            setup,
+            sourceSequence: 38);
+        var zeroSequenceConfirmed = ScholarSpreadRules.ObserveActionEffect(
+            zeroSequence,
+            Effect(
+                ScholarSpreadRules.BiolysisActionId,
+                zeroSequence.Plan.Target,
+                sourceSequence: 0,
+                globalSequence: 398),
+            shieldReservationStillSafe: true);
+        True(zeroSequenceConfirmed.Advanced,
+            "an exact accepted request tolerates a missing packet source sequence");
+
+        var unusableMetadata = ScholarSpreadRules.RecordClientAcceptedAction(
+            BeginDotWorkflow(),
+            setup,
+            sourceSequence: 36);
+        var zeroGlobal = ScholarSpreadRules.ObserveActionEffect(
+            unusableMetadata,
+            Effect(
+                ScholarSpreadRules.BiolysisActionId,
+                unusableMetadata.Plan.Target,
+                sourceSequence: 36,
+                globalSequence: 0),
+            shieldReservationStillSafe: true);
+        Equal(ScholarSpreadEffectDecisionKind.Ignored, zeroGlobal.Kind,
+            "zero global sequence waits for exact statuses instead of cancelling");
+        Equal(ScholarSpreadPhase.AwaitingSetupEffect, zeroGlobal.NextState.Phase,
+            "zero global sequence preserves accepted setup ownership");
+        var mismatchedSource = ScholarSpreadRules.ObserveActionEffect(
+            zeroGlobal.NextState,
+            Effect(
+                ScholarSpreadRules.BiolysisActionId,
+                unusableMetadata.Plan.Target,
+                sourceSequence: 999,
+                globalSequence: 396),
+            shieldReservationStillSafe: true);
+        Equal(ScholarSpreadEffectDecisionKind.Ignored, mismatchedSource.Kind,
+            "exact setup with unusable source metadata waits for status proof");
+        Equal(ScholarSpreadPhase.AwaitingSetupEffect, mismatchedSource.NextState.Phase,
+            "mismatched packet metadata cannot terminally consume the hold");
+        True(ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
+                mismatchedSource.NextState,
+                unusableMetadata.Plan.Target,
+                expectedOwnStatusPairActive: true,
+                shieldReservationStillSafe: true).Advanced,
+            "exact own statuses recover from unusable packet metadata");
+
+        var statusAwaiting = ScholarSpreadRules.RecordClientAcceptedAction(
+            BeginDotWorkflow(),
+            setup,
+            sourceSequence: 37);
+        var statusConfirmed = ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
+            statusAwaiting,
+            statusAwaiting.Plan.Target,
+            expectedOwnStatusPairActive: true,
+            shieldReservationStillSafe: true);
+        Equal(ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed, statusConfirmed.Kind,
+            "exact own statuses confirm the already accepted setup without a packet");
+        Equal(ScholarSpreadPhase.DeploymentReady, statusConfirmed.NextState.Phase,
+            "status confirmation arms Deployment");
+        var delayedSetupPacket = ScholarSpreadRules.ObserveActionEffect(
+            statusConfirmed.NextState,
+            Effect(
+                ScholarSpreadRules.BiolysisActionId,
+                statusAwaiting.Plan.Target,
+                sourceSequence: 999,
+                globalSequence: 0),
+            shieldReservationStillSafe: true);
+        Equal(ScholarSpreadEffectDecisionReason.DuplicateOwnedEffect,
+            delayedSetupPacket.Reason,
+            "the delayed packet after status confirmation cannot cancel Deployment");
+        Equal(ScholarSpreadPhase.DeploymentReady, delayedSetupPacket.NextState.Phase,
+            "delayed packet preserves the armed Deployment");
+
+        var absentPair = ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
+            statusAwaiting,
+            statusAwaiting.Plan.Target,
+            expectedOwnStatusPairActive: false,
+            shieldReservationStillSafe: true);
+        Equal(ScholarSpreadPhase.AwaitingSetupEffect, absentPair.NextState.Phase,
+            "an absent exact status pair cannot confirm setup");
+
+        True(ScholarSpreadRules.IsWithinOwnedConfirmationWindow(
+                acceptedAtMilliseconds: 1_000,
+                nowMilliseconds: 3_500,
+                maximumAgeMilliseconds: 2_500),
+            "exact ownership deadline remains inclusive");
+        False(ScholarSpreadRules.IsWithinOwnedConfirmationWindow(
+                acceptedAtMilliseconds: 1_000,
+                nowMilliseconds: 3_501,
+                maximumAgeMilliseconds: 2_500),
+            "evidence one millisecond after ownership expiry is rejected");
+        False(ScholarSpreadRules.IsWithinOwnedConfirmationWindow(
+                acceptedAtMilliseconds: 1_000,
+                nowMilliseconds: 999,
+                maximumAgeMilliseconds: 2_500),
+            "clock reversal cannot confirm an owned action");
 
         state = ScholarSpreadRules.RecordClientAcceptedAction(state, setup, sourceSequence: 41);
         Equal(ScholarSpreadPhase.AwaitingSetupEffect, state.Phase, "await helper-owned packet");

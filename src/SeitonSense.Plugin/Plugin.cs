@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.34.0.0";
+    private const string CurrentReleaseVersion = "0.34.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -311,9 +311,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Monk held combo now uses native PvP route 55 beyond Dragon Kick; Viper Den testing accepts the exact current hostile duel opponent or reviewed dummy without changing target.",
-                "SAM Soten/Mineuchi now freezes the exact target and protection episode, uses direct targeting, and learns verified two-stage impact timing with a conservative first-use fallback.",
-                "Counter-CC learns exact action-impact timing; true main-GCD actions get one fixed sub-1000-ms late reservation. Added default-off RDM Vice and BLM Frost Star. Schema 38; all 454 Core tests pass.",
+                "Monk now reserves Wind's Reply across the transient Phantom Rush transition and uses it before an active Fire Resonance can skip the knockback step.",
+                "Scholar now captures the exact single-target setup actor, waits for its exact own-status pair when packet metadata is unusable, and rejects evidence after the ownership deadline.",
+                "DRK held Shadowbringer now receives known Wolves' Den pressure for exact dummy testing. Schema 38 is unchanged; all 454 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -1043,8 +1043,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"key={scholarSpread.HeldGameplayKey},next={scholarSpread.NextActionId},charges=" +
                     $"{scholarSpread.DeploymentCharges},deploy/bio=" +
                     $"{scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
-                    $"{scholarSpread.BiolysisRemainingMilliseconds},boundary=" +
-                    $"{scholarSpread.NativeBoundaryClear},dot/shield=" +
+                    $"{scholarSpread.BiolysisRemainingMilliseconds},native/boundary=" +
+                    $"{scholarSpread.NativeStateKnown}/{scholarSpread.NativeBoundaryClear},dot/shield=" +
                     $"{scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount},slot=" +
                     $"{scholarSpread.TargetSlot},target={scholarSpread.TargetGameObjectId:X}/" +
                     $"{scholarSpread.TargetEntityId:X},coverage=" +

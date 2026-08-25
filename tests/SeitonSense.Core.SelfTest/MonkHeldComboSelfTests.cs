@@ -312,6 +312,45 @@ internal static class MonkHeldComboSelfTests
             state = gcdWait.NextState;
         }
 
+        // The native carrier can advance to Phantom while the previous
+        // weaponskill still makes the exact target status transiently
+        // unavailable. A stable Wind opportunity must be reserved instead of
+        // permanently falling through to Phoenix/Phantom on that one frame.
+        var windWait = MonkHeldComboRules.Observe(
+            state,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                windReady: false,
+                windWorkflowAvailable: true,
+                nativeBoundary: false,
+                now: now++));
+        Equal(
+            MonkHeldComboDecisionKind.Armed,
+            windWait.Kind,
+            "Phantom transition reserves transiently blocked Wind");
+        Equal(
+            MonkHeldComboPhase.BufferedAction,
+            windWait.NextState.Phase,
+            "transient Wind remains buffered");
+        Equal(
+            MonkHeldComboRules.WindReplyActionId,
+            windWait.NextState.PendingActionId,
+            "transient Wind owns the pending action");
+
+        var windDispatch = MonkHeldComboRules.Observe(
+            windWait.NextState,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                windReady: true,
+                windWorkflowAvailable: true,
+                nativeBoundary: true,
+                now: now++));
+        Dispatch(
+            windDispatch,
+            MonkHeldComboRules.WindReplyActionId,
+            MonkHeldComboActionPurpose.WindReplySetup,
+            "continuous route Wind setup");
+
         Equal(
             0u,
             MonkHeldComboRules.GetNativeComboRouteId(
@@ -346,6 +385,20 @@ internal static class MonkHeldComboSelfTests
         var awaitingPressure = Accept(wind, 1_001, sequence: 10);
         Equal(MonkHeldComboPhase.AwaitPressurePoint,
             awaitingPressure.Phase, "await Pressure Point");
+
+        var windBeforeExistingFire = MonkHeldComboRules.Observe(
+            MonkHeldComboState.Initial,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                Candidate(phantomRange: true, windRange: true),
+                windReady: true,
+                fireResonance: true,
+                now: 1_001));
+        Dispatch(
+            windBeforeExistingFire,
+            MonkHeldComboRules.WindReplyActionId,
+            MonkHeldComboActionPurpose.WindReplySetup,
+            "Wind setup precedes existing Fire Resonance");
 
         var pressure = outOfRange with { HasExactOwnPressurePoint = true };
         var thunder = MonkHeldComboRules.Observe(
@@ -412,6 +465,11 @@ internal static class MonkHeldComboSelfTests
                 phantomRange,
                 windReady: true,
                 phoenixReady: true));
+        Dispatch(
+            wind,
+            MonkHeldComboRules.WindReplyActionId,
+            MonkHeldComboActionPurpose.WindReplySetup,
+            "in-range Wind proof setup");
         var awaitingPressure = Accept(wind, 1_001, sequence: 10);
         var missing = MonkHeldComboRules.Observe(
             awaitingPressure,
@@ -612,6 +670,7 @@ internal static class MonkHeldComboSelfTests
         bool comboReady = true,
         bool fireReady = true,
         bool windReady = true,
+        bool? windWorkflowAvailable = null,
         bool thunderReady = true,
         bool phoenixReady = true,
         bool fireResonance = false,
@@ -635,6 +694,8 @@ internal static class MonkHeldComboSelfTests
         ResolvedComboActionId: carrier,
         ComboActionLocallyReady: comboReady,
         FireReplyLocallyReady: fireReady,
+        WindReplyWorkflowAvailable:
+            windWorkflowAvailable ?? windReady,
         WindReplyLocallyReady: windReady,
         ThunderclapLocallyReady: thunderReady,
         RisingPhoenixLocallyReady: phoenixReady,

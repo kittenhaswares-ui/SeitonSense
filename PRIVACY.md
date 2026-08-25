@@ -109,10 +109,11 @@ following data already available in the local FFXIV client:
   range/line-of-sight result, destination safety counts/clearance, and one-shot
   danger-episode state;
 - when Scholar Smart Spread is enabled, the exact local Scholar identity and raw
-  held-key state, current Biolysis/Adloquium/Deployment recasts and charges,
-  canonical enemy and party identities, local-source status pairs, positions,
-  native target action/range/line-of-sight results, the uniquely resolved tactical-
-  crystal actor/position, and bounded plugin-owned ActionEffect source sequences;
+  held-key state, current Biolysis/Adloquium/Deployment charges and optional
+  dynamic recast timing, canonical enemy and party identities, local-source
+  status pairs, positions, native target action/range/line-of-sight results, the
+  uniquely resolved tactical-crystal actor/position, and bounded plugin-owned
+  ActionEffect target/source sequences;
 - when the Viper Serpentiner-Geist helper is enabled, the directly observed
   adjusted carrier/follow-up action, its in-memory exposure generation/spent
   state, exact local/current-hard-target identities, context, territory, own
@@ -1055,17 +1056,24 @@ single language-independent tactical-crystal battle-NPC identity; when that acto
 is uniquely resolved, candidates inside a conservative 5-yalm edge radius rank
 first, then lower HP and stable identity. Unknown coverage for any party member
 blocks this ranking. A full-health candidate away from that tactical-crystal
-radius is ineligible. Adloquium spread is permitted only when
-two Deployment charges exist or native recast timing proves the next charge will
-return no later than the next Biolysis window.
+radius is ineligible. Adloquium spread is permitted only when two Deployment
+charges exist or dynamically observed native recast timing proves the next
+charge will return no later than the next Biolysis window. Unknown timing blocks
+only that one-charge shield reservation, not DoT or two-charge shield planning;
+final native readiness is still required.
 
 Every plugin-owned Adloquium/Biolysis/Deployment request freezes one action,
-actor, and episode. If a nonzero native source sequence is synchronously
-available it is bound immediately; otherwise the first exact nonzero server
-ActionEffect sequence may bind the already accepted request. The matching local-
-source ActionEffect advances the setup, after which the runtime observes the
-frozen actor's live exact local-source paired statuses for at most 2.5 seconds.
-Deployment becomes eligible as soon as that pair appears; the timeout is not a
+actor, and episode. Single-target setup capture uses the exact first effect
+recipient; area Deployment retains the animation target. If a nonzero native
+source sequence is synchronously available it is bound immediately. The
+matching exact local-source ActionEffect may confirm the already accepted setup
+even when its packet source sequence is zero; independently, the frozen actor's
+exact locally sourced paired statuses may confirm only that same already
+accepted setup. A delayed matching packet is ignored rather than cancelling
+Deployment. Missing, zero, or disagreeing packet sequence metadata waits for
+the exact pair or expiry; it does not cancel ahead of that proof. Deployment
+becomes eligible as soon as that pair appears inside the ownership window;
+evidence after 2.5 seconds cannot revive the workflow and the timeout is not a
 fixed dispatch delay.
 Separately pressed Scholar actions are not adopted; a manual Deployment conflict
 cancels the automatic plan to avoid double-spending. Final identity/status/action
@@ -1480,7 +1488,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 38 is current in v0.34.0.0. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.1. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options, starts calibration revision
 1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
 Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of

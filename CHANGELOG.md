@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.34.0.1
+
+- Fixed held **Monk Wind's Reply** being skipped at the one-frame Pouncing
+  Coeurl -> Phantom Rush transition. The frozen combo now retains the knockback
+  reservation across a transient native-ready sample, and Wind's Reply remains
+  ahead of an already active Fire Resonance.
+- Fixed **Scholar Smart Spread** setup attribution by capturing the exact first
+  effect recipient for single-target Biolysis/Adloquium while retaining the
+  animation target for area Deployment. An already client-accepted exact setup
+  may also advance from the frozen target's matching local-source status pair;
+  unusable or delayed matching packet metadata waits for that exact proof
+  instead of cancelling Deployment, and evidence after the 2.5-second ownership
+  deadline can no longer revive an expired workflow.
+- Made Scholar recast observation dynamic and optional. Candidate targeting no
+  longer mixes structural target validity with transient recast/cast state;
+  unknown timing blocks only the one-charge shield reservation, while DoT and
+  two-charge shield plans retain their final native readiness checks.
+- Enabled known pressure sampling for default-off held **DRK Shadowbringer** in
+  the Wolves' Den, so its safe fallback can be tested against the exact reviewed
+  dummy. Configuration schema remains `38`; all `454` Core tests and the zero-
+  warning release build pass in this source snapshot. Current-patch in-game
+  behavior remains a separate live-validation boundary.
+
 ## 0.34.0.0
 
 - Fixed the held **Monk combo** against the live Dragon Kick stall by resolving

@@ -143,7 +143,8 @@ internal sealed partial class SettingsWindow
             $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}, " +
             $"key={scholarSpread.HeldGameplayKey}, next={scholarSpread.NextActionId}, charges=" +
             $"{scholarSpread.DeploymentCharges}, deploy/bio={scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
-            $"{scholarSpread.BiolysisRemainingMilliseconds} ms, boundary={scholarSpread.NativeBoundaryClear}, " +
+            $"{scholarSpread.BiolysisRemainingMilliseconds} ms, native/boundary=" +
+            $"{scholarSpread.NativeStateKnown}/{scholarSpread.NativeBoundaryClear}, " +
             $"dot/shield candidates={scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount}, " +
             $"slot={scholarSpread.TargetSlot}, target={scholarSpread.TargetGameObjectId:X}/" +
             $"{scholarSpread.TargetEntityId:X}, coverage={scholarSpread.PredictedAffectedCount}/" +

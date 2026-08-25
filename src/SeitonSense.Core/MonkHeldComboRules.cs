@@ -127,6 +127,7 @@ public readonly record struct MonkHeldComboObservation(
     uint ResolvedComboActionId,
     bool ComboActionLocallyReady,
     bool FireReplyLocallyReady,
+    bool WindReplyWorkflowAvailable,
     bool WindReplyLocallyReady,
     bool ThunderclapLocallyReady,
     bool RisingPhoenixLocallyReady,
@@ -840,6 +841,7 @@ public static class MonkHeldComboRules
                 return BufferAction(
                     state with { FireResonanceConfirmed = true },
                     observation,
+                    candidate,
                     PhantomRushActionId,
                     MonkHeldComboActionPurpose.PhantomRushFinish);
             }
@@ -849,6 +851,7 @@ public static class MonkHeldComboRules
                 return BufferAction(
                     state,
                     observation,
+                    candidate,
                     RisingPhoenixActionId,
                     MonkHeldComboActionPurpose.RisingPhoenixBuff);
             }
@@ -858,6 +861,7 @@ public static class MonkHeldComboRules
             return BufferAction(
                 state,
                 observation,
+                candidate,
                 PhantomRushActionId,
                 MonkHeldComboActionPurpose.PhantomRushFinish);
         }
@@ -871,6 +875,7 @@ public static class MonkHeldComboRules
             return BufferAction(
                 state,
                 observation,
+                candidate,
                 ThunderclapActionId,
                 MonkHeldComboActionPurpose.ThunderclapReturn);
         }
@@ -912,6 +917,7 @@ public static class MonkHeldComboRules
             return BufferAction(
                 state with { FireResonanceConfirmed = true },
                 observation,
+                candidate,
                 PhantomRushActionId,
                 MonkHeldComboActionPurpose.PhantomRushFinish);
         }
@@ -942,6 +948,7 @@ public static class MonkHeldComboRules
                 return BufferAction(
                     state,
                     observation,
+                    candidate,
                     observation.ResolvedComboActionId,
                     MonkHeldComboActionPurpose.NormalCombo);
             }
@@ -954,6 +961,7 @@ public static class MonkHeldComboRules
                 return BufferAction(
                     state,
                     observation,
+                    candidate,
                     FireReplyActionId,
                     MonkHeldComboActionPurpose.FireReplyFallback);
             }
@@ -975,14 +983,6 @@ public static class MonkHeldComboRules
                 inputClaimed: false);
         }
 
-        if (observation.HasExactOwnFireResonance)
-        {
-            return ObserveFireResonance(
-                state with { Phase = MonkHeldComboPhase.AwaitFireResonance },
-                observation,
-                candidate);
-        }
-
         if (candidate.HasExactOwnPressurePoint)
         {
             return ObservePhantomRange(
@@ -995,14 +995,31 @@ public static class MonkHeldComboRules
                 candidate);
         }
 
-        if (observation.WindReplyLocallyReady &&
+        // Reserve the Wind path from stable action availability. The exact
+        // target status is commonly transiently unavailable on the first
+        // Phantom carrier frame while the preceding weaponskill's native
+        // boundary is still closed. Buffering keeps the route on Wind and lets
+        // ObserveBuffered wait for exact readiness instead of permanently
+        // falling through to Phoenix/Phantom on that one frame.
+        if (observation.WindReplyWorkflowAvailable &&
             candidate.WindReplyTargetReady)
         {
             return BufferAction(
                 state,
                 observation,
+                candidate,
                 WindReplyActionId,
                 MonkHeldComboActionPurpose.WindReplySetup);
+        }
+
+        // An already active Fire Resonance still buffs the eventual Phantom,
+        // but must not bypass a currently available Pressure Point setup.
+        if (observation.HasExactOwnFireResonance)
+        {
+            return ObserveFireResonance(
+                state with { Phase = MonkHeldComboPhase.AwaitFireResonance },
+                observation,
+                candidate);
         }
 
         return ObservePhantomRange(
@@ -1018,6 +1035,7 @@ public static class MonkHeldComboRules
     private static MonkHeldComboDecision BufferAction(
         MonkHeldComboState state,
         MonkHeldComboObservation observation,
+        MonkHeldComboCandidate candidate,
         uint actionId,
         MonkHeldComboActionPurpose purpose)
     {
@@ -1030,7 +1048,7 @@ public static class MonkHeldComboRules
             Retry = HeldActionRetryState.Initial,
             LastNativeOutcome = ClientActionAttemptOutcome.None,
         }, observation);
-        return EvaluateBufferedBoundary(buffered, observation);
+        return ObserveBuffered(buffered, observation, candidate);
     }
 
     private static MonkHeldComboDecision EvaluateBufferedBoundary(

@@ -15,9 +15,9 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One bounded local-Scholar action packet captured by the plugin's existing
-/// shared ActionEffect hook. The target is the action header's animation target,
-/// not the first effect
-/// recipient. Area actions may order their effect recipients independently.
+/// shared ActionEffect hook. Single-target setup actions use their exact effect
+/// recipient; Deployment uses the header animation target because area-action
+/// effect recipients may be ordered independently.
 /// </summary>
 internal readonly record struct ScholarSpreadCapturedActionEffect(
     long ObservedAtMilliseconds,
@@ -67,6 +67,7 @@ internal sealed record ScholarSpreadProbeSnapshot(
     int DeploymentCharges,
     long DeploymentNextChargeRemainingMilliseconds,
     long BiolysisRemainingMilliseconds,
+    bool NativeStateKnown,
     bool NativeBoundaryClear,
     int DotCandidateCount,
     int ShieldCandidateCount,
@@ -114,6 +115,7 @@ internal sealed record ScholarSpreadProbeSnapshot(
         -1,
         -1,
         false,
+        false,
         0,
         0,
         0,
@@ -149,12 +151,6 @@ internal sealed class ScholarSpreadProbe : IDisposable
     internal const float TacticalCrystalPriorityRadiusYalms = 5f;
 
     private const float DeploymentRadiusYalms = 15f;
-    private const int BiolysisRuntimeRecastGroup = 0;
-    private const int DeploymentRuntimeRecastGroup = 1;
-    private const int AdloquiumRuntimeRecastGroup = 6;
-    private const uint BiolysisAdjustedRecastMilliseconds = 16_000;
-    private const uint DeploymentAdjustedRecastMilliseconds = 12_000;
-    private const uint AdloquiumAdjustedRecastMilliseconds = 12_000;
     private const long OwnedEffectTimeoutMilliseconds = 2_500;
     private const long StatusPropagationTimeoutMilliseconds = 2_500;
 
@@ -286,21 +282,50 @@ internal sealed class ScholarSpreadProbe : IDisposable
                                         nativeState.BiolysisTimingKnown,
                                         nativeState.BiolysisRemainingMilliseconds);
 
-        var effectReason = DrainActionEffects(
-            now,
-            featureContextReady,
-            shieldReservationSafe,
-            input.HeldGameplayKeyEligible);
-        var captureBecameUnreliable = ObserveCaptureReliability();
-        if (captureBecameUnreliable && workflowState.IsActive)
+        var effectReason = ScholarSpreadEffectDecisionReason.None;
+        if (IsOwnedEffectTimedOut(now))
         {
             workflowState = ScholarSpreadRules.Cancel(workflowState);
             ClearActionEpisode();
             terminalUntilRelease = input.HeldGameplayKeyEligible;
             effectReason = ScholarSpreadEffectDecisionReason.OwnedEffectMalformed;
         }
+        else
+        {
+            effectReason = DrainActionEffects(
+                now,
+                featureContextReady,
+                shieldReservationSafe,
+                input.HeldGameplayKeyEligible);
 
-        if (IsOwnedEffectTimedOut(now))
+            // ActionEffect is useful attribution evidence, but it is not the only
+            // exact proof available. Some clients expose the locally sourced status
+            // pair before (or without) a usable target/source sequence in the packet.
+            // Only a setup already accepted for this frozen target may use this path.
+            if (featureContextReady &&
+                workflowState.Phase == ScholarSpreadPhase.AwaitingSetupEffect &&
+                localPlayer is not null &&
+                HasExactOwnPairOnFrozenTarget(workflowState.Plan, localPlayer.EntityId))
+            {
+                var statusDecision = ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
+                    workflowState,
+                    workflowState.Plan.Target,
+                    expectedOwnStatusPairActive: true,
+                    shieldReservationSafe);
+                workflowState = statusDecision.NextState;
+                if (statusDecision.Kind == ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed)
+                {
+                    Interlocked.Increment(ref setupConfirmationCount);
+                    pendingAcceptedAtMilliseconds = -1;
+                    setupConfirmedAtMilliseconds = now;
+                    retryState = HeldActionRetryState.Initial;
+                    effectReason = statusDecision.Reason;
+                }
+            }
+        }
+
+        var captureBecameUnreliable = ObserveCaptureReliability();
+        if (captureBecameUnreliable && workflowState.IsActive)
         {
             workflowState = ScholarSpreadRules.Cancel(workflowState);
             ClearActionEpisode();
@@ -469,6 +494,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
             nativeState.DeploymentCharges,
             nativeState.DeploymentRemainingMilliseconds,
             nativeState.BiolysisRemainingMilliseconds,
+            nativeState.Known,
             nativeState.NativeBoundaryClear,
             dotRuntime.Length,
             shieldRuntime.Length,
@@ -645,8 +671,10 @@ internal sealed class ScholarSpreadProbe : IDisposable
     private bool IsOwnedEffectTimedOut(long nowMilliseconds) =>
         workflowState.PendingOwnedAction.IsValid &&
         pendingAcceptedAtMilliseconds >= 0 &&
-        (nowMilliseconds < pendingAcceptedAtMilliseconds ||
-         nowMilliseconds - pendingAcceptedAtMilliseconds > OwnedEffectTimeoutMilliseconds);
+        !ScholarSpreadRules.IsWithinOwnedConfirmationWindow(
+            pendingAcceptedAtMilliseconds,
+            nowMilliseconds,
+            OwnedEffectTimeoutMilliseconds);
 
     private void HandleNativeOutcome(
         ScholarSpreadIntent intent,
@@ -798,27 +826,18 @@ internal sealed class ScholarSpreadProbe : IDisposable
             return ScholarSpreadNativeState.Unknown;
         }
 
-        if (!TryObserveRecast(
-                actionManager,
-                adlo,
-                AdloquiumRuntimeRecastGroup,
-                AdloquiumAdjustedRecastMilliseconds,
-                out _) ||
-            !TryObserveRecast(
-                actionManager,
-                bio,
-                BiolysisRuntimeRecastGroup,
-                BiolysisAdjustedRecastMilliseconds,
-                out var bioRemaining) ||
-            !TryObserveRecast(
-                actionManager,
-                deploy,
-                DeploymentRuntimeRecastGroup,
-                DeploymentAdjustedRecastMilliseconds,
-                out var deployRemaining))
-        {
-            return ScholarSpreadNativeState.Unknown;
-        }
+        // Runtime recast groups and adjusted totals are observations, not stable
+        // identity. A transient or patch-dependent value must not disable every
+        // Scholar action. Unknown timing only blocks the one-charge shield
+        // reservation path; DoT spread and two-charge shield spread remain valid.
+        var bioTimingKnown = TryObserveRecast(
+            actionManager,
+            bio,
+            out var bioRemaining);
+        var deployTimingKnown = TryObserveRecast(
+            actionManager,
+            deploy,
+            out var deployRemaining);
 
         var charges = actionManager->GetCurrentCharges(deploy);
         if (charges > 2) return ScholarSpreadNativeState.Unknown;
@@ -840,9 +859,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 actionManager->IsActionOffCooldown(ActionType.Action, deploy) &&
                 actionManager->CheckActionResources(ActionType.Action, deploy) == 0,
             DeploymentCharges: (int)charges,
-            DeploymentTimingKnown: true,
+            DeploymentTimingKnown: deployTimingKnown,
             DeploymentRemainingMilliseconds: deployRemaining,
-            BiolysisTimingKnown: true,
+            BiolysisTimingKnown: bioTimingKnown,
             BiolysisRemainingMilliseconds: bioRemaining,
             NativeBoundaryClear: boundaryClear);
     }
@@ -850,17 +869,12 @@ internal sealed class ScholarSpreadProbe : IDisposable
     private static unsafe bool TryObserveRecast(
         ActionManager* actionManager,
         uint actionId,
-        int expectedRuntimeGroup,
-        uint expectedAdjustedRecastMilliseconds,
         out long remainingMilliseconds)
     {
         remainingMilliseconds = -1;
         var group = actionManager->GetRecastGroup((int)ActionType.Action, actionId);
         var detail = group < 0 ? null : actionManager->GetRecastGroupDetail(group);
-        if (group != expectedRuntimeGroup ||
-            detail == null ||
-            ActionManager.GetAdjustedRecastTime(ActionType.Action, actionId, true) !=
-            expectedAdjustedRecastMilliseconds ||
+        if (detail == null ||
             !float.IsFinite(detail->Elapsed) ||
             !float.IsFinite(detail->Total) ||
             detail->Elapsed < 0f ||
@@ -931,8 +945,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                         member.Exact &&
                         HasValidActionTarget(
                             ScholarSpreadRules.BiolysisActionId,
-                            member.Identity.GameObjectId,
-                            checkCastingActive: false),
+                            member.Identity.GameObjectId),
                     NativeRangeAndLineOfSight:
                         member.Exact &&
                         HasRangeAndLineOfSight(
@@ -975,8 +988,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                         member.Exact &&
                         HasValidActionTarget(
                             ScholarSpreadRules.AdloquiumActionId,
-                            member.Identity.GameObjectId,
-                            checkCastingActive: false),
+                            member.Identity.GameObjectId),
                     NativeRangeAndLineOfSight:
                         member.Exact &&
                         HasRangeAndLineOfSight(
@@ -1077,8 +1089,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 MaximumHp: currentTarget.MaxHp,
                 NativeTargetValid: HasValidActionTarget(
                     intent.ActionId,
-                    intent.Target.GameObjectId,
-                    checkCastingActive: false),
+                    intent.Target.GameObjectId),
                 NativeRangeAndLineOfSight:
                     HasRangeAndLineOfSight(localPlayer, currentTarget, intent.ActionId),
                 TacticalCrystalPresenceKnown:
@@ -1583,8 +1594,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
 
     private static unsafe bool HasValidActionTarget(
         uint actionId,
-        ulong targetGameObjectId,
-        bool checkCastingActive)
+        ulong targetGameObjectId)
     {
         if (!ScholarSpreadRules.IsRelevantAction(actionId) ||
             !IsNetworkObjectId(targetGameObjectId))
@@ -1599,8 +1609,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
                    ActionType.Action,
                    actionId,
                    targetGameObjectId,
-                   checkRecastActive: true,
-                   checkCastingActive: checkCastingActive) == 0;
+                   checkRecastActive: false,
+                   checkCastingActive: false) == 0;
     }
 
     private static unsafe uint ResolveAdjustedActionId(uint actionId)

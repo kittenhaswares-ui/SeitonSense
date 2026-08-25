@@ -596,6 +596,8 @@ internal sealed unsafe class MonkHeldComboProbe
             ResolvedComboActionId: localActions.ResolvedComboActionId,
             ComboActionLocallyReady: exactComboReady,
             FireReplyLocallyReady: exactFireReady,
+            WindReplyWorkflowAvailable:
+                localActions.WindReplyLocallyReady,
             WindReplyLocallyReady: exactWindReady,
             ThunderclapLocallyReady: exactThunderReady,
             RisingPhoenixLocallyReady: exactPhoenixReady,
@@ -858,6 +860,8 @@ internal sealed unsafe class MonkHeldComboProbe
                     FireReplyLocallyReady =
                         currentActions.FireReplyLocallyReady &&
                         candidate.Value.FireReplyUseReady,
+                    WindReplyWorkflowAvailable =
+                        currentActions.WindReplyLocallyReady,
                     WindReplyLocallyReady =
                         currentActions.WindReplyLocallyReady &&
                         candidate.Value.WindReplyUseReady,

@@ -316,6 +316,8 @@ internal sealed class TargetPressureTracker : IDisposable
         var isReactiveCounterCcJob = isAllyRescueJob ||
                                      localJobId == EnemyCombatConstants.NinjaJobId;
         var isScholar = localJobId == EnemyCombatConstants.ScholarJobId;
+        var isDarkKnight =
+            localJobId == DarkKnightShadowbringerRules.DarkKnightJobId;
         var isEmergencyTeleportJob =
             EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var isBard = localJobId == EnemyCombatConstants.BardJobId;
@@ -347,6 +349,8 @@ internal sealed class TargetPressureTracker : IDisposable
                                           configuration.ReactiveCcAfterEnemyGuard)) ||
                                        (isScholar &&
                                         configuration.EnableScholarCriticalStrategyOnHeldKey) ||
+                                       (isDarkKnight &&
+                                        configuration.EnableDarkKnightShadowbringerOnHeldKey) ||
                                        configuration.EnableAutoEnemyFocusMark ||
                                        configuration.ShowHighPressureWarning ||
                                        configuration.PlayHighPressureWarningSound ||
@@ -357,7 +361,9 @@ internal sealed class TargetPressureTracker : IDisposable
                                         (!isWolvesDen ||
                                          configuration.PressureIncludeWolvesDen ||
                                          (isEmergencyTeleportJob &&
-                                          configuration.EnableEmergencyTeleportOnHeldKey));
+                                          configuration.EnableEmergencyTeleportOnHeldKey) ||
+                                         (isDarkKnight &&
+                                          configuration.EnableDarkKnightShadowbringerOnHeldKey));
         var incomingAllyPressureEnabledForContext =
             supportedContext == SupportedPvPContext.CrystallineConflict &&
             ((isAllyRescueJob &&

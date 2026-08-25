@@ -813,29 +813,29 @@ public static class ScholarSpreadRules
             return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
                 ScholarSpreadEffectDecisionReason.OtherCaster);
 
-        if (effect.GlobalSequence != 0 &&
-            effect.GlobalSequence == state.LastConfirmedGlobalSequence &&
-            effect.SourceSequence == state.LastConfirmedSourceSequence &&
-            effect.ActionId == state.LastConfirmedActionId)
+        if ((effect.GlobalSequence != 0 &&
+             effect.GlobalSequence == state.LastConfirmedGlobalSequence &&
+             effect.SourceSequence == state.LastConfirmedSourceSequence &&
+             effect.ActionId == state.LastConfirmedActionId) ||
+            (state.LastConfirmedGlobalSequence == 0 &&
+             state.LastConfirmedActionId == state.Plan.SetupActionId &&
+             effect.ActionId == state.LastConfirmedActionId &&
+             effect.PrimaryTarget == state.Plan.Target))
         {
             return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
                 ScholarSpreadEffectDecisionReason.DuplicateOwnedEffect);
         }
 
         var pending = state.PendingOwnedAction;
-        if (pending.IsValid &&
-            effect.SourceSequence != 0 &&
-            (!pending.HasBoundSourceSequence ||
-             effect.SourceSequence == pending.SourceSequence))
+        var exactPendingIdentity = pending.IsValid &&
+                                   effect.ActionId == pending.ActionId &&
+                                   effect.PrimaryTarget == pending.Target;
+        var exactPendingEffect = exactPendingIdentity && effect.GlobalSequence != 0;
+        var compatibleSourceSequence = !pending.HasBoundSourceSequence ||
+                                       effect.SourceSequence == 0 ||
+                                       effect.SourceSequence == pending.SourceSequence;
+        if (exactPendingEffect && compatibleSourceSequence)
         {
-            if (effect.GlobalSequence == 0 ||
-                effect.ActionId != pending.ActionId ||
-                effect.PrimaryTarget != pending.Target)
-            {
-                return Effect(Cancel(state), ScholarSpreadEffectDecisionKind.Cancelled,
-                    ScholarSpreadEffectDecisionReason.OwnedSequenceMismatch);
-            }
-
             if (pending.RequestedFromPhase == ScholarSpreadPhase.SetupReady)
             {
                 if (state.Plan.Kind == ScholarSpreadKind.Shield &&
@@ -877,6 +877,17 @@ public static class ScholarSpreadRules
                 ScholarSpreadEffectDecisionReason.OwnedEffectMalformed);
         }
 
+        // An accepted exact request remains attributable by the frozen actor's
+        // local-source status pair even when packet sequence metadata is absent,
+        // malformed, or disagrees with the synchronously observed sequence. Do
+        // not reinterpret that exact action/target packet as manual input; wait
+        // for the exact status proof or the bounded ownership timeout instead.
+        if (exactPendingIdentity)
+        {
+            return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
+                ScholarSpreadEffectDecisionReason.OwnedEffectMalformed);
+        }
+
         // A source-sequence collision with the helper-owned request is always
         // ambiguous. Never reinterpret it as a manual action or try another target.
         if (pending.IsValid &&
@@ -908,6 +919,61 @@ public static class ScholarSpreadRules
             ScholarSpreadEffectDecisionReason.ManualUnrelatedAction);
     }
 
+    /// <summary>
+    /// Confirms only a setup that this workflow already submitted and the client
+    /// accepted. The exact, frozen recipient must now expose both expected statuses
+    /// from the local Scholar. This is a second confirmation path for runtimes where
+    /// ActionEffect target/sequence metadata is absent or arrives after status data.
+    /// </summary>
+    public static ScholarSpreadEffectDecision ConfirmPendingSetupFromExactStatusPair(
+        ScholarSpreadWorkflowState state,
+        TargetPressureActorIdentity exactTarget,
+        bool expectedOwnStatusPairActive,
+        bool shieldReservationStillSafe)
+    {
+        if (!state.IsActive)
+            return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
+                ScholarSpreadEffectDecisionReason.InactiveWorkflow);
+
+        var pending = state.PendingOwnedAction;
+        if (state.Phase != ScholarSpreadPhase.AwaitingSetupEffect ||
+            !pending.IsValid ||
+            pending.RequestedFromPhase != ScholarSpreadPhase.SetupReady ||
+            pending.ActionId != state.Plan.SetupActionId)
+        {
+            return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
+                ScholarSpreadEffectDecisionReason.OwnedEffectMalformed);
+        }
+
+        if (!exactTarget.IsValid ||
+            exactTarget != state.Plan.Target ||
+            exactTarget != pending.Target ||
+            !expectedOwnStatusPairActive)
+        {
+            return Effect(state, ScholarSpreadEffectDecisionKind.Ignored,
+                ScholarSpreadEffectDecisionReason.ManualUnrelatedAction);
+        }
+
+        if (state.Plan.Kind == ScholarSpreadKind.Shield &&
+            !shieldReservationStillSafe)
+        {
+            return Effect(Cancel(state), ScholarSpreadEffectDecisionKind.Cancelled,
+                ScholarSpreadEffectDecisionReason.ShieldReservationUnavailable);
+        }
+
+        return Effect(
+            state with
+            {
+                Phase = ScholarSpreadPhase.DeploymentReady,
+                PendingOwnedAction = default,
+                LastConfirmedGlobalSequence = 0,
+                LastConfirmedSourceSequence = pending.SourceSequence,
+                LastConfirmedActionId = pending.ActionId,
+            },
+            ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed,
+            ScholarSpreadEffectDecisionReason.None);
+    }
+
     public static ScholarSpreadWorkflowState Cancel(
         ScholarSpreadWorkflowState state) =>
         state.Plan.IsValid
@@ -917,6 +983,16 @@ public static class ScholarSpreadRules
                 PendingOwnedAction = default,
             }
             : ScholarSpreadWorkflowState.Initial;
+
+    public static bool IsWithinOwnedConfirmationWindow(
+        long acceptedAtMilliseconds,
+        long nowMilliseconds,
+        long maximumAgeMilliseconds) =>
+        acceptedAtMilliseconds >= 0 &&
+        nowMilliseconds >= acceptedAtMilliseconds &&
+        maximumAgeMilliseconds >= 0 &&
+        (ulong)(nowMilliseconds - acceptedAtMilliseconds) <=
+        (ulong)maximumAgeMilliseconds;
 
     public static bool IsRelevantAction(uint actionId) =>
         actionId is AdloquiumActionId or BiolysisActionId or

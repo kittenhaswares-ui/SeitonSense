@@ -170,7 +170,7 @@ var tests = new (string Name, Action Run)[]
     ("Scholar spread prioritizes maximum DoT coverage", ScholarSpreadSelfTests.DotSequenceWinsAndRanksMaximumExactCoverage),
     ("Scholar spread reserves Deployment for the next DoT", ScholarSpreadSelfTests.ShieldReservationProtectsNextDotOpportunity),
     ("Scholar shield spread ranks crystal then exact HP", ScholarSpreadSelfTests.ShieldRanksCrystalThenExactHp),
-    ("Scholar spread advances only from owned source sequences", ScholarSpreadSelfTests.OwnedSourceSequenceAloneAdvancesWorkflow),
+    ("Scholar spread advances from an owned request plus exact confirmation", ScholarSpreadSelfTests.OwnedRequestOrExactStatusPairAdvancesWorkflow),
     ("Scholar manual actions cannot hijack the workflow", ScholarSpreadSelfTests.ManualActionsCannotHijackOrDoubleDeploy),
     ("Scholar spread never falls back after target drift", ScholarSpreadSelfTests.ExactTargetRevalidationNeverFallsBack),
     ("Smart Paean eligibility requires exact pressure", SmartWardensPaeanTargetSelfTests.EligibilityRequiresKnownPressureAndNativeReachability),

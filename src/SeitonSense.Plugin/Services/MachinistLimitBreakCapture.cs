@@ -1086,9 +1086,18 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             return null;
         }
 
-        var animationTargetId = header->AnimationTargetId;
-        if (animationTargetId > uint.MaxValue) return null;
-        var primaryTargetEntityId = (uint)animationTargetId;
+        uint primaryTargetEntityId;
+        if (actionId == ScholarSpreadRules.DeploymentTacticsActionId)
+        {
+            var animationTargetId = header->AnimationTargetId;
+            if (animationTargetId > uint.MaxValue) return null;
+            primaryTargetEntityId = (uint)animationTargetId;
+        }
+        else
+        {
+            primaryTargetEntityId = targetEntityIds[0].ObjectId;
+        }
+
         if (!IsNetworkEntityId(primaryTargetEntityId)) return null;
 
         if (featureGeneration != CurrentScholarSpreadGeneration ||
