@@ -2,9 +2,11 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.33.0.0 adds default-off held GNB
-Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken
-helpers; `/seitonbringer` has been removed. WHM, BRD, NIN, PLD, RDM, and SAM
+assistance, and target highlights. Version 0.33.0.1 fixes held Monk combo native
+route advancement after Dragon Kick plus DRK Shadowbringer metadata and Wolves'
+Den duel-target routing. It retains v0.33's default-off held GNB Continuation,
+DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken helpers;
+`/seitonbringer` has been removed. WHM, BRD, NIN, PLD, RDM, and SAM
 protection-end follow-ups retain exact evidence through short native busy
 windows. Accepted Auto-Guard can show a card/sound and protects an accidental
 second Guard press for two seconds. `/panicshu` now reaches its one location call
@@ -1536,7 +1538,7 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 37 is current in v0.33.0.0. It keeps GNB Continuation, DRK
+Configuration schema 37 is current in v0.33.0.1. It keeps GNB Continuation, DRK
 Shadowbringer, Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, and RDM
 Resolution off for every upgrade, fresh install, and Reset Defaults. Schema 36
 adds the local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
@@ -1837,7 +1839,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.33.0.0, the exact 440-test Core registry and source checks pin
+For current v0.33.0.1, the exact 441-test Core registry and source checks pin
 configuration schema 37, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, and RDM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired

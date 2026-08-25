@@ -28,6 +28,26 @@ internal static class DarkKnightShadowbringerSelfTests
         Equal(1_000,
             DarkKnightShadowbringerRules.ExpectedAdjustedRecastMilliseconds,
             "adjusted recast");
+        True(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+                DarkKnightShadowbringerRules.ShadowbringerActionId,
+                isPlayerAction: true),
+            "hotbar Shadowbringer is a player action");
+        False(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+                DarkKnightShadowbringerRules.ShadowbringerActionId,
+                isPlayerAction: false),
+            "hotbar Shadowbringer rejects the adjusted-row flag");
+        True(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+                DarkKnightShadowbringerRules.DarkArtsShadowbringerActionId,
+                isPlayerAction: false),
+            "Dark Arts Shadowbringer is an internal adjusted row");
+        False(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+                DarkKnightShadowbringerRules.DarkArtsShadowbringerActionId,
+                isPlayerAction: true),
+            "Dark Arts adjusted row is not a standalone player action");
+        False(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+                1,
+                isPlayerAction: true),
+            "unknown action rows fail closed");
 
         False(Safe(85_000, 100_000, true, 1),
             "exactly 85 percent is not strictly above threshold");

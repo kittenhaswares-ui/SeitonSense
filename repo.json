@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, Scholar Smart Spread, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.33.0.0",
-    "Changelog": "Added default-off held GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC/Zantetsuken helpers; removed /seitonbringer. Hardened exact protection-end follow-ups for WHM, BRD, NIN, PLD, RDM, and SAM. Accepted Auto-Guard can show a card/sound and protects Guard re-presses for two seconds. /panicshu now requires exact native Shukuchi recast/resource readiness before its one location call. Schema 37; all 440 Core tests pass; current-patch in-game validation remains separate.",
+    "AssemblyVersion": "0.33.0.1",
+    "Changelog": "Fixed held Monk combo stopping after Dragon Kick by using the exact native PvP combo route for every normal stage and Phantom Rush. Fixed DRK Shadowbringer metadata and Wolves' Den duel-target routing; Dark Arts is pressure-independent while the HP-cost fallback still requires known pressure. Schema 37; all 441 Core tests pass; current-patch in-game validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,6 +33,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787651918"
+    "LastUpdate": "1787658555"
   }
 ]

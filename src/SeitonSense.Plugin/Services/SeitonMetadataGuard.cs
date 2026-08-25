@@ -1303,7 +1303,9 @@ internal static class PvPMetadataGuard
         string.Equals(action.Name.ToString(), "Shadowbringer", StringComparison.Ordinal) &&
         action.Icon == DarkKnightShadowbringerRules.ShadowbringerIconId &&
         action.IsPvP &&
-        action.IsPlayerAction &&
+        DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
+            action.RowId,
+            action.IsPlayerAction) &&
         action.ClassJob.IsValid &&
         action.ClassJob.RowId == DarkKnightShadowbringerRules.DarkKnightJobId &&
         action.ClassJobCategory.IsValid &&

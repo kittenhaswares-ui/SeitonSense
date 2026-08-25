@@ -228,6 +228,21 @@ public static class MonkHeldComboRules
         actionId is FireReplyActionId or WindReplyActionId or
             RisingPhoenixActionId or ThunderclapActionId;
 
+    /// <summary>
+    /// PvP combo-route actions after Dragon Kick are not standalone hotbar
+    /// actions. They must be submitted through ActionManager's combo mode with
+    /// the exact ActionComboRoute row; a normal UseAction call can execute the
+    /// first action but cannot advance the single-button route.
+    /// </summary>
+    public static uint GetNativeComboRouteId(
+        uint actionId,
+        MonkHeldComboActionPurpose purpose) =>
+        IsExactComboAction(actionId) &&
+        purpose is MonkHeldComboActionPurpose.NormalCombo or
+            MonkHeldComboActionPurpose.PhantomRushFinish
+            ? PhantomRushComboRouteId
+            : 0;
+
     public static uint GetExpectedPreviousComboAction(uint actionId) => actionId switch
     {
         DragonKickActionId => 0,

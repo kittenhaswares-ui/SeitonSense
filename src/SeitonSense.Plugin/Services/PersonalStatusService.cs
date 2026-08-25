@@ -739,9 +739,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.GunbreakerContinuationVerified;
         var darkKnightShadowbringerHeldInputEnabled =
             darkKnightShadowbringerConfigurationEnabled &&
-            metadata.DarkKnightShadowbringerVerified &&
-            (context != SupportedPvPContext.WolvesDen ||
-             metadata.WolvesDenStrikingDummyVerified);
+            metadata.DarkKnightShadowbringerVerified;
         var monkHeldComboInputEnabled = monkHeldComboConfigurationEnabled &&
                                         metadata.MonkHeldComboVerified;
         var ninjaGuardShukuchiHeldInputEnabled =

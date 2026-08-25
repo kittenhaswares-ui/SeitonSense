@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.33.0.1
+
+- Fixed the held **Monk combo** stopping after Dragon Kick. Every normal combo
+  stage and Phantom Rush now uses FFXIV's exact PvP combo mode and route `55`;
+  standalone helpers such as Fire's Reply and Rising Phoenix keep their normal
+  invocation mode. One frozen held-key episode can therefore advance all six
+  normal stages across their real GCD waits.
+- Fixed held **Dark Knight Shadowbringer** failing metadata validation. The
+  hotbar carrier `29091` is correctly required to be a player action while its
+  internal Dark Arts replacement `29738` is correctly required not to be one.
+- Removed the unrelated striking-dummy metadata requirement from the DRK
+  Wolves' Den held-input gate. A native duel opponent remains identity-frozen
+  and revalidated independently; the strict NameId-`541` dummy path still
+  requires its own verified metadata. Dark Arts remains pressure-independent,
+  while the HP-cost fallback still fails closed without known pressure.
+- Bumped the plugin to `0.33.0.1`; configuration schema remains `37`. All `441`
+  Core tests and the full zero-warning release build pass in this source
+  snapshot; current-patch in-game behavior remains a separate live validation
+  boundary.
+
 ## 0.33.0.0
 
 - Replaced the retired `/seitonbringer` macro pair with a default-off **held

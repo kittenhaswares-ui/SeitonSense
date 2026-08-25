@@ -156,6 +156,79 @@ internal static class MonkHeldComboSelfTests
             "true ranged fallback");
     }
 
+    public static void ContinuousHoldAdvancesEveryNormalComboStage()
+    {
+        var route = new uint[]
+        {
+            MonkHeldComboRules.DragonKickActionId,
+            MonkHeldComboRules.TwinSnakesActionId,
+            MonkHeldComboRules.DemolishActionId,
+            MonkHeldComboRules.LeapingOpoActionId,
+            MonkHeldComboRules.RisingRaptorActionId,
+            MonkHeldComboRules.PouncingCoeurlActionId,
+        };
+        var state = MonkHeldComboState.Initial;
+        var now = 10_000L;
+
+        for (var index = 0; index < route.Length; index++)
+        {
+            var actionId = route[index];
+            var dispatch = MonkHeldComboRules.Observe(
+                state,
+                Observation(actionId, now: now++));
+            Dispatch(
+                dispatch,
+                actionId,
+                MonkHeldComboActionPurpose.NormalCombo,
+                $"continuous stage {index + 1}");
+            Equal(
+                MonkHeldComboRules.PhantomRushComboRouteId,
+                MonkHeldComboRules.GetNativeComboRouteId(
+                    dispatch.ActionId,
+                    dispatch.Purpose),
+                $"continuous stage {index + 1} native combo route");
+
+            state = Accept(dispatch, now++);
+            Equal(
+                MonkHeldComboPhase.AwaitCarrierTransition,
+                state.Phase,
+                $"continuous stage {index + 1} awaits carrier");
+
+            if (index + 1 >= route.Length) continue;
+            var gcdWait = MonkHeldComboRules.Observe(
+                state,
+                Observation(
+                    route[index + 1],
+                    comboReady: false,
+                    now: now++));
+            Equal(
+                MonkHeldComboDecisionKind.Armed,
+                gcdWait.Kind,
+                $"continuous stage {index + 1} survives GCD wait");
+            Equal(
+                MonkHeldComboPhase.Active,
+                gcdWait.NextState.Phase,
+                $"continuous stage {index + 1} keeps the route active");
+            True(
+                gcdWait.NextState.Intent is { IsValid: true },
+                $"continuous stage {index + 1} keeps held consent");
+            state = gcdWait.NextState;
+        }
+
+        Equal(
+            0u,
+            MonkHeldComboRules.GetNativeComboRouteId(
+                MonkHeldComboRules.FireReplyActionId,
+                MonkHeldComboActionPurpose.FireReplyFallback),
+            "standalone auxiliary keeps normal invocation mode");
+        Equal(
+            MonkHeldComboRules.PhantomRushComboRouteId,
+            MonkHeldComboRules.GetNativeComboRouteId(
+                MonkHeldComboRules.PhantomRushActionId,
+                MonkHeldComboActionPurpose.PhantomRushFinish),
+            "Phantom Rush finishes through the same combo route");
+    }
+
     public static void PhantomWorkflowUsesProofRangeAndReservedPhoenix()
     {
         var outOfRange = Candidate(
