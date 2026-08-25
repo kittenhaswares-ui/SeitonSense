@@ -22,8 +22,29 @@ internal static class MiracleInterceptConfirmationSelfTests
             accepted: true,
             now: 3_000,
             expectedSourceSequence: 0);
-        False(registered.PendingRegistered, "accepted call without exact source sequence cannot claim automation");
-        True(registered.NextState.Pending is null, "unattributable accepted call remains unconfirmable");
+        True(registered.PendingRegistered, "accepted call remains visible while its source sequence is deferred");
+        True(registered.NextState.Pending is { HasBoundSourceSequence: false },
+            "accepted call records that it is awaiting the exact ActionEffect sequence");
+
+        var zeroSequence = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            registered.NextState,
+            Effect(now: 3_050, sourceSequence: 0));
+        False(zeroSequence.Confirmed, "a zero-sequence server packet cannot bind deferred ownership");
+        True(zeroSequence.NextState.Pending is not null,
+            "a non-binding packet cannot consume the accepted pending episode");
+
+        var wrongTarget = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            zeroSequence.NextState,
+            Effect(now: 3_051, sourceSequence: 21) with { TargetEntityId = 0x201 });
+        False(wrongTarget.Confirmed, "a different actor cannot bind deferred ownership");
+        True(wrongTarget.NextState.Pending is not null,
+            "identity mismatch preserves the exact accepted pending episode");
+
+        var bound = MiracleInterceptConfirmationRules.ObserveActionEffect(
+            wrongTarget.NextState,
+            Effect(now: 3_052, sourceSequence: 21));
+        True(bound.Confirmed, "the first later exact non-zero ActionEffect binds and confirms");
+        Equal(1L, bound.NextState.TotalConfirmed, "deferred binding confirms exactly once");
     }
 
     public static void ExactStatusAddConfirmsAndLabelsThreat()

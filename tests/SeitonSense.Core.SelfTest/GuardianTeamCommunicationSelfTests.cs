@@ -460,12 +460,34 @@ internal static class GuardianTeamCommunicationSelfTests
         var afterDeferredChat = Apply(
             quickChat,
             GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation);
-        Equal(GuardianTeamCommunicationPhase.ReadyToSetBind2, afterDeferredChat.Phase,
-            "QuickChat is spent even on an unexpected deferral");
+        Equal(GuardianTeamCommunicationPhase.ReadyToSendQuickChat, afterDeferredChat.Phase,
+            "pre-invocation QuickChat unavailability preserves a bounded retry");
+        Equal(quickChat.Command!.Value, afterDeferredChat.PendingCommand!.Value,
+            "QuickChat retry freezes the exact original command");
+        Equal(quickChat.State.PendingCommandExpiresAtMilliseconds,
+            afterDeferredChat.PendingCommandExpiresAtMilliseconds,
+            "QuickChat retry preserves the original deadline");
 
-        var firstBind2 = GuardianTeamCommunicationRules.Observe(
+        var retriedChat = GuardianTeamCommunicationRules.Observe(
             afterDeferredChat,
             observation with { NowMilliseconds = 1_001 });
+        Command(GuardianTeamCommunicationCommandKind.SendQuickChat, retriedChat,
+            "deferred QuickChat is offered again");
+        Equal(quickChat.Command.Value, retriedChat.Command!.Value,
+            "QuickChat retry cannot change target or party slot");
+        Equal(quickChat.State.PendingCommandExpiresAtMilliseconds,
+            retriedChat.State.PendingCommandExpiresAtMilliseconds,
+            "re-offering QuickChat cannot extend the deadline");
+
+        var afterInvokedChat = Apply(
+            retriedChat,
+            GuardianTeamCommunicationCommandOutcome.Invoked);
+        Equal(GuardianTeamCommunicationPhase.ReadyToSetBind2, afterInvokedChat.Phase,
+            "one native QuickChat invocation advances without another retry");
+
+        var firstBind2 = GuardianTeamCommunicationRules.Observe(
+            afterInvokedChat,
+            observation with { NowMilliseconds = 1_002 });
         Command(GuardianTeamCommunicationCommandKind.SetBind2, firstBind2, "first marker reservation");
         var deferred = Apply(firstBind2, GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation);
         Equal(GuardianTeamCommunicationPhase.ReadyToSetBind2, deferred.Phase,
@@ -473,15 +495,37 @@ internal static class GuardianTeamCommunicationSelfTests
 
         var secondBind2 = GuardianTeamCommunicationRules.Observe(
             deferred,
-            observation with { NowMilliseconds = 1_101 });
+            observation with { NowMilliseconds = 1_102 });
         Command(GuardianTeamCommunicationCommandKind.SetBind2, secondBind2, "deferred command can be offered again");
         var terminal = Apply(secondBind2, GuardianTeamCommunicationCommandOutcome.TerminalFailure);
         Equal(GuardianTeamCommunicationPhase.Idle, terminal.Phase, "terminal marker result never retries");
 
         var duplicate = GuardianTeamCommunicationRules.Observe(
             terminal,
-            observation with { NowMilliseconds = 1_102 });
+            observation with { NowMilliseconds = 1_103 });
         False(duplicate.ShouldIssueCommand, "spent episode cannot start again");
+
+        var timeoutEpisode = Episode(token: 2);
+        var timeoutObservation = Observation(
+            timeoutEpisode,
+            bind1GameObjectId: Other.GameObjectId);
+        var timeoutChat = GuardianTeamCommunicationRules.Observe(
+            GuardianTeamCommunicationState.Initial,
+            timeoutObservation);
+        var waitingForShell = Apply(
+            timeoutChat,
+            GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation);
+        var expired = GuardianTeamCommunicationRules.Observe(
+            waitingForShell,
+            timeoutObservation with
+            {
+                NowMilliseconds = waitingForShell.PendingCommandExpiresAtMilliseconds,
+            });
+        False(expired.ShouldIssueCommand, "expired QuickChat deferral never invokes late");
+        Equal(GuardianTeamCommunicationPhase.Idle, expired.State.Phase,
+            "QuickChat deferral is bounded by its original deadline");
+        Equal(GuardianTeamCommunicationDecisionReason.CommandResultTimeout, expired.Reason,
+            "bounded QuickChat timeout is diagnostic");
     }
 
     internal static void NewEpisodeWhileBusyIsConsumedWithoutReplacement()

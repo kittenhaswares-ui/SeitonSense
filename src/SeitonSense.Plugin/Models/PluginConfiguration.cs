@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Configuration;
 using Dalamud.Plugin;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Models;
 
@@ -35,7 +36,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 35;
+    public int Version { get; set; } = 37;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -64,8 +65,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float EmergencyTeleportEnemySafetyRadiusYalms { get; set; } = 10f;
     public int EmergencyTeleportMaximumNearbyEnemies { get; set; }
     public bool EnableViperSerpentTailOnHeldKey { get; set; }
+    public bool EnableGunbreakerContinuationOnHeldKey { get; set; }
+    public bool EnableMonkHeldComboOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
+    public bool EnableDarkKnightShadowbringerOnHeldKey { get; set; }
+    public int DarkKnightShadowbringerMinimumHpPercent { get; set; } = 85;
+    public int DarkKnightShadowbringerPressureLimitExclusive { get; set; } = 2;
     public string SeitonKeyLabel { get; set; } = "SHIFT";
     public float NameplateIconScale { get; set; } = 0.92f;
     public float NameplateIconSpacing { get; set; } = 2f;
@@ -94,6 +100,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
     public bool MchLimitBreakSoundEnabled { get; set; } = true;
     public int MchLimitBreakSoundId { get; set; } = 6;
+    public bool ShowAutoGuardActivationNotification { get; set; } = true;
+    public bool PlayAutoGuardActivationSound { get; set; } = true;
+    public int AutoGuardActivationSoundId { get; set; } = 3;
     public bool PlayLocalMpWarningSounds { get; set; } = true;
     public int LocalMpWarning4000SoundId { get; set; } = 4;
     public int LocalMpWarning2000SoundId { get; set; } = 6;
@@ -135,12 +144,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ReactiveCcDancerLimitBreak { get; set; } = true;
     public bool ReactiveCcAfterEnemyPurify { get; set; } = true;
     public bool ReactiveCcAfterEnemyGuard { get; set; } = true;
+    public bool ReactiveCcPaladinIntervene { get; set; }
+    public float ReactiveCcPaladinInterveneMaximumRangeYalms { get; set; } = 20f;
+    public bool ReactiveCcRedMageResolution { get; set; }
+    public bool ReactiveCcSamuraiSotenMineuchi { get; set; }
+    public float ReactiveCcSamuraiSotenMaximumRangeYalms { get; set; } = 20f;
+    public bool EnableSamuraiZantetsukenOnHeldKey { get; set; }
     public bool EnableMonkEarthReplyHelper { get; set; }
     public bool MonkEarthReplyOnLowHp { get; set; } = true;
     public bool MonkEarthReplyBeforeExpiry { get; set; } = true;
     public int MonkEarthReplyHpPercent { get; set; } = 30;
     public float MonkEarthReplyExpirySeconds { get; set; } = 1.25f;
-    public bool EnableDarkKnightShadowbringerMacro { get; set; }
     public bool EnableAutoLowMpFocusTarget { get; set; }
     public bool EnableFocusGlow { get; set; }
     public bool FocusHideWithGameUi { get; set; } = true;
@@ -239,7 +253,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 35)
+        if (Version >= 37)
         {
             if (repaired) Save();
             return;
@@ -460,11 +474,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
         if (Version < 24)
         {
-            // Both features can mutate local game state: one may set an empty native
-            // Focus Target and one may initiate a DRK action. Every upgrading user
-            // must explicitly opt in after reviewing their exact boundaries.
+            // This feature may set an empty native Focus Target. Every upgrading
+            // user must explicitly opt in after reviewing its exact boundary.
             EnableAutoLowMpFocusTarget = false;
-            EnableDarkKnightShadowbringerMacro = false;
         }
 
         if (Version < 25)
@@ -597,7 +609,35 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableScholarSpreadOnHeldKey = false;
         }
 
-        Version = 35;
+        if (Version < 36)
+        {
+            // Auto-Guard is already an explicit action opt-in. Its short local
+            // confirmation card and sound make the protected two-second input
+            // window visible without enabling any additional action request.
+            ShowAutoGuardActivationNotification = true;
+            PlayAutoGuardActivationSound = true;
+            AutoGuardActivationSoundId = 3;
+            EnableGunbreakerContinuationOnHeldKey = false;
+        }
+
+        if (Version < 37)
+        {
+            // Every added hostile action path remains an explicit opt-in for an
+            // upgrading installation. Conservative thresholds are ready once
+            // the corresponding job helper is deliberately enabled.
+            EnableDarkKnightShadowbringerOnHeldKey = false;
+            DarkKnightShadowbringerMinimumHpPercent = 85;
+            DarkKnightShadowbringerPressureLimitExclusive = 2;
+            ReactiveCcPaladinIntervene = false;
+            ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;
+            ReactiveCcRedMageResolution = false;
+            ReactiveCcSamuraiSotenMineuchi = false;
+            ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;
+            EnableSamuraiZantetsukenOnHeldKey = false;
+            EnableMonkHeldComboOnHeldKey = false;
+        }
+
+        Version = 37;
         ClampSettings();
         Save();
     }
@@ -606,7 +646,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 35;
+        Version = 37;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -632,8 +672,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EmergencyTeleportEnemySafetyRadiusYalms = 10f;
         EmergencyTeleportMaximumNearbyEnemies = 0;
         EnableViperSerpentTailOnHeldKey = false;
+        EnableGunbreakerContinuationOnHeldKey = false;
+        EnableMonkHeldComboOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
         EnableDarkKnightPlungeOnHeldKey = false;
+        EnableDarkKnightShadowbringerOnHeldKey = false;
+        DarkKnightShadowbringerMinimumHpPercent = 85;
+        DarkKnightShadowbringerPressureLimitExclusive = 2;
         SeitonKeyLabel = "SHIFT";
         NameplateIconScale = 0.92f;
         NameplateIconSpacing = 2f;
@@ -662,6 +707,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         MarksmanSpiteWarningScale = 1.45f;
         MchLimitBreakSoundEnabled = true;
         MchLimitBreakSoundId = 6;
+        ShowAutoGuardActivationNotification = true;
+        PlayAutoGuardActivationSound = true;
+        AutoGuardActivationSoundId = 3;
         PlayLocalMpWarningSounds = true;
         LocalMpWarning4000SoundId = 4;
         LocalMpWarning2000SoundId = 6;
@@ -702,12 +750,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ReactiveCcDancerLimitBreak = true;
         ReactiveCcAfterEnemyPurify = true;
         ReactiveCcAfterEnemyGuard = true;
+        ReactiveCcPaladinIntervene = false;
+        ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;
+        ReactiveCcRedMageResolution = false;
+        ReactiveCcSamuraiSotenMineuchi = false;
+        ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;
+        EnableSamuraiZantetsukenOnHeldKey = false;
         EnableMonkEarthReplyHelper = false;
         MonkEarthReplyOnLowHp = true;
         MonkEarthReplyBeforeExpiry = true;
         MonkEarthReplyHpPercent = 30;
         MonkEarthReplyExpirySeconds = 1.25f;
-        EnableDarkKnightShadowbringerMacro = false;
         EnableAutoLowMpFocusTarget = false;
         ApplyFocusGlowDefaults(false);
         ApplyCurrentTargetHighlightDefaults(false);
@@ -873,6 +926,18 @@ public sealed class PluginConfiguration : IPluginConfiguration
             20f,
             10f,
             value => EmergencyTeleportEnemySafetyRadiusYalms = value);
+        changed |= Clamp(
+            ReactiveCcPaladinInterveneMaximumRangeYalms,
+            1f,
+            20f,
+            20f,
+            value => ReactiveCcPaladinInterveneMaximumRangeYalms = value);
+        changed |= Clamp(
+            ReactiveCcSamuraiSotenMaximumRangeYalms,
+            SamuraiReactiveCounterCcRules.MineuchiMaximumRangeYalms,
+            SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms,
+            SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms,
+            value => ReactiveCcSamuraiSotenMaximumRangeYalms = value);
         changed |= Clamp(PressureNumberPixelSize, 36f, 128f, 80f, value => PressureNumberPixelSize = value);
         changed |= Clamp(PressureIconSize, 16f, 72f, 38f, value => PressureIconSize = value);
         changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
@@ -909,6 +974,30 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (emergencyTeleportHpPercent != EmergencyTeleportHpPercent)
         {
             EmergencyTeleportHpPercent = emergencyTeleportHpPercent;
+            changed = true;
+        }
+
+        var darkKnightShadowbringerMinimumHpPercent = Math.Clamp(
+            DarkKnightShadowbringerMinimumHpPercent,
+            1,
+            100);
+        if (darkKnightShadowbringerMinimumHpPercent !=
+            DarkKnightShadowbringerMinimumHpPercent)
+        {
+            DarkKnightShadowbringerMinimumHpPercent =
+                darkKnightShadowbringerMinimumHpPercent;
+            changed = true;
+        }
+
+        var darkKnightShadowbringerPressureLimitExclusive = Math.Clamp(
+            DarkKnightShadowbringerPressureLimitExclusive,
+            1,
+            6);
+        if (darkKnightShadowbringerPressureLimitExclusive !=
+            DarkKnightShadowbringerPressureLimitExclusive)
+        {
+            DarkKnightShadowbringerPressureLimitExclusive =
+                darkKnightShadowbringerPressureLimitExclusive;
             changed = true;
         }
 
@@ -964,6 +1053,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (soundId != MchLimitBreakSoundId)
         {
             MchLimitBreakSoundId = soundId;
+            changed = true;
+        }
+
+        var autoGuardSoundId = Math.Clamp(AutoGuardActivationSoundId, 1, 16);
+        if (autoGuardSoundId != AutoGuardActivationSoundId)
+        {
+            AutoGuardActivationSoundId = autoGuardSoundId;
             changed = true;
         }
 

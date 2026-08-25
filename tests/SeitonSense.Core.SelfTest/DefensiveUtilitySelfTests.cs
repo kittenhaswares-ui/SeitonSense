@@ -288,7 +288,7 @@ internal static class DefensiveUtilitySelfTests
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
         var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
-        var explicitRelease = AutoGuardProtectionRules.Observe(
+        var protectedReuse = AutoGuardProtectionRules.Observe(
             armed,
             ProtectionObservation(
                 local,
@@ -296,8 +296,24 @@ internal static class DefensiveUtilitySelfTests
                 actionCanCancelGuard: false,
                 now: 1_100,
                 explicitGuardReuse: true));
-        False(explicitRelease.ShouldBlockAction, "Guard reuse is never suppressed");
-        False(explicitRelease.NextState.IsArmed, "Guard reuse atomically releases ownership");
+        True(protectedReuse.ShouldBlockAction, "Guard reuse is suppressed in the two-second safety window");
+        True(protectedReuse.NextState.IsArmed, "protected Guard reuse retains ownership");
+        Equal(
+            AutoGuardProtectionDecisionReason.GuardReuseProtected,
+            protectedReuse.Reason,
+            "protected reuse reason");
+        Equal(1_900L, protectedReuse.RemainingMilliseconds, "reuse lock reports its exact remaining time");
+
+        var explicitRelease = AutoGuardProtectionRules.Observe(
+            protectedReuse.NextState,
+            ProtectionObservation(
+                local,
+                exactGuardActive: true,
+                actionCanCancelGuard: false,
+                now: 3_000,
+                explicitGuardReuse: true));
+        False(explicitRelease.ShouldBlockAction, "Guard reuse releases at the exact two-second boundary");
+        False(explicitRelease.NextState.IsArmed, "allowed Guard reuse atomically releases ownership");
         Equal(
             AutoGuardProtectionDecisionReason.ExplicitGuardReuse,
             explicitRelease.Reason,
@@ -601,6 +617,61 @@ internal static class DefensiveUtilitySelfTests
             nowMilliseconds: 1_100,
             hardReset: true);
         True(reset is null, "hard reset clears the popup immediately");
+    }
+
+    public static void AutoGuardTriggerPopupIsAcceptedOnlyAndDeduplicated()
+    {
+        var rejected = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guard,
+            useActionAttempted: true,
+            useActionAccepted: false,
+            acceptedAttemptToken: 1,
+            nowMilliseconds: 1_000);
+        True(rejected is null, "a rejected Guard request never creates an Auto-Guard popup");
+
+        var guardian = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guardian,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            acceptedAttemptToken: 1,
+            nowMilliseconds: 1_000);
+        True(guardian is null, "Guardian acceptance cannot masquerade as Auto-Guard");
+
+        var accepted = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            previous: null,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guard,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            acceptedAttemptToken: 7,
+            nowMilliseconds: 1_000);
+        True(accepted is not null, "accepted Auto-Guard creates a popup");
+        Equal(7L, accepted!.Value.Token, "popup retains exact accepted-attempt token");
+        Equal(3_000L, accepted.Value.EndsAtMilliseconds, "Auto-Guard popup matches the two-second reuse lock");
+
+        var duplicate = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            accepted,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.Guard,
+            useActionAttempted: true,
+            useActionAccepted: true,
+            acceptedAttemptToken: 7,
+            nowMilliseconds: 1_100);
+        Equal(accepted.Value, duplicate!.Value, "same accepted attempt cannot restart the popup");
+
+        var expired = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            duplicate,
+            runtimeEnabled: true,
+            DefensiveUtilityActionKind.None,
+            useActionAttempted: false,
+            useActionAccepted: false,
+            acceptedAttemptToken: 0,
+            nowMilliseconds: 3_000);
+        True(expired is null, "popup expires exactly at its bounded end");
     }
 
     private static PaladinGuardianCandidate Candidate(

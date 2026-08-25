@@ -80,6 +80,8 @@ public static class PanicShukuchiRules
     public const uint ActionId = 29_513;
     public const float NativeMaximumRangeYalms = 20f;
     public const float SafeForwardDistanceYalms = 19.5f;
+    public const int ExpectedRuntimeRecastGroupIndex = 4;
+    public const int ExpectedAdjustedRecastMilliseconds = 20_000;
 
     // Collision implementations can introduce tiny horizontal rounding while
     // returning the surface Y. This tolerance cannot turn a materially shorter

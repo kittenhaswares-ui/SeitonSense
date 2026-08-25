@@ -56,6 +56,22 @@ public readonly record struct GuardianTriggerPopup(
         nowMilliseconds < EndsAtMilliseconds;
 }
 
+public readonly record struct AutoGuardTriggerPopup(
+    long Token,
+    long StartedAtMilliseconds,
+    long EndsAtMilliseconds)
+{
+    public bool IsValid =>
+        Token > 0 &&
+        StartedAtMilliseconds >= 0 &&
+        EndsAtMilliseconds > StartedAtMilliseconds;
+
+    public bool IsVisible(long nowMilliseconds) =>
+        IsValid &&
+        nowMilliseconds >= StartedAtMilliseconds &&
+        nowMilliseconds < EndsAtMilliseconds;
+}
+
 public readonly record struct GuardPropagationState(
     long LastObservedAttemptAtMilliseconds,
     long ExpiresAtMilliseconds)
@@ -97,6 +113,8 @@ public static class DefensiveUtilityRules
     public const int GuardianProactiveAllyHpPercent = 35;
     public const long GuardianMaximumPressureAgeMilliseconds = 250;
     public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
+    public const long AutoGuardTriggerPopupDurationMilliseconds =
+        AutoGuardProtectionRules.GuardReuseProtectionMilliseconds;
     public const long PostPurifyGuardWindowMilliseconds = 2_000;
     // Covers the normal client/server status-propagation and action-queue window
     // without turning one Guard request into an unbounded helper lockout.
@@ -231,6 +249,39 @@ public static class DefensiveUtilityRules
             selectedPartySlot,
             nowMilliseconds,
             SaturatingAdd(nowMilliseconds, GuardianTriggerPopupDurationMilliseconds));
+        return next.IsValid ? next : current;
+    }
+
+    public static AutoGuardTriggerPopup? ObserveAutoGuardTriggerPopup(
+        AutoGuardTriggerPopup? previous,
+        bool runtimeEnabled,
+        DefensiveUtilityActionKind action,
+        bool useActionAttempted,
+        bool useActionAccepted,
+        long acceptedAttemptToken,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        if (hardReset || !runtimeEnabled || nowMilliseconds < 0) return null;
+
+        var current = previous is { } visible && visible.IsVisible(nowMilliseconds)
+            ? visible
+            : (AutoGuardTriggerPopup?)null;
+        if (action != DefensiveUtilityActionKind.Guard ||
+            !useActionAttempted ||
+            !useActionAccepted ||
+            acceptedAttemptToken <= 0)
+        {
+            return current;
+        }
+
+        if (current is { } existing && existing.Token == acceptedAttemptToken)
+            return existing;
+
+        var next = new AutoGuardTriggerPopup(
+            acceptedAttemptToken,
+            nowMilliseconds,
+            SaturatingAdd(nowMilliseconds, AutoGuardTriggerPopupDurationMilliseconds));
         return next.IsValid ? next : current;
     }
 

@@ -4,6 +4,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
+using System.Numerics;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -78,6 +79,9 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal uint ProtectionEndRankCurrentMp { get; init; }
     internal uint ProtectionEndRankMaximumMp { get; init; }
     internal int ConfirmationPendingCount { get; init; }
+    internal bool ConfirmationAwaitingSourceSequence { get; init; }
+    internal uint ConfirmationPendingActionId { get; init; }
+    internal bool WolvesDenCurrentTargetMode { get; init; }
 
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
@@ -106,14 +110,18 @@ internal sealed record MiracleInterceptProbeSnapshot(
 }
 
 /// <summary>
-/// Experimental CC-only WHM/BRD/NIN held helper. It freezes one exact threat,
-/// target, action, and physical key. Only proven client-false calls may retry
-/// inside the bounded event lease; it never changes the selected target.
+/// Explicit WHM/BRD/NIN/PLD/RDM held reactive-CC helper. It freezes one exact
+/// threat, target, action, range policy, and physical key. Only proven
+/// client-false calls may retry inside the bounded event lease; it never
+/// changes the selected target.
 /// </summary>
 internal sealed class MiracleInterceptProbe
 {
     private const int MaximumRememberedSignals = 128;
     private const long MaximumTeamPressureAgeMilliseconds = 250;
+    // Core state requires one stable positive identity key. In Wolves' Den it
+    // denotes only the current hard target; it is never resolved as an e-slot.
+    private const int WolvesDenCurrentTargetStateKey = 1;
     private static readonly uint[] RequiredMiracleProtectionStatusIds =
         CcImmunityBrakeActionCatalog
             .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.Miracle)
@@ -178,6 +186,9 @@ internal sealed class MiracleInterceptProbe
     private string lastOpportunity = "None observed";
     private string cleanseFollowupLastEvent = "None observed";
     private uint counterActionId;
+    private float counterActionMaximumRangeYalms = float.PositiveInfinity;
+    private bool wolvesDenContextThisFrame;
+    private IPlayerCharacter? wolvesDenCurrentHardTargetThisFrame;
     private uint cleanseFollowupRemovedStatusId;
     private int cleanseFollowupTeamPressure;
     private ulong guardFollowupTargetGameObjectId;
@@ -232,12 +243,24 @@ internal sealed class MiracleInterceptProbe
         bool purifyMetadataVerified,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
-        bool hardReset = false)
+        bool hardReset = false,
+        bool enablePaladinIntervene = false,
+        float paladinInterveneMaximumRangeYalms =
+            ReactiveCounterCcProfileRules.InterveneMaximumRangeYalms,
+        bool enableRedMageResolution = false,
+        bool redMageResolutionMetadataVerified = false,
+        bool isWolvesDenTesting = false,
+        IPlayerCharacter? wolvesDenCurrentHardTarget = null)
     {
         inputClaimedThisFrame = false;
         castCancellationRequestThisFrame = null;
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
         if (hardReset) ResetRuntime();
+
+        wolvesDenContextThisFrame = !isCrystallineConflict && isWolvesDenTesting;
+        wolvesDenCurrentHardTargetThisFrame = wolvesDenContextThisFrame
+            ? wolvesDenCurrentHardTarget
+            : null;
 
         var localIdentityValid = localPlayer is not null && HasValidNativeIdentity(localPlayer);
         var localAlive = localIdentityValid && IsLivePlayer(localPlayer);
@@ -247,11 +270,19 @@ internal sealed class MiracleInterceptProbe
         counterActionId = ResolveCounterActionId(
             localJobId,
             miracleMetadataVerified,
-            silentNocturneMetadataVerified);
+            silentNocturneMetadataVerified,
+            enablePaladinIntervene,
+            enableRedMageResolution,
+            redMageResolutionMetadataVerified);
+        counterActionMaximumRangeYalms = ResolveCounterMaximumRangeYalms(
+            counterActionId,
+            paladinInterveneMaximumRangeYalms);
         var protectionMetadataReady = RequiredProtectionStatusIds(counterActionId).All(
             verifiedProtectionStatusIds.Contains);
         var enabled = configurationEnabled &&
-                      isCrystallineConflict &&
+                      ReactiveCounterCcProfileRules.IsSupportedContext(
+                          isCrystallineConflict,
+                          isWolvesDenTesting) &&
                       localIdentityValid &&
                       counterActionId != 0 &&
                       protectionMetadataReady;
@@ -363,16 +394,21 @@ internal sealed class MiracleInterceptProbe
         }
 
         var marksmanSpiteEnabled =
+            isCrystallineConflict &&
             enableMarksmanSpite &&
             marksmanSpiteMetadataVerified;
         var zantetsukenEnabled =
+            isCrystallineConflict &&
             enableZantetsuken &&
             zantetsukenMetadataVerified;
         var furiousBacklashEnabled =
+            isCrystallineConflict &&
             enableFuriousBacklash &&
             furiousBacklashMetadataVerified &&
             verifiedProtectionStatusIds.Contains(EnemyCombatConstants.HardenedScalesStatusId);
-        var contradanceEnabled = enableContradance && contradanceMetadataVerified;
+        var contradanceEnabled = isCrystallineConflict &&
+                                 enableContradance &&
+                                 contradanceMetadataVerified;
 
         // Retire an old lease before draining new packets. Otherwise an already
         // expired or newly disabled threat could terminally suppress the first
@@ -526,6 +562,20 @@ internal sealed class MiracleInterceptProbe
         if (activeThreat is not { } threat)
             return Publish("Waiting", "No current exact threat", nowMilliseconds);
 
+        if (!ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                threat.CounterActionId,
+                threat.Kind))
+        {
+            Interlocked.Increment(ref rejectedThreatCount);
+            lastOpportunity =
+                $"{threat.Kind}: counter action {threat.CounterActionId} is not reviewed for this trigger";
+            activeThreat = null;
+            return Publish(
+                "Cancelled",
+                "Counter action is not reviewed for this trigger family",
+                nowMilliseconds);
+        }
+
         // The exact hostile packet owns the short event lease, not whichever
         // movement key happened to win the very same framework frame. Attach
         // the first currently eligible held/fresh generation inside that
@@ -675,7 +725,8 @@ internal sealed class MiracleInterceptProbe
         var rangeAndLineOfSight = HasActionRangeAndLineOfSight(
             threat.CounterActionId,
             localPlayer!,
-            candidate);
+            candidate,
+            threat.MaximumRangeYalms);
         var structurallyReady =
             HasStructuralActionReadiness(localPlayer!, threat.CounterActionId);
         var exactIntentCanProgress = !hardenedScales &&
@@ -793,7 +844,8 @@ internal sealed class MiracleInterceptProbe
                                HasActionRangeAndLineOfSight(
                                    threat.CounterActionId,
                                    localPlayer!,
-                                   revalidated);
+                                   revalidated,
+                                   threat.MaximumRangeYalms);
         var revalidationNow = Math.Max(nowMilliseconds, Environment.TickCount64);
         var revalidatedLocalJobId = localPlayer!.ClassJob.IsValid
             ? localPlayer.ClassJob.RowId
@@ -1041,6 +1093,17 @@ internal sealed class MiracleInterceptProbe
                     signal.LocalEntityId,
                     localPlayer.ClassJob.RowId,
                     signal.FeatureGeneration);
+                if (wolvesDenContextThisFrame &&
+                    ResolveExactWolvesDenCurrentTarget(
+                        localPlayer,
+                        expectedActorEntityId: signal.CasterEntityId) is null)
+                {
+                    Interlocked.Increment(ref rejectedThreatCount);
+                    cleanseFollowupLastEvent =
+                        "PostPurifyCC: Wolves' Den current hard target did not exactly match the Purify actor";
+                    continue;
+                }
+
                 var resolution = ResolveCleanseTarget(
                     pendingResolution,
                     localPlayer,
@@ -1053,6 +1116,7 @@ internal sealed class MiracleInterceptProbe
                 }
 
                 if (resolution.ShouldRetry &&
+                    !wolvesDenContextThisFrame &&
                     pendingCleanseTargetResolutions.Count <
                     MiracleCleanseFollowupRules.MaximumPendingResolutions)
                 {
@@ -1099,6 +1163,16 @@ internal sealed class MiracleInterceptProbe
             if (kind == MiracleInterceptThreatKind.None ||
                 signal.LocalEntityId != localPlayer.EntityId)
             {
+                continue;
+            }
+
+            if (!ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    counterActionId,
+                    kind))
+            {
+                Interlocked.Increment(ref rejectedThreatCount);
+                lastOpportunity =
+                    $"{kind}: counter action {counterActionId} is protection-end only";
                 continue;
             }
 
@@ -1153,7 +1227,8 @@ internal sealed class MiracleInterceptProbe
                 localPlayer.ClassJob.RowId,
                 ProtectionEndRank: null,
                 HeldActionRetryState.Initial,
-                GameplayKeyToken: episodeGameplayKeyToken);
+                GameplayKeyToken: episodeGameplayKeyToken,
+                MaximumRangeYalms: counterActionMaximumRangeYalms);
             if (activeThreat is { } previousThreat && previousThreat.Signal != identity &&
                 !MiracleProtectionEndRules.CanPreemptUnattemptedLowerPriorityThreat(
                     previousThreat.Kind,
@@ -1267,13 +1342,30 @@ internal sealed class MiracleInterceptProbe
         bool configurationEnabled,
         long nowMilliseconds)
     {
-        var canonical = ResolveUniqueCanonicalCleanseEnemy(pending.Key.CasterEntityId);
-        MiracleCleanseFollowupTargetIdentity? target = canonical is null
-            ? null
-            : new MiracleCleanseFollowupTargetIdentity(
-                canonical.GameObjectId,
-                canonical.EntityId,
-                canonical.JobId);
+        MiracleCleanseFollowupTargetIdentity? target;
+        if (wolvesDenContextThisFrame)
+        {
+            var currentTarget = ResolveExactWolvesDenCurrentTarget(
+                localPlayer,
+                expectedActorEntityId: pending.Key.CasterEntityId);
+            target = currentTarget is null
+                ? null
+                : new MiracleCleanseFollowupTargetIdentity(
+                    currentTarget.GameObjectId,
+                    currentTarget.EntityId,
+                    currentTarget.ClassJob.RowId);
+        }
+        else
+        {
+            var canonical = ResolveUniqueCanonicalCleanseEnemy(
+                pending.Key.CasterEntityId);
+            target = canonical is null
+                ? null
+                : new MiracleCleanseFollowupTargetIdentity(
+                    canonical.GameObjectId,
+                    canonical.EntityId,
+                    canonical.JobId);
+        }
         var localJobId = localPlayer.ClassJob.IsValid
             ? localPlayer.ClassJob.RowId
             : 0;
@@ -1281,13 +1373,16 @@ internal sealed class MiracleInterceptProbe
             pending,
             new MiracleCleanseFollowupResolutionObservation(
                 configurationEnabled,
-                IsCrystallineConflict: true,
+                IsCrystallineConflict: !wolvesDenContextThisFrame,
                 IsLocalCounterJobValid: counterActionId != 0 && localJobId != 0,
                 localPlayer.EntityId,
                 localJobId,
                 capture.CurrentMiracleCleanseFollowupGeneration,
                 target,
-                nowMilliseconds));
+                nowMilliseconds)
+            {
+                IsWolvesDenTesting = wolvesDenContextThisFrame,
+            });
     }
 
     private MiracleFollowupPromotion? ObserveCleanseFollowup(
@@ -1305,14 +1400,24 @@ internal sealed class MiracleInterceptProbe
         var signalWasNew = false;
         if (newSignal is { } exactSignal)
         {
-            canonical = ResolveCanonicalEnemy(exactSignal.Target);
-            if (canonical is null ||
-                !EnemySlotRules.IsValidSlot(canonical.Slot))
+            if (wolvesDenContextThisFrame)
             {
-                return null;
+                if (ResolveCleanseFollowupCandidate(localPlayer, exactSignal.Target) is null)
+                    return null;
+                enemySlot = WolvesDenCurrentTargetStateKey;
+            }
+            else
+            {
+                canonical = ResolveCanonicalEnemy(exactSignal.Target);
+                if (canonical is null ||
+                    !EnemySlotRules.IsValidSlot(canonical.Slot))
+                {
+                    return null;
+                }
+
+                enemySlot = canonical.Slot;
             }
 
-            enemySlot = canonical.Slot;
             signalWasNew = true;
         }
 
@@ -1333,9 +1438,11 @@ internal sealed class MiracleInterceptProbe
         cleanseFollowupTeamPressure = 0;
         if (target is { } targetIdentity)
         {
-            canonical = ResolveCanonicalEnemy(targetIdentity);
+            canonical = wolvesDenContextThisFrame
+                ? null
+                : ResolveCanonicalEnemy(targetIdentity);
             player = ResolveCleanseFollowupCandidate(localPlayer, targetIdentity);
-            if (canonical is not null && player is not null)
+            if ((wolvesDenContextThisFrame || canonical is not null) && player is not null)
             {
                 candidate = new MiracleCleanseFollowupCandidate(
                     targetIdentity,
@@ -1357,11 +1464,12 @@ internal sealed class MiracleInterceptProbe
                         localPlayer,
                         player),
                 };
-                teamTargetCountKnown = TryGetFreshTeamTargetCount(
-                    localPlayer,
-                    player,
-                    nowMilliseconds,
-                    out cleanseFollowupTeamPressure);
+                teamTargetCountKnown = !wolvesDenContextThisFrame &&
+                    TryGetFreshTeamTargetCount(
+                        localPlayer,
+                        player,
+                        nowMilliseconds,
+                        out cleanseFollowupTeamPressure);
             }
         }
 
@@ -1370,14 +1478,17 @@ internal sealed class MiracleInterceptProbe
             previous,
             new MiracleCleanseFollowupObservation(
                 configurationEnabled,
-                IsCrystallineConflict: true,
+                IsCrystallineConflict: !wolvesDenContextThisFrame,
                 IsLocalCounterJobValid: true,
                 higherPriorityClaimed,
                 newSignal,
                 candidate,
                 teamTargetCountKnown,
                 cleanseFollowupTeamPressure,
-                nowMilliseconds));
+                nowMilliseconds)
+            {
+                IsWolvesDenTesting = wolvesDenContextThisFrame,
+            });
 
         if (signalWasNew ||
             decision.Kind is MiracleCleanseFollowupDecisionKind.ResilienceObserved or
@@ -1463,10 +1574,11 @@ internal sealed class MiracleInterceptProbe
         }
 
         Interlocked.Increment(ref cleanseFollowupPromotionCount);
-        canonical = ResolveCanonicalEnemy(promotion.Target);
+        canonical = wolvesDenContextThisFrame
+            ? null
+            : ResolveCanonicalEnemy(promotion.Target);
         player = ResolveCleanseFollowupCandidate(localPlayer, promotion.Target);
-        if (canonical is null ||
-            player is null)
+        if ((!wolvesDenContextThisFrame && canonical is null) || player is null)
         {
             Interlocked.Increment(ref cleanseFollowupCancellationCount);
             Interlocked.Increment(ref rejectedThreatCount);
@@ -1475,14 +1587,21 @@ internal sealed class MiracleInterceptProbe
             return null;
         }
 
-        teamTargetCountKnown = TryGetFreshTeamTargetCount(
-            localPlayer,
-            player,
-            nowMilliseconds,
-            out cleanseFollowupTeamPressure);
+        teamTargetCountKnown = !wolvesDenContextThisFrame &&
+            TryGetFreshTeamTargetCount(
+                localPlayer,
+                player,
+                nowMilliseconds,
+                out cleanseFollowupTeamPressure);
+        var hasTrustedMp = wolvesDenContextThisFrame
+            ? player.MaxMp == CombatFrameRules.ExpectedMaximumMp &&
+              player.CurrentMp <= player.MaxMp
+            : canonical!.HasTrustedMp;
         var rank = new MiracleProtectionEndRankCandidate(
             MiracleInterceptThreatKind.PostPurifyCrowdControl,
-            canonical.Slot,
+            wolvesDenContextThisFrame
+                ? WolvesDenCurrentTargetStateKey
+                : canonical!.Slot,
             promotion.Target.GameObjectId,
             promotion.Target.EntityId,
             promotion.Target.JobId,
@@ -1490,9 +1609,13 @@ internal sealed class MiracleInterceptProbe
             cleanseFollowupTeamPressure,
             player.CurrentHp,
             player.MaxHp,
-            canonical.HasTrustedMp,
-            canonical.CurrentMp,
-            canonical.MaxMp);
+            hasTrustedMp,
+            hasTrustedMp
+                ? wolvesDenContextThisFrame ? player.CurrentMp : canonical!.CurrentMp
+                : 0,
+            hasTrustedMp
+                ? wolvesDenContextThisFrame ? player.MaxMp : canonical!.MaxMp
+                : 0);
         if (!rank.IsValid)
         {
             Interlocked.Increment(ref cleanseFollowupCancellationCount);
@@ -1508,7 +1631,7 @@ internal sealed class MiracleInterceptProbe
             promotion.Target.GameObjectId,
             promotion.Target.EntityId,
             promotion.Target.JobId,
-            canonical.Slot,
+            rank.EnemySlot,
             promotion.ReleasedAtMilliseconds,
             new MiracleSignalIdentity(
                 promotionSignal.Key.CasterEntityId,
@@ -1520,7 +1643,8 @@ internal sealed class MiracleInterceptProbe
             localPlayer.ClassJob.RowId,
             rank,
             HeldActionRetryState.Initial,
-            promotion.GameplayKeyToken);
+            promotion.GameplayKeyToken,
+            counterActionMaximumRangeYalms);
 
         cleanseFollowupRemovedStatusId = promotionSignal.Key.EffectValue;
         return new MiracleFollowupPromotion(threat, rank);
@@ -1544,11 +1668,14 @@ internal sealed class MiracleInterceptProbe
             guardFollowupState,
             new MiracleGuardFollowupObservation(
                 configurationEnabled,
-                IsCrystallineConflict: true,
+                IsCrystallineConflict: !wolvesDenContextThisFrame,
                 IsLocalCounterJobValid: true,
                 higherPriorityClaimed,
                 candidates,
-                nowMilliseconds));
+                nowMilliseconds)
+            {
+                IsWolvesDenTesting = wolvesDenContextThisFrame,
+            });
         guardFollowupState = decision.NextState;
 
         if (decision.NewGuardEpisodeCount > 0 ||
@@ -1638,9 +1765,11 @@ internal sealed class MiracleInterceptProbe
         }
 
         Interlocked.Increment(ref guardFollowupPromotionCount);
-        var canonical = ResolveCanonicalEnemy(promotion.Target);
+        var canonical = wolvesDenContextThisFrame
+            ? null
+            : ResolveCanonicalEnemy(promotion.Target);
         var player = ResolveGuardFollowupCandidate(localPlayer, promotion.Target);
-        if (canonical is null ||
+        if ((!wolvesDenContextThisFrame && canonical is null) ||
             player is null ||
             CountActiveGuardStatuses(player) != 0)
         {
@@ -1686,7 +1815,8 @@ internal sealed class MiracleInterceptProbe
             localPlayer.ClassJob.RowId,
             rank,
             HeldActionRetryState.Initial,
-            promotion.GameplayKeyToken);
+            promotion.GameplayKeyToken,
+            counterActionMaximumRangeYalms);
         return new MiracleFollowupPromotion(threat, rank);
     }
 
@@ -1863,6 +1993,14 @@ internal sealed class MiracleInterceptProbe
         EmergencyActionInputFrame inputFrame,
         int episodeGameplayKeyToken)
     {
+        if (wolvesDenContextThisFrame)
+        {
+            return BuildWolvesDenGuardFollowupCandidates(
+                localPlayer,
+                inputFrame,
+                episodeGameplayKeyToken);
+        }
+
         if (!executeTracker.IsActive) return [];
         var enemies = executeTracker.Enemies
             .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
@@ -1947,6 +2085,60 @@ internal sealed class MiracleInterceptProbe
         return candidates;
     }
 
+    private IReadOnlyList<MiracleGuardFollowupCandidate>
+        BuildWolvesDenGuardFollowupCandidates(
+            IPlayerCharacter localPlayer,
+            EmergencyActionInputFrame inputFrame,
+            int episodeGameplayKeyToken)
+    {
+        var player = ResolveExactWolvesDenCurrentTarget(localPlayer);
+        if (player is null) return [];
+
+        var target = new MiracleGuardFollowupTargetIdentity(
+            WolvesDenCurrentTargetStateKey,
+            player.GameObjectId,
+            player.EntityId,
+            player.ClassJob.RowId);
+        var previousActor = guardFollowupState.Actors
+            .Where(actor => actor.Target == target)
+            .Take(2)
+            .ToArray();
+        var ownedGameplayKeyToken = previousActor.Length == 1 &&
+                                    previousActor[0].GameplayKeyToken > 0
+            ? previousActor[0].GameplayKeyToken
+            : episodeGameplayKeyToken;
+        var guardCount = CountActiveGuardStatuses(
+            player,
+            out var guardRemainingMilliseconds);
+        var hasTrustedMp = player.MaxMp == CombatFrameRules.ExpectedMaximumMp &&
+                           player.CurrentMp <= player.MaxMp;
+        return
+        [
+            new MiracleGuardFollowupCandidate(
+                target,
+                IsExactCanonicalEnemy: true,
+                IsAliveAndTargetable: true,
+                guardCount,
+                player.CurrentHp,
+                player.MaxHp,
+                TeamTargetCountKnown: false,
+                TeamTargetCount: 0)
+            {
+                HasTrustedMp = hasTrustedMp,
+                CurrentMp = hasTrustedMp ? player.CurrentMp : 0,
+                MaximumMp = hasTrustedMp ? player.MaxMp : 0,
+                GuardRemainingMilliseconds = guardRemainingMilliseconds,
+                ReservationGameplayKeyToken = episodeGameplayKeyToken,
+                ReservedGameplayKeyPhysicallyDown = IsReservedGameplayKeyPhysicallyDown(
+                    ownedGameplayKeyToken,
+                    inputFrame),
+                CounterActionReachable = IsCounterActionReachable(
+                    localPlayer,
+                    player),
+            },
+        ];
+    }
+
     private void UpdateGuardFollowupTargetDiagnostics(
         IReadOnlyList<MiracleGuardFollowupCandidate> candidates,
         MiracleGuardFollowupIntent? promotion)
@@ -1977,6 +2169,16 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         MiracleCleanseFollowupTargetIdentity target)
     {
+        if (wolvesDenContextThisFrame)
+        {
+            return ResolveExactWolvesDenCurrentTarget(
+                localPlayer,
+                target.EntityId,
+                target.GameObjectId,
+                target.EntityId,
+                target.JobId);
+        }
+
         var canonical = executeTracker.Enemies
             .Where(enemy =>
                 enemy.GameObjectId == target.GameObjectId &&
@@ -2007,6 +2209,16 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         MiracleGuardFollowupTargetIdentity target)
     {
+        if (wolvesDenContextThisFrame)
+        {
+            return ResolveExactWolvesDenCurrentTarget(
+                localPlayer,
+                target.EntityId,
+                target.GameObjectId,
+                target.EntityId,
+                target.JobId);
+        }
+
         if (ResolveCanonicalEnemy(target) is null) return null;
         var players = objectTable.PlayerObjects
             .OfType<IPlayerCharacter>()
@@ -2029,6 +2241,16 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         MiracleThreatState threat)
     {
+        if (wolvesDenContextThisFrame)
+        {
+            return ResolveExactWolvesDenCurrentTarget(
+                localPlayer,
+                threat.EntityId,
+                threat.GameObjectId,
+                threat.EntityId,
+                threat.JobId);
+        }
+
         var canonical = executeTracker.Enemies
             .Where(enemy =>
                 EnemySlotRules.IsValidSlot(threat.EnemySlot) &&
@@ -2054,6 +2276,67 @@ internal sealed class MiracleInterceptProbe
                IsLivePlayer(players[0]) &&
                HasValidNativeIdentity(players[0])
             ? players[0]
+            : null;
+    }
+
+    private IPlayerCharacter? ResolveExactWolvesDenCurrentTarget(
+        IPlayerCharacter localPlayer,
+        uint expectedActorEntityId = 0,
+        ulong expectedGameObjectId = 0,
+        uint expectedEntityId = 0,
+        uint expectedJobId = 0)
+    {
+        if (!wolvesDenContextThisFrame ||
+            wolvesDenCurrentHardTargetThisFrame is not { } current ||
+            !current.ClassJob.IsValid ||
+            current.GameObjectId == localPlayer.GameObjectId ||
+            !HasValidNativeIdentity(current) ||
+            !IsLivePlayer(current))
+        {
+            return null;
+        }
+
+        var currentJobId = current.ClassJob.RowId;
+        if (expectedActorEntityId != 0 &&
+            current.EntityId != expectedActorEntityId)
+        {
+            return null;
+        }
+
+        if (expectedGameObjectId != 0 ||
+            expectedEntityId != 0 ||
+            expectedJobId != 0)
+        {
+            var actor = expectedActorEntityId != 0
+                ? expectedActorEntityId
+                : expectedEntityId;
+            if (!ReactiveCounterCcProfileRules.IsExactWolvesDenCurrentTarget(
+                    actor,
+                    expectedGameObjectId,
+                    expectedEntityId,
+                    expectedJobId,
+                    current.GameObjectId,
+                    current.EntityId,
+                    currentJobId))
+            {
+                return null;
+            }
+        }
+
+        var matches = objectTable.PlayerObjects
+            .OfType<IPlayerCharacter>()
+            .Where(player =>
+                player.GameObjectId == current.GameObjectId &&
+                player.EntityId == current.EntityId &&
+                player.ClassJob.IsValid &&
+                player.ClassJob.RowId == currentJobId)
+            .Take(2)
+            .ToArray();
+        return matches.Length == 1 &&
+               matches[0].GameObjectId != localPlayer.GameObjectId &&
+               HasValidNativeIdentity(matches[0]) &&
+               IsLivePlayer(matches[0])
+            ? matches[0]
             : null;
     }
 
@@ -2153,12 +2436,16 @@ internal sealed class MiracleInterceptProbe
         return Math.Max(1L, (long)Math.Ceiling((double)remainingSeconds * 1_000d));
     }
 
-    private static unsafe bool HasActionRangeAndLineOfSight(
+    private unsafe bool HasActionRangeAndLineOfSight(
         uint actionId,
         IPlayerCharacter localPlayer,
-        IPlayerCharacter target)
+        IPlayerCharacter target,
+        float maximumRangeYalms = float.PositiveInfinity)
     {
         if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0)
+            return false;
+
+        if (!IsInsideConfiguredRange(localPlayer, target, maximumRangeYalms))
             return false;
 
         var sourceObject = GetNativeObject(localPlayer);
@@ -2369,7 +2656,11 @@ internal sealed class MiracleInterceptProbe
                !HasAnyVerifiedCcProtection(
                    candidate,
                    BlockerFamilyForAction(rangeActionId)) &&
-               HasActionRangeAndLineOfSight(rangeActionId, localPlayer, candidate);
+               HasActionRangeAndLineOfSight(
+                   rangeActionId,
+                   localPlayer,
+                   candidate,
+                   counterActionMaximumRangeYalms);
     }
 
     private static unsafe bool HasStructuralActionReadiness(
@@ -2392,7 +2683,7 @@ internal sealed class MiracleInterceptProbe
         // Both PvP Raiju variants are movement attacks and explicitly cannot
         // execute while Bound. Membership of the exact live Bind row is the
         // authority; duration telemetry is deliberately ignored.
-        if (IsExactRaijuAction(actionId) &&
+        if (CannotExecuteWhileBound(actionId) &&
             localPlayer.StatusList.Any(static status =>
                 status.StatusId == EnemyCombatConstants.PvPBindStatusId))
         {
@@ -2441,7 +2732,10 @@ internal sealed class MiracleInterceptProbe
     private unsafe uint ResolveCounterActionId(
         uint localJobId,
         bool miracleMetadataVerified,
-        bool silentNocturneMetadataVerified)
+        bool silentNocturneMetadataVerified,
+        bool enablePaladinIntervene,
+        bool enableRedMageResolution,
+        bool redMageResolutionMetadataVerified)
     {
         if (localJobId == EnemyCombatConstants.NinjaJobId)
         {
@@ -2466,13 +2760,31 @@ internal sealed class MiracleInterceptProbe
 
         return localJobId switch
         {
+            ReactiveCounterCcProfileRules.PaladinJobId when
+                enablePaladinIntervene &&
+                verifiedCounterActionIds.Contains(
+                    MiracleInterceptConfirmationRules.InterveneActionId) =>
+                MiracleInterceptConfirmationRules.InterveneActionId,
             EnemyCombatConstants.WhiteMageJobId when miracleMetadataVerified =>
                 EnemyCombatConstants.MiracleOfNatureActionId,
             EnemyCombatConstants.BardJobId when silentNocturneMetadataVerified =>
                 EnemyCombatConstants.SilentNocturneActionId,
+            ReactiveCounterCcProfileRules.RedMageJobId when
+                enableRedMageResolution &&
+                redMageResolutionMetadataVerified =>
+                MiracleInterceptConfirmationRules.ResolutionActionId,
             _ => 0,
         };
     }
+
+    private static float ResolveCounterMaximumRangeYalms(
+        uint actionId,
+        float paladinInterveneMaximumRangeYalms) =>
+        actionId == MiracleInterceptConfirmationRules.InterveneActionId
+            ? ReactiveCounterCcProfileRules.NormalizeInterveneMaximumRangeYalms(
+                paladinInterveneMaximumRangeYalms)
+            : ReactiveCounterCcProfileRules.Get(actionId)?.NativeMaximumRangeYalms ??
+              float.PositiveInfinity;
 
     private static CcImmunityBrakeBlockerFamily BlockerFamilyForAction(uint actionId) =>
         actionId == EnemyCombatConstants.MiracleOfNatureActionId
@@ -2486,7 +2798,9 @@ internal sealed class MiracleInterceptProbe
             EnemyCombatConstants.SilentNocturneActionId or
             EnemyCombatConstants.ForkedRaijuActionId or
             EnemyCombatConstants.FleetingRaijuActionId or
-            EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId =>
+            EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId or
+            MiracleInterceptConfirmationRules.InterveneActionId or
+            MiracleInterceptConfirmationRules.ResolutionActionId =>
                 RequiredSilentProtectionStatusIds,
             _ => Array.Empty<uint>(),
         };
@@ -2494,6 +2808,33 @@ internal sealed class MiracleInterceptProbe
     private static bool IsExactRaijuAction(uint actionId) =>
         actionId is EnemyCombatConstants.ForkedRaijuActionId or
             EnemyCombatConstants.FleetingRaijuActionId;
+
+    private static bool CannotExecuteWhileBound(uint actionId) =>
+        ReactiveCounterCcProfileRules.Get(actionId)?.CannotExecuteWhileBound ??
+        IsExactRaijuAction(actionId);
+
+    private static bool IsInsideConfiguredRange(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter target,
+        float maximumRangeYalms)
+    {
+        if (float.IsPositiveInfinity(maximumRangeYalms)) return true;
+        if (!float.IsFinite(maximumRangeYalms) || maximumRangeYalms <= 0f ||
+            !float.IsFinite(localPlayer.HitboxRadius) ||
+            localPlayer.HitboxRadius < 0f ||
+            !float.IsFinite(target.HitboxRadius) ||
+            target.HitboxRadius < 0f)
+        {
+            return false;
+        }
+
+        var centerDistance = Vector3.Distance(localPlayer.Position, target.Position);
+        if (!float.IsFinite(centerDistance)) return false;
+        var edgeDistance = MathF.Max(
+            0f,
+            centerDistance - localPlayer.HitboxRadius - target.HitboxRadius);
+        return edgeDistance <= maximumRangeYalms;
+    }
 
     private bool RememberSignal(MiracleSignalIdentity identity)
     {
@@ -2592,6 +2933,9 @@ internal sealed class MiracleInterceptProbe
         ClearCleanseFollowupStates();
         guardFollowupState = MiracleGuardFollowupState.Initial;
         counterActionId = 0;
+        counterActionMaximumRangeYalms = float.PositiveInfinity;
+        wolvesDenContextThisFrame = false;
+        wolvesDenCurrentHardTargetThisFrame = null;
         cleanseFollowupRemovedStatusId = 0;
         cleanseFollowupTeamPressure = 0;
         guardFollowupTargetGameObjectId = 0;
@@ -2697,6 +3041,10 @@ internal sealed class MiracleInterceptProbe
             ProtectionEndRankCurrentMp = protectionEndLastRank?.CurrentMp ?? 0,
             ProtectionEndRankMaximumMp = protectionEndLastRank?.MaximumMp ?? 0,
             ConfirmationPendingCount = confirmationState.Pending is null ? 0 : 1,
+            ConfirmationAwaitingSourceSequence =
+                confirmationState.Pending is { HasBoundSourceSequence: false },
+            ConfirmationPendingActionId = confirmationState.Pending?.ActionId ?? 0,
+            WolvesDenCurrentTargetMode = wolvesDenContextThisFrame,
         };
     }
 
@@ -2913,7 +3261,8 @@ internal sealed class MiracleInterceptProbe
         uint LocalJobId,
         MiracleProtectionEndRankCandidate? ProtectionEndRank,
         HeldActionRetryState RetryState,
-        int GameplayKeyToken);
+        int GameplayKeyToken,
+        float MaximumRangeYalms);
 
     private readonly record struct MiracleFollowupPromotion(
         MiracleThreatState Threat,

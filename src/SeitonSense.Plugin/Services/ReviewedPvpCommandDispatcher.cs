@@ -25,6 +25,7 @@ internal enum ReviewedPvpCommandDispatchResult
 {
     Invoked,
     MarkerRateLimited,
+    TextCommandUnavailableBeforeInvocation,
     InvalidCommand,
     NativeUnavailable,
 }
@@ -113,9 +114,7 @@ internal sealed class ReviewedPvpCommandDispatcher
             lastMarkerReservationAt = nowMilliseconds;
         }
 
-        return TryExecuteShellCommand(exactHardcodedCommand)
-            ? ReviewedPvpCommandDispatchResult.Invoked
-            : ReviewedPvpCommandDispatchResult.NativeUnavailable;
+        return TryExecuteShellCommand(exactHardcodedCommand);
     }
 
     private static ReviewedPvpCommandDispatchResult TryExecuteUnreserved(
@@ -125,9 +124,7 @@ internal sealed class ReviewedPvpCommandDispatcher
         if (exactHardcodedCommand is null || IsMarkerCommand(command.Kind))
             return ReviewedPvpCommandDispatchResult.InvalidCommand;
 
-        return TryExecuteShellCommand(exactHardcodedCommand)
-            ? ReviewedPvpCommandDispatchResult.Invoked
-            : ReviewedPvpCommandDispatchResult.NativeUnavailable;
+        return TryExecuteShellCommand(exactHardcodedCommand);
     }
 
     private void NormalizeMarkerClock(long nowMilliseconds)
@@ -210,24 +207,33 @@ internal sealed class ReviewedPvpCommandDispatcher
         _ => null,
     };
 
-    private static unsafe bool TryExecuteShellCommand(string exactHardcodedCommand)
+    private static unsafe ReviewedPvpCommandDispatchResult TryExecuteShellCommand(
+        string exactHardcodedCommand)
     {
         Utf8String* command = null;
         try
         {
             var uiModule = UIModule.Instance();
-            if (uiModule == null) return false;
+            if (uiModule == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
             var shell = uiModule->GetRaptureShellModule();
-            if (shell == null) return false;
+            if (shell == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
+
+            // ExecuteCommandInner has no result value. This native flag is the
+            // only exact pre-invocation proof that the shell cannot accept a
+            // text command right now; do not misreport that case as Invoked.
+            if (shell->IsTextCommandUnavailable)
+            {
+                return ReviewedPvpCommandDispatchResult.TextCommandUnavailableBeforeInvocation;
+            }
 
             command = Utf8String.FromString(exactHardcodedCommand);
-            if (command == null) return false;
+            if (command == null) return ReviewedPvpCommandDispatchResult.NativeUnavailable;
             shell->ExecuteCommandInner(command, uiModule);
-            return true;
+            return ReviewedPvpCommandDispatchResult.Invoked;
         }
         catch
         {
-            return false;
+            return ReviewedPvpCommandDispatchResult.NativeUnavailable;
         }
         finally
         {

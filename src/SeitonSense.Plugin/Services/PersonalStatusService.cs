@@ -14,15 +14,24 @@ internal readonly record struct MachinistLimitBreakDiagnostics(
     long DroppedWarnings,
     bool WarningActive);
 
+internal readonly record struct SamuraiReactiveCaptureDiagnostics(
+    bool CaptureRunning,
+    int QueueDepth,
+    long CapturedSignals,
+    long DroppedSignals,
+    int FeatureGeneration);
+
 internal sealed class PersonalStatusService : IDisposable
 {
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
+    private readonly ITargetManager targetManager;
     private readonly IFramework framework;
     private readonly IDutyState dutyState;
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
+    private readonly SamuraiReactiveMetadataValidation samuraiReactiveMetadata;
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
@@ -35,14 +44,18 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
+    private readonly SamuraiReactiveCounterCcProbe samuraiReactive;
     private readonly SmartKardiaProbe smartKardia;
     private readonly NinjaGuardShukuchiProbe ninjaGuardShukuchi;
     private readonly NinjaSeitonDispatchProbe ninjaSeiton;
     private readonly ViperSerpentTailProbe viperSerpentTail;
+    private readonly GunbreakerContinuationProbe gunbreakerContinuation;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
     private readonly ScholarSpreadProbe scholarSpread;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly DarkKnightPlungeProbe darkKnightPlunge;
+    private readonly DarkKnightShadowbringerProbe darkKnightShadowbringer;
+    private readonly MonkHeldComboProbe monkHeldCombo;
     private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly MachinistLimitBreakWarningSound machinistLimitBreakWarningSound;
     private readonly Dictionary<ObservedStatusKey, StatusIdentityState> instanceTokens = [];
@@ -57,6 +70,8 @@ internal sealed class PersonalStatusService : IDisposable
     private DebouncedVisibilityState resiliencePresence = DebouncedVisibilityState.Initial;
     private LocalMpWarningState localMpWarningState = LocalMpWarningState.Initial;
     private MachinistLimitBreakThreatState? machinistLimitBreakThreat;
+    private long consumedAutoGuardPopupToken;
+    private long nextAutoGuardSoundPreviewAt;
     private uint activeTerritory = uint.MaxValue;
     private ulong activeLocalPlayerId;
     private SupportedPvPContext activeContext;
@@ -79,15 +94,18 @@ internal sealed class PersonalStatusService : IDisposable
         IPluginLog log,
         PluginConfiguration configuration,
         PvPMetadataValidation metadata,
+        SamuraiReactiveMetadataValidation samuraiReactiveMetadata,
         ReviewedPvpCommandDispatcher commands)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
+        this.targetManager = targetManager;
         this.framework = framework;
         this.dutyState = dutyState;
         this.log = log;
         this.configuration = configuration;
         this.metadata = metadata;
+        this.samuraiReactiveMetadata = samuraiReactiveMetadata;
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         emergencyInput = new EmergencyActionInputCoordinator(keyState);
@@ -141,6 +159,12 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture,
             log,
             metadata);
+        samuraiReactive = new SamuraiReactiveCounterCcProbe(
+            objectTable,
+            executeTracker,
+            nearAssist,
+            log,
+            samuraiReactiveMetadata);
         smartKardia = new SmartKardiaProbe(
             clientState,
             objectTable,
@@ -175,6 +199,11 @@ internal sealed class PersonalStatusService : IDisposable
             objectTable,
             nearAssist,
             log);
+        gunbreakerContinuation = new GunbreakerContinuationProbe(
+            clientState,
+            objectTable,
+            nearAssist,
+            log);
         scholarCriticalStrategy = new ScholarCriticalStrategyProbe(
             clientState,
             objectTable,
@@ -200,6 +229,18 @@ internal sealed class PersonalStatusService : IDisposable
             executeTracker,
             nearAssist,
             log);
+        darkKnightShadowbringer = new DarkKnightShadowbringerProbe(
+            clientState,
+            objectTable,
+            executeTracker,
+            pressureTracker,
+            nearAssist,
+            log);
+        monkHeldCombo = new MonkHeldComboProbe(
+            clientState,
+            objectTable,
+            nearAssist,
+            log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
     }
@@ -217,18 +258,33 @@ internal sealed class PersonalStatusService : IDisposable
         guardianCommunication.Diagnostics;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
     internal MiracleInterceptProbeSnapshot MiracleInterceptDiagnostics => miracleIntercept.Snapshot;
+    internal SamuraiReactiveCounterCcProbeSnapshot SamuraiReactiveDiagnostics =>
+        samuraiReactive.Snapshot;
+    internal SamuraiReactiveMetadataValidation SamuraiReactiveMetadata =>
+        samuraiReactiveMetadata;
+    internal SamuraiReactiveCaptureDiagnostics SamuraiReactiveCaptureDiagnostics => new(
+        machinistLimitBreakCapture.IsRunning,
+        machinistLimitBreakCapture.SamuraiReactiveProtectionQueueDepth,
+        machinistLimitBreakCapture.CapturedSamuraiReactiveProtectionSignals,
+        machinistLimitBreakCapture.DroppedSamuraiReactiveProtectionSignals,
+        machinistLimitBreakCapture.CurrentSamuraiReactiveGeneration);
     internal SmartKardiaProbeSnapshot SmartKardiaDiagnostics => smartKardia.Snapshot;
     internal NinjaGuardShukuchiProbeSnapshot NinjaGuardShukuchiDiagnostics =>
         ninjaGuardShukuchi.Snapshot;
     internal NinjaSeitonDispatchProbeSnapshot NinjaSeitonDiagnostics => ninjaSeiton.Snapshot;
     internal ViperSerpentTailProbeSnapshot ViperSerpentTailDiagnostics =>
         viperSerpentTail.Snapshot;
+    internal GunbreakerContinuationProbeSnapshot GunbreakerContinuationDiagnostics =>
+        gunbreakerContinuation.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
     internal ScholarSpreadProbeSnapshot ScholarSpreadDiagnostics => scholarSpread.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal DarkKnightPlungeProbeSnapshot DarkKnightPlungeDiagnostics =>
         darkKnightPlunge.Snapshot;
+    internal DarkKnightShadowbringerProbeSnapshot DarkKnightShadowbringerDiagnostics =>
+        darkKnightShadowbringer.Snapshot;
+    internal MonkHeldComboProbeSnapshot MonkHeldComboDiagnostics => monkHeldCombo.Snapshot;
     internal HeldCastCancellationSnapshot HeldCastCancellationDiagnostics =>
         heldCastCancellation.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
@@ -245,6 +301,17 @@ internal sealed class PersonalStatusService : IDisposable
         machinistLimitBreakWarningSound.TryPlayPreview(
             Math.Clamp(configuration.MchLimitBreakSoundId, 1, 16),
             Environment.TickCount64);
+
+    internal bool PlayAutoGuardActivationSoundPreview()
+    {
+        var now = Environment.TickCount64;
+        if (now < nextAutoGuardSoundPreviewAt) return false;
+        nextAutoGuardSoundPreviewAt = SaturatingAdd(now, 350);
+        return MachinistLimitBreakWarningSound.TryPlayShared(
+            Math.Clamp(configuration.AutoGuardActivationSoundId, 1, 16),
+            log,
+            "Seiton Sense Auto-Guard activation sound preview failed closed.");
+    }
 
     internal bool PlayHighPressureWarningSoundPreview() =>
         pressureEscapeSprint.PlayWarningSoundPreview(
@@ -308,6 +375,8 @@ internal sealed class PersonalStatusService : IDisposable
             pulseStartedAt.Clear();
             machinistLimitBreakCapture.SetMachinistLocalEntityId(0);
             machinistLimitBreakCapture.ClearWarnings();
+            machinistLimitBreakCapture.SetSamuraiReactiveLocalEntityId(0);
+            machinistLimitBreakCapture.ClearSamuraiReactiveProtectionSignals();
             machinistLimitBreakThreat = null;
             emergencyInput.Reset();
             localMpWarningState = LocalMpWarningState.Initial;
@@ -319,14 +388,18 @@ internal sealed class PersonalStatusService : IDisposable
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
+            samuraiReactive.Reset();
             smartKardia.FailClosed();
             ninjaGuardShukuchi.FailClosed();
             ninjaSeiton.FailClosed();
             viperSerpentTail.FailClosed();
+            gunbreakerContinuation.FailClosed();
             scholarCriticalStrategy.FailClosed();
             scholarSpread.FailClosed();
             monkEarthReply.FailClosed(now);
             darkKnightPlunge.FailClosed();
+            darkKnightShadowbringer.FailClosed();
+            monkHeldCombo.FailClosed();
             Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
                 false,
                 SupportedPvPContext.None,
@@ -363,14 +436,20 @@ internal sealed class PersonalStatusService : IDisposable
             guardianCommunication.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
+            samuraiReactive.Reset();
+            machinistLimitBreakCapture.SetSamuraiReactiveLocalEntityId(0);
+            machinistLimitBreakCapture.ClearSamuraiReactiveProtectionSignals();
             smartKardia.Reset();
             ninjaGuardShukuchi.Reset();
             ninjaSeiton.Reset();
             viperSerpentTail.Reset();
+            gunbreakerContinuation.Reset();
             scholarCriticalStrategy.Reset();
             scholarSpread.Reset();
             monkEarthReply.Reset();
             darkKnightPlunge.Reset();
+            darkKnightShadowbringer.Reset();
+            monkHeldCombo.Reset();
         }
 
         var isSupportedPvPContext = context != SupportedPvPContext.None;
@@ -385,15 +464,18 @@ internal sealed class PersonalStatusService : IDisposable
             ? localPlayer.ClassJob.RowId
             : 0;
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
+        var isRedMage = localJobId == ReactiveCounterCcProfileRules.RedMageJobId;
         var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
             EnemyCombatConstants.BardJobId;
         var isNinja = ExecuteThreshold.IsNinja(localJobId);
-        var isReactiveCcJob = isAllyRescueJob || isNinja;
+        var isReactiveCcJob = isAllyRescueJob || isNinja || isPaladin || isRedMage;
         var isSage = localJobId == SmartKardiaRules.SageJobId;
         var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;
         var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
         var isDarkKnight = localJobId == DarkKnightPlungeRules.DarkKnightJobId;
         var isViper = localJobId == ViperSerpentTailRules.ViperJobId;
+        var isGunbreaker = localJobId == GunbreakerContinuationRules.GunbreakerJobId;
+        var isSamurai = localJobId == SamuraiReactiveCounterCcRules.SamuraiJobId;
         var isEmergencyTeleportJob =
             EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
@@ -517,8 +599,19 @@ internal sealed class PersonalStatusService : IDisposable
                                              !guardActive;
         var miracleInterceptConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableReactiveCcUtilities &&
-                                                     isCrystallineConflict &&
+                                                     isSupportedPvPContext &&
                                                      isReactiveCcJob;
+        var samuraiCounterCcConfigurationEnabled = configuration.Enabled &&
+                                                    configuration.EnableReactiveCcUtilities &&
+                                                    configuration.ReactiveCcSamuraiSotenMineuchi &&
+                                                    (configuration.ReactiveCcAfterEnemyPurify ||
+                                                     configuration.ReactiveCcAfterEnemyGuard) &&
+                                                    isSupportedPvPContext &&
+                                                    isSamurai;
+        var samuraiZantetsukenConfigurationEnabled = configuration.Enabled &&
+                                                     configuration.EnableSamuraiZantetsukenOnHeldKey &&
+                                                     isSupportedPvPContext &&
+                                                     isSamurai;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                                configuration.EnableNinjaSeitonOnHeldGameplayKey &&
                                                isCrystallineConflict &&
@@ -527,6 +620,10 @@ internal sealed class PersonalStatusService : IDisposable
                                                     configuration.EnableViperSerpentTailOnHeldKey &&
                                                     isSupportedPvPContext &&
                                                     isViper;
+        var gunbreakerContinuationConfigurationEnabled = configuration.Enabled &&
+                                                          configuration.EnableGunbreakerContinuationOnHeldKey &&
+                                                          isSupportedPvPContext &&
+                                                          isGunbreaker;
         var ninjaGuardShukuchiConfigurationEnabled = configuration.Enabled &&
                                                      configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey &&
                                                      isCrystallineConflict &&
@@ -546,6 +643,14 @@ internal sealed class PersonalStatusService : IDisposable
                                                 metadata.ScholarSpreadVerified;
         var darkKnightPlungeConfigurationEnabled = configuration.Enabled &&
                                                     configuration.EnableDarkKnightPlungeOnHeldKey;
+        var darkKnightShadowbringerConfigurationEnabled = configuration.Enabled &&
+                                                           configuration.EnableDarkKnightShadowbringerOnHeldKey &&
+                                                           isSupportedPvPContext &&
+                                                           isDarkKnight;
+        var monkHeldComboConfigurationEnabled = configuration.Enabled &&
+                                                configuration.EnableMonkHeldComboOnHeldKey &&
+                                                isSupportedPvPContext &&
+                                                isMonk;
 
         // Keep the shared physical-key observer enabled from stable opt-in gates,
         // not from the current action opportunity. Guard suppresses every direct
@@ -586,13 +691,27 @@ internal sealed class PersonalStatusService : IDisposable
              nearAssist.VerifiedCcBrakeActionIds.Contains(
                   EnemyCombatConstants.ForkedRaijuActionId) &&
               nearAssist.VerifiedCcBrakeActionIds.Contains(
-                  EnemyCombatConstants.FleetingRaijuActionId));
+                  EnemyCombatConstants.FleetingRaijuActionId)) ||
+            (isPaladin &&
+             configuration.ReactiveCcPaladinIntervene &&
+             nearAssist.VerifiedCcBrakeActionIds.Contains(
+                 MiracleInterceptConfirmationRules.InterveneActionId)) ||
+            (isRedMage &&
+             configuration.ReactiveCcRedMageResolution &&
+             metadata.RedMageResolutionVerified);
         var miracleInterceptHeldInputEnabled = configuration.Enabled &&
                                                configuration.EnableReactiveCcUtilities &&
                                                configuration.ReactiveCcOnHeldKey &&
                                                reactiveCcActionMetadataVerified &&
-                                               isCrystallineConflict &&
+                                               isSupportedPvPContext &&
                                                isReactiveCcJob;
+        var samuraiCounterCcHeldInputEnabled =
+            samuraiCounterCcConfigurationEnabled &&
+            configuration.ReactiveCcOnHeldKey &&
+            samuraiReactiveMetadata.CounterCcVerified;
+        var samuraiZantetsukenHeldInputEnabled =
+            samuraiZantetsukenConfigurationEnabled &&
+            samuraiReactiveMetadata.ZantetsukenWorkflowVerified;
         var scholarCriticalStrategyHeldInputEnabled =
             scholarCriticalStrategyConfigurationEnabled &&
             metadata.ScholarCriticalStrategyVerified;
@@ -615,16 +734,44 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ViperSerpentTailVerified &&
             (context != SupportedPvPContext.WolvesDen ||
              metadata.WolvesDenStrikingDummyVerified);
+        var gunbreakerContinuationHeldInputEnabled =
+            gunbreakerContinuationConfigurationEnabled &&
+            metadata.GunbreakerContinuationVerified;
+        var darkKnightShadowbringerHeldInputEnabled =
+            darkKnightShadowbringerConfigurationEnabled &&
+            metadata.DarkKnightShadowbringerVerified &&
+            (context != SupportedPvPContext.WolvesDen ||
+             metadata.WolvesDenStrikingDummyVerified);
+        var monkHeldComboInputEnabled = monkHeldComboConfigurationEnabled &&
+                                        metadata.MonkHeldComboVerified;
         var ninjaGuardShukuchiHeldInputEnabled =
             ninjaGuardShukuchiConfigurationEnabled &&
             metadata.PanicShukuchiVerified &&
             metadata.GuardVerified;
+        var shouldCaptureSamuraiProtectionSignals =
+            !hardReset &&
+            alive &&
+            localPlayer is not null &&
+            samuraiCounterCcConfigurationEnabled &&
+            samuraiReactiveMetadata.CounterCcVerified;
+        machinistLimitBreakCapture.SetSamuraiReactiveLocalEntityId(
+            shouldCaptureSamuraiProtectionSignals ? localPlayer!.EntityId : 0);
+        if (shouldCaptureSamuraiProtectionSignals)
+        {
+            while (machinistLimitBreakCapture
+                       .TryDequeueSamuraiReactiveProtectionSignal(out var signal))
+            {
+                samuraiReactive.EnqueueProtectionSignal(signal);
+            }
+        }
         var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||
                                             defensiveUtilityHeldInputEnabled ||
                                             paladinGuardianHeldInputEnabled ||
                                             smartRecuperateHeldInputEnabled ||
                                             allyRescueHeldInputEnabled ||
                                              miracleInterceptHeldInputEnabled ||
+                                             samuraiCounterCcHeldInputEnabled ||
+                                             samuraiZantetsukenHeldInputEnabled ||
                                              scholarCriticalStrategyHeldInputEnabled ||
                                              scholarSpreadConfigurationEnabled ||
                                              emergencyTeleportHeldInputEnabled ||
@@ -632,7 +779,10 @@ internal sealed class PersonalStatusService : IDisposable
                                             darkKnightPlungeHeldInputEnabled ||
                                             ninjaGuardShukuchiHeldInputEnabled ||
                                             ninjaSeitonHeldInputEnabled ||
-                                            viperSerpentTailHeldInputEnabled;
+                                            viperSerpentTailHeldInputEnabled ||
+                                            gunbreakerContinuationHeldInputEnabled ||
+                                            darkKnightShadowbringerHeldInputEnabled ||
+                                            monkHeldComboInputEnabled;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -642,10 +792,15 @@ internal sealed class PersonalStatusService : IDisposable
              defensiveUtilitiesConfigurationEnabled ||
              paladinGuardianConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
-             miracleInterceptConfigurationEnabled ||
+                                             miracleInterceptConfigurationEnabled ||
+             samuraiCounterCcConfigurationEnabled ||
+             samuraiZantetsukenConfigurationEnabled ||
              ninjaGuardShukuchiHeldInputEnabled ||
              ninjaSeitonHeldInputEnabled ||
              viperSerpentTailHeldInputEnabled ||
+             gunbreakerContinuationHeldInputEnabled ||
+             darkKnightShadowbringerHeldInputEnabled ||
+             monkHeldComboInputEnabled ||
              scholarCriticalStrategyHeldInputEnabled ||
              scholarSpreadConfigurationEnabled ||
              emergencyTeleportHeldInputEnabled ||
@@ -664,7 +819,12 @@ internal sealed class PersonalStatusService : IDisposable
             darkKnightPlungeHeldInputEnabled,
             ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled,
             ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled,
-            viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled);
+            viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled,
+            gunbreakerContinuationHeldEnabled: gunbreakerContinuationHeldInputEnabled,
+            darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled,
+            monkHeldComboEnabled: monkHeldComboInputEnabled,
+            samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
+            samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -681,6 +841,43 @@ internal sealed class PersonalStatusService : IDisposable
         // actionable or waiting at the global native boundary. It no longer
         // consumes that physical hold through release.
         var purifyClaimedPriority = purify.InputClaimed;
+        // SAM's exact post-protection sequence is a job helper directly after
+        // Purify. Counter-CC runs before Zantetsuken so an accepted Soten can
+        // reserve its bounded Mineuchi arrival window without another SAM
+        // action inserting animation lock.
+        now = Environment.TickCount64;
+        var samuraiCounter = samuraiReactive.ObserveCounterCc(
+            localPlayer,
+            context,
+            samuraiCounterCcConfigurationEnabled,
+            configuration.ReactiveCcAfterEnemyPurify,
+            configuration.ReactiveCcAfterEnemyGuard,
+            configuration.ReactiveCcOnHeldKey,
+            dispatchAllowed:
+                !guardActive &&
+                !purifyClaimedPriority &&
+                !emergencyInputFrame.IsConsumed,
+            configuration.ReactiveCcSamuraiSotenMaximumRangeYalms,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        now = Environment.TickCount64;
+        var samurai = samuraiZantetsukenConfigurationEnabled
+            ? samuraiReactive.ObserveZantetsuken(
+                localPlayer,
+                context,
+                enabled: true,
+                allowHeldGameplayKey: true,
+                dispatchAllowed:
+                    !guardActive &&
+                    !purifyClaimedPriority &&
+                    !samuraiCounter.InputClaimed &&
+                    !emergencyInputFrame.IsConsumed,
+                emergencyInputFrame,
+                now,
+                hardReset)
+            : samuraiReactive.ResetZantetsukenLane();
+        var samuraiClaimedPriority = samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
         // Purify is absolute. Auto-Seiton is the next action-level priority;
@@ -694,6 +891,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.SeitonVerified,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -707,7 +905,23 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.WolvesDenStrikingDummyVerified,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             ninja.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        now = Environment.TickCount64;
+        var gunbreaker = gunbreakerContinuation.Observe(
+            localPlayer,
+            context,
+            gunbreakerContinuationConfigurationEnabled,
+            metadata.GunbreakerContinuationVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            samuraiClaimedPriority ||
+            ninja.InputClaimed ||
+            viper.InputClaimed ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -726,8 +940,10 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ReactiveCcOnHeldKey,
             !guardActive &&
             !purifyClaimedPriority &&
+            !samuraiClaimedPriority &&
             !ninja.InputClaimed &&
             !viper.InputClaimed &&
+            !gunbreaker.InputClaimed &&
             !emergencyInputFrame.IsConsumed,
             configuration.MiracleInterceptMchLimitBreak,
             configuration.MiracleInterceptSamZantetsuken,
@@ -742,7 +958,14 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.PurifyVerified,
             emergencyInputFrame,
             now,
-            hardReset);
+            hardReset,
+            enablePaladinIntervene: configuration.ReactiveCcPaladinIntervene,
+            paladinInterveneMaximumRangeYalms:
+                configuration.ReactiveCcPaladinInterveneMaximumRangeYalms,
+            enableRedMageResolution: configuration.ReactiveCcRedMageResolution,
+            redMageResolutionMetadataVerified: metadata.RedMageResolutionVerified,
+            isWolvesDenTesting: context == SupportedPvPContext.WolvesDen,
+            wolvesDenCurrentHardTarget: targetManager.Target as IPlayerCharacter);
         var rescue = allyRescue.Observe(
             localPlayer,
             isCrystallineConflict,
@@ -754,8 +977,10 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset,
             dispatchAllowed:
                 !purifyClaimedPriority &&
+                !samuraiClaimedPriority &&
                 !ninja.InputClaimed &&
                 !viper.InputClaimed &&
+                !gunbreaker.InputClaimed &&
                 !miracle.InputClaimed &&
                 !emergencyInputFrame.IsConsumed);
         var allyRescueClaimedPriority = rescue.InputClaimed;
@@ -766,8 +991,10 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.PaladinGuardianOnHeldKey,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             ninja.InputClaimed ||
             viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             emergencyInputFrame.IsConsumed,
@@ -795,8 +1022,10 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.PanicShukuchiVerified && metadata.GuardVerified,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             ninja.InputClaimed ||
             viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
@@ -811,7 +1040,9 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ScholarCriticalStrategyVerified,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
             allyRescueClaimedPriority ||
             miracle.InputClaimed ||
             guardianClaimedPriority ||
@@ -821,14 +1052,20 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
-        var plunge = darkKnightPlunge.Observe(
+        now = Environment.TickCount64;
+        var shadowbringerPre = darkKnightShadowbringer.ObservePriorityDarkArts(
             localPlayer,
-            isCrystallineConflict,
-            darkKnightPlungeConfigurationEnabled,
-            metadata.DarkKnightPlungeVerified,
+            context,
+            darkKnightShadowbringerConfigurationEnabled,
+            metadata.DarkKnightShadowbringerVerified,
+            metadata.WolvesDenStrikingDummyVerified,
+            configuration.DarkKnightShadowbringerMinimumHpPercent,
+            configuration.DarkKnightShadowbringerPressureLimitExclusive,
             guardActive,
             purifyClaimedPriority ||
+            samuraiClaimedPriority ||
             viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
             allyRescueClaimedPriority ||
             rescue.UseActionAttempted ||
             miracle.InputClaimed ||
@@ -840,15 +1077,98 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             hardReset);
+        var plunge = darkKnightPlunge.Observe(
+            localPlayer,
+            isCrystallineConflict,
+            darkKnightPlungeConfigurationEnabled,
+            metadata.DarkKnightPlungeVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            samuraiClaimedPriority ||
+            viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
+            allyRescueClaimedPriority ||
+            rescue.UseActionAttempted ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            guardShukuchi.InputClaimed ||
+            ninja.InputClaimed ||
+            scholar.InputClaimed ||
+            shadowbringerPre.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
 
-        var jobSpecificHeldClaimedPriority = ninja.InputClaimed ||
+        var shadowbringer = shadowbringerPre;
+        if (shadowbringerPre.CanRunDeferredSafeFallback)
+        {
+            now = Environment.TickCount64;
+            shadowbringer = darkKnightShadowbringer.ObserveDeferredSafeFallback(
+                shadowbringerPre.DeferredFrameToken,
+                localPlayer,
+                context,
+                darkKnightShadowbringerConfigurationEnabled,
+                metadata.DarkKnightShadowbringerVerified,
+                metadata.WolvesDenStrikingDummyVerified,
+                configuration.DarkKnightShadowbringerMinimumHpPercent,
+                configuration.DarkKnightShadowbringerPressureLimitExclusive,
+                guardActive,
+                purifyClaimedPriority ||
+                samuraiClaimedPriority ||
+                viper.InputClaimed ||
+                gunbreaker.InputClaimed ||
+                allyRescueClaimedPriority ||
+                rescue.UseActionAttempted ||
+                miracle.InputClaimed ||
+                guardianClaimedPriority ||
+                guardShukuchi.InputClaimed ||
+                ninja.InputClaimed ||
+                scholar.InputClaimed ||
+                shadowbringerPre.InputClaimed ||
+                plunge.InputClaimed ||
+                emergencyInputFrame.IsConsumed,
+                emergencyInputFrame,
+                now);
+        }
+
+        now = Environment.TickCount64;
+        var monkCombo = monkHeldCombo.Observe(
+            localPlayer,
+            context,
+            monkHeldComboConfigurationEnabled,
+            metadata.MonkHeldComboVerified,
+            guardActive,
+            purifyClaimedPriority ||
+            samuraiClaimedPriority ||
+            viper.InputClaimed ||
+            gunbreaker.InputClaimed ||
+            allyRescueClaimedPriority ||
+            rescue.UseActionAttempted ||
+            miracle.InputClaimed ||
+            guardianClaimedPriority ||
+            guardShukuchi.InputClaimed ||
+            ninja.InputClaimed ||
+            scholar.InputClaimed ||
+            shadowbringer.InputClaimed ||
+            plunge.InputClaimed ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+
+        var jobSpecificHeldClaimedPriority = samuraiClaimedPriority ||
+                                             ninja.InputClaimed ||
                                              viper.InputClaimed ||
+                                             gunbreaker.InputClaimed ||
                                              allyRescueClaimedPriority ||
                                              miracle.InputClaimed ||
                                              guardianClaimedPriority ||
                                              guardShukuchi.InputClaimed ||
                                              scholar.InputClaimed ||
-                                             plunge.InputClaimed;
+                                             plunge.InputClaimed ||
+                                             shadowbringer.InputClaimed ||
+                                             monkCombo.InputClaimed;
         var recuperate = smartRecuperate.Observe(
             localPlayer,
             context,
@@ -902,6 +1222,7 @@ internal sealed class PersonalStatusService : IDisposable
             prioritizedGuardianPass: defense);
         var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||
                                                guardianClaimedPriority;
+        ObserveAutoGuardFeedback(guardDefense.AutoGuardPopup);
         now = Environment.TickCount64;
         var pressureEscape = pressureEscapeSprint.Observe(
             localPlayer,
@@ -967,6 +1288,9 @@ internal sealed class PersonalStatusService : IDisposable
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                samurai.InputClaimed,
+                samurai.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 ninja.InputClaimed,
                 ninja.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -984,9 +1308,19 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 scholar.InputClaimed,
                 scholar.CastCancellationRequest) ??
+            ClaimedDarkKnightShadowbringerCastCancellationRequest(
+                shadowbringerPre.InputClaimed &&
+                shadowbringerPre.Opportunity ==
+                    DarkKnightShadowbringerOpportunityKind.DarkArts,
+                shadowbringerPre.CastCancellationLease) ??
             ClaimedCastCancellationRequest(
                 plunge.InputClaimed,
                 plunge.CastCancellationRequest) ??
+            ClaimedDarkKnightShadowbringerCastCancellationRequest(
+                shadowbringer.InputClaimed &&
+                shadowbringer.Opportunity ==
+                    DarkKnightShadowbringerOpportunityKind.SafeHpCost,
+                shadowbringer.CastCancellationLease) ??
             ClaimedCastCancellationRequest(
                 recuperate.InputClaimed,
                 recuperate.CastCancellationRequest) ??
@@ -1060,6 +1394,22 @@ internal sealed class PersonalStatusService : IDisposable
         inputClaimed && request is { IsValid: true }
             ? request
             : null;
+
+    private static HeldCastCancellationRequest?
+        ClaimedDarkKnightShadowbringerCastCancellationRequest(
+            bool inputClaimed,
+            DarkKnightShadowbringerCastCancellationLease? lease)
+    {
+        if (!inputClaimed || lease is not { IsValid: true } exact) return null;
+        var request = new HeldCastCancellationRequest(
+            HeldCastCancellationHelperKind.DarkKnightShadowbringer,
+            exact.ExpectedAdjustedActionId,
+            exact.LocalPlayer,
+            exact.Target,
+            exact.FrozenKeyCode,
+            exact.IntentEpochToken);
+        return request.IsValid ? request : null;
+    }
 
     private List<ObservedPersonalStatus> ScanExactStatuses(
         IPlayerCharacter? localPlayer,
@@ -1380,14 +1730,20 @@ internal sealed class PersonalStatusService : IDisposable
         guardianCommunication.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();
+        samuraiReactive.Reset();
+        machinistLimitBreakCapture.SetSamuraiReactiveLocalEntityId(0);
+        machinistLimitBreakCapture.ClearSamuraiReactiveProtectionSignals();
         smartKardia.Reset();
         ninjaGuardShukuchi.Reset();
         ninjaSeiton.Reset();
         viperSerpentTail.Reset();
+        gunbreakerContinuation.Reset();
         scholarCriticalStrategy.Reset();
         scholarSpread.Reset();
         monkEarthReply.Reset();
         darkKnightPlunge.Reset();
+        darkKnightShadowbringer.Reset();
+        monkHeldCombo.Reset();
         Interlocked.Exchange(ref snapshot, PersonalAlertSnapshot.Inactive);
     }
 
@@ -1455,6 +1811,27 @@ internal sealed class PersonalStatusService : IDisposable
             Math.Clamp(configuredSoundId, 1, 16),
             log,
             $"Seiton Sense local-player {label} failed closed.");
+
+    private void ObserveAutoGuardFeedback(AutoGuardTriggerPopup? popup)
+    {
+        var now = Environment.TickCount64;
+        if (popup is not { } visible ||
+            !visible.IsVisible(now) ||
+            visible.Token == consumedAutoGuardPopupToken)
+        {
+            return;
+        }
+
+        // Consume before the native call. Disabled, failed, or throwing sound
+        // requests are never replayed later in the same Auto-Guard episode.
+        consumedAutoGuardPopupToken = visible.Token;
+        if (!configuration.Enabled || !configuration.PlayAutoGuardActivationSound) return;
+
+        MachinistLimitBreakWarningSound.TryPlayShared(
+            Math.Clamp(configuration.AutoGuardActivationSoundId, 1, 16),
+            log,
+            "Seiton Sense Auto-Guard activation sound failed closed.");
+    }
 
     private static bool HasTrustedLocalPlayerIdentity(IPlayerCharacter? localPlayer) =>
         localPlayer is not null &&

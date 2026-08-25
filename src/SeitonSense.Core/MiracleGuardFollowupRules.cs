@@ -124,7 +124,15 @@ public readonly record struct MiracleGuardFollowupObservation(
     bool HigherPriorityClaimed,
     IReadOnlyList<MiracleGuardFollowupCandidate>? Candidates,
     long NowMilliseconds,
-    bool HardReset = false);
+    bool HardReset = false)
+{
+    public bool IsWolvesDenTesting { get; init; }
+
+    public bool IsSupportedContext =>
+        ReactiveCounterCcProfileRules.IsSupportedContext(
+            IsCrystallineConflict,
+            IsWolvesDenTesting);
+}
 
 public readonly record struct MiracleGuardFollowupIntent(
     MiracleGuardFollowupTargetIdentity Target,
@@ -563,7 +571,7 @@ public static class MiracleGuardFollowupRules
     {
         if (!observation.ConfigurationEnabled)
             return MiracleGuardFollowupCancelReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
+        if (!observation.IsSupportedContext)
             return MiracleGuardFollowupCancelReason.OutsideCrystallineConflict;
         if (!observation.IsLocalCounterJobValid)
             return MiracleGuardFollowupCancelReason.LocalCounterJobInvalid;

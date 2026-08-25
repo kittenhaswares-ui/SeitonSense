@@ -35,8 +35,10 @@ internal readonly record struct PanicShukuchiDiagnostics(
 /// Executes only an explicit /panicshu command. Every invocation computes one
 /// exact 19.5-yalm forward ground point and immediately makes at most one native
 /// UseActionLocation call. It deliberately has no scheduler, Guard/CC gate,
-/// Purify priority, cast/queue/animation wait, cooldown precheck, pending state,
+/// Purify priority, cast/queue/animation wait, or pending state,
 /// retry, shorter-point fallback, cursor movement, or target mutation.
+/// A positively ready native cooldown is required before the call so an active
+/// recast cannot start a client-predicted animation which later rolls back.
 /// </summary>
 internal sealed class PanicShukuchiService
 {
@@ -137,10 +139,39 @@ internal sealed class PanicShukuchiService
                 return;
             }
 
-            // Structural identity only: do not inspect or wait for Guard, cast,
-            // queue, animation lock, cooldown, resources, or any prior attempt.
+            // This remains an immediate command, but an active recast must end
+            // before the native location call. Otherwise the client may briefly
+            // predict the animation/recast and then roll it back, occupying the
+            // same action boundary another helper (notably Auto-Seiton) needs.
             var adjustedActionId = actionManager->GetAdjustedActionId(
                 PanicShukuchiRules.ActionId);
+            var readiness = ClientActionAttemptBoundary.Capture(
+                actionManager,
+                PanicShukuchiRules.ActionId);
+            var recastGroup = actionManager->GetRecastGroup(
+                (int)ActionType.Action,
+                PanicShukuchiRules.ActionId);
+            var recast = recastGroup == PanicShukuchiRules.ExpectedRuntimeRecastGroupIndex
+                ? actionManager->GetRecastGroupDetail(recastGroup)
+                : null;
+            if (!readiness.Captured ||
+                adjustedActionId != PanicShukuchiRules.ActionId ||
+                readiness.AdjustedActionId != PanicShukuchiRules.ActionId ||
+                !readiness.IsActionOffCooldown ||
+                readiness.ResourceStatus != 0 ||
+                recast == null ||
+                recast->IsActive ||
+                actionManager->GetAdditionalRecastGroup(
+                    ActionType.Action,
+                    PanicShukuchiRules.ActionId) >= 0 ||
+                ActionManager.GetAdjustedRecastTime(
+                    ActionType.Action,
+                    PanicShukuchiRules.ActionId,
+                    true) != PanicShukuchiRules.ExpectedAdjustedRecastMilliseconds)
+            {
+                RecordRefused("Shukuchi cooldown is not positively ready; command ended");
+                return;
+            }
 
             var origin = default(PanicShukuchiPoint);
             var candidate = default(PanicShukuchiCandidate);

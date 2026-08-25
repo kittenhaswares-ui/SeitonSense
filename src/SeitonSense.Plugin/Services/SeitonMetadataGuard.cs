@@ -34,12 +34,16 @@ internal sealed record PvPMetadataValidation(
     bool EmergencyTeleportViperVerified,
     bool SmartKardiaVerified,
     bool AutoLowMpFocusProbeVerified,
-    bool DarkKnightPlungeVerified)
+    bool DarkKnightPlungeVerified,
+    bool GunbreakerContinuationVerified,
+    bool DarkKnightShadowbringerVerified,
+    bool RedMageResolutionVerified,
+    bool MonkHeldComboVerified)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false);
+        false, false, false, false, false, false, false, false, false);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -1103,6 +1107,114 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var gunbreakerContinuationVerified =
+            GunbreakerContinuationProbe.ValidateMetadata(dataManager, log);
+
+        var darkKnightShadowbringerVerified = ValidateFeature(
+            "Dark Knight Shadowbringer",
+            log,
+            () =>
+            {
+                var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+                var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+                var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+                if (!actions.TryGetRow(
+                        DarkKnightShadowbringerRules.ShadowbringerActionId,
+                        out var baseAction) ||
+                    !actions.TryGetRow(
+                        DarkKnightShadowbringerRules.DarkArtsShadowbringerActionId,
+                        out var darkArtsAction) ||
+                    !actions.TryGetRow(
+                        DarkKnightShadowbringerRules.TheBlackestNightActionId,
+                        out var blackestNight) ||
+                    !procStatuses.TryGetRow(baseAction.ActionProcStatus.RowId, out var proc) ||
+                    !statuses.TryGetRow(
+                        DarkKnightShadowbringerRules.DarkArtsStatusId,
+                        out var darkArtsStatus))
+                {
+                    return false;
+                }
+
+                return ValidateShadowbringerAction(
+                           baseAction,
+                           DarkKnightShadowbringerRules.ShadowbringerHpCost,
+                           expectedCostType: 105) &&
+                       ValidateShadowbringerAction(
+                           darkArtsAction,
+                           DarkKnightShadowbringerRules.DarkArtsStatusId,
+                           expectedCostType: 10) &&
+                       string.Equals(
+                           blackestNight.Name.ToString(),
+                           "the Blackest Night",
+                           StringComparison.Ordinal) &&
+                       blackestNight.Icon == DarkKnightShadowbringerRules.TheBlackestNightIconId &&
+                       blackestNight.IsPvP &&
+                       blackestNight.IsPlayerAction &&
+                       blackestNight.ClassJob.IsValid &&
+                       blackestNight.ClassJob.RowId == DarkKnightShadowbringerRules.DarkKnightJobId &&
+                       blackestNight.Range == 30 &&
+                       blackestNight.Cast100ms == 0 &&
+                       blackestNight.Recast100ms == 160 &&
+                       blackestNight.CooldownGroup == 3 &&
+                       blackestNight.MaxCharges == 2 &&
+                       blackestNight.CanTargetSelf &&
+                       blackestNight.CanTargetParty &&
+                       !blackestNight.CanTargetHostile &&
+                       !blackestNight.TargetArea &&
+                       blackestNight.RequiresLineOfSight &&
+                       baseAction.ActionProcStatus.RowId != 0 &&
+                       darkArtsAction.ActionProcStatus.RowId == baseAction.ActionProcStatus.RowId &&
+                       proc.Status.RowId == DarkKnightShadowbringerRules.DarkArtsStatusId &&
+                       string.Equals(darkArtsStatus.Name.ToString(), "Dark Arts", StringComparison.Ordinal) &&
+                       darkArtsStatus.Icon == DarkKnightShadowbringerRules.DarkArtsStatusIconId &&
+                       darkArtsStatus.StatusCategory == 1 &&
+                       !darkArtsStatus.CanDispel &&
+                       !darkArtsStatus.IsPermanent;
+            });
+
+        var redMageResolutionVerified = ValidateFeature(
+            "Red Mage Resolution",
+            log,
+            () =>
+            {
+                var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+                if (!actions.TryGetRow(
+                        MiracleInterceptConfirmationRules.ResolutionActionId,
+                        out var action))
+                {
+                    return false;
+                }
+
+                return string.Equals(action.Name.ToString(), "Resolution", StringComparison.Ordinal) &&
+                       action.Icon == ReactiveCounterCcProfileRules.ResolutionIconId &&
+                       action.IsPvP &&
+                       action.IsPlayerAction &&
+                       action.ClassJob.IsValid &&
+                       action.ClassJob.RowId == ReactiveCounterCcProfileRules.RedMageJobId &&
+                       action.ActionCategory.IsValid &&
+                       action.ActionCategory.RowId == 2 &&
+                       action.Range == ReactiveCounterCcProfileRules.ResolutionMaximumRangeYalms &&
+                       action.EffectRange == 25 &&
+                       action.Cast100ms == 0 &&
+                       action.Recast100ms == 200 &&
+                       action.CooldownGroup == 1 &&
+                       action.MaxCharges == 0 &&
+                       action.CanTargetHostile &&
+                       !action.CanTargetSelf &&
+                       !action.CanTargetParty &&
+                       !action.CanTargetAlly &&
+                       !action.TargetArea &&
+                       action.RequiresLineOfSight &&
+                       action.NeedToFaceTarget &&
+                       !action.AffectsPosition &&
+                       action.CastType == 4 &&
+                       action.PrimaryCostType == 0 &&
+                       action.PrimaryCostValue == 0;
+            });
+
+        var monkHeldComboVerified =
+            MonkHeldComboProbe.ValidateMetadata(dataManager, log);
+
         var validation = new PvPMetadataValidation(
             seitonVerified,
             viperSerpentTailVerified,
@@ -1130,7 +1242,11 @@ internal static class PvPMetadataGuard
             emergencyTeleportViperVerified,
             smartKardiaVerified,
             autoLowMpFocusProbeVerified,
-            darkKnightPlungeVerified);
+            darkKnightPlungeVerified,
+            gunbreakerContinuationVerified,
+            darkKnightShadowbringerVerified,
+            redMageResolutionVerified,
+            monkHeldComboVerified);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -1142,7 +1258,9 @@ internal static class PvPMetadataGuard
             "ScholarCriticalStrategy={ScholarCriticalStrategy}, ScholarSpread={ScholarSpread}, " +
             "EmergencyTeleport={EmergencyTeleportMonk}/{EmergencyTeleportBlackMage}/" +
             "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
-            "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}.",
+            "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
+            "GunbreakerContinuation={GunbreakerContinuation}, DarkKnightShadowbringer={DarkKnightShadowbringer}, " +
+            "RedMageResolution={RedMageResolution}, MonkHeldCombo={MonkHeldCombo}.",
             validation.SeitonVerified,
             validation.ViperSerpentTailVerified,
             validation.WolvesDenStrikingDummyVerified,
@@ -1169,10 +1287,48 @@ internal static class PvPMetadataGuard
             validation.EmergencyTeleportViperVerified,
             validation.SmartKardiaVerified,
             validation.AutoLowMpFocusProbeVerified,
-            validation.DarkKnightPlungeVerified);
+            validation.DarkKnightPlungeVerified,
+            validation.GunbreakerContinuationVerified,
+            validation.DarkKnightShadowbringerVerified,
+            validation.RedMageResolutionVerified,
+            validation.MonkHeldComboVerified);
 
         return validation;
     }
+
+    private static bool ValidateShadowbringerAction(
+        ActionSheet action,
+        uint expectedCostValue,
+        byte expectedCostType) =>
+        string.Equals(action.Name.ToString(), "Shadowbringer", StringComparison.Ordinal) &&
+        action.Icon == DarkKnightShadowbringerRules.ShadowbringerIconId &&
+        action.IsPvP &&
+        action.IsPlayerAction &&
+        action.ClassJob.IsValid &&
+        action.ClassJob.RowId == DarkKnightShadowbringerRules.DarkKnightJobId &&
+        action.ClassJobCategory.IsValid &&
+        action.ClassJobCategory.RowId ==
+        DarkKnightShadowbringerRules.DarkKnightClassJobCategoryId &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == 4 &&
+        action.Range == DarkKnightShadowbringerRules.MaximumRangeYalms &&
+        action.EffectRange == DarkKnightShadowbringerRules.MaximumRangeYalms &&
+        action.Cast100ms == 0 &&
+        action.Recast100ms == 10 &&
+        action.CooldownGroup == 1 &&
+        action.AdditionalCooldownGroup == 0 &&
+        action.MaxCharges == 0 &&
+        action.CanTargetHostile &&
+        !action.CanTargetSelf &&
+        !action.CanTargetParty &&
+        !action.CanTargetAlly &&
+        !action.TargetArea &&
+        action.RequiresLineOfSight &&
+        action.NeedToFaceTarget &&
+        !action.AffectsPosition &&
+        action.CastType == 4 &&
+        action.PrimaryCostType == expectedCostType &&
+        action.PrimaryCostValue == expectedCostValue;
 
     private static bool ValidateViperSerpentTailCarrier(
         ExcelSheet<ActionSheet> actions,

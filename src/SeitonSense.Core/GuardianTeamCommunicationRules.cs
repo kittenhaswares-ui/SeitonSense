@@ -15,6 +15,7 @@ public enum GuardianTeamCommunicationPhase : byte
     AwaitingBind2ClearResult = 10,
     ReadyToClearBind1 = 11,
     AwaitingBind1ClearResult = 12,
+    ReadyToSendQuickChat = 13,
 }
 
 public enum GuardianTeamCommunicationDecisionKind : byte
@@ -352,14 +353,22 @@ public static class GuardianTeamCommunicationRules
             return StartCleanupOrIdle(state);
         }
 
-        if (outcome == GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation &&
-            command.Kind != GuardianTeamCommunicationCommandKind.SendQuickChat)
+        if (outcome == GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation)
         {
+            var retryQuickChat = command.Kind == GuardianTeamCommunicationCommandKind.SendQuickChat;
             return state with
             {
                 Phase = ReadyPhaseFor(command.Kind),
-                PendingCommand = null,
-                PendingCommandExpiresAtMilliseconds = -1,
+                // Quick Chat is offered in the same framework frame as the
+                // accepted Guardian action. If the native shell explicitly
+                // reports that text commands are unavailable before invocation,
+                // preserve the exact frozen command and its original deadline.
+                // Marker rate-limit deferrals keep their existing fresh-offer
+                // behavior because no marker command crossed the boundary.
+                PendingCommand = retryQuickChat ? command : null,
+                PendingCommandExpiresAtMilliseconds = retryQuickChat
+                    ? state.PendingCommandExpiresAtMilliseconds
+                    : -1,
             };
         }
 
@@ -493,6 +502,8 @@ public static class GuardianTeamCommunicationRules
 
         return state.Phase switch
         {
+            GuardianTeamCommunicationPhase.ReadyToSendQuickChat =>
+                ObserveReadyQuickChat(state, observation),
             GuardianTeamCommunicationPhase.ReadyToSetBind2 => ObserveReadyBind2(state, observation),
             GuardianTeamCommunicationPhase.ReadyToSetBind1 => ObserveReadyBind1(state, observation),
             GuardianTeamCommunicationPhase.ActivePair => ObserveActivePair(state, observation),
@@ -503,6 +514,39 @@ public static class GuardianTeamCommunicationRules
                 GuardianTeamCommunicationDecisionKind.Cancelled,
                 GuardianTeamCommunicationDecisionReason.InvalidState),
         };
+    }
+
+    private static GuardianTeamCommunicationDecision ObserveReadyQuickChat(
+        GuardianTeamCommunicationState state,
+        GuardianTeamCommunicationObservation observation)
+    {
+        var episode = state.Episode!.Value;
+        if (!MatchesLocal(episode, observation.LocalPlayer))
+            return CancelWithoutOwnership(state, GuardianTeamCommunicationDecisionReason.LocalIdentityMismatch);
+        if (!MatchesTarget(episode, observation.PartyTarget))
+            return CancelWithoutOwnership(state, GuardianTeamCommunicationDecisionReason.TargetIdentityMismatch);
+
+        if (observation.NowMilliseconds >= state.PendingCommandExpiresAtMilliseconds)
+        {
+            var expired = AdvanceAfterQuickChat(state);
+            return Result(
+                expired,
+                expired.Phase == GuardianTeamCommunicationPhase.Idle
+                    ? GuardianTeamCommunicationDecisionKind.Completed
+                    : GuardianTeamCommunicationDecisionKind.Waiting,
+                GuardianTeamCommunicationDecisionReason.CommandResultTimeout);
+        }
+
+        var command = state.PendingCommand!.Value;
+        var awaitingResult = state with
+        {
+            Phase = GuardianTeamCommunicationPhase.AwaitingQuickChatResult,
+        };
+        return new GuardianTeamCommunicationDecision(
+            awaitingResult,
+            GuardianTeamCommunicationDecisionKind.IssueCommand,
+            GuardianTeamCommunicationDecisionReason.QuickChatReady,
+            command);
     }
 
     private static GuardianTeamCommunicationDecision ObserveReadyBind2(
@@ -946,6 +990,8 @@ public static class GuardianTeamCommunicationRules
     private static GuardianTeamCommunicationPhase ReadyPhaseFor(
         GuardianTeamCommunicationCommandKind commandKind) => commandKind switch
         {
+            GuardianTeamCommunicationCommandKind.SendQuickChat =>
+                GuardianTeamCommunicationPhase.ReadyToSendQuickChat,
             GuardianTeamCommunicationCommandKind.SetBind2 =>
                 GuardianTeamCommunicationPhase.ReadyToSetBind2,
             GuardianTeamCommunicationCommandKind.SetBind1 =>
@@ -1084,6 +1130,7 @@ public static class GuardianTeamCommunicationRules
         }
 
         var awaitingResult = state.Phase is
+            GuardianTeamCommunicationPhase.ReadyToSendQuickChat or
             GuardianTeamCommunicationPhase.AwaitingQuickChatResult or
             GuardianTeamCommunicationPhase.AwaitingBind2SetResult or
             GuardianTeamCommunicationPhase.AwaitingBind1SetResult or
@@ -1107,6 +1154,7 @@ public static class GuardianTeamCommunicationRules
         var confirmationDeadlineValid = state.PendingCommandExpiresAtMilliseconds >= 0;
         return state.Phase switch
         {
+            GuardianTeamCommunicationPhase.ReadyToSendQuickChat or
             GuardianTeamCommunicationPhase.AwaitingQuickChatResult =>
                 !state.OwnsBind1 && !state.OwnsBind2,
             GuardianTeamCommunicationPhase.ReadyToSetBind2 or
@@ -1139,6 +1187,7 @@ public static class GuardianTeamCommunicationRules
         GuardianTeamCommunicationPhase phase,
         GuardianTeamCommunicationCommandKind command) => phase switch
         {
+            GuardianTeamCommunicationPhase.ReadyToSendQuickChat or
             GuardianTeamCommunicationPhase.AwaitingQuickChatResult =>
                 command == GuardianTeamCommunicationCommandKind.SendQuickChat,
             GuardianTeamCommunicationPhase.AwaitingBind2SetResult =>

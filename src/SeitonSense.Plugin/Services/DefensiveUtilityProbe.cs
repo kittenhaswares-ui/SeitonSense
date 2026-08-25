@@ -55,6 +55,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
     bool GuardianMetadataVerified,
     AcceptedAutoGuardianEpisode? LastAcceptedGuardianEpisode,
     GuardianTriggerPopup? GuardianPopup,
+    AutoGuardTriggerPopup? AutoGuardPopup,
     string LastEvent)
 {
     internal int GuardianCriticalCandidateCount { get; init; }
@@ -92,6 +93,7 @@ internal sealed record DefensiveUtilityProbeSnapshot(
         false,
         null,
         null,
+        null,
         "Not started");
 }
 
@@ -115,6 +117,7 @@ internal sealed class DefensiveUtilityProbe
     private long postPurifyGuardExpiresAt = -1;
     private GuardPropagationState guardPropagationState = GuardPropagationState.Initial;
     private GuardianTriggerPopup? guardianPopup;
+    private AutoGuardTriggerPopup? autoGuardPopup;
     private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;
     private FrozenGuardRetry? frozenGuardRetry;
     private FrozenGuardianRetry? frozenGuardianRetry;
@@ -122,6 +125,7 @@ internal sealed class DefensiveUtilityProbe
     private VirtualKey terminalGuardianKey = VirtualKey.NO_KEY;
     private long frozenIntentEpochToken;
     private long guardianEpisodeToken;
+    private long autoGuardNotificationToken;
     private long attemptCount;
     private long acceptedCount;
     private long nextErrorLogAt;
@@ -222,6 +226,7 @@ internal sealed class DefensiveUtilityProbe
         HeldCastCancellationRequest? castCancellationRequest = null;
         var attempted = false;
         var accepted = false;
+        var autoGuardProtectionArmed = false;
         var targetGameObjectId = 0UL;
         var targetEntityId = 0U;
         var lastEvent = DescribeWaitingState(
@@ -298,7 +303,10 @@ internal sealed class DefensiveUtilityProbe
                 }
                 else
                 {
-                    var outcome = TryUseGuardOnce(localPlayer!, out attempted);
+                    var outcome = TryUseGuardOnce(
+                        localPlayer!,
+                        out attempted,
+                        out autoGuardProtectionArmed);
                     accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                     CompleteGuardAttempt(frozenGuard, outcome, nowMilliseconds);
                     if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
@@ -349,7 +357,10 @@ internal sealed class DefensiveUtilityProbe
             }
             else
             {
-                var outcome = TryUseGuardOnce(localPlayer!, out attempted);
+                var outcome = TryUseGuardOnce(
+                    localPlayer!,
+                    out attempted,
+                    out autoGuardProtectionArmed);
                 accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
                 CompleteGuardAttempt(frozen, outcome, nowMilliseconds);
                 if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
@@ -366,6 +377,21 @@ internal sealed class DefensiveUtilityProbe
 
         if (attempted) Interlocked.Increment(ref attemptCount);
         if (accepted) Interlocked.Increment(ref acceptedCount);
+
+        var autoGuardToken = accepted &&
+                             autoGuardProtectionArmed &&
+                             action == DefensiveUtilityActionKind.Guard
+            ? NextAutoGuardNotificationToken()
+            : autoGuardPopup?.Token ?? 0;
+        autoGuardPopup = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+            autoGuardPopup,
+            guardConfigurationEnabled && isCrystallineConflict && localIdentityValid,
+            action,
+            attempted,
+            accepted && autoGuardProtectionArmed,
+            autoGuardToken,
+            nowMilliseconds,
+            hardReset);
 
         var guardSuppressionNow = Math.Max(nowMilliseconds, Environment.TickCount64);
         var guardSuppression = ObserveGuardSuppression(
@@ -402,6 +428,7 @@ internal sealed class DefensiveUtilityProbe
             guardianMetadataVerified,
             lastAcceptedGuardianEpisode,
             guardianPopup,
+            autoGuardPopup,
             lastEvent);
         var result = prioritizedGuardianPass is { } guardianPass
             ? MergePrioritizedGuardianPass(guardResult, guardianPass)
@@ -777,6 +804,7 @@ internal sealed class DefensiveUtilityProbe
             GuardianMetadataVerified = guardianMetadataVerified,
             LastAcceptedGuardianEpisode = lastAcceptedGuardianEpisode,
             GuardianPopup = guardianPopup,
+            AutoGuardPopup = autoGuardPopup,
             LastEvent = "Frame initialized",
         };
 
@@ -834,6 +862,7 @@ internal sealed class DefensiveUtilityProbe
             UseActionAccepted = aggregate.UseActionAccepted,
             LastAcceptedGuardianEpisode = guardianPass.LastAcceptedGuardianEpisode,
             GuardianPopup = guardianPass.GuardianPopup,
+            AutoGuardPopup = guardPass.AutoGuardPopup,
             LastEvent = aggregate.GuardianOwnsPresentation
                 ? guardianPass.LastEvent
                 : guardPass.LastEvent,
@@ -990,9 +1019,11 @@ internal sealed class DefensiveUtilityProbe
 
     private unsafe ClientActionAttemptOutcome TryUseGuardOnce(
         IPlayerCharacter localPlayer,
-        out bool attempted)
+        out bool attempted,
+        out bool protectionArmed)
     {
         attempted = false;
+        protectionArmed = false;
         if (!guardMetadataVerified ||
             !nearAssist.CanProtectAutomaticGuard ||
             !HasValidLocalPlayer(localPlayer) ||
@@ -1049,10 +1080,11 @@ internal sealed class DefensiveUtilityProbe
 
             if (outcome == ClientActionAttemptOutcome.ClientAccepted)
             {
-                if (!nearAssist.TryArmAcceptedAutoGuardProtection(
+                protectionArmed = nearAssist.TryArmAcceptedAutoGuardProtection(
                     localPlayer.GameObjectId,
                     localPlayer.EntityId,
-                    generationBeforeCall))
+                    generationBeforeCall);
+                if (!protectionArmed)
                 {
                     log.Warning(
                         "Seiton Sense accepted automatic Guard but could not prove exact protection ownership.");
@@ -1448,6 +1480,7 @@ internal sealed class DefensiveUtilityProbe
         ResetGuardianOpportunityRuntime();
         guardPropagationState = GuardPropagationState.Initial;
         lastAcceptedGuardianEpisode = null;
+        autoGuardPopup = null;
     }
 
     private void ResetOpportunityRuntime()
@@ -1462,6 +1495,14 @@ internal sealed class DefensiveUtilityProbe
         postPurifyGuardExpiresAt = -1;
         frozenGuardRetry = null;
         terminalGuardKey = VirtualKey.NO_KEY;
+    }
+
+    private long NextAutoGuardNotificationToken()
+    {
+        if (autoGuardNotificationToken == long.MaxValue)
+            autoGuardNotificationToken = 0;
+        autoGuardNotificationToken++;
+        return autoGuardNotificationToken;
     }
 
     private void ResetGuardianOpportunityRuntime()

@@ -8,6 +8,8 @@ internal static class PanicShukuchiSelfTests
         Equal(29_513u, PanicShukuchiRules.ActionId, "PvP Shukuchi action ID");
         Equal(20f, PanicShukuchiRules.NativeMaximumRangeYalms, "native action range");
         Equal(19.5f, PanicShukuchiRules.SafeForwardDistanceYalms, "safe destination range");
+        Equal(4, PanicShukuchiRules.ExpectedRuntimeRecastGroupIndex, "runtime recast group");
+        Equal(20_000, PanicShukuchiRules.ExpectedAdjustedRecastMilliseconds, "adjusted recast");
 
         var origin = new PanicShukuchiPoint(10f, 3f, -4f);
         True(
