@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.DutyState;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -14,17 +15,15 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One bounded local-Scholar action packet captured by the plugin's existing
-/// shared ActionEffect hook. PrimaryTargetEntityId is targetEntityIds[0]. The
-/// pair flags mean both corresponding AddStatus (0x0E) effects were present on
-/// the same packet target; for Deployment they may be on a secondary target.
+/// shared ActionEffect hook. The target is the action header's animation target,
+/// not the first effect
+/// recipient. Area actions may order their effect recipients independently.
 /// </summary>
 internal readonly record struct ScholarSpreadCapturedActionEffect(
     long ObservedAtMilliseconds,
     uint CasterEntityId,
     uint PrimaryTargetEntityId,
     uint ActionId,
-    bool DotStatusPairObserved,
-    bool ShieldStatusPairObserved,
     int FeatureGeneration,
     uint GlobalSequence,
     ushort SourceSequence);
@@ -56,6 +55,9 @@ internal sealed record ScholarSpreadProbeSnapshot(
     ScholarSpreadIntentDecisionReason IntentReason,
     ScholarSpreadEffectDecisionReason EffectReason,
     bool CaptureRunning,
+    bool DutyStartedRaw,
+    bool MatchStartedLatched,
+    bool MatchCompletedLatched,
     bool InputProbeSucceeded,
     bool RawHeldGameplayKeyEligible,
     bool SharedInputFrameWasConsumed,
@@ -98,6 +100,9 @@ internal sealed record ScholarSpreadProbeSnapshot(
         ScholarSpreadPlanDecisionReason.None,
         ScholarSpreadIntentDecisionReason.None,
         ScholarSpreadEffectDecisionReason.None,
+        false,
+        false,
+        false,
         false,
         false,
         false,
@@ -151,7 +156,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
     private const uint DeploymentAdjustedRecastMilliseconds = 12_000;
     private const uint AdloquiumAdjustedRecastMilliseconds = 12_000;
     private const long OwnedEffectTimeoutMilliseconds = 2_500;
-    private const long StatusPropagationGraceMilliseconds = 250;
+    private const long StatusPropagationTimeoutMilliseconds = 2_500;
 
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
@@ -177,6 +182,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
     private long deploymentConfirmationCount;
     private long manualConflictCount;
     private long nextErrorLogAt;
+    private ScholarSpreadMatchGateState matchGateState = ScholarSpreadMatchGateState.Initial;
+    private int signaledMatchStartTerritory;
+    private int signaledMatchCompletionTerritory;
     private bool disposed;
 
     internal ScholarSpreadProbe(
@@ -197,6 +205,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
         this.log = log;
         observedCaptureDropCount = actionEffectCapture.DroppedScholarSpreadEffects;
         observedCaptureErrorCount = actionEffectCapture.ScholarSpreadCaptureErrors;
+        dutyState.DutyStarted += OnDutyStarted;
+        dutyState.DutyRecommenced += OnDutyRecommenced;
+        dutyState.DutyCompleted += OnDutyCompleted;
     }
 
     internal ScholarSpreadProbeSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -233,9 +244,15 @@ internal sealed class ScholarSpreadProbe : IDisposable
             ? localPlayer.ClassJob.RowId
             : 0;
         var liveContextValid = isCrystallineConflict && IsCurrentCrystallineConflict();
+        var dutyStartedRaw = liveContextValid && dutyState.IsDutyStarted;
+        var matchStarted = ObserveMatchStartGate(
+            liveContextValid,
+            dutyStartedRaw,
+            hardReset);
         var featureContextReady = configurationEnabled &&
                                   metadataVerified &&
                                   liveContextValid &&
+                                  matchStarted &&
                                   localAlive &&
                                   localJobId == ScholarSpreadRules.ScholarJobId &&
                                   localIdentity.IsValid &&
@@ -291,9 +308,11 @@ internal sealed class ScholarSpreadProbe : IDisposable
             effectReason = ScholarSpreadEffectDecisionReason.OwnedEffectMalformed;
         }
 
-        var terminalThisFrame = workflowState.Phase == ScholarSpreadPhase.Cancelled;
+        var terminalThisFrame = workflowState.Phase is
+            ScholarSpreadPhase.Completed or ScholarSpreadPhase.Cancelled;
         if (workflowState.Phase is ScholarSpreadPhase.Completed or ScholarSpreadPhase.Cancelled)
         {
+            terminalUntilRelease = input.HeldGameplayKeyEligible;
             workflowState = ScholarSpreadWorkflowState.Initial;
             ClearActionEpisode();
         }
@@ -327,6 +346,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 var planning = new ScholarSpreadPlanningObservation(
                     configurationEnabled,
                     liveContextValid,
+                    matchStarted,
                     localJobId,
                     localIdentity,
                     localAlive,
@@ -363,7 +383,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     workflowState.Phase == ScholarSpreadPhase.DeploymentReady &&
                     setupConfirmedAtMilliseconds >= 0 &&
                     now >= setupConfirmedAtMilliseconds &&
-                    now - setupConfirmedAtMilliseconds <= StatusPropagationGraceMilliseconds &&
+                    now - setupConfirmedAtMilliseconds <= StatusPropagationTimeoutMilliseconds &&
                     !HasExactOwnPairOnFrozenTarget(workflowState.Plan, localPlayer!.EntityId);
 
                 if (!statusPropagationPending &&
@@ -374,6 +394,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
                         shieldReservationSafe,
                         dotRuntime,
                         shieldRuntime,
+                        tacticalCrystalResolved,
+                        tacticalCrystalPosition,
                         out var intentObservation))
                 {
                     currentAffectedCount =
@@ -435,6 +457,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
             intentReason,
             effectReason,
             actionEffectCapture.IsRunning,
+            dutyStartedRaw,
+            matchGateState.MatchStarted,
+            matchGateState.MatchCompleted,
             input.ProbeSucceeded,
             input.HeldGameplayKeyEligible,
             inputFrame.IsConsumed,
@@ -467,6 +492,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
             actionEffectCapture.DroppedScholarSpreadEffects,
             actionEffectCapture.ScholarSpreadQueueDepth,
             Describe(
+                liveContextValid,
+                matchStarted,
                 featureContextReady,
                 statusPropagationPending: setupConfirmedAtMilliseconds >= 0 &&
                                           workflowState.Phase == ScholarSpreadPhase.DeploymentReady &&
@@ -525,6 +552,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
     {
         if (disposed) return;
         disposed = true;
+        dutyState.DutyStarted -= OnDutyStarted;
+        dutyState.DutyRecommenced -= OnDutyRecommenced;
+        dutyState.DutyCompleted -= OnDutyCompleted;
         actionEffectCapture.SetScholarSpreadLocalEntityId(0);
         actionEffectCapture.ClearScholarSpreadEffects();
         ResetRuntime(resetConsent: true, clearCapture: false);
@@ -559,12 +589,6 @@ internal sealed class ScholarSpreadProbe : IDisposable
             var primaryTarget = ResolveCapturedTargetIdentity(
                 captured.PrimaryTargetEntityId,
                 workflowState.Plan);
-            var expectedPair = workflowState.Plan.Kind switch
-            {
-                ScholarSpreadKind.Dot => captured.DotStatusPairObserved,
-                ScholarSpreadKind.Shield => captured.ShieldStatusPairObserved,
-                _ => false,
-            };
             var decision = ScholarSpreadRules.ObserveActionEffect(
                 workflowState,
                 new ScholarSpreadActionEffectObservation(
@@ -572,8 +596,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     primaryTarget,
                     captured.ActionId,
                     captured.GlobalSequence,
-                    captured.SourceSequence,
-                    expectedPair),
+                    captured.SourceSequence),
                 shieldReservationStillSafe);
             workflowState = decision.NextState;
             lastReason = decision.Reason;
@@ -644,7 +667,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 terminalUntilRelease = heldGameplayKeyEligible;
                 ClearActionEpisode();
                 break;
-            case ClientActionAttemptOutcome.ClientAccepted when sourceSequence != 0:
+            case ClientActionAttemptOutcome.ClientAccepted:
                 workflowState = ScholarSpreadRules.RecordClientAcceptedAction(
                     workflowState,
                     intent,
@@ -670,7 +693,6 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 }
                 break;
             case ClientActionAttemptOutcome.AcceptanceUnknown:
-            case ClientActionAttemptOutcome.ClientAccepted:
                 workflowState = ScholarSpreadRules.Cancel(workflowState);
                 terminalUntilRelease = heldGameplayKeyEligible;
                 ClearActionEpisode();
@@ -689,6 +711,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         var exactLocal = ResolveExactLocalPlayer(intent.LocalPlayer);
         if (!intent.IsValid ||
             !IsCurrentCrystallineConflict() ||
+            !IsCurrentScholarMatchStarted() ||
             exactLocal is null ||
             exactLocal.Address != localPlayer.Address ||
             !IsExactLocalScholar(exactLocal, intent.LocalPlayer) ||
@@ -744,9 +767,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 sourceSequence = after.LastUsedActionSequence;
             }
 
-            return accepted && sourceSequence == 0
-                ? ClientActionAttemptOutcome.AcceptanceUnknown
-                : outcome;
+            return outcome;
         }
         catch (Exception exception)
         {
@@ -984,6 +1005,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
         bool shieldReservationSafe,
         IReadOnlyList<ScholarDotRuntimeCandidate> observedDots,
         IReadOnlyList<ScholarShieldRuntimeCandidate> observedShields,
+        bool tacticalCrystalResolved,
+        Vector3 tacticalCrystalPosition,
         out ScholarSpreadIntentObservation observation)
     {
         observation = default;
@@ -1058,6 +1081,12 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     checkCastingActive: false),
                 NativeRangeAndLineOfSight:
                     HasRangeAndLineOfSight(localPlayer, currentTarget, intent.ActionId),
+                TacticalCrystalPresenceKnown:
+                    intent.Kind == ScholarSpreadKind.Shield && tacticalCrystalResolved,
+                OnTacticalCrystal:
+                    intent.Kind == ScholarSpreadKind.Shield &&
+                    tacticalCrystalResolved &&
+                    IsInsideTacticalCrystal(currentTarget, tacticalCrystalPosition),
                 ExactCoverageKnown: exactCoverageKnown,
                 CurrentAffectedCount: affected,
                 ExpectedOwnStatusPairActive: pairActive),
@@ -1450,6 +1479,66 @@ internal sealed class ScholarSpreadProbe : IDisposable
                first && second;
     }
 
+    private bool ObserveMatchStartGate(
+        bool liveContextValid,
+        bool dutyStartedRaw,
+        bool hardReset)
+    {
+        var territory = clientState.TerritoryType;
+        if (!liveContextValid)
+        {
+            Interlocked.Exchange(ref signaledMatchStartTerritory, 0);
+            Interlocked.Exchange(ref signaledMatchCompletionTerritory, 0);
+            matchGateState = ScholarSpreadRules.ObserveMatchGate(
+                matchGateState,
+                new ScholarSpreadMatchGateObservation(
+                    territory,
+                    LiveContextValid: false,
+                    HardReset: hardReset,
+                    DutyStartedRaw: false,
+                    DutyStartSignaled: false,
+                    DutyCompletionSignaled: false));
+            return matchGateState.AllowsActions;
+        }
+
+        var startedTerritory = unchecked((uint)Interlocked.Exchange(
+            ref signaledMatchStartTerritory,
+            0));
+        var completedTerritory = unchecked((uint)Interlocked.Exchange(
+            ref signaledMatchCompletionTerritory,
+            0));
+
+        matchGateState = ScholarSpreadRules.ObserveMatchGate(
+            matchGateState,
+            new ScholarSpreadMatchGateObservation(
+                territory,
+                LiveContextValid: true,
+                HardReset: hardReset,
+                DutyStartedRaw: dutyStartedRaw,
+                DutyStartSignaled: startedTerritory == territory,
+                DutyCompletionSignaled: completedTerritory == territory));
+        return matchGateState.AllowsActions;
+    }
+
+    private bool IsCurrentScholarMatchStarted() =>
+        matchGateState.TerritoryId == clientState.TerritoryType &&
+        matchGateState.AllowsActions;
+
+    private void OnDutyStarted(IDutyStateEventArgs _) =>
+        Interlocked.Exchange(
+            ref signaledMatchStartTerritory,
+            unchecked((int)clientState.TerritoryType));
+
+    private void OnDutyRecommenced(IDutyStateEventArgs _) =>
+        Interlocked.Exchange(
+            ref signaledMatchStartTerritory,
+            unchecked((int)clientState.TerritoryType));
+
+    private void OnDutyCompleted(IDutyStateEventArgs _) =>
+        Interlocked.Exchange(
+            ref signaledMatchCompletionTerritory,
+            unchecked((int)clientState.TerritoryType));
+
     private bool IsCurrentCrystallineConflict()
     {
         var condition = dutyState.ContentFinderCondition;
@@ -1603,6 +1692,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
     }
 
     private static string Describe(
+        bool liveContextValid,
+        bool matchStarted,
         bool featureContextReady,
         bool statusPropagationPending,
         bool attempted,
@@ -1611,6 +1702,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         ScholarSpreadIntentDecisionReason intentReason,
         ScholarSpreadEffectDecisionReason effectReason)
     {
+        if (liveContextValid && !matchStarted) return "Waiting for CC Duty Start";
         if (!featureContextReady) return "Waiting for exact Scholar CC context";
         if (statusPropagationPending) return "Waiting for owned setup status propagation";
         if (attempted) return $"Native action boundary: {outcome}";

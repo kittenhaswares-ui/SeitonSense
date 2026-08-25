@@ -70,9 +70,29 @@ public readonly record struct ScholarSpreadHeldConsentDecision(
     public bool ConsumesSharedInputGeneration => false;
 }
 
+public readonly record struct ScholarSpreadMatchGateState(
+    uint TerritoryId,
+    bool LiveContextValid,
+    bool MatchStarted,
+    bool MatchCompleted)
+{
+    public static ScholarSpreadMatchGateState Initial => default;
+    public bool AllowsActions =>
+        LiveContextValid && MatchStarted && !MatchCompleted;
+}
+
+public readonly record struct ScholarSpreadMatchGateObservation(
+    uint TerritoryId,
+    bool LiveContextValid,
+    bool HardReset,
+    bool DutyStartedRaw,
+    bool DutyStartSignaled,
+    bool DutyCompletionSignaled);
+
 public readonly record struct ScholarSpreadPlanningObservation(
     bool ConfigurationEnabled,
     bool IsCrystallineConflict,
+    bool MatchStarted,
     uint LocalJobId,
     TargetPressureActorIdentity LocalPlayer,
     bool IsLocalPlayerAlive,
@@ -117,6 +137,7 @@ public enum ScholarSpreadPlanDecisionReason : byte
     HeldGameplayKeyInvalid = 12,
     DeploymentUnavailable = 13,
     NoEligibleSequence = 14,
+    MatchNotStarted = 15,
 }
 
 public readonly record struct ScholarSpreadPlan(
@@ -208,8 +229,9 @@ public readonly record struct ScholarSpreadOwnedActionToken(
         RequestedFromPhase is ScholarSpreadPhase.SetupReady or
             ScholarSpreadPhase.DeploymentReady &&
         ScholarSpreadRules.IsRelevantAction(ActionId) &&
-        Target.IsValid &&
-        SourceSequence != 0;
+        Target.IsValid;
+
+    public bool HasBoundSourceSequence => SourceSequence != 0;
 }
 
 public readonly record struct ScholarSpreadWorkflowState(
@@ -242,6 +264,8 @@ public readonly record struct ScholarSpreadExactTargetSnapshot(
     uint MaximumHp,
     bool NativeTargetValid,
     bool NativeRangeAndLineOfSight,
+    bool TacticalCrystalPresenceKnown,
+    bool OnTacticalCrystal,
     bool ExactCoverageKnown,
     int CurrentAffectedCount,
     bool ExpectedOwnStatusPairActive);
@@ -294,8 +318,7 @@ public readonly record struct ScholarSpreadActionEffectObservation(
     TargetPressureActorIdentity PrimaryTarget,
     uint ActionId,
     uint GlobalSequence,
-    ushort SourceSequence,
-    bool ExpectedOwnStatusPairObserved);
+    ushort SourceSequence);
 
 public enum ScholarSpreadEffectDecisionKind : byte
 {
@@ -317,8 +340,7 @@ public enum ScholarSpreadEffectDecisionReason : byte
     ManualSetupTargetConflict = 7,
     OwnedSequenceMismatch = 8,
     OwnedEffectMalformed = 9,
-    ExpectedStatusPairMissing = 10,
-    ShieldReservationUnavailable = 11,
+    ShieldReservationUnavailable = 10,
 }
 
 public readonly record struct ScholarSpreadEffectDecision(
@@ -356,6 +378,43 @@ public static class ScholarSpreadRules
     public const int MinimumUsefulSpreadTargets = 2;
     public const int MaximumEnemyTargets = 5;
     public const int MaximumPartyTargets = 8;
+
+    public static ScholarSpreadMatchGateState ObserveMatchGate(
+        ScholarSpreadMatchGateState previous,
+        ScholarSpreadMatchGateObservation observation)
+    {
+        if (!observation.LiveContextValid)
+        {
+            return new ScholarSpreadMatchGateState(
+                observation.TerritoryId,
+                LiveContextValid: false,
+                MatchStarted: false,
+                MatchCompleted: false);
+        }
+
+        var reset = observation.HardReset ||
+                    !previous.LiveContextValid ||
+                    previous.TerritoryId != observation.TerritoryId;
+        var started = !reset && previous.MatchStarted;
+        var completed = !reset && previous.MatchCompleted;
+        if (!completed &&
+            (observation.DutyStartedRaw || observation.DutyStartSignaled))
+        {
+            started = true;
+        }
+
+        if (observation.DutyCompletionSignaled)
+        {
+            started = false;
+            completed = true;
+        }
+
+        return new ScholarSpreadMatchGateState(
+            observation.TerritoryId,
+            LiveContextValid: true,
+            MatchStarted: started,
+            MatchCompleted: completed);
+    }
 
     public static ScholarSpreadHeldConsentDecision ObserveIndependentHeldConsent(
         ScholarSpreadHeldConsentState state,
@@ -583,6 +642,8 @@ public static class ScholarSpreadRules
         HasValidHp(candidate.CurrentHp, candidate.MaximumHp) &&
         candidate.NativeTargetValid &&
         candidate.NativeRangeAndLineOfSight &&
+        (candidate.CurrentHp < candidate.MaximumHp ||
+         (candidate.TacticalCrystalPresenceKnown && candidate.OnTacticalCrystal)) &&
         !candidate.HasOwnGalvanize &&
         !candidate.HasOwnCatalyze &&
         candidate.ExactCoverageKnown &&
@@ -631,7 +692,7 @@ public static class ScholarSpreadRules
         ScholarSpreadIntent intent,
         ushort sourceSequence)
     {
-        if (!IntentBelongsToState(state, intent) || sourceSequence == 0)
+        if (!IntentBelongsToState(state, intent))
             return Cancel(state);
 
         var nextPhase = intent.RequiredPhase switch
@@ -689,6 +750,14 @@ public static class ScholarSpreadRules
 
         if (!target.ExactCoverageKnown ||
             target.CurrentAffectedCount < MinimumUsefulSpreadTargets)
+        {
+            return CancelIntent(ScholarSpreadIntentDecisionReason.SpreadNoLongerUseful);
+        }
+
+        if (intent.Kind == ScholarSpreadKind.Shield &&
+            intent.IsSetup &&
+            target.CurrentHp >= target.MaximumHp &&
+            (!target.TacticalCrystalPresenceKnown || !target.OnTacticalCrystal))
         {
             return CancelIntent(ScholarSpreadIntentDecisionReason.SpreadNoLongerUseful);
         }
@@ -755,7 +824,9 @@ public static class ScholarSpreadRules
 
         var pending = state.PendingOwnedAction;
         if (pending.IsValid &&
-            effect.SourceSequence == pending.SourceSequence)
+            effect.SourceSequence != 0 &&
+            (!pending.HasBoundSourceSequence ||
+             effect.SourceSequence == pending.SourceSequence))
         {
             if (effect.GlobalSequence == 0 ||
                 effect.ActionId != pending.ActionId ||
@@ -763,12 +834,6 @@ public static class ScholarSpreadRules
             {
                 return Effect(Cancel(state), ScholarSpreadEffectDecisionKind.Cancelled,
                     ScholarSpreadEffectDecisionReason.OwnedSequenceMismatch);
-            }
-
-            if (!effect.ExpectedOwnStatusPairObserved)
-            {
-                return Effect(Cancel(state), ScholarSpreadEffectDecisionKind.Cancelled,
-                    ScholarSpreadEffectDecisionReason.ExpectedStatusPairMissing);
             }
 
             if (pending.RequestedFromPhase == ScholarSpreadPhase.SetupReady)
@@ -814,7 +879,9 @@ public static class ScholarSpreadRules
 
         // A source-sequence collision with the helper-owned request is always
         // ambiguous. Never reinterpret it as a manual action or try another target.
-        if (pending.IsValid && effect.SourceSequence == pending.SourceSequence)
+        if (pending.IsValid &&
+            pending.HasBoundSourceSequence &&
+            effect.SourceSequence == pending.SourceSequence)
         {
             return Effect(Cancel(state), ScholarSpreadEffectDecisionKind.Cancelled,
                 ScholarSpreadEffectDecisionReason.OwnedSequenceMismatch);
@@ -864,6 +931,8 @@ public static class ScholarSpreadRules
             return ScholarSpreadPlanDecisionReason.ConfigurationDisabled;
         if (!observation.IsCrystallineConflict)
             return ScholarSpreadPlanDecisionReason.OutsideCrystallineConflict;
+        if (!observation.MatchStarted)
+            return ScholarSpreadPlanDecisionReason.MatchNotStarted;
         if (!observation.LocalPlayer.IsValid)
             return ScholarSpreadPlanDecisionReason.LocalPlayerIdentityInvalid;
         if (!observation.IsLocalPlayerAlive)

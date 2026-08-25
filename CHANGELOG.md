@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.32.0.1
+
+- Fixed **Scholar Smart Spread** running during Crystalline Conflict
+  preparation. It now remains inactive until the current territory receives
+  Duty Start / recommence evidence, remembers that start through transient
+  `IsDutyStarted` gaps, and closes again on duty completion or context reset.
+- Replaced the fragile requirement that one ActionEffect packet contain both
+  expected setup statuses. The helper now attributes its exact accepted
+  Biolysis/Adloquium through local caster, action, frozen animation target,
+  generation, and source/global sequence evidence, then observes the exact
+  local-source status pair on that frozen actor for up to 2.5 seconds.
+  Deployment Tactics is eligible immediately when the pair appears and runs at
+  the first safe native animation/cast/queue boundary; 2.5 seconds is only the
+  fail-closed timeout, not an added delay.
+- Accepted calls whose native source sequence is not synchronously visible may
+  now bind the first exact nonzero server ActionEffect instead of cancelling a
+  valid chain. Manual Scholar actions still cannot start or hijack a workflow,
+  and target/status ambiguity still retires it without fallback.
+- Full-health allies away from the tactical crystal no longer qualify as
+  Adloquium seeds. A completed setup -> Deployment chain is terminal until all
+  physical gameplay keys are released, preventing a continuous WASD hold from
+  becoming an idle Scholar rotation.
+- Bumped the plugin to `0.32.0.1`; configuration schema remains `35`, preserving
+  every setting. All `423` Core tests and the full zero-warning release build
+  pass in this source snapshot. Current-patch in-game confirmation remains
+  separate from these source/build checks.
+
 ## 0.32.0.0
 
 - Added a default-off **Emergency Teleport** held helper for PvP MNK, BLM, SGE,

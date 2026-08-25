@@ -1068,7 +1068,10 @@ This separate persisted option is disabled by default and runs only for PvP
 Scholar in exact Crystalline Conflict. It reads immutable raw held-key consent in
 an independent lane. It never claims the shared helper frame/generation and never
 requests cast cancellation; it waits for FFXIV's real GCD, cast, queue, and
-animation-lock boundary instead.
+animation-lock boundary instead. A territory-local Duty Start/recommence latch
+keeps the helper inactive during preparation and a duty-completion/context reset
+closes it. One completed chain is retained as terminal until every physical
+gameplay key is released.
 
 The DoT path requires a complete exact canonical five-enemy roster and reads
 local-source Biolysis/Biolytic statuses, position, and native reachability to
@@ -1080,20 +1083,27 @@ HP/status/position and the
 single language-independent tactical-crystal battle-NPC identity; when that actor
 is uniquely resolved, candidates inside a conservative 5-yalm edge radius rank
 first, then lower HP and stable identity. Unknown coverage for any party member
-blocks this ranking. Adloquium spread is permitted only when
+blocks this ranking. A full-health candidate away from that tactical-crystal
+radius is ineligible. Adloquium spread is permitted only when
 two Deployment charges exist or native recast timing proves the next charge will
 return no later than the next Biolysis window.
 
 Every plugin-owned Adloquium/Biolysis/Deployment request freezes one action,
-actor, episode, and nonzero source sequence. Only its matching local-source
-ActionEffect and expected paired status evidence can advance the workflow.
+actor, and episode. If a nonzero native source sequence is synchronously
+available it is bound immediately; otherwise the first exact nonzero server
+ActionEffect sequence may bind the already accepted request. The matching local-
+source ActionEffect advances the setup, after which the runtime observes the
+frozen actor's live exact local-source paired statuses for at most 2.5 seconds.
+Deployment becomes eligible as soon as that pair appears; the timeout is not a
+fixed dispatch delay.
 Separately pressed Scholar actions are not adopted; a manual Deployment conflict
 cancels the automatic plan to avoid double-spending. Final identity/status/action
 drift, unknown evidence, or packet ambiguity ends the plan without fallback or
 stale retry. All plans, source sequences, confirmations, conflicts, and aggregate
 diagnostics are bounded in local memory and are not persisted or uploaded.
 Client dispatch/packet evidence does not prove the status spread; current-patch
-ActionEffect correlation and the conservative crystal radius require live testing.
+ActionEffect correlation, Duty Start signal, and the conservative crystal radius
+require live testing.
 
 ## Experimental Sage Smart Kardia after accepted Eukrasia
 
@@ -1482,7 +1492,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 35 is current in v0.32.0.0. It forces Emergency Teleport
+Configuration schema 35 is current in v0.32.0.1. It forces Emergency Teleport
 and Scholar Smart Spread off for every upgrade, fresh install, and Reset Defaults;
 Emergency initializes to 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
 travel, 10-yalm destination radius, and zero nearby enemies. The historical

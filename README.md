@@ -2,13 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.32.0.0 adds two default-off held
-helpers. Emergency Teleport gives PvP MNK, BLM, SGE, and VPR one exact escape to
-the safest sufficiently distant party member when configured HP, MP, and direct-
-focus gates pass. Scholar Smart Spread runs independently from the shared hold
-priority: it prepares Biolysis coverage first and permits an Adloquium spread only
-when the next DoT Deployment opportunity remains available. Manual Scholar
-actions are never adopted. It retains v0.31's ranged Smart Tab, direct Viper
+assistance, and target highlights. Version 0.32.0.1 fixes Scholar Smart Spread:
+it remains inactive until the Crystalline Conflict Duty Start barrier drops,
+confirms the helper-owned setup before observing its live statuses, and sends
+Deployment Tactics at the first safe animation boundary. Full-health allies away
+from the tactical crystal no longer start Adloquium loops, and another chain
+requires a physical key release. It retains v0.32's Emergency Teleport and
+v0.31's ranged Smart Tab, direct Viper
 carrier handling, and explicit Wolves' Den testing additions. `/smarttab`
 (`/sstarget`) toggles the native forward-target replacement; paired handler/helper
 hooks preserve the game's own binding and UI/input gates. The v0.30 line moved the optional harmful-action
@@ -129,12 +129,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
   exact HP does; every target still requires native 25-yalm range/line of sight.
 - **Experimental Scholar Smart Spread helper:** a default-off raw held-key lane
-  runs independently from the shared physical-input priority. It prepares
+  runs independently from the shared physical-input priority and stays inactive
+  until exact CC Duty Start. It prepares
   plugin-owned Biolysis and Deployment Tactics steps for the largest exact new
   enemy coverage. Adloquium may be spread only when Deployment remains available
-  for the next Biolysis window. Each transition requires matching local-source
-  ActionEffect evidence and a source sequence owned by this workflow; manually
-  pressed Scholar actions are never adopted.
+  for the next Biolysis window and its seed is damaged or on the tactical crystal.
+  Each setup transition requires the matching local-source ActionEffect; its live
+  own-status pair on the frozen target then opens Deployment immediately at the
+  next safe native boundary. One completed chain requires key release before a
+  new one, and manually pressed Scholar actions are never adopted.
 - **Experimental Sage Smart Kardia helper:** a separate default-off option arms
   only after the existing Eukrasia call is forwarded unchanged and accepted by
   the client. Inside that two-second opportunity it requires causal Eukrasia
@@ -652,7 +655,10 @@ It reads the raw held-key snapshot independently and never claims the shared
 physical-input frame or generation. Purify, Smart Recuperate, Emergency
 Teleport, and every other shared helper therefore retain their normal priority;
 Scholar advances only when FFXIV exposes a clear GCD, cast, action-queue, and
-animation-lock boundary.
+animation-lock boundary. The helper remains inactive during preparation and
+arms only after the current territory's Duty Start event or live started state.
+One completed setup -> Deployment chain latches the current hold; every physical
+gameplay key must be released before a new chain can begin.
 
 When Biolysis `29233` and Deployment Tactics `29234` are ready, the workflow
 requires the complete exact canonical `S1`-`S5` roster and chooses the reachable
@@ -666,18 +672,24 @@ conservative 5-yalm edge radius around the uniquely resolved tactical-crystal
 actor, then lowest exact HP and stable party identity. Adloquium -> Deployment
 is allowed only with two current Deployment charges or when the next charge is
 proven to return no later than the next Biolysis opportunity. Unknown coverage
-for any party member also blocks shield ranking.
+for any party member also blocks shield ranking. A full-health candidate away
+from the tactical crystal is not an eligible shield seed, preventing idle
+Adloquium loops while preserving proactive objective shielding.
 
 Every plugin-issued setup and Deployment step is tied to its exact local source,
-target, episode, and nonzero native source sequence. The next phase opens only
-after the matching ActionEffect and expected local-source status pair are
-observed. An independently pressed Adloquium, Biolysis, or Deployment cannot be
+target, action, and episode. A synchronously exposed native source sequence is
+bound immediately; otherwise the first matching nonzero server ActionEffect
+sequence binds that already accepted request. After the exact setup ActionEffect,
+the helper polls the frozen target for its exact local-source status pair for up
+to 2.5 seconds. Deployment becomes eligible immediately when the pair appears
+and uses the first safe native animation boundary; the timeout is not a fixed
+delay. An independently pressed Adloquium, Biolysis, or Deployment cannot be
 adopted; a conflicting manual Deployment cancels the automatic episode rather
 than double-spending the shared charges. Target/status drift, ambiguous packet
 evidence, missing metadata, or failed final revalidation ends the frozen plan
-without alternate, fallback, or stale retry. Client dispatch evidence does not
-prove the server effect; current-patch ActionEffect pairing and the conservative
-crystal radius remain live-validation boundaries.
+without alternate, fallback, or stale retry. Client dispatch and source/build
+checks do not prove the current server effect; exact live CC behavior remains a
+required in-game validation boundary.
 
 ## Dark Knight Hiebsprung held-key helper
 
@@ -1565,7 +1577,7 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 35 is current in v0.32.0.0. It forces Emergency Teleport
+Configuration schema 35 is current in v0.32.0.1. It forces Emergency Teleport
 and Scholar Smart Spread off for every upgrade, fresh install, and Reset Defaults,
 with Emergency defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
 travel, 10-yalm destination radius, and zero nearby enemies. The historical
@@ -1857,7 +1869,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.32.0.0, the exact 423-test Core registry and source checks pin
+For current v0.32.0.1, the exact 423-test Core registry and source checks pin
 configuration schema 35, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the separate default-off Viper helper, Emergency Teleport, and independent
 Scholar Smart Spread. Smart Tab checks retain the paired
@@ -1892,10 +1904,11 @@ edges, safety-before-distance ranking, target-specific native action status,
 complete enemy geometry, exact actor/key/context freeze, final-preflight
 retirement, frame consumption only after final commit, and one committed native
 request with no fallback or retry. Scholar tests pin DoT-first coverage,
-Deployment reserve math, tactical-crystal/HP shield ranking, independent input
-ownership, exact owned source-sequence transitions, manual-action isolation, and
-terminal target drift. These are source/build assertions, not live proof that a
-current server accepted the movement or status spread.
+Deployment reserve math, Duty Start gating, useful tactical-crystal/HP shield
+ranking, independent input ownership, accepted-action/server-sequence binding,
+live own-status propagation, one-chain-per-hold completion, manual-action
+isolation, and terminal target drift. These are source/build assertions, not
+live proof that a current server accepted the movement or status spread.
 
 Historical v0.30.0.0 baseline: the exact 388-test Core registry and source checks
 pinned Smart Target's reach-first deterministic ranking, complete exact actor/action freeze,

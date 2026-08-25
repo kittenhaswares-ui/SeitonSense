@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.32.0.0";
+    private const string CurrentReleaseVersion = "0.32.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -318,9 +318,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Emergency Teleport is a new default-off held helper for MNK, BLM, SGE, and VPR: below your HP/MP limits and at or above the direct-focus minimum it makes one exact jump to the safest distant party member.",
-                "Scholar Smart Spread is a separate default-off held lane: it prioritizes Biolysis coverage, reserves Deployment Tactics for the next DoT opportunity, and never adopts a manually started chain.",
-                "Purify remains first; Emergency Teleport follows Smart Recuperate, while Scholar waits independently for the real cast, queue, and animation boundary. Schema 35; all 423 Core tests pass.",
+                "Scholar Smart Spread now stays inactive during Crystalline Conflict preparation and starts only after the Duty Start barrier drops.",
+                "Its own Biolysis or Adloquium is confirmed first, then the live status on the frozen target opens Deployment Tactics at the first safe animation boundary.",
+                "Full-health allies away from the tactical crystal no longer start shield loops, and one completed chain now requires a real key release before another can begin. Schema 35; all 423 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

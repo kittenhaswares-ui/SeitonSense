@@ -53,6 +53,62 @@ internal static class ScholarSpreadSelfTests
             configurationEnabled: false,
             heldGameplayKeyEligible: true);
         Equal(ScholarSpreadHeldConsentState.Initial, reset.NextState, "disable resets local latch");
+
+        var preparation = ScholarSpreadRules.ObserveMatchGate(
+            ScholarSpreadMatchGateState.Initial,
+            new ScholarSpreadMatchGateObservation(
+                TerritoryId: 1032,
+                LiveContextValid: true,
+                HardReset: true,
+                DutyStartedRaw: false,
+                DutyStartSignaled: false,
+                DutyCompletionSignaled: false));
+        False(preparation.AllowsActions, "CC preparation is not a running match");
+
+        var started = ScholarSpreadRules.ObserveMatchGate(
+            preparation,
+            new ScholarSpreadMatchGateObservation(
+                TerritoryId: 1032,
+                LiveContextValid: true,
+                HardReset: false,
+                DutyStartedRaw: false,
+                DutyStartSignaled: true,
+                DutyCompletionSignaled: false));
+        True(started.AllowsActions, "Duty Start event opens Scholar actions");
+
+        var transientFalse = ScholarSpreadRules.ObserveMatchGate(
+            started,
+            new ScholarSpreadMatchGateObservation(
+                TerritoryId: 1032,
+                LiveContextValid: true,
+                HardReset: false,
+                DutyStartedRaw: false,
+                DutyStartSignaled: false,
+                DutyCompletionSignaled: false));
+        True(transientFalse.AllowsActions,
+            "a false IsDutyStarted poll cannot stop an active match");
+
+        var completed = ScholarSpreadRules.ObserveMatchGate(
+            transientFalse,
+            new ScholarSpreadMatchGateObservation(
+                TerritoryId: 1032,
+                LiveContextValid: true,
+                HardReset: false,
+                DutyStartedRaw: true,
+                DutyStartSignaled: true,
+                DutyCompletionSignaled: true));
+        False(completed.AllowsActions, "completion wins over stale start evidence");
+
+        var nextPreparation = ScholarSpreadRules.ObserveMatchGate(
+            completed,
+            new ScholarSpreadMatchGateObservation(
+                TerritoryId: 1033,
+                LiveContextValid: true,
+                HardReset: true,
+                DutyStartedRaw: false,
+                DutyStartSignaled: false,
+                DutyCompletionSignaled: false));
+        False(nextPreparation.AllowsActions, "new territory returns to preparation");
     }
 
     internal static void DotSequenceWinsAndRanksMaximumExactCoverage()
@@ -82,6 +138,13 @@ internal static class ScholarSpreadSelfTests
         Equal(5, decision.Plan.Value.PredictedAffectedCount, "frozen coverage diagnostics");
         False(decision.ClaimsSharedInputFrame, "plan never claims main lane");
         False(decision.ConsumesSharedInputGeneration, "plan never consumes main input");
+
+        var preparation = ScholarSpreadRules.PlanNextSequence(
+            observation with { MatchStarted = false },
+            episodeToken: 76);
+        False(preparation.HasPlan, "preparation cannot start a Scholar workflow");
+        Equal(ScholarSpreadPlanDecisionReason.MatchNotStarted, preparation.Reason,
+            "match start is an explicit planning gate");
 
         dots[0] = dots[0] with { NewlyCoveredEnemyCount = 5 };
         Equal(
@@ -230,6 +293,25 @@ internal static class ScholarSpreadSelfTests
         missingSelf[0] = missingSelf[0] with { Actor = Ally(6) };
         Equal(-1, ScholarSpreadRules.SelectBestShieldSeedIndex(missingSelf, LocalPlayer),
             "party roster without the local player fails closed");
+
+        var fullHealthOffObjective = candidates
+            .Select(candidate => candidate with
+            {
+                CurrentHp = candidate.MaximumHp,
+                OnTacticalCrystal = false,
+            })
+            .ToArray();
+        Equal(-1,
+            ScholarSpreadRules.SelectBestShieldSeedIndex(fullHealthOffObjective, LocalPlayer),
+            "full-health allies away from the objective do not create an Adlo rotation");
+
+        fullHealthOffObjective[1] = fullHealthOffObjective[1] with
+        {
+            OnTacticalCrystal = true,
+        };
+        Equal(1,
+            ScholarSpreadRules.SelectBestShieldSeedIndex(fullHealthOffObjective, LocalPlayer),
+            "an objective seed still permits a proactive shield");
     }
 
     internal static void OwnedSourceSequenceAloneAdvancesWorkflow()
@@ -254,6 +336,25 @@ internal static class ScholarSpreadSelfTests
             });
         True(busy.ShouldSoftWait, "real native boundary is the sole soft wait");
         False(busy.ClaimsSharedInputFrame, "soft wait cannot block main lane");
+
+        var unbound = ScholarSpreadRules.RecordClientAcceptedAction(
+            state,
+            setup,
+            sourceSequence: 0);
+        True(unbound.PendingOwnedAction.IsValid,
+            "a synchronously accepted call may wait to bind its server source sequence");
+        False(unbound.PendingOwnedAction.HasBoundSourceSequence,
+            "zero means pending server binding, not manual ownership");
+        var unboundConfirmed = ScholarSpreadRules.ObserveActionEffect(
+            unbound,
+            Effect(
+                ScholarSpreadRules.BiolysisActionId,
+                unbound.Plan.Target,
+                sourceSequence: 39,
+                globalSequence: 399),
+            shieldReservationStillSafe: true);
+        True(unboundConfirmed.Advanced,
+            "first exact nonzero server packet binds an accepted setup");
 
         state = ScholarSpreadRules.RecordClientAcceptedAction(state, setup, sourceSequence: 41);
         Equal(ScholarSpreadPhase.AwaitingSetupEffect, state.Phase, "await helper-owned packet");
@@ -404,6 +505,55 @@ internal static class ScholarSpreadSelfTests
             valid with { HeldGameplayKeyEligible = false },
             ScholarSpreadIntentDecisionReason.HeldGameplayKeyReleased);
 
+        var shieldSetupState = ScholarSpreadRules.BeginWorkflow(
+            Plan(ScholarSpreadKind.Shield, LocalPlayer, targetSlot: 1, affected: 3));
+        True(ScholarSpreadRules.TryGetNextIntent(
+            shieldSetupState,
+            out var shieldSetup), "shield setup intent");
+        var shieldSetupObservation = IntentObservation(
+            shieldSetupState,
+            shieldSetup,
+            ownStatusPairActive: false);
+        var damagedOffCrystal = shieldSetupObservation with
+        {
+            ExactTarget = shieldSetupObservation.ExactTarget with
+            {
+                CurrentHp = 99,
+                MaximumHp = 100,
+                TacticalCrystalPresenceKnown = true,
+                OnTacticalCrystal = false,
+            },
+        };
+        True(
+            ScholarSpreadRules.EvaluateExactIntent(
+                shieldSetupState,
+                shieldSetup,
+                damagedOffCrystal).CanDispatch,
+            "damaged off-crystal seed remains useful");
+        CancelIntent(
+            shieldSetupState,
+            shieldSetup,
+            damagedOffCrystal with
+            {
+                ExactTarget = damagedOffCrystal.ExactTarget with { CurrentHp = 100 },
+            },
+            ScholarSpreadIntentDecisionReason.SpreadNoLongerUseful);
+
+        var fullHealthOnCrystal = damagedOffCrystal with
+        {
+            ExactTarget = damagedOffCrystal.ExactTarget with
+            {
+                CurrentHp = 100,
+                OnTacticalCrystal = true,
+            },
+        };
+        True(
+            ScholarSpreadRules.EvaluateExactIntent(
+                shieldSetupState,
+                shieldSetup,
+                fullHealthOnCrystal).CanDispatch,
+            "full-health tactical-crystal seed remains proactively useful");
+
         var shieldState = ScholarSpreadRules.BeginWorkflow(
             Plan(ScholarSpreadKind.Shield, LocalPlayer, targetSlot: 1, affected: 3));
         True(ScholarSpreadRules.TryGetNextIntent(shieldState, out var adlo), "Adlo intent");
@@ -433,6 +583,7 @@ internal static class ScholarSpreadSelfTests
         new(
             ConfigurationEnabled: true,
             IsCrystallineConflict: true,
+            MatchStarted: true,
             LocalJobId: ScholarSpreadRules.ScholarJobId,
             LocalPlayer,
             IsLocalPlayerAlive: true,
@@ -525,6 +676,8 @@ internal static class ScholarSpreadSelfTests
                 MaximumHp: 100,
                 NativeTargetValid: true,
                 NativeRangeAndLineOfSight: true,
+                TacticalCrystalPresenceKnown: true,
+                OnTacticalCrystal: true,
                 ExactCoverageKnown: true,
                 CurrentAffectedCount: state.Plan.PredictedAffectedCount,
                 ExpectedOwnStatusPairActive: ownStatusPairActive),
@@ -545,8 +698,7 @@ internal static class ScholarSpreadSelfTests
             target,
             actionId,
             globalSequence,
-            sourceSequence,
-            ExpectedOwnStatusPairObserved: true);
+            sourceSequence);
 
     private static TargetPressureActorIdentity Enemy(int slot) =>
         new((ulong)(20_000 + slot), (uint)(2_000 + slot));

@@ -129,7 +129,9 @@ internal sealed partial class SettingsWindow
             $"plan/intent/effect={scholarSpread.PlanReason}/{scholarSpread.IntentReason}/" +
             $"{scholarSpread.EffectReason}, capture={scholarSpread.CaptureRunning}/" +
             $"{scholarSpread.CaptureQueueDepth}/{scholarSpread.CaptureCount}/" +
-            $"{scholarSpread.CaptureDropCount}, raw-held/consumed=" +
+            $"{scholarSpread.CaptureDropCount}, duty/raw-latched-complete=" +
+            $"{scholarSpread.DutyStartedRaw}/{scholarSpread.MatchStartedLatched}/" +
+            $"{scholarSpread.MatchCompletedLatched}, raw-held/consumed=" +
             $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}, " +
             $"key={scholarSpread.HeldGameplayKey}, next={scholarSpread.NextActionId}, charges=" +
             $"{scholarSpread.DeploymentCharges}, deploy/bio={scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +

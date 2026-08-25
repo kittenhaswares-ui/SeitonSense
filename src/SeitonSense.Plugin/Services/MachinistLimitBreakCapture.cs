@@ -69,7 +69,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private const uint WardensPaeanActionId = 29400;
     private const uint AquaveilActionId = 29227;
     private const byte RemoveStatusEffectType = 0x10;
-    private const byte AddStatusEffectType = 0x0E;
 
     private readonly IGameInteropProvider interop;
     private readonly IPluginLog log;
@@ -829,26 +828,10 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             return null;
         }
 
-        var primaryTargetEntityId = targetEntityIds[0].ObjectId;
+        var animationTargetId = header->AnimationTargetId;
+        if (animationTargetId > uint.MaxValue) return null;
+        var primaryTargetEntityId = (uint)animationTargetId;
         if (!IsNetworkEntityId(primaryTargetEntityId)) return null;
-
-        var dotPairObserved = false;
-        var shieldPairObserved = false;
-        var targetsToScan = actionId == ScholarSpreadRules.DeploymentTacticsActionId
-            ? (int)header->NumTargets
-            : 1;
-        for (var targetIndex = 0; targetIndex < targetsToScan; targetIndex++)
-        {
-            var targetEffects = effects[targetIndex].Effects;
-            dotPairObserved |= HasExactAddedStatusPair(
-                targetEffects,
-                ScholarSpreadRules.BiolysisStatusId,
-                ScholarSpreadRules.BiolyticStatusId);
-            shieldPairObserved |= HasExactAddedStatusPair(
-                targetEffects,
-                ScholarSpreadRules.GalvanizeStatusId,
-                ScholarSpreadRules.CatalyzeStatusId);
-        }
 
         if (featureGeneration != CurrentScholarSpreadGeneration ||
             localEntityId != CurrentScholarSpreadLocalEntityId)
@@ -861,8 +844,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             casterEntityId,
             primaryTargetEntityId,
             actionId,
-            dotPairObserved,
-            shieldPairObserved,
             featureGeneration,
             header->GlobalSequence,
             header->SourceSequence);
@@ -1026,25 +1007,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         }
 
         return true;
-    }
-
-    private static bool HasExactAddedStatusPair(
-        Span<ActionEffectHandler.Effect> effects,
-        uint firstStatusId,
-        uint secondStatusId)
-    {
-        var firstCount = 0;
-        var secondCount = 0;
-        foreach (var effect in effects)
-        {
-            if (effect.Type != AddStatusEffectType) continue;
-            if (effect.Value == firstStatusId)
-                firstCount++;
-            else if (effect.Value == secondStatusId)
-                secondCount++;
-        }
-
-        return firstCount == 1 && secondCount == 1;
     }
 
     private static bool IsEmpty(ActionEffectHandler.Effect effect) =>
