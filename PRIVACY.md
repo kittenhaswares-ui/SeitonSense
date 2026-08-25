@@ -1464,7 +1464,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 37 is current in v0.33.0.0. It keeps GNB Continuation, DRK
+Configuration schema 37 is current in v0.33.0.1. It keeps GNB Continuation, DRK
 Shadowbringer, Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, and RDM
 Resolution off for every upgrade, fresh install, and Reset Defaults. Schema 36
 adds local Auto-Guard card/sound defaults without enabling Auto-Guard itself.

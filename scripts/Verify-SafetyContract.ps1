@@ -3033,8 +3033,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 3 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 440) {
-    throw 'All four shared protection-end tests, all three SAM reactive tests, and the exact 440-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 441) {
+    throw 'All four shared protection-end tests, all three SAM reactive tests, and the exact 441-test Core registry must remain pinned.'
 }
 if ($normalizedMchCapture -notmatch 'var localEntityId = CurrentScholarSpreadLocalEntityId; var featureGeneration = CurrentScholarSpreadGeneration; if \(!IsNetworkEntityId\(localEntityId\) \|\| casterEntityId != localEntityId \|\| header == null \|\| effects == null \|\| targetEntityIds == null \|\| header->NumTargets is 0 or > MaximumTargetsPerAction\).*?if \(!ScholarSpreadRules\.IsRelevantAction\(actionId\)\) return null;.*?var animationTargetId = header->AnimationTargetId; if \(animationTargetId > uint\.MaxValue\) return null; var primaryTargetEntityId = \(uint\)animationTargetId; if \(!IsNetworkEntityId\(primaryTargetEntityId\)\) return null;.*?new ScholarSpreadCapturedActionEffect\( Environment\.TickCount64, casterEntityId, primaryTargetEntityId, actionId, featureGeneration, header->GlobalSequence, header->SourceSequence\)' -or
     $normalizedMchCapture -notmatch 'effect\.CasterEntityId != CurrentScholarSpreadLocalEntityId \|\| effect\.FeatureGeneration != CurrentScholarSpreadGeneration \|\| !IsNetworkEntityId\(effect\.PrimaryTargetEntityId\).*?if \(depth > MaximumQueuedScholarSpreadEffects\).*?pendingScholarSpreadEffects\.Enqueue\(effect\); Interlocked\.Increment\(ref capturedScholarSpreadEffects\);') {
@@ -8095,10 +8095,10 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.33.0.0</Version>',
-    '<AssemblyVersion>0.33.0.0</AssemblyVersion>',
-    '<FileVersion>0.33.0.0</FileVersion>'
-) 'v0.33.0.0 project version'
+    '<Version>0.33.0.1</Version>',
+    '<AssemblyVersion>0.33.0.1</AssemblyVersion>',
+    '<FileVersion>0.33.0.1</FileVersion>'
+) 'v0.33.0.1 project version'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8117,21 +8117,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.33.0.0 plugin manifest metadata'
+) 'v0.33.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.33.0.0"',
-    'Added default-off held GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC/Zantetsuken helpers',
-    'removed /seitonbringer',
-    'Hardened exact protection-end follow-ups for WHM, BRD, NIN, PLD, RDM, and SAM.',
-    'Accepted Auto-Guard can show a card/sound and protects Guard re-presses for two seconds.',
-    '/panicshu now requires exact native Shukuchi recast/resource readiness before its one location call.',
-    'Schema 37; all 440 Core tests pass',
+    '"AssemblyVersion": "0.33.0.1"',
+    'Fixed held Monk combo stopping after Dragon Kick by using the exact native PvP combo route for every normal stage and Phantom Rush.',
+    'Fixed DRK Shadowbringer metadata and Wolves'' Den duel-target routing',
+    'Dark Arts is pressure-independent while the HP-cost fallback still requires known pressure.',
+    'Schema 37; all 441 Core tests pass',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.33.0.0 custom-repository metadata'
+) 'v0.33.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8147,7 +8145,8 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.33.0.0 adds default-off held GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken helpers',
+    'Version 0.33.0.1 fixes held Monk combo native route advancement after Dragon Kick plus DRK Shadowbringer metadata and Wolves'' Den duel-target routing.',
+    'It retains v0.33''s default-off held GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken helpers',
     '`/seitonbringer` has been removed.',
     'protection-end follow-ups retain exact evidence through short native busy windows.',
     'Accepted Auto-Guard can show a card/sound and protects an accidental second Guard press for two seconds.',
@@ -8164,14 +8163,27 @@ Assert-Literals $normalizedReadme @(
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 37 is current in v0.33.0.0',
-    'For current v0.33.0.0, the exact 440-test Core registry and source checks pin',
+    'Configuration schema 37 is current in v0.33.0.1',
+    'For current v0.33.0.1, the exact 441-test Core registry and source checks pin',
     'Eighteen physical-hold option enable edges share the scheduler input.',
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'Scholar Smart Spread remains an independent raw-hold lane and never consumes that frame.',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.33.0.0 current README release and safety contract'
+) 'v0.33.0.1 current README release and safety contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.33.0.1',
+    'Fixed the held **Monk combo** stopping after Dragon Kick.',
+    'exact PvP combo mode and route `55`',
+    'Fixed held **Dark Knight Shadowbringer** failing metadata validation.',
+    'hotbar carrier `29091` is correctly required to be a player action',
+    'internal Dark Arts replacement `29738` is correctly required not to be one.',
+    'Removed the unrelated striking-dummy metadata requirement from the DRK Wolves'' Den held-input gate.',
+    'Dark Arts remains pressure-independent',
+    'HP-cost fallback still fails closed without known pressure.',
+    'Bumped the plugin to `0.33.0.1`; configuration schema remains `37`.',
+    'All `441` Core tests and the full zero-warning release build pass'
+) 'v0.33.0.1 Monk route and DRK Shadowbringer hotfix release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.33.0.0',
     'Replaced the retired `/seitonbringer` macro pair with a default-off **held Shadowbringer** helper',
@@ -8187,7 +8199,7 @@ Assert-Literals $normalizedChangelog @(
     'Hardened `/panicshu` only at its immediate native boundary',
     'Bumped the plugin to `0.33.0.0` and configuration schema to `37`.',
     'All `440` Core tests and the full zero-warning release build pass'
-) 'v0.33.0.0 job helpers, reactive reliability, Auto-Guard, Panic Shukuchi, and release notes'
+) 'retained v0.33.0.0 job helpers, reactive reliability, Auto-Guard, Panic Shukuchi, and release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.32.0.1',
     'remains inactive until the current territory receives Duty Start / recommence evidence',
@@ -8232,7 +8244,7 @@ Assert-Literals $normalizedPrivacy @(
     'frozen actor''s live exact local-source paired statuses for at most 2.5 seconds',
     'Deployment becomes eligible as soon as that pair appears; the timeout is not a fixed dispatch delay.',
     'Separately pressed Scholar actions are not adopted; a manual Deployment conflict cancels the automatic plan',
-    'Configuration schema 37 is current in v0.33.0.0.',
+    'Configuration schema 37 is current in v0.33.0.1.',
     'Emergency danger/destination episodes, Scholar spread plans/source sequences, ActionEffect confirmation state, or in-memory counters.'
 ) 'v0.32.0.1 Emergency Teleport and independent Scholar spread transient-data contract'
 Assert-Literals $normalizedReadme @(
@@ -8363,7 +8375,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 37 is current in v0.33.0.0'
+    'Configuration schema 37 is current in v0.33.0.1'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8470,7 +8482,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 37 is current in v0.33.0.0',
+    'Configuration schema 37 is current in v0.33.0.1',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -8838,7 +8850,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 37 is current in v0.33.0.0',
+    'Configuration schema 37 is current in v0.33.0.1',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -8918,7 +8930,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 37 is current in v0.33.0.0'
+    'Configuration schema 37 is current in v0.33.0.1'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -9341,4 +9353,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.33.0.0 safety contract verified across $($sourceFiles.Count) source files with schema 37 and the exact 440-test Core registry. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires complete unique five-player rosters, binds only its own accepted exact ActionEffect, and waits for the frozen target's live own-status pair before Deployment."
+Write-Host "Seiton Sense v0.33.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 37 and the exact 441-test Core registry. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires complete unique five-player rosters, binds only its own accepted exact ActionEffect, and waits for the frozen target's live own-status pair before Deployment."

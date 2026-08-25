@@ -126,6 +126,7 @@ var tests = new (string Name, Action Run)[]
     ("Monk held combo catalog and route are exact", MonkHeldComboSelfTests.ExactCatalogAndRouteArePinned),
     ("Monk held combo CC and Wolves targets are exact", MonkHeldComboSelfTests.CcSelectionPrefersMeleeThenLowestHpAndWolvesUsesCurrentTarget),
     ("Monk held combo route and ranged fallback are exact", MonkHeldComboSelfTests.NormalRouteRequiresExactNextCarrierAndTrueRangedFallback),
+    ("Monk held combo continuous hold advances every stage", MonkHeldComboSelfTests.ContinuousHoldAdvancesEveryNormalComboStage),
     ("Monk held combo Phantom workflow requires proof", MonkHeldComboSelfTests.PhantomWorkflowUsesProofRangeAndReservedPhoenix),
     ("Monk held combo missing proof fails closed", MonkHeldComboSelfTests.MissingOrExpiredProofFailsClosed),
     ("Monk held combo retries only stable false", MonkHeldComboSelfTests.StableFalseAloneRetriesAndStatusDriftIsAmbiguous),

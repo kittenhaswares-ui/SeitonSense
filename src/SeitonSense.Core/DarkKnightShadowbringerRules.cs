@@ -399,6 +399,20 @@ public static class DarkKnightShadowbringerRules
             _ => 0,
         };
 
+    /// <summary>
+    /// The hotbar carrier is a player action, while its Dark Arts-adjusted row
+    /// is an internal replacement and deliberately is not. Treating both rows
+    /// alike makes the complete feature metadata fail closed at startup.
+    /// </summary>
+    public static bool HasExpectedPlayerActionFlag(
+        uint actionId,
+        bool isPlayerAction) => actionId switch
+        {
+            ShadowbringerActionId => isPlayerAction,
+            DarkArtsShadowbringerActionId => !isPlayerAction,
+            _ => false,
+        };
+
     public static bool TrySelectOpportunity(
         DarkKnightShadowbringerDarkArtsState darkArts,
         DarkKnightShadowbringerFallbackState fallback,

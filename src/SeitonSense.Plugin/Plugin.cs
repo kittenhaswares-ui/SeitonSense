@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.33.0.0";
+    private const string CurrentReleaseVersion = "0.33.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -310,10 +310,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New default-off held helpers: GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken. The old /seitonbringer macro helper is gone.",
-                "Reactive WHM, BRD, NIN, PLD, RDM, and SAM follow-ups now keep exact protection-end evidence through short native busy windows without changing your target.",
-                "Accepted Auto-Guard now shows an optional card and sound, and accidental Guard re-presses are protected for the first two seconds.",
-                "/panicshu now calls Shukuchi only after exact native recast and resource readiness, avoiding the predicted animation/cooldown rollback. Schema 37; all 440 Core tests pass.",
+                "Monk held combo now sends every normal stage and Phantom Rush through the native PvP combo route, so one continuous hold advances beyond Dragon Kick.",
+                "DRK Shadowbringer metadata now accepts the exact base/adjusted player-action flags, and Wolves' Den duel targets no longer depend on striking-dummy metadata.",
+                "The HP-cost DRK fallback still requires known pressure; Dark Arts remains pressure-independent. Schema 37; all 441 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

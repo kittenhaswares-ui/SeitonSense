@@ -870,13 +870,18 @@ internal sealed unsafe class MonkHeldComboProbe
                 }
 
                 attemptedAtBoundary = true;
+                var comboRouteId = MonkHeldComboRules.GetNativeComboRouteId(
+                    decision.ActionId,
+                    decision.Purpose);
                 var accepted = actionManager->UseAction(
                     ActionType.Action,
                     decision.ActionId,
                     useTargetId,
                     0,
-                    ActionManager.UseActionMode.None,
-                    0);
+                    comboRouteId != 0
+                        ? ActionManager.UseActionMode.Combo
+                        : ActionManager.UseActionMode.None,
+                    comboRouteId);
                 after = ClientActionAttemptBoundary.Capture(
                     actionManager,
                     decision.ActionId);
