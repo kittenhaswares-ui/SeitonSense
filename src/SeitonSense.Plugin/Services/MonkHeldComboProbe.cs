@@ -546,10 +546,10 @@ internal sealed unsafe class MonkHeldComboProbe
                     context,
                     localActions.ResolvedComboActionId,
                     localActions.FireReplyLocallyReady,
-                    localActions.WindReplyLocallyReady,
-                     localActions.ThunderclapLocallyReady,
-                     hasFireResonance,
-                     wolvesDenStrikingDummyMetadataVerified);
+                    localActions.WindReplyWorkflowAvailable,
+                    localActions.ThunderclapWorkflowAvailable,
+                    hasFireResonance,
+                    wolvesDenStrikingDummyMetadataVerified);
         }
 
         if (state.Intent is { IsValid: true } &&
@@ -597,9 +597,13 @@ internal sealed unsafe class MonkHeldComboProbe
             ComboActionLocallyReady: exactComboReady,
             FireReplyLocallyReady: exactFireReady,
             WindReplyWorkflowAvailable:
-                localActions.WindReplyLocallyReady,
+                localActions.WindReplyWorkflowAvailable,
             WindReplyLocallyReady: exactWindReady,
+            ThunderclapWorkflowAvailable:
+                localActions.ThunderclapWorkflowAvailable,
             ThunderclapLocallyReady: exactThunderReady,
+            RisingPhoenixWorkflowAvailable:
+                localActions.RisingPhoenixWorkflowAvailable,
             RisingPhoenixLocallyReady: exactPhoenixReady,
             HasExactOwnFireResonance: hasFireResonance,
             ConfirmationBoundaryReopened: confirmationBoundaryReopened,
@@ -861,13 +865,17 @@ internal sealed unsafe class MonkHeldComboProbe
                         currentActions.FireReplyLocallyReady &&
                         candidate.Value.FireReplyUseReady,
                     WindReplyWorkflowAvailable =
-                        currentActions.WindReplyLocallyReady,
+                        currentActions.WindReplyWorkflowAvailable,
                     WindReplyLocallyReady =
                         currentActions.WindReplyLocallyReady &&
                         candidate.Value.WindReplyUseReady,
+                    ThunderclapWorkflowAvailable =
+                        currentActions.ThunderclapWorkflowAvailable,
                     ThunderclapLocallyReady =
                         currentActions.ThunderclapLocallyReady &&
                         candidate.Value.ThunderclapUseReady,
+                    RisingPhoenixWorkflowAvailable =
+                        currentActions.RisingPhoenixWorkflowAvailable,
                     RisingPhoenixLocallyReady =
                         currentActions.RisingPhoenixLocallyReady &&
                         currentActions.RisingPhoenixSelfUseReady,
@@ -1008,8 +1016,8 @@ internal sealed unsafe class MonkHeldComboProbe
         SupportedPvPContext context,
         uint resolvedComboActionId,
         bool fireReplyLocallyReady,
-        bool windReplyLocallyReady,
-        bool thunderclapLocallyReady,
+        bool windReplyWorkflowAvailable,
+        bool thunderclapWorkflowAvailable,
         bool hasExactOwnFireResonance,
         bool strikingDummyMetadataVerified)
     {
@@ -1041,8 +1049,8 @@ internal sealed unsafe class MonkHeldComboProbe
                 context,
                 resolvedComboActionId,
                 fireReplyLocallyReady,
-                windReplyLocallyReady,
-                thunderclapLocallyReady,
+                windReplyWorkflowAvailable,
+                thunderclapWorkflowAvailable,
                 hasExactOwnFireResonance,
                 [candidate.Value.Core]);
             return selected.HasValue ? candidate : null;
@@ -1079,8 +1087,8 @@ internal sealed unsafe class MonkHeldComboProbe
             context,
             resolvedComboActionId,
             fireReplyLocallyReady,
-            windReplyLocallyReady,
-            thunderclapLocallyReady,
+            windReplyWorkflowAvailable,
+            thunderclapWorkflowAvailable,
             hasExactOwnFireResonance,
             core);
         if (!best.HasValue) return null;
@@ -1374,6 +1382,18 @@ internal sealed unsafe class MonkHeldComboProbe
         var comboFingerprint = ClientActionAttemptBoundary.Capture(
             actionManager,
             resolved);
+        var windWorkflowAvailable = HasStableAvailableUse(
+            actionManager,
+            MonkHeldComboRules.WindReplyActionId,
+            maximumAccessibleCharges: 1);
+        var thunderclapWorkflowAvailable = HasStableAvailableUse(
+            actionManager,
+            MonkHeldComboRules.ThunderclapActionId,
+            maximumAccessibleCharges: 2);
+        var risingPhoenixWorkflowAvailable = HasStableAvailableUse(
+            actionManager,
+            MonkHeldComboRules.RisingPhoenixActionId,
+            maximumAccessibleCharges: 2);
         var phoenixLocallyReady = IsLocallyReady(
             actionManager,
             MonkHeldComboRules.RisingPhoenixActionId);
@@ -1383,12 +1403,15 @@ internal sealed unsafe class MonkHeldComboProbe
             IsLocallyReady(
                 actionManager,
                 MonkHeldComboRules.FireReplyActionId),
+            windWorkflowAvailable,
             IsLocallyReady(
                 actionManager,
                 MonkHeldComboRules.WindReplyActionId),
+            thunderclapWorkflowAvailable,
             IsLocallyReady(
                 actionManager,
                 MonkHeldComboRules.ThunderclapActionId),
+            risingPhoenixWorkflowAvailable,
             phoenixLocallyReady,
             phoenixLocallyReady &&
                 IsTargetActionReady(
@@ -1428,6 +1451,31 @@ internal sealed unsafe class MonkHeldComboProbe
                fingerprint.AdjustedActionId == actionId &&
                fingerprint.IsActionOffCooldown &&
                fingerprint.ResourceStatus == 0;
+    }
+
+    /// <summary>
+    /// Stable pre-reservation evidence for one currently available use. The
+    /// exact adjusted action, resources, and explicit charge count deliberately
+    /// exclude the shared-GCD, animation, cast, queue, and target gates which
+    /// remain part of final dispatch readiness. Non-charge actions intentionally
+    /// report at most one accessible use through the same native charge API.
+    /// </summary>
+    private static bool HasStableAvailableUse(
+        ActionManager* actionManager,
+        uint actionId,
+        uint maximumAccessibleCharges)
+    {
+        if (actionManager == null ||
+            actionId == 0 ||
+            maximumAccessibleCharges == 0 ||
+            actionManager->GetAdjustedActionId(actionId) != actionId ||
+            actionManager->CheckActionResources(ActionType.Action, actionId) != 0)
+        {
+            return false;
+        }
+
+        var charges = actionManager->GetCurrentCharges(actionId);
+        return charges is > 0 && charges <= maximumAccessibleCharges;
     }
 
     private static bool IsTargetActionReady(
@@ -1820,8 +1868,11 @@ internal sealed unsafe class MonkHeldComboProbe
         uint ResolvedComboActionId,
         bool ComboActionLocallyReady,
         bool FireReplyLocallyReady,
+        bool WindReplyWorkflowAvailable,
         bool WindReplyLocallyReady,
+        bool ThunderclapWorkflowAvailable,
         bool ThunderclapLocallyReady,
+        bool RisingPhoenixWorkflowAvailable,
         bool RisingPhoenixLocallyReady,
         bool RisingPhoenixSelfUseReady,
         bool NativeBoundaryReady,

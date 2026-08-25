@@ -354,7 +354,7 @@ if (-not $monkMetadataValidationMethod.Success -or
     $monkMetadataValidationBody -notmatch 'var valid = auxiliariesValid && routeValid && statusesValid;' -or
     $normalizedMonkRouteResolverSource -notmatch 'internal MonkHeldComboProbeSnapshot Observe\( IPlayerCharacter\? localPlayer, SupportedPvPContext context, bool configurationEnabled, bool actionMetadataVerified, bool wolvesDenStrikingDummyMetadataVerified,' -or
     $normalizedMonkRouteResolverSource -notmatch 'runtimeDrift = state\.Intent is \{ IsValid: true \} frozenIntent.*?!actionMetadataVerified \|\| !MonkHeldComboRules\.IsTargetMetadataEligible\( frozenIntent\.Context, frozenWolvesDenTargetKind == MonkWolvesDenTargetKind\.StrikingDummy, wolvesDenStrikingDummyMetadataVerified\)' -or
-    $normalizedMonkRouteResolverSource -notmatch 'ResolveCurrentBestCandidate\( exactLocal, context, localActions\.ResolvedComboActionId, localActions\.FireReplyLocallyReady, localActions\.WindReplyLocallyReady, localActions\.ThunderclapLocallyReady, hasFireResonance, wolvesDenStrikingDummyMetadataVerified\)' -or
+    $normalizedMonkRouteResolverSource -notmatch 'ResolveCurrentBestCandidate\( exactLocal, context, localActions\.ResolvedComboActionId, localActions\.FireReplyLocallyReady, localActions\.WindReplyWorkflowAvailable, localActions\.ThunderclapWorkflowAvailable, hasFireResonance, wolvesDenStrikingDummyMetadataVerified\)' -or
     $normalizedMonkRouteResolverSource -notmatch 'ResolveExactCandidate\(.*?expectedWolvesKind == MonkWolvesDenTargetKind\.StrikingDummy, strikingDummyMetadataVerified\)' -or
     $monkRouteResolverSource -match 'strikingDummyMetadataVerified\s*:\s*true' -or
     $normalizedPersonalStatusScannerWiring -notmatch 'var monkHeldComboInputEnabled = monkHeldComboConfigurationEnabled && metadata\.MonkHeldComboVerified;' -or
@@ -2384,7 +2384,8 @@ if ([regex]::Matches($emergencyTeleportSelfTests, '\bpublic static void\s+\w+\s*
 # Scholar spread observes the immutable raw hold as a separate GCD lane. It
 # cannot consume or claim the shared scheduler frame, cannot cancel casts, and
 # advances Biolysis/Adloquium -> Deployment only from its own accepted action,
-# exact ActionEffect ownership, and a live own-status pair on the frozen target.
+# exact ActionEffect ownership, one observed complete exact owned setup pair,
+# and only then a remaining exact owned setup status on the frozen target.
 $scholarSpreadRules = Read-RequiredSource $scholarSpreadRulesPath 'Scholar spread rules'
 $normalizedScholarSpreadRules = $scholarSpreadRules -replace '\s+', ' '
 $scholarSpreadProbe = Read-RequiredSource $scholarSpreadProbePath 'Scholar spread runtime'
@@ -2431,19 +2432,20 @@ Assert-Literals $scholarSpreadRules @(
 if ($normalizedScholarSpreadRules -notmatch 'if \(observation\.BiolysisLocallyReady\).*?SelectBestDotSeedIndex\(.*?if \(observation\.AdloquiumLocallyReady && CanSpendDeploymentOnShield\(' -or
     $normalizedScholarSpreadRules -notmatch 'public static ScholarSpreadMatchGateState ObserveMatchGate\(.*?if \(!observation\.LiveContextValid\).*?var reset = observation\.HardReset \|\|.*?previous\.TerritoryId != observation\.TerritoryId;.*?DutyStartedRaw \|\| observation\.DutyStartSignaled.*?if \(observation\.DutyCompletionSignaled\).*?MatchCompleted: completed\);' -or
     $normalizedScholarSpreadRules -notmatch 'var exactPendingIdentity = pending\.IsValid && effect\.ActionId == pending\.ActionId && effect\.PrimaryTarget == pending\.Target; var exactPendingEffect = exactPendingIdentity && effect\.GlobalSequence != 0; var compatibleSourceSequence = !pending\.HasBoundSourceSequence \|\| effect\.SourceSequence == 0 \|\| effect\.SourceSequence == pending\.SourceSequence; if \(exactPendingEffect && compatibleSourceSequence\).*?OwnedSetupConfirmed.*?OwnedDeploymentConfirmed.*?if \(exactPendingIdentity\).*?ScholarSpreadEffectDecisionReason\.OwnedEffectMalformed' -or
-    $normalizedScholarSpreadRules -notmatch 'public static ScholarSpreadEffectDecision ConfirmPendingSetupFromExactStatusPair\(.*?state\.Phase != ScholarSpreadPhase\.AwaitingSetupEffect.*?exactTarget != state\.Plan\.Target.*?exactTarget != pending\.Target.*?!expectedOwnStatusPairActive.*?Phase = ScholarSpreadPhase\.DeploymentReady.*?LastConfirmedGlobalSequence = 0.*?LastConfirmedActionId = pending\.ActionId' -or
+    $normalizedScholarSpreadRules -notmatch 'public static ScholarSpreadEffectDecision ConfirmPendingSetupFromExactStatusPair\(.*?state\.Phase != ScholarSpreadPhase\.AwaitingSetupEffect.*?exactTarget != state\.Plan\.Target.*?exactTarget != pending\.Target.*?!expectedOwnStatusPairActive.*?Phase = ScholarSpreadPhase\.DeploymentReady.*?LastConfirmedGlobalSequence = 0.*?LastConfirmedActionId = pending\.ActionId.*?OwnedSetupPairWasComplete = true' -or
     $normalizedScholarSpreadRules -notmatch 'public static bool IsWithinOwnedConfirmationWindow\(.*?acceptedAtMilliseconds >= 0 && nowMilliseconds >= acceptedAtMilliseconds && maximumAgeMilliseconds >= 0 && \(ulong\)\(nowMilliseconds - acceptedAtMilliseconds\) <= \(ulong\)maximumAgeMilliseconds;' -or
-    $normalizedScholarSpreadRules -notmatch '\(candidate\.CurrentHp < candidate\.MaximumHp \|\| \(candidate\.TacticalCrystalPresenceKnown && candidate\.OnTacticalCrystal\)\).*?!candidate\.HasOwnGalvanize.*?!candidate\.HasOwnCatalyze' -or
+    $normalizedScholarSpreadRules -notmatch 'public static bool IsCleanSetupSeed\(.*?!hasFirstExpectedStatus && !hasSecondExpectedStatus;.*?public static bool IsCompleteOwnedSetupStatusPair\(.*?hasFirstExpectedStatus && hasSecondExpectedStatus;.*?public static bool HasDeployableOwnedSetupStatus\(.*?ownedSetupPairWasComplete && \(hasFirstExpectedStatus \|\| hasSecondExpectedStatus\);' -or
+    $normalizedScholarSpreadRules -notmatch '\(candidate\.CurrentHp < candidate\.MaximumHp \|\| \(candidate\.TacticalCrystalPresenceKnown && candidate\.OnTacticalCrystal\)\).*?IsCleanSetupSeed\(candidate\.HasOwnGalvanize, candidate\.HasOwnCatalyze\)' -or
     $normalizedScholarSpreadRules -notmatch 'if \(intent\.Kind == ScholarSpreadKind\.Shield && intent\.IsSetup && target\.CurrentHp >= target\.MaximumHp && \(!target\.TacticalCrystalPresenceKnown \|\| !target\.OnTacticalCrystal\)\).*?SpreadNoLongerUseful' -or
     $normalizedScholarSpreadRules -notmatch 'if \(effect\.ActionId == DeploymentTacticsActionId\).*?ManualDeploymentConflict.*?if \(effect\.ActionId == state\.Plan\.SetupActionId && effect\.PrimaryTarget == state\.Plan\.Target\).*?ManualSetupTargetConflict') {
     throw 'Scholar must stay behind the live match gate, plan maximum-coverage DoT before a safely reserved useful shield, and advance only its accepted exact action/target workflow; manual setup or Deployment cannot be adopted.'
 }
 if ($normalizedScholarSpreadRules -notmatch 'public static int SelectBestDotSeedIndex\(.*?if \(!HasUniqueDotCandidateSet\(candidates, localPlayer\)\) return -1;.*?public static int SelectBestShieldSeedIndex\(' -or
     $normalizedScholarSpreadRules -notmatch 'public static int SelectBestShieldSeedIndex\(.*?if \(!HasUniqueShieldCandidateSet\(candidates, localPlayer\)\) return -1;.*?public static bool IsEligibleDotSeed\(' -or
-    $normalizedScholarSpreadRules -notmatch 'private static bool HasUniqueDotCandidateSet\(.*?candidates\.Count != CrystallineConflictRosterSize.*?foreach \(var candidate in candidates\).*?!candidate\.ExactCanonicalIdentity.*?!candidate\.ExactCoverageKnown.*?!candidate\.Actor\.IsValid.*?candidate\.Actor == localPlayer.*?!slots\.Add\(candidate\.EnemySlot\).*?!actors\.Add\(candidate\.Actor\).*?return true;' -or
-    $normalizedScholarSpreadRules -notmatch 'private static bool HasUniqueShieldCandidateSet\(.*?candidates\.Count != CrystallineConflictRosterSize.*?foreach \(var candidate in candidates\).*?!candidate\.ExactCanonicalIdentity.*?!candidate\.ExactCoverageKnown.*?!candidate\.Actor\.IsValid.*?!slots\.Add\(candidate\.PartySlot\).*?!actors\.Add\(candidate\.Actor\).*?return actors\.Contains\(localPlayer\);' -or
-    [regex]::Matches($scholarSpreadRules, '\bcandidates\.Count\s*!=\s*CrystallineConflictRosterSize\b').Count -ne 2) {
-    throw 'Scholar Core selection must reject the entire rank set before comparison unless all five canonical CC enemy or party candidates have exact known coverage; partial, duplicate, unknown-coverage, or party-without-self sets fail closed.'
+    $normalizedScholarSpreadRules -notmatch 'private static bool HasUniqueDotCandidateSet\(.*?candidates\.Count is < MinimumExactRosterSliceSize or > CrystallineConflictRosterSize.*?foreach \(var candidate in candidates\).*?!candidate\.ExactCanonicalIdentity.*?!candidate\.ExactCoverageKnown.*?!candidate\.Actor\.IsValid.*?candidate\.Actor == localPlayer.*?!slots\.Add\(candidate\.EnemySlot\).*?!actors\.Add\(candidate\.Actor\).*?return true;' -or
+    $normalizedScholarSpreadRules -notmatch 'private static bool HasUniqueShieldCandidateSet\(.*?candidates\.Count is < MinimumExactRosterSliceSize or > CrystallineConflictRosterSize.*?foreach \(var candidate in candidates\).*?!candidate\.ExactCanonicalIdentity.*?!candidate\.ExactCoverageKnown.*?!candidate\.Actor\.IsValid.*?!slots\.Add\(candidate\.PartySlot\).*?!actors\.Add\(candidate\.Actor\).*?return actors\.Contains\(localPlayer\);' -or
+    [regex]::Matches($scholarSpreadRules, '\bcandidates\.Count\s+is\s+<\s+MinimumExactRosterSliceSize\s+or\s+>\s+CrystallineConflictRosterSize\b').Count -ne 2) {
+    throw 'Scholar Core selection must require a stable exact 2-5 actor slice with known conservative coverage; one-member, duplicate, unknown-coverage, or party-without-self sets fail closed.'
 }
 Assert-Literals $scholarSpreadProbe @(
     'long ScholarSpreadCaptureErrors { get; }',
@@ -2462,7 +2464,15 @@ Assert-Literals $scholarSpreadProbe @(
     'captured.GlobalSequence,',
     'captured.SourceSequence),',
     'StatusPropagationTimeoutMilliseconds = 2_500',
-    'HasExactOwnPairOnFrozenTarget(',
+    'TryObserveExactOwnPairOnFrozenTarget(',
+    'HasDeployableOwnStatusOnFrozenTarget(',
+    'workflowState.OwnedSetupPairWasComplete',
+    'BiolysisPlanningReady: ScholarSpreadRules.IsBiolysisPlanningReady(',
+    'var adloquiumCharges = actionManager->GetCurrentCharges(adlo);',
+    'var deploymentCharges = actionManager->GetCurrentCharges(deploy);',
+    'adloquiumCharges > 0',
+    'deploymentCharges > 0',
+    'Seiton Sense Scholar spread attempt: action={ActionId}',
     'var bioTimingKnown = TryObserveRecast(',
     'var deployTimingKnown = TryObserveRecast(',
     'DeploymentTimingKnown: deployTimingKnown',
@@ -2492,20 +2502,20 @@ if ([regex]::Matches($scholarSpreadProbe, '\bactionEffectCapture\.ScholarSpreadC
     $normalizedScholarSpreadProbe -notmatch 'private void ResetRuntime\(bool resetConsent, bool clearCapture\).*?if \(clearCapture\) actionEffectCapture\.ClearScholarSpreadEffects\(\); observedCaptureDropCount = actionEffectCapture\.DroppedScholarSpreadEffects; observedCaptureErrorCount = actionEffectCapture\.ScholarSpreadCaptureErrors;') {
     throw 'Scholar runtime reliability must observe only its dedicated ActionEffect drop/error counters and reset those baselines with the Scholar capture generation.'
 }
-if ($normalizedScholarSpreadProbe -notmatch 'var effectReason = ScholarSpreadEffectDecisionReason\.None; if \(IsOwnedEffectTimedOut\(now\)\).*?else \{ effectReason = DrainActionEffects\( now, featureContextReady, shieldReservationSafe, input\.HeldGameplayKeyEligible\);' -or
-    $normalizedScholarSpreadProbe -notmatch 'workflowState\.Phase == ScholarSpreadPhase\.AwaitingSetupEffect.*?HasExactOwnPairOnFrozenTarget\(workflowState\.Plan, localPlayer\.EntityId\).*?ConfirmPendingSetupFromExactStatusPair\( workflowState, workflowState\.Plan\.Target, expectedOwnStatusPairActive: true, shieldReservationSafe\).*?pendingAcceptedAtMilliseconds = -1; setupConfirmedAtMilliseconds = now;' -or
+if ($normalizedScholarSpreadProbe -notmatch 'var effectReason = ScholarSpreadEffectDecisionReason\.None; var replanDeferredThisFrame = false; if \(IsOwnedEffectTimedOut\(now\)\).*?else \{ effectReason = DrainActionEffects\( now, featureContextReady, shieldReservationSafe, input\.HeldGameplayKeyEligible, out replanDeferredThisFrame\);' -or
+    $normalizedScholarSpreadProbe -notmatch 'TryObserveExactOwnPairOnFrozenTarget\( workflowState\.Plan, localPlayer\.EntityId, out var hasFirstExpectedStatus, out var hasSecondExpectedStatus\).*?var completePair = ScholarSpreadRules\.IsCompleteOwnedSetupStatusPair\( hasFirstExpectedStatus, hasSecondExpectedStatus\); if \(workflowState\.Phase == ScholarSpreadPhase\.AwaitingSetupEffect && completePair\).*?ConfirmPendingSetupFromExactStatusPair\( workflowState, workflowState\.Plan\.Target, expectedOwnStatusPairActive: true, shieldReservationSafe\).*?pendingAcceptedAtMilliseconds = -1; setupConfirmedAtMilliseconds = now;' -or
     $normalizedScholarSpreadProbe -notmatch 'private bool IsOwnedEffectTimedOut\(long nowMilliseconds\) => workflowState\.PendingOwnedAction\.IsValid && pendingAcceptedAtMilliseconds >= 0 && !ScholarSpreadRules\.IsWithinOwnedConfirmationWindow\( pendingAcceptedAtMilliseconds, nowMilliseconds, OwnedEffectTimeoutMilliseconds\);' -or
-    $normalizedScholarSpreadProbe -notmatch 'private ScholarSpreadEffectDecisionReason DrainActionEffects\( long nowMilliseconds, bool featureContextReady, bool shieldReservationStillSafe, bool heldGameplayKeyEligible\).*?case ScholarSpreadEffectDecisionKind\.Cancelled:.*?terminalUntilRelease = heldGameplayKeyEligible; ClearActionEpisode\(\); break;' -or
+    $normalizedScholarSpreadProbe -notmatch 'private ScholarSpreadEffectDecisionReason DrainActionEffects\( long nowMilliseconds, bool featureContextReady, bool shieldReservationStillSafe, bool heldGameplayKeyEligible, out bool resetForReplan\).*?case ScholarSpreadEffectDecisionKind\.Cancelled:.*?RequiresHeldReleaseAfterEffectCancellation\( decision\.Reason\).*?terminalUntilRelease = heldGameplayKeyEligible;.*?else \{ resetForReplan = true; \}.*?ClearActionEpisode\(\); break;' -or
     [regex]::Matches($scholarSpreadProbe, '\bterminalUntilRelease\s*=\s*true\s*;').Count -ne 0) {
     throw 'Scholar ActionEffect cancellation must receive the current immutable held-state and latch only while that key is actually still held; an effect arriving after release must not create a synthetic terminal hold.'
 }
 if ($normalizedScholarSpreadProbe -notmatch 'var dutyStartedRaw = liveContextValid && dutyState\.IsDutyStarted; var matchStarted = ObserveMatchStartGate\( liveContextValid, dutyStartedRaw, hardReset\);.*?var featureContextReady = configurationEnabled && metadataVerified && liveContextValid && matchStarted' -or
     $normalizedScholarSpreadProbe -notmatch 'private bool ObserveMatchStartGate\(.*?ScholarSpreadRules\.ObserveMatchGate\(.*?DutyStartSignaled: startedTerritory == territory, DutyCompletionSignaled: completedTerritory == territory\)' -or
-    $normalizedScholarSpreadProbe -notmatch 'workflowState\.Phase is ScholarSpreadPhase\.Completed or ScholarSpreadPhase\.Cancelled.*?terminalUntilRelease = input\.HeldGameplayKeyEligible; workflowState = ScholarSpreadWorkflowState\.Initial;' -or
-    $normalizedScholarSpreadProbe -notmatch 'now - setupConfirmedAtMilliseconds <= StatusPropagationTimeoutMilliseconds && !HasExactOwnPairOnFrozenTarget\(workflowState\.Plan, localPlayer!\.EntityId\)' -or
-    $normalizedScholarSpreadProbe -notmatch 'TryBuildIntentObservation\( localPlayer!, intent, nativeState, shieldReservationSafe, dotRuntime, shieldRuntime, tacticalCrystalResolved, tacticalCrystalPosition, out var intentObservation\)' -or
+    $normalizedScholarSpreadProbe -notmatch 'workflowState\.Phase is ScholarSpreadPhase\.Completed or ScholarSpreadPhase\.Cancelled.*?if \(workflowState\.Phase == ScholarSpreadPhase\.Completed\) terminalUntilRelease = input\.HeldGameplayKeyEligible; workflowState = ScholarSpreadWorkflowState\.Initial;' -or
+    $normalizedScholarSpreadProbe -notmatch 'now - setupConfirmedAtMilliseconds <= StatusPropagationTimeoutMilliseconds && !HasDeployableOwnStatusOnFrozenTarget\( workflowState\.Plan, localPlayer!\.EntityId, workflowState\.OwnedSetupPairWasComplete\)' -or
+    $normalizedScholarSpreadProbe -notmatch 'TryBuildIntentObservation\( localPlayer!, intent, nativeState, shieldReservationSafe, dotRuntime, shieldRuntime, tacticalCrystalResolved, tacticalCrystalPosition, workflowState\.OwnedSetupPairWasComplete, out var intentObservation\)' -or
     $normalizedScholarSpreadProbe -notmatch 'TacticalCrystalPresenceKnown: intent\.Kind == ScholarSpreadKind\.Shield && tacticalCrystalResolved, OnTacticalCrystal: intent\.Kind == ScholarSpreadKind\.Shield && tacticalCrystalResolved && IsInsideTacticalCrystal\(currentTarget, tacticalCrystalPosition\)') {
-    throw 'Scholar must remain inactive before CC Duty Start, remember start/completion per territory, stop after one completed chain until release, and poll the frozen target live for its exact own status pair.'
+    throw 'Scholar must remain inactive before CC Duty Start, remember start/completion per territory, stop after one completed chain until release, and require one complete frozen-target status pair before a later single owned remainder may deploy.'
 }
 if ([regex]::Matches($scholarSpreadProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($scholarSpreadProbe, '\bUseActionLocation\s*\(').Count -ne 0 -or
@@ -2519,26 +2529,26 @@ if ([regex]::Matches($scholarSpreadProbe, '\bUseAction\s*\(').Count -ne 1 -or
     $scholarSpreadProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|UseActionLocation|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget|QueueAction|CancelCast)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'Scholar spread must own exactly one direct-GOID UseAction path from the immutable raw hold, with no shared consume/claim, cast cancellation, alternate action/target, custom queue, or target mutation.'
 }
-if ($normalizedScholarSpreadProbe -notmatch 'private ExactRosterMember\[\] ResolveExactEnemies\(\).*?for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?if \(!HasValidNativeIdentity\(first\)\) return \[\];.*?return HasCompleteUniqueRoster\( result, ScholarSpreadRules\.CrystallineConflictRosterSize\) \? result\.ToArray\(\) : \[\];' -or
-    $normalizedScholarSpreadProbe -notmatch 'private ExactRosterMember\[\] ResolveExactParty\( TargetPressureActorIdentity localPlayer\).*?result\.Count\(static item => item\.Identity\.IsValid\) == ScholarSpreadRules\.CrystallineConflictRosterSize.*?result\.Count\(item => item\.Identity == localPlayer\) == 1.*?HasCompleteUniqueRoster\( result, ScholarSpreadRules\.CrystallineConflictRosterSize\)' -or
-    $normalizedScholarSpreadProbe -notmatch 'private static bool HasCompleteUniqueRoster\(.*?roster\.Count == expectedCount.*?item\.Exact && item\.Identity\.IsValid.*?Distinct\(\)\.Count\(\) == expectedCount.*?Distinct\(\)\.Count\(\) == expectedCount') {
-    throw 'Scholar runtime candidate resolution must fail closed unless it has the complete unique five-enemy roster and a complete unique five-party roster containing exact local Scholar exactly once.'
+if ($normalizedScholarSpreadProbe -notmatch 'private ExactRosterMember\[\] ResolveExactEnemies\(\).*?for \(var slot = EnemySlotRules\.FirstSlot; slot <= EnemySlotRules\.LastSlot; slot\+\+\).*?if \(!HasValidNativeIdentity\(first\)\) continue;.*?return HasStableUniqueRosterSlice\( result, ScholarSpreadRules\.MinimumExactRosterSliceSize, ScholarSpreadRules\.CrystallineConflictRosterSize\) \? result\.ToArray\(\) : \[\];' -or
+    $normalizedScholarSpreadProbe -notmatch 'private ExactRosterMember\[\] ResolveExactParty\( TargetPressureActorIdentity localPlayer\).*?result\.Count\(item => item\.Identity == localPlayer\) == 1.*?HasStableUniqueRosterSlice\( result, ScholarSpreadRules\.MinimumExactRosterSliceSize, ScholarSpreadRules\.CrystallineConflictRosterSize\)' -or
+    $normalizedScholarSpreadProbe -notmatch 'private static bool HasStableUniqueRosterSlice\(.*?roster\.Count >= minimumCount.*?roster\.Count <= maximumCount.*?item\.Exact && item\.Identity\.IsValid.*?Distinct\(\)\.Count\(\) == roster\.Count.*?Distinct\(\)\.Count\(\) == roster\.Count') {
+    throw 'Scholar runtime candidate resolution must retain only individually stable exact actors and require a unique 2-5 member slice; the party slice must contain exact local Scholar exactly once.'
 }
 $scholarFrozenCancelMatches = [regex]::Matches(
     $scholarSpreadProbe,
     '\bworkflowState\s*=\s*ScholarSpreadRules\.Cancel\(workflowState\);')
-if ($scholarFrozenCancelMatches.Count -ne 9) {
-    throw 'Scholar runtime must retain exactly the nine reviewed frozen-workflow cancellation sites.'
+if ($scholarFrozenCancelMatches.Count -ne 4) {
+    throw 'Scholar runtime must retain exactly four ambiguity/timeout/rejection cancellation sites; ordinary live drift replans under the same hold.'
 }
 if ([regex]::Matches(
         $scholarSpreadProbe,
         '\bworkflowState\s*=\s*ScholarSpreadRules\.Cancel\(workflowState\);\s*(?:ClearActionEpisode\(\);\s*)?terminalUntilRelease\s*=\s*(?:input\.HeldGameplayKeyEligible|heldGameplayKeyEligible)\s*;').Count -ne $scholarFrozenCancelMatches.Count) {
-    throw 'Every Scholar frozen-workflow Cancel path must immediately latch the currently held key until a real release.'
+    throw 'Every remaining Scholar frozen-workflow Cancel path is an ambiguous or terminal native outcome and must latch the currently held key until a real release.'
 }
-if ($normalizedScholarSpreadProbe -notmatch 'case ClientActionAttemptOutcome\.NotInvoked:.*?workflowState = ScholarSpreadRules\.Cancel\(workflowState\); terminalUntilRelease = heldGameplayKeyEligible; ClearActionEpisode\(\); break;.*?case ClientActionAttemptOutcome\.ClientAccepted: workflowState = ScholarSpreadRules\.RecordClientAcceptedAction\( workflowState, intent, sourceSequence\);.*?pendingAcceptedAtMilliseconds = nowMilliseconds;.*?case ClientActionAttemptOutcome\.ClientRejected: if \(retry\.IsTerminal\) \{ workflowState = ScholarSpreadRules\.Cancel\(workflowState\); terminalUntilRelease = heldGameplayKeyEligible; ClearActionEpisode\(\); \} break;.*?case ClientActionAttemptOutcome\.AcceptanceUnknown: workflowState = ScholarSpreadRules\.Cancel\(workflowState\); terminalUntilRelease = heldGameplayKeyEligible;' -or
+if ($normalizedScholarSpreadProbe -notmatch 'case ClientActionAttemptOutcome\.NotInvoked:.*?workflowState = ScholarSpreadWorkflowState\.Initial; ClearActionEpisode\(\); break;.*?case ClientActionAttemptOutcome\.ClientAccepted: workflowState = ScholarSpreadRules\.RecordClientAcceptedAction\( workflowState, intent, sourceSequence\);.*?pendingAcceptedAtMilliseconds = nowMilliseconds;.*?case ClientActionAttemptOutcome\.ClientRejected: if \(retry\.IsTerminal\) \{ workflowState = ScholarSpreadRules\.Cancel\(workflowState\); terminalUntilRelease = heldGameplayKeyEligible; ClearActionEpisode\(\); \} break;.*?case ClientActionAttemptOutcome\.AcceptanceUnknown: workflowState = ScholarSpreadRules\.Cancel\(workflowState\); terminalUntilRelease = heldGameplayKeyEligible;' -or
     [regex]::Matches($scholarSpreadProbe, 'case ClientActionAttemptOutcome\.SoftUnavailable\s*:').Count -ne 0 -or
     $normalizedScholarSpreadProbe -notmatch 'var retry = HeldActionRetryRules\.Complete\(retryState, nowMilliseconds, outcome\); retryState = retry\.NextState; switch \(outcome\)') {
-    throw 'Scholar NotInvoked, ambiguous, and terminal rejection paths must latch until release; an accepted call may bind its exact server sequence later, while SoftUnavailable and nonterminal clean ClientRejected alone preserve the same frozen retry episode.'
+    throw 'Scholar NotInvoked must replan without changing target inside the failed attempt, while ambiguous and exhausted-rejection outcomes latch until release; SoftUnavailable and nonterminal clean ClientRejected preserve the frozen retry episode.'
 }
 $scholarSpreadTestMethods = @(
     'MetadataConstantsAreExact',
@@ -8323,16 +8333,16 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.34.0.1</Version>',
-    '<AssemblyVersion>0.34.0.1</AssemblyVersion>',
-    '<FileVersion>0.34.0.1</FileVersion>'
-) 'v0.34.0.1 project version'
+    '<Version>0.34.0.2</Version>',
+    '<AssemblyVersion>0.34.0.2</AssemblyVersion>',
+    '<FileVersion>0.34.0.2</FileVersion>'
+) 'v0.34.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.34.0.1";',
-    'Monk now reserves Wind''s Reply across the transient Phantom Rush transition and uses it before an active Fire Resonance can skip the knockback step.',
-    'Scholar now captures the exact single-target setup actor, waits for its exact own-status pair when packet metadata is unusable, and rejects evidence after the ownership deadline.',
-    'DRK held Shadowbringer now receives known Wolves'' Den pressure for exact dummy testing. Schema 38 is unchanged; all 454 Core tests pass.'
-) 'v0.34.0.1 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.34.0.2";',
+    'Scholar now requires the complete owned setup pair once, then still spreads Catalyze after Galvanize is consumed and replans ordinary live drift without a full WASD release.',
+    'Scholar preserves DoT-first planning across the shared PvP GCD, accepts stable exact 2-5 actor slices, waits through transient readiness, and logs every plugin-issued spread attempt.',
+    'Monk now reserves Wind''s Reply, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering. Schema 38 is unchanged; all 454 Core tests pass.'
+) 'v0.34.0.2 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8351,22 +8361,24 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.34.0.1 plugin manifest metadata'
+) 'v0.34.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.34.0.1"',
-    'Fixed held Monk Wind''s Reply reservation across the Phantom Rush transition and active Fire Resonance.',
-    'Scholar Smart Spread now captures the exact single-target setup actor',
-    'confirms an accepted setup from the frozen target''s exact own-status pair despite unusable packet metadata',
-    'enforces its ownership deadline before evidence',
-    'keeps candidate/final recast timing separate.',
-    'DRK held Shadowbringer now receives known pressure in Wolves'' Den.',
+    '"AssemblyVersion": "0.34.0.2"',
+    'Fixed Scholar Smart Spread''s live CC blockers:',
+    'after the complete owned setup pair is observed once, a surviving status such as Catalyze remains deployable after Galvanize is consumed',
+    'stable exact 2-5 actor slices no longer fail because one roster actor is unresolved',
+    'DoT-first planning survives the shared PvP GCD',
+    'transient readiness waits',
+    'ordinary drift/manual conflicts replan under the same hold.',
+    'Plugin-issued Scholar attempts are now logged.',
+    'Monk now reserves Wind, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering.',
     'Schema 38 remains current; all 454 Core tests pass',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.34.0.1 custom-repository metadata'
+) 'v0.34.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8382,19 +8394,20 @@ $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
 Assert-Literals $normalizedReadme @(
-    'Version 0.34.0.1 keeps held Monk Wind''s Reply reserved across the transient Phantom Rush transition and ahead of active Fire Resonance',
-    'fixes Scholar''s exact single-target setup capture',
-    'accepted Scholar setup advance from the frozen target''s exact own-status pair.',
-    'Scholar recast observation is now dynamic and optional',
-    'candidate target validity stays separate from final recast/cast readiness.',
-    'Held DRK Shadowbringer now receives known Wolves'' Den pressure for exact reviewed-dummy testing.',
+    'Version 0.34.0.2 fixes Scholar''s live half-status, incomplete-roster, shared-GCD planning, transient-readiness, and terminal-hold blockers;',
+    'every plugin-issued Scholar attempt is now identifiable in the local Dalamud log.',
+    'Held Monk now reserves Wind''s Reply before Phantom, then guarantees a confirmed Wind''s Reply -> Thunderclap -> Phantom Rush order across transient GCD/readiness and knockback-position frames.',
+    'requires at least two individually double-resolved, stable, unique canonical',
+    'Deployment waits until the complete exact locally owned setup pair has been observed once on the frozen target.',
+    'After complete-pair proof, either remaining exact status keeps Deployment eligible;',
+    'manual conflicts and ordinary target/readiness drift reset for a fresh plan under the same physical hold.',
     'retains v0.34''s measured counter-CC timing plus default-off RDM Vice of Thorns and BLM Frost Star.',
     'dynamically observed recast timing proves the next charge will return no later than the next Biolysis opportunity.',
     'Unknown timing blocks only that one-charge shield reservation; DoT and two-charge shield plans still use their final native readiness checks.',
     'Single-target setup capture uses the first exact effect recipient; area Deployment retains the animation target.',
     'server ActionEffect, including one without a usable source sequence, may confirm that already accepted request.',
-    'already accepted setup may instead be confirmed when its exact local-source status pair appears on the frozen target',
-    'metadata-disagreeing matching packet waits for that pair rather than cancelling the armed step.',
+    'ActionEffect alone cannot authorize Deployment: the complete exact locally owned status pair must be observed once on the frozen target.',
+    'A delayed or metadata-disagreeing matching packet waits for that pair rather than cancelling the armed step.',
     'ownership deadline is checked before either packet or status confirmation',
     'Accepted Auto-Guard can show a card/sound and protects an accidental second Guard press for two seconds.',
     '`/panicshu` now reaches its one location call only after exact native Shukuchi recast and resource readiness.',
@@ -8410,28 +8423,30 @@ Assert-Literals $normalizedReadme @(
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 38 is current in v0.34.0.1',
-    'For current v0.34.0.1, the exact 454-test Core registry and source checks pin',
+    'Configuration schema 38 is current in v0.34.0.2',
+    'For current v0.34.0.2, the exact 454-test Core registry and source checks pin',
     'Eighteen physical-hold option enable edges share the scheduler input.',
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'Scholar Smart Spread remains an independent raw-hold lane and never consumes that frame.',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.34.0.1 current README release and safety contract'
+) 'v0.34.0.2 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.34.0.1',
-    'Monk Wind''s Reply',
-    'Pouncing Coeurl -> Phantom Rush transition.',
-    'Wind''s Reply remains ahead of an already active Fire Resonance.',
-    'capturing the exact first effect recipient for single-target Biolysis/Adloquium',
-    'already client-accepted exact setup may also advance from the frozen target''s matching local-source status pair',
-    'unusable or delayed matching packet metadata waits for that exact proof instead of cancelling Deployment',
-    'evidence after the 2.5-second ownership deadline can no longer revive an expired workflow.',
-    'Made Scholar recast observation dynamic and optional.',
-    'unknown timing blocks only the one-charge shield reservation',
-    'Enabled known pressure sampling for default-off held **DRK Shadowbringer** in the Wolves'' Den',
-    'Configuration schema remains `38`; all `454` Core tests and the zero- warning release build pass'
-) 'v0.34.0.1 Monk, Scholar, DRK, version, and unchanged-schema release notes'
+    '## 0.34.0.2',
+    'Fixed the live **Scholar Smart Spread** shield blocker:',
+    'complete locally owned setup pair has first been observed',
+    'first staggered status alone cannot authorize Deployment.',
+    'stable exact slice of two to five unique actors.',
+    'Scholar now separates Biolysis''s own recast from the shared PvP GCD while planning',
+    'charged Adloquium cannot outrank a ready DoT during that GCD.',
+    'Scholar also soft-waits through transient charged-action readiness.',
+    'manual conflicts, and a final preflight miss replan on the continuing hold',
+    'Every plugin-issued native Scholar attempt is now recorded in the local Dalamud log',
+    'confirmed Wind''s Reply always prefers Thunderclap before Phantom Rush',
+    'Stable cooldown/charge evidence now reserves Wind''s Reply, Thunderclap, and Rising Phoenix across transient GCD/readiness frames;',
+    'Wind remains a melee and ranged setup before Phantom.',
+    'Configuration schema remains `38`; all `454` Core tests pass.'
+) 'v0.34.0.2 Scholar and Monk reliability release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.34.0.0',
     'native PvP `ActionComboRoute` function and invoking route `55` in Combo mode',
@@ -8519,12 +8534,13 @@ Assert-Literals $normalizedPrivacy @(
     'Single-target setup capture uses the exact first effect recipient; area Deployment retains the animation target.',
     'If a nonzero native source sequence is synchronously available it is bound immediately',
     'matching exact local-source ActionEffect may confirm the already accepted setup even when its packet source sequence is zero',
-    'frozen actor''s exact locally sourced paired statuses may confirm only that same already accepted setup.',
+    'ActionEffect alone cannot authorize Deployment. The complete exact locally sourced status pair must first be observed on the frozen actor for that same accepted setup.',
+    'After that proof, either remaining status may keep Deployment eligible;',
     'A delayed matching packet is ignored rather than cancelling Deployment.',
-    'Missing, zero, or disagreeing packet sequence metadata waits for the exact pair or expiry',
+    'Missing, zero, or disagreeing packet sequence metadata waits for complete-pair proof or expiry',
     'evidence after 2.5 seconds cannot revive the workflow',
-    'Separately pressed Scholar actions are not adopted; a manual Deployment conflict cancels the automatic plan',
-    'Configuration schema 38 is current in v0.34.0.1.',
+    'Separately pressed Scholar actions are not adopted. Manual conflicts, transient readiness, and ordinary identity/status drift reset or wait for a fresh exact plan under the same physical hold;',
+    'Configuration schema 38 is current in v0.34.0.2.',
     'Emergency danger/destination episodes, Scholar spread plans/source sequences, ActionEffect confirmation state, or in-memory counters.'
 ) 'v0.32.0.1 Emergency Teleport and independent Scholar spread transient-data contract'
 Assert-Literals $normalizedReadme @(
@@ -8655,7 +8671,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 38 is current in v0.34.0.1'
+    'Configuration schema 38 is current in v0.34.0.2'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8762,7 +8778,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 38 is current in v0.34.0.1',
+    'Configuration schema 38 is current in v0.34.0.2',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -9130,7 +9146,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 38 is current in v0.34.0.1',
+    'Configuration schema 38 is current in v0.34.0.2',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -9210,7 +9226,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 38 is current in v0.34.0.1'
+    'Configuration schema 38 is current in v0.34.0.2'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -9635,4 +9651,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.34.0.1 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 454-test Core registry. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires complete unique five-player rosters, and may confirm only its own accepted exact setup from its matching ActionEffect or the frozen target's exact own-status pair before Deployment."
+Write-Host "Seiton Sense v0.34.0.2 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 454-test Core registry. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."

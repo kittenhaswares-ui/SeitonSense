@@ -15,6 +15,7 @@ internal static class ScholarSpreadSelfTests
         Equal(3_089u, ScholarSpreadRules.BiolysisStatusId, "Biolysis status");
         Equal(3_090u, ScholarSpreadRules.BiolyticStatusId, "Biolytic");
         Equal(5, ScholarSpreadRules.CrystallineConflictRosterSize, "exact CC roster size");
+        Equal(2, ScholarSpreadRules.MinimumExactRosterSliceSize, "minimum exact roster slice");
     }
 
     internal static void IndependentHeldLaneNeverClaimsSharedInput()
@@ -162,8 +163,11 @@ internal static class ScholarSpreadSelfTests
         duplicate[2] = duplicate[2] with { Actor = duplicate[1].Actor };
         Equal(-1, ScholarSpreadRules.SelectBestDotSeedIndex(duplicate, LocalPlayer),
             "ambiguous duplicate actor fails closed");
-        Equal(-1, ScholarSpreadRules.SelectBestDotSeedIndex(dots[..4], LocalPlayer),
-            "incomplete enemy roster fails closed");
+        var exactSlice = new[] { Dot(2, affected: 2), Dot(4, affected: 2) };
+        Equal(0, ScholarSpreadRules.SelectBestDotSeedIndex(exactSlice, LocalPlayer),
+            "two stable exact enemies are enough for a useful spread");
+        Equal(-1, ScholarSpreadRules.SelectBestDotSeedIndex(exactSlice[..1], LocalPlayer),
+            "one enemy cannot create a useful exact spread");
 
         var unknownCoverage = dots.ToArray();
         unknownCoverage[4] = unknownCoverage[4] with { ExactCoverageKnown = false };
@@ -173,6 +177,35 @@ internal static class ScholarSpreadSelfTests
 
     internal static void ShieldReservationProtectsNextDotOpportunity()
     {
+        True(
+            ScholarSpreadRules.IsBiolysisPlanningReady(
+                ownRecastTimingKnown: true,
+                ownRecastRemainingMilliseconds: 0,
+                actionResourcesAvailable: true,
+                finalNativeReady: false),
+            "a shared PvP GCD cannot make charged Adlo outrank ready Biolysis");
+        False(
+            ScholarSpreadRules.IsBiolysisPlanningReady(
+                ownRecastTimingKnown: true,
+                ownRecastRemainingMilliseconds: 1,
+                actionResourcesAvailable: true,
+                finalNativeReady: true),
+            "Biolysis own recast still blocks DoT planning");
+        False(
+            ScholarSpreadRules.IsBiolysisPlanningReady(
+                ownRecastTimingKnown: true,
+                ownRecastRemainingMilliseconds: 0,
+                actionResourcesAvailable: false,
+                finalNativeReady: true),
+            "missing Biolysis resources still fail closed");
+        False(
+            ScholarSpreadRules.IsBiolysisPlanningReady(
+                ownRecastTimingKnown: false,
+                ownRecastRemainingMilliseconds: -1,
+                actionResourcesAvailable: true,
+                finalNativeReady: false),
+            "unknown own recast falls back to final native readiness");
+
         True(
             ScholarSpreadRules.CanSpendDeploymentOnShield(
                 currentDeploymentCharges: 2,
@@ -281,8 +314,15 @@ internal static class ScholarSpreadSelfTests
             2,
             ScholarSpreadRules.SelectBestShieldSeedIndex(candidates, LocalPlayer),
             "equal HP uses larger exact spread, then stable slot");
-        Equal(-1, ScholarSpreadRules.SelectBestShieldSeedIndex(candidates[..4], LocalPlayer),
-            "incomplete party roster fails closed");
+        var exactSlice = new[]
+        {
+            Shield(1, hp: 10, affected: 2),
+            Shield(4, hp: 60, affected: 2),
+        };
+        Equal(0, ScholarSpreadRules.SelectBestShieldSeedIndex(exactSlice, LocalPlayer),
+            "two stable exact party members are enough for a useful spread");
+        Equal(-1, ScholarSpreadRules.SelectBestShieldSeedIndex(exactSlice[..1], LocalPlayer),
+            "one party member cannot create a useful exact spread");
 
         var unknownCoverage = candidates.ToArray();
         unknownCoverage[4] = unknownCoverage[4] with { ExactCoverageKnown = false };
@@ -312,6 +352,25 @@ internal static class ScholarSpreadSelfTests
         Equal(1,
             ScholarSpreadRules.SelectBestShieldSeedIndex(fullHealthOffObjective, LocalPlayer),
             "an objective seed still permits a proactive shield");
+
+        True(ScholarSpreadRules.IsCleanSetupSeed(false, false),
+            "a setup seed is clean only when neither owned status remains");
+        False(ScholarSpreadRules.IsCleanSetupSeed(true, false),
+            "a consumed-shield half pair is not a clean setup seed");
+        False(ScholarSpreadRules.IsCleanSetupSeed(false, true),
+            "a companion-only half pair is not a clean setup seed");
+        False(ScholarSpreadRules.IsCompleteOwnedSetupStatusPair(true, false),
+            "the first staggered status is not complete setup proof");
+        True(ScholarSpreadRules.IsCompleteOwnedSetupStatusPair(true, true),
+            "both expected statuses provide complete setup proof");
+        False(ScholarSpreadRules.HasDeployableOwnedSetupStatus(false, true, false),
+            "a first half-status cannot deploy before complete-pair proof");
+        True(ScholarSpreadRules.HasDeployableOwnedSetupStatus(true, true, false),
+            "a first status remaining after complete-pair proof stays deployable");
+        True(ScholarSpreadRules.HasDeployableOwnedSetupStatus(true, false, true),
+            "a companion status remaining after complete-pair proof stays deployable");
+        False(ScholarSpreadRules.HasDeployableOwnedSetupStatus(true, false, false),
+            "an entirely expired proven setup cannot deploy");
     }
 
     internal static void OwnedRequestOrExactStatusPairAdvancesWorkflow()
@@ -337,6 +396,19 @@ internal static class ScholarSpreadSelfTests
         True(busy.ShouldSoftWait, "real native boundary is the sole soft wait");
         False(busy.ClaimsSharedInputFrame, "soft wait cannot block main lane");
 
+        var transientlyUnavailable = ScholarSpreadRules.EvaluateExactIntent(
+            state,
+            setup,
+            IntentObservation(state, setup, ownStatusPairActive: false) with
+            {
+                ActionLocallyReady = false,
+            });
+        True(transientlyUnavailable.ShouldSoftWait,
+            "transient action readiness waits without retiring the frozen chain");
+        Equal(ScholarSpreadIntentDecisionReason.ActionUnavailable,
+            transientlyUnavailable.Reason,
+            "transient action readiness keeps its exact diagnostic reason");
+
         var unbound = ScholarSpreadRules.RecordClientAcceptedAction(
             state,
             setup,
@@ -355,6 +427,27 @@ internal static class ScholarSpreadSelfTests
             shieldReservationStillSafe: true);
         True(unboundConfirmed.Advanced,
             "first exact nonzero server packet binds an accepted setup");
+        False(unboundConfirmed.NextState.OwnedSetupPairWasComplete,
+            "ActionEffect alone cannot prove both staggered statuses arrived");
+        var firstStaggeredStatus = ScholarSpreadRules.ObserveCompleteOwnedSetupStatusPair(
+            unboundConfirmed.NextState,
+            unboundConfirmed.NextState.Plan.Target,
+            hasFirstExpectedStatus: true,
+            hasSecondExpectedStatus: false);
+        False(firstStaggeredStatus.OwnedSetupPairWasComplete,
+            "first staggered status cannot open Deployment");
+        var completePair = ScholarSpreadRules.ObserveCompleteOwnedSetupStatusPair(
+            firstStaggeredStatus,
+            firstStaggeredStatus.Plan.Target,
+            hasFirstExpectedStatus: true,
+            hasSecondExpectedStatus: true);
+        True(completePair.OwnedSetupPairWasComplete,
+            "full pair records deterministic setup proof");
+        True(ScholarSpreadRules.HasDeployableOwnedSetupStatus(
+                completePair.OwnedSetupPairWasComplete,
+                hasFirstExpectedStatus: false,
+                hasSecondExpectedStatus: true),
+            "later half-pair remains deployable after full-pair proof");
 
         var zeroSequence = ScholarSpreadRules.RecordClientAcceptedAction(
             BeginDotWorkflow(),
@@ -419,6 +512,8 @@ internal static class ScholarSpreadSelfTests
             "exact own statuses confirm the already accepted setup without a packet");
         Equal(ScholarSpreadPhase.DeploymentReady, statusConfirmed.NextState.Phase,
             "status confirmation arms Deployment");
+        True(statusConfirmed.NextState.OwnedSetupPairWasComplete,
+            "direct status confirmation records the complete pair");
         var delayedSetupPacket = ScholarSpreadRules.ObserveActionEffect(
             statusConfirmed.NextState,
             Effect(
@@ -515,6 +610,22 @@ internal static class ScholarSpreadSelfTests
 
     internal static void ManualActionsCannotHijackOrDoubleDeploy()
     {
+        False(ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                ScholarSpreadEffectDecisionReason.ManualDeploymentConflict),
+            "manual Deployment conflict may replan on the continuing hold");
+        False(ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                ScholarSpreadEffectDecisionReason.ManualSetupTargetConflict),
+            "manual setup conflict may replan on the continuing hold");
+        False(ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                ScholarSpreadEffectDecisionReason.ShieldReservationUnavailable),
+            "a deterministic reservation loss may replan on the continuing hold");
+        True(ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                ScholarSpreadEffectDecisionReason.OwnedSequenceMismatch),
+            "ambiguous owned sequence evidence remains release-terminal");
+        True(ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                ScholarSpreadEffectDecisionReason.OwnedEffectMalformed),
+            "malformed owned effect evidence remains release-terminal");
+
         var initial = BeginDotWorkflow();
         var manualOther = ScholarSpreadRules.ObserveActionEffect(
             initial,

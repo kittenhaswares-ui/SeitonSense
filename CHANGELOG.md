@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.34.0.2
+
+- Fixed the live **Scholar Smart Spread** shield blocker: Galvanize can be
+  consumed by incoming damage before Catalyze ends. The helper now treats that
+  half-status state as known after the complete locally owned setup pair has
+  first been observed, then can deploy whichever exact plugin-owned effect
+  remains. A completely clean seed is still required before setup, and a first
+  staggered status alone cannot authorize Deployment.
+- Replaced the all-or-nothing five-player Scholar snapshot with a conservative
+  stable exact slice of two to five unique actors. Missing or respawning actors
+  are omitted, every retained actor is still double-resolved by native slot and
+  exact identity, and a spread still needs at least two exact recipients.
+- Scholar now separates Biolysis's own recast from the shared PvP GCD while
+  planning, so a charged Adloquium cannot outrank a ready DoT during that GCD.
+  Final native readiness still gates the actual request. Scholar also soft-waits
+  through transient charged-action readiness. Ordinary
+  target/status drift, manual conflicts, and a final preflight miss replan on
+  the continuing hold instead of disabling the helper until every WASD key is
+  released. Ambiguous ownership, timeout, exhausted rejection, and completed
+  chains remain release-terminal. Every plugin-issued native Scholar attempt is
+  now recorded in the local Dalamud log for unambiguous live diagnosis.
+- Changed held **Monk** sequencing so a confirmed Wind's Reply always prefers
+  Thunderclap before Phantom Rush, even when the client still reports the
+  pre-knockback melee position. Stable cooldown/charge evidence now reserves
+  Wind's Reply, Thunderclap, and Rising Phoenix across transient GCD/readiness
+  frames; a genuinely unavailable charge still falls through without deadlock.
+  Wind remains a melee and ranged setup before Phantom. Configuration schema
+  remains `38`; all `454` Core tests pass.
+
 ## 0.34.0.1
 
 - Fixed held **Monk Wind's Reply** being skipped at the one-frame Pouncing

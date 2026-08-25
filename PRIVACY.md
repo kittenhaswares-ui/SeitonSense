@@ -1045,12 +1045,15 @@ keeps the helper inactive during preparation and a duty-completion/context reset
 closes it. One completed chain is retained as terminal until every physical
 gameplay key is released.
 
-The DoT path requires a complete exact canonical five-enemy roster and reads
+The DoT path requires at least two individually double-resolved, stable, unique
+canonical enemy actors and reads
 local-source Biolysis/Biolytic statuses, position, and native reachability to
 choose the exact seed with the largest new 15-yalm coverage of at least two
-targets. Unknown coverage for any of those five enemies blocks the ranking. The
+retained targets. Unresolved actors are omitted instead of poisoning every exact
+candidate; unknown coverage on a retained actor still blocks ranking. The
 shield path is considered only when no DoT plan is ready and
-requires a complete exact five-member party view. It reads exact party
+requires at least two individually stable exact party members including the
+local Scholar exactly once. It reads exact party
 HP/status/position and the
 single language-independent tactical-crystal battle-NPC identity; when that actor
 is uniquely resolved, candidates inside a conservative 5-yalm edge radius rank
@@ -1067,18 +1070,21 @@ actor, and episode. Single-target setup capture uses the exact first effect
 recipient; area Deployment retains the animation target. If a nonzero native
 source sequence is synchronously available it is bound immediately. The
 matching exact local-source ActionEffect may confirm the already accepted setup
-even when its packet source sequence is zero; independently, the frozen actor's
-exact locally sourced paired statuses may confirm only that same already
-accepted setup. A delayed matching packet is ignored rather than cancelling
-Deployment. Missing, zero, or disagreeing packet sequence metadata waits for
-the exact pair or expiry; it does not cancel ahead of that proof. Deployment
-becomes eligible as soon as that pair appears inside the ownership window;
+even when its packet source sequence is zero, but ActionEffect alone cannot
+authorize Deployment. The complete exact locally sourced status pair must first
+be observed on the frozen actor for that same accepted setup. After that proof,
+either remaining status may keep Deployment eligible; this permits Catalyze to
+remain deployable after Galvanize has absorbed damage. A delayed matching packet
+is ignored rather than cancelling Deployment. Missing, zero, or disagreeing
+packet sequence metadata waits for complete-pair proof or expiry; it does not
+cancel ahead of that proof. Deployment
+becomes eligible as soon as that proof appears inside the ownership window;
 evidence after 2.5 seconds cannot revive the workflow and the timeout is not a
 fixed dispatch delay.
-Separately pressed Scholar actions are not adopted; a manual Deployment conflict
-cancels the automatic plan to avoid double-spending. Final identity/status/action
-drift, unknown evidence, or packet ambiguity ends the plan without fallback or
-stale retry. All plans, source sequences, confirmations, conflicts, and aggregate
+Separately pressed Scholar actions are not adopted. Manual conflicts, transient
+readiness, and ordinary identity/status drift reset or wait for a fresh exact
+plan under the same physical hold; ambiguous ownership, expired accepted
+requests, and exhausted native rejection remain terminal until release. All plans, source sequences, confirmations, conflicts, and aggregate
 diagnostics are bounded in local memory and are not persisted or uploaded.
 Client dispatch/packet evidence does not prove the status spread; current-patch
 ActionEffect correlation, Duty Start signal, and the conservative crystal radius
@@ -1488,7 +1494,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 38 is current in v0.34.0.1. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.2. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options, starts calibration revision
 1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
 Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of

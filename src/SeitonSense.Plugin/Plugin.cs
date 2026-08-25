@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.34.0.1";
+    private const string CurrentReleaseVersion = "0.34.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -311,9 +311,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Monk now reserves Wind's Reply across the transient Phantom Rush transition and uses it before an active Fire Resonance can skip the knockback step.",
-                "Scholar now captures the exact single-target setup actor, waits for its exact own-status pair when packet metadata is unusable, and rejects evidence after the ownership deadline.",
-                "DRK held Shadowbringer now receives known Wolves' Den pressure for exact dummy testing. Schema 38 is unchanged; all 454 Core tests pass.",
+                "Scholar now requires the complete owned setup pair once, then still spreads Catalyze after Galvanize is consumed and replans ordinary live drift without a full WASD release.",
+                "Scholar preserves DoT-first planning across the shared PvP GCD, accepts stable exact 2-5 actor slices, waits through transient readiness, and logs every plugin-issued spread attempt.",
+                "Monk now reserves Wind's Reply, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering. Schema 38 is unchanged; all 454 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

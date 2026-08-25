@@ -358,13 +358,13 @@ internal sealed partial class SettingsWindow
                 "gameplay key, including WASD, supplies consent after the Duty Start barrier drops. One completed " +
                 "Biolysis/Adloquium → Deployment chain is allowed per uninterrupted hold; release every held " +
                 "gameplay key before authorizing another. When Biolysis and Deployment Tactics are ready, " +
-                "the helper requires the complete exact S1-S5 roster, then chooses the reachable enemy whose " +
+                "the helper requires at least two individually stable exact S1-S5 actors, then chooses the reachable enemy whose " +
                 "15-yalm spread reaches the most " +
                 "living enemies, then applies Biolysis and deploys only that plugin-owned exact status.");
             ImGui.TextDisabled(
                 "When the DoT route is not ready, an Adloquium shield spread is allowed only if spending Deployment " +
-                "still leaves, or regenerates, a charge by the next Biolysis opportunity. It requires a complete " +
-                "exact five-member party view. If exactly one language-" +
+                "still leaves, or regenerates, a charge by the next Biolysis opportunity. It requires at least two " +
+                "individually stable exact party members including you. If exactly one language-" +
                 "independent tactical-crystal actor is resolved, a party member within its conservative 5-yalm " +
                 "hitbox-edge priority radius is preferred; otherwise the lowest exact HP percentage wins. A shield " +
                 "route must reach at least one additional party member. A full-health ally away from the tactical " +
@@ -372,10 +372,12 @@ internal sealed partial class SettingsWindow
             ImGui.TextDisabled(
                 "This is an independent held lane because all three actions use their own recasts. It never consumes " +
                 "or blocks Purify, Recup, Emergency Teleport, or another job helper; it simply waits for the real " +
-                "animation/cast/queue boundary. After its exact accepted setup ActionEffect, it watches the frozen " +
-                "target for the helper's live paired statuses for up to 2.5 seconds and uses Deployment Tactics at " +
-                "the first safe boundary as soon as they appear. It never cancels your cast. Manual Adloquium, " +
-                "Biolysis, or Deployment Tactics never starts or adopts an automatic chain.");
+                "animation/cast/queue boundary. After its exact accepted setup, it watches the frozen target " +
+                "for the complete exact locally owned status pair for up to 2.5 seconds. Only after that pair " +
+                "has been observed once may either remaining effect keep Deployment Tactics eligible at the " +
+                "first safe boundary. A consumed Galvanize no " +
+                "longer blocks spreading its surviving Catalyze. It never cancels your cast. Manual Adloquium, " +
+                "Biolysis, or Deployment Tactics is never adopted and causes a clean same-hold replan.");
             ImGui.PopTextWrapPos();
         }
 

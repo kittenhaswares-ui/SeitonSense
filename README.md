@@ -2,13 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.34.0.1 keeps held Monk Wind's Reply
-reserved across the transient Phantom Rush transition and ahead of active Fire
-Resonance, fixes Scholar's exact single-target setup capture, and lets an already
-accepted Scholar setup advance from the frozen target's exact own-status pair.
-Scholar recast observation is now dynamic and optional, while candidate target
-validity stays separate from final recast/cast readiness. Held DRK Shadowbringer
-now receives known Wolves' Den pressure for exact reviewed-dummy testing. It
+assistance, and target highlights. Version 0.34.0.2 fixes Scholar's live
+half-status, incomplete-roster, shared-GCD planning, transient-readiness, and terminal-hold blockers;
+every plugin-issued Scholar attempt is now identifiable in the local Dalamud
+log. Held Monk now reserves Wind's Reply before Phantom, then guarantees a
+confirmed Wind's Reply -> Thunderclap -> Phantom Rush order across transient
+GCD/readiness and knockback-position frames. It
 retains v0.34's measured counter-CC timing plus default-off RDM Vice of Thorns
 and BLM Frost Star. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
@@ -141,10 +140,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
   enemy coverage. Adloquium may be spread only when Deployment remains available
   for the next Biolysis window and its seed is damaged or on the tactical crystal.
   Each setup transition requires an exact plugin request that the client already
-  accepted. Either its matching local-source ActionEffect or the resulting exact
-  own-status pair on the frozen target confirms that setup; the pair then opens
-  Deployment immediately at the next safe native boundary. Unusable packet
-  sequence metadata waits for that exact pair inside the bounded ownership
+  accepted. Its matching local-source ActionEffect may confirm ownership, but
+  Deployment waits until the complete exact locally owned setup pair has been
+  observed once on the frozen target. After that proof, either remaining status
+  keeps Deployment eligible at the next safe native boundary. Unusable packet
+  sequence metadata waits for the complete-pair proof inside the bounded ownership
   window instead of cancelling the chain. One completed chain requires key
   release before a new one, and manually pressed Scholar actions are never adopted.
 - **Experimental Sage Smart Kardia helper:** a separate default-off option arms
@@ -678,12 +678,14 @@ One completed setup -> Deployment chain latches the current hold; every physical
 gameplay key must be released before a new chain can begin.
 
 When Biolysis `29233` and Deployment Tactics `29234` are ready, the workflow
-requires the complete exact canonical `S1`-`S5` roster and chooses the reachable
+requires at least two individually double-resolved, stable, unique canonical
+`S1`-`S5` actors and chooses the reachable
 seed that gives the largest exact new
 15-yalm DoT coverage, then freezes Biolysis -> Deployment on that actor. A spread
-must benefit at least two targets; unknown coverage for any of the five actors
-blocks ranking instead of hiding a possibly better seed. Shield work is considered only when no DoT
-plan is ready and requires a complete exact five-member party view: Adloquium
+must benefit at least two currently exact targets; unresolved actors are omitted
+instead of invalidating every otherwise exact candidate. Shield work is considered only when no DoT
+plan is ready and requires at least two individually stable exact party members,
+including the local Scholar exactly once: Adloquium
 `29232` prefers an exact party member inside the
 conservative 5-yalm edge radius around the uniquely resolved tactical-crystal
 actor, then lowest exact HP and stable party identity. Adloquium -> Deployment
@@ -691,7 +693,7 @@ is allowed only with two current Deployment charges or when dynamically observed
 recast timing proves the next charge will return no later than the next Biolysis
 opportunity. Unknown timing blocks only that one-charge shield reservation; DoT
 and two-charge shield plans still use their final native readiness checks.
-Unknown coverage for any party member also blocks shield ranking. A full-health candidate away
+Unknown coverage for any retained party member blocks shield ranking. A full-health candidate away
 from the tactical crystal is not an eligible shield seed, preventing idle
 Adloquium loops while preserving proactive objective shielding.
 
@@ -700,18 +702,20 @@ target, action, and episode. Single-target setup capture uses the first exact
 effect recipient; area Deployment retains the animation target. A synchronously
 exposed native source sequence is bound immediately; otherwise an exact matching
 server ActionEffect, including one without a usable source sequence, may confirm
-that already accepted request. The already accepted setup may instead be
-confirmed when its exact local-source status pair appears on the frozen target;
-a delayed or metadata-disagreeing matching packet waits for that pair rather
-than cancelling the armed step. The ownership deadline is checked before either
-packet or status confirmation, so evidence after 2.5 seconds cannot revive an
-expired episode. Deployment becomes eligible immediately when the pair appears
+that already accepted request. ActionEffect alone cannot authorize Deployment:
+the complete exact locally owned status pair must be observed once on the frozen
+target. A delayed or metadata-disagreeing matching packet waits for that pair
+rather than cancelling the armed step. The ownership deadline is checked before
+either packet or status confirmation, so evidence after 2.5 seconds cannot revive
+an expired episode. After complete-pair proof, either remaining exact status keeps
+Deployment eligible; this intentionally permits Catalyze to spread after Galvanize
+has already absorbed damage. Deployment becomes eligible immediately when that proof appears
 inside that window and uses the first safe native animation boundary; the
-timeout is not a fixed delay. An independently pressed Adloquium, Biolysis, or Deployment cannot be
-adopted; a conflicting manual Deployment cancels the automatic episode rather
-than double-spending the shared charges. Target/status drift, ambiguous packet
-evidence, missing metadata, or failed final revalidation ends the frozen plan
-without alternate, fallback, or stale retry. Client dispatch and source/build
+timeout is not a fixed delay. Transient action readiness waits without retiring
+the chain. An independently pressed Adloquium, Biolysis, or Deployment cannot be
+adopted; manual conflicts and ordinary target/readiness drift reset for a fresh
+plan under the same physical hold. Ambiguous ownership evidence, exhausted native
+rejection, or an expired accepted request still latches until release. Client dispatch and source/build
 checks do not prove the current server effect; exact live CC behavior remains a
 required in-game validation boundary.
 
@@ -1583,7 +1587,7 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 38 is current in v0.34.0.1. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.2. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options and resets unversioned
 impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
 SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
@@ -1886,7 +1890,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.34.0.1, the exact 454-test Core registry and source checks pin
+For current v0.34.0.2, the exact 454-test Core registry and source checks pin
 configuration schema 38, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired

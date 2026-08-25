@@ -133,8 +133,8 @@ internal static class MonkHeldComboSelfTests
             SupportedPvPContext.CrystallineConflict,
             MonkHeldComboRules.DragonKickActionId,
             fireReplyLocallyReady: true,
-            windReplyLocallyReady: true,
-            thunderclapLocallyReady: true,
+            windReplyWorkflowAvailable: true,
+            thunderclapWorkflowAvailable: true,
             hasExactOwnFireResonance: false,
             [lowRanged, highMelee]);
         Equal(highMelee.Actor, selected!.Value.Actor,
@@ -412,10 +412,117 @@ internal static class MonkHeldComboSelfTests
                 now: 1_002));
         Dispatch(thunder, MonkHeldComboRules.ThunderclapActionId,
             MonkHeldComboActionPurpose.ThunderclapReturn,
-            "Thunderclap only while out of Phantom range");
+            "Thunderclap returns after confirmed Wind knockback");
         var afterThunder = Accept(thunder, 1_003);
 
+        var locallyStillMelee = pressure with { PhantomRushTargetReady = true };
+        var inRangeRace = MonkHeldComboRules.Observe(
+            awaitingPressure,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                locallyStillMelee,
+                windReady: false,
+                thunderReady: true,
+                phoenixReady: true,
+                now: 1_002));
+        Dispatch(inRangeRace, MonkHeldComboRules.ThunderclapActionId,
+            MonkHeldComboActionPurpose.ThunderclapReturn,
+            "confirmed Wind prefers Thunderclap before the knockback position updates");
+
+        var transientThunderWait = MonkHeldComboRules.Observe(
+            awaitingPressure,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                locallyStillMelee,
+                windReady: false,
+                thunderReady: false,
+                thunderWorkflowAvailable: true,
+                phoenixReady: true,
+                now: 1_002));
+        Equal(MonkHeldComboDecisionKind.Armed, transientThunderWait.Kind,
+            "transient Thunder readiness waits");
+        Equal(MonkHeldComboPhase.BufferedAction,
+            transientThunderWait.NextState.Phase,
+            "transient Thunder remains reserved");
+        Equal(MonkHeldComboRules.ThunderclapActionId,
+            transientThunderWait.NextState.PendingActionId,
+            "transient Thunder owns the pending action");
+        var recoveredThunder = MonkHeldComboRules.Observe(
+            transientThunderWait.NextState,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                locallyStillMelee,
+                windReady: false,
+                thunderReady: true,
+                thunderWorkflowAvailable: true,
+                phoenixReady: true,
+                now: 1_003));
+        Dispatch(recoveredThunder, MonkHeldComboRules.ThunderclapActionId,
+            MonkHeldComboActionPurpose.ThunderclapReturn,
+            "reserved Thunder dispatches when transient readiness returns");
+
+        var noThunderCharge = MonkHeldComboRules.Observe(
+            awaitingPressure,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                locallyStillMelee,
+                windReady: false,
+                thunderReady: false,
+                thunderWorkflowAvailable: false,
+                phoenixReady: true,
+                phoenixWorkflowAvailable: true,
+                now: 1_002));
+        Dispatch(noThunderCharge, MonkHeldComboRules.RisingPhoenixActionId,
+            MonkHeldComboActionPurpose.RisingPhoenixBuff,
+            "zero Thunder charges fall through without deadlock");
+
         var arrived = pressure with { PhantomRushTargetReady = true };
+        var transientPhoenixWait = MonkHeldComboRules.Observe(
+            afterThunder,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                arrived,
+                windReady: false,
+                thunderReady: false,
+                phoenixReady: false,
+                phoenixWorkflowAvailable: true,
+                now: 1_004));
+        Equal(MonkHeldComboDecisionKind.Armed, transientPhoenixWait.Kind,
+            "transient Phoenix readiness waits");
+        Equal(MonkHeldComboPhase.BufferedAction,
+            transientPhoenixWait.NextState.Phase,
+            "transient Phoenix remains reserved");
+        Equal(MonkHeldComboRules.RisingPhoenixActionId,
+            transientPhoenixWait.NextState.PendingActionId,
+            "transient Phoenix owns the pending action");
+        var recoveredPhoenix = MonkHeldComboRules.Observe(
+            transientPhoenixWait.NextState,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                arrived,
+                windReady: false,
+                thunderReady: false,
+                phoenixReady: true,
+                phoenixWorkflowAvailable: true,
+                now: 1_005));
+        Dispatch(recoveredPhoenix, MonkHeldComboRules.RisingPhoenixActionId,
+            MonkHeldComboActionPurpose.RisingPhoenixBuff,
+            "reserved Phoenix dispatches when transient readiness returns");
+
+        var noPhoenixCharge = MonkHeldComboRules.Observe(
+            afterThunder,
+            Observation(
+                MonkHeldComboRules.PhantomRushActionId,
+                arrived,
+                windReady: false,
+                thunderReady: false,
+                phoenixReady: false,
+                phoenixWorkflowAvailable: false,
+                now: 1_004));
+        Dispatch(noPhoenixCharge, MonkHeldComboRules.PhantomRushActionId,
+            MonkHeldComboActionPurpose.PhantomRushFinish,
+            "zero Phoenix charges fall through without deadlock");
+
         var phoenix = MonkHeldComboRules.Observe(
             afterThunder,
             Observation(
@@ -501,6 +608,8 @@ internal static class MonkHeldComboSelfTests
                 MonkHeldComboRules.PhantomRushActionId,
                 proven,
                 windReady: false,
+                thunderReady: false,
+                thunderWorkflowAvailable: false,
                 phoenixReady: true,
                 now: 2_002));
         var awaitingFire = Accept(phoenix, 2_003, sequence: 20);
@@ -672,7 +781,9 @@ internal static class MonkHeldComboSelfTests
         bool windReady = true,
         bool? windWorkflowAvailable = null,
         bool thunderReady = true,
+        bool? thunderWorkflowAvailable = null,
         bool phoenixReady = true,
+        bool? phoenixWorkflowAvailable = null,
         bool fireResonance = false,
         bool confirmationBoundary = false,
         bool nativeBoundary = true,
@@ -697,7 +808,11 @@ internal static class MonkHeldComboSelfTests
         WindReplyWorkflowAvailable:
             windWorkflowAvailable ?? windReady,
         WindReplyLocallyReady: windReady,
+        ThunderclapWorkflowAvailable:
+            thunderWorkflowAvailable ?? thunderReady,
         ThunderclapLocallyReady: thunderReady,
+        RisingPhoenixWorkflowAvailable:
+            phoenixWorkflowAvailable ?? phoenixReady,
         RisingPhoenixLocallyReady: phoenixReady,
         HasExactOwnFireResonance: fireResonance,
         ConfirmationBoundaryReopened: confirmationBoundary,

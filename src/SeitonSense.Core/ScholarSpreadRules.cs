@@ -240,7 +240,8 @@ public readonly record struct ScholarSpreadWorkflowState(
     ScholarSpreadOwnedActionToken PendingOwnedAction,
     uint LastConfirmedGlobalSequence,
     ushort LastConfirmedSourceSequence,
-    uint LastConfirmedActionId)
+    uint LastConfirmedActionId,
+    bool OwnedSetupPairWasComplete)
 {
     public static ScholarSpreadWorkflowState Initial => default;
 
@@ -375,6 +376,7 @@ public static class ScholarSpreadRules
     public const int FirstPartySlot = 1;
     public const int LastPartySlot = 8;
     public const int CrystallineConflictRosterSize = 5;
+    public const int MinimumExactRosterSliceSize = 2;
     public const int MinimumUsefulSpreadTargets = 2;
     public const int MaximumEnemyTargets = 5;
     public const int MaximumPartyTargets = 8;
@@ -557,6 +559,34 @@ public static class ScholarSpreadRules
                biolysisRemainingMilliseconds;
     }
 
+    public static bool IsBiolysisPlanningReady(
+        bool ownRecastTimingKnown,
+        long ownRecastRemainingMilliseconds,
+        bool actionResourcesAvailable,
+        bool finalNativeReady)
+    {
+        if (!actionResourcesAvailable) return false;
+        if (!ownRecastTimingKnown) return finalNativeReady;
+        return ownRecastRemainingMilliseconds == 0;
+    }
+
+    public static bool IsCleanSetupSeed(
+        bool hasFirstExpectedStatus,
+        bool hasSecondExpectedStatus) =>
+        !hasFirstExpectedStatus && !hasSecondExpectedStatus;
+
+    public static bool IsCompleteOwnedSetupStatusPair(
+        bool hasFirstExpectedStatus,
+        bool hasSecondExpectedStatus) =>
+        hasFirstExpectedStatus && hasSecondExpectedStatus;
+
+    public static bool HasDeployableOwnedSetupStatus(
+        bool ownedSetupPairWasComplete,
+        bool hasFirstExpectedStatus,
+        bool hasSecondExpectedStatus) =>
+        ownedSetupPairWasComplete &&
+        (hasFirstExpectedStatus || hasSecondExpectedStatus);
+
     public static int SelectBestDotSeedIndex(
         IReadOnlyList<ScholarSpreadDotCandidate>? candidates,
         TargetPressureActorIdentity localPlayer)
@@ -624,8 +654,7 @@ public static class ScholarSpreadRules
         HasValidHp(candidate.CurrentHp, candidate.MaximumHp) &&
         candidate.NativeTargetValid &&
         candidate.NativeRangeAndLineOfSight &&
-        !candidate.HasOwnBiolysis &&
-        !candidate.HasOwnBiolytic &&
+        IsCleanSetupSeed(candidate.HasOwnBiolysis, candidate.HasOwnBiolytic) &&
         candidate.ExactCoverageKnown &&
         candidate.NewlyCoveredEnemyCount is >= MinimumUsefulSpreadTargets and
             <= MaximumEnemyTargets;
@@ -644,8 +673,7 @@ public static class ScholarSpreadRules
         candidate.NativeRangeAndLineOfSight &&
         (candidate.CurrentHp < candidate.MaximumHp ||
          (candidate.TacticalCrystalPresenceKnown && candidate.OnTacticalCrystal)) &&
-        !candidate.HasOwnGalvanize &&
-        !candidate.HasOwnCatalyze &&
+        IsCleanSetupSeed(candidate.HasOwnGalvanize, candidate.HasOwnCatalyze) &&
         candidate.ExactCoverageKnown &&
         candidate.NewlyCoveredPartyCount is >= MinimumUsefulSpreadTargets and
             <= MaximumPartyTargets;
@@ -658,7 +686,8 @@ public static class ScholarSpreadRules
                 default,
                 0,
                 0,
-                0)
+                0,
+                false)
             : ScholarSpreadWorkflowState.Initial;
 
     public static bool TryGetNextIntent(
@@ -767,8 +796,6 @@ public static class ScholarSpreadRules
             return CancelIntent(ScholarSpreadIntentDecisionReason.StatusOwnershipDrift);
         if (observation.ResolvedActionId != intent.ActionId)
             return CancelIntent(ScholarSpreadIntentDecisionReason.ResolvedActionDrift);
-        if (!observation.ActionLocallyReady)
-            return CancelIntent(ScholarSpreadIntentDecisionReason.ActionUnavailable);
 
         if (intent.IsDeployment)
         {
@@ -784,6 +811,13 @@ public static class ScholarSpreadRules
                 return CancelIntent(
                     ScholarSpreadIntentDecisionReason.ShieldReservationUnavailable);
             }
+        }
+
+        if (!observation.ActionLocallyReady)
+        {
+            return new ScholarSpreadIntentDecision(
+                ScholarSpreadIntentDecisionKind.SoftWaitNativeBoundary,
+                ScholarSpreadIntentDecisionReason.ActionUnavailable);
         }
 
         if (!observation.NativeActionBoundaryClear)
@@ -969,9 +1003,28 @@ public static class ScholarSpreadRules
                 LastConfirmedGlobalSequence = 0,
                 LastConfirmedSourceSequence = pending.SourceSequence,
                 LastConfirmedActionId = pending.ActionId,
+                OwnedSetupPairWasComplete = true,
             },
             ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed,
             ScholarSpreadEffectDecisionReason.None);
+    }
+
+    public static ScholarSpreadWorkflowState ObserveCompleteOwnedSetupStatusPair(
+        ScholarSpreadWorkflowState state,
+        TargetPressureActorIdentity exactTarget,
+        bool hasFirstExpectedStatus,
+        bool hasSecondExpectedStatus)
+    {
+        if (state.Phase != ScholarSpreadPhase.DeploymentReady ||
+            exactTarget != state.Plan.Target ||
+            !IsCompleteOwnedSetupStatusPair(
+                hasFirstExpectedStatus,
+                hasSecondExpectedStatus))
+        {
+            return state;
+        }
+
+        return state with { OwnedSetupPairWasComplete = true };
     }
 
     public static ScholarSpreadWorkflowState Cancel(
@@ -997,6 +1050,11 @@ public static class ScholarSpreadRules
     public static bool IsRelevantAction(uint actionId) =>
         actionId is AdloquiumActionId or BiolysisActionId or
             DeploymentTacticsActionId;
+
+    public static bool RequiresHeldReleaseAfterEffectCancellation(
+        ScholarSpreadEffectDecisionReason reason) =>
+        reason is ScholarSpreadEffectDecisionReason.OwnedSequenceMismatch or
+            ScholarSpreadEffectDecisionReason.OwnedEffectMalformed;
 
     private static ScholarSpreadPlanDecisionReason GetPlanningGateFailure(
         ScholarSpreadPlanningObservation observation)
@@ -1035,7 +1093,8 @@ public static class ScholarSpreadRules
         TargetPressureActorIdentity localPlayer)
     {
         if (candidates is null ||
-            candidates.Count != CrystallineConflictRosterSize ||
+            candidates.Count is < MinimumExactRosterSliceSize or
+                > CrystallineConflictRosterSize ||
             !localPlayer.IsValid)
         {
             return false;
@@ -1065,7 +1124,8 @@ public static class ScholarSpreadRules
         TargetPressureActorIdentity localPlayer)
     {
         if (candidates is null ||
-            candidates.Count != CrystallineConflictRosterSize ||
+            candidates.Count is < MinimumExactRosterSliceSize or
+                > CrystallineConflictRosterSize ||
             !localPlayer.IsValid)
         {
             return false;

@@ -263,8 +263,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         {
             if (workflowState.IsActive)
             {
-                workflowState = ScholarSpreadRules.Cancel(workflowState);
-                terminalUntilRelease = input.HeldGameplayKeyEligible;
+                workflowState = ScholarSpreadWorkflowState.Initial;
             }
 
             ClearActionEpisode();
@@ -283,6 +282,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                                         nativeState.BiolysisRemainingMilliseconds);
 
         var effectReason = ScholarSpreadEffectDecisionReason.None;
+        var replanDeferredThisFrame = false;
         if (IsOwnedEffectTimedOut(now))
         {
             workflowState = ScholarSpreadRules.Cancel(workflowState);
@@ -296,30 +296,55 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 now,
                 featureContextReady,
                 shieldReservationSafe,
-                input.HeldGameplayKeyEligible);
+                input.HeldGameplayKeyEligible,
+                out replanDeferredThisFrame);
+            if (replanDeferredThisFrame)
+                workflowState = ScholarSpreadWorkflowState.Initial;
 
             // ActionEffect is useful attribution evidence, but it is not the only
-            // exact proof available. Some clients expose the locally sourced status
-            // pair before (or without) a usable target/source sequence in the packet.
-            // Only a setup already accepted for this frozen target may use this path.
+            // exact proof available. Require the complete locally sourced pair once
+            // before a staggered first status or a later consumed shield may open
+            // Deployment for this already accepted, frozen setup.
             if (featureContextReady &&
-                workflowState.Phase == ScholarSpreadPhase.AwaitingSetupEffect &&
+                workflowState.Phase is ScholarSpreadPhase.AwaitingSetupEffect or
+                    ScholarSpreadPhase.DeploymentReady &&
                 localPlayer is not null &&
-                HasExactOwnPairOnFrozenTarget(workflowState.Plan, localPlayer.EntityId))
+                TryObserveExactOwnPairOnFrozenTarget(
+                    workflowState.Plan,
+                    localPlayer.EntityId,
+                    out var hasFirstExpectedStatus,
+                    out var hasSecondExpectedStatus))
             {
-                var statusDecision = ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
-                    workflowState,
-                    workflowState.Plan.Target,
-                    expectedOwnStatusPairActive: true,
-                    shieldReservationSafe);
-                workflowState = statusDecision.NextState;
-                if (statusDecision.Kind == ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed)
+                var completePair = ScholarSpreadRules.IsCompleteOwnedSetupStatusPair(
+                    hasFirstExpectedStatus,
+                    hasSecondExpectedStatus);
+                if (workflowState.Phase == ScholarSpreadPhase.AwaitingSetupEffect &&
+                    completePair)
                 {
-                    Interlocked.Increment(ref setupConfirmationCount);
-                    pendingAcceptedAtMilliseconds = -1;
-                    setupConfirmedAtMilliseconds = now;
-                    retryState = HeldActionRetryState.Initial;
-                    effectReason = statusDecision.Reason;
+                    var statusDecision =
+                        ScholarSpreadRules.ConfirmPendingSetupFromExactStatusPair(
+                            workflowState,
+                            workflowState.Plan.Target,
+                            expectedOwnStatusPairActive: true,
+                            shieldReservationSafe);
+                    workflowState = statusDecision.NextState;
+                    if (statusDecision.Kind ==
+                        ScholarSpreadEffectDecisionKind.OwnedSetupConfirmed)
+                    {
+                        Interlocked.Increment(ref setupConfirmationCount);
+                        pendingAcceptedAtMilliseconds = -1;
+                        setupConfirmedAtMilliseconds = now;
+                        retryState = HeldActionRetryState.Initial;
+                        effectReason = statusDecision.Reason;
+                    }
+                }
+                else if (workflowState.Phase == ScholarSpreadPhase.DeploymentReady)
+                {
+                    workflowState = ScholarSpreadRules.ObserveCompleteOwnedSetupStatusPair(
+                        workflowState,
+                        workflowState.Plan.Target,
+                        hasFirstExpectedStatus,
+                        hasSecondExpectedStatus);
                 }
             }
         }
@@ -333,11 +358,13 @@ internal sealed class ScholarSpreadProbe : IDisposable
             effectReason = ScholarSpreadEffectDecisionReason.OwnedEffectMalformed;
         }
 
-        var terminalThisFrame = workflowState.Phase is
-            ScholarSpreadPhase.Completed or ScholarSpreadPhase.Cancelled;
+        var terminalThisFrame = replanDeferredThisFrame ||
+                                workflowState.Phase is
+                                    ScholarSpreadPhase.Completed or ScholarSpreadPhase.Cancelled;
         if (workflowState.Phase is ScholarSpreadPhase.Completed or ScholarSpreadPhase.Cancelled)
         {
-            terminalUntilRelease = input.HeldGameplayKeyEligible;
+            if (workflowState.Phase == ScholarSpreadPhase.Completed)
+                terminalUntilRelease = input.HeldGameplayKeyEligible;
             workflowState = ScholarSpreadWorkflowState.Initial;
             ClearActionEpisode();
         }
@@ -383,7 +410,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     input.HeldGameplayKey == VirtualKey.NO_KEY
                         ? 0
                         : (int)input.HeldGameplayKey,
-                    nativeState.BiolysisReady,
+                    nativeState.BiolysisPlanningReady,
                     nativeState.AdloquiumReady,
                     nativeState.DeploymentCharges,
                     nativeState.DeploymentTimingKnown,
@@ -409,7 +436,10 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     setupConfirmedAtMilliseconds >= 0 &&
                     now >= setupConfirmedAtMilliseconds &&
                     now - setupConfirmedAtMilliseconds <= StatusPropagationTimeoutMilliseconds &&
-                    !HasExactOwnPairOnFrozenTarget(workflowState.Plan, localPlayer!.EntityId);
+                    !HasDeployableOwnStatusOnFrozenTarget(
+                        workflowState.Plan,
+                        localPlayer!.EntityId,
+                        workflowState.OwnedSetupPairWasComplete);
 
                 if (!statusPropagationPending &&
                     TryBuildIntentObservation(
@@ -421,6 +451,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                         shieldRuntime,
                         tacticalCrystalResolved,
                         tacticalCrystalPosition,
+                        workflowState.OwnedSetupPairWasComplete,
                         out var intentObservation))
                 {
                     currentAffectedCount =
@@ -447,16 +478,14 @@ internal sealed class ScholarSpreadProbe : IDisposable
                     }
                     else if (intentDecision.Kind == ScholarSpreadIntentDecisionKind.Cancelled)
                     {
-                        workflowState = ScholarSpreadRules.Cancel(workflowState);
+                        workflowState = ScholarSpreadWorkflowState.Initial;
                         ClearActionEpisode();
-                        terminalUntilRelease = input.HeldGameplayKeyEligible;
                     }
                 }
                 else if (!statusPropagationPending)
                 {
-                    workflowState = ScholarSpreadRules.Cancel(workflowState);
+                    workflowState = ScholarSpreadWorkflowState.Initial;
                     ClearActionEpisode();
-                    terminalUntilRelease = input.HeldGameplayKeyEligible;
                     intentReason = ScholarSpreadIntentDecisionReason.TargetIdentityDrift;
                 }
             }
@@ -464,9 +493,8 @@ internal sealed class ScholarSpreadProbe : IDisposable
         else if (workflowState.IsActive &&
                  (!consent.AllowsWorkflow || !featureContextReady))
         {
-            workflowState = ScholarSpreadRules.Cancel(workflowState);
+            workflowState = ScholarSpreadWorkflowState.Initial;
             ClearActionEpisode();
-            terminalUntilRelease = input.HeldGameplayKeyEligible;
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -523,9 +551,10 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 featureContextReady,
                 statusPropagationPending: setupConfirmedAtMilliseconds >= 0 &&
                                           workflowState.Phase == ScholarSpreadPhase.DeploymentReady &&
-                                          !HasExactOwnPairOnFrozenTarget(
+                                          !HasDeployableOwnStatusOnFrozenTarget(
                                               workflowState.Plan,
-                                              localPlayer?.EntityId ?? 0),
+                                              localPlayer?.EntityId ?? 0,
+                                              workflowState.OwnedSetupPairWasComplete),
                 attempted,
                 nativeOutcome,
                 planReason,
@@ -590,8 +619,10 @@ internal sealed class ScholarSpreadProbe : IDisposable
         long nowMilliseconds,
         bool featureContextReady,
         bool shieldReservationStillSafe,
-        bool heldGameplayKeyEligible)
+        bool heldGameplayKeyEligible,
+        out bool resetForReplan)
     {
+        resetForReplan = false;
         var lastReason = ScholarSpreadEffectDecisionReason.None;
         while (actionEffectCapture.TryDequeueScholarSpreadEffect(out var captured))
         {
@@ -648,7 +679,16 @@ internal sealed class ScholarSpreadProbe : IDisposable
                         Interlocked.Increment(ref manualConflictCount);
                     }
 
-                    terminalUntilRelease = heldGameplayKeyEligible;
+                    if (ScholarSpreadRules.RequiresHeldReleaseAfterEffectCancellation(
+                            decision.Reason))
+                    {
+                        terminalUntilRelease = heldGameplayKeyEligible;
+                    }
+                    else
+                    {
+                        resetForReplan = true;
+                    }
+
                     ClearActionEpisode();
                     break;
             }
@@ -689,10 +729,9 @@ internal sealed class ScholarSpreadProbe : IDisposable
         {
             case ClientActionAttemptOutcome.NotInvoked:
                 // The frozen exact intent failed its final live revalidation before
-                // UseAction. Retire this episode instead of repeatedly trying an
-                // actor/context that is no longer the exact one we planned for.
-                workflowState = ScholarSpreadRules.Cancel(workflowState);
-                terminalUntilRelease = heldGameplayKeyEligible;
+                // UseAction. Replan on the next held frame instead of latching a
+                // transient actor/context drift until every movement key is up.
+                workflowState = ScholarSpreadWorkflowState.Initial;
                 ClearActionEpisode();
                 break;
             case ClientActionAttemptOutcome.ClientAccepted:
@@ -752,7 +791,6 @@ internal sealed class ScholarSpreadProbe : IDisposable
         var actionManager = ActionManager.Instance();
         if (actionManager == null ||
             actionManager->GetAdjustedActionId(intent.ActionId) != intent.ActionId ||
-            !actionManager->IsActionOffCooldown(ActionType.Action, intent.ActionId) ||
             actionManager->CheckActionResources(ActionType.Action, intent.ActionId) != 0 ||
             actionManager->GetActionStatus(
                 ActionType.Action,
@@ -794,6 +832,13 @@ internal sealed class ScholarSpreadProbe : IDisposable
             {
                 sourceSequence = after.LastUsedActionSequence;
             }
+
+            log.Information(
+                "Seiton Sense Scholar spread attempt: action={ActionId} target={TargetId:X} outcome={Outcome} sourceSequence={SourceSequence}.",
+                intent.ActionId,
+                intent.Target.EntityId,
+                outcome,
+                sourceSequence);
 
             return outcome;
         }
@@ -839,8 +884,15 @@ internal sealed class ScholarSpreadProbe : IDisposable
             deploy,
             out var deployRemaining);
 
-        var charges = actionManager->GetCurrentCharges(deploy);
-        if (charges > 2) return ScholarSpreadNativeState.Unknown;
+        var adloquiumCharges = actionManager->GetCurrentCharges(adlo);
+        var deploymentCharges = actionManager->GetCurrentCharges(deploy);
+        if (adloquiumCharges > 2 || deploymentCharges > 2)
+            return ScholarSpreadNativeState.Unknown;
+        var biolysisResourcesAvailable =
+            actionManager->CheckActionResources(ActionType.Action, bio) == 0;
+        var biolysisReady =
+            actionManager->IsActionOffCooldown(ActionType.Action, bio) &&
+            biolysisResourcesAvailable;
         var boundaryClear = HeldActionRetryRules.IsNativeBoundaryNearQueueable(
             actionManager->AnimationLock,
             localPlayer.IsCasting,
@@ -848,17 +900,19 @@ internal sealed class ScholarSpreadProbe : IDisposable
             actionManager->ActionQueued);
         return new ScholarSpreadNativeState(
             Known: true,
+            BiolysisPlanningReady: ScholarSpreadRules.IsBiolysisPlanningReady(
+                bioTimingKnown,
+                bioRemaining,
+                biolysisResourcesAvailable,
+                biolysisReady),
             AdloquiumReady:
-                actionManager->IsActionOffCooldown(ActionType.Action, adlo) &&
+                adloquiumCharges > 0 &&
                 actionManager->CheckActionResources(ActionType.Action, adlo) == 0,
-            BiolysisReady:
-                actionManager->IsActionOffCooldown(ActionType.Action, bio) &&
-                actionManager->CheckActionResources(ActionType.Action, bio) == 0,
+            BiolysisReady: biolysisReady,
             DeploymentReady:
-                charges > 0 &&
-                actionManager->IsActionOffCooldown(ActionType.Action, deploy) &&
+                deploymentCharges > 0 &&
                 actionManager->CheckActionResources(ActionType.Action, deploy) == 0,
-            DeploymentCharges: (int)charges,
+            DeploymentCharges: (int)deploymentCharges,
             DeploymentTimingKnown: deployTimingKnown,
             DeploymentRemainingMilliseconds: deployRemaining,
             BiolysisTimingKnown: bioTimingKnown,
@@ -931,6 +985,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 enemies,
                 localPlayer.EntityId,
                 seedPairMustBeActive: false,
+                seedPairWasObservedComplete: false,
                 out var affected);
             dotList.Add(new ScholarDotRuntimeCandidate(
                 new ScholarSpreadDotCandidate(
@@ -974,6 +1029,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 party,
                 localPlayer.EntityId,
                 seedPairMustBeActive: false,
+                seedPairWasObservedComplete: false,
                 out var affected);
             shieldList.Add(new ScholarShieldRuntimeCandidate(
                 new ScholarSpreadShieldCandidate(
@@ -1019,6 +1075,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         IReadOnlyList<ScholarShieldRuntimeCandidate> observedShields,
         bool tacticalCrystalResolved,
         Vector3 tacticalCrystalPosition,
+        bool ownedSetupPairWasComplete,
         out ScholarSpreadIntentObservation observation)
     {
         observation = default;
@@ -1047,7 +1104,11 @@ internal sealed class ScholarSpreadProbe : IDisposable
             expectedSecond,
             out var hasFirst,
             out var hasSecond);
-        var pairActive = pairKnown && hasFirst && hasSecond;
+        var pairActive = pairKnown &&
+                         ScholarSpreadRules.HasDeployableOwnedSetupStatus(
+                             ownedSetupPairWasComplete,
+                             hasFirst,
+                             hasSecond);
 
         var exactCoverageKnown = intent.Kind == ScholarSpreadKind.Dot
             ? TryCountDotCoverage(
@@ -1055,12 +1116,14 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 ResolveExactEnemies(),
                 localPlayer.EntityId,
                 seedPairMustBeActive: intent.IsDeployment,
+                seedPairWasObservedComplete: ownedSetupPairWasComplete,
                 out var affected)
             : TryCountShieldCoverage(
                 new ExactRosterMember(intent.TargetSlot, currentTarget, currentIdentity, true),
                 ResolveExactParty(currentLocalIdentity),
                 localPlayer.EntityId,
                 seedPairMustBeActive: intent.IsDeployment,
+                seedPairWasObservedComplete: ownedSetupPairWasComplete,
                 out affected);
         var actionReady = intent.ActionId switch
         {
@@ -1136,7 +1199,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
         {
             var first = EnemySlotResolver.Resolve(objectTable, slot);
-            if (!HasValidNativeIdentity(first)) return [];
+            if (!HasValidNativeIdentity(first)) continue;
             var identity = new TargetPressureActorIdentity(first!.GameObjectId, first.EntityId);
             var second = EnemySlotResolver.Resolve(objectTable, slot);
             if (!HasValidNativeIdentity(second) ||
@@ -1144,14 +1207,15 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 second.GameObjectId != first.GameObjectId ||
                 second.EntityId != first.EntityId)
             {
-                return [];
+                continue;
             }
 
             result.Add(new ExactRosterMember(slot, first, identity, true));
         }
 
-        return HasCompleteUniqueRoster(
+        return HasStableUniqueRosterSlice(
             result,
+            ScholarSpreadRules.MinimumExactRosterSliceSize,
             ScholarSpreadRules.CrystallineConflictRosterSize)
             ? result.ToArray()
             : [];
@@ -1167,7 +1231,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         {
             var first = PartySlotResolver.Resolve(objectTable, slot);
             if (first is null) continue;
-            if (!HasValidNativeIdentity(first)) return [];
+            if (!HasValidNativeIdentity(first)) continue;
             var identity = new TargetPressureActorIdentity(first!.GameObjectId, first.EntityId);
             var second = PartySlotResolver.Resolve(objectTable, slot);
             if (!HasValidNativeIdentity(second) ||
@@ -1175,36 +1239,38 @@ internal sealed class ScholarSpreadProbe : IDisposable
                 second.GameObjectId != first.GameObjectId ||
                 second.EntityId != first.EntityId)
             {
-                return [];
+                continue;
             }
 
             result.Add(new ExactRosterMember(slot, first, identity, true));
         }
 
         return localPlayer.IsValid &&
-               result.Count(static item => item.Identity.IsValid) ==
-               ScholarSpreadRules.CrystallineConflictRosterSize &&
                result.Count(item => item.Identity == localPlayer) == 1 &&
-               HasCompleteUniqueRoster(
+               HasStableUniqueRosterSlice(
                    result,
+                   ScholarSpreadRules.MinimumExactRosterSliceSize,
                    ScholarSpreadRules.CrystallineConflictRosterSize)
             ? result.ToArray()
             : [];
     }
 
-    private static bool HasCompleteUniqueRoster(
+    private static bool HasStableUniqueRosterSlice(
         IReadOnlyList<ExactRosterMember> roster,
-        int expectedCount) =>
-        roster.Count == expectedCount &&
+        int minimumCount,
+        int maximumCount) =>
+        roster.Count >= minimumCount &&
+        roster.Count <= maximumCount &&
         roster.All(static item => item.Exact && item.Identity.IsValid) &&
-        roster.Select(static item => item.Slot).Distinct().Count() == expectedCount &&
-        roster.Select(static item => item.Identity).Distinct().Count() == expectedCount;
+        roster.Select(static item => item.Slot).Distinct().Count() == roster.Count &&
+        roster.Select(static item => item.Identity).Distinct().Count() == roster.Count;
 
     private static bool TryCountDotCoverage(
         ExactRosterMember seed,
         IReadOnlyList<ExactRosterMember> roster,
         uint localEntityId,
         bool seedPairMustBeActive,
+        bool seedPairWasObservedComplete,
         out int affected)
     {
         affected = 0;
@@ -1238,8 +1304,14 @@ internal sealed class ScholarSpreadProbe : IDisposable
             }
 
             var isSeed = member.Identity == exactSeed.Identity;
-            if (isSeed ? first == seedPairMustBeActive && second == seedPairMustBeActive
-                       : !first && !second)
+            if (isSeed
+                    ? seedPairMustBeActive
+                        ? ScholarSpreadRules.HasDeployableOwnedSetupStatus(
+                            seedPairWasObservedComplete,
+                            first,
+                            second)
+                        : ScholarSpreadRules.IsCleanSetupSeed(first, second)
+                    : ScholarSpreadRules.IsCleanSetupSeed(first, second))
             {
                 affected++;
             }
@@ -1253,6 +1325,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         IReadOnlyList<ExactRosterMember> roster,
         uint localEntityId,
         bool seedPairMustBeActive,
+        bool seedPairWasObservedComplete,
         out int affected)
     {
         affected = 0;
@@ -1286,8 +1359,14 @@ internal sealed class ScholarSpreadProbe : IDisposable
             }
 
             var isSeed = member.Identity == exactSeed.Identity;
-            if (isSeed ? first == seedPairMustBeActive && second == seedPairMustBeActive
-                       : !first && !second)
+            if (isSeed
+                    ? seedPairMustBeActive
+                        ? ScholarSpreadRules.HasDeployableOwnedSetupStatus(
+                            seedPairWasObservedComplete,
+                            first,
+                            second)
+                        : ScholarSpreadRules.IsCleanSetupSeed(first, second)
+                    : ScholarSpreadRules.IsCleanSetupSeed(first, second))
             {
                 affected++;
             }
@@ -1347,9 +1426,10 @@ internal sealed class ScholarSpreadProbe : IDisposable
             }
         }
 
-        // A locally-owned half-pair is an observation race or metadata drift;
-        // never use it as either a clean setup seed or an owned spread seed.
-        return hasFirst == hasSecond;
+        // A consumed shield or independently removed companion status is still a
+        // known observation. Planning requires a completely clean seed, while an
+        // already-owned setup may deploy whichever expected effect remains.
+        return true;
     }
 
     private bool TryResolveTacticalCrystal(
@@ -1461,10 +1541,14 @@ internal sealed class ScholarSpreadProbe : IDisposable
             : default;
     }
 
-    private bool HasExactOwnPairOnFrozenTarget(
+    private bool TryObserveExactOwnPairOnFrozenTarget(
         ScholarSpreadPlan plan,
-        uint localEntityId)
+        uint localEntityId,
+        out bool hasFirst,
+        out bool hasSecond)
     {
+        hasFirst = false;
+        hasSecond = false;
         if (!plan.IsValid || !IsNetworkEntityId(localEntityId)) return false;
         var intent = new ScholarSpreadIntent(
             plan.EpisodeToken,
@@ -1477,18 +1561,31 @@ internal sealed class ScholarSpreadProbe : IDisposable
         var target = ResolveFrozenTarget(intent);
         if (target is null) return false;
         return TryObserveOwnPair(
-                   target,
-                   localEntityId,
-                   plan.Kind == ScholarSpreadKind.Dot
-                       ? ScholarSpreadRules.BiolysisStatusId
-                       : ScholarSpreadRules.GalvanizeStatusId,
-                   plan.Kind == ScholarSpreadKind.Dot
-                       ? ScholarSpreadRules.BiolyticStatusId
-                       : ScholarSpreadRules.CatalyzeStatusId,
-                   out var first,
-                   out var second) &&
-               first && second;
+            target,
+            localEntityId,
+            plan.Kind == ScholarSpreadKind.Dot
+                ? ScholarSpreadRules.BiolysisStatusId
+                : ScholarSpreadRules.GalvanizeStatusId,
+            plan.Kind == ScholarSpreadKind.Dot
+                ? ScholarSpreadRules.BiolyticStatusId
+                : ScholarSpreadRules.CatalyzeStatusId,
+            out hasFirst,
+            out hasSecond);
     }
+
+    private bool HasDeployableOwnStatusOnFrozenTarget(
+        ScholarSpreadPlan plan,
+        uint localEntityId,
+        bool ownedSetupPairWasComplete) =>
+        TryObserveExactOwnPairOnFrozenTarget(
+            plan,
+            localEntityId,
+            out var hasFirst,
+            out var hasSecond) &&
+        ScholarSpreadRules.HasDeployableOwnedSetupStatus(
+            ownedSetupPairWasComplete,
+            hasFirst,
+            hasSecond);
 
     private bool ObserveMatchStartGate(
         bool liveContextValid,
@@ -1727,6 +1824,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
 
     private readonly record struct ScholarSpreadNativeState(
         bool Known,
+        bool BiolysisPlanningReady,
         bool AdloquiumReady,
         bool BiolysisReady,
         bool DeploymentReady,
@@ -1738,6 +1836,7 @@ internal sealed class ScholarSpreadProbe : IDisposable
         bool NativeBoundaryClear)
     {
         internal static ScholarSpreadNativeState Unknown => new(
+            false,
             false,
             false,
             false,

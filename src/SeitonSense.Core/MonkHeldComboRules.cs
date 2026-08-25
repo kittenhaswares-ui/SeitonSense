@@ -129,7 +129,9 @@ public readonly record struct MonkHeldComboObservation(
     bool FireReplyLocallyReady,
     bool WindReplyWorkflowAvailable,
     bool WindReplyLocallyReady,
+    bool ThunderclapWorkflowAvailable,
     bool ThunderclapLocallyReady,
+    bool RisingPhoenixWorkflowAvailable,
     bool RisingPhoenixLocallyReady,
     bool HasExactOwnFireResonance,
     bool ConfirmationBoundaryReopened,
@@ -379,8 +381,8 @@ public static class MonkHeldComboRules
         SupportedPvPContext context,
         uint resolvedComboActionId,
         bool fireReplyLocallyReady,
-        bool windReplyLocallyReady,
-        bool thunderclapLocallyReady,
+        bool windReplyWorkflowAvailable,
+        bool thunderclapWorkflowAvailable,
         bool hasExactOwnFireResonance,
         IReadOnlyList<MonkHeldComboCandidate> candidates)
     {
@@ -401,8 +403,8 @@ public static class MonkHeldComboRules
                 if (!IsRouteReachable(
                         resolvedComboActionId,
                         fireReplyLocallyReady,
-                        windReplyLocallyReady,
-                        thunderclapLocallyReady,
+                        windReplyWorkflowAvailable,
+                        thunderclapWorkflowAvailable,
                         hasExactOwnFireResonance,
                         candidate))
                 {
@@ -442,8 +444,8 @@ public static class MonkHeldComboRules
                 : IsRouteReachable(
                     resolvedComboActionId,
                     fireReplyLocallyReady,
-                    windReplyLocallyReady,
-                    thunderclapLocallyReady,
+                    windReplyWorkflowAvailable,
+                    thunderclapWorkflowAvailable,
                     hasExactOwnFireResonance,
                     candidate);
             if (!eligible) continue;
@@ -834,6 +836,25 @@ public static class MonkHeldComboRules
                 MonkHeldComboState.Initial,
                 MonkHeldComboDecisionReason.PressurePointMissing);
         }
+        // A confirmed Pressure Point means Wind's Reply has landed. Prefer the
+        // return charge even while the target position still looks melee-valid:
+        // the status can arrive one or more frames before the knockback position
+        // is reflected locally. Checking Phantom range first races that update
+        // and can skip Thunderclap entirely.
+        if (state.PressurePointConfirmed &&
+            candidate.HasExactOwnPressurePoint &&
+            !state.ThunderclapUsed &&
+            observation.ThunderclapWorkflowAvailable &&
+            candidate.ThunderclapTargetReady)
+        {
+            return BufferAction(
+                state,
+                observation,
+                candidate,
+                ThunderclapActionId,
+                MonkHeldComboActionPurpose.ThunderclapReturn);
+        }
+
         if (candidate.PhantomRushTargetReady)
         {
             if (observation.HasExactOwnFireResonance)
@@ -846,7 +867,7 @@ public static class MonkHeldComboRules
                     MonkHeldComboActionPurpose.PhantomRushFinish);
             }
 
-            if (observation.RisingPhoenixLocallyReady)
+            if (observation.RisingPhoenixWorkflowAvailable)
             {
                 return BufferAction(
                     state,
@@ -856,28 +877,14 @@ public static class MonkHeldComboRules
                     MonkHeldComboActionPurpose.RisingPhoenixBuff);
             }
 
-            // Never stall or spend Thunderclap merely because the reserved
-            // Phoenix charge is unavailable.
+            // Never stall merely because the reserved Phoenix charge or the
+            // already-preferred Thunderclap return is unavailable.
             return BufferAction(
                 state,
                 observation,
                 candidate,
                 PhantomRushActionId,
                 MonkHeldComboActionPurpose.PhantomRushFinish);
-        }
-
-        if (state.PressurePointConfirmed &&
-            candidate.HasExactOwnPressurePoint &&
-            !state.ThunderclapUsed &&
-            observation.ThunderclapLocallyReady &&
-            candidate.ThunderclapTargetReady)
-        {
-            return BufferAction(
-                state,
-                observation,
-                candidate,
-                ThunderclapActionId,
-                MonkHeldComboActionPurpose.ThunderclapReturn);
         }
 
         return Armed(
@@ -1240,8 +1247,8 @@ public static class MonkHeldComboRules
         IsRouteReachable(
             observation.ResolvedComboActionId,
             observation.FireReplyLocallyReady,
-            observation.WindReplyLocallyReady,
-            observation.ThunderclapLocallyReady,
+            observation.WindReplyWorkflowAvailable,
+            observation.ThunderclapWorkflowAvailable,
             observation.HasExactOwnFireResonance,
             candidate);
 
@@ -1269,8 +1276,8 @@ public static class MonkHeldComboRules
     private static bool IsRouteReachable(
         uint resolvedComboActionId,
         bool fireReplyLocallyReady,
-        bool windReplyLocallyReady,
-        bool thunderclapLocallyReady,
+        bool windReplyWorkflowAvailable,
+        bool thunderclapWorkflowAvailable,
         bool hasExactOwnFireResonance,
         MonkHeldComboCandidate candidate)
     {
@@ -1285,9 +1292,9 @@ public static class MonkHeldComboRules
         if (resolvedComboActionId != PhantomRushActionId) return false;
         if (candidate.PhantomRushTargetReady) return true;
         if (hasExactOwnFireResonance) return false;
-        return windReplyLocallyReady && candidate.WindReplyTargetReady ||
+        return windReplyWorkflowAvailable && candidate.WindReplyTargetReady ||
                candidate.HasExactOwnPressurePoint &&
-               thunderclapLocallyReady &&
+               thunderclapWorkflowAvailable &&
                candidate.ThunderclapTargetReady;
     }
 
