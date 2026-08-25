@@ -188,7 +188,8 @@ internal sealed partial class SettingsWindow
             $"{monkCombo.PendingPurpose}, S={monkCombo.EnemySlot}, target=" +
             $"{monkCombo.TargetGameObjectId:X}/{monkCombo.TargetEntityId:X}, proof pressure/fire=" +
             $"{monkCombo.PressurePointConfirmed}/{monkCombo.FireResonanceConfirmed}, boundary=" +
-            $"{monkCombo.NativeBoundaryReady}, key={monkCombo.HeldGameplayKey}, claim=" +
+            $"{monkCombo.NativeBoundaryReady}, route-resolver={monkCombo.NativeRouteResolverReady}, " +
+            $"key={monkCombo.HeldGameplayKey}, claim=" +
             $"{monkCombo.InputClaimed}, attempt={monkCombo.UseActionAttempted}/" +
             $"{monkCombo.UseActionAccepted}, native={monkCombo.NativeAttemptCount}/" +
             $"{monkCombo.LastNativeOutcome}, last={monkCombo.LastEvent}");
@@ -219,7 +220,7 @@ internal sealed partial class SettingsWindow
             $"capture/drop={rescue.ConfirmationCaptureCount}/{rescue.ConfirmationDropCount}, " +
             $"last={rescue.LastEvent}");
         ImGui.TextWrapped(
-            $"Reactive CC (WHM Miracle; BRD Silent Nocturne; NIN Forked/Fleeting Raiju): " +
+            $"Reactive CC (WHM/BRD/NIN/PLD/RDM/BLM): " +
             $"{miracle.Phase}/{miracle.Threat}, action={miracle.CounterActionId}, " +
             $"target={miracle.TargetGameObjectId:X}/" +
             $"{miracle.TargetEntityId:X}, job={miracle.TargetJobId}, remaining={miracle.ThreatRemainingMilliseconds} ms, " +
@@ -257,6 +258,8 @@ internal sealed partial class SettingsWindow
             $"consent={miracle.ProtectionEndHeldConsentActive}/" +
             $"{miracle.ProtectionEndHeldConsentKey}, reserved={miracle.ProtectionEndReservedKey}, " +
             $"expected-end={miracle.ProtectionEndExpectedRemainingMilliseconds} ms, " +
+            $"main-GCD-late={miracle.MainGcdLateReservationActive}/" +
+            $"{miracle.MainGcdLateRemainingMilliseconds} ms, " +
             $"last-winner pressure={protectionEndRankPressure}, " +
             $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
@@ -266,11 +269,19 @@ internal sealed partial class SettingsWindow
             $"key={samurai.ReservedKey}, claim={samurai.InputClaimed}, last-action/outcome=" +
             $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome}, attempts Soten/Mineuchi/Zan=" +
             $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/{samurai.ZantetsukenAttemptCount}, " +
-            $"accepted={samurai.AcceptedCount}, Zan={samurai.ZantetsukenPhase}, mirror queue/capture/drop=" +
+            $"accepted={samurai.AcceptedCount}, own-Zan enabled/metadata/phase=" +
+            $"{samurai.ZantetsukenHeldHelperEnabled}/{samurai.ZantetsukenMetadataVerified}/" +
+            $"{samurai.ZantetsukenPhase}, mirror queue/capture/drop=" +
             $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
-            $"{samurai.DroppedProtectionSignalCount}, shared hook/queue/capture/drop/gen=" +
-            $"{samuraiCapture.CaptureRunning}/{samuraiCapture.QueueDepth}/{samuraiCapture.CapturedSignals}/" +
-            $"{samuraiCapture.DroppedSignals}/{samuraiCapture.FeatureGeneration}, metadata counter/Zan/dummy=" +
+            $"{samurai.DroppedProtectionSignalCount}, timing Soten/Mineuchi samples=" +
+            $"{samurai.SotenTimingSampleCount}/{samurai.MineuchiTimingSampleCount}, " +
+            $"lead Soten/Mineuchi={samurai.PredictiveSotenLeadMilliseconds}/" +
+            $"{samurai.PredictiveMineuchiLeadMilliseconds} ms, Soten-effect=" +
+            $"{samurai.SotenArrivalConfirmed}, shared hook/protection q-c-d/effect q-c-d/gen=" +
+            $"{samuraiCapture.CaptureRunning}/{samuraiCapture.QueueDepth}/" +
+            $"{samuraiCapture.CapturedSignals}/{samuraiCapture.DroppedSignals}/" +
+            $"{samuraiCapture.ActionEffectQueueDepth}/{samuraiCapture.CapturedActionEffects}/" +
+            $"{samuraiCapture.DroppedActionEffects}/{samuraiCapture.FeatureGeneration}, metadata counter/Zan/dummy=" +
             $"{samuraiMetadata.CounterCcVerified}/{samuraiMetadata.ZantetsukenWorkflowVerified}/" +
             $"{samuraiMetadata.WolvesDenStrikingDummyVerified}, last={samurai.LastEvent}");
         ImGui.TextWrapped(

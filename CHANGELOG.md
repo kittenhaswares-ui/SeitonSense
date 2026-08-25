@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.34.0.0
+
+- Fixed the held **Monk combo** against the live Dragon Kick stall by resolving
+  FFXIV's native PvP `ActionComboRoute` function and invoking route `55` in
+  Combo mode for every normal stage and Phantom Rush. A missing or drifted
+  native resolver now disables the combo helper fail closed.
+- Extended **Viper Serpentiner Geist** Wolves' Den testing to the exact current
+  hard target when it is either the native hostile duel opponent or the
+  reviewed combat striking dummy with NameId `541`. The exact actor remains
+  frozen and revalidated as slot `0`; no target switch or synthetic enemy slot
+  is introduced.
+- Reworked **Samurai Soten -> Mineuchi** around direct targeted requests, one
+  exact protection episode, the complete verified blocker family, and measured
+  current-session Soten/Mineuchi impact timing. A client-accepted Soten retains
+  its frozen Mineuchi completion; without enough safe samples, the helper waits
+  for authoritative protection absence.
+- Added bounded, action-specific impact calibration for protection-end
+  counter-CC. Prediction requires five valid current-or-nearer samples,
+  including one from the current runtime session, and every early request keeps
+  the exact action, actor, and protection episode through the final native check.
+- A true main-GCD counter that is still busy at its learned ideal request frame
+  now reserves only that frozen intent for the first ready frame strictly before
+  `1000 ms`; the deadline never slides and the wait neither claims input nor
+  cancels a cast. Existing oGCD paths do not inherit this late window.
+- Added default-off protection-end options for **RDM Vice of Thorns** from its
+  exact Forte proc and **BLM Frost Star** from its exact Soul Resonance proc,
+  alongside the existing WHM, BRD, NIN, PLD, RDM Resolution, and SAM paths.
+- Bumped the plugin to `0.34.0.0` and configuration schema to `38`. The new
+  hostile options remain off for upgrades, fresh installs, and Reset Defaults;
+  all `454` Core tests and the zero-warning release build pass in this source
+  snapshot. Current-patch in-game behavior remains a separate live-validation
+  boundary.
+
 ## 0.33.0.1
 
 - Fixed the held **Monk combo** stopping after Dragon Kick. Every normal combo

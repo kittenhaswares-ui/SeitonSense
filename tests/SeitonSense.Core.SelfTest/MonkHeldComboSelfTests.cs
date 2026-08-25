@@ -39,6 +39,82 @@ internal static class MonkHeldComboSelfTests
         False(MonkHeldComboRules.IsDispatchableAction(1), "unknown action");
     }
 
+    public static void NativeRouteStageOwnsExactRequestShape()
+    {
+        True(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboActionPurpose.NormalCombo,
+                out var twinSnakes),
+            "native Twin Snakes stage creates route request");
+        Equal(
+            MonkHeldComboRules.TwinSnakesActionId,
+            twinSnakes.ActionId,
+            "current native stage owns action id");
+        Equal(
+            MonkHeldComboRules.PhantomRushComboRouteId,
+            twinSnakes.ComboRouteId,
+            "current native stage uses route 55");
+        True(twinSnakes.UsesComboMode, "current native stage uses combo mode");
+        True(twinSnakes.IsValid, "current native stage request is valid");
+
+        False(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboActionPurpose.NormalCombo,
+                out _),
+            "base carrier cannot replace the current native stage");
+        False(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboRules.TwinSnakesActionId,
+                MonkHeldComboActionPurpose.NormalCombo,
+                out _),
+            "route drift cannot create a native request");
+
+        True(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.PhantomRushActionId,
+                MonkHeldComboRules.PhantomRushActionId,
+                MonkHeldComboRules.PhantomRushActionId,
+                MonkHeldComboActionPurpose.PhantomRushFinish,
+                out var phantomRush),
+            "Phantom Rush uses its resolved route stage");
+        True(phantomRush.UsesComboMode, "Phantom Rush uses combo mode");
+        Equal(
+            MonkHeldComboRules.PhantomRushComboRouteId,
+            phantomRush.ComboRouteId,
+            "Phantom Rush uses route 55");
+
+        True(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboRules.FireReplyActionId,
+                MonkHeldComboActionPurpose.FireReplyFallback,
+                out var fireReply),
+            "auxiliary action keeps ordinary request shape");
+        Equal(
+            MonkHeldComboRules.FireReplyActionId,
+            fireReply.ActionId,
+            "auxiliary action id stays exact");
+        Equal(0u, fireReply.ComboRouteId, "auxiliary has no combo route");
+        False(fireReply.UsesComboMode, "auxiliary does not use combo mode");
+        False(
+            MonkHeldComboRules.TryCreateNativeActionRequest(
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboRules.DragonKickActionId,
+                MonkHeldComboRules.WindReplyActionId,
+                MonkHeldComboActionPurpose.FireReplyFallback,
+                out _),
+            "auxiliary purpose cannot substitute another action");
+    }
+
     public static void CcSelectionPrefersMeleeThenLowestHpAndWolvesUsesCurrentTarget()
     {
         var lowRanged = Candidate(
@@ -102,6 +178,27 @@ internal static class MonkHeldComboSelfTests
                 true, true, true, false,
                 [wolves, wolves with { Actor = new(0x2002, 0x202) }]).HasValue,
             "Wolves never chooses among targets");
+
+        True(MonkHeldComboRules.IsTargetMetadataEligible(
+                SupportedPvPContext.CrystallineConflict,
+                isWolvesDenStrikingDummy: false,
+                wolvesDenStrikingDummyMetadataVerified: false),
+            "CC does not depend on Wolves Den dummy metadata");
+        True(MonkHeldComboRules.IsTargetMetadataEligible(
+                SupportedPvPContext.WolvesDen,
+                isWolvesDenStrikingDummy: false,
+                wolvesDenStrikingDummyMetadataVerified: false),
+            "live duel opponent does not depend on dummy metadata");
+        False(MonkHeldComboRules.IsTargetMetadataEligible(
+                SupportedPvPContext.WolvesDen,
+                isWolvesDenStrikingDummy: true,
+                wolvesDenStrikingDummyMetadataVerified: false),
+            "dummy target requires its independent metadata proof");
+        True(MonkHeldComboRules.IsTargetMetadataEligible(
+                SupportedPvPContext.WolvesDen,
+                isWolvesDenStrikingDummy: true,
+                wolvesDenStrikingDummyMetadataVerified: true),
+            "verified dummy target remains available");
     }
 
     public static void NormalRouteRequiresExactNextCarrierAndTrueRangedFallback()

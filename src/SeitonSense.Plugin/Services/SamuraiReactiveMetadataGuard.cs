@@ -166,6 +166,9 @@ internal static class SamuraiReactiveMetadataGuard
         }
     }
 
+    // Both reviewed stages are Ability rows on their independent PvP cooldown
+    // lane, not main-GCD weaponskills. The staged scheduler therefore stays
+    // tight and never reserves or blocks a manual GCD.
     private static bool ValidateAction(
         GameAction action,
         string name,
@@ -187,6 +190,10 @@ internal static class SamuraiReactiveMetadataGuard
         action.Cast100ms == 0 &&
         action.Recast100ms == recast100ms &&
         action.MaxCharges == maxCharges &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == 4 &&
+        action.CooldownGroup == 3 &&
+        action.AdditionalCooldownGroup == 0 &&
         action.CanTargetHostile &&
         !action.CanTargetSelf &&
         !action.CanTargetParty &&

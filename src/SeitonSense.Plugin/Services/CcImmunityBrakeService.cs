@@ -131,13 +131,30 @@ internal sealed unsafe class CcImmunityBrakeService
         ulong originalTargetId,
         ulong forwardedTargetId,
         bool targetSuppressedByRedirect,
-        ActionManager.UseActionMode mode)
+        ActionManager.UseActionMode mode,
+        PredictiveCcBrakeBypassIntent? predictiveBypassIntent = null)
     {
-        if (!IsRecognizedInvocation(actionType, mode) ||
-            !configuration.Enabled ||
-            !configuration.EnableCcImmunityBrake ||
-            !verifiedActionIds.Contains(resolvedActionId) ||
-            ResolveContext() != SupportedPvPContext.CrystallineConflict)
+        var exactPredictiveIntent = predictiveBypassIntent.GetValueOrDefault();
+        var predictiveHelperRecheck =
+            predictiveBypassIntent.HasValue &&
+            PredictiveCcBrakeBypassRules.RequiresPredictiveHookRecheck(
+                resolvedActionId) &&
+            PredictiveCcBrakeBypassRules.IsValidIntent(exactPredictiveIntent);
+        var context = ResolveContext(includeWolvesDenTesting: predictiveHelperRecheck);
+        if (predictiveHelperRecheck &&
+            (!IsRecognizedInvocation(actionType, mode) ||
+             !configuration.Enabled ||
+             context == SupportedPvPContext.None))
+        {
+            return true;
+        }
+
+        if (!predictiveHelperRecheck &&
+            (!IsRecognizedInvocation(actionType, mode) ||
+             !configuration.Enabled ||
+             !configuration.EnableCcImmunityBrake ||
+             !verifiedActionIds.Contains(resolvedActionId) ||
+             context != SupportedPvPContext.CrystallineConflict))
         {
             return false;
         }
@@ -162,6 +179,8 @@ internal sealed unsafe class CcImmunityBrakeService
         var exactTarget = TryResolveExactCanonicalEnemy(
             localPlayer,
             effectiveTargetId,
+            context,
+            predictiveHelperRecheck,
             out var target,
             out var enemySlot,
             out var targetResolution);
@@ -169,8 +188,16 @@ internal sealed unsafe class CcImmunityBrakeService
             ? default
             : new TargetPressureActorIdentity(target.GameObjectId, target.EntityId);
         var targetJobId = target?.ClassJob.IsValid == true ? target.ClassJob.RowId : 0;
-        var liveStatuses = target?.StatusList
-            .Select(static status => status.StatusId)
+        var liveProtectionStatuses = target?.StatusList
+            .Where(status => verifiedStatusIds.Contains(status.StatusId))
+            .Select(status => new PredictiveCcProtectionStatusObservation(
+                status.StatusId,
+                ValidatedProtectionRemainingMilliseconds(
+                    status.StatusId,
+                    status.RemainingTime)))
+            .ToArray();
+        var liveStatuses = liveProtectionStatuses
+            ?.Select(static status => status.StatusId)
             .Where(verifiedStatusIds.Contains)
             .ToArray();
         var hardTargetStable = !defaultTargetCarrier ||
@@ -180,17 +207,29 @@ internal sealed unsafe class CcImmunityBrakeService
             exactTarget = false;
             targetResolution = "Native hard target changed during evaluation";
         }
-        var decision = CcImmunityBrakeRules.Evaluate(
-            masterEnabled: true,
-            configuration.IsCcBrakeJobEnabled(localJobId),
-            configuration.IsCcBrakeActionEnabled(resolvedActionId),
-            localJobId,
-            resolvedActionId,
-            effectiveTargetId,
-            targetIdentity,
-            targetJobId,
-            exactTarget,
-            liveStatuses);
+        var decision = predictiveHelperRecheck
+            ? CcImmunityBrakeRules.EvaluatePredictiveHelperExactRecheck(
+                localJobId,
+                resolvedActionId,
+                effectiveTargetId,
+                targetIdentity,
+                targetJobId,
+                exactTarget,
+                liveProtectionStatuses,
+                exactPredictiveIntent,
+                Environment.TickCount64)
+            : CcImmunityBrakeRules.Evaluate(
+                masterEnabled: true,
+                configuration.IsCcBrakeJobEnabled(localJobId),
+                configuration.IsCcBrakeActionEnabled(resolvedActionId),
+                localJobId,
+                resolvedActionId,
+                effectiveTargetId,
+                targetIdentity,
+                targetJobId,
+                exactTarget,
+                liveStatuses,
+                permittedPredictiveBlockerStatusId: 0);
         RecordDecision(
             decision,
             resolvedActionId,
@@ -271,6 +310,8 @@ internal sealed unsafe class CcImmunityBrakeService
     private bool TryResolveExactCanonicalEnemy(
         IPlayerCharacter? localPlayer,
         ulong targetId,
+        SupportedPvPContext context,
+        bool predictiveHelperRecheck,
         out IPlayerCharacter? target,
         out int enemySlot,
         out string resolution)
@@ -284,6 +325,34 @@ internal sealed unsafe class CcImmunityBrakeService
         }
         resolution = "Default/explicit target unresolved";
         if (!IsNetworkObjectId(targetId)) return false;
+
+        if (predictiveHelperRecheck && context == SupportedPvPContext.WolvesDen)
+        {
+            var wolvesDenMatches = objectTable.PlayerObjects
+                .OfType<IPlayerCharacter>()
+                .Where(candidate =>
+                    (candidate.GameObjectId == targetId ||
+                     candidate.EntityId == targetId) &&
+                    IsLivePlayer(candidate) &&
+                    HasValidNativeIdentity(candidate) &&
+                    candidate.ClassJob.IsValid &&
+                    candidate.GameObjectId != localPlayer!.GameObjectId &&
+                    candidate.EntityId != localPlayer.EntityId &&
+                    (candidate.StatusFlags & StatusFlags.Hostile) != 0)
+                .Take(2)
+                .ToArray();
+            if (wolvesDenMatches.Length != 1)
+            {
+                resolution = wolvesDenMatches.Length == 0
+                    ? "Exact Wolves' Den hostile target unresolved"
+                    : "Duplicate Wolves' Den hostile target identity";
+                return false;
+            }
+
+            target = wolvesDenMatches[0];
+            resolution = "Exact Wolves' Den hostile target";
+            return true;
+        }
 
         var partyEntityIds = partyList
             .Select(static member => member.EntityId)
@@ -371,20 +440,35 @@ internal sealed unsafe class CcImmunityBrakeService
         return character == null ? 0 : character->GetTargetId().Id;
     }
 
-    private SupportedPvPContext ResolveContext()
+    private SupportedPvPContext ResolveContext(bool includeWolvesDenTesting = false)
     {
         var condition = dutyState.ContentFinderCondition;
         var conditionValid = condition.IsValid;
         return PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
             clientState.IsPvPExcludingDen,
-            includeWolvesDenTesting: false,
+            includeWolvesDenTesting,
             clientState.TerritoryType,
             conditionValid,
             conditionValid && condition.Value.PvP,
             conditionValid ? condition.Value.ContentUICategory.RowId : 0,
             conditionValid && condition.Value.CrystallineConflictCasualRoulette,
             conditionValid && condition.Value.CrystallineConflictRankedRoulette);
+    }
+
+    private static long ValidatedProtectionRemainingMilliseconds(
+        uint statusId,
+        float remainingSeconds)
+    {
+        if (!CcProtectionStatusCatalog.TryGet(statusId, out var definition) ||
+            !float.IsFinite(remainingSeconds) ||
+            remainingSeconds <= 0f ||
+            remainingSeconds > definition.MaximumRemainingTime)
+        {
+            return 0;
+        }
+
+        return Math.Max(1L, (long)Math.Ceiling((double)remainingSeconds * 1_000d));
     }
 
     private static bool IsRecognizedInvocation(

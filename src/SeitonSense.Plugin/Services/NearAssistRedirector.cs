@@ -137,6 +137,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     [ThreadStatic]
     private static int explicitAutoGuardBreakBypassDepth;
 
+    [ThreadStatic]
+    private static PredictiveCcBrakeBypassScope? predictiveCcBrakeBypassScope;
+
     internal const int TokenLifetimeMilliseconds = 750;
     internal const float MinimumAllyDistance = 5f;
     internal const float MaximumAllyDistance = 30f;
@@ -480,11 +483,22 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     /// <summary>
     /// Runs one plugin-owned exact-target action through the existing hook without
     /// consuming or rewriting an armed macro token. The detour still reaches its
-    /// single Original call with every incoming argument unchanged.
+    /// single Original call with every incoming argument unchanged. A caller may
+    /// additionally scope one already validated protection-end prediction to one
+    /// exact action and target; nested or mismatched calls keep the normal brake.
     /// </summary>
-    internal T RunWithoutRedirect<T>(Func<T> action)
+    internal T RunWithoutRedirect<T>(
+        Func<T> action,
+        PredictiveCcBrakeBypassIntent? predictiveCcBrakeBypass = null)
     {
         ArgumentNullException.ThrowIfNull(action);
+        var previousPredictiveScope = predictiveCcBrakeBypassScope;
+        predictiveCcBrakeBypassScope =
+            previousPredictiveScope is null &&
+            predictiveCcBrakeBypass is { } intent &&
+            PredictiveCcBrakeBypassRules.IsValidIntent(intent)
+                ? new PredictiveCcBrakeBypassScope(this, intent)
+                : null;
         internalRedirectBypassDepth++;
         try
         {
@@ -493,6 +507,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         finally
         {
             internalRedirectBypassDepth--;
+            predictiveCcBrakeBypassScope = previousPredictiveScope;
         }
     }
 
@@ -1399,16 +1414,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         // branches above. They must still pass through the same final CC brake
         // so a protection appearing between a helper's pre-check and UseAction
         // can stop the one incoming attempt.
+        var predictiveCcBrakeScopeArmed =
+            predictiveCcBrakeBypassScope is { } predictiveScope &&
+            ReferenceEquals(predictiveScope.Owner, this);
         try
         {
             var resolvedActionId = ResolveActionId(thisPtr, actionType, actionId);
+            var predictiveBypassIntent =
+                TryConsumePredictiveCcBrakeBypass(
+                actionType,
+                actionId,
+                resolvedActionId,
+                targetId,
+                forwardedTargetId,
+                targetSuppressedByRedirect,
+                mode);
+            if (predictiveCcBrakeScopeArmed && predictiveBypassIntent is null)
+            {
+                // RunWithoutRedirect owns exactly one expected native call.
+                // Adjusted-action or target drift inside that armed scope is
+                // terminal; helper-only AoEs have no ordinary brake fallback.
+                return false;
+            }
             if (ccImmunityBrake.ShouldBlock(
                     actionType,
                     resolvedActionId,
                     targetId,
                     forwardedTargetId,
                     targetSuppressedByRedirect,
-                    mode))
+                    mode,
+                    predictiveBypassIntent))
             {
                 return false;
             }
@@ -1416,6 +1451,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         catch (Exception exception)
         {
             ccImmunityBrake.RecordFailedOpen(exception);
+            if (predictiveCcBrakeScopeArmed)
+                return false;
         }
 
         // This remains the detour's only textual Original call site. Every outer
@@ -1447,6 +1484,35 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (clientAccepted && hasSmartKardiaPreflight)
             ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
         return clientAccepted;
+    }
+
+    private PredictiveCcBrakeBypassIntent? TryConsumePredictiveCcBrakeBypass(
+        ActionType actionType,
+        uint requestedActionId,
+        uint resolvedActionId,
+        ulong originalTargetId,
+        ulong forwardedTargetId,
+        bool targetSuppressedByRedirect,
+        ActionManager.UseActionMode mode)
+    {
+        if (predictiveCcBrakeBypassScope is not { } scope ||
+            !ReferenceEquals(scope.Owner, this) ||
+            !PredictiveCcBrakeBypassRules.CanConsume(
+                scope.Intent,
+                scope.Consumed,
+                requestedActionId,
+                resolvedActionId,
+                originalTargetId,
+                forwardedTargetId,
+                targetSuppressedByRedirect,
+                actionType == ActionType.Action,
+                mode == ActionManager.UseActionMode.None))
+        {
+            return null;
+        }
+
+        scope.Consumed = true;
+        return scope.Intent;
     }
 
     private bool UseActionLocationDetour(
@@ -3316,6 +3382,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 0,
                 explicitAutoGuardBreakBypassDepth - 1);
         }
+    }
+
+    private sealed class PredictiveCcBrakeBypassScope(
+        NearAssistRedirector owner,
+        PredictiveCcBrakeBypassIntent intent)
+    {
+        internal NearAssistRedirector Owner { get; } = owner;
+        internal PredictiveCcBrakeBypassIntent Intent { get; } = intent;
+        internal bool Consumed { get; set; }
     }
 
     private static NearAssistAllyRole GetRolePreference(IPlayerCharacter player)

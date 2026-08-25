@@ -55,6 +55,25 @@ public enum MonkHeldComboActionPurpose : byte
     PhantomRushFinish = 6,
 }
 
+/// <summary>
+/// Exact native request shape for one frozen Monk held-combo action. PvP
+/// combo-route stages use the stage resolved by the game's ActionComboRoute
+/// resolver together with combo mode and the route row. Auxiliary actions are
+/// ordinary action requests and never inherit combo mode or a route id.
+/// </summary>
+public readonly record struct MonkHeldComboNativeActionRequest(
+    uint ActionId,
+    uint ComboRouteId,
+    bool UsesComboMode)
+{
+    public bool IsValid =>
+        MonkHeldComboRules.IsDispatchableAction(ActionId) &&
+        (UsesComboMode
+            ? ComboRouteId == MonkHeldComboRules.PhantomRushComboRouteId &&
+              MonkHeldComboRules.IsExactComboAction(ActionId)
+            : ComboRouteId == 0);
+}
+
 public readonly record struct MonkHeldComboState(
     MonkHeldComboPhase Phase,
     MonkHeldComboIntent? Intent,
@@ -211,6 +230,22 @@ public static class MonkHeldComboRules
     public const uint FireResonanceStatusId = 3_170;
     public const uint WindResonanceStatusId = 2_007;
 
+    /// <summary>
+    /// Action/route/status metadata gates the Monk helper itself. The shared
+    /// BNpcName proof is target-scoped: it is required only when the exact
+    /// Wolves' Den target is the reviewed striking dummy, never for CC or a
+    /// live duel opponent.
+    /// </summary>
+    public static bool IsTargetMetadataEligible(
+        SupportedPvPContext context,
+        bool isWolvesDenStrikingDummy,
+        bool wolvesDenStrikingDummyMetadataVerified) =>
+        (context == SupportedPvPContext.CrystallineConflict ||
+         context == SupportedPvPContext.WolvesDen) &&
+        (!isWolvesDenStrikingDummy ||
+         context == SupportedPvPContext.WolvesDen &&
+         wolvesDenStrikingDummyMetadataVerified);
+
     public static bool IsExactComboAction(uint actionId) => actionId is
         DragonKickActionId or
         TwinSnakesActionId or
@@ -242,6 +277,67 @@ public static class MonkHeldComboRules
             MonkHeldComboActionPurpose.PhantomRushFinish
             ? PhantomRushComboRouteId
             : 0;
+
+    /// <summary>
+    /// Creates the exact native request without substituting a stale stage.
+    /// The current stage must come from the game's ActionComboRoute resolver,
+    /// must still match the frozen carrier, and must own every route request.
+    /// </summary>
+    public static bool TryCreateNativeActionRequest(
+        uint nativeResolvedRouteActionId,
+        uint frozenCarrierActionId,
+        uint requestedActionId,
+        MonkHeldComboActionPurpose purpose,
+        out MonkHeldComboNativeActionRequest request)
+    {
+        request = default;
+        if (!IsExactComboAction(nativeResolvedRouteActionId) ||
+            nativeResolvedRouteActionId != frozenCarrierActionId)
+        {
+            return false;
+        }
+
+        var comboRouteId = GetNativeComboRouteId(requestedActionId, purpose);
+        if (comboRouteId != 0)
+        {
+            var purposeMatches = purpose switch
+            {
+                MonkHeldComboActionPurpose.NormalCombo =>
+                    IsNormalComboAction(requestedActionId),
+                MonkHeldComboActionPurpose.PhantomRushFinish =>
+                    requestedActionId == PhantomRushActionId,
+                _ => false,
+            };
+            if (!purposeMatches || requestedActionId != nativeResolvedRouteActionId)
+                return false;
+
+            request = new MonkHeldComboNativeActionRequest(
+                nativeResolvedRouteActionId,
+                comboRouteId,
+                UsesComboMode: true);
+            return request.IsValid;
+        }
+
+        var auxiliaryMatches = purpose switch
+        {
+            MonkHeldComboActionPurpose.FireReplyFallback =>
+                requestedActionId == FireReplyActionId,
+            MonkHeldComboActionPurpose.WindReplySetup =>
+                requestedActionId == WindReplyActionId,
+            MonkHeldComboActionPurpose.ThunderclapReturn =>
+                requestedActionId == ThunderclapActionId,
+            MonkHeldComboActionPurpose.RisingPhoenixBuff =>
+                requestedActionId == RisingPhoenixActionId,
+            _ => false,
+        };
+        if (!auxiliaryMatches) return false;
+
+        request = new MonkHeldComboNativeActionRequest(
+            requestedActionId,
+            ComboRouteId: 0,
+            UsesComboMode: false);
+        return request.IsValid;
+    }
 
     public static uint GetExpectedPreviousComboAction(uint actionId) => actionId switch
     {

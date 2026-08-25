@@ -127,6 +127,8 @@ internal static class MiracleProtectionEndSelfTests
                      MiracleInterceptConfirmationRules.InterveneActionId,
                      MiracleInterceptConfirmationRules.MineuchiActionId,
                      MiracleInterceptConfirmationRules.ResolutionActionId,
+                     MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                     MiracleInterceptConfirmationRules.FrostStarActionId,
                  })
         {
             var purify = new MiracleInterceptPendingAttempt(
@@ -183,6 +185,16 @@ internal static class MiracleProtectionEndSelfTests
         Equal(
             (ushort)MiracleCleanseFollowupRules.StunStatusId,
             MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.ViceOfThornsActionId),
+            "RDM Vice of Thorns retains exact Stun landing status");
+        Equal(
+            MiracleInterceptConfirmationRules.DeepFreezeStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.FrostStarActionId),
+            "BLM Frost Star retains exact Deep Freeze landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.StunStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
                 MiracleInterceptConfirmationRules.MineuchiActionId),
             "SAM Mineuchi retains exact Stun landing status for staged confirmation");
 
@@ -202,6 +214,66 @@ internal static class MiracleProtectionEndSelfTests
             ReactiveCounterCcExecutionShape.LineAoeTargeted,
             resolution!.Value.ExecutionShape,
             "Resolution cannot be flattened into the direct single-target catalog");
+
+        var vice = ReactiveCounterCcProfileRules.Get(
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId);
+        True(vice is { IsValid: true }, "RDM Vice of Thorns is one explicit proc profile");
+        Equal(
+            ReactiveCounterCcExecutionShape.TargetCenteredAoe,
+            vice!.Value.ExecutionShape,
+            "Vice retains its target-centered AoE shape");
+        Equal(
+            ReactiveCounterCcProfileRules.ForteCarrierActionId,
+            ReactiveCounterCcProfileRules.CarrierActionId(vice.Value.ActionId),
+            "Vice readiness is proven only by the Forte carrier adjustment");
+
+        var frost = ReactiveCounterCcProfileRules.Get(
+            MiracleInterceptConfirmationRules.FrostStarActionId);
+        True(frost is { IsValid: true }, "BLM Frost Star is one explicit proc profile");
+        Equal(
+            ReactiveCounterCcExecutionShape.TargetCenteredAoe,
+            frost!.Value.ExecutionShape,
+            "Frost Star retains its target-centered AoE shape");
+        Equal(
+            ReactiveCounterCcProfileRules.SoulResonanceCarrierActionId,
+            ReactiveCounterCcProfileRules.CarrierActionId(frost.Value.ActionId),
+            "Frost readiness is proven only by Soul Resonance adjustment");
+        Equal(
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+            ReactiveCounterCcProfileRules.SelectRedMageCounterAction(
+                viceEnabled: true,
+                viceMetadataVerified: true,
+                adjustedForteActionId:
+                    MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                resolutionEnabled: true,
+                resolutionMetadataVerified: true),
+            "an exposed Vice proc wins over Resolution");
+        Equal(
+            MiracleInterceptConfirmationRules.ResolutionActionId,
+            ReactiveCounterCcProfileRules.SelectRedMageCounterAction(
+                viceEnabled: true,
+                viceMetadataVerified: true,
+                adjustedForteActionId:
+                    ReactiveCounterCcProfileRules.ForteCarrierActionId,
+                resolutionEnabled: true,
+                resolutionMetadataVerified: true),
+            "Resolution remains the configured fallback before Vice is exposed");
+        Equal(
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+            ReactiveCounterCcProfileRules.SelectRedMageCounterAction(
+                viceEnabled: true,
+                viceMetadataVerified: true,
+                adjustedForteActionId:
+                    ReactiveCounterCcProfileRules.ForteCarrierActionId,
+                resolutionEnabled: false,
+                resolutionMetadataVerified: false),
+            "Vice-only keeps the capture lane alive while the proc is absent");
+        Equal(
+            MiracleInterceptConfirmationRules.FrostStarActionId,
+            ReactiveCounterCcProfileRules.SelectBlackMageCounterAction(
+                frostStarEnabled: true,
+                frostStarMetadataVerified: true),
+            "Frost Star keeps the capture lane alive before and after proc exposure");
 
         Equal(
             20f,
@@ -257,6 +329,16 @@ internal static class MiracleProtectionEndSelfTests
                     MiracleInterceptConfirmationRules.ResolutionActionId,
                     protectionEnd),
                 "RDM Resolution accepts only its reviewed protection-end trigger");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                    protectionEnd),
+                "RDM Vice accepts only its reviewed protection-end trigger");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.FrostStarActionId,
+                    protectionEnd),
+                "BLM Frost Star accepts only its reviewed protection-end trigger");
         }
 
         foreach (var urgent in new[]
@@ -277,6 +359,16 @@ internal static class MiracleProtectionEndSelfTests
                     MiracleInterceptConfirmationRules.ResolutionActionId,
                     urgent),
                 "RDM Resolution never inherits an urgent LB-start trigger");
+            False(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                    urgent),
+                "RDM Vice never inherits an urgent LB-start trigger");
+            False(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.FrostStarActionId,
+                    urgent),
+                "BLM Frost Star never inherits an urgent LB-start trigger");
             True(
                 ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
                     MiracleInterceptConfirmationRules.MiracleOfNatureActionId,

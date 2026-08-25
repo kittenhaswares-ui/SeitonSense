@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.33.0.1";
+    private const string CurrentReleaseVersion = "0.34.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -218,6 +218,7 @@ public sealed class Plugin : IDalamudPlugin
             dutyState,
             keyState,
             dataManager,
+            sigScanner,
             pressureTracker,
             tracker,
             nearAssist,
@@ -310,9 +311,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Monk held combo now sends every normal stage and Phantom Rush through the native PvP combo route, so one continuous hold advances beyond Dragon Kick.",
-                "DRK Shadowbringer metadata now accepts the exact base/adjusted player-action flags, and Wolves' Den duel targets no longer depend on striking-dummy metadata.",
-                "The HP-cost DRK fallback still requires known pressure; Dark Arts remains pressure-independent. Schema 37; all 441 Core tests pass.",
+                "Monk held combo now uses native PvP route 55 beyond Dragon Kick; Viper Den testing accepts the exact current hostile duel opponent or reviewed dummy without changing target.",
+                "SAM Soten/Mineuchi now freezes the exact target and protection episode, uses direct targeting, and learns verified two-stage impact timing with a conservative first-use fallback.",
+                "Counter-CC learns exact action-impact timing; true main-GCD actions get one fixed sub-1000-ms late reservation. Added default-off RDM Vice and BLM Frost Star. Schema 38; all 454 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -864,7 +865,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"{monkCombo.PendingPurpose},S={monkCombo.EnemySlot},target=" +
                     $"{monkCombo.TargetGameObjectId:X}/{monkCombo.TargetEntityId:X},proof=" +
                     $"{monkCombo.PressurePointConfirmed}/{monkCombo.FireResonanceConfirmed}," +
-                    $"boundary={monkCombo.NativeBoundaryReady},key={monkCombo.HeldGameplayKey}," +
+                    $"boundary={monkCombo.NativeBoundaryReady},route-resolver=" +
+                    $"{monkCombo.NativeRouteResolverReady},key={monkCombo.HeldGameplayKey}," +
                     $"claim={monkCombo.InputClaimed},attempt={monkCombo.UseActionAttempted}/" +
                     $"{monkCombo.UseActionAccepted},native={monkCombo.NativeAttemptCount}/" +
                     $"{monkCombo.LastNativeOutcome},last={monkCombo.LastEvent}]");
@@ -936,7 +938,9 @@ public sealed class Plugin : IDalamudPlugin
                     $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome},attempts=" +
                     $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/" +
                     $"{samurai.ZantetsukenAttemptCount},accepted={samurai.AcceptedCount}," +
-                    $"zan={samurai.ZantetsukenPhase},mirror-q/capture/drop=" +
+                    $"own-zan-enabled/meta/phase={samurai.ZantetsukenHeldHelperEnabled}/" +
+                    $"{samurai.ZantetsukenMetadataVerified}/{samurai.ZantetsukenPhase}," +
+                    $"mirror-q/capture/drop=" +
                     $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
                     $"{samurai.DroppedProtectionSignalCount},shared=" +
                     $"{samuraiCapture.CaptureRunning}/{samuraiCapture.QueueDepth}/" +

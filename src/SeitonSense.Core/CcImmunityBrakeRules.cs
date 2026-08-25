@@ -47,7 +47,8 @@ public static class CcImmunityBrakeRules
         TargetPressureActorIdentity resolvedTarget,
         uint targetJobId,
         bool targetIdentityResolvedExactly,
-        IEnumerable<uint>? activeStatusIds)
+        IEnumerable<uint>? activeStatusIds,
+        uint permittedPredictiveBlockerStatusId = 0)
     {
         if (!masterEnabled)
             return Pass(CcImmunityBrakeDecisionReason.MasterDisabled);
@@ -70,7 +71,13 @@ public static class CcImmunityBrakeRules
 
         if (activeStatusIds is not null)
         {
-            var activeStatuses = activeStatusIds.ToHashSet();
+            var activeStatusArray = activeStatusIds.ToArray();
+            var mayPermitOnePredictedStatus =
+                PredictiveCcBrakeBypassRules.IsSupportedProtectionStatus(
+                    permittedPredictiveBlockerStatusId) &&
+                activeStatusArray.Count(statusId =>
+                    statusId == permittedPredictiveBlockerStatusId) == 1;
+            var activeStatuses = activeStatusArray.ToHashSet();
             foreach (var statusId in CcImmunityBrakeActionCatalog.GetBlockerStatusIds(action.BlockerFamily))
             {
                 if (!activeStatuses.Contains(statusId) ||
@@ -81,6 +88,13 @@ public static class CcImmunityBrakeRules
                 {
                     continue;
                 }
+
+                if (mayPermitOnePredictedStatus &&
+                    statusId == permittedPredictiveBlockerStatusId)
+                {
+                    continue;
+                }
+
                 return new CcImmunityBrakeDecision(
                     CcImmunityBrakeDecisionKind.Block,
                     CcImmunityBrakeDecisionReason.VerifiedBlocker,
@@ -90,6 +104,115 @@ public static class CcImmunityBrakeRules
         }
 
         return Pass(CcImmunityBrakeDecisionReason.NoVerifiedBlocker, action);
+    }
+
+    /// <summary>
+    /// Hook-time safety recheck for one plugin-owned helper call. It applies
+    /// only when the detour consumed an exact one-call token and only to the
+    /// frozen primary actor. A natural token requires authoritative blocker
+    /// absence; a predictive token may carry exactly its still-valid scheduled
+    /// protection row. Target-centered/line actions stay outside the user's
+    /// ordinary brake catalog, so normal AoE semantics are never broadened.
+    /// </summary>
+    public static CcImmunityBrakeDecision EvaluatePredictiveHelperExactRecheck(
+        uint localJobId,
+        uint actionId,
+        ulong incomingTargetId,
+        TargetPressureActorIdentity resolvedTarget,
+        uint targetJobId,
+        bool targetIdentityResolvedExactly,
+        IEnumerable<PredictiveCcProtectionStatusObservation>? activeStatuses,
+        PredictiveCcBrakeBypassIntent intent,
+        long nowMilliseconds)
+    {
+        if (!PredictiveCcBrakeBypassRules.IsValidIntent(intent) ||
+            intent.ActionId != actionId ||
+            !PredictiveCcBrakeBypassRules.RequiresPredictiveHookRecheck(actionId) ||
+            ReactiveCounterCcProfileRules.Get(actionId) is not { } profile)
+        {
+            return Block(CcImmunityBrakeDecisionReason.ActionNotCataloged);
+        }
+
+        if (localJobId != profile.JobId)
+            return Block(CcImmunityBrakeDecisionReason.JobMismatch);
+        if (!targetIdentityResolvedExactly)
+            return Block(CcImmunityBrakeDecisionReason.TargetNotResolvedExactly);
+        if (!resolvedTarget.IsValid)
+            return Block(CcImmunityBrakeDecisionReason.InvalidTargetIdentity);
+        if (!IsExactIncomingTarget(incomingTargetId, resolvedTarget) ||
+            intent.TargetGameObjectId != resolvedTarget.GameObjectId ||
+            intent.TargetEntityId != resolvedTarget.EntityId ||
+            targetJobId == 0 ||
+            intent.TargetJobId != targetJobId)
+            return Block(CcImmunityBrakeDecisionReason.IncomingTargetMismatch);
+
+        if (activeStatuses is null)
+        {
+            return Block(CcImmunityBrakeDecisionReason.VerifiedBlocker);
+        }
+
+        var blockerFamily = PredictiveCcBrakeBypassRules.BlockerFamilyForPredictiveAction(
+            actionId);
+        var statuses = activeStatuses.ToArray();
+        if (PredictiveCcBrakeBypassRules.IsNaturalHelperIntent(intent))
+        {
+            var blockerStatusId = statuses
+                .Select(static status => status.StatusId)
+                .FirstOrDefault(statusId =>
+                    CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                        blockerFamily,
+                        statusId,
+                        targetJobId) ||
+                    (intent.RequireGuardAbsent &&
+                     MiracleGuardFollowupRules.IsExactGuardStatus(statusId)));
+            return blockerStatusId == 0
+                ? Pass(CcImmunityBrakeDecisionReason.NoVerifiedBlocker)
+                : Block(
+                    CcImmunityBrakeDecisionReason.VerifiedBlocker,
+                    blockerStatusId);
+        }
+
+        var protectionSet = PredictiveCcBrakeBypassRules.ClassifyProtectionSet(
+            blockerFamily,
+            targetJobId,
+            intent.ProtectionStatusId,
+            statuses);
+        if (protectionSet.ScheduledStatusCount > 1)
+        {
+            return Block(
+                CcImmunityBrakeDecisionReason.VerifiedBlocker,
+                intent.ProtectionStatusId);
+        }
+
+        if (protectionSet.OtherBlockerPresent)
+        {
+            var otherBlockerStatusId = statuses
+                .Select(static status => status.StatusId)
+                .FirstOrDefault(statusId =>
+                statusId != intent.ProtectionStatusId &&
+                (PredictiveCcBrakeBypassRules.IsSupportedProtectionStatus(statusId) ||
+                 CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                     blockerFamily,
+                     statusId,
+                     targetJobId)));
+            return Block(
+                CcImmunityBrakeDecisionReason.VerifiedBlocker,
+                otherBlockerStatusId);
+        }
+
+        if (protectionSet.ScheduledStatusCount == 1 &&
+            !ReactiveCounterCcImpactTimingRules.IsScheduledProtectionStillValid(
+                intent.ScheduledProtectionEndAtMilliseconds,
+                nowMilliseconds,
+                protectionSet.ScheduledRemainingMilliseconds,
+                intent.SafeImpactLeadMilliseconds))
+        {
+            return Block(
+                CcImmunityBrakeDecisionReason.VerifiedBlocker,
+                intent.ProtectionStatusId);
+        }
+
+        return Pass(CcImmunityBrakeDecisionReason.NoVerifiedBlocker);
     }
 
     private static bool IsExactIncomingTarget(
@@ -102,4 +225,12 @@ public static class CcImmunityBrakeRules
         CcImmunityBrakeDecisionReason reason,
         CcImmunityBrakeActionDefinition? action = null) =>
         new(CcImmunityBrakeDecisionKind.Pass, reason, action);
+
+    private static CcImmunityBrakeDecision Block(
+        CcImmunityBrakeDecisionReason reason,
+        uint blockerStatusId = 0) =>
+        new(
+            CcImmunityBrakeDecisionKind.Block,
+            reason,
+            BlockerStatusId: blockerStatusId);
 }

@@ -211,9 +211,10 @@ internal sealed unsafe class ViperSerpentTailProbe
             ? exactLocal.ClassJob.RowId
             : 0;
         var territoryId = clientState.TerritoryType;
-        var metadataVerified = actionMetadataVerified &&
-                               (context != SupportedPvPContext.WolvesDen ||
-                                wolvesDenDummyMetadataVerified);
+        // The action sheet is the feature-wide metadata gate. Wolves' Den duel
+        // opponents are exact live players and therefore must not depend on the
+        // optional striking-dummy name-row verification.
+        var metadataVerified = actionMetadataVerified;
         var runtimeDrift = state.Intent is { IsValid: true } frozenIntent &&
                            (!FrozenRuntimeMatches(
                                 frozenIntent,
@@ -675,13 +676,14 @@ internal sealed unsafe class ViperSerpentTailProbe
                 return null;
             }
             case SupportedPvPContext.WolvesDen:
-                return StrictWolvesDenStrikingDummyResolver
+                return DarkKnightWolvesDenCurrentTargetResolver
                     .TryResolveExactCurrentHardTarget(
                         objectTable,
                         wolvesDenDummyMetadataVerified,
                         localPlayer,
                         out _,
                         out var identity,
+                        out _,
                         out _)
                     ? ResolveExactCandidate(
                         localPlayer,
@@ -751,13 +753,16 @@ internal sealed unsafe class ViperSerpentTailProbe
             }
             case SupportedPvPContext.WolvesDen:
                 if (enemySlot != 0 ||
-                    !StrictWolvesDenStrikingDummyResolver
-                        .TryResolveFrozenCurrentHardTarget(
+                    !DarkKnightWolvesDenCurrentTargetResolver
+                        .TryResolveExactCurrentHardTarget(
                             objectTable,
                             wolvesDenDummyMetadataVerified,
                             localPlayer,
-                            expectedTarget,
-                            out target))
+                            out target,
+                            out var currentIdentity,
+                            out _,
+                            out _) ||
+                    currentIdentity != expectedTarget)
                 {
                     return null;
                 }

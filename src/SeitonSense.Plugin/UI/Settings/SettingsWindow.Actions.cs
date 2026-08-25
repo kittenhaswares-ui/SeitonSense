@@ -48,7 +48,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader(
-                "Reactive counter-CC: WHM / BRD / NIN / PLD / RDM / SAM",
+                "Reactive counter-CC: WHM / BRD / NIN / PLD / RDM / BLM / SAM",
                 ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= DrawReactiveCcControls();
@@ -386,7 +386,7 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
-                ? "ON — enabled WHM Miracle, BRD Silent Nocturne, NIN Raiju, PLD Intervene, RDM Resolution, or SAM Soten/Mineuchi " +
+                ? "ON — enabled WHM Miracle, BRD Silent Nocturne, NIN Raiju, PLD Intervene, RDM Resolution/Vice of Thorns, BLM Frost Star, or SAM Soten/Mineuchi " +
                   "may schedule one frozen exact-target intent " +
                   "for an eligible CC opportunity."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
@@ -422,6 +422,14 @@ internal sealed partial class SettingsWindow
             configuration.ReactiveCcRedMageResolution,
             value => configuration.ReactiveCcRedMageResolution = value);
         changed |= Checkbox(
+            "RDM Vice of Thorns proc after enemy Purify / Guard",
+            configuration.ReactiveCcRedMageViceOfThorns,
+            value => configuration.ReactiveCcRedMageViceOfThorns = value);
+        changed |= Checkbox(
+            "BLM Frost Star proc after enemy Purify / Guard",
+            configuration.ReactiveCcBlackMageFrostStar,
+            value => configuration.ReactiveCcBlackMageFrostStar = value);
+        changed |= Checkbox(
             "SAM Soten -> Mineuchi after enemy Purify / Guard",
             configuration.ReactiveCcSamuraiSotenMineuchi,
             value => configuration.ReactiveCcSamuraiSotenMineuchi = value);
@@ -439,7 +447,7 @@ internal sealed partial class SettingsWindow
             configuration.MiracleInterceptMchLimitBreak,
             value => configuration.MiracleInterceptMchLimitBreak = value);
         changed |= Checkbox(
-            "SAM Zantetsuken",
+            "Interrupt an enemy SAM Zantetsuken (WHM / BRD / NIN)",
             configuration.MiracleInterceptSamZantetsuken,
             value => configuration.MiracleInterceptSamZantetsuken = value);
         changed |= Checkbox(
@@ -451,11 +459,13 @@ internal sealed partial class SettingsWindow
             overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Experimental, CC-only, and disabled by default. WHM Wunder der Natur / Miracle of Nature uses its " +
+            "Experimental and disabled by default. Exact Crystalline Conflict is supported; the separate Wolves' Den " +
+            "testing toggle uses only the exact current hard target. WHM Wunder der Natur / Miracle of Nature uses its " +
             "native 10-yalm range; BRD Stumme Nocturne / Silent Nocturne and both NIN Raiju stun variants use " +
             "their native 20-yalm range. The enemy " +
             "must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
+            "The enemy-SAM trigger here is separate from your own Samurai Zantetsuken held helper under Job Tools. " +
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
             "accepts an exact enemy self-Purify action packet with or without an exposed Stun, Heavy, Bind, Silence, Deep " +
             "Freeze, or Miracle of Nature recovery tuple, observes real Resilience and remembers the exact enemy episode " +
@@ -475,15 +485,21 @@ internal sealed partial class SettingsWindow
             "selected; simultaneous losers " +
             "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
             "3054/3673 was observed present and then verified absent. Early Guard cancellation releases immediately. " +
-            "WHM, BRD, PLD, and RDM retain the 1.5-second held lease; NIN uses 3 seconds to cover one verified 2.5-second Raiju recast. " +
-            "PLD uses the configured Intervene cap up to its native 20 yalms; RDM uses the exact 25-yalm line-AoE Resolution. " +
+            "Ordinary protection-end held episodes retain the shared 3-second lease. A true main-GCD counter that is busy at its learned ideal request frame reserves only that exact action, actor, and protection episode for at most 1000 ms from that frozen frame; it never claims input or cancels your cast while waiting. " +
+            "PLD uses the configured Intervene cap up to its native 20 yalms; RDM Resolution, the exact Forte-to-Vice proc, and the exact Soul Resonance-to-Frost Star proc use native 25-yalm targeting. " +
+            "Each exact action learns only from exact source-sequence server ActionEffect timing at its measured edge distance. Prediction needs five safe current-or-nearer samples including at least one from the current runtime session; otherwise it waits for authoritative protection absence. Learned attempts may request early so impact aims just after natural expiry. Early Guard cancellation remains immediate. " +
             "In enabled Wolves' Den testing, these helpers act only on the exact current hard target matching the observed episode.");
         ImGui.TextDisabled(
             "SAM's separate staged option mirrors the exact enemy self-Purify/Guard packet from the same shared hook, " +
-            "requires the matching live Resilience/Guard status and then its authoritative absence. Inside 5 yalms it " +
-            "uses Mineuchi directly; otherwise it may use Soten once up to the configured cap, then reserves only that " +
-            "same actor/key for Mineuchi for 1.5 seconds. It never changes target, reranks, substitutes, or retries a " +
-            "completed native boundary. Wolves' Den requires the observed actor to be the exact current duel target or " +
+            "requires the matching live Resilience/Guard status, the complete verified Mineuchi blocker family, and " +
+            "freezes that exact actor, status, end time, and held-key generation. It first learns exact sequence-bound " +
+            "Soten arrival and Mineuchi ActionEffect timing. After warm-up it may start Soten early and requests Mineuchi " +
+            "only inside its measured final window so the stun lands just after protection expires; without enough safe " +
+            "samples it conservatively waits for authoritative absence. Early Guard cancellation remains immediate. " +
+            "Inside 5 yalms it uses Mineuchi directly; otherwise it may use Soten once up to the configured cap. A " +
+            "client-accepted Soten commits only that actor/episode's Mineuchi completion even if the initiating key is " +
+            "released or changed; text input still cancels it. It never changes target, reranks, substitutes, or retries " +
+            "a completed native boundary. Wolves' Den requires the observed actor to be the exact current duel target or " +
             "the reviewed current striking dummy.");
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +

@@ -118,9 +118,9 @@ following data already available in the local FFXIV client:
   state, exact local/current-hard-target identities, context, territory, own
   Guard, held-key generation, readiness, and native range/line-of-sight result.
   No preceding-action or native-queue history is recorded. Wolves' Den
-  additionally
-  reads only the exact current hard-target combat striking dummy identity and
-  NameId `541`;
+  additionally reads the exact current hard target only when it is either the
+  native hostile duel opponent or the reviewed combat striking dummy with NameId
+  `541`;
 - when the separate held-action cast-cancellation test is enabled, the exact
   highest-priority frozen helper/action/target/key/intent epoch, both current
   local cast signals and cast action ID, own Guard, queue, animation lock,
@@ -158,7 +158,12 @@ following data already available in the local FFXIV client:
 - when the optional Samurai helpers are enabled, exact local Samurai identity,
   held-key ownership, enemy Purify/Guard action-and-status evidence, the frozen
   Soten/Mineuchi stage, own Kuzushi attribution, target shield amount, action
-  readiness, range/line of sight, and bounded source/global sequence data.
+  readiness, range/line of sight, and bounded source/global sequence data;
+- when reactive counter-CC timing is learned, the exact plugin-owned action,
+  target and nonzero source sequence are correlated transiently with the matching
+  server status. Only the resulting action ID, landing delay, and target-edge
+  distance are eligible for the bounded local calibration; no actor identity or
+  character name is stored with a sample.
 
 Actor observations are joined using exact game-object and network entity
 identity. Ambiguous or stale identity is discarded. Nameplate rectangles and
@@ -924,9 +929,10 @@ its physical release.
 
 In Crystalline Conflict the frozen target must remain one exact canonical
 `S1`-`S5` enemy. In Wolves' Den, the separate testing option must remain enabled
-and the target must remain the exact current hard-target living, targetable combat
-striking dummy with NameId `541`. Duel players, arbitrary NPCs, synthetic enemy
-slots, Frontline, and Rival Wings fail closed. The helper deliberately cannot
+and the target must remain the exact current hard-target living, targetable
+native hostile duel opponent or reviewed combat striking dummy with NameId
+`541`. Arbitrary NPCs, synthetic enemy slots, Frontline, and Rival Wings fail
+closed. The helper deliberately cannot
 request held-action cast cancellation. Exposure, intent, retry, native-result,
 and aggregate diagnostic state remain bounded in memory and are not persisted,
 transmitted, or uploaded. Client acceptance does not prove server execution or
@@ -1141,16 +1147,20 @@ or fail open. All ownership state and aggregate diagnostics remain bounded in
 memory and are not persisted or uploaded; source checks do not prove server-side
 Guard timing.
 
-## Experimental WHM/BRD/NIN reactive counter-CC
+## Experimental WHM/BRD/NIN/PLD/RDM/BLM/SAM reactive counter-CC
 
-If explicitly enabled in exact Crystalline Conflict, the plugin extends its
+If explicitly enabled in exact Crystalline Conflict or in the separate Wolves'
+Den test mode, the plugin extends its
 bounded local action-effect observer to recognize the reviewed early event
 shapes for DNC Contradance `29432`, Marksman's Spite `29415`, Zantetsuken
 `29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188`. It reads
 source/target network identity, action identity, bounded event sequence/time,
 and the small fixed effect-slot shape needed to reject later hit packets. DNC
 and the reviewed MCH/SAM/VPR urgent startup paths are available to WHM, BRD, and
-NIN. NIN is enabled only when both metadata-verified Forked Raiju `29510` and
+NIN. Protection-end-only paths may instead use PLD Intervene `29065`, RDM
+Resolution `41492`, exact Forte `41496` to Vice of Thorns `41493`, exact Soul
+Resonance `29662` to BLM Frost Star `41481`, or the separate staged SAM
+Soten/Mineuchi helper. NIN is enabled only when both metadata-verified Forked Raiju `29510` and
 Fleeting Raiju `29707` rows are available. The bounded queues exist only in
 memory.
 
@@ -1212,7 +1222,10 @@ simultaneous loser before a higher-priority wait, so no later rank change or alt
 replace the winner. The winning actor and key freeze once; cast,
 queue, animation-lock, range, and line-of-sight gates may wait only until three
 seconds from the original release. These values and the frozen winning actor are
-retained only in bounded in-memory helper state.
+retained only in bounded in-memory helper state. A true main-GCD counter that is
+busy at its learned ideal request frame retains only the exact frozen reservation
+strictly before `1000 ms`; that deadline never slides, and the wait neither claims
+input nor requests cast cancellation.
 
 At dispatch, the enemy identity, expected triggering job, life/targetable state,
 exact still-eligible key generation, and action-specific verified protection
@@ -1258,8 +1271,8 @@ The action-effect hook also places exact local counter-status observations into
 a separate bounded in-memory queue. A 1.5-second `AUTO CC LANDED` visual is
 created only when local caster, expected action, pending enemy, effect type
 `0x0E`, action-specific status, and the same nonzero source sequence created by
-the plugin's accepted native request match within 1500 ms: Miracle `3085` for
-WHM, Silence `1347` for BRD, or Stun `1343` for either exact NIN Raiju variant.
+the plugin's accepted native request match within 1500 ms: Miracle `3085`,
+Silence `1347`, Stun `1343`, or Deep Freeze `3219` for the exact supported action.
 A manual use with a different sequence cannot claim the pending automatic
 result. This proves only that the
 counter-CC status landed on the intended enemy, not that Contradance, another
@@ -1442,10 +1455,13 @@ opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
 trigger opt-ins, the separate held Smart Recuperate and Emergency Teleport opt-ins
 plus the six local Emergency thresholds, the independent PLD
-  Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN reactive
-  counter-CC master/held-key/post-Purify/post-Guard/per-startup-trigger opt-ins,
-  optional PLD Intervene, RDM Resolution, SAM Soten/Mineuchi and SAM Zantetsuken
-  opt-ins plus their local maximum ranges,
+  Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN/PLD/RDM/
+  BLM/SAM reactive counter-CC master/held-key/post-Purify/post-Guard/per-startup-
+  trigger opt-ins,
+  optional PLD Intervene, RDM Resolution, RDM Vice of Thorns, BLM Frost Star,
+  SAM Soten/Mineuchi and SAM Zantetsuken opt-ins plus their local maximum ranges,
+  the impact-calibration revision and at most 24 numeric delay/distance samples
+  per supported counter action,
 the team-visible Attack1 marker
 opt-in, resource-aura surfaces/thresholds/appearance, enemy LB nameplates and
 scale, self/ally LB activation messages, optional ally names and ally LB damage,
@@ -1464,9 +1480,12 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 37 is current in v0.33.0.1. It keeps GNB Continuation, DRK
-Shadowbringer, Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, and RDM
-Resolution off for every upgrade, fresh install, and Reset Defaults. Schema 36
+Configuration schema 38 is current in v0.34.0.0. It adds RDM Vice of Thorns and
+BLM Frost Star as default-off protection-end options, starts calibration revision
+1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
+Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of
+Thorns, and Frost Star remain off for every upgrade, fresh install, and Reset
+Defaults. Schema 36
 adds local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
 The schema-35 migration still forces Emergency Teleport and Scholar Smart Spread
 off; Emergency initializes to 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
@@ -1498,8 +1517,9 @@ Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Ac
 helpers, and all other
 action-helper masters off; post-Guard defaults on only behind the disabled
 reactive-counter master. The replacement LB and local-MP presentation options
-default on but neither submits an action nor changes a target. Configuration does not
-save observed actors, targets,
+default on but neither submits an action nor changes a target. Apart from the
+bounded action-keyed numeric impact-calibration samples described above,
+configuration does not save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground
 destinations, Viper carrier exposures/frozen action-actor-context-key intents,

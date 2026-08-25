@@ -2,14 +2,15 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.33.0.1 fixes held Monk combo native
-route advancement after Dragon Kick plus DRK Shadowbringer metadata and Wolves'
-Den duel-target routing. It retains v0.33's default-off held GNB Continuation,
-DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken helpers;
-`/seitonbringer` has been removed. WHM, BRD, NIN, PLD, RDM, and SAM
-protection-end follow-ups retain exact evidence through short native busy
-windows. Accepted Auto-Guard can show a card/sound and protects an accidental
-second Guard press for two seconds. `/panicshu` now reaches its one location call
+assistance, and target highlights. Version 0.34.0.0 fixes held Monk combo
+advancement with FFXIV's native PvP route `55`, lets the Viper Den helper use the
+exact current hostile duel opponent or reviewed dummy, and rebuilds SAM
+Soten/Mineuchi around direct targeting plus measured two-stage timing. Reactive
+counter-CC now learns exact action-impact timing from bounded current-session
+evidence; true main-GCD counters may use one fixed late reservation strictly
+shorter than one second. RDM Vice of Thorns and BLM Frost Star join the default-
+off protection-end options. Accepted Auto-Guard can show a card/sound and protects
+an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
 v0.32's Emergency Teleport and Scholar Smart Spread plus v0.31's ranged Smart
 Tab, direct Viper carrier handling, and explicit Wolves' Den testing additions. `/smarttab`
@@ -126,7 +127,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
   key freeze for the attempt/retry episode. The helper never changes the selected
   target, substitutes a follow-up, dispatches carrier `39183`, or cancels your cast.
   Exact CC uses canonical `S1`-`S5`; explicitly enabled Wolves' Den testing uses
-  only the exact current hard-target combat striking dummy with NameId `541`.
+  the exact current hard target only when it is either the native hostile duel
+  opponent or the reviewed combat striking dummy with NameId `541`.
 - **Experimental Scholar Critical Strategy helper:** a separate default-off
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
@@ -233,7 +235,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Experimental reactive counter-CC:** the default-off helper uses WHM Wunder
   der Natur / Miracle of Nature, BRD Stumme Nocturne / Silent Nocturne, or both
   metadata-verified NIN Forked/Fleeting Raiju variants on exact DNC, MCH, SAM,
-  or VPR urgent startup evidence. It can also follow any of
+  or VPR urgent startup evidence. Protection-end-only options additionally cover
+  PLD Intervene, RDM Resolution or an exact Forte-to-Vice proc, BLM's exact Soul-
+  Resonance-to-Frost-Star proc, and staged SAM Soten/Mineuchi. It can also follow
+  any of
   the six exact Purify-removable enemy statuses after real Resilience ends, or
   an exact Guard on its first verified absent framework observation. Both
   follow-ups bind the exact canonical `S1`-`S5` actor directly and have no minimum
@@ -249,11 +254,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
   only that intent, and a later distinct release epoch can trigger on the same
   continuous held key without requiring or mutating the selected target. WHM
   uses native 10-yalm range; BRD and both NIN Raiju variants use native 20-yalm
-  range. Every bound protection-end intent expires three seconds after its
-  original release; acquisition, waiting, and retry never restart or extend that
-  deadline. NIN confirms only exact Stun on
-  the frozen enemy and every automatic landing requires the exact native action
-  source sequence, so a manual cast cannot claim it. An
+  range. Exact server ActionEffect landings build a bounded per-action and edge-
+  distance calibration. Prediction needs five current-or-nearer samples and at
+  least one eligible sample from the current runtime session; otherwise it waits
+  for authoritative protection absence. A true main-GCD counter that is busy at
+  its ideal request frame keeps only the frozen action/actor/episode until the
+  first ready frame strictly before `1000 ms`, without claiming input or
+  cancelling a cast. Every automatic landing requires the exact expected status
+  on the frozen enemy and the exact native action source sequence, so a manual
+  cast cannot claim it. An
   already-accepted instant LB may still win the client/server race.
 - **Optional team focus sign:** a separate default-off module can place the real,
   party-visible Attack1 sign on an exact enemy whose Guard is known unavailable
@@ -871,9 +880,10 @@ same carrier rule.
 
 In exact Crystalline Conflict the target must remain one canonical `S1`-`S5`
 enemy. Wolves' Den is available only with the separate testing option and only
-for the exact current hard-target living, targetable combat striking dummy with
-NameId `541`; duel players, arbitrary NPCs, and synthetic `S1`/`<e1>` identities
-are rejected. Frontline and Rival Wings remain excluded. This helper deliberately
+for the exact current hard-target living, targetable native hostile duel opponent
+or reviewed combat striking dummy with NameId `541`. Arbitrary NPCs and synthetic
+`S1`/`<e1>` identities are rejected. Frontline and Rival Wings remain excluded.
+This helper deliberately
 does not participate in held-action cast cancellation. A client-accepted return
 is bounded diagnostic feedback, not proof that the server applied damage.
 
@@ -1034,7 +1044,8 @@ disabled/context/player/identity drift, missing propagation, classification
 exceptions, and a hard six-second maximum fail open. Exact live client/server
 ordering still needs in-game validation.
 
-The **Reactive counter-CC** module is also default-off and CC-only. On WHM it
+The **Reactive counter-CC** module is also default-off and runs only in exact CC
+or explicitly enabled Wolves' Den testing. On WHM it
 uses Wunder der Natur / Miracle of Nature `29228` at native 10-yalm range; on
 BRD it uses Stumme Nocturne / Silent Nocturne `29395` at native 20-yalm range;
 on NIN it resolves the PvP Spinning Edge/Aeolian Edge Combo carrier `29500` to
@@ -1042,8 +1053,11 @@ either Forked Raiju `29510` or Fleeting Raiju `29707` at native 20-yalm range.
 Both Raiju metadata rows must verify before NIN can arm, and the carrier must
 expose the exact variant before an action can be requested. Forked Raiju remains
 blocked while the exact local Sealed Forked Raiju status `3195` is present; both
-variants remain blocked through exact local Bind `1345`.
-All three jobs can respond to the exact
+variants remain blocked through exact local Bind `1345`. Protection-end-only
+options add PLD Intervene `29065`, RDM Resolution `41492`, exact Forte `41496`
+to Vice of Thorns `41493`, and exact Soul Resonance `29662` to BLM Frost Star
+`41481`. SAM Soten/Mineuchi uses its separate two-stage exact-target path.
+WHM, BRD, and NIN can respond to the exact
 early DNC Contradance `29432`, MCH Marksman's Spite `29415`, SAM Zantetsuken
 `29537`, and VPR Furious Backlash / Nest der Blutschuppen `39188` startup
 signals. VPR waits for live Hardened Scales `4096` to be genuinely absent, and
@@ -1094,6 +1108,25 @@ or switching the selected target, choosing an alternate action/actor, or
 replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
+After an exact plugin-owned request lands, the matching nonzero source sequence,
+action, target, status, delay, and target-edge distance can contribute one
+bounded timing sample. At most 24 delay/distance samples are kept per supported
+action. Predictive release requires at least five valid samples at the current or
+a nearer distance, including one eligible sample from the current runtime
+session; until then the helper waits for authoritative protection absence. The
+lead uses the fastest eligible observed landing with a fixed safety margin, then
+revalidates that the same sole protection row, end time, actor, action, and range
+still match immediately before the one native call. This cannot guarantee an
+unseen faster server effect, so live validation remains required.
+
+For true main-GCD counters—NIN Raiju, RDM Resolution, and BLM Frost Star—the
+learned ideal request frame is also the start of one fixed late reservation. If
+the main GCD is busy, only that exact action, actor, held-key generation, and
+protection episode may fire on the first ready frame strictly before `1000 ms`.
+The deadline never slides; waiting neither consumes the held input nor requests
+cast cancellation. At or after `1000 ms` the opportunity is lost. oGCD counter
+paths do not inherit this main-GCD late reservation.
+
 If multiple exact post-Purify or post-Guard releases are simultaneously eligible,
 an exact current key must first be acquired inside the original strict 500-ms
 release edge. The best exact actor/key is then frozen once. Guard retires every
@@ -1128,13 +1161,14 @@ event-driven origins. At the reactive counter-CC stage, the chosen opportunity
 freezes one exact-target intent;
 there is no visible selected-target change,
 alternate action/target, fallback, or replay. Plugin-owned Miracle, Silent
-Nocturne, and Raiju requests still pass through the final action-specific
-CC-immunity brake immediately before the native call.
+Nocturne, Raiju, Intervene, Resolution, Vice, and Frost Star requests still pass
+through the final action-specific CC-immunity brake immediately before the native
+call.
 
 After a client-accepted request, a blue `AUTO CC LANDED` popup appears only if the bounded
 ActionEffect observer captures the matching status on that exact pending enemy:
-Miracle `3085` for WHM, Silence `1347` for BRD, or Stun `1343` for either NIN
-Raiju variant, with the exact `SourceSequence` created by the plugin request.
+Miracle `3085`, Silence `1347`, Stun `1343`, or Deep Freeze `3219`, with the
+exact action and `SourceSequence` created by the plugin request.
 A manual use of the same action cannot claim the pending automatic result. A
 local client-accepted request
 does not count. Even an exact landed popup proves only that the counter-CC status
@@ -1142,8 +1176,8 @@ landed; it does not conclusively prove that Contradance, another limit break, or
 its damage was interrupted. In particular, an instant LB already accepted by
 the server can resolve before the reactive request arrives. All startup timing,
 Purify/Resilience release
-ordering, WHM/BRD/NIN dispatch, and claimed interruption outcomes remain explicit
-current-patch live-validation boundaries.
+ordering, every counter profile's dispatch, and claimed interruption outcomes
+remain explicit current-patch live-validation boundaries.
 
 Bounded transition diagnostics record reactive episode memory, current-key
 attachment, protection-end promotion, native attempt outcome, and exact source
@@ -1495,7 +1529,7 @@ focus module to avoid drawing both over the same actor.
 | Optional held Emergency Teleport (MNK/BLM/SGE/VPR) | Yes | Yes, when test mode is enabled | No |
 | Optional reactive defensive utilities | Yes | No | No |
 | Optional PLD Guardian job tool | Yes | No | No |
-| Optional WHM/BRD/NIN reactive counter-CC | Yes | No | No |
+| Optional WHM/BRD/NIN/PLD/RDM/BLM/SAM reactive counter-CC | Yes | Yes, for the exact current hard target when test mode is enabled | No |
 | Optional team-visible Attack1 focus sign | Yes | No | No |
 | Optional local Auto Low-MP Focus Target | Yes | No | No |
 | Optional MNK Earth's Reply | Yes | Yes, when test mode is enabled | No |
@@ -1505,7 +1539,7 @@ focus module to avoid drawing both over the same actor.
 | Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Optional SCH Smart Spread independent held lane | Yes | No | No |
-| Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, only for the exact current hard-target striking dummy when test mode is enabled | No |
+| Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, for the exact current hostile duel opponent or reviewed dummy when test mode is enabled | No |
 | Optional GNB Continuation held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Optional SAM Soten/Mineuchi and Zantetsuken held helpers | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Optional MNK held combo helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
@@ -1522,8 +1556,8 @@ and uses no target; its destination comes from the local NIN position, facing,
 and exact forward terrain point. Enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
 nothing. Held GNB, SAM, MNK, and DRK test paths accept only their exact reviewed
-current-target route; Viper remains restricted to the exact current hard-target
-striking dummy.
+current-target route; Viper accepts the same exact current native hostile duel
+opponent or the reviewed NameId-`541` striking dummy.
 Pressure has an additional Wolves' Den opt-in so testing does not create an
 always-on pressure display by surprise.
 
@@ -1538,9 +1572,11 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 37 is current in v0.33.0.1. It keeps GNB Continuation, DRK
-Shadowbringer, Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, and RDM
-Resolution off for every upgrade, fresh install, and Reset Defaults. Schema 36
+Configuration schema 38 is current in v0.34.0.0. It adds RDM Vice of Thorns and
+BLM Frost Star as default-off protection-end options and resets unversioned
+impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
+SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
+Frost Star remain off for every upgrade, fresh install, and Reset Defaults. Schema 36
 adds the local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
 The schema-35 migration still forces Emergency Teleport and Scholar Smart Spread
 off, with Emergency defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
@@ -1839,9 +1875,9 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.33.0.1, the exact 441-test Core registry and source checks pin
-configuration schema 37, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
-the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, and RDM
+For current v0.34.0.0, the exact 454-test Core registry and source checks pin
+configuration schema 38, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
+the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only
 ownership, complete actor freeze, one hard-target setter/readback, and no retry or
@@ -1854,8 +1890,9 @@ The same current checks pin Smart Recuperate's exact CC-or-enabled-Den context
 freeze and no cross-context drift. Viper checks pin carrier `39183`, follow-ups
 `39174`-`39182`, their 5/20-yalm ranges, direct per-frame carrier exposure without
 preceding-action or queue provenance, one exact current-hard-target/action/context/
-territory/key intent, shared clean-false retry, and the strict NameId-`541` Den
-dummy path. They also retain the historical default-off schema-34 migration and the deliberate
+territory/key intent, shared clean-false retry, and both exact-current-target Den
+paths: the native hostile duel opponent or reviewed NameId-`541` dummy. They also
+retain the historical default-off schema-34 migration and the deliberate
 absence of Viper cast cancellation. These checks validate
 source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
@@ -2040,10 +2077,11 @@ queue/resource gates, unchanged outer combo call, and no alternate, mutation,
 replay, or retry. Those checks cannot prove the live Focus setter/HUD/`<f>`
 result, ReAction Macro Queue/Turbo mode, native queue and recast-group timing,
 server execution, or clipping. The hotfix additionally checks the existing
-Wolves' Den opt-in, exact hard-target striking-dummy identity and NameId `541`,
-the absence of synthetic enemy-slot or duel-opponent fallback, exact current
+Wolves' Den opt-in, exact hard-target identity as either the native hostile duel
+opponent or reviewed NameId-`541` striking dummy, the absence of a synthetic
+enemy-slot or arbitrary-target fallback, exact current
 combo secondary-cost metadata, and main-thread framework-update cycle priming.
-It does not turn a successful Den dummy trace into proof of live CC behavior;
+It does not turn a successful Den target trace into proof of live CC behavior;
 both contexts retain their own current-patch A/B boundary.
 
 The retained v0.17.0.0 source checks cover the exact direct hard/cast

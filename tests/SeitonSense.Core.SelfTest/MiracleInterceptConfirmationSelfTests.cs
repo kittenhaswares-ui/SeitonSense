@@ -153,6 +153,52 @@ internal static class MiracleInterceptConfirmationSelfTests
         }
     }
 
+    public static void ProcAoeCountersRequireTheirAuthoredTargetStatus()
+    {
+        foreach (var (actionId, expectedStatus) in new[]
+                 {
+                     (
+                         MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                         MiracleInterceptConfirmationRules.StunStatusId),
+                     (
+                         MiracleInterceptConfirmationRules.FrostStarActionId,
+                         MiracleInterceptConfirmationRules.DeepFreezeStatusId),
+                 })
+        {
+            var state = Register(
+                MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                accepted: true,
+                now: 1_000,
+                actionId: actionId).NextState;
+            var impactOnly = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                state,
+                Effect(now: 1_200, actionId: actionId) with
+                {
+                    EffectType = 0,
+                    EffectValue = 0,
+                });
+            False(impactOnly.Confirmed, $"proc AoE {actionId} impact alone cannot confirm CC");
+            True(impactOnly.NextState.Pending is not null, "impact-only packet preserves correlation");
+
+            var wrongTarget = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                impactOnly.NextState,
+                Effect(now: 1_201, actionId: actionId) with
+                {
+                    TargetEntityId = Target + 1,
+                    EffectValue = expectedStatus,
+                });
+            False(wrongTarget.Confirmed, $"proc AoE {actionId} secondary target cannot confirm");
+
+            var exact = MiracleInterceptConfirmationRules.ObserveActionEffect(
+                wrongTarget.NextState,
+                Effect(
+                    now: 1_202,
+                    actionId: actionId,
+                    effectValue: expectedStatus));
+            True(exact.Confirmed, $"proc AoE {actionId} exact authored target status confirms");
+        }
+    }
+
     public static void CorrelationRequiresExactIdentityShapeAndWindow()
     {
         var variants = new[]

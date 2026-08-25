@@ -19,6 +19,9 @@ internal readonly record struct SamuraiReactiveCaptureDiagnostics(
     int QueueDepth,
     long CapturedSignals,
     long DroppedSignals,
+    int ActionEffectQueueDepth,
+    long CapturedActionEffects,
+    long DroppedActionEffects,
     int FeatureGeneration);
 
 internal sealed class PersonalStatusService : IDisposable
@@ -87,6 +90,7 @@ internal sealed class PersonalStatusService : IDisposable
         IDutyState dutyState,
         IKeyState keyState,
         IDataManager dataManager,
+        ISigScanner sigScanner,
         TargetPressureTracker pressureTracker,
         ExecuteTracker executeTracker,
         NearAssistRedirector nearAssist,
@@ -158,13 +162,15 @@ internal sealed class PersonalStatusService : IDisposable
             nearAssist,
             machinistLimitBreakCapture,
             log,
-            metadata);
+            metadata,
+            configuration);
         samuraiReactive = new SamuraiReactiveCounterCcProbe(
             objectTable,
             executeTracker,
             nearAssist,
             log,
-            samuraiReactiveMetadata);
+            samuraiReactiveMetadata,
+            configuration);
         smartKardia = new SmartKardiaProbe(
             clientState,
             objectTable,
@@ -240,6 +246,7 @@ internal sealed class PersonalStatusService : IDisposable
             clientState,
             objectTable,
             nearAssist,
+            sigScanner,
             log);
         this.machinistLimitBreakCapture = machinistLimitBreakCapture;
         machinistLimitBreakWarningSound = new MachinistLimitBreakWarningSound(log);
@@ -267,6 +274,9 @@ internal sealed class PersonalStatusService : IDisposable
         machinistLimitBreakCapture.SamuraiReactiveProtectionQueueDepth,
         machinistLimitBreakCapture.CapturedSamuraiReactiveProtectionSignals,
         machinistLimitBreakCapture.DroppedSamuraiReactiveProtectionSignals,
+        machinistLimitBreakCapture.SamuraiReactiveActionEffectQueueDepth,
+        machinistLimitBreakCapture.CapturedSamuraiReactiveActionEffects,
+        machinistLimitBreakCapture.DroppedSamuraiReactiveActionEffects,
         machinistLimitBreakCapture.CurrentSamuraiReactiveGeneration);
     internal SmartKardiaProbeSnapshot SmartKardiaDiagnostics => smartKardia.Snapshot;
     internal NinjaGuardShukuchiProbeSnapshot NinjaGuardShukuchiDiagnostics =>
@@ -465,10 +475,12 @@ internal sealed class PersonalStatusService : IDisposable
             : 0;
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
         var isRedMage = localJobId == ReactiveCounterCcProfileRules.RedMageJobId;
+        var isBlackMage = localJobId == ReactiveCounterCcProfileRules.BlackMageJobId;
         var isAllyRescueJob = localJobId is EnemyCombatConstants.WhiteMageJobId or
             EnemyCombatConstants.BardJobId;
         var isNinja = ExecuteThreshold.IsNinja(localJobId);
-        var isReactiveCcJob = isAllyRescueJob || isNinja || isPaladin || isRedMage;
+        var isReactiveCcJob =
+            isAllyRescueJob || isNinja || isPaladin || isRedMage || isBlackMage;
         var isSage = localJobId == SmartKardiaRules.SageJobId;
         var isScholar = localJobId == ScholarCriticalStrategyRules.ScholarJobId;
         var isMonk = localJobId == MonkEarthReplyRules.MonkJobId;
@@ -697,8 +709,13 @@ internal sealed class PersonalStatusService : IDisposable
              nearAssist.VerifiedCcBrakeActionIds.Contains(
                  MiracleInterceptConfirmationRules.InterveneActionId)) ||
             (isRedMage &&
-             configuration.ReactiveCcRedMageResolution &&
-             metadata.RedMageResolutionVerified);
+             ((configuration.ReactiveCcRedMageResolution &&
+               metadata.RedMageResolutionVerified) ||
+              (configuration.ReactiveCcRedMageViceOfThorns &&
+               metadata.RedMageViceOfThornsVerified))) ||
+            (isBlackMage &&
+             configuration.ReactiveCcBlackMageFrostStar &&
+             metadata.BlackMageFrostStarVerified);
         var miracleInterceptHeldInputEnabled = configuration.Enabled &&
                                                configuration.EnableReactiveCcUtilities &&
                                                configuration.ReactiveCcOnHeldKey &&
@@ -731,9 +748,7 @@ internal sealed class PersonalStatusService : IDisposable
                                           metadata.SeitonVerified;
         var viperSerpentTailHeldInputEnabled =
             viperSerpentTailConfigurationEnabled &&
-            metadata.ViperSerpentTailVerified &&
-            (context != SupportedPvPContext.WolvesDen ||
-             metadata.WolvesDenStrikingDummyVerified);
+            metadata.ViperSerpentTailVerified;
         var gunbreakerContinuationHeldInputEnabled =
             gunbreakerContinuationConfigurationEnabled &&
             metadata.GunbreakerContinuationVerified;
@@ -760,6 +775,11 @@ internal sealed class PersonalStatusService : IDisposable
                        .TryDequeueSamuraiReactiveProtectionSignal(out var signal))
             {
                 samuraiReactive.EnqueueProtectionSignal(signal);
+            }
+            while (machinistLimitBreakCapture
+                       .TryDequeueSamuraiReactiveActionEffect(out var effect))
+            {
+                samuraiReactive.EnqueueActionEffectSignal(effect);
             }
         }
         var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||
@@ -963,7 +983,15 @@ internal sealed class PersonalStatusService : IDisposable
             enableRedMageResolution: configuration.ReactiveCcRedMageResolution,
             redMageResolutionMetadataVerified: metadata.RedMageResolutionVerified,
             isWolvesDenTesting: context == SupportedPvPContext.WolvesDen,
-            wolvesDenCurrentHardTarget: targetManager.Target as IPlayerCharacter);
+            wolvesDenCurrentHardTarget: targetManager.Target as IPlayerCharacter,
+            enableRedMageViceOfThorns:
+                configuration.ReactiveCcRedMageViceOfThorns,
+            redMageViceOfThornsMetadataVerified:
+                metadata.RedMageViceOfThornsVerified,
+            enableBlackMageFrostStar:
+                configuration.ReactiveCcBlackMageFrostStar,
+            blackMageFrostStarMetadataVerified:
+                metadata.BlackMageFrostStarVerified);
         var rescue = allyRescue.Observe(
             localPlayer,
             isCrystallineConflict,
@@ -1136,6 +1164,7 @@ internal sealed class PersonalStatusService : IDisposable
             context,
             monkHeldComboConfigurationEnabled,
             metadata.MonkHeldComboVerified,
+            metadata.WolvesDenStrikingDummyVerified,
             guardActive,
             purifyClaimedPriority ||
             samuraiClaimedPriority ||

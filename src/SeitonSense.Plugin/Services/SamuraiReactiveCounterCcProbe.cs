@@ -6,6 +6,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
+using SeitonSense.Plugin.Models;
 
 namespace SeitonSense.Plugin.Services;
 
@@ -29,6 +30,13 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
     long CapturedProtectionSignalCount,
     long DroppedProtectionSignalCount,
     string ZantetsukenPhase,
+    bool ZantetsukenHeldHelperEnabled,
+    bool ZantetsukenMetadataVerified,
+    int SotenTimingSampleCount,
+    int MineuchiTimingSampleCount,
+    int PredictiveSotenLeadMilliseconds,
+    int PredictiveMineuchiLeadMilliseconds,
+    bool SotenArrivalConfirmed,
     string LastEvent)
 {
     internal HeldCastCancellationRequest? CastCancellationRequest { get; init; }
@@ -53,6 +61,13 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
         0,
         0,
         "Waiting",
+        false,
+        false,
+        0,
+        0,
+        0,
+        0,
+        false,
         "Not started");
 }
 
@@ -60,7 +75,8 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
 /// Isolated SAM action runtime. An existing shared ActionEffect capture feeds
 /// exact self-target Purify/Guard records through EnqueueProtectionSignal. The
 /// probe then requires live Resilience/Guard membership before it can remember
-/// the episode, and authoritative status absence before Soten or Mineuchi.
+/// the episode. Exact sequence-bound ActionEffects warm the optional two-stage
+/// Soten/Mineuchi timing; until then it waits for authoritative status absence.
 /// Zantetsuken is a separate held lane with an exact own-source Kuzushi and
 /// zero ShieldPercentage requirement at the final native boundary.
 /// </summary>
@@ -68,6 +84,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
 {
     private const int MaximumQueuedSignals = 64;
     private const int MaximumRememberedSignals = 128;
+    private const int MaximumQueuedActionEffects = 64;
+    private const int MaximumPendingTimingAttempts = 8;
+    private const int MaximumRememberedTimingEffects = 128;
 
     private readonly object signalGate = new();
     private readonly IObjectTable objectTable;
@@ -75,9 +94,16 @@ internal sealed class SamuraiReactiveCounterCcProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private readonly SamuraiReactiveMetadataValidation metadata;
+    private readonly PluginConfiguration configuration;
     private readonly Queue<SamuraiReactiveProtectionSignal> pendingSignals = [];
+    private readonly Queue<SamuraiReactiveActionEffectSignal> pendingActionEffects = [];
     private readonly HashSet<ProtectionSignalIdentity> rememberedSignals = [];
     private readonly Queue<ProtectionSignalIdentity> rememberedSignalOrder = [];
+    private readonly List<PendingTimingAttempt> pendingTimingAttempts = [];
+    private readonly Dictionary<uint, List<ReactiveCounterCcImpactSample>>
+        currentSessionTimingSamples = [];
+    private readonly HashSet<TimingEffectIdentity> learnedTimingEffects = [];
+    private readonly Queue<TimingEffectIdentity> learnedTimingEffectOrder = [];
 
     private FrozenProtectionEpisode? protectionEpisode;
     private SamuraiReactiveCounterCcState counterState =
@@ -89,11 +115,19 @@ internal sealed class SamuraiReactiveCounterCcProbe
     private long sotenArrivalDeadlineMilliseconds = -1;
     private long capturedSignalCount;
     private long droppedSignalCount;
+    private long capturedActionEffectCount;
+    private long droppedActionEffectCount;
+    private long learnedTimingSampleCount;
     private long sotenAttemptCount;
     private long mineuchiAttemptCount;
     private long zantetsukenAttemptCount;
     private long acceptedCount;
     private bool inputClaimedThisFrame;
+    private bool zantetsukenHeldHelperEnabled;
+    private uint timingLocalEntityId;
+    private SupportedPvPContext timingContext;
+    private int predictiveSotenLeadMilliseconds;
+    private int predictiveMineuchiLeadMilliseconds;
     private HeldCastCancellationRequest? castCancellationRequestThisFrame;
     private uint lastAttemptedActionId;
     private ClientActionAttemptOutcome lastAttemptOutcome =
@@ -108,13 +142,15 @@ internal sealed class SamuraiReactiveCounterCcProbe
         ExecuteTracker executeTracker,
         NearAssistRedirector nearAssist,
         IPluginLog log,
-        SamuraiReactiveMetadataValidation metadata)
+        SamuraiReactiveMetadataValidation metadata,
+        PluginConfiguration configuration)
     {
         this.objectTable = objectTable;
         this.executeTracker = executeTracker;
         this.nearAssist = nearAssist;
         this.log = log;
         this.metadata = metadata;
+        this.configuration = configuration;
     }
 
     internal SamuraiReactiveCounterCcProbeSnapshot Snapshot =>
@@ -152,6 +188,24 @@ internal sealed class SamuraiReactiveCounterCcProbe
         }
     }
 
+    internal bool EnqueueActionEffectSignal(
+        SamuraiReactiveActionEffectSignal signal)
+    {
+        if (!signal.IsValid) return false;
+        lock (signalGate)
+        {
+            while (pendingActionEffects.Count >= MaximumQueuedActionEffects)
+            {
+                pendingActionEffects.Dequeue();
+                droppedActionEffectCount++;
+            }
+
+            pendingActionEffects.Enqueue(signal);
+            capturedActionEffectCount++;
+            return true;
+        }
+    }
+
     internal unsafe SamuraiReactiveCounterCcProbeSnapshot ObserveCounterCc(
         IPlayerCharacter? localPlayer,
         SupportedPvPContext context,
@@ -167,24 +221,41 @@ internal sealed class SamuraiReactiveCounterCcProbe
     {
         inputClaimedThisFrame = false;
         castCancellationRequestThisFrame = null;
+        predictiveSotenLeadMilliseconds = 0;
+        predictiveMineuchiLeadMilliseconds = 0;
         try
         {
             var localValid = IsValidLocalSamurai(localPlayer);
             var contextValid = context is SupportedPvPContext.CrystallineConflict or
                 SupportedPvPContext.WolvesDen;
+            var blockerMetadataVerified = HasCompleteMineuchiBlockerMetadata();
+            if (hardReset || !localValid || !contextValid)
+            {
+                ResetTimingSession();
+            }
+            else
+            {
+                EnsureTimingSession(localPlayer!.EntityId, context);
+                DrainActionEffectSignals(localPlayer.EntityId, nowMilliseconds);
+            }
+
             if (hardReset || !enabled ||
                 (!enablePostPurify && !enablePostGuard) ||
                 !metadata.CounterCcVerified ||
+                !blockerMetadataVerified ||
                 !contextValid || !localValid)
             {
                 ResetCounter(
                     clearSignals: hardReset ||
                         !enabled ||
                         !metadata.CounterCcVerified ||
+                        !blockerMetadataVerified ||
                         !contextValid ||
                         !localValid);
                 lastEvent = !metadata.CounterCcVerified
-                    ? "SAM counter-CC metadata is not verified"
+                    ? "SAM counter-CC action/protection metadata is not verified"
+                    : !blockerMetadataVerified
+                        ? "SAM Mineuchi blocker-family metadata is incomplete"
                     : "SAM counter-CC inactive";
                 return PublishSnapshot();
             }
@@ -206,8 +277,6 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     context,
                     enablePostPurify,
                     enablePostGuard,
-                    allowHeldGameplayKey,
-                    inputFrame,
                     nowMilliseconds);
             }
 
@@ -229,10 +298,10 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 return PublishSnapshot();
             }
 
-            var protectionCount = CountExpectedProtectionStatuses(
+            var protection = ObserveExpectedProtection(
                 target,
                 episode.Signal.Kind);
-            if (protectionCount > 1)
+            if (protection.Count > 1)
             {
                 lastEvent = "Ambiguous duplicate protection statuses; episode cancelled";
                 ResetCounter(clearSignals: false);
@@ -241,7 +310,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
             if (!episode.ProtectionObserved)
             {
-                if (protectionCount == 0)
+                if (protection.Count == 0)
                 {
                     if (!SamuraiReactiveRuntimeRules.IsInsideLease(
                             episode.Signal.ObservedAtMilliseconds,
@@ -256,62 +325,106 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     return PublishSnapshot();
                 }
 
-                var keyToken = episode.GameplayKeyToken;
-                if (keyToken <= 0 && TryResolveEligibleGameplayKey(
-                        inputFrame,
-                        allowHeldGameplayKey,
-                        out var observedKey))
-                {
-                    keyToken = (int)observedKey;
-                }
-
+                var gameplayKeyToken = TryResolveEligibleGameplayKey(
+                    inputFrame,
+                    allowHeldGameplayKey,
+                    out var observedKey)
+                    ? (int)observedKey
+                    : 0;
                 episode = episode with
                 {
                     ProtectionObserved = true,
-                    GameplayKeyToken = keyToken,
+                    ProtectionStatusId = protection.StatusId,
+                    ScheduledProtectionEndAtMilliseconds =
+                        protection.RemainingMilliseconds > 0
+                            ? SaturatingAdd(
+                                nowMilliseconds,
+                                protection.RemainingMilliseconds)
+                            : -1,
+                    GameplayKeyToken = gameplayKeyToken,
                 };
                 protectionEpisode = episode;
-                if (keyToken > 0)
-                {
-                    counterState = SamuraiReactiveCounterCcRules.Arm(
-                        episode.Target.Identity,
-                        keyToken,
-                        nowMilliseconds,
-                        episode.Target.AllowJoblessWolvesDenTarget);
-                }
+                lastEvent = gameplayKeyToken > 0
+                    ? $"Exact {episode.Signal.Kind} status/key frozen"
+                    : $"Exact {episode.Signal.Kind} status observed; waiting for held key";
+            }
 
-                lastEvent = $"Exact {episode.Signal.Kind} status observed";
+            if (protection.Count == 1 &&
+                episode.ProtectionStatusId != protection.StatusId)
+            {
+                lastEvent = "Frozen protection status row drifted; episode cancelled";
+                ResetCounter(clearSignals: false, preserveLastEvent: true);
+                return PublishSnapshot();
+            }
+
+            if (episode.GameplayKeyToken == 0)
+            {
+                if (TryResolveEligibleGameplayKey(
+                        inputFrame,
+                        allowHeldGameplayKey,
+                        out var currentKey))
+                {
+                    episode = episode with { GameplayKeyToken = (int)currentKey };
+                    protectionEpisode = episode;
+                    lastEvent = protection.Count == 1
+                        ? $"Exact protection/key frozen: {currentKey}"
+                        : $"Protection release-edge key frozen: {currentKey}";
+                }
+                else if (protection.Count == 0)
+                {
+                    // Absence is a single release edge, not a multi-second
+                    // opportunity for an unrelated later key press.
+                    lastEvent = "Protection ended without exact held-key consent";
+                    ResetCounter(clearSignals: false, preserveLastEvent: true);
+                    return PublishSnapshot();
+                }
+                else
+                {
+                    return PublishSnapshot();
+                }
             }
 
             if (!counterState.IsActive)
             {
-                if (protectionCount == 0)
+                counterState = SamuraiReactiveCounterCcRules.Arm(
+                    episode.Target.Identity,
+                    episode.GameplayKeyToken,
+                    nowMilliseconds,
+                    episode.Target.AllowJoblessWolvesDenTarget);
+                if (!counterState.IsActive)
                 {
-                    lastEvent = "Protection ended without held-key consent";
-                    ResetCounter(clearSignals: false);
+                    lastEvent = "Frozen status/key could not arm the exact actor";
+                    ResetCounter(clearSignals: false, preserveLastEvent: true);
                     return PublishSnapshot();
                 }
-
-                if (TryResolveEligibleGameplayKey(
-                        inputFrame,
-                        allowHeldGameplayKey,
-                        out var lateKey))
-                {
-                    episode = episode with { GameplayKeyToken = (int)lateKey };
-                    protectionEpisode = episode;
-                    counterState = SamuraiReactiveCounterCcRules.Arm(
-                        episode.Target.Identity,
-                        (int)lateKey,
-                        nowMilliseconds,
-                        episode.Target.AllowJoblessWolvesDenTarget);
-                }
-
-                if (!counterState.IsActive) return PublishSnapshot();
             }
 
-            var exactKeyStillDown = IsExactGameplayKeyStillDown(
-                inputFrame,
-                counterState.GameplayKeyToken);
+            if (counterState.Phase == SamuraiReactiveCounterCcPhase.Armed &&
+                !IsExactGameplayKeyStillDown(
+                    inputFrame,
+                    counterState.GameplayKeyToken))
+            {
+                lastEvent = "Frozen pre-Soten held key was released or changed";
+                ResetCounter(clearSignals: false, preserveLastEvent: true);
+                return PublishSnapshot();
+            }
+
+            if (counterState.Phase == SamuraiReactiveCounterCcPhase.ApproachAccepted &&
+                inputFrame.Snapshot.IsTextInputActive)
+            {
+                lastEvent = "Accepted Soten follow-up cancelled by text input";
+                ResetCounter(clearSignals: false, preserveLastEvent: true);
+                return PublishSnapshot();
+            }
+
+            // Once Soten is accepted, the one frozen staged intent owns its
+            // exact Mineuchi completion; releasing or changing the initiating
+            // movement key must not strand the SAM beside the target.
+            var exactKeyStillDown =
+                counterState.Phase == SamuraiReactiveCounterCcPhase.ApproachAccepted ||
+                IsExactGameplayKeyStillDown(
+                    inputFrame,
+                    counterState.GameplayKeyToken);
             if (counterState.Phase == SamuraiReactiveCounterCcPhase.ApproachAccepted &&
                 sotenArrivalDeadlineMilliseconds >= 0 &&
                 nowMilliseconds > sotenArrivalDeadlineMilliseconds)
@@ -326,6 +439,85 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 SamuraiReactiveCounterCcRules.SotenActionId);
             var mineuchiReady = IsActionSpecificReady(
                 SamuraiReactiveCounterCcRules.MineuchiActionId);
+            var mineuchiBlockerCount = CountMineuchiBlockingProtections(target);
+            PredictiveAttemptAuthorization? predictiveAuthorization = null;
+            var sotenApproachWindowOpen = protection.Count == 0;
+            var mineuchiImpactWindowOpen = mineuchiBlockerCount == 0;
+            if (protection.Count == 1 &&
+                protection.RemainingMilliseconds > 0 &&
+                episode.ScheduledProtectionEndAtMilliseconds > 0 &&
+                distanceKnown)
+            {
+                var scheduledStatusId = protection.StatusId;
+                var scheduledRemainingMilliseconds =
+                    protection.RemainingMilliseconds;
+                if (counterState.Phase == SamuraiReactiveCounterCcPhase.Armed &&
+                    distance > SamuraiReactiveCounterCcRules.MineuchiMaximumRangeYalms &&
+                    TryGetCombinedPredictiveTiming(distance, out var combinedTiming))
+                {
+                    predictiveSotenLeadMilliseconds =
+                        combinedTiming.CombinedSotenLeadMilliseconds;
+                    predictiveMineuchiLeadMilliseconds =
+                        combinedTiming.MineuchiSafeLeadMilliseconds;
+                    if (SamuraiReactivePredictiveTimingRules
+                            .ShouldStartPredictiveSoten(
+                                1,
+                                scheduledRemainingMilliseconds,
+                                combinedTiming) &&
+                        ReactiveCounterCcImpactTimingRules
+                            .IsScheduledProtectionStillValid(
+                                episode.ScheduledProtectionEndAtMilliseconds,
+                                nowMilliseconds,
+                                scheduledRemainingMilliseconds,
+                                combinedTiming.CombinedSotenLeadMilliseconds))
+                    {
+                        sotenApproachWindowOpen = true;
+                        predictiveAuthorization = new PredictiveAttemptAuthorization(
+                            SamuraiReactiveCounterCcRules.SotenActionId,
+                            scheduledStatusId,
+                            episode.ScheduledProtectionEndAtMilliseconds,
+                            combinedTiming.CombinedSotenLeadMilliseconds);
+                    }
+                }
+
+                var predictiveMineuchiMayStart =
+                    counterState.Phase != SamuraiReactiveCounterCcPhase.ApproachAccepted ||
+                    episode.SotenActionEffectConfirmed;
+                if (predictiveMineuchiMayStart &&
+                    distance <= SamuraiReactiveCounterCcRules.MineuchiMaximumRangeYalms &&
+                    TryGetOnlyScheduledProtection(
+                        target,
+                        episode,
+                        out scheduledStatusId,
+                        out scheduledRemainingMilliseconds) &&
+                    TryGetMineuchiPredictiveLead(
+                        distance,
+                        out var mineuchiSafeLeadMilliseconds))
+                {
+                    predictiveMineuchiLeadMilliseconds =
+                        mineuchiSafeLeadMilliseconds;
+                    if (SamuraiReactivePredictiveTimingRules
+                            .ShouldStartPredictiveMineuchi(
+                                1,
+                                scheduledRemainingMilliseconds,
+                                mineuchiSafeLeadMilliseconds) &&
+                        ReactiveCounterCcImpactTimingRules
+                            .IsScheduledProtectionStillValid(
+                                episode.ScheduledProtectionEndAtMilliseconds,
+                                nowMilliseconds,
+                                scheduledRemainingMilliseconds,
+                                mineuchiSafeLeadMilliseconds))
+                    {
+                        mineuchiImpactWindowOpen = true;
+                        predictiveAuthorization = new PredictiveAttemptAuthorization(
+                            SamuraiReactiveCounterCcRules.MineuchiActionId,
+                            scheduledStatusId,
+                            episode.ScheduledProtectionEndAtMilliseconds,
+                            mineuchiSafeLeadMilliseconds);
+                    }
+                }
+            }
+
             var decision = SamuraiReactiveCounterCcRules.Observe(
                 counterState,
                 new SamuraiReactiveCounterCcObservation(
@@ -334,7 +526,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     ExactTargetStillCurrent: true,
                     TargetAliveAndTargetable: IsLiveTarget(target),
                     exactKeyStillDown,
-                    ProtectionPresent: protectionCount == 1,
+                    ProtectionPresent: mineuchiBlockerCount > 0,
                     distanceKnown,
                     distance,
                     sotenReady,
@@ -342,11 +534,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     BoundPresent: HasStatus(
                         localPlayer!,
                         EnemyCombatConstants.PvPBindStatusId),
-                    // There is no guessed travel-time lead. The dash becomes
-                    // eligible only on authoritative protection absence.
-                    SotenApproachWindowOpen: episode.ProtectionObserved &&
-                        protectionCount == 0,
-                    configuredSotenMaximumRangeYalms));
+                    SotenApproachWindowOpen: sotenApproachWindowOpen,
+                    configuredSotenMaximumRangeYalms,
+                    MineuchiImpactWindowOpen: mineuchiImpactWindowOpen));
             counterState = decision.NextState;
             if (decision.Kind == SamuraiReactiveCounterCcDecisionKind.Cancelled)
             {
@@ -391,7 +581,11 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 localPlayer!,
                 episode,
                 decision.ActionId,
-                configuredSotenMaximumRangeYalms);
+                configuredSotenMaximumRangeYalms,
+                predictiveAuthorization is { } authorization &&
+                authorization.ActionId == decision.ActionId
+                    ? authorization
+                    : null);
             if (!result.Attempted)
                 return PublishSnapshot();
 
@@ -405,8 +599,23 @@ internal sealed class SamuraiReactiveCounterCcProbe
             {
                 acceptedCount++;
                 inputFrame.Consume();
+                RegisterPendingTimingAttempt(
+                    episode,
+                    decision.ActionId,
+                    result,
+                    Math.Max(nowMilliseconds, Environment.TickCount64));
             }
 
+            if (decision.ActionId == SamuraiReactiveCounterCcRules.SotenActionId &&
+                result.Outcome == ClientActionAttemptOutcome.ClientAccepted)
+            {
+                episode = episode with
+                {
+                    SotenActionEffectConfirmed = false,
+                    SotenSourceSequence = result.SourceSequence,
+                };
+                protectionEpisode = episode;
+            }
             counterState = SamuraiReactiveCounterCcRules.CompleteAttempt(
                 counterState,
                 decision.ActionId,
@@ -415,7 +624,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
             {
                 sotenArrivalDeadlineMilliseconds = nowMilliseconds +
                     SamuraiReactiveRuntimeRules.SotenArrivalLeaseMilliseconds;
-                lastEvent = $"Soten boundary completed: {result.Outcome}; waiting for Mineuchi";
+                lastEvent = result.SourceSequence != 0
+                    ? $"Soten accepted with exact sequence {result.SourceSequence}; waiting for arrival/Mineuchi"
+                    : "Soten accepted without an exact timing sequence; Mineuchi stays conservative";
             }
             else
             {
@@ -444,6 +655,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
         long nowMilliseconds,
         bool hardReset = false)
     {
+        zantetsukenHeldHelperEnabled = enabled;
         try
         {
             var localValid = IsValidLocalSamurai(localPlayer);
@@ -572,7 +784,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
     internal void Reset()
     {
         ResetCounter(clearSignals: true);
+        ResetTimingSession();
         ResetZantetsuken();
+        zantetsukenHeldHelperEnabled = false;
         lastEvent = "Reset";
         PublishSnapshot();
     }
@@ -580,6 +794,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
     internal SamuraiReactiveCounterCcProbeSnapshot ResetZantetsukenLane()
     {
         ResetZantetsuken();
+        zantetsukenHeldHelperEnabled = false;
         return PublishSnapshot();
     }
 
@@ -588,8 +803,6 @@ internal sealed class SamuraiReactiveCounterCcProbe
         SupportedPvPContext context,
         bool enablePostPurify,
         bool enablePostGuard,
-        bool allowHeldGameplayKey,
-        EmergencyActionInputFrame inputFrame,
         long nowMilliseconds)
     {
         while (TryDequeueProtectionSignal(out var signal))
@@ -612,17 +825,15 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
             var target = ResolveSignalTarget(localPlayer, context, signal);
             if (target is null) continue;
-            var keyToken = TryResolveEligibleGameplayKey(
-                inputFrame,
-                allowHeldGameplayKey,
-                out var key)
-                ? (int)key
-                : 0;
             protectionEpisode = new FrozenProtectionEpisode(
                 signal,
                 target.Value,
-                keyToken,
-                ProtectionObserved: false);
+                GameplayKeyToken: 0,
+                ProtectionObserved: false,
+                ProtectionStatusId: 0,
+                ScheduledProtectionEndAtMilliseconds: -1,
+                SotenSourceSequence: 0,
+                SotenActionEffectConfirmed: false);
             lastEvent = $"Queued exact {signal.Kind} actor {signal.CasterEntityId:X8}";
             return;
         }
@@ -644,6 +855,231 @@ internal sealed class SamuraiReactiveCounterCcProbe
         }
     }
 
+    private void EnsureTimingSession(
+        uint localEntityId,
+        SupportedPvPContext context)
+    {
+        if (timingLocalEntityId == localEntityId && timingContext == context)
+            return;
+        ResetTimingSession();
+        timingLocalEntityId = localEntityId;
+        timingContext = context;
+    }
+
+    private void ResetTimingSession()
+    {
+        lock (signalGate) pendingActionEffects.Clear();
+        pendingTimingAttempts.Clear();
+        learnedTimingEffects.Clear();
+        learnedTimingEffectOrder.Clear();
+        currentSessionTimingSamples.Clear();
+        timingLocalEntityId = 0;
+        timingContext = SupportedPvPContext.None;
+        predictiveSotenLeadMilliseconds = 0;
+        predictiveMineuchiLeadMilliseconds = 0;
+    }
+
+    private void DrainActionEffectSignals(
+        uint localEntityId,
+        long nowMilliseconds)
+    {
+        pendingTimingAttempts.RemoveAll(pending =>
+            nowMilliseconds < pending.AttemptedAtMilliseconds ||
+            nowMilliseconds - pending.AttemptedAtMilliseconds >
+                ReactiveCounterCcImpactTimingRules.MaximumSampleMilliseconds);
+
+        while (TryDequeueActionEffectSignal(out var signal))
+        {
+            if (!signal.IsValid || signal.CasterEntityId != localEntityId)
+                continue;
+            var matches = pendingTimingAttempts
+                .Select((pending, index) => (Pending: pending, Index: index))
+                .Where(entry =>
+                    entry.Pending.ActionId == signal.ActionId &&
+                    entry.Pending.TargetEntityId == signal.TargetEntityId &&
+                    entry.Pending.SourceSequence == signal.SourceSequence)
+                .Take(2)
+                .ToArray();
+            if (matches.Length != 1) continue;
+
+            var pending = matches[0].Pending;
+            pendingTimingAttempts.RemoveAt(matches[0].Index);
+            var effectIdentity = new TimingEffectIdentity(
+                signal.ActionId,
+                signal.TargetEntityId,
+                signal.SourceSequence);
+            if (!learnedTimingEffects.Add(effectIdentity)) continue;
+            learnedTimingEffectOrder.Enqueue(effectIdentity);
+            while (learnedTimingEffectOrder.Count > MaximumRememberedTimingEffects)
+            {
+                learnedTimingEffects.Remove(learnedTimingEffectOrder.Dequeue());
+            }
+
+            if (signal.ActionId == SamuraiReactiveCounterCcRules.SotenActionId &&
+                protectionEpisode is { } episode &&
+                counterState.Phase == SamuraiReactiveCounterCcPhase.ApproachAccepted &&
+                episode.Target.Identity.EntityId == signal.TargetEntityId &&
+                episode.SotenSourceSequence == signal.SourceSequence &&
+                pending.EpisodeToken == CounterIntentEpochToken(
+                    episode,
+                    SamuraiReactiveCounterCcRules.SotenActionId))
+            {
+                protectionEpisode = episode with
+                {
+                    SotenActionEffectConfirmed = true,
+                };
+            }
+
+            if (pending.SourceSequence == 0 ||
+                !ReactiveCounterCcImpactTimingRules.TryMeasureSample(
+                    pending.ActionId,
+                    pending.TargetEntityId,
+                    pending.SourceSequence,
+                    pending.AttemptedAtMilliseconds,
+                    signal.ActionId,
+                    signal.TargetEntityId,
+                    signal.SourceSequence,
+                    signal.ObservedAtMilliseconds,
+                    out var sampleMilliseconds) ||
+                !ReactiveCounterCcImpactTimingRules.TryCreateCalibrationSample(
+                    sampleMilliseconds,
+                    pending.EdgeDistanceYalms,
+                    out var sample))
+            {
+                continue;
+            }
+
+            configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+                pending.ActionId,
+                out var previousSamples);
+            var samples = ReactiveCounterCcImpactTimingRules.AppendBoundedSample(
+                previousSamples,
+                sample);
+            configuration.ReactiveCcImpactCalibrationSamples[pending.ActionId] =
+                samples.ToList();
+            currentSessionTimingSamples.TryGetValue(
+                pending.ActionId,
+                out var previousSessionSamples);
+            currentSessionTimingSamples[pending.ActionId] =
+                ReactiveCounterCcImpactTimingRules.AppendBoundedSample(
+                    previousSessionSamples,
+                    sample).ToList();
+            learnedTimingSampleCount++;
+            configuration.Save();
+            lastEvent =
+                $"Learned exact {pending.ActionId} effect: {sampleMilliseconds} ms at " +
+                $"{pending.EdgeDistanceYalms:0.00}y ({samples.Length} stored)";
+        }
+    }
+
+    private bool TryDequeueActionEffectSignal(
+        out SamuraiReactiveActionEffectSignal signal)
+    {
+        lock (signalGate)
+        {
+            if (pendingActionEffects.Count == 0)
+            {
+                signal = default;
+                return false;
+            }
+
+            signal = pendingActionEffects.Dequeue();
+            return true;
+        }
+    }
+
+    private void RegisterPendingTimingAttempt(
+        FrozenProtectionEpisode episode,
+        uint actionId,
+        AttemptResult result,
+        long registrationNowMilliseconds)
+    {
+        if (result.Outcome != ClientActionAttemptOutcome.ClientAccepted ||
+            result.SourceSequence == 0 ||
+            !SamuraiReactiveRuntimeRules.CanRegisterExactTimingAttempt(
+                result.AttemptedAtMilliseconds,
+                registrationNowMilliseconds) ||
+            !float.IsFinite(result.EdgeDistanceYalms) ||
+            result.EdgeDistanceYalms < 0f)
+        {
+            return;
+        }
+
+        pendingTimingAttempts.RemoveAll(pending =>
+            pending.SourceSequence == result.SourceSequence &&
+            pending.ActionId == actionId);
+        if (pendingTimingAttempts.Count >= MaximumPendingTimingAttempts)
+            pendingTimingAttempts.RemoveAt(0);
+        pendingTimingAttempts.Add(new PendingTimingAttempt(
+            actionId,
+            episode.Target.Identity.EntityId,
+            result.SourceSequence,
+            result.AttemptedAtMilliseconds,
+            result.EdgeDistanceYalms,
+            CounterIntentEpochToken(episode, actionId)));
+    }
+
+    private bool TryGetCombinedPredictiveTiming(
+        float sotenEdgeDistanceYalms,
+        out SamuraiReactivePredictiveTiming timing)
+    {
+        timing = default;
+        if (!currentSessionTimingSamples.TryGetValue(
+                SamuraiReactiveCounterCcRules.SotenActionId,
+                out var currentSotenSamples) ||
+            SamuraiReactivePredictiveTimingRules.CountEligibleSotenTransitSamples(
+                currentSotenSamples,
+                sotenEdgeDistanceYalms) <
+                SamuraiReactivePredictiveTimingRules
+                    .MinimumSotenTransitSamplesForPrediction ||
+            !currentSessionTimingSamples.TryGetValue(
+                SamuraiReactiveCounterCcRules.MineuchiActionId,
+                out var currentMineuchiSamples) ||
+            SamuraiReactivePredictiveTimingRules.CountEligibleMineuchiSamples(
+                currentMineuchiSamples,
+                SamuraiReactiveCounterCcRules.MineuchiMaximumRangeYalms) < 1 ||
+            !configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+                SamuraiReactiveCounterCcRules.MineuchiActionId,
+                out var mineuchiSamples))
+        {
+            return false;
+        }
+
+        return SamuraiReactivePredictiveTimingRules.TryGetCombinedTiming(
+            currentSotenSamples,
+            sotenEdgeDistanceYalms,
+            mineuchiSamples,
+            out timing);
+    }
+
+    private bool TryGetMineuchiPredictiveLead(
+        float edgeDistanceYalms,
+        out int safeLeadMilliseconds)
+    {
+        safeLeadMilliseconds = 0;
+        return currentSessionTimingSamples.TryGetValue(
+                   SamuraiReactiveCounterCcRules.MineuchiActionId,
+                   out var currentSamples) &&
+               SamuraiReactivePredictiveTimingRules.CountEligibleMineuchiSamples(
+                   currentSamples,
+                   edgeDistanceYalms) > 0 &&
+               configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+                   SamuraiReactiveCounterCcRules.MineuchiActionId,
+                   out var samples) &&
+               SamuraiReactivePredictiveTimingRules
+                   .TryGetMineuchiSafeLeadMilliseconds(
+                       samples,
+                       edgeDistanceYalms,
+                       out safeLeadMilliseconds);
+    }
+
+    private int StoredTimingSampleCount(uint actionId) =>
+        configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+            actionId,
+            out var samples)
+            ? ReactiveCounterCcImpactTimingRules.NormalizeSamples(samples).Length
+            : 0;
+
     private FrozenActionTarget? ResolveSignalTarget(
         IPlayerCharacter localPlayer,
         SupportedPvPContext context,
@@ -655,7 +1091,10 @@ internal sealed class SamuraiReactiveCounterCcProbe
         if (context == SupportedPvPContext.WolvesDen)
         {
             return TryResolveWolvesDenCurrentTarget(localPlayer, out var current) &&
-                   current.Identity.EntityId == signal.CasterEntityId
+                   SamuraiReactiveRuntimeRules.IsExactWolvesDenCurrentTarget(
+                       localPlayer.EntityId,
+                       signal.CasterEntityId,
+                       current.Identity.EntityId)
                 ? current
                 : null;
         }
@@ -855,91 +1294,154 @@ internal sealed class SamuraiReactiveCounterCcProbe
         IPlayerCharacter localPlayer,
         FrozenProtectionEpisode episode,
         uint actionId,
-        float configuredSotenMaximumRangeYalms)
+        float configuredSotenMaximumRangeYalms,
+        PredictiveAttemptAuthorization? predictiveAuthorization)
     {
         var attempted = false;
+        var attemptedAtMilliseconds = -1L;
+        var attemptedEdgeDistanceYalms = float.NaN;
         var before = default(ClientActionAttemptFingerprint);
         var after = default(ClientActionAttemptFingerprint);
         try
         {
-            var returned = nearAssist.RunWithoutRedirect(() =>
-            {
-                var target = ResolveFrozenTarget(localPlayer, episode.Target);
-                if (target is null ||
-                    CountExpectedProtectionStatuses(target, episode.Signal.Kind) != 0 ||
-                    !IsActionSpecificReady(actionId) ||
-                    !HasGlobalNativeBoundaryReadiness(localPlayer) ||
-                    !TryGetEdgeDistance(localPlayer, target, out var edgeDistance) ||
-                    !HasNativeRangeAndLineOfSight(localPlayer, target, actionId))
+            var brakeBypass = actionId == SamuraiReactiveCounterCcRules.MineuchiActionId &&
+                              predictiveAuthorization is { } mineuchiAuthorization
+                ? new PredictiveCcBrakeBypassIntent(
+                    actionId,
+                    episode.Target.Identity.GameObjectId,
+                    episode.Target.Identity.EntityId,
+                    episode.Target.Identity.JobId,
+                    mineuchiAuthorization.ProtectionStatusId,
+                    mineuchiAuthorization.ScheduledProtectionEndAtMilliseconds,
+                    mineuchiAuthorization.SafeLeadMilliseconds)
+                : (PredictiveCcBrakeBypassIntent?)null;
+            var returned = nearAssist.RunWithoutRedirect(
+                () =>
                 {
-                    return false;
-                }
-
-                if (actionId == SamuraiReactiveCounterCcRules.SotenActionId)
-                {
-                    var maximum = SamuraiReactiveCounterCcRules
-                        .NormalizeSotenMaximumRangeYalms(
-                            configuredSotenMaximumRangeYalms);
-                    if (edgeDistance <= SamuraiReactiveCounterCcRules
-                            .MineuchiMaximumRangeYalms ||
-                        edgeDistance > maximum ||
-                        HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId))
+                    var target = ResolveFrozenTarget(localPlayer, episode.Target);
+                    if (target is null ||
+                        !HasCompleteMineuchiBlockerMetadata() ||
+                        !IsActionSpecificReady(actionId) ||
+                        !HasGlobalNativeBoundaryReadiness(localPlayer) ||
+                        !TryGetEdgeDistance(localPlayer, target, out var edgeDistance) ||
+                        !HasNativeRangeAndLineOfSight(localPlayer, target, actionId))
                     {
                         return false;
                     }
-                }
-                else if (actionId == SamuraiReactiveCounterCcRules.MineuchiActionId)
-                {
-                    if (edgeDistance > SamuraiReactiveCounterCcRules
-                            .MineuchiMaximumRangeYalms)
+
+                    var currentProtection = ObserveExpectedProtection(
+                        target,
+                        episode.Signal.Kind);
+                    if (currentProtection.Count > 1) return false;
+                    if (currentProtection.Count == 1)
+                    {
+                        if (predictiveAuthorization is not { } authorization ||
+                            !authorization.IsValidFor(actionId))
+                        {
+                            return false;
+                        }
+
+                        var statusId = currentProtection.StatusId;
+                        var remainingMilliseconds =
+                            currentProtection.RemainingMilliseconds;
+                        if (actionId == SamuraiReactiveCounterCcRules.MineuchiActionId &&
+                            !TryGetOnlyScheduledProtection(
+                                target,
+                                episode,
+                                out statusId,
+                                out remainingMilliseconds))
+                        {
+                            return false;
+                        }
+
+                        if (statusId != authorization.ProtectionStatusId ||
+                            remainingMilliseconds <= 0 ||
+                            !ReactiveCounterCcImpactTimingRules
+                                .IsScheduledProtectionStillValid(
+                                    authorization.ScheduledProtectionEndAtMilliseconds,
+                                    Environment.TickCount64,
+                                    remainingMilliseconds,
+                                    authorization.SafeLeadMilliseconds))
+                            return false;
+                    }
+                    else if (actionId ==
+                                 SamuraiReactiveCounterCcRules.MineuchiActionId &&
+                             CountMineuchiBlockingProtections(target) != 0)
                     {
                         return false;
                     }
-                }
-                else
-                {
-                    return false;
-                }
 
-                var actionManager = ActionManager.Instance();
-                if (actionManager == null) return false;
-                before = ClientActionAttemptBoundary.Capture(actionManager, actionId);
-                attempted = true;
-                bool accepted;
-                if (actionId == SamuraiReactiveCounterCcRules.SotenActionId)
-                {
-                    var destination = target.Position;
-                    if (!IsFinite(destination)) return false;
-                    accepted = actionManager->UseActionLocation(
-                        ActionType.Action,
-                        actionId,
-                        target.GameObjectId,
-                        &destination,
-                        0,
-                        0);
-                }
-                else
-                {
-                    accepted = actionManager->UseAction(
+                    if (actionId == SamuraiReactiveCounterCcRules.SotenActionId)
+                    {
+                        var maximum = SamuraiReactiveCounterCcRules
+                            .NormalizeSotenMaximumRangeYalms(
+                                configuredSotenMaximumRangeYalms);
+                        if (edgeDistance <= SamuraiReactiveCounterCcRules
+                                .MineuchiMaximumRangeYalms ||
+                            edgeDistance > maximum ||
+                            HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (actionId == SamuraiReactiveCounterCcRules.MineuchiActionId)
+                    {
+                        if (edgeDistance > SamuraiReactiveCounterCcRules
+                                .MineuchiMaximumRangeYalms)
+                        {
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+
+                    var actionManager = ActionManager.Instance();
+                    if (actionManager == null) return false;
+                    before = ClientActionAttemptBoundary.Capture(actionManager, actionId);
+                    attempted = true;
+                    attemptedAtMilliseconds = Environment.TickCount64;
+                    attemptedEdgeDistanceYalms = edgeDistance;
+                    if (SamuraiReactiveCounterCcRules.GetNativeInvocationKind(actionId) !=
+                        SamuraiReactiveCounterCcNativeInvocationKind.TargetedUseAction)
+                    {
+                        return false;
+                    }
+
+                    // Both SAM stages are metadata-pinned hostile target
+                    // abilities. The request never changes the visible target.
+                    var accepted = actionManager->UseAction(
                         ActionType.Action,
                         actionId,
                         target.GameObjectId,
                         0,
                         ActionManager.UseActionMode.None,
                         0);
-                }
 
-                after = ClientActionAttemptBoundary.Capture(actionManager, actionId);
-                return accepted;
-            });
+                    after = ClientActionAttemptBoundary.Capture(actionManager, actionId);
+                    return accepted;
+                },
+                brakeBypass);
+            var outcome = attempted
+                ? ClientActionAttemptBoundaryRules.Classify(
+                    returned,
+                    actionId,
+                    before,
+                    after)
+                : ClientActionAttemptOutcome.NotInvoked;
+            var sourceSequence = outcome == ClientActionAttemptOutcome.ClientAccepted &&
+                                 after.LastUsedActionSequence != 0 &&
+                                 after.LastUsedActionSequence != before.LastUsedActionSequence
+                ? after.LastUsedActionSequence
+                : (ushort)0;
             return attempted
                 ? new AttemptResult(
-                    ClientActionAttemptBoundaryRules.Classify(
-                        returned,
-                        actionId,
-                        before,
-                        after),
-                    true)
+                    outcome,
+                    true,
+                    sourceSequence,
+                    attemptedAtMilliseconds,
+                    attemptedEdgeDistanceYalms)
                 : new AttemptResult(ClientActionAttemptOutcome.NotInvoked, false);
         }
         catch (Exception exception)
@@ -1057,11 +1559,13 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 targetObject));
     }
 
-    private static int CountExpectedProtectionStatuses(
+    private static ProtectionObservation ObserveExpectedProtection(
         IBattleChara target,
         SamuraiReactiveProtectionKind kind)
     {
         var count = 0;
+        var statusId = 0u;
+        var remainingMilliseconds = 0L;
         foreach (var status in target.StatusList)
         {
             if (!SamuraiReactiveRuntimeRules.IsExpectedProtectionStatus(
@@ -1072,10 +1576,99 @@ internal sealed class SamuraiReactiveCounterCcProbe
             }
 
             count++;
-            if (count > 1) return count;
+            statusId = status.StatusId;
+            remainingMilliseconds = ValidatedProtectionRemainingMilliseconds(
+                status.StatusId,
+                status.RemainingTime);
+            if (count > 1)
+                return new ProtectionObservation(count, 0, 0);
+        }
+
+        return new ProtectionObservation(
+            count,
+            count == 1 ? statusId : 0,
+            count == 1 ? remainingMilliseconds : 0);
+    }
+
+    private static bool TryGetOnlyScheduledProtection(
+        IBattleChara target,
+        FrozenProtectionEpisode episode,
+        out uint statusId,
+        out long remainingMilliseconds)
+    {
+        statusId = 0;
+        remainingMilliseconds = 0;
+        var blockingProtectionCount = 0;
+        var targetJobId = target.ClassJob.IsValid ? target.ClassJob.RowId : 0;
+        foreach (var status in target.StatusList)
+        {
+            if (!CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                    CcImmunityBrakeBlockerFamily.StandardPurifyCc,
+                    status.StatusId,
+                    targetJobId))
+            {
+                continue;
+            }
+
+            blockingProtectionCount++;
+            if (blockingProtectionCount > 1) return false;
+            statusId = status.StatusId;
+            remainingMilliseconds = ValidatedProtectionRemainingMilliseconds(
+                status.StatusId,
+                status.RemainingTime);
+        }
+
+        return blockingProtectionCount == 1 &&
+               statusId == episode.ProtectionStatusId &&
+               SamuraiReactiveRuntimeRules.IsExpectedProtectionStatus(
+                   episode.Signal.Kind,
+                   statusId) &&
+               remainingMilliseconds > 0;
+    }
+
+    private static int CountMineuchiBlockingProtections(IBattleChara target)
+    {
+        var count = 0;
+        var targetJobId = target.ClassJob.IsValid ? target.ClassJob.RowId : 0;
+        foreach (var status in target.StatusList)
+        {
+            if (!CcImmunityBrakeActionCatalog.IsBlockerStatus(
+                    CcImmunityBrakeBlockerFamily.StandardPurifyCc,
+                    status.StatusId,
+                    targetJobId))
+            {
+                continue;
+            }
+
+            count++;
         }
 
         return count;
+    }
+
+    private bool HasCompleteMineuchiBlockerMetadata()
+    {
+        var verifiedStatusIds = nearAssist.VerifiedCcBrakeStatusIds;
+        return CcImmunityBrakeActionCatalog
+            .GetBlockerStatusIds(CcImmunityBrakeBlockerFamily.StandardPurifyCc)
+            .All(verifiedStatusIds.Contains);
+    }
+
+    private static long ValidatedProtectionRemainingMilliseconds(
+        uint statusId,
+        float remainingSeconds)
+    {
+        if (!CcProtectionStatusCatalog.TryGet(statusId, out var definition) ||
+            !float.IsFinite(remainingSeconds) ||
+            remainingSeconds <= 0f ||
+            remainingSeconds > definition.MaximumRemainingTime)
+        {
+            return 0;
+        }
+
+        return Math.Max(
+            1L,
+            (long)Math.Ceiling((double)remainingSeconds * 1_000d));
     }
 
     private static int CountOwnSourceKuzushi(
@@ -1283,6 +1876,15 @@ internal sealed class SamuraiReactiveCounterCcProbe
             captured,
             dropped,
             zantetsukenState.Phase.ToString(),
+            zantetsukenHeldHelperEnabled,
+            metadata.ZantetsukenWorkflowVerified,
+            StoredTimingSampleCount(
+                SamuraiReactiveCounterCcRules.SotenActionId),
+            StoredTimingSampleCount(
+                SamuraiReactiveCounterCcRules.MineuchiActionId),
+            predictiveSotenLeadMilliseconds,
+            predictiveMineuchiLeadMilliseconds,
+            episode?.SotenActionEffectConfirmed ?? false,
             lastEvent)
         {
             CastCancellationRequest = castCancellationRequestThisFrame,
@@ -1382,6 +1984,11 @@ internal sealed class SamuraiReactiveCounterCcProbe
         return token == 0 ? 1 : token;
     }
 
+    private static long SaturatingAdd(long left, long right) =>
+        right > 0 && left > long.MaxValue - right
+            ? long.MaxValue
+            : left + right;
+
     private void LogFailure(
         Exception exception,
         long nowMilliseconds,
@@ -1410,9 +2017,51 @@ internal sealed class SamuraiReactiveCounterCcProbe
         SamuraiReactiveProtectionSignal Signal,
         FrozenActionTarget Target,
         int GameplayKeyToken,
-        bool ProtectionObserved);
+        bool ProtectionObserved,
+        uint ProtectionStatusId,
+        long ScheduledProtectionEndAtMilliseconds,
+        ushort SotenSourceSequence,
+        bool SotenActionEffectConfirmed);
+
+    private readonly record struct ProtectionObservation(
+        int Count,
+        uint StatusId,
+        long RemainingMilliseconds);
+
+    private readonly record struct PredictiveAttemptAuthorization(
+        uint ActionId,
+        uint ProtectionStatusId,
+        long ScheduledProtectionEndAtMilliseconds,
+        int SafeLeadMilliseconds)
+    {
+        internal bool IsValidFor(uint actionId) =>
+            ActionId == actionId &&
+            actionId is SamuraiReactiveCounterCcRules.SotenActionId or
+                SamuraiReactiveCounterCcRules.MineuchiActionId &&
+            PredictiveCcBrakeBypassRules.IsSupportedProtectionStatus(
+                ProtectionStatusId) &&
+            ScheduledProtectionEndAtMilliseconds > 0 &&
+            SafeLeadMilliseconds >=
+                ReactiveCounterCcImpactTimingRules.MinimumUsefulLeadMilliseconds;
+    }
+
+    private readonly record struct PendingTimingAttempt(
+        uint ActionId,
+        uint TargetEntityId,
+        ushort SourceSequence,
+        long AttemptedAtMilliseconds,
+        float EdgeDistanceYalms,
+        ulong EpisodeToken);
+
+    private readonly record struct TimingEffectIdentity(
+        uint ActionId,
+        uint TargetEntityId,
+        ushort SourceSequence);
 
     private readonly record struct AttemptResult(
         ClientActionAttemptOutcome Outcome,
-        bool Attempted);
+        bool Attempted,
+        ushort SourceSequence = 0,
+        long AttemptedAtMilliseconds = -1,
+        float EdgeDistanceYalms = -1f);
 }

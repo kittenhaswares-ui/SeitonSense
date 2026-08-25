@@ -29,6 +29,24 @@ public readonly record struct SamuraiReactiveProtectionSignal(
             SourceSequence);
 }
 
+public readonly record struct SamuraiReactiveActionEffectSignal(
+    long ObservedAtMilliseconds,
+    uint CasterEntityId,
+    uint TargetEntityId,
+    uint ActionId,
+    uint GlobalSequence,
+    ushort SourceSequence)
+{
+    public bool IsValid =>
+        ObservedAtMilliseconds >= 0 &&
+        MiracleInterceptConfirmationRules.IsValidEntityId(CasterEntityId) &&
+        MiracleInterceptConfirmationRules.IsValidEntityId(TargetEntityId) &&
+        CasterEntityId != TargetEntityId &&
+        ActionId is SamuraiReactiveCounterCcRules.SotenActionId or
+            SamuraiReactiveCounterCcRules.MineuchiActionId &&
+        SourceSequence != 0;
+}
+
 public static class SamuraiReactiveRuntimeRules
 {
     public const uint GuardActionId = 29_054;
@@ -75,22 +93,32 @@ public static class SamuraiReactiveRuntimeRules
     public static bool IsExpectedProtectionStatus(
         SamuraiReactiveProtectionKind kind,
         uint statusId) => kind switch
-    {
-        SamuraiReactiveProtectionKind.PurifyResilience =>
-            statusId == ResilienceStatusId,
-        SamuraiReactiveProtectionKind.Guard =>
-            statusId is GuardStatusId or GuardAlternateStatusId,
-        _ => false,
-    };
+        {
+            SamuraiReactiveProtectionKind.PurifyResilience =>
+                statusId == ResilienceStatusId,
+            SamuraiReactiveProtectionKind.Guard =>
+                statusId is GuardStatusId or GuardAlternateStatusId,
+            _ => false,
+        };
+
+    public static bool IsExactWolvesDenCurrentTarget(
+        uint localEntityId,
+        uint signalCasterEntityId,
+        uint currentTargetEntityId) =>
+        MiracleInterceptConfirmationRules.IsValidEntityId(localEntityId) &&
+        MiracleInterceptConfirmationRules.IsValidEntityId(signalCasterEntityId) &&
+        MiracleInterceptConfirmationRules.IsValidEntityId(currentTargetEntityId) &&
+        signalCasterEntityId != localEntityId &&
+        currentTargetEntityId == signalCasterEntityId;
 
     public static long EpisodeLeaseMilliseconds(
         SamuraiReactiveProtectionKind kind) => kind switch
-    {
-        SamuraiReactiveProtectionKind.PurifyResilience =>
-            PurifyEpisodeLeaseMilliseconds,
-        SamuraiReactiveProtectionKind.Guard => GuardEpisodeLeaseMilliseconds,
-        _ => 0,
-    };
+        {
+            SamuraiReactiveProtectionKind.PurifyResilience =>
+                PurifyEpisodeLeaseMilliseconds,
+            SamuraiReactiveProtectionKind.Guard => GuardEpisodeLeaseMilliseconds,
+            _ => 0,
+        };
 
     public static bool IsInsideLease(
         long observedAtMilliseconds,
@@ -100,6 +128,12 @@ public static class SamuraiReactiveRuntimeRules
         nowMilliseconds >= observedAtMilliseconds &&
         leaseMilliseconds > 0 &&
         nowMilliseconds - observedAtMilliseconds <= leaseMilliseconds;
+
+    public static bool CanRegisterExactTimingAttempt(
+        long attemptedAtMilliseconds,
+        long registrationNowMilliseconds) =>
+        attemptedAtMilliseconds >= 0 &&
+        registrationNowMilliseconds >= attemptedAtMilliseconds;
 }
 
 public enum SamuraiZantetsukenPhase : byte

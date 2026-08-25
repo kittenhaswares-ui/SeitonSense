@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Dalamud.Game;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Enums;
@@ -34,6 +35,7 @@ internal sealed record MonkHeldComboProbeSnapshot(
     bool PressurePointConfirmed,
     bool FireResonanceConfirmed,
     bool NativeBoundaryReady,
+    bool NativeRouteResolverReady,
     VirtualKey HeldGameplayKey,
     bool InputClaimed,
     bool UseActionAttempted,
@@ -60,6 +62,7 @@ internal sealed record MonkHeldComboProbeSnapshot(
         false,
         false,
         false,
+        false,
         VirtualKey.NO_KEY,
         false,
         false,
@@ -82,10 +85,23 @@ internal sealed record MonkHeldComboProbeSnapshot(
 /// </summary>
 internal sealed unsafe class MonkHeldComboProbe
 {
+    // The injected version-pinned scanner resolves this leading E8 to the called function. The reviewed
+    // client uses that function to turn an ActionComboRoute row into the exact
+    // current stage immediately before a PvPCombo hotbar slot calls UseAction.
+    private const string NativePvpComboRouteResolverSignature =
+        "E8 ?? ?? ?? ?? 89 03 0F B7 44 24 ?? 66 89 06";
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate uint NativePvpComboRouteResolverDelegate(
+        uint comboRouteId,
+        uint* outInfo,
+        byte adjustActionIds);
+
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
+    private readonly NativePvpComboRouteResolverDelegate? nativePvpComboRouteResolver;
     private MonkHeldComboState state = MonkHeldComboState.Initial;
     private MonkHeldComboProbeSnapshot snapshot = MonkHeldComboProbeSnapshot.Initial;
     private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
@@ -105,19 +121,45 @@ internal sealed unsafe class MonkHeldComboProbe
         IClientState clientState,
         IObjectTable objectTable,
         NearAssistRedirector nearAssist,
+        ISigScanner sigScanner,
         IPluginLog log)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.nearAssist = nearAssist;
         this.log = log;
+
+        NativePvpComboRouteResolverDelegate? createdResolver = null;
+        try
+        {
+            var resolverAddress = sigScanner.ScanText(
+                NativePvpComboRouteResolverSignature);
+            if (resolverAddress == nint.Zero)
+            {
+                throw new InvalidOperationException(
+                    "Native PvP combo-route resolver signature resolved to zero");
+            }
+
+            createdResolver = Marshal.GetDelegateForFunctionPointer<
+                NativePvpComboRouteResolverDelegate>(resolverAddress);
+        }
+        catch (Exception exception)
+        {
+            log.Warning(
+                exception,
+                "Seiton Sense Monk held-combo route resolver unavailable; feature fails closed.");
+        }
+
+        nativePvpComboRouteResolver = createdResolver;
     }
 
     internal MonkHeldComboProbeSnapshot Snapshot => Volatile.Read(ref snapshot);
 
     /// <summary>
     /// One-time English-sheet validation for the route, auxiliary actions,
-    /// status proof rows, and Wolves' Den dummy identity.
+    /// and status proof rows. The shared Wolves' Den dummy identity is
+    /// validated independently by <see cref="PvPMetadataValidation"/> so a
+    /// dummy-row drift cannot disable CC or live-duel Monk behavior.
     /// </summary>
     internal static bool ValidateMetadata(
         IDataManager dataManager,
@@ -132,8 +174,6 @@ internal sealed unsafe class MonkHeldComboProbe
             var statuses = dataManager.GetExcelSheet<GameStatus>(
                 ClientLanguage.English);
             var routes = dataManager.GetExcelSheet<ActionComboRoute>(
-                ClientLanguage.English);
-            var npcNames = dataManager.GetExcelSheet<BNpcName>(
                 ClientLanguage.English);
 
             var comboDefinitions = new[]
@@ -310,23 +350,14 @@ internal sealed unsafe class MonkHeldComboProbe
                     "Wind Resonance",
                     212_537,
                     category: 1);
-            var dummyValid =
-                npcNames.TryGetRow(
-                    MonkHeldComboRules.WolvesDenStrikingDummyNameId,
-                    out var dummy) &&
-                dummy.Singular.ToString() == "striking dummy" &&
-                dummy.Plural.ToString() == "striking dummies";
-
-            var valid = auxiliariesValid && routeValid &&
-                        statusesValid && dummyValid;
+            var valid = auxiliariesValid && routeValid && statusesValid;
             if (!valid)
             {
                 log.Warning(
-                    "Seiton Sense Monk held-combo metadata failed closed: auxiliaries={Auxiliaries}, route={Route}, statuses={Statuses}, dummy={Dummy}.",
+                    "Seiton Sense Monk held-combo metadata failed closed: auxiliaries={Auxiliaries}, route={Route}, statuses={Statuses}.",
                     auxiliariesValid,
                     routeValid,
-                    statusesValid,
-                    dummyValid);
+                    statusesValid);
             }
 
             return valid;
@@ -345,6 +376,7 @@ internal sealed unsafe class MonkHeldComboProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool wolvesDenStrikingDummyMetadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -358,6 +390,7 @@ internal sealed unsafe class MonkHeldComboProbe
                 context,
                 configurationEnabled,
                 actionMetadataVerified,
+                wolvesDenStrikingDummyMetadataVerified,
                 actionHelpersSuppressedByGuard,
                 higherPriorityClaimed,
                 inputFrame,
@@ -407,6 +440,7 @@ internal sealed unsafe class MonkHeldComboProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool wolvesDenStrikingDummyMetadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -446,10 +480,15 @@ internal sealed unsafe class MonkHeldComboProbe
                                 exactLocal?.Address ?? nint.Zero) ||
                             frozenIntent.Context != context ||
                             frozenIntent.LocalPlayer != localIdentity ||
-                            !configurationEnabled ||
-                            !localAlive ||
-                            localJobId != MonkHeldComboRules.MonkJobId ||
-                            !actionMetadataVerified);
+                             !configurationEnabled ||
+                             !localAlive ||
+                             localJobId != MonkHeldComboRules.MonkJobId ||
+                             !actionMetadataVerified ||
+                             !MonkHeldComboRules.IsTargetMetadataEligible(
+                                 frozenIntent.Context,
+                                 frozenWolvesDenTargetKind ==
+                                     MonkWolvesDenTargetKind.StrikingDummy,
+                                 wolvesDenStrikingDummyMetadataVerified));
         if (runtimeDrift)
         {
             effectiveHardReset = true;
@@ -497,19 +536,20 @@ internal sealed unsafe class MonkHeldComboProbe
                 ? ResolveExactCandidate(
                     exactLocal,
                     context,
-                    intent.EnemySlot,
-                    intent.Target,
-                    frozenWolvesDenTargetKind,
-                    localActions.ResolvedComboActionId)
+                     intent.EnemySlot,
+                     intent.Target,
+                     frozenWolvesDenTargetKind,
+                     wolvesDenStrikingDummyMetadataVerified,
+                     localActions.ResolvedComboActionId)
                 : ResolveCurrentBestCandidate(
                     exactLocal,
                     context,
                     localActions.ResolvedComboActionId,
                     localActions.FireReplyLocallyReady,
                     localActions.WindReplyLocallyReady,
-                    localActions.ThunderclapLocallyReady,
-                    hasFireResonance,
-                    actionMetadataVerified);
+                     localActions.ThunderclapLocallyReady,
+                     hasFireResonance,
+                     wolvesDenStrikingDummyMetadataVerified);
         }
 
         if (state.Intent is { IsValid: true } &&
@@ -621,6 +661,7 @@ internal sealed unsafe class MonkHeldComboProbe
                 context,
                 configurationEnabled,
                 actionMetadataVerified,
+                wolvesDenStrikingDummyMetadataVerified,
                 actionHelpersSuppressedByGuard,
                 effectiveHigherPriorityClaimed,
                 inputFrame,
@@ -687,6 +728,7 @@ internal sealed unsafe class MonkHeldComboProbe
                 selectedCandidate?.HasExactOwnPressurePoint == true,
             hasFireResonance,
             localActions.NativeBoundaryReady,
+            nativePvpComboRouteResolver is not null,
             activeIntent is { IsValid: true }
                 ? (VirtualKey)activeIntent.Value.FrozenKeyCode
                 : input.HeldGameplayKey,
@@ -713,6 +755,7 @@ internal sealed unsafe class MonkHeldComboProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool metadataVerified,
+        bool wolvesDenStrikingDummyMetadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -767,6 +810,7 @@ internal sealed unsafe class MonkHeldComboProbe
                     intent.EnemySlot,
                     intent.Target,
                     frozenWolvesDenTargetKind,
+                    wolvesDenStrikingDummyMetadataVerified,
                     currentActions.ResolvedComboActionId);
                 if (candidate is null ||
                     candidate.Value.Target.Address != frozenTargetAddress)
@@ -855,8 +899,7 @@ internal sealed unsafe class MonkHeldComboProbe
                     return false;
                 }
 
-                carrierBefore = actionManager->GetAdjustedActionId(
-                    MonkHeldComboRules.ComboCarrierActionId);
+                carrierBefore = ResolveNativeComboRouteAction();
                 before = ClientActionAttemptBoundary.Capture(
                     actionManager,
                     decision.ActionId);
@@ -869,27 +912,33 @@ internal sealed unsafe class MonkHeldComboProbe
                     return false;
                 }
 
+                if (!MonkHeldComboRules.TryCreateNativeActionRequest(
+                        carrierBefore,
+                        state.CarrierActionId,
+                        decision.ActionId,
+                        decision.Purpose,
+                        out var nativeRequest))
+                {
+                    return false;
+                }
+
                 attemptedAtBoundary = true;
-                var comboRouteId = MonkHeldComboRules.GetNativeComboRouteId(
-                    decision.ActionId,
-                    decision.Purpose);
                 var accepted = actionManager->UseAction(
                     ActionType.Action,
-                    decision.ActionId,
+                    nativeRequest.ActionId,
                     useTargetId,
                     0,
-                    comboRouteId != 0
+                    nativeRequest.UsesComboMode
                         ? ActionManager.UseActionMode.Combo
                         : ActionManager.UseActionMode.None,
-                    comboRouteId);
+                    nativeRequest.ComboRouteId);
                 after = ClientActionAttemptBoundary.Capture(
                     actionManager,
-                    decision.ActionId);
+                    nativeRequest.ActionId);
                 capturedConfirmationSequenceBaseline = after.Captured
                     ? after.LastUsedActionSequence
                     : before.LastUsedActionSequence;
-                carrierAfter = actionManager->GetAdjustedActionId(
-                    MonkHeldComboRules.ComboCarrierActionId);
+                carrierAfter = ResolveNativeComboRouteAction();
                 targetStatusAfter = actionManager->GetActionStatus(
                     ActionType.Action,
                     decision.ActionId,
@@ -981,6 +1030,7 @@ internal sealed unsafe class MonkHeldComboProbe
                 0,
                 identity,
                 kind,
+                strikingDummyMetadataVerified,
                 resolvedComboActionId);
             if (!candidate.HasValue) return null;
             var selected = MonkHeldComboRules.SelectBestCandidate(
@@ -1012,6 +1062,7 @@ internal sealed unsafe class MonkHeldComboProbe
                 slot,
                 identity,
                 MonkWolvesDenTargetKind.None,
+                strikingDummyMetadataVerified,
                 resolvedComboActionId);
             if (candidate.HasValue) runtimeCandidates.Add(candidate.Value);
         }
@@ -1043,12 +1094,17 @@ internal sealed unsafe class MonkHeldComboProbe
         int enemySlot,
         TargetPressureActorIdentity expectedTarget,
         MonkWolvesDenTargetKind expectedWolvesKind,
+        bool strikingDummyMetadataVerified,
         uint resolvedComboActionId)
     {
         if (!expectedTarget.IsValid ||
             expectedTarget == new TargetPressureActorIdentity(
                 localPlayer.GameObjectId,
                 localPlayer.EntityId) ||
+            !MonkHeldComboRules.IsTargetMetadataEligible(
+                context,
+                expectedWolvesKind == MonkWolvesDenTargetKind.StrikingDummy,
+                strikingDummyMetadataVerified) ||
             !MonkHeldComboRules.IsExactComboAction(resolvedComboActionId))
         {
             return null;
@@ -1091,7 +1147,7 @@ internal sealed unsafe class MonkHeldComboProbe
                          MonkWolvesDenTargetKind.StrikingDummy) ||
                     !TryResolveCurrentWolvesDenTarget(
                         localPlayer,
-                        strikingDummyMetadataVerified: true,
+                        strikingDummyMetadataVerified,
                         out target,
                         out var currentIdentity,
                         out wolvesKind) ||
@@ -1295,7 +1351,7 @@ internal sealed unsafe class MonkHeldComboProbe
         return identity.IsValid;
     }
 
-    private static LocalActionState ObserveLocalActions(
+    private LocalActionState ObserveLocalActions(
         IPlayerCharacter localPlayer)
     {
         if (!HasValidNativeIdentity(localPlayer) ||
@@ -1307,8 +1363,7 @@ internal sealed unsafe class MonkHeldComboProbe
 
         var actionManager = ActionManager.Instance();
         if (actionManager == null) return default;
-        var resolved = actionManager->GetAdjustedActionId(
-            MonkHeldComboRules.ComboCarrierActionId);
+        var resolved = ResolveNativeComboRouteAction();
         if (!MonkHeldComboRules.IsExactComboAction(resolved))
             return default;
 
@@ -1342,6 +1397,20 @@ internal sealed unsafe class MonkHeldComboProbe
                 actionManager->CastActionId,
                 actionManager->ActionQueued),
             comboFingerprint.LastUsedActionSequence);
+    }
+
+    private uint ResolveNativeComboRouteAction()
+    {
+        var resolver = nativePvpComboRouteResolver;
+        if (resolver is null) return 0;
+
+        var resolved = resolver(
+            MonkHeldComboRules.PhantomRushComboRouteId,
+            outInfo: null,
+            adjustActionIds: 1);
+        return MonkHeldComboRules.IsExactComboAction(resolved)
+            ? resolved
+            : 0;
     }
 
     private static bool IsLocallyReady(
@@ -1488,6 +1557,7 @@ internal sealed unsafe class MonkHeldComboProbe
         {
             Decision = decision,
             Reason = reason,
+            NativeRouteResolverReady = nativePvpComboRouteResolver is not null,
             AttemptCount = Interlocked.Read(ref attemptCount),
             AcceptedCount = Interlocked.Read(ref acceptedCount),
             RejectedCount = Interlocked.Read(ref rejectedCount),

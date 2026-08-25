@@ -17,6 +17,12 @@ public enum SamuraiReactiveCounterCcDecisionKind : byte
     Cancelled = 4,
 }
 
+public enum SamuraiReactiveCounterCcNativeInvocationKind : byte
+{
+    None = 0,
+    TargetedUseAction = 1,
+}
+
 public readonly record struct SamuraiReactiveCounterCcTarget(
     ulong GameObjectId,
     uint EntityId,
@@ -67,7 +73,8 @@ public readonly record struct SamuraiReactiveCounterCcObservation(
     bool MineuchiReady,
     bool BoundPresent,
     bool SotenApproachWindowOpen,
-    float ConfiguredSotenMaximumRangeYalms);
+    float ConfiguredSotenMaximumRangeYalms,
+    bool MineuchiImpactWindowOpen = false);
 
 public readonly record struct SamuraiReactiveCounterCcDecision(
     SamuraiReactiveCounterCcState NextState,
@@ -76,9 +83,9 @@ public readonly record struct SamuraiReactiveCounterCcDecision(
 
 /// <summary>
 /// Pure staged policy for Soten -> Mineuchi. The caller owns the reviewed
-/// UseActionLocation destination/collision proof and decides when a measured
-/// Purify approach window is open. These rules deliberately contain no guessed
-/// travel or animation timing and never select a replacement actor.
+/// direct-target native boundary and decides when measured Soten/Mineuchi
+/// impact windows are open. These rules deliberately contain no guessed travel
+/// or animation timing and never select a replacement actor.
 /// </summary>
 public static class SamuraiReactiveCounterCcRules
 {
@@ -88,6 +95,22 @@ public static class SamuraiReactiveCounterCcRules
         MiracleInterceptConfirmationRules.MineuchiActionId;
     public const float MineuchiMaximumRangeYalms = 5f;
     public const float SotenMaximumRangeYalms = 20f;
+
+    public static SamuraiReactiveCounterCcNativeInvocationKind
+        GetNativeInvocationKind(uint actionId) => actionId switch
+        {
+            SotenActionId or MineuchiActionId =>
+                SamuraiReactiveCounterCcNativeInvocationKind.TargetedUseAction,
+            _ => SamuraiReactiveCounterCcNativeInvocationKind.None,
+        };
+
+    public static bool CanAcquireProtectionEndConsent(
+        bool protectionObserved,
+        bool protectionPresent,
+        int currentGameplayKeyToken) =>
+        protectionObserved &&
+        !protectionPresent &&
+        currentGameplayKeyToken > 0;
 
     public static SamuraiReactiveCounterCcState Arm(
         SamuraiReactiveCounterCcTarget target,
@@ -106,6 +129,15 @@ public static class SamuraiReactiveCounterCcRules
                 allowJoblessWolvesDenTarget)
             : SamuraiReactiveCounterCcState.Initial;
 
+    public static SamuraiReactiveCounterCcState RebindUncommittedHeldConsent(
+        SamuraiReactiveCounterCcState state,
+        int currentGameplayKeyToken) =>
+        state.IsActive &&
+        state.Phase == SamuraiReactiveCounterCcPhase.Armed &&
+        currentGameplayKeyToken > 0
+            ? state with { GameplayKeyToken = currentGameplayKeyToken }
+            : state;
+
     public static SamuraiReactiveCounterCcDecision Observe(
         SamuraiReactiveCounterCcState state,
         SamuraiReactiveCounterCcObservation observation)
@@ -115,7 +147,8 @@ public static class SamuraiReactiveCounterCcRules
             !observation.Enabled ||
             !observation.ExactTargetStillCurrent ||
             !observation.TargetAliveAndTargetable ||
-            !observation.ExactGameplayKeyStillDown ||
+            (state.Phase != SamuraiReactiveCounterCcPhase.ApproachAccepted &&
+             !observation.ExactGameplayKeyStillDown) ||
             !observation.DistanceKnown ||
             !float.IsFinite(observation.TargetEdgeDistanceYalms) ||
             observation.TargetEdgeDistanceYalms < 0f)
@@ -125,7 +158,9 @@ public static class SamuraiReactiveCounterCcRules
 
         if (observation.TargetEdgeDistanceYalms <= MineuchiMaximumRangeYalms)
         {
-            return !observation.ProtectionPresent && observation.MineuchiReady
+            return (!observation.ProtectionPresent ||
+                    observation.MineuchiImpactWindowOpen) &&
+                   observation.MineuchiReady
                 ? new SamuraiReactiveCounterCcDecision(
                     state,
                     SamuraiReactiveCounterCcDecisionKind.AttemptMineuchi,

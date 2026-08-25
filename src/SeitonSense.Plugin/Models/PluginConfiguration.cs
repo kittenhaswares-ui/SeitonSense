@@ -36,7 +36,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 37;
+    public int Version { get; set; } = 38;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -147,6 +147,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ReactiveCcPaladinIntervene { get; set; }
     public float ReactiveCcPaladinInterveneMaximumRangeYalms { get; set; } = 20f;
     public bool ReactiveCcRedMageResolution { get; set; }
+    public bool ReactiveCcRedMageViceOfThorns { get; set; }
+    public bool ReactiveCcBlackMageFrostStar { get; set; }
+    public int ReactiveCcImpactCalibrationRevision { get; set; } =
+        ReactiveCounterCcImpactTimingRules.CalibrationRevision;
+    public Dictionary<uint, List<ReactiveCounterCcImpactSample>>
+        ReactiveCcImpactCalibrationSamples { get; set; } = [];
     public bool ReactiveCcSamuraiSotenMineuchi { get; set; }
     public float ReactiveCcSamuraiSotenMaximumRangeYalms { get; set; } = 20f;
     public bool EnableSamuraiZantetsukenOnHeldKey { get; set; }
@@ -253,7 +259,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 37)
+        if (Version >= 38)
         {
             if (repaired) Save();
             return;
@@ -637,7 +643,19 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableMonkHeldComboOnHeldKey = false;
         }
 
-        Version = 37;
+        if (Version < 38)
+        {
+            // Proc-only counter actions and persistent impact calibration are
+            // new hostile paths/state. Upgrading users opt in explicitly, and
+            // no unversioned timing evidence is trusted.
+            ReactiveCcRedMageViceOfThorns = false;
+            ReactiveCcBlackMageFrostStar = false;
+            ReactiveCcImpactCalibrationRevision =
+                ReactiveCounterCcImpactTimingRules.CalibrationRevision;
+            ReactiveCcImpactCalibrationSamples = [];
+        }
+
+        Version = 38;
         ClampSettings();
         Save();
     }
@@ -646,7 +664,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 37;
+        Version = 38;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -753,6 +771,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ReactiveCcPaladinIntervene = false;
         ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;
         ReactiveCcRedMageResolution = false;
+        ReactiveCcRedMageViceOfThorns = false;
+        ReactiveCcBlackMageFrostStar = false;
+        ReactiveCcImpactCalibrationRevision =
+            ReactiveCounterCcImpactTimingRules.CalibrationRevision;
+        ReactiveCcImpactCalibrationSamples = [];
         ReactiveCcSamuraiSotenMineuchi = false;
         ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;
         EnableSamuraiZantetsukenOnHeldKey = false;
@@ -910,6 +933,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         var changed = false;
         changed |= NormalizeCcBrakeSelections();
+        changed |= NormalizeReactiveCcImpactCalibrations();
         var clamped = float.IsFinite(NearAssistMaxAllyDistance)
             ? Math.Clamp(NearAssistMaxAllyDistance, 5f, 30f)
             : 25f;
@@ -1129,6 +1153,37 @@ public sealed class PluginConfiguration : IPluginConfiguration
         return changed;
     }
 
+    private bool NormalizeReactiveCcImpactCalibrations()
+    {
+        if (ReactiveCcImpactCalibrationRevision !=
+            ReactiveCounterCcImpactTimingRules.CalibrationRevision)
+        {
+            ReactiveCcImpactCalibrationRevision =
+                ReactiveCounterCcImpactTimingRules.CalibrationRevision;
+            ReactiveCcImpactCalibrationSamples = [];
+            return true;
+        }
+
+        var normalized =
+            new Dictionary<uint, List<ReactiveCounterCcImpactSample>>();
+        foreach (var (actionId, samples) in
+                 ReactiveCcImpactCalibrationSamples ?? [])
+        {
+            if (!ReactiveCounterCcImpactTimingRules.IsSupportedAction(actionId))
+                continue;
+            var clean = ReactiveCounterCcImpactTimingRules
+                .NormalizeSamples(samples)
+                .ToList();
+            if (clean.Count > 0) normalized[actionId] = clean;
+        }
+
+        var changed = !ImpactCalibrationDictionaryEquals(
+            ReactiveCcImpactCalibrationSamples,
+            normalized);
+        ReactiveCcImpactCalibrationSamples = normalized;
+        return changed;
+    }
+
     private static Dictionary<uint, bool> CreateDefaultCcBrakeJobs() =>
         SupportedCcBrakeJobIds.ToDictionary(static id => id, static _ => true);
 
@@ -1153,6 +1208,24 @@ public sealed class PluginConfiguration : IPluginConfiguration
         foreach (var (id, enabled) in right)
         {
             if (!left.TryGetValue(id, out var current) || current != enabled) return false;
+        }
+
+        return true;
+    }
+
+    private static bool ImpactCalibrationDictionaryEquals(
+        IReadOnlyDictionary<uint, List<ReactiveCounterCcImpactSample>>? left,
+        IReadOnlyDictionary<uint, List<ReactiveCounterCcImpactSample>> right)
+    {
+        if (left is null || left.Count != right.Count) return false;
+        foreach (var (key, samples) in right)
+        {
+            if (!left.TryGetValue(key, out var current) ||
+                current is null ||
+                !current.SequenceEqual(samples))
+            {
+                return false;
+            }
         }
 
         return true;

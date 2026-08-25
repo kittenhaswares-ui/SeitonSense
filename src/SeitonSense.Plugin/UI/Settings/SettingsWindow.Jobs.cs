@@ -240,7 +240,7 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Samurai — Zantetsuken", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Zantetsuken on held gameplay key when exact Kuzushi has no shield",
+                "Use your own SAM Zantetsuken on held key when exact Kuzushi has no shield",
                 configuration.EnableSamuraiZantetsukenOnHeldKey,
                 value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
@@ -285,8 +285,9 @@ internal sealed partial class SettingsWindow
                 "exhaustion requires releasing that frozen key before another Viper episode.");
             ImGui.TextDisabled(
                 "Available in exact Crystalline Conflict. With the separate Wolves' Den testing toggle, testing is " +
-                "restricted to the exact current hard-target striking dummy (NameId 541); duel players, arbitrary NPCs, " +
-                "and synthetic enemy slots are rejected. Client acceptance is not proof of a server-side hit.");
+                "restricted to your exact current hard target (<t>): the live hostile duel opponent or the reviewed " +
+                "striking dummy (NameId 541). Arbitrary NPCs and synthetic enemy slots are rejected. Client acceptance " +
+                "is not proof of a server-side hit.");
             ImGui.PopTextWrapPos();
         }
 

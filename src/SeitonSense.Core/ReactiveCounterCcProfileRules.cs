@@ -7,6 +7,7 @@ public enum ReactiveCounterCcExecutionShape : byte
     AdjustedComboTarget = 2,
     LineAoeTargeted = 3,
     GroundDashThenDirect = 4,
+    TargetCenteredAoe = 5,
 }
 
 public readonly record struct ReactiveCounterCcProfile(
@@ -17,6 +18,8 @@ public readonly record struct ReactiveCounterCcProfile(
     float NativeMaximumRangeYalms,
     bool CannotExecuteWhileBound)
 {
+    public bool UsesMainGlobalCooldown { get; init; }
+
     public bool IsValid =>
         JobId != 0 &&
         MiracleInterceptConfirmationRules.ExpectedStatusForAction(ActionId) ==
@@ -38,15 +41,29 @@ public static class ReactiveCounterCcProfileRules
     public const uint BardJobId = 23;
     public const uint WhiteMageJobId = 24;
     public const uint NinjaJobId = 30;
+    public const uint BlackMageJobId = 25;
     public const uint RedMageJobId = 35;
     public const uint SamuraiJobId = 34;
 
     public const float MiracleOfNatureMaximumRangeYalms = 10f;
     public const float SilentNocturneMaximumRangeYalms = 20f;
+    public const uint NinjaComboCarrierActionId = 29_500;
     public const float RaijuMaximumRangeYalms = 20f;
     public const float InterveneMaximumRangeYalms = 20f;
     public const float ResolutionMaximumRangeYalms = 25f;
     public const uint ResolutionIconId = 9_686;
+    public const uint ForteCarrierActionId = 41_496;
+    public const uint ViceOfThornsIconId = 9_063;
+    public const uint ViceOfThornsProcStatusRowId = 242;
+    public const uint ThornedFlourishStatusId = 4_321;
+    public const uint ThornedFlourishStatusIconId = 213_411;
+    public const float ViceOfThornsMaximumRangeYalms = 25f;
+    public const uint SoulResonanceCarrierActionId = 29_662;
+    public const uint FrostStarIconId = 9_056;
+    public const uint FrostStarProcStatusRowId = 241;
+    public const uint ElementalStarStatusId = 4_317;
+    public const uint ElementalStarStatusIconId = 214_736;
+    public const float FrostStarMaximumRangeYalms = 25f;
     public const float MinimumConfiguredInterveneRangeYalms = 1f;
 
     public static ReactiveCounterCcProfile? Get(uint actionId) => actionId switch
@@ -72,7 +89,10 @@ public static class ReactiveCounterCcProfileRules
                 MiracleInterceptConfirmationRules.StunStatusId,
                 ReactiveCounterCcExecutionShape.AdjustedComboTarget,
                 RaijuMaximumRangeYalms,
-                CannotExecuteWhileBound: true),
+                CannotExecuteWhileBound: true)
+            {
+                UsesMainGlobalCooldown = true,
+            },
         MiracleInterceptConfirmationRules.InterveneActionId => new(
             PaladinJobId,
             actionId,
@@ -93,9 +113,76 @@ public static class ReactiveCounterCcProfileRules
             MiracleInterceptConfirmationRules.SilenceStatusId,
             ReactiveCounterCcExecutionShape.LineAoeTargeted,
             ResolutionMaximumRangeYalms,
+            CannotExecuteWhileBound: false)
+        {
+            UsesMainGlobalCooldown = true,
+        },
+        MiracleInterceptConfirmationRules.ViceOfThornsActionId => new(
+            RedMageJobId,
+            actionId,
+            MiracleInterceptConfirmationRules.StunStatusId,
+            ReactiveCounterCcExecutionShape.TargetCenteredAoe,
+            ViceOfThornsMaximumRangeYalms,
             CannotExecuteWhileBound: false),
+        MiracleInterceptConfirmationRules.FrostStarActionId => new(
+            BlackMageJobId,
+            actionId,
+            MiracleInterceptConfirmationRules.DeepFreezeStatusId,
+            ReactiveCounterCcExecutionShape.TargetCenteredAoe,
+            FrostStarMaximumRangeYalms,
+            CannotExecuteWhileBound: false)
+        {
+            UsesMainGlobalCooldown = true,
+        },
         _ => null,
     };
+
+    public static uint CarrierActionId(uint executableActionId) =>
+        executableActionId switch
+        {
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId =>
+                ForteCarrierActionId,
+            MiracleInterceptConfirmationRules.FrostStarActionId =>
+                SoulResonanceCarrierActionId,
+            _ => executableActionId,
+        };
+
+    public static bool UsesMainGlobalCooldown(uint actionId) =>
+        actionId == NinjaComboCarrierActionId ||
+        Get(actionId)?.UsesMainGlobalCooldown == true;
+
+    public static uint SelectRedMageCounterAction(
+        bool viceEnabled,
+        bool viceMetadataVerified,
+        uint adjustedForteActionId,
+        bool resolutionEnabled,
+        bool resolutionMetadataVerified)
+    {
+        if (viceEnabled &&
+            viceMetadataVerified &&
+            adjustedForteActionId ==
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId)
+        {
+            return MiracleInterceptConfirmationRules.ViceOfThornsActionId;
+        }
+
+        if (resolutionEnabled && resolutionMetadataVerified)
+            return MiracleInterceptConfirmationRules.ResolutionActionId;
+
+        // Retain the episode/capture lane for a Vice-only configuration while
+        // the proc is absent. Native readiness still fails closed until Forte
+        // exposes the exact executable action.
+        return viceEnabled && viceMetadataVerified
+            ? MiracleInterceptConfirmationRules.ViceOfThornsActionId
+            : 0;
+    }
+
+    public static uint SelectBlackMageCounterAction(
+        bool frostStarEnabled,
+        bool frostStarMetadataVerified) =>
+        frostStarEnabled && frostStarMetadataVerified
+            ? MiracleInterceptConfirmationRules.FrostStarActionId
+            : 0;
 
     public static float NormalizeInterveneMaximumRangeYalms(float configured) =>
         float.IsFinite(configured)
@@ -119,7 +206,9 @@ public static class ReactiveCounterCcProfileRules
         uint actionId,
         MiracleInterceptThreatKind threat) =>
         actionId is MiracleInterceptConfirmationRules.InterveneActionId or
-            MiracleInterceptConfirmationRules.ResolutionActionId
+            MiracleInterceptConfirmationRules.ResolutionActionId or
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId or
+            MiracleInterceptConfirmationRules.FrostStarActionId
             ? threat is MiracleInterceptThreatKind.PostPurifyCrowdControl or
                 MiracleInterceptThreatKind.PostGuardCrowdControl
             : true;

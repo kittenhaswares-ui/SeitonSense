@@ -192,6 +192,38 @@ internal static class ViperSerpentTailSelfTests
         Equal(ViperSerpentTailDecisionKind.Armed, rangeWait.Kind, "range wait freezes intent");
         Equal(ViperSerpentTailDecisionReason.TargetNotReady, rangeWait.Reason, "range wait reason");
         Equal(Target, rangeWait.Intent!.Value.Target, "range wait target stays frozen");
+
+        // Wolves' Den replaces the CC e1-e5 identity with the exact current
+        // native hard target (<t>). Its synthetic slot is always zero; the
+        // runtime independently proves that actor as the duel opponent (or the
+        // optional verified dummy) before this Core boundary is reached.
+        var wolvesCandidate = Candidate() with
+        {
+            Context = SupportedPvPContext.WolvesDen,
+            EnemySlot = 0,
+        };
+        var wolvesDecision = Observe(Observation(exposure) with
+        {
+            Context = SupportedPvPContext.WolvesDen,
+            Candidate = wolvesCandidate,
+        });
+        Dispatch(wolvesDecision, "Wolves' Den exact current <t> uses slot zero");
+        var wolvesIntent = wolvesDecision.Intent ??
+                           throw new InvalidOperationException("missing Wolves' Den intent");
+        Equal(0, wolvesIntent.EnemySlot, "Wolves' Den never invents an e-slot");
+        Equal(Target, wolvesIntent.Target, "Wolves' Den freezes exact <t> identity");
+        True(CanUse(
+                wolvesIntent,
+                exposure,
+                wolvesCandidate,
+                context: SupportedPvPContext.WolvesDen),
+            "Wolves' Den exact <t> remains usable without an e-slot");
+        False(CanUse(
+                wolvesIntent,
+                exposure,
+                wolvesCandidate with { EnemySlot = 1 },
+                context: SupportedPvPContext.WolvesDen),
+            "Wolves' Den rejects an invented e1 identity");
     }
 
     public static void KnownWaitsAreFreeAndCleanFalseRetriesAreBounded()

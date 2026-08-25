@@ -4,6 +4,8 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
+using SeitonSense.Plugin.Models;
+using System.Collections.Immutable;
 using System.Numerics;
 
 namespace SeitonSense.Plugin.Services;
@@ -82,6 +84,8 @@ internal sealed record MiracleInterceptProbeSnapshot(
     internal bool ConfirmationAwaitingSourceSequence { get; init; }
     internal uint ConfirmationPendingActionId { get; init; }
     internal bool WolvesDenCurrentTargetMode { get; init; }
+    internal bool MainGcdLateReservationActive { get; init; }
+    internal long MainGcdLateRemainingMilliseconds { get; init; }
 
     internal static MiracleInterceptProbeSnapshot Initial { get; } = new(
         "Waiting",
@@ -140,6 +144,7 @@ internal sealed class MiracleInterceptProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly MachinistLimitBreakCapture capture;
     private readonly IPluginLog log;
+    private readonly PluginConfiguration configuration;
     private readonly IReadOnlySet<uint> verifiedCounterActionIds;
     private readonly IReadOnlySet<uint> verifiedProtectionStatusIds;
     private readonly bool silentNocturneMetadataVerified;
@@ -198,6 +203,9 @@ internal sealed class MiracleInterceptProbe
     private MiracleProtectionEndRankCandidate? protectionEndLastRank;
     private string guardFollowupLastEvent = "None observed";
     private long nextErrorLogAt;
+    private readonly Dictionary<uint, List<ReactiveCounterCcImpactSample>>
+        currentSessionImpactSamples = [];
+    private SupportedPvPContext impactCalibrationContext;
 
     internal MiracleInterceptProbe(
         IObjectTable objectTable,
@@ -208,7 +216,8 @@ internal sealed class MiracleInterceptProbe
         NearAssistRedirector nearAssist,
         MachinistLimitBreakCapture capture,
         IPluginLog log,
-        PvPMetadataValidation metadata)
+        PvPMetadataValidation metadata,
+        PluginConfiguration configuration)
     {
         this.objectTable = objectTable;
         this.executeTracker = executeTracker;
@@ -216,6 +225,7 @@ internal sealed class MiracleInterceptProbe
         this.nearAssist = nearAssist;
         this.capture = capture;
         this.log = log;
+        this.configuration = configuration;
         verifiedCounterActionIds = verifiedCcBrakeActionIds.ToHashSet();
         verifiedProtectionStatusIds = verifiedCcBrakeStatusIds.ToHashSet();
         silentNocturneMetadataVerified = metadata.SilentNocturneVerified;
@@ -250,12 +260,27 @@ internal sealed class MiracleInterceptProbe
         bool enableRedMageResolution = false,
         bool redMageResolutionMetadataVerified = false,
         bool isWolvesDenTesting = false,
-        IPlayerCharacter? wolvesDenCurrentHardTarget = null)
+        IPlayerCharacter? wolvesDenCurrentHardTarget = null,
+        bool enableRedMageViceOfThorns = false,
+        bool redMageViceOfThornsMetadataVerified = false,
+        bool enableBlackMageFrostStar = false,
+        bool blackMageFrostStarMetadataVerified = false)
     {
         inputClaimedThisFrame = false;
         castCancellationRequestThisFrame = null;
         nowMilliseconds = Math.Max(nowMilliseconds, Environment.TickCount64);
         if (hardReset) ResetRuntime();
+
+        var observedImpactContext = isCrystallineConflict
+            ? SupportedPvPContext.CrystallineConflict
+            : isWolvesDenTesting
+                ? SupportedPvPContext.WolvesDen
+                : SupportedPvPContext.None;
+        if (impactCalibrationContext != observedImpactContext)
+        {
+            currentSessionImpactSamples.Clear();
+            impactCalibrationContext = observedImpactContext;
+        }
 
         wolvesDenContextThisFrame = !isCrystallineConflict && isWolvesDenTesting;
         wolvesDenCurrentHardTargetThisFrame = wolvesDenContextThisFrame
@@ -273,7 +298,11 @@ internal sealed class MiracleInterceptProbe
             silentNocturneMetadataVerified,
             enablePaladinIntervene,
             enableRedMageResolution,
-            redMageResolutionMetadataVerified);
+            redMageResolutionMetadataVerified,
+            enableRedMageViceOfThorns,
+            redMageViceOfThornsMetadataVerified,
+            enableBlackMageFrostStar,
+            blackMageFrostStarMetadataVerified);
         counterActionMaximumRangeYalms = ResolveCounterMaximumRangeYalms(
             counterActionId,
             paladinInterveneMaximumRangeYalms);
@@ -713,10 +742,16 @@ internal sealed class MiracleInterceptProbe
         }
 
         var blockerFamily = BlockerFamilyForAction(threat.CounterActionId);
-        var anyProtection = HasAnyVerifiedCcProtection(candidate, blockerFamily);
+        var anyProtection = HasBlockingProtectionForThreat(
+            candidate,
+            blockerFamily,
+            threat,
+            nowMilliseconds,
+            out var predictiveProtectionBypassed);
         var guardReappeared =
             threat.Kind == MiracleInterceptThreatKind.PostGuardCrowdControl &&
-            CountActiveGuardStatuses(candidate) != 0;
+            CountActiveGuardStatuses(candidate) != 0 &&
+            !predictiveProtectionBypassed;
         var hardenedScales = threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
                              HasVerifiedActiveStatus(
                                  candidate,
@@ -729,6 +764,10 @@ internal sealed class MiracleInterceptProbe
             threat.MaximumRangeYalms);
         var structurallyReady =
             HasStructuralActionReadiness(localPlayer!, threat.CounterActionId);
+        var mainGcdLateReservation =
+            IsProtectionEndThreat(threat.Kind) &&
+            ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(
+                threat.CounterActionId);
         var exactIntentCanProgress = !hardenedScales &&
                                      !otherProtection &&
                                      rangeAndLineOfSight &&
@@ -772,19 +811,24 @@ internal sealed class MiracleInterceptProbe
         if (!globallyQueueReady)
         {
             RecordWait(threat, MiracleWaitReason.GlobalQueue);
-            inputClaimedThisFrame = true;
-            inputFrame.Consume();
-            castCancellationRequestThisFrame = BuildCastCancellationRequest(
-                localPlayer!,
-                candidate,
-                threat,
-                triggerKey,
-                inputFrame);
+            if (!mainGcdLateReservation)
+            {
+                inputClaimedThisFrame = true;
+                inputFrame.Consume();
+                castCancellationRequestThisFrame = BuildCastCancellationRequest(
+                    localPlayer!,
+                    candidate,
+                    threat,
+                    triggerKey,
+                    inputFrame);
+            }
             return PublishCandidate(
                 threat,
                 candidate,
                 "Armed",
-                "Soft wait: global animation/cast/action queue busy",
+                mainGcdLateReservation
+                    ? "Background wait: main GCD busy inside frozen 1000-ms late lease"
+                    : "Soft wait: global animation/cast/action queue busy",
                 triggerKey,
                 false,
                 false,
@@ -800,8 +844,11 @@ internal sealed class MiracleInterceptProbe
                 nowMilliseconds,
                 ThreatLifetime(threat)))
         {
-            inputClaimedThisFrame = true;
-            inputFrame.Consume();
+            if (!mainGcdLateReservation)
+            {
+                inputClaimedThisFrame = true;
+                inputFrame.Consume();
+            }
             return PublishCandidate(
                 threat,
                 candidate,
@@ -817,8 +864,11 @@ internal sealed class MiracleInterceptProbe
                 nowMilliseconds);
         }
 
-        inputClaimedThisFrame = true;
-        inputFrame.Consume();
+        if (!mainGcdLateReservation)
+        {
+            inputClaimedThisFrame = true;
+            inputFrame.Consume();
+        }
 
         // Claim only this framework frame. The exact threat/target/action/key
         // remains frozen until true, an ambiguous exception, the shared
@@ -828,25 +878,33 @@ internal sealed class MiracleInterceptProbe
         var exceptionAmbiguous = false;
         var nativeOutcome = ClientActionAttemptOutcome.NotInvoked;
         var attemptedAtMilliseconds = -1L;
+        var attemptedTargetEdgeDistanceYalms = float.NaN;
         ushort expectedSourceSequence = 0;
+        var revalidationNow = Math.Max(nowMilliseconds, Environment.TickCount64);
         var revalidated = ResolveCandidate(localPlayer!, threat);
         var revalidatedHardened = revalidated is not null &&
                                   threat.Kind == MiracleInterceptThreatKind.FuriousBacklash &&
                                   HasVerifiedActiveStatus(
                                       revalidated,
                                       EnemyCombatConstants.HardenedScalesStatusId);
+        var revalidatedPredictiveBypass = false;
         var revalidatedProtection = revalidated is not null &&
-                                    HasAnyVerifiedCcProtection(revalidated, blockerFamily);
+                                    HasBlockingProtectionForThreat(
+                                        revalidated,
+                                        blockerFamily,
+                                        threat,
+                                        revalidationNow,
+                                        out revalidatedPredictiveBypass);
         var revalidatedGuardAbsent = revalidated is not null &&
             (threat.Kind != MiracleInterceptThreatKind.PostGuardCrowdControl ||
-             CountActiveGuardStatuses(revalidated) == 0);
+             CountActiveGuardStatuses(revalidated) == 0 ||
+             revalidatedPredictiveBypass);
         var revalidatedRange = revalidated is not null &&
                                HasActionRangeAndLineOfSight(
                                    threat.CounterActionId,
                                    localPlayer!,
                                    revalidated,
                                    threat.MaximumRangeYalms);
-        var revalidationNow = Math.Max(nowMilliseconds, Environment.TickCount64);
         var revalidatedLocalJobId = localPlayer!.ClassJob.IsValid
             ? localPlayer.ClassJob.RowId
             : 0;
@@ -860,26 +918,77 @@ internal sealed class MiracleInterceptProbe
         var revalidatedInsideWindow =
             revalidationNow >= threat.ObservedAtMilliseconds &&
             revalidationNow - threat.ObservedAtMilliseconds < ThreatLifetime(threat);
+        var finalProtectionStateValid =
+            !revalidatedProtection && revalidatedGuardAbsent;
         var finalValidationPassed = revalidated is not null &&
                                     !revalidatedHardened &&
-                                    !revalidatedProtection &&
-                                    revalidatedGuardAbsent &&
+                                    finalProtectionStateValid &&
                                     revalidatedRange &&
                                     revalidatedActionIdentity &&
                                     revalidatedInput &&
                                     revalidatedInsideWindow;
+        if (finalValidationPassed && mainGcdLateReservation)
+        {
+            var revalidatedStructuralReadiness =
+                HasStructuralActionReadiness(
+                    localPlayer!,
+                    threat.CounterActionId);
+            var revalidatedGlobalQueueReadiness =
+                revalidatedStructuralReadiness &&
+                HasGlobalQueueReadiness(
+                    localPlayer!,
+                    threat.CounterActionId);
+            finalValidationPassed =
+                ReactiveCounterCcLateDispatchRules.CanDispatch(
+                    new ReactiveCounterCcLateReservation(
+                        threat.CounterActionId,
+                        threat.GameObjectId,
+                        threat.EntityId,
+                        threat.ScheduledProtectionStatusId,
+                        threat.ObservedAtMilliseconds),
+                    revalidationNow,
+                    counterActionId,
+                    revalidated!.GameObjectId,
+                    revalidated.EntityId,
+                    revalidatedPredictiveBypass
+                        ? threat.ScheduledProtectionStatusId
+                        : 0,
+                    finalProtectionStateValid,
+                    revalidatedInput,
+                    revalidatedRange,
+                    revalidatedStructuralReadiness,
+                    revalidatedGlobalQueueReadiness);
+        }
         var attemptOutcome = MiracleProtectionEndAttemptOutcome.None;
         if (finalValidationPassed)
         {
             try
             {
-                attemptedAtMilliseconds = Environment.TickCount64;
                 nativeOutcome = TryUseCounterCcOnce(
                     localPlayer!,
                     threat.CounterActionId,
-                    revalidated!.GameObjectId,
+                    revalidated!,
+                    new PredictiveCcBrakeBypassIntent(
+                        threat.CounterActionId,
+                        revalidated!.GameObjectId,
+                        revalidated.EntityId,
+                        revalidated.ClassJob.RowId,
+                        revalidatedPredictiveBypass
+                            ? threat.ScheduledProtectionStatusId
+                            : 0,
+                        revalidatedPredictiveBypass
+                            ? threat.ScheduledProtectionEndAtMilliseconds
+                            : -1,
+                        revalidatedPredictiveBypass
+                            ? threat.ScheduledSafeImpactLeadMilliseconds
+                            : 0,
+                        RequireGuardAbsent:
+                            threat.Kind ==
+                            MiracleInterceptThreatKind.PostGuardCrowdControl),
                     out attempted,
-                    out expectedSourceSequence);
+                    out expectedSourceSequence,
+                    out attemptedAtMilliseconds,
+                    out attemptedTargetEdgeDistanceYalms);
                 accepted = nativeOutcome == ClientActionAttemptOutcome.ClientAccepted;
                 exceptionAmbiguous =
                     nativeOutcome == ClientActionAttemptOutcome.AcceptanceUnknown;
@@ -928,6 +1037,7 @@ internal sealed class MiracleInterceptProbe
                     expectedSourceSequence)
                 {
                     RemovedStatusId = threat.RemovedStatusId,
+                    TargetEdgeDistanceYalms = attemptedTargetEdgeDistanceYalms,
                 },
                 attemptedAtMilliseconds);
             confirmationState = registered.NextState;
@@ -1561,6 +1671,104 @@ internal sealed class MiracleInterceptProbe
             _ => cleanseFollowupLastEvent,
         };
 
+        if (!decision.ShouldPromote &&
+            !higherPriorityClaimed &&
+            decision.NextState.Phase == MiracleCleanseFollowupPhase.WaitingForResilienceEnd &&
+            decision.NextState.ActiveSignal is { } predictiveSignal &&
+            candidate is { } predictiveCandidate &&
+            player is not null &&
+            predictiveCandidate.ReservedGameplayKeyPhysicallyDown &&
+            episodeGameplayKeyToken > 0 &&
+            TryGetSolePredictiveProtection(
+                player,
+                BlockerFamilyForAction(counterActionId),
+                EnemyCombatConstants.ResilienceStatusId,
+                out var predictiveProtectionRemainingMilliseconds) &&
+            CanReserveAtIdealRequest(localPlayer, counterActionId) &&
+            HasActionRangeAndLineOfSight(
+                counterActionId,
+                localPlayer,
+                player,
+                counterActionMaximumRangeYalms) &&
+            TryGetSafeImpactLead(
+                counterActionId,
+                localPlayer,
+                player,
+                out var predictiveLeadMilliseconds) &&
+            ReactiveCounterCcImpactTimingRules.ShouldPreDispatch(
+                exactProtectionStatusCount: 1,
+                predictiveProtectionRemainingMilliseconds,
+                predictiveLeadMilliseconds) &&
+            ReactiveCounterCcImpactTimingRules.IsScheduledProtectionStillValid(
+                decision.NextState.ExpectedProtectionEndAtMilliseconds,
+                nowMilliseconds,
+                predictiveProtectionRemainingMilliseconds,
+                predictiveLeadMilliseconds))
+        {
+            var predictiveHasTrustedMp = wolvesDenContextThisFrame
+                ? player.MaxMp == CombatFrameRules.ExpectedMaximumMp &&
+                  player.CurrentMp <= player.MaxMp
+                : canonical?.HasTrustedMp == true;
+            var predictiveRank = new MiracleProtectionEndRankCandidate(
+                MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                wolvesDenContextThisFrame
+                    ? WolvesDenCurrentTargetStateKey
+                    : canonical?.Slot ?? 0,
+                predictiveSignal.Target.GameObjectId,
+                predictiveSignal.Target.EntityId,
+                predictiveSignal.Target.JobId,
+                teamTargetCountKnown,
+                cleanseFollowupTeamPressure,
+                player.CurrentHp,
+                player.MaxHp,
+                predictiveHasTrustedMp,
+                predictiveHasTrustedMp
+                    ? wolvesDenContextThisFrame
+                        ? player.CurrentMp
+                        : canonical!.CurrentMp
+                    : 0,
+                predictiveHasTrustedMp
+                    ? wolvesDenContextThisFrame
+                        ? player.MaxMp
+                        : canonical!.MaxMp
+                    : 0);
+            if (predictiveRank.IsValid)
+            {
+                cleanseFollowupStates.Remove(enemySlot);
+                Interlocked.Increment(ref cleanseFollowupPromotionCount);
+                cleanseFollowupLastEvent =
+                    $"PostPurifyCC: predictive impact scheduled {predictiveLeadMilliseconds} ms before Resilience end";
+                var predictiveThreat = new MiracleThreatState(
+                    MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                    predictiveSignal.Target.GameObjectId,
+                    predictiveSignal.Target.EntityId,
+                    predictiveSignal.Target.JobId,
+                    predictiveRank.EnemySlot,
+                    nowMilliseconds,
+                    new MiracleSignalIdentity(
+                        predictiveSignal.Key.CasterEntityId,
+                        predictiveSignal.Key.ActionId,
+                        predictiveSignal.Key.GlobalSequence,
+                        predictiveSignal.Key.SourceSequence),
+                    predictiveSignal.Key.EffectValue,
+                    counterActionId,
+                    localPlayer.ClassJob.RowId,
+                    predictiveRank,
+                    HeldActionRetryState.Initial,
+                    episodeGameplayKeyToken,
+                    counterActionMaximumRangeYalms)
+                {
+                    ScheduledProtectionStatusId = EnemyCombatConstants.ResilienceStatusId,
+                    ScheduledProtectionEndAtMilliseconds =
+                        decision.NextState.ExpectedProtectionEndAtMilliseconds,
+                    ScheduledSafeImpactLeadMilliseconds = predictiveLeadMilliseconds,
+                };
+                return new MiracleFollowupPromotion(
+                    predictiveThreat,
+                    predictiveRank);
+            }
+        }
+
         if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
             return null;
 
@@ -1752,6 +1960,135 @@ internal sealed class MiracleInterceptProbe
             _ => guardFollowupLastEvent,
         };
 
+        if (!decision.ShouldPromote &&
+            !higherPriorityClaimed &&
+            episodeGameplayKeyToken > 0 &&
+            IsReservedGameplayKeyPhysicallyDown(
+                episodeGameplayKeyToken,
+                inputFrame))
+        {
+            var predictive = new List<GuardPredictivePromotionCandidate>();
+            foreach (var candidate in candidates)
+            {
+                var actor = guardFollowupState.Actors.FirstOrDefault(
+                    tracked => tracked.Target == candidate.Target);
+                if (actor.Target != candidate.Target ||
+                    actor.Phase != MiracleGuardFollowupPhase.GuardPresent ||
+                    candidate.ActiveGuardStatusCount != 1 ||
+                    !candidate.IsValid)
+                {
+                    continue;
+                }
+
+                var target = ResolveGuardFollowupCandidate(localPlayer, candidate.Target);
+                if (target is null ||
+                    !TryGetSingleActiveGuardStatus(
+                        target,
+                        out var guardStatusId,
+                        out _) ||
+                    !TryGetSolePredictiveProtection(
+                        target,
+                        BlockerFamilyForAction(counterActionId),
+                        guardStatusId,
+                        out var soleGuardRemainingMilliseconds) ||
+                    !CanReserveAtIdealRequest(localPlayer, counterActionId) ||
+                    !HasActionRangeAndLineOfSight(
+                        counterActionId,
+                        localPlayer,
+                        target,
+                        counterActionMaximumRangeYalms) ||
+                    !TryGetSafeImpactLead(
+                        counterActionId,
+                        localPlayer,
+                        target,
+                        out var safeLeadMilliseconds) ||
+                    !ReactiveCounterCcImpactTimingRules.ShouldPreDispatch(
+                        candidate.ActiveGuardStatusCount,
+                        soleGuardRemainingMilliseconds,
+                        safeLeadMilliseconds) ||
+                    !ReactiveCounterCcImpactTimingRules.IsScheduledProtectionStillValid(
+                        actor.ExpectedProtectionEndAtMilliseconds,
+                        nowMilliseconds,
+                        soleGuardRemainingMilliseconds,
+                        safeLeadMilliseconds))
+                {
+                    continue;
+                }
+
+                predictive.Add(new GuardPredictivePromotionCandidate(
+                    candidate,
+                    actor,
+                    guardStatusId,
+                    safeLeadMilliseconds));
+            }
+
+            if (predictive.Count > 0)
+            {
+                var selected = predictive[0];
+                for (var index = 1; index < predictive.Count; index++)
+                {
+                    if (MiracleProtectionEndRules.Compare(
+                            predictive[index].Candidate.RankCandidate,
+                            selected.Candidate.RankCandidate) < 0)
+                    {
+                        selected = predictive[index];
+                    }
+                }
+
+                var predictiveTargets = predictive
+                    .Select(static value => value.Candidate.Target)
+                    .ToHashSet();
+                guardFollowupState = guardFollowupState with
+                {
+                    Actors = guardFollowupState.Actors
+                        .Select(actor => predictiveTargets.Contains(actor.Target)
+                            ? actor with
+                            {
+                                Phase = MiracleGuardFollowupPhase.RetiredUntilGuardAbsent,
+                                ReleasedAtMilliseconds = -1,
+                                GameplayKeyToken = 0,
+                            }
+                            : actor)
+                        .ToImmutableArray(),
+                };
+                Interlocked.Increment(ref guardFollowupPromotionCount);
+                if (predictive.Count > 1)
+                {
+                    Interlocked.Add(ref guardFollowupRetiredCount, predictive.Count - 1);
+                    Interlocked.Add(ref rejectedThreatCount, predictive.Count - 1);
+                }
+
+                var predictiveRank = selected.Candidate.RankCandidate;
+                guardFollowupLastEvent =
+                    $"GuardEndCC: predictive impact scheduled {selected.SafeLeadMilliseconds} ms before natural Guard end";
+                var predictiveThreat = new MiracleThreatState(
+                    MiracleInterceptThreatKind.PostGuardCrowdControl,
+                    selected.Candidate.Target.GameObjectId,
+                    selected.Candidate.Target.EntityId,
+                    selected.Candidate.Target.JobId,
+                    selected.Candidate.Target.EnemySlot,
+                    nowMilliseconds,
+                    default,
+                    RemovedStatusId: 0,
+                    counterActionId,
+                    localPlayer.ClassJob.RowId,
+                    predictiveRank,
+                    HeldActionRetryState.Initial,
+                    episodeGameplayKeyToken,
+                    counterActionMaximumRangeYalms)
+                {
+                    ScheduledProtectionStatusId = selected.GuardStatusId,
+                    ScheduledProtectionEndAtMilliseconds =
+                        selected.Actor.ExpectedProtectionEndAtMilliseconds,
+                    ScheduledSafeImpactLeadMilliseconds =
+                        selected.SafeLeadMilliseconds,
+                };
+                return new MiracleFollowupPromotion(
+                    predictiveThreat,
+                    predictiveRank);
+            }
+        }
+
         if (!decision.ShouldPromote || decision.PromotionIntent is not { } promotion)
             return null;
 
@@ -1833,6 +2170,8 @@ internal sealed class MiracleInterceptProbe
                 continue;
             }
 
+            var timingPending = confirmationState.Pending;
+
             var decision = MiracleInterceptConfirmationRules.ObserveActionEffect(
                 confirmationState,
                 new MiracleInterceptLandedObservation(
@@ -1845,6 +2184,7 @@ internal sealed class MiracleInterceptProbe
                     effect.SourceSequence,
                     effect.ObservedAtMilliseconds));
             confirmationState = decision.NextState;
+            ObserveImpactTiming(timingPending, effect);
             if (decision.Confirmed)
             {
                 log.Information(
@@ -1860,6 +2200,67 @@ internal sealed class MiracleInterceptProbe
         confirmationState = MiracleInterceptConfirmationRules.ObserveTime(
             confirmationState,
             Math.Max(nowMilliseconds, Environment.TickCount64));
+    }
+
+    private void ObserveImpactTiming(
+        MiracleInterceptPendingAttempt? pendingAttempt,
+        MiracleInterceptLandedEffect effect)
+    {
+        if (pendingAttempt is not { } pending ||
+            !ReactiveCounterCcImpactTimingRules.TryMeasureSample(
+                pending.ActionId,
+                pending.TargetEntityId,
+                pending.ExpectedSourceSequence,
+                pending.AttemptedAtMilliseconds,
+                effect.ActionId,
+                effect.TargetEntityId,
+                effect.SourceSequence,
+                effect.ObservedAtMilliseconds,
+                out var sampleMilliseconds))
+        {
+            return;
+        }
+
+        if (!ReactiveCounterCcImpactTimingRules.TryCreateCalibrationSample(
+                sampleMilliseconds,
+                pending.TargetEdgeDistanceYalms,
+                out var timingSample))
+        {
+            return;
+        }
+
+        configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+            pending.ActionId,
+            out var previousSamples);
+        var samples = ReactiveCounterCcImpactTimingRules.AppendBoundedSample(
+            previousSamples,
+            timingSample);
+        configuration.ReactiveCcImpactCalibrationSamples[pending.ActionId] =
+            samples.ToList();
+        currentSessionImpactSamples.TryGetValue(
+            pending.ActionId,
+            out var previousSessionSamples);
+        var sessionSamples = ReactiveCounterCcImpactTimingRules.AppendBoundedSample(
+            previousSessionSamples,
+            timingSample);
+        currentSessionImpactSamples[pending.ActionId] = sessionSamples.ToList();
+        configuration.Save();
+        ReactiveCounterCcImpactTimingRules.TryGetSafeLeadMilliseconds(
+            samples,
+            sessionSamples,
+            pending.TargetEdgeDistanceYalms,
+            out var safeLeadMilliseconds);
+        log.Information(
+            "Seiton Sense reactive CC impact timing learned: action={ActionId} " +
+            "edgeDistance={EdgeDistanceYalms:F2}y sample={SampleMilliseconds}ms " +
+            "samples={SampleCount} sessionSamples={SessionSampleCount} " +
+            "safeLead={SafeLeadMilliseconds}ms",
+            pending.ActionId,
+            pending.TargetEdgeDistanceYalms,
+            sampleMilliseconds,
+            samples.Length,
+            sessionSamples.Length,
+            safeLeadMilliseconds);
     }
 
     private EnemyHudSnapshot? ResolveCanonicalEnemy(
@@ -2362,6 +2763,73 @@ internal sealed class MiracleInterceptProbe
         return false;
     }
 
+    private bool HasBlockingProtectionForThreat(
+        IPlayerCharacter player,
+        CcImmunityBrakeBlockerFamily blockerFamily,
+        MiracleThreatState threat,
+        long nowMilliseconds,
+        out bool predictiveProtectionBypassed)
+    {
+        predictiveProtectionBypassed = false;
+        if (!threat.IsPredictiveProtectionEndAttempt)
+            return HasAnyVerifiedCcProtection(player, blockerFamily);
+
+        var targetJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
+        var protectionSet = PredictiveCcBrakeBypassRules.ClassifyProtectionSet(
+            blockerFamily,
+            targetJobId,
+            threat.ScheduledProtectionStatusId,
+            player.StatusList
+                .Where(status => verifiedProtectionStatusIds.Contains(status.StatusId))
+                .Select(status => new PredictiveCcProtectionStatusObservation(
+                    status.StatusId,
+                    ValidatedProtectionRemainingMilliseconds(
+                        status.StatusId,
+                        status.RemainingTime))));
+
+        if (protectionSet.OtherBlockerPresent) return true;
+        if (protectionSet.ScheduledStatusCount == 0)
+        {
+            // Early Guard cancellation or an ordinary authoritative absence is
+            // immediately actionable; no protection is being bypassed.
+            return false;
+        }
+
+        predictiveProtectionBypassed = protectionSet.ScheduledStatusCount == 1 &&
+            ReactiveCounterCcImpactTimingRules.IsScheduledProtectionStillValid(
+                threat.ScheduledProtectionEndAtMilliseconds,
+                nowMilliseconds,
+                protectionSet.ScheduledRemainingMilliseconds,
+                threat.ScheduledSafeImpactLeadMilliseconds);
+        return !predictiveProtectionBypassed;
+    }
+
+    private bool TryGetSolePredictiveProtection(
+        IPlayerCharacter player,
+        CcImmunityBrakeBlockerFamily blockerFamily,
+        uint scheduledProtectionStatusId,
+        out long scheduledRemainingMilliseconds)
+    {
+        scheduledRemainingMilliseconds = 0;
+        var targetJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
+        var protectionSet = PredictiveCcBrakeBypassRules.ClassifyProtectionSet(
+            blockerFamily,
+            targetJobId,
+            scheduledProtectionStatusId,
+            player.StatusList
+                .Where(status => verifiedProtectionStatusIds.Contains(status.StatusId))
+                .Select(status => new PredictiveCcProtectionStatusObservation(
+                    status.StatusId,
+                    ValidatedProtectionRemainingMilliseconds(
+                        status.StatusId,
+                        status.RemainingTime))));
+        scheduledRemainingMilliseconds =
+            protectionSet.ScheduledRemainingMilliseconds;
+        return protectionSet.ScheduledStatusCount == 1 &&
+               !protectionSet.OtherBlockerPresent &&
+               scheduledRemainingMilliseconds > 0;
+    }
+
     private bool HasVerifiedActiveStatus(IPlayerCharacter player, uint statusId)
     {
         if (!verifiedProtectionStatusIds.Contains(statusId)) return false;
@@ -2419,6 +2887,51 @@ internal sealed class MiracleInterceptProbe
         }
 
         return count;
+    }
+
+    private static bool TryGetSingleActiveGuardStatus(
+        IPlayerCharacter player,
+        out uint statusId,
+        out long remainingMilliseconds)
+    {
+        statusId = 0;
+        remainingMilliseconds = 0;
+        var count = 0;
+        foreach (var status in player.StatusList)
+        {
+            if (!MiracleGuardFollowupRules.IsExactGuardStatus(status.StatusId))
+                continue;
+            count++;
+            statusId = status.StatusId;
+            remainingMilliseconds = ValidatedProtectionRemainingMilliseconds(
+                status.StatusId,
+                status.RemainingTime);
+            if (count > 1) return false;
+        }
+
+        return count == 1 && remainingMilliseconds > 0;
+    }
+
+    private bool TryGetSafeImpactLead(
+        uint actionId,
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter target,
+        out int safeLeadMilliseconds)
+    {
+        safeLeadMilliseconds = 0;
+        if (!TryGetEdgeDistance(localPlayer, target, out var edgeDistanceYalms))
+            return false;
+        return configuration.ReactiveCcImpactCalibrationSamples.TryGetValue(
+                   actionId,
+                   out var samples) &&
+               currentSessionImpactSamples.TryGetValue(
+                   actionId,
+                   out var sessionSamples) &&
+               ReactiveCounterCcImpactTimingRules.TryGetSafeLeadMilliseconds(
+                   samples,
+                   sessionSamples,
+                   edgeDistanceYalms,
+                   out safeLeadMilliseconds);
     }
 
     private static long ValidatedProtectionRemainingMilliseconds(
@@ -2598,14 +3111,19 @@ internal sealed class MiracleInterceptProbe
     private unsafe ClientActionAttemptOutcome TryUseCounterCcOnce(
         IPlayerCharacter localPlayer,
         uint actionId,
-        ulong targetGameObjectId,
+        IPlayerCharacter target,
+        PredictiveCcBrakeBypassIntent? predictiveBrakeBypass,
         out bool attempted,
-        out ushort expectedSourceSequence)
+        out ushort expectedSourceSequence,
+        out long attemptedAtMilliseconds,
+        out float targetEdgeDistanceYalms)
     {
         attempted = false;
         expectedSourceSequence = 0;
+        attemptedAtMilliseconds = -1;
+        targetEdgeDistanceYalms = float.NaN;
         if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0 ||
-            !TargetHighlightRules.IsValidGameObjectId(targetGameObjectId))
+            !TargetHighlightRules.IsValidGameObjectId(target.GameObjectId))
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -2621,15 +3139,23 @@ internal sealed class MiracleInterceptProbe
         }
 
         var boundaryBefore = ClientActionAttemptBoundary.Capture(actionManager, actionId);
+        targetEdgeDistanceYalms = TryGetEdgeDistance(
+            localPlayer,
+            target,
+            out var exactEdgeDistanceYalms)
+                ? exactEdgeDistanceYalms
+                : float.NaN;
+        attemptedAtMilliseconds = Environment.TickCount64;
         attempted = true;
-        var accepted = nearAssist.RunWithoutRedirect(() =>
-            actionManager->UseAction(
-                ActionType.Action,
-                actionId,
-                targetGameObjectId,
-                0,
-                ActionManager.UseActionMode.None,
-                0));
+        var accepted = nearAssist.RunWithoutRedirect(
+            () => actionManager->UseAction(
+                    ActionType.Action,
+                    actionId,
+                    target.GameObjectId,
+                    0,
+                    ActionManager.UseActionMode.None,
+                    0),
+            predictiveBrakeBypass);
         var boundaryAfter = ClientActionAttemptBoundary.Capture(actionManager, actionId);
         if (accepted &&
             boundaryAfter.LastUsedActionSequence != 0 &&
@@ -2667,6 +3193,34 @@ internal sealed class MiracleInterceptProbe
         IPlayerCharacter localPlayer,
         uint actionId)
     {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               HasActionExposureAndResourcesExcludingCooldown(
+                   localPlayer,
+                   actionId,
+                   actionManager) &&
+               actionManager->IsActionOffCooldown(ActionType.Action, actionId);
+    }
+
+    private static unsafe bool CanReserveAtIdealRequest(
+        IPlayerCharacter localPlayer,
+        uint actionId)
+    {
+        if (HasStructuralActionReadiness(localPlayer, actionId)) return true;
+        var actionManager = ActionManager.Instance();
+        return ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(actionId) &&
+               actionManager != null &&
+               HasActionExposureAndResourcesExcludingCooldown(
+                   localPlayer,
+                   actionId,
+                   actionManager);
+    }
+
+    private static unsafe bool HasActionExposureAndResourcesExcludingCooldown(
+        IPlayerCharacter localPlayer,
+        uint actionId,
+        ActionManager* actionManager)
+    {
         if (MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId) == 0)
             return false;
 
@@ -2690,16 +3244,12 @@ internal sealed class MiracleInterceptProbe
             return false;
         }
 
-        var actionManager = ActionManager.Instance();
-        var adjustedActionId = actionManager == null
-            ? 0
-            : IsExactRaijuAction(actionId)
+        var carrierActionId = ReactiveCounterCcProfileRules.CarrierActionId(actionId);
+        var adjustedActionId = IsExactRaijuAction(actionId)
                 ? actionManager->GetAdjustedActionId(
                     EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId)
-                : actionManager->GetAdjustedActionId(actionId);
-        return actionManager != null &&
-               adjustedActionId == actionId &&
-               actionManager->IsActionOffCooldown(ActionType.Action, actionId) &&
+                : actionManager->GetAdjustedActionId(carrierActionId);
+        return adjustedActionId == actionId &&
                actionManager->CheckActionResources(ActionType.Action, actionId) == 0;
     }
 
@@ -2735,7 +3285,11 @@ internal sealed class MiracleInterceptProbe
         bool silentNocturneMetadataVerified,
         bool enablePaladinIntervene,
         bool enableRedMageResolution,
-        bool redMageResolutionMetadataVerified)
+        bool redMageResolutionMetadataVerified,
+        bool enableRedMageViceOfThorns,
+        bool redMageViceOfThornsMetadataVerified,
+        bool enableBlackMageFrostStar,
+        bool blackMageFrostStarMetadataVerified)
     {
         if (localJobId == EnemyCombatConstants.NinjaJobId)
         {
@@ -2758,6 +3312,27 @@ internal sealed class MiracleInterceptProbe
                 : EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId;
         }
 
+        var manager = ActionManager.Instance();
+        if (localJobId == ReactiveCounterCcProfileRules.RedMageJobId)
+        {
+            return ReactiveCounterCcProfileRules.SelectRedMageCounterAction(
+                enableRedMageViceOfThorns,
+                redMageViceOfThornsMetadataVerified,
+                manager == null
+                    ? 0
+                    : manager->GetAdjustedActionId(
+                        ReactiveCounterCcProfileRules.ForteCarrierActionId),
+                enableRedMageResolution,
+                redMageResolutionMetadataVerified);
+        }
+
+        if (localJobId == ReactiveCounterCcProfileRules.BlackMageJobId)
+        {
+            return ReactiveCounterCcProfileRules.SelectBlackMageCounterAction(
+                enableBlackMageFrostStar,
+                blackMageFrostStarMetadataVerified);
+        }
+
         return localJobId switch
         {
             ReactiveCounterCcProfileRules.PaladinJobId when
@@ -2769,10 +3344,6 @@ internal sealed class MiracleInterceptProbe
                 EnemyCombatConstants.MiracleOfNatureActionId,
             EnemyCombatConstants.BardJobId when silentNocturneMetadataVerified =>
                 EnemyCombatConstants.SilentNocturneActionId,
-            ReactiveCounterCcProfileRules.RedMageJobId when
-                enableRedMageResolution &&
-                redMageResolutionMetadataVerified =>
-                MiracleInterceptConfirmationRules.ResolutionActionId,
             _ => 0,
         };
     }
@@ -2800,7 +3371,9 @@ internal sealed class MiracleInterceptProbe
             EnemyCombatConstants.FleetingRaijuActionId or
             EnemyCombatConstants.NinjaAeolianEdgeComboCarrierActionId or
             MiracleInterceptConfirmationRules.InterveneActionId or
-            MiracleInterceptConfirmationRules.ResolutionActionId =>
+            MiracleInterceptConfirmationRules.ResolutionActionId or
+            MiracleInterceptConfirmationRules.ViceOfThornsActionId or
+            MiracleInterceptConfirmationRules.FrostStarActionId =>
                 RequiredSilentProtectionStatusIds,
             _ => Array.Empty<uint>(),
         };
@@ -2819,7 +3392,19 @@ internal sealed class MiracleInterceptProbe
         float maximumRangeYalms)
     {
         if (float.IsPositiveInfinity(maximumRangeYalms)) return true;
-        if (!float.IsFinite(maximumRangeYalms) || maximumRangeYalms <= 0f ||
+        return float.IsFinite(maximumRangeYalms) &&
+               maximumRangeYalms > 0f &&
+               TryGetEdgeDistance(localPlayer, target, out var edgeDistance) &&
+               edgeDistance <= maximumRangeYalms;
+    }
+
+    private static bool TryGetEdgeDistance(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter target,
+        out float edgeDistanceYalms)
+    {
+        edgeDistanceYalms = float.NaN;
+        if (
             !float.IsFinite(localPlayer.HitboxRadius) ||
             localPlayer.HitboxRadius < 0f ||
             !float.IsFinite(target.HitboxRadius) ||
@@ -2830,10 +3415,10 @@ internal sealed class MiracleInterceptProbe
 
         var centerDistance = Vector3.Distance(localPlayer.Position, target.Position);
         if (!float.IsFinite(centerDistance)) return false;
-        var edgeDistance = MathF.Max(
+        edgeDistanceYalms = MathF.Max(
             0f,
             centerDistance - localPlayer.HitboxRadius - target.HitboxRadius);
-        return edgeDistance <= maximumRangeYalms;
+        return float.IsFinite(edgeDistanceYalms);
     }
 
     private bool RememberSignal(MiracleSignalIdentity identity)
@@ -2946,6 +3531,8 @@ internal sealed class MiracleInterceptProbe
         ResetWaitDiagnostics();
         rememberedSignals.Clear();
         rememberedSignalOrder.Clear();
+        currentSessionImpactSamples.Clear();
+        impactCalibrationContext = SupportedPvPContext.None;
         capture.SetMiracleInterceptLocalEntityId(0);
         capture.SetMiracleCleanseFollowupLocalEntityId(0);
         capture.ClearMiracleInterceptThreats();
@@ -3045,6 +3632,24 @@ internal sealed class MiracleInterceptProbe
                 confirmationState.Pending is { HasBoundSourceSequence: false },
             ConfirmationPendingActionId = confirmationState.Pending?.ActionId ?? 0,
             WolvesDenCurrentTargetMode = wolvesDenContextThisFrame,
+            MainGcdLateReservationActive =
+                activeThreat is { } lateThreat &&
+                IsProtectionEndThreat(lateThreat.Kind) &&
+                ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(
+                    lateThreat.CounterActionId),
+            MainGcdLateRemainingMilliseconds =
+                activeThreat is { } timedLateThreat &&
+                IsProtectionEndThreat(timedLateThreat.Kind) &&
+                ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(
+                    timedLateThreat.CounterActionId)
+                    ? Math.Max(
+                        0,
+                        ReactiveCounterCcLateDispatchRules.MaximumLateMilliseconds -
+                        Math.Max(
+                            0,
+                            Environment.TickCount64 -
+                            timedLateThreat.ObservedAtMilliseconds))
+                    : 0,
         };
     }
 
@@ -3186,9 +3791,13 @@ internal sealed class MiracleInterceptProbe
 
     private static long ThreatLifetime(MiracleThreatState threat) =>
         IsProtectionEndThreat(threat.Kind) &&
-        threat.LocalJobId == EnemyCombatConstants.NinjaJobId
-            ? MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds
-            : ThreatLifetime(threat.Kind);
+        ReactiveCounterCcProfileRules.UsesMainGlobalCooldown(
+            threat.CounterActionId)
+            ? ReactiveCounterCcLateDispatchRules.MaximumLateMilliseconds
+            : IsProtectionEndThreat(threat.Kind) &&
+              threat.LocalJobId == EnemyCombatConstants.NinjaJobId
+                ? MiracleProtectionEndRules.NinjaWeaponskillHeldLeaseMilliseconds
+                : ThreatLifetime(threat.Kind);
 
     private static bool IsThreatKindEnabled(
         MiracleInterceptThreatKind kind,
@@ -3262,11 +3871,28 @@ internal sealed class MiracleInterceptProbe
         MiracleProtectionEndRankCandidate? ProtectionEndRank,
         HeldActionRetryState RetryState,
         int GameplayKeyToken,
-        float MaximumRangeYalms);
+        float MaximumRangeYalms)
+    {
+        public uint ScheduledProtectionStatusId { get; init; }
+        public long ScheduledProtectionEndAtMilliseconds { get; init; } = -1;
+        public int ScheduledSafeImpactLeadMilliseconds { get; init; }
+
+        public bool IsPredictiveProtectionEndAttempt =>
+            ScheduledProtectionStatusId != 0 &&
+            ScheduledProtectionEndAtMilliseconds > ObservedAtMilliseconds &&
+            ScheduledSafeImpactLeadMilliseconds >=
+                ReactiveCounterCcImpactTimingRules.MinimumUsefulLeadMilliseconds;
+    }
 
     private readonly record struct MiracleFollowupPromotion(
         MiracleThreatState Threat,
         MiracleProtectionEndRankCandidate Rank);
+
+    private readonly record struct GuardPredictivePromotionCandidate(
+        MiracleGuardFollowupCandidate Candidate,
+        MiracleGuardFollowupActorState Actor,
+        uint GuardStatusId,
+        int SafeLeadMilliseconds);
 
     private enum MiracleWaitReason : byte
     {

@@ -61,6 +61,11 @@ internal readonly record struct SamuraiReactiveProtectionCapture(
     uint LocalEntityId,
     int FeatureGeneration);
 
+internal readonly record struct SamuraiReactiveActionEffectCapture(
+    SamuraiReactiveActionEffectSignal Signal,
+    uint LocalEntityId,
+    int FeatureGeneration);
+
 internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarSpreadActionEffectCapture
 {
     private const int EffectSlotsPerTarget = 8;
@@ -71,6 +76,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private const int MaximumQueuedPressureEvents = 128;
     private const int MaximumQueuedScholarSpreadEffects = 64;
     private const int MaximumQueuedSamuraiReactiveProtectionSignals = 64;
+    private const int MaximumQueuedSamuraiReactiveActionEffects = 64;
     private const int MaximumTargetsPerAction = 32;
     private const uint WardensPaeanActionId = 29400;
     private const uint AquaveilActionId = 29227;
@@ -86,6 +92,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
     private readonly ConcurrentQueue<ScholarSpreadCapturedActionEffect> pendingScholarSpreadEffects = new();
     private readonly ConcurrentQueue<SamuraiReactiveProtectionCapture> pendingSamuraiReactiveProtectionSignals = new();
+    private readonly ConcurrentQueue<SamuraiReactiveActionEffectCapture> pendingSamuraiReactiveActionEffects = new();
 
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private int machinistLocalEntityIdBits;
@@ -106,6 +113,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private int queuedPressureEventCount;
     private int queuedScholarSpreadEffectCount;
     private int queuedSamuraiReactiveProtectionSignalCount;
+    private int queuedSamuraiReactiveActionEffectCount;
     private int captureBlocked = 1;
     private long captureErrors;
     private long scholarSpreadCaptureErrors;
@@ -121,6 +129,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private long droppedScholarSpreadEffects;
     private long capturedSamuraiReactiveProtectionSignals;
     private long droppedSamuraiReactiveProtectionSignals;
+    private long capturedSamuraiReactiveActionEffects;
+    private long droppedSamuraiReactiveActionEffects;
     private bool disposed;
 
     public MachinistLimitBreakCapture(IGameInteropProvider interop, IPluginLog log)
@@ -154,6 +164,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     public int ScholarSpreadQueueDepth => Math.Max(0, Volatile.Read(ref queuedScholarSpreadEffectCount));
     public int SamuraiReactiveProtectionQueueDepth =>
         Math.Max(0, Volatile.Read(ref queuedSamuraiReactiveProtectionSignalCount));
+    public int SamuraiReactiveActionEffectQueueDepth =>
+        Math.Max(0, Volatile.Read(ref queuedSamuraiReactiveActionEffectCount));
     public long CaptureErrors => Interlocked.Read(ref captureErrors);
     public long DroppedWarnings => Interlocked.Read(ref droppedWarnings);
     public long CapturedAllyRescueCleanses => Interlocked.Read(ref capturedAllyRescueCleanses);
@@ -170,6 +182,10 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         Interlocked.Read(ref capturedSamuraiReactiveProtectionSignals);
     public long DroppedSamuraiReactiveProtectionSignals =>
         Interlocked.Read(ref droppedSamuraiReactiveProtectionSignals);
+    public long CapturedSamuraiReactiveActionEffects =>
+        Interlocked.Read(ref capturedSamuraiReactiveActionEffects);
+    public long DroppedSamuraiReactiveActionEffects =>
+        Interlocked.Read(ref droppedSamuraiReactiveActionEffects);
     internal CombatLimitBreakCaptureBuffer CombatLimitBreakCaptureBuffer => combatLimitBreakCaptureBuffer;
 
     public void Start()
@@ -266,6 +282,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         if (previous == normalized) return;
         Interlocked.Increment(ref samuraiReactiveGeneration);
         ClearSamuraiReactiveProtectionSignals();
+        ClearSamuraiReactiveActionEffects();
     }
 
     public bool TryDequeue(out MachinistLimitBreakWarning warning)
@@ -330,6 +347,26 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         return false;
     }
 
+    public bool TryDequeueSamuraiReactiveActionEffect(
+        out SamuraiReactiveActionEffectSignal signal)
+    {
+        while (pendingSamuraiReactiveActionEffects.TryDequeue(out var captured))
+        {
+            Interlocked.Decrement(ref queuedSamuraiReactiveActionEffectCount);
+            if (captured.LocalEntityId != CurrentSamuraiReactiveLocalEntityId ||
+                captured.FeatureGeneration != CurrentSamuraiReactiveGeneration)
+            {
+                continue;
+            }
+
+            signal = captured.Signal;
+            return true;
+        }
+
+        signal = default;
+        return false;
+    }
+
     public void ClearWarnings()
     {
         while (pendingWarnings.TryDequeue(out _))
@@ -372,6 +409,12 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             Interlocked.Decrement(ref queuedSamuraiReactiveProtectionSignalCount);
     }
 
+    public void ClearSamuraiReactiveActionEffects()
+    {
+        while (pendingSamuraiReactiveActionEffects.TryDequeue(out _))
+            Interlocked.Decrement(ref queuedSamuraiReactiveActionEffectCount);
+    }
+
     public void Dispose()
     {
         if (disposed) return;
@@ -398,6 +441,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         ClearPressureEvents();
         ClearScholarSpreadEffects();
         ClearSamuraiReactiveProtectionSignals();
+        ClearSamuraiReactiveActionEffects();
     }
 
     private void ActionEffectDetour(
@@ -415,6 +459,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         TargetPressureCaptureEvent? capturedPressure = null;
         ScholarSpreadCapturedActionEffect? capturedScholarSpreadEffect = null;
         SamuraiReactiveProtectionCapture? capturedSamuraiReactiveProtectionSignal = null;
+        SamuraiReactiveActionEffectCapture? capturedSamuraiReactiveActionEffect = null;
         try
         {
             if (Volatile.Read(ref captureBlocked) == 0)
@@ -458,6 +503,11 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
                 {
                     capturedSamuraiReactiveProtectionSignal =
                         TryCaptureSamuraiReactiveProtectionSignal(
+                            casterEntityId,
+                            header,
+                            targetEntityIds);
+                    capturedSamuraiReactiveActionEffect =
+                        TryCaptureSamuraiReactiveActionEffect(
                             casterEntityId,
                             header,
                             targetEntityIds);
@@ -519,6 +569,8 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             EnqueueScholarSpreadEffect(scholarSpreadEffect);
         if (capturedSamuraiReactiveProtectionSignal is { } samuraiSignal)
             EnqueueSamuraiReactiveProtectionSignal(samuraiSignal);
+        if (capturedSamuraiReactiveActionEffect is { } samuraiEffect)
+            EnqueueSamuraiReactiveActionEffect(samuraiEffect);
     }
 
     private void RecordCaptureError(Exception exception, bool scholarSpread)
@@ -798,41 +850,68 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         var expectedStatus = MiracleInterceptConfirmationRules.ExpectedStatusForAction(actionId);
         if (expectedStatus == 0) return null;
 
-        for (var targetIndex = 0; targetIndex < header->NumTargets; targetIndex++)
+        var animationTargetId = header->AnimationTargetId;
+        if (animationTargetId > uint.MaxValue) return null;
+        var primaryTargetEntityId = (uint)animationTargetId;
+        if (!IsNetworkEntityId(primaryTargetEntityId) ||
+            primaryTargetEntityId == localEntityId)
         {
-            var targetEntityId = targetEntityIds[targetIndex].ObjectId;
-            if (!IsNetworkEntityId(targetEntityId) || targetEntityId == localEntityId) continue;
-
-            var targetEffects = effects[targetIndex].Effects;
-            for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
-            {
-                var effect = targetEffects[slot];
-                if (effect.Type != MiracleInterceptConfirmationRules.AddStatusEffectType ||
-                    effect.Value != expectedStatus)
-                {
-                    continue;
-                }
-
-                if (featureGeneration != CurrentMiracleInterceptGeneration ||
-                    localEntityId != CurrentMiracleInterceptLocalEntityId)
-                {
-                    return null;
-                }
-
-                return new MiracleInterceptLandedEffect(
-                    Environment.TickCount64,
-                    casterEntityId,
-                    targetEntityId,
-                    actionId,
-                    effect.Type,
-                    effect.Value,
-                    featureGeneration,
-                    header->GlobalSequence,
-                    header->SourceSequence);
-            }
+            return null;
         }
 
-        return null;
+        var primaryTargetIndex = -1;
+        for (var targetIndex = 0; targetIndex < header->NumTargets; targetIndex++)
+        {
+            if (targetEntityIds[targetIndex].ObjectId != primaryTargetEntityId)
+                continue;
+            if (primaryTargetIndex >= 0) return null;
+            primaryTargetIndex = targetIndex;
+        }
+
+        if (primaryTargetIndex < 0 ||
+            featureGeneration != CurrentMiracleInterceptGeneration ||
+            localEntityId != CurrentMiracleInterceptLocalEntityId)
+        {
+            return null;
+        }
+
+        var observedAtMilliseconds = Environment.TickCount64;
+        var primaryTargetEffects = effects[primaryTargetIndex].Effects;
+        for (var slot = 0; slot < EffectSlotsPerTarget; slot++)
+        {
+            var effect = primaryTargetEffects[slot];
+            if (effect.Type != MiracleInterceptConfirmationRules.AddStatusEffectType ||
+                effect.Value != expectedStatus)
+            {
+                continue;
+            }
+
+            return new MiracleInterceptLandedEffect(
+                observedAtMilliseconds,
+                casterEntityId,
+                primaryTargetEntityId,
+                actionId,
+                effect.Type,
+                effect.Value,
+                featureGeneration,
+                header->GlobalSequence,
+                header->SourceSequence);
+        }
+
+        // The ActionEffect header itself is the authoritative impact edge for
+        // the authored target, even when immunity suppresses its expected
+        // status-add tuple. A zero effect/value can calibrate timing but can
+        // never satisfy the separate landing-confirmation rule.
+        return new MiracleInterceptLandedEffect(
+            observedAtMilliseconds,
+            casterEntityId,
+            primaryTargetEntityId,
+            actionId,
+            0,
+            0,
+            featureGeneration,
+            header->GlobalSequence,
+            header->SourceSequence);
     }
 
     private TargetPressureCaptureEvent? TryCapturePressure(
@@ -928,6 +1007,57 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
                 header->SourceSequence),
             localEntityId,
             featureGeneration);
+    }
+
+    private SamuraiReactiveActionEffectCapture?
+        TryCaptureSamuraiReactiveActionEffect(
+            uint casterEntityId,
+            ActionEffectHandler.Header* header,
+            GameObjectId* targetEntityIds)
+    {
+        var localEntityId = CurrentSamuraiReactiveLocalEntityId;
+        var featureGeneration = CurrentSamuraiReactiveGeneration;
+        if (!IsNetworkEntityId(localEntityId) ||
+            casterEntityId != localEntityId ||
+            header == null ||
+            targetEntityIds == null ||
+            header->NumTargets != 1 ||
+            header->SourceSequence == 0)
+        {
+            return null;
+        }
+
+        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
+        if (actionId is not (SamuraiReactiveCounterCcRules.SotenActionId or
+                SamuraiReactiveCounterCcRules.MineuchiActionId) ||
+            header->AnimationTargetId > uint.MaxValue)
+        {
+            return null;
+        }
+
+        var targetEntityId = (uint)header->AnimationTargetId;
+        if (!IsNetworkEntityId(targetEntityId) ||
+            targetEntityIds[0].ObjectId != targetEntityId ||
+            targetEntityId == localEntityId ||
+            localEntityId != CurrentSamuraiReactiveLocalEntityId ||
+            featureGeneration != CurrentSamuraiReactiveGeneration)
+        {
+            return null;
+        }
+
+        var signal = new SamuraiReactiveActionEffectSignal(
+            Environment.TickCount64,
+            casterEntityId,
+            targetEntityId,
+            actionId,
+            header->GlobalSequence,
+            header->SourceSequence);
+        return signal.IsValid
+            ? new SamuraiReactiveActionEffectCapture(
+                signal,
+                localEntityId,
+                featureGeneration)
+            : null;
     }
 
     private ScholarSpreadCapturedActionEffect? TryCaptureScholarSpreadEffect(
@@ -1142,6 +1272,33 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
 
         pendingSamuraiReactiveProtectionSignals.Enqueue(capture);
         Interlocked.Increment(ref capturedSamuraiReactiveProtectionSignals);
+    }
+
+    private void EnqueueSamuraiReactiveActionEffect(
+        SamuraiReactiveActionEffectCapture capture)
+    {
+        var currentLocalEntityId = CurrentSamuraiReactiveLocalEntityId;
+        if (disposed ||
+            Volatile.Read(ref captureBlocked) != 0 ||
+            !capture.Signal.IsValid ||
+            capture.Signal.CasterEntityId != currentLocalEntityId ||
+            capture.LocalEntityId != currentLocalEntityId ||
+            capture.FeatureGeneration != CurrentSamuraiReactiveGeneration)
+        {
+            return;
+        }
+
+        var depth = Interlocked.Increment(
+            ref queuedSamuraiReactiveActionEffectCount);
+        if (depth > MaximumQueuedSamuraiReactiveActionEffects)
+        {
+            Interlocked.Decrement(ref queuedSamuraiReactiveActionEffectCount);
+            Interlocked.Increment(ref droppedSamuraiReactiveActionEffects);
+            return;
+        }
+
+        pendingSamuraiReactiveActionEffects.Enqueue(capture);
+        Interlocked.Increment(ref capturedSamuraiReactiveActionEffects);
     }
 
     private static bool HasHarmfulPressureEffect(ActionEffectHandler.TargetEffects* targetEffects)

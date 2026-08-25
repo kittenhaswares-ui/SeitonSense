@@ -38,12 +38,15 @@ internal sealed record PvPMetadataValidation(
     bool GunbreakerContinuationVerified,
     bool DarkKnightShadowbringerVerified,
     bool RedMageResolutionVerified,
+    bool RedMageViceOfThornsVerified,
+    bool BlackMageFrostStarVerified,
     bool MonkHeldComboVerified)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false);
+        false, false, false, false, false, false, false, false, false, false,
+        false);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -1212,6 +1215,157 @@ internal static class PvPMetadataGuard
                        action.PrimaryCostValue == 0;
             });
 
+        var redMageViceOfThornsVerified = ValidateFeature(
+            "Red Mage Vice of Thorns",
+            log,
+            () =>
+            {
+                var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+                var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+                var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+                var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+                if (!actions.TryGetRow(
+                        ReactiveCounterCcProfileRules.ForteCarrierActionId,
+                        out var carrier) ||
+                    !actions.TryGetRow(
+                        MiracleInterceptConfirmationRules.ViceOfThornsActionId,
+                        out var action) ||
+                    !descriptions.TryGetRow(carrier.RowId, out var carrierDescription) ||
+                    !descriptions.TryGetRow(action.RowId, out var actionDescription) ||
+                    !procStatuses.TryGetRow(
+                        ReactiveCounterCcProfileRules.ViceOfThornsProcStatusRowId,
+                        out var proc) ||
+                    !statuses.TryGetRow(
+                        ReactiveCounterCcProfileRules.ThornedFlourishStatusId,
+                        out var status))
+                {
+                    return false;
+                }
+
+                return string.Equals(carrier.Name.ToString(), "Forte", StringComparison.Ordinal) &&
+                       carrier.Icon == 9_064 &&
+                       carrier.IsPvP &&
+                       carrier.IsPlayerAction &&
+                       carrier.ClassJob.IsValid &&
+                       carrier.ClassJob.RowId == ReactiveCounterCcProfileRules.RedMageJobId &&
+                       carrier.Cast100ms == 0 &&
+                       carrier.Recast100ms == 200 &&
+                       carrier.CooldownGroup == 6 &&
+                       carrier.CanTargetSelf &&
+                       !carrier.CanTargetHostile &&
+                       carrierDescription.Description.ToString().Contains(
+                           "Action changes to Vice of Thorns",
+                           StringComparison.Ordinal) &&
+                       string.Equals(action.Name.ToString(), "Vice of Thorns", StringComparison.Ordinal) &&
+                       action.Icon == ReactiveCounterCcProfileRules.ViceOfThornsIconId &&
+                       action.IsPvP &&
+                       !action.IsPlayerAction &&
+                       action.ClassJob.IsValid &&
+                       action.ClassJob.RowId == ReactiveCounterCcProfileRules.RedMageJobId &&
+                       action.ActionCategory.IsValid &&
+                       action.ActionCategory.RowId == 4 &&
+                       action.Range == ReactiveCounterCcProfileRules.ViceOfThornsMaximumRangeYalms &&
+                       action.EffectRange == 5 &&
+                       action.Cast100ms == 0 &&
+                       action.Recast100ms == 10 &&
+                       action.CooldownGroup == 7 &&
+                       action.CanTargetHostile &&
+                       !action.CanTargetSelf &&
+                       !action.TargetArea &&
+                       action.RequiresLineOfSight &&
+                       action.NeedToFaceTarget &&
+                       action.CastType == 2 &&
+                       action.PrimaryCostType == 10 &&
+                       action.PrimaryCostValue ==
+                           ReactiveCounterCcProfileRules.ThornedFlourishStatusId &&
+                       action.ActionProcStatus.RowId ==
+                           ReactiveCounterCcProfileRules.ViceOfThornsProcStatusRowId &&
+                       proc.Status.RowId ==
+                           ReactiveCounterCcProfileRules.ThornedFlourishStatusId &&
+                       string.Equals(status.Name.ToString(), "Thorned Flourish", StringComparison.Ordinal) &&
+                       status.Icon == ReactiveCounterCcProfileRules.ThornedFlourishStatusIconId &&
+                       status.StatusCategory == 1 &&
+                       !status.CanDispel &&
+                       !status.IsPermanent &&
+                       status.CanStatusOff &&
+                       actionDescription.Description.ToString().Contains(
+                           "Additional Effect: Stun",
+                           StringComparison.Ordinal);
+            });
+
+        var blackMageFrostStarVerified = ValidateFeature(
+            "Black Mage Frost Star",
+            log,
+            () =>
+            {
+                var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+                var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+                var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+                var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+                if (!actions.TryGetRow(
+                        ReactiveCounterCcProfileRules.SoulResonanceCarrierActionId,
+                        out var carrier) ||
+                    !actions.TryGetRow(
+                        MiracleInterceptConfirmationRules.FrostStarActionId,
+                        out var action) ||
+                    !descriptions.TryGetRow(carrier.RowId, out var carrierDescription) ||
+                    !descriptions.TryGetRow(action.RowId, out var actionDescription) ||
+                    !procStatuses.TryGetRow(
+                        ReactiveCounterCcProfileRules.FrostStarProcStatusRowId,
+                        out var proc) ||
+                    !statuses.TryGetRow(
+                        ReactiveCounterCcProfileRules.ElementalStarStatusId,
+                        out var status))
+                {
+                    return false;
+                }
+
+                return string.Equals(carrier.Name.ToString(), "Soul Resonance", StringComparison.Ordinal) &&
+                       carrier.Icon == 9_673 &&
+                       carrier.IsPvP &&
+                       carrier.IsPlayerAction &&
+                       carrier.ClassJob.IsValid &&
+                       carrier.ClassJob.RowId == ReactiveCounterCcProfileRules.BlackMageJobId &&
+                       carrierDescription.Description.ToString().Contains(
+                           "Frost Star while under the effect of Umbral Ice",
+                           StringComparison.Ordinal) &&
+                       string.Equals(action.Name.ToString(), "Frost Star", StringComparison.Ordinal) &&
+                       action.Icon == ReactiveCounterCcProfileRules.FrostStarIconId &&
+                       action.IsPvP &&
+                       !action.IsPlayerAction &&
+                       action.ClassJob.IsValid &&
+                       action.ClassJob.RowId == ReactiveCounterCcProfileRules.BlackMageJobId &&
+                       action.ActionCategory.IsValid &&
+                       action.ActionCategory.RowId == 2 &&
+                       action.Range == ReactiveCounterCcProfileRules.FrostStarMaximumRangeYalms &&
+                       action.EffectRange == 5 &&
+                       action.Cast100ms == 0 &&
+                       action.Recast100ms == 25 &&
+                       action.CooldownGroup == 58 &&
+                       action.CanTargetHostile &&
+                       !action.CanTargetSelf &&
+                       !action.TargetArea &&
+                       action.RequiresLineOfSight &&
+                       action.NeedToFaceTarget &&
+                       action.CastType == 2 &&
+                       action.PrimaryCostType == 10 &&
+                       action.PrimaryCostValue ==
+                           ReactiveCounterCcProfileRules.ElementalStarStatusId &&
+                       action.ActionProcStatus.RowId ==
+                           ReactiveCounterCcProfileRules.FrostStarProcStatusRowId &&
+                       proc.Status.RowId ==
+                           ReactiveCounterCcProfileRules.ElementalStarStatusId &&
+                       string.Equals(status.Name.ToString(), "Elemental Star", StringComparison.Ordinal) &&
+                       status.Icon == ReactiveCounterCcProfileRules.ElementalStarStatusIconId &&
+                       status.StatusCategory == 1 &&
+                       !status.CanDispel &&
+                       !status.IsPermanent &&
+                       status.CanStatusOff &&
+                       actionDescription.Description.ToString().Contains(
+                           "Additional Effect: Afflicts target with Deep Freeze",
+                           StringComparison.Ordinal);
+            });
+
         var monkHeldComboVerified =
             MonkHeldComboProbe.ValidateMetadata(dataManager, log);
 
@@ -1246,6 +1400,8 @@ internal static class PvPMetadataGuard
             gunbreakerContinuationVerified,
             darkKnightShadowbringerVerified,
             redMageResolutionVerified,
+            redMageViceOfThornsVerified,
+            blackMageFrostStarVerified,
             monkHeldComboVerified);
 
         log.Information(
@@ -1260,7 +1416,8 @@ internal static class PvPMetadataGuard
             "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
             "GunbreakerContinuation={GunbreakerContinuation}, DarkKnightShadowbringer={DarkKnightShadowbringer}, " +
-            "RedMageResolution={RedMageResolution}, MonkHeldCombo={MonkHeldCombo}.",
+            "RedMageResolution={RedMageResolution}, RedMageViceOfThorns={RedMageViceOfThorns}, " +
+            "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}.",
             validation.SeitonVerified,
             validation.ViperSerpentTailVerified,
             validation.WolvesDenStrikingDummyVerified,
@@ -1291,6 +1448,8 @@ internal static class PvPMetadataGuard
             validation.GunbreakerContinuationVerified,
             validation.DarkKnightShadowbringerVerified,
             validation.RedMageResolutionVerified,
+            validation.RedMageViceOfThornsVerified,
+            validation.BlackMageFrostStarVerified,
             validation.MonkHeldComboVerified);
 
         return validation;

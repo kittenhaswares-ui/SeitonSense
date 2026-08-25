@@ -135,6 +135,240 @@ internal static class SamuraiReactiveSelfTests
             "Soten rejection is terminal");
     }
 
+    public static void PredictiveTimingRequiresExactWarmEvidence()
+    {
+        var exactEffect = new SamuraiReactiveActionEffectSignal(
+            ObservedAtMilliseconds: 1_400,
+            CasterEntityId: 0x100,
+            TargetEntityId: Enemy.EntityId,
+            ActionId: SamuraiReactiveCounterCcRules.SotenActionId,
+            GlobalSequence: 7,
+            SourceSequence: 11);
+        True(exactEffect.IsValid, "exact local Soten effect sequence");
+        False(
+            (exactEffect with { SourceSequence = 0 }).IsValid,
+            "unbound ActionEffect cannot teach timing");
+        False(
+            (exactEffect with { TargetEntityId = 0x100 }).IsValid,
+            "self-target effect cannot teach hostile timing");
+        True(
+            SamuraiReactiveRuntimeRules.CanRegisterExactTimingAttempt(
+                attemptedAtMilliseconds: 1_001,
+                registrationNowMilliseconds: 1_002),
+            "native attempt after frame-start still registers against fresh time");
+        False(
+            SamuraiReactiveRuntimeRules.CanRegisterExactTimingAttempt(
+                attemptedAtMilliseconds: 1_003,
+                registrationNowMilliseconds: 1_002),
+            "genuinely future native attempt is rejected");
+
+        var oneSoten = Samples((420, 15f));
+        var fiveMineuchi = Samples(
+            (200, 1f),
+            (210, 2f),
+            (220, 3f),
+            (230, 4f),
+            (240, 5f));
+        False(
+            SamuraiReactivePredictiveTimingRules.TryGetCombinedTiming(
+                oneSoten,
+                15f,
+                fiveMineuchi,
+                out _),
+            "one exact Soten sample stays in conservative fallback");
+
+        var twoSoten = Samples(
+            (420, 15f),
+            (450, 15.3f));
+        True(
+            SamuraiReactivePredictiveTimingRules.TryGetCombinedTiming(
+                twoSoten,
+                15f,
+                fiveMineuchi,
+                out var timing),
+            "two current Soten and five Mineuchi samples arm prediction");
+        var expectedMineuchiLead = 200 -
+            ReactiveCounterCcImpactTimingRules.LandingSafetyMarginMilliseconds;
+        var expectedCombinedLead = 450 + expectedMineuchiLead;
+        Equal(450, timing.SotenTransitMilliseconds, "slowest safe Soten transit");
+        Equal(expectedMineuchiLead, timing.MineuchiSafeLeadMilliseconds, "Mineuchi lands after expiry");
+        Equal(expectedCombinedLead, timing.CombinedSotenLeadMilliseconds, "combined approach lead");
+        True(
+            SamuraiReactivePredictiveTimingRules.ShouldStartPredictiveSoten(
+                1,
+                expectedCombinedLead,
+                timing),
+            "Soten starts at its learned combined window");
+        False(
+            SamuraiReactivePredictiveTimingRules.ShouldStartPredictiveSoten(
+                1,
+                expectedCombinedLead + 1,
+                timing),
+            "Soten never starts before its learned window");
+        True(
+            SamuraiReactivePredictiveTimingRules.ShouldStartPredictiveMineuchi(
+                1,
+                expectedMineuchiLead,
+                timing.MineuchiSafeLeadMilliseconds),
+            "Mineuchi starts only in its final learned window");
+        False(
+            SamuraiReactivePredictiveTimingRules.ShouldStartPredictiveMineuchi(
+                1,
+                expectedMineuchiLead + 1,
+                timing.MineuchiSafeLeadMilliseconds),
+            "Mineuchi does not fire early into protection");
+
+        var nearerOnlySoten = Samples(
+            (300, 8f),
+            (310, 9f),
+            (320, 10f),
+            (330, 11f),
+            (340, 12f));
+        False(
+            SamuraiReactivePredictiveTimingRules.TryGetSotenTransitMilliseconds(
+                nearerOnlySoten,
+                15f,
+                out _),
+            "nearer Soten samples cannot teach a farther dash");
+
+        var unstableMineuchi = Samples(
+            (600, 1f),
+            (610, 2f),
+            (620, 3f),
+            (630, 4f),
+            (200, 5f));
+        True(
+            SamuraiReactivePredictiveTimingRules
+                .TryGetMineuchiSafeLeadMilliseconds(
+                    unstableMineuchi,
+                    5f,
+                    out var collapsedLead),
+            "a newly observed faster effect keeps only a late safe window");
+        Equal(
+            ReactiveCounterCcImpactTimingRules.MinimumUsefulLeadMilliseconds,
+            collapsedLead,
+            "faster effect collapses prediction to the latest useful edge");
+
+        var armed = SamuraiReactiveCounterCcRules.Arm(Enemy, HeldKey, 1_000);
+        var acceptedSoten = SamuraiReactiveCounterCcRules.CompleteAttempt(
+            armed,
+            SamuraiReactiveCounterCcRules.SotenActionId,
+            ClientActionAttemptOutcome.ClientAccepted);
+        Equal(
+            SamuraiReactiveCounterCcDecisionKind.Waiting,
+            SamuraiReactiveCounterCcRules.Observe(
+                acceptedSoten,
+                CounterObservation(distance: 4f, protectionPresent: true)).Kind,
+            "arrived SAM still waits outside Mineuchi final window");
+        Equal(
+            SamuraiReactiveCounterCcRules.MineuchiActionId,
+            SamuraiReactiveCounterCcRules.Observe(
+                acceptedSoten,
+                CounterObservation(distance: 4f, protectionPresent: true) with
+                {
+                    MineuchiImpactWindowOpen = true,
+                }).ActionId,
+            "measured final window authorizes exact Mineuchi");
+    }
+
+    public static void ProtectionEndConsentUsesTheCurrentHeldKey()
+    {
+        False(
+            SamuraiReactiveCounterCcRules.CanAcquireProtectionEndConsent(
+                protectionObserved: true,
+                protectionPresent: true,
+                HeldKey),
+            "a key held during active protection does not prematurely arm");
+        True(
+            SamuraiReactiveCounterCcRules.CanAcquireProtectionEndConsent(
+                protectionObserved: true,
+                protectionPresent: false,
+                HeldKey + 1),
+            "the current key at the authoritative release edge arms");
+        False(
+            SamuraiReactiveCounterCcRules.CanAcquireProtectionEndConsent(
+                protectionObserved: false,
+                protectionPresent: false,
+                HeldKey + 1),
+            "status absence without observed protection cannot arm");
+
+        var armedAtRelease = SamuraiReactiveCounterCcRules.Arm(
+            Enemy,
+            HeldKey,
+            1_000);
+        var rebound = SamuraiReactiveCounterCcRules.RebindUncommittedHeldConsent(
+            armedAtRelease,
+            HeldKey + 1);
+        Equal(HeldKey + 1, rebound.GameplayKeyToken, "W to A switch uses current consent");
+
+        Equal(
+            SamuraiReactiveCounterCcDecisionKind.Cancelled,
+            SamuraiReactiveCounterCcRules.Observe(
+                rebound,
+                CounterObservation(distance: 15f, protectionPresent: false) with
+                {
+                    ExactGameplayKeyStillDown = false,
+                }).Kind,
+            "uncommitted Soten still requires a current held key");
+
+        var committed = SamuraiReactiveCounterCcRules.CompleteAttempt(
+            rebound,
+            SamuraiReactiveCounterCcRules.SotenActionId,
+            ClientActionAttemptOutcome.ClientAccepted);
+        Equal(
+            SamuraiReactiveCounterCcRules.MineuchiActionId,
+            SamuraiReactiveCounterCcRules.Observe(
+                committed,
+                CounterObservation(distance: 4f, protectionPresent: false) with
+                {
+                    ExactGameplayKeyStillDown = false,
+                }).ActionId,
+            "accepted Soten completes Mineuchi after key release or switch");
+        Equal(
+            HeldKey + 1,
+            SamuraiReactiveCounterCcRules.RebindUncommittedHeldConsent(
+                committed,
+                HeldKey + 2).GameplayKeyToken,
+            "committed approach cannot be rebound to a later input generation");
+    }
+
+    public static void WolvesDenUsesExactCurrentTargetAndTargetedActions()
+    {
+        Equal(
+            SamuraiReactiveCounterCcNativeInvocationKind.TargetedUseAction,
+            SamuraiReactiveCounterCcRules.GetNativeInvocationKind(
+                SamuraiReactiveCounterCcRules.SotenActionId),
+            "Soten is a hostile targeted action, not a ground-target action");
+        Equal(
+            SamuraiReactiveCounterCcNativeInvocationKind.TargetedUseAction,
+            SamuraiReactiveCounterCcRules.GetNativeInvocationKind(
+                SamuraiReactiveCounterCcRules.MineuchiActionId),
+            "Mineuchi uses the same exact target boundary");
+        Equal(
+            SamuraiReactiveCounterCcNativeInvocationKind.None,
+            SamuraiReactiveCounterCcRules.GetNativeInvocationKind(123),
+            "unknown action cannot cross the SAM native boundary");
+
+        True(
+            SamuraiReactiveRuntimeRules.IsExactWolvesDenCurrentTarget(
+                localEntityId: 0x100,
+                signalCasterEntityId: Enemy.EntityId,
+                currentTargetEntityId: Enemy.EntityId),
+            "enemy protection signal matches the current Wolves Den target");
+        False(
+            SamuraiReactiveRuntimeRules.IsExactWolvesDenCurrentTarget(
+                localEntityId: 0x100,
+                signalCasterEntityId: Enemy.EntityId,
+                currentTargetEntityId: Enemy.EntityId + 1),
+            "a different current target never receives the frozen signal");
+        False(
+            SamuraiReactiveRuntimeRules.IsExactWolvesDenCurrentTarget(
+                localEntityId: Enemy.EntityId,
+                signalCasterEntityId: Enemy.EntityId,
+                currentTargetEntityId: Enemy.EntityId),
+            "the local actor can never become its own Wolves Den counter target");
+    }
+
     public static void ZantetsukenRequiresOwnKuzushiAndZeroShield()
     {
         var armed = SamuraiZantetsukenRules.Arm(Enemy, HeldKey, 2_000);
@@ -204,6 +438,24 @@ internal static class SamuraiReactiveSelfTests
         BoundPresent: false,
         ZantetsukenReady: true,
         HasNativeRangeAndLineOfSight: true);
+
+    private static ReactiveCounterCcImpactSample[] Samples(
+        params (int DelayMilliseconds, float EdgeDistanceYalms)[] values)
+    {
+        var samples = new List<ReactiveCounterCcImpactSample>();
+        foreach (var value in values)
+        {
+            True(
+                ReactiveCounterCcImpactTimingRules.TryCreateCalibrationSample(
+                    value.DelayMilliseconds,
+                    value.EdgeDistanceYalms,
+                    out var sample),
+                "valid timing sample fixture");
+            samples.Add(sample);
+        }
+
+        return samples.ToArray();
+    }
 
     private static void True(bool condition, string label)
     {

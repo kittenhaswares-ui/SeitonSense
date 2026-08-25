@@ -33,6 +33,13 @@ public readonly record struct MiracleInterceptPendingAttempt(
     public uint RemovedStatusId { get; init; }
 
     /// <summary>
+    /// Edge-to-edge distance captured at the exact native request boundary.
+    /// It is advisory for timing calibration only and never participates in
+    /// target identity or landing confirmation.
+    /// </summary>
+    public float TargetEdgeDistanceYalms { get; init; } = float.NaN;
+
+    /// <summary>
     /// False means the native request was accepted before ActionManager exposed
     /// its source sequence. The first later exact ActionEffect may bind it.
     /// </summary>
@@ -116,7 +123,10 @@ public static class MiracleInterceptConfirmationRules
     public const uint InterveneActionId = 29_065;
     public const uint MineuchiActionId = 29_535;
     public const uint ResolutionActionId = 41_492;
+    public const uint ViceOfThornsActionId = 41_493;
+    public const uint FrostStarActionId = 41_481;
     public const ushort StunStatusId = 1_343;
+    public const ushort DeepFreezeStatusId = 3_219;
     public const byte AddStatusEffectType = 0x0E;
     public const long CorrelationMilliseconds = 1_500;
     public const long PopupDurationMilliseconds = 1_500;
@@ -262,6 +272,8 @@ public static class MiracleInterceptConfirmationRules
             InterveneActionId => StunStatusId,
             MineuchiActionId => StunStatusId,
             ResolutionActionId => SilenceStatusId,
+            ViceOfThornsActionId => StunStatusId,
+            FrostStarActionId => DeepFreezeStatusId,
             _ => 0,
         };
 
