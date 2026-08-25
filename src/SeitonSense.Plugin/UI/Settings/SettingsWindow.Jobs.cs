@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.UI;
 
@@ -12,8 +13,8 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung. NIN and VPR get their first job slot directly after Purify; " +
+            "in deterministic urgency order: SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. SAM runs directly after Purify; " +
             "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
@@ -52,7 +53,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
 
-        if (ImGui.CollapsingHeader("Dark Knight — Hiebsprung", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Dark Knight — Hiebsprung + Shadowbringer", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
                 "Hiebsprung on held gameplay key at 30% HP or lower (experimental)",
@@ -73,9 +74,38 @@ internal sealed partial class SettingsWindow
                 "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
                 "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
                 "two framework frames is deliberately " +
-                "missed rather than guessed. The shared order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD " +
-                "Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > " +
-                "pressure Sprint > event Kardia > event Monk.");
+                "missed rather than guessed. Dark Arts Shadowbringer runs before Hiebsprung; the safe HP-cost " +
+                "Shadowbringer fallback runs after it, followed by held Monk combo and the cross-job survival helpers.");
+
+            ImGui.Spacing();
+            changed |= Checkbox(
+                "Shadowbringer on held gameplay key (experimental)",
+                configuration.EnableDarkKnightShadowbringerOnHeldKey,
+                value => configuration.EnableDarkKnightShadowbringerOnHeldKey = value);
+            changed |= SliderInt(
+                "Base Shadowbringer minimum HP",
+                configuration.DarkKnightShadowbringerMinimumHpPercent,
+                DarkKnightShadowbringerRules.MinimumConfigurableHpPercent,
+                DarkKnightShadowbringerRules.MaximumConfigurableHpPercent,
+                value => configuration.DarkKnightShadowbringerMinimumHpPercent = value,
+                "%d%%");
+            changed |= SliderInt(
+                "Base Shadowbringer pressure must stay below",
+                configuration.DarkKnightShadowbringerPressureLimitExclusive,
+                DarkKnightShadowbringerRules.MinimumPressureLimitExclusive,
+                DarkKnightShadowbringerRules.MaximumPressureLimitExclusive,
+                value => configuration.DarkKnightShadowbringerPressureLimitExclusive = value,
+                "%d");
+            ImGui.TextDisabled(
+                "An exact own Dark Arts proc from a broken Blackest Night always gets the first DRK opportunity and " +
+                "does not pay HP. Without Dark Arts, base Shadowbringer is allowed only strictly above the configured " +
+                "HP threshold and with a fresh known incoming-pressure count strictly below the configured limit. " +
+                "Dark Arts runs before Hiebsprung; the HP-cost fallback runs after Hiebsprung. The lowest-HP reachable " +
+                "exact enemy inside native 10-yalm range wins. Unknown pressure blocks only the HP-cost fallback.");
+            ImGui.TextDisabled(
+                "Default off. Exact Crystalline Conflict uses canonical S1-S5 actors without changing target. Enabled " +
+                "Wolves' Den testing uses only the current exact duel opponent or reviewed striking dummy. Each proc or " +
+                "eligibility episode freezes one actor; explicit client-false is the only retryable result.");
             ImGui.PopTextWrapPos();
         }
 
@@ -207,6 +237,28 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Samurai — Zantetsuken", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Zantetsuken on held gameplay key when exact Kuzushi has no shield",
+                configuration.EnableSamuraiZantetsukenOnHeldKey,
+                value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and PvP Samurai only. The exact target must have exactly one Kuzushi applied by you, " +
+                "zero ShieldPercentage at selection and at the final native boundary, be alive, targetable, in native " +
+                "range/line of sight, and you must not be Bound. Crystalline Conflict uses one exact canonical S-slot; " +
+                "enabled Wolves' Den testing uses only the exact current duel target or reviewed striking dummy. There " +
+                "is no visible target change, alternate, fallback, or retry after the one native request.");
+            ImGui.TextDisabled(
+                "Purify stays absolute priority. The separate SAM post-Purify/Guard Soten-to-Mineuchi option runs first; " +
+                "an accepted Soten reserves its bounded Mineuchi arrival window before Zantetsuken or any lower helper. " +
+                "With the global held-helper cast-cancel test enabled, an otherwise-ready frozen SAM intent may request " +
+                "the same one-shot native cast cancellation used by reactive counter-CC.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Viper — Serpentiner Geist", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
@@ -239,6 +291,27 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Gunbreaker — Continuation", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Use transformed Continuation follow-ups on held gameplay key (includes WASD)",
+                configuration.EnableGunbreakerContinuationOnHeldKey,
+                value => configuration.EnableGunbreakerContinuationOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and PvP Gunbreaker only. The native Continuation carrier plus the exact own proc status " +
+                "must expose Hypervelocity, Jugular Rip, Abdomen Tear, Eye Gouge, or Fated Brand. One transformed proc " +
+                "can authorize exactly one call while a gameplay key remains held. CC chooses the lowest-HP reachable " +
+                "canonical S1-S5 enemy; Wolves' Den uses only the exact current target. Fated Brand is self-centered " +
+                "and requires that frozen enemy inside its exact 6-yalm effect radius.");
+            ImGui.TextDisabled(
+                "Purify and earlier job-specific work keep priority. The action, proc, key, context, and actor freeze " +
+                "before any bounded explicit-false retry. It never cancels casts, changes target, substitutes a follow-up, " +
+                "or treats client acceptance as proof of a hit.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Scholar — Critical Strategy", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
@@ -266,8 +339,8 @@ internal sealed partial class SettingsWindow
                 "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.TextDisabled(
-                "Purify, NIN Seiton / VPR Serpentiner Geist, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. DRK Hiebsprung closes the " +
-                "job-specific second tier before Smart Recuperate, Emergency Teleport, and the generic helpers.");
+                "Purify, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. " +
+                "DRK Dark Arts, Hiebsprung, the safe DRK fallback, and held Monk combo follow before the cross-job survival helpers.");
             ImGui.PopTextWrapPos();
         }
 
@@ -318,8 +391,22 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Monk — Earth's Reply", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Monk — held combo + Earth's Reply", ImGuiTreeNodeFlags.DefaultOpen))
         {
+            changed |= Checkbox(
+                "Run the PvP Monk combo on held gameplay key (includes WASD)",
+                configuration.EnableMonkHeldComboOnHeldKey,
+                value => configuration.EnableMonkHeldComboOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off. CC first prefers reachable melee enemies, then lowest exact HP; Wolves' Den uses only " +
+                "the exact current duel opponent or reviewed dummy. The helper follows the native seven-step combo " +
+                "carrier exactly and uses Wind's Reply only as the reviewed ranged fallback. It keeps one Rising " +
+                "Phoenix charge reserved for the deliberate Pressure Point → Thunderclap when needed → Rising Phoenix " +
+                "→ Fire Resonance → Phantom Rush finish. Every proof, range edge, action, actor, and held key is frozen " +
+                "and revalidated; it never changes target or guesses a missing combo/status transition.");
+            ImGui.PopTextWrapPos();
+            ImGui.Spacing();
             changed |= DrawMonkEarthReplyControls();
         }
 

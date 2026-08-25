@@ -5,13 +5,14 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations.
-/// Canonical order is Purify, Ninja Seiton / VPR Serpent's Tail, reactive
-/// counter-CC, Ally Rescue, PLD Guardian, NIN Guard-Shukuchi, Scholar Critical
-/// Strategy, DRK Hiebsprung, Smart Recuperate, Emergency Teleport, reactive
-/// Guard, then high-pressure Sprint. Accepted-Eukrasia Kardia, the independent
-/// Scholar spread lane, and Monk Earth's Reply do not originate from shared
-/// physical-input ownership. Scholar only observes the immutable held snapshot
-/// after that whole priority chain and never suppresses or consumes it.
+/// Canonical order is Purify, SAM reactive actions, Ninja Seiton, VPR Serpent's
+/// Tail, GNB Continuation, reactive counter-CC, Ally Rescue, PLD Guardian, NIN
+/// Guard-Shukuchi, Scholar Critical Strategy, DRK Dark-Arts Shadowbringer, DRK
+/// Hiebsprung, DRK safe-fallback Shadowbringer, held Monk combo, Smart
+/// Recuperate, Emergency Teleport, reactive Guard, then high-pressure Sprint.
+/// Accepted-Eukrasia Kardia and Monk Earth's Reply follow as event lanes.
+/// Independent Scholar spread only observes the immutable held snapshot after
+/// that whole priority chain and never suppresses or consumes it.
 /// Consumption is deliberately frame-local: one helper can own the current
 /// framework frame without destroying the still-held physical consent needed
 /// by a later distinct action episode.
@@ -76,6 +77,11 @@ internal sealed class EmergencyActionInputCoordinator
     private bool ninjaGuardShukuchiHeldWasEnabled;
     private bool ninjaSeitonHeldWasEnabled;
     private bool viperSerpentTailHeldWasEnabled;
+    private bool gunbreakerContinuationHeldWasEnabled;
+    private bool darkKnightShadowbringerHeldWasEnabled;
+    private bool monkHeldComboWasEnabled;
+    private bool samuraiCounterCcHeldWasEnabled;
+    private bool samuraiZantetsukenHeldWasEnabled;
 
     internal EmergencyActionInputCoordinator(IKeyState keyState)
     {
@@ -96,7 +102,12 @@ internal sealed class EmergencyActionInputCoordinator
         bool darkKnightPlungeHeldEnabled = false,
         bool ninjaGuardShukuchiHeldEnabled = false,
         bool ninjaSeitonHeldEnabled = false,
-        bool viperSerpentTailHeldEnabled = false)
+        bool viperSerpentTailHeldEnabled = false,
+        bool gunbreakerContinuationHeldEnabled = false,
+        bool darkKnightShadowbringerHeldEnabled = false,
+        bool monkHeldComboEnabled = false,
+        bool samuraiCounterCcHeldEnabled = false,
+        bool samuraiZantetsukenHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -120,7 +131,12 @@ internal sealed class EmergencyActionInputCoordinator
             (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
             (ninjaGuardShukuchiHeldEnabled && !ninjaGuardShukuchiHeldWasEnabled) ||
             (ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled) ||
-            (viperSerpentTailHeldEnabled && !viperSerpentTailHeldWasEnabled);
+            (viperSerpentTailHeldEnabled && !viperSerpentTailHeldWasEnabled) ||
+            (gunbreakerContinuationHeldEnabled && !gunbreakerContinuationHeldWasEnabled) ||
+            (darkKnightShadowbringerHeldEnabled && !darkKnightShadowbringerHeldWasEnabled) ||
+            (monkHeldComboEnabled && !monkHeldComboWasEnabled) ||
+            (samuraiCounterCcHeldEnabled && !samuraiCounterCcHeldWasEnabled) ||
+            (samuraiZantetsukenHeldEnabled && !samuraiZantetsukenHeldWasEnabled);
         purifyHeldWasEnabled = purifyHeldEnabled;
         defensiveUtilityHeldWasEnabled = defensiveUtilityHeldEnabled;
         paladinGuardianHeldWasEnabled = paladinGuardianHeldEnabled;
@@ -134,6 +150,11 @@ internal sealed class EmergencyActionInputCoordinator
         ninjaGuardShukuchiHeldWasEnabled = ninjaGuardShukuchiHeldEnabled;
         ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;
         viperSerpentTailHeldWasEnabled = viperSerpentTailHeldEnabled;
+        gunbreakerContinuationHeldWasEnabled = gunbreakerContinuationHeldEnabled;
+        darkKnightShadowbringerHeldWasEnabled = darkKnightShadowbringerHeldEnabled;
+        monkHeldComboWasEnabled = monkHeldComboEnabled;
+        samuraiCounterCcHeldWasEnabled = samuraiCounterCcHeldEnabled;
+        samuraiZantetsukenHeldWasEnabled = samuraiZantetsukenHeldEnabled;
 
         if (heldOptionJustEnabled)
         {
@@ -184,5 +205,10 @@ internal sealed class EmergencyActionInputCoordinator
         ninjaGuardShukuchiHeldWasEnabled = false;
         ninjaSeitonHeldWasEnabled = false;
         viperSerpentTailHeldWasEnabled = false;
+        gunbreakerContinuationHeldWasEnabled = false;
+        darkKnightShadowbringerHeldWasEnabled = false;
+        monkHeldComboWasEnabled = false;
+        samuraiCounterCcHeldWasEnabled = false;
+        samuraiZantetsukenHeldWasEnabled = false;
     }
 }

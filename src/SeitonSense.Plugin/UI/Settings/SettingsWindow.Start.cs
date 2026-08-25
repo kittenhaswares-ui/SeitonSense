@@ -30,8 +30,8 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "These are independent test scopes. Each feature still requires its own opt-in and keeps its own strict " +
             "target rules. Seiton uses the exact hostile duel opponent as synthetic S1, including party-member duels. " +
-            "Smart Recuperate is self-only. Viper's held Serpent's Tail helper and /seitonbringer accept only your exact " +
-            "current hard-target Wolves' Den striking dummy; they never use synthetic S1, <e1>, or the duel opponent. " +
+            "Smart Recuperate is self-only. Supported held job helpers use only your exact current hard target in " +
+            "Wolves' Den; they never scan e-slots or silently substitute another actor. " +
             "The pressure option controls only the counter.");
         ImGui.PopTextWrapPos();
 

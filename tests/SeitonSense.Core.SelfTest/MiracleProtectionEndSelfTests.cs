@@ -124,6 +124,9 @@ internal static class MiracleProtectionEndSelfTests
                      MiracleInterceptConfirmationRules.SilentNocturneActionId,
                      MiracleInterceptConfirmationRules.ForkedRaijuActionId,
                      MiracleInterceptConfirmationRules.FleetingRaijuActionId,
+                     MiracleInterceptConfirmationRules.InterveneActionId,
+                     MiracleInterceptConfirmationRules.MineuchiActionId,
+                     MiracleInterceptConfirmationRules.ResolutionActionId,
                  })
         {
             var purify = new MiracleInterceptPendingAttempt(
@@ -167,6 +170,301 @@ internal static class MiracleProtectionEndSelfTests
             MiracleInterceptConfirmationRules.ExpectedStatusForAction(
                 MiracleInterceptConfirmationRules.FleetingRaijuActionId),
             "NIN Fleeting Raiju retains exact Stun landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.StunStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.InterveneActionId),
+            "PLD Intervene retains exact Stun landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.SilenceStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.ResolutionActionId),
+            "RDM Resolution retains exact Silence landing status");
+        Equal(
+            (ushort)MiracleCleanseFollowupRules.StunStatusId,
+            MiracleInterceptConfirmationRules.ExpectedStatusForAction(
+                MiracleInterceptConfirmationRules.MineuchiActionId),
+            "SAM Mineuchi retains exact Stun landing status for staged confirmation");
+
+        var intervene = ReactiveCounterCcProfileRules.Get(
+            MiracleInterceptConfirmationRules.InterveneActionId);
+        True(intervene is { IsValid: true }, "PLD Intervene is one explicit reviewed profile");
+        Equal(
+            ReactiveCounterCcExecutionShape.DirectTarget,
+            intervene!.Value.ExecutionShape,
+            "Intervene uses one exact actor target");
+        True(intervene.Value.CannotExecuteWhileBound, "Intervene retains its Bound restriction");
+
+        var resolution = ReactiveCounterCcProfileRules.Get(
+            MiracleInterceptConfirmationRules.ResolutionActionId);
+        True(resolution is { IsValid: true }, "RDM Resolution is one explicit reviewed profile");
+        Equal(
+            ReactiveCounterCcExecutionShape.LineAoeTargeted,
+            resolution!.Value.ExecutionShape,
+            "Resolution cannot be flattened into the direct single-target catalog");
+
+        Equal(
+            20f,
+            ReactiveCounterCcProfileRules.NormalizeInterveneMaximumRangeYalms(float.NaN),
+            "invalid PLD range fails closed to the verified native maximum");
+        Equal(
+            1f,
+            ReactiveCounterCcProfileRules.NormalizeInterveneMaximumRangeYalms(0f),
+            "PLD configured range has a positive lower bound");
+        Equal(
+            12f,
+            ReactiveCounterCcProfileRules.NormalizeInterveneMaximumRangeYalms(12f),
+            "PLD configured range remains exact inside its verified bounds");
+        True(
+            ReactiveCounterCcProfileRules.IsSupportedContext(
+                isCrystallineConflict: false,
+                isWolvesDenTesting: true),
+            "Wolves' Den may reuse the protection-end coordinator only when explicitly enabled");
+        True(
+            ReactiveCounterCcProfileRules.IsExactWolvesDenCurrentTarget(
+                observedActorEntityId: 0x200,
+                expectedGameObjectId: 0x200,
+                expectedEntityId: 0x200,
+                expectedJobId: 30,
+                currentHardTargetGameObjectId: 0x200,
+                currentHardTargetEntityId: 0x200,
+                currentHardTargetJobId: 30),
+            "Wolves' Den requires the observed actor to remain the exact current hard target");
+        False(
+            ReactiveCounterCcProfileRules.IsExactWolvesDenCurrentTarget(
+                observedActorEntityId: 0x200,
+                expectedGameObjectId: 0x200,
+                expectedEntityId: 0x200,
+                expectedJobId: 30,
+                currentHardTargetGameObjectId: 0x201,
+                currentHardTargetEntityId: 0x201,
+                currentHardTargetJobId: 30),
+            "Wolves' Den never substitutes a different current target");
+
+        foreach (var protectionEnd in new[]
+                 {
+                     MiracleInterceptThreatKind.PostPurifyCrowdControl,
+                     MiracleInterceptThreatKind.PostGuardCrowdControl,
+                 })
+        {
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.InterveneActionId,
+                    protectionEnd),
+                "PLD Intervene accepts only its reviewed protection-end trigger");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.ResolutionActionId,
+                    protectionEnd),
+                "RDM Resolution accepts only its reviewed protection-end trigger");
+        }
+
+        foreach (var urgent in new[]
+                 {
+                     MiracleInterceptThreatKind.MarksmanSpite,
+                     MiracleInterceptThreatKind.Zantetsuken,
+                     MiracleInterceptThreatKind.FuriousBacklash,
+                     MiracleInterceptThreatKind.Contradance,
+                 })
+        {
+            False(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.InterveneActionId,
+                    urgent),
+                "PLD Intervene never inherits an urgent LB-start trigger");
+            False(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.ResolutionActionId,
+                    urgent),
+                "RDM Resolution never inherits an urgent LB-start trigger");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.MiracleOfNatureActionId,
+                    urgent),
+                "the existing WHM urgent trigger matrix stays unchanged");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.SilentNocturneActionId,
+                    urgent),
+                "the existing BRD urgent trigger matrix stays unchanged");
+            True(
+                ReactiveCounterCcProfileRules.IsThreatSupportedByAction(
+                    MiracleInterceptConfirmationRules.ForkedRaijuActionId,
+                    urgent),
+                "the existing NIN urgent trigger matrix stays unchanged");
+        }
+
+        var samTarget = new SamuraiReactiveCounterCcTarget(
+            GameObjectId: 0x300,
+            EntityId: 0x300,
+            JobId: 23);
+        var sam = SamuraiReactiveCounterCcRules.Arm(
+            samTarget,
+            gameplayKeyToken: 65,
+            nowMilliseconds: 1_000);
+        True(sam.IsActive, "SAM freezes one exact actor and held-key episode");
+
+        var protectedInMelee = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(distance: 4f, protectionPresent: true));
+        Equal(
+            SamuraiReactiveCounterCcDecisionKind.Waiting,
+            protectedInMelee.Kind,
+            "SAM never fires Mineuchi through live protection");
+
+        var directMineuchi = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(distance: 4f, protectionPresent: false));
+        Equal(
+            SamuraiReactiveCounterCcRules.MineuchiActionId,
+            directMineuchi.ActionId,
+            "SAM skips Soten when the exact actor is already in Mineuchi range");
+
+        var approach = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(
+                distance: 15f,
+                protectionPresent: true,
+                approachWindowOpen: true));
+        Equal(
+            SamuraiReactiveCounterCcRules.SotenActionId,
+            approach.ActionId,
+            "SAM requests one Soten only after the external measured approach window opens");
+        sam = SamuraiReactiveCounterCcRules.CompleteAttempt(
+            sam,
+            approach.ActionId,
+            ClientActionAttemptOutcome.ClientAccepted);
+        Equal(
+            SamuraiReactiveCounterCcPhase.ApproachAccepted,
+            sam.Phase,
+            "accepted Soten advances to the Mineuchi-only phase");
+
+        var noSecondSoten = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(
+                distance: 12f,
+                protectionPresent: false,
+                approachWindowOpen: true));
+        Equal(
+            SamuraiReactiveCounterCcDecisionKind.Waiting,
+            noSecondSoten.Kind,
+            "the same protection episode cannot request a second Soten");
+
+        var timedMineuchi = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(distance: 4f, protectionPresent: false));
+        Equal(
+            SamuraiReactiveCounterCcRules.MineuchiActionId,
+            timedMineuchi.ActionId,
+            "Mineuchi becomes eligible only after arrival and authoritative protection absence");
+
+        var drift = SamuraiReactiveCounterCcRules.Observe(
+            sam,
+            SamObservation(distance: 4f, protectionPresent: false) with
+            {
+                ExactTargetStillCurrent = false,
+            });
+        Equal(
+            SamuraiReactiveCounterCcDecisionKind.Cancelled,
+            drift.Kind,
+            "SAM target drift cancels without a fallback actor");
+
+        Equal(
+            SamuraiReactiveProtectionKind.PurifyResilience,
+            SamuraiReactiveRuntimeRules.ClassifyExactProtectionSignal(
+                SamuraiReactiveRuntimeRules.PurifyActionId,
+                casterEntityId: 0x400,
+                targetEntityId: 0x400,
+                targetCount: 1,
+                globalSequence: 9,
+                sourceSequence: 0),
+            "SAM feed recognizes only an exact self-target Purify packet");
+        True(
+            new SamuraiReactiveProtectionSignal(
+                SamuraiReactiveProtectionKind.PurifyResilience,
+                ObservedAtMilliseconds: 1_000,
+                CasterEntityId: 0x400,
+                TargetEntityId: 0x400,
+                ActionId: SamuraiReactiveRuntimeRules.PurifyActionId,
+                TargetCount: 1,
+                GlobalSequence: 9,
+                SourceSequence: 0).IsValid,
+            "the immutable SAM feed record retains every exact packet proof");
+        Equal(
+            SamuraiReactiveProtectionKind.Guard,
+            SamuraiReactiveRuntimeRules.ClassifyExactProtectionSignal(
+                SamuraiReactiveRuntimeRules.GuardActionId,
+                casterEntityId: 0x400,
+                targetEntityId: 0x400,
+                targetCount: 1,
+                globalSequence: 0,
+                sourceSequence: 7),
+            "SAM feed recognizes one exact self-target Guard packet");
+        Equal(
+            SamuraiReactiveProtectionKind.None,
+            SamuraiReactiveRuntimeRules.ClassifyExactProtectionSignal(
+                SamuraiReactiveRuntimeRules.PurifyActionId,
+                casterEntityId: 0x400,
+                targetEntityId: 0x401,
+                targetCount: 1,
+                globalSequence: 9,
+                sourceSequence: 7),
+            "SAM feed rejects a Purify packet whose actor and target differ");
+        True(
+            SamuraiReactiveRuntimeRules.IsExpectedProtectionStatus(
+                SamuraiReactiveProtectionKind.Guard,
+                SamuraiReactiveRuntimeRules.GuardAlternateStatusId),
+            "SAM guard episodes accept the verified alternate Guard row");
+        False(
+            SamuraiReactiveRuntimeRules.IsInsideLease(
+                observedAtMilliseconds: 1_000,
+                nowMilliseconds: 2_001,
+                SamuraiReactiveRuntimeRules.SignalStatusObservationLeaseMilliseconds),
+            "a protection signal cannot gain status authority after its acquisition lease");
+
+        var wolvesDummy = new SamuraiReactiveCounterCcTarget(
+            GameObjectId: 0x500,
+            EntityId: 0x500,
+            JobId: 0);
+        False(
+            SamuraiReactiveCounterCcRules.Arm(
+                wolvesDummy,
+                gameplayKeyToken: 65,
+                nowMilliseconds: 1_000).IsActive,
+            "jobless actors remain invalid in normal CC");
+        True(
+            SamuraiReactiveCounterCcRules.Arm(
+                wolvesDummy,
+                gameplayKeyToken: 65,
+                nowMilliseconds: 1_000,
+                allowJoblessWolvesDenTarget: true).IsActive,
+            "the explicit Wolves' Den dummy route can preserve its exact actor identity");
+
+        var zantetsuken = SamuraiZantetsukenRules.Arm(
+            samTarget,
+            gameplayKeyToken: 65,
+            nowMilliseconds: 2_000);
+        var shielded = SamuraiZantetsukenRules.Observe(
+            zantetsuken,
+            ZanObservation(shieldPercentage: 1));
+        Equal(
+            SamuraiZantetsukenDecisionKind.Waiting,
+            shielded.Kind,
+            "Zantetsuken waits while even one authoritative shield percent remains");
+        var unshielded = SamuraiZantetsukenRules.Observe(
+            zantetsuken,
+            ZanObservation(shieldPercentage: 0));
+        Equal(
+            SamuraiZantetsukenRules.ActionId,
+            unshielded.ActionId,
+            "exact own-source Kuzushi with zero shields admits one Zantetsuken boundary");
+        var foreignOrMissingKuzushi = SamuraiZantetsukenRules.Observe(
+            zantetsuken,
+            ZanObservation(shieldPercentage: 0) with { OwnSourceKuzushiCount = 0 });
+        Equal(
+            SamuraiZantetsukenDecisionKind.Cancelled,
+            foreignOrMissingKuzushi.Kind,
+            "missing or foreign-source Kuzushi cancels without a fallback target");
 
         foreach (var active in new[]
                  {
@@ -340,6 +638,39 @@ internal static class MiracleProtectionEndSelfTests
             ClientActionAttemptOutcome.NotInvoked);
         Equal(MiracleProtectionEndAttemptOutcome.CancelledTerminal, notInvoked.Outcome, "pre-boundary cancellation cannot retry");
     }
+
+    private static SamuraiReactiveCounterCcObservation SamObservation(
+        float distance,
+        bool protectionPresent,
+        bool approachWindowOpen = false) =>
+        new(
+            Enabled: true,
+            HardReset: false,
+            ExactTargetStillCurrent: true,
+            TargetAliveAndTargetable: true,
+            ExactGameplayKeyStillDown: true,
+            ProtectionPresent: protectionPresent,
+            DistanceKnown: true,
+            TargetEdgeDistanceYalms: distance,
+            SotenReady: true,
+            MineuchiReady: true,
+            BoundPresent: false,
+            SotenApproachWindowOpen: approachWindowOpen,
+            ConfiguredSotenMaximumRangeYalms:
+            SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms);
+
+    private static SamuraiZantetsukenObservation ZanObservation(
+        byte shieldPercentage) => new(
+            Enabled: true,
+            HardReset: false,
+            ExactTargetStillCurrent: true,
+            TargetAliveAndTargetable: true,
+            ExactGameplayKeyStillDown: true,
+            OwnSourceKuzushiCount: 1,
+            shieldPercentage,
+            BoundPresent: false,
+            ZantetsukenReady: true,
+            HasNativeRangeAndLineOfSight: true);
 
     private static MiracleProtectionEndHeldConsentObservation Observation(
         int token,

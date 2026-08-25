@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.32.0.1";
+    private const string CurrentReleaseVersion = "0.33.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -46,7 +46,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WhatsNewWindow whatsNew;
     private readonly NearAssistRedirector nearAssist;
     private readonly SmartTabTargetingService smartTabTargeting;
-    private readonly DarkKnightShadowbringerMacroService darkKnightShadowbringer;
     private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
@@ -66,7 +65,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool nearHelpAliasRegistered;
     private readonly bool farHelpCommandRegistered;
     private readonly bool farHelpAliasRegistered;
-    private readonly bool darkKnightShadowbringerCommandRegistered;
     private readonly bool panicShukuchiCommandRegistered;
     private readonly bool pressureCommandRegistered;
 
@@ -98,6 +96,9 @@ public sealed class Plugin : IDalamudPlugin
         configuration.Initialize(pluginInterface);
 
         var metadata = PvPMetadataGuard.Validate(dataManager, log);
+        var samuraiReactiveMetadata = SamuraiReactiveMetadataGuard.Validate(
+            dataManager,
+            log);
         var combatLimitBreakMetadata = CombatLimitBreakMetadataGuard.Validate(dataManager, log);
         var machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
         tracker = new ExecuteTracker(
@@ -183,15 +184,6 @@ public sealed class Plugin : IDalamudPlugin
             dataManager,
             pressureTracker,
             log);
-        darkKnightShadowbringer = new DarkKnightShadowbringerMacroService(
-            configuration,
-            clientState,
-            objectTable,
-            partyList,
-            dutyState,
-            dataManager,
-            framework,
-            log);
         nearAssist = new NearAssistRedirector(
             configuration,
             clientState,
@@ -205,7 +197,6 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             smartWardensPaean,
             ccImmunityBrake,
-            darkKnightShadowbringer,
             log);
         smartTabTargeting = new SmartTabTargetingService(
             configuration,
@@ -234,6 +225,7 @@ public sealed class Plugin : IDalamudPlugin
             log,
             configuration,
             metadata,
+            samuraiReactiveMetadata,
             reviewedPvpCommands);
         panicShukuchi = new PanicShukuchiService(
             configuration,
@@ -318,9 +310,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Scholar Smart Spread now stays inactive during Crystalline Conflict preparation and starts only after the Duty Start barrier drops.",
-                "Its own Biolysis or Adloquium is confirmed first, then the live status on the frozen target opens Deployment Tactics at the first safe animation boundary.",
-                "Full-health allies away from the tactical crystal no longer start shield loops, and one completed chain now requires a real key release before another can begin. Schema 35; all 423 Core tests pass.",
+                "New default-off held helpers: GNB Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken. The old /seitonbringer macro helper is gone.",
+                "Reactive WHM, BRD, NIN, PLD, RDM, and SAM follow-ups now keep exact protection-end evidence through short native busy windows without changing your target.",
+                "Accepted Auto-Guard now shows an optional card and sound, and accidental Guard re-presses are protected for the first two seconds.",
+                "/panicshu now calls Shukuchi only after exact native recast and resource readiness, avoiding the predicted animation/cooldown rollback. Schema 37; all 440 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -503,23 +496,6 @@ public sealed class Plugin : IDalamudPlugin
                 (farHelpAliasRegistered ? "Use /ssfar meanwhile." : "Disable the conflicting plugin and reload."));
         }
 
-        darkKnightShadowbringerCommandRegistered = commandManager.AddHandler(
-            DarkKnightShadowbringerMacroService.Command,
-            new CommandInfo(OnDarkKnightShadowbringerCommand)
-            {
-                AllowedInMacros = true,
-                HelpMessage =
-                    "Exact CC or enabled Wolves' Den striking-dummy DRK helper: /seitonbringer, then " +
-                    "/pvpac \"Souleater Combo\" <t>; " +
-                    "use the localized action name and ReAction Macro Queue + Turbo.",
-            });
-        if (!darkKnightShadowbringerCommandRegistered)
-        {
-            log.Warning("/seitonbringer is already owned by another plugin; the DRK macro helper remains unavailable.");
-            chatGui.PrintError(
-                "[Seiton Sense] /seitonbringer is owned by another plugin. Disable the conflict and reload before using the DRK macro helper.");
-        }
-
         panicShukuchiCommandRegistered = commandManager.AddHandler(
             PanicShukuchiService.Command,
             new CommandInfo(OnPanicShukuchiCommand)
@@ -562,7 +538,6 @@ public sealed class Plugin : IDalamudPlugin
         autoEnemyFocusMark.Start();
         autoLowMpFocusTarget.Start();
         isolationAwareness.Start();
-        darkKnightShadowbringer.Start();
         nearAssist.Start();
         personalStatus.Start();
         combatLimitBreakRuntime.Start();
@@ -584,8 +559,6 @@ public sealed class Plugin : IDalamudPlugin
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
         if (farHelpCommandRegistered) commandManager.RemoveHandler(FarHelpCommand);
         if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
-        if (darkKnightShadowbringerCommandRegistered)
-            commandManager.RemoveHandler(DarkKnightShadowbringerMacroService.Command);
         if (panicShukuchiCommandRegistered)
             commandManager.RemoveHandler(PanicShukuchiService.Command);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
@@ -595,7 +568,6 @@ public sealed class Plugin : IDalamudPlugin
         personalStatus.Dispose();
         smartTabTargeting.Dispose();
         nearAssist.Dispose();
-        darkKnightShadowbringer.Dispose();
         isolationAwareness.Dispose();
         autoLowMpFocusTarget.Dispose();
         autoEnemyFocusMark.Dispose();
@@ -733,14 +705,20 @@ public sealed class Plugin : IDalamudPlugin
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
                 var rescue = personalStatus.AllyRescueDiagnostics;
                 var miracle = personalStatus.MiracleInterceptDiagnostics;
+                var samurai = personalStatus.SamuraiReactiveDiagnostics;
+                var samuraiCapture = personalStatus.SamuraiReactiveCaptureDiagnostics;
+                var samuraiMetadata = personalStatus.SamuraiReactiveMetadata;
                 var kardia = personalStatus.SmartKardiaDiagnostics;
                 var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
                 var ninja = personalStatus.NinjaSeitonDiagnostics;
                 var viper = personalStatus.ViperSerpentTailDiagnostics;
+                var gunbreaker = personalStatus.GunbreakerContinuationDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
                 var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
+                var shadowbringer = personalStatus.DarkKnightShadowbringerDiagnostics;
+                var monkCombo = personalStatus.MonkHeldComboDiagnostics;
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
                 var assist = nearAssist.Diagnostics;
@@ -855,6 +833,43 @@ public sealed class Plugin : IDalamudPlugin
                     $"count={emergencyTeleport.AttemptCount}/{emergencyTeleport.AcceptedCount}," +
                     $"last={emergencyTeleport.LastEvent}]");
                 chatGui.Print(
+                    $"[Seiton Sense] gnb-continuation[phase={gunbreaker.Phase}," +
+                    $"decision={gunbreaker.Decision}/{gunbreaker.Reason},action/proc=" +
+                    $"{gunbreaker.ResolvedActionId}/{gunbreaker.ResolvedProcStatusId}," +
+                    $"generation/spent={gunbreaker.ExposureGeneration}/{gunbreaker.ExposureSpent}," +
+                    $"S={gunbreaker.EnemySlot},target={gunbreaker.TargetGameObjectId:X}/" +
+                    $"{gunbreaker.TargetEntityId:X},ready={gunbreaker.LocallyReady}/" +
+                    $"{gunbreaker.NativeBoundaryReady},key={gunbreaker.HeldGameplayKey}," +
+                    $"claim={gunbreaker.InputClaimed},attempt={gunbreaker.UseActionAttempted}/" +
+                    $"{gunbreaker.UseActionAccepted},native={gunbreaker.NativeAttemptCount}/" +
+                    $"{gunbreaker.LastNativeOutcome},last={gunbreaker.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] drk-shadowbringer[decision={shadowbringer.Decision}/" +
+                    $"{shadowbringer.Reason},opportunity={shadowbringer.Opportunity},action=" +
+                    $"{shadowbringer.ResolvedAdjustedActionId},dark-arts=" +
+                    $"{shadowbringer.DarkArtsGeneration}/{shadowbringer.DarkArtsExposed}/" +
+                    $"{shadowbringer.DarkArtsSpent},fallback={shadowbringer.FallbackGeneration}/" +
+                    $"{shadowbringer.FallbackEligible}/{shadowbringer.FallbackSpent},pressure=" +
+                    $"{shadowbringer.PressureKnown}/{shadowbringer.IncomingPressure}/" +
+                    $"{shadowbringer.PressureAgeMilliseconds},ready={shadowbringer.ActionLocallyReady}/" +
+                    $"{shadowbringer.NativeBoundaryReady},deferred={shadowbringer.CanRunDeferredSafeFallback}/" +
+                    $"{shadowbringer.DeferredFrameToken},S={shadowbringer.EnemySlot},target=" +
+                    $"{shadowbringer.TargetGameObjectId:X}/{shadowbringer.TargetEntityId:X},key=" +
+                    $"{shadowbringer.HeldGameplayKey},claim={shadowbringer.InputClaimed},attempt=" +
+                    $"{shadowbringer.UseActionAttempted}/{shadowbringer.UseActionAccepted},last=" +
+                    $"{shadowbringer.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] monk-combo[phase={monkCombo.Phase},decision=" +
+                    $"{monkCombo.Decision}/{monkCombo.Reason},combo/pending=" +
+                    $"{monkCombo.ResolvedComboActionId}/{monkCombo.PendingActionId}/" +
+                    $"{monkCombo.PendingPurpose},S={monkCombo.EnemySlot},target=" +
+                    $"{monkCombo.TargetGameObjectId:X}/{monkCombo.TargetEntityId:X},proof=" +
+                    $"{monkCombo.PressurePointConfirmed}/{monkCombo.FireResonanceConfirmed}," +
+                    $"boundary={monkCombo.NativeBoundaryReady},key={monkCombo.HeldGameplayKey}," +
+                    $"claim={monkCombo.InputClaimed},attempt={monkCombo.UseActionAttempted}/" +
+                    $"{monkCombo.UseActionAccepted},native={monkCombo.NativeAttemptCount}/" +
+                    $"{monkCombo.LastNativeOutcome},last={monkCombo.LastEvent}]");
+                chatGui.Print(
                     $"[Seiton Sense] cast-cancel[enabled=" +
                     $"{configuration.AllowHeldHelpersToCancelOwnCast}," +
                     $"state={castCancellation.Decision}/{castCancellation.Reason}," +
@@ -913,6 +928,24 @@ public sealed class Plugin : IDalamudPlugin
                     $"{miracle.CleanseFollowupPromotionCount}/" +
                     $"{miracle.CleanseFollowupCancellationCount}," +
                     $"last={miracle.CleanseFollowupLastEvent}]]");
+                chatGui.Print(
+                    $"[Seiton Sense] sam-reactive[counter={samurai.CounterPhase}/" +
+                    $"{samurai.ProtectionKind},protection={samurai.ProtectionObserved},S=" +
+                    $"{samurai.EnemySlot},target={samurai.TargetGameObjectId:X}/" +
+                    $"{samurai.TargetEntityId:X},job={samurai.TargetJobId},key={samurai.ReservedKey}," +
+                    $"claim={samurai.InputClaimed},last-action/outcome=" +
+                    $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome},attempts=" +
+                    $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/" +
+                    $"{samurai.ZantetsukenAttemptCount},accepted={samurai.AcceptedCount}," +
+                    $"zan={samurai.ZantetsukenPhase},mirror-q/capture/drop=" +
+                    $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
+                    $"{samurai.DroppedProtectionSignalCount},shared=" +
+                    $"{samuraiCapture.CaptureRunning}/{samuraiCapture.QueueDepth}/" +
+                    $"{samuraiCapture.CapturedSignals}/{samuraiCapture.DroppedSignals}/" +
+                    $"g{samuraiCapture.FeatureGeneration},meta=" +
+                    $"{samuraiMetadata.CounterCcVerified}/" +
+                    $"{samuraiMetadata.ZantetsukenWorkflowVerified}/" +
+                    $"{samuraiMetadata.WolvesDenStrikingDummyVerified},last={samurai.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] smart-kardia[decision={kardia.Decision},reason={kardia.Reason}," +
                     $"ready={kardia.LocallyReady},action={kardia.ResolvedActionId}," +
@@ -1043,9 +1076,6 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print($"[Seiton Sense] auto-mark[{autoEnemyFocusMark.Diagnostics.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] auto-low-mp-focus[{autoLowMpFocusTarget.Diagnostics.ToChatLine()}]");
                 chatGui.Print(
-                    $"[Seiton Sense] shadowbringer[cmd={darkKnightShadowbringerCommandRegistered}," +
-                    $"{darkKnightShadowbringer.Diagnostics.ToChatLine()}]");
-                chatGui.Print(
                     $"[Seiton Sense] panic-shukuchi[cmd={panicShukuchiCommandRegistered}," +
                     $"{panic.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
@@ -1093,8 +1123,6 @@ public sealed class Plugin : IDalamudPlugin
             "/smartaction and /ssaction optionally arm one harmful-action target redirect. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
-            "/seitonbringer arms only the immediately following authored DRK Souleater Combo <t> macro line in " +
-            "CC or enabled Wolves' Den striking-dummy testing. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
             "/autoseiton [on|off|toggle] controls whether held-key NIN Auto-Seiton is available. " +
@@ -1243,15 +1271,4 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    private void OnDarkKnightShadowbringerCommand(string _, string arguments)
-    {
-        try
-        {
-            darkKnightShadowbringer.Arm(arguments, nearAssist.Diagnostics.HookAvailable);
-        }
-        catch (Exception exception)
-        {
-            log.Error(exception, "Seiton Sense Shadowbringer macro command failed closed.");
-        }
-    }
 }

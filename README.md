@@ -2,14 +2,15 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.32.0.1 fixes Scholar Smart Spread:
-it remains inactive until the Crystalline Conflict Duty Start barrier drops,
-confirms the helper-owned setup before observing its live statuses, and sends
-Deployment Tactics at the first safe animation boundary. Full-health allies away
-from the tactical crystal no longer start Adloquium loops, and another chain
-requires a physical key release. It retains v0.32's Emergency Teleport and
-v0.31's ranged Smart Tab, direct Viper
-carrier handling, and explicit Wolves' Den testing additions. `/smarttab`
+assistance, and target highlights. Version 0.33.0.0 adds default-off held GNB
+Continuation, DRK Shadowbringer, Monk combo, and SAM counter-CC / Zantetsuken
+helpers; `/seitonbringer` has been removed. WHM, BRD, NIN, PLD, RDM, and SAM
+protection-end follow-ups retain exact evidence through short native busy
+windows. Accepted Auto-Guard can show a card/sound and protects an accidental
+second Guard press for two seconds. `/panicshu` now reaches its one location call
+only after exact native Shukuchi recast and resource readiness. It retains
+v0.32's Emergency Teleport and Scholar Smart Spread plus v0.31's ranged Smart
+Tab, direct Viper carrier handling, and explicit Wolves' Den testing additions. `/smarttab`
 (`/sstarget`) toggles the native forward-target replacement; paired handler/helper
 hooks preserve the game's own binding and UI/input gates. The v0.30 line moved the optional harmful-action
 redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the
@@ -187,15 +188,14 @@ and Super Focus Glow into one configurable custom-repository plugin.
   immediate Shukuchi attempt at the terrain point 19.5 yalms along the
   character's current facing. It is command-only, works from own Guard, is never
   automatic or held-triggered, changes no cursor or target, stores no pending
-  attempt, and never retries or searches for a shorter fallback point.
-- **DRK Shadowbringer macro:** the separate default-off `/seitonbringer` helper
-  pairs only with the immediately following authored Souleater Combo `<t>` line
-  on exact PvP Dark Knight. It supports canonical `S1`-`S5` enemies in
-  Crystalline Conflict and, when the existing test option is enabled, only the
-  exact current hard-target Wolves' Den striking dummy. With ReAction Macro
-  Queue and Turbo, it may attempt Shadowbringer at most once per proven
-  2.40-second GCD, and only at 0.60-0.80 seconds remaining. It never changes a
-  target, substitutes an action, or retries.
+  attempt, and never retries or searches for a shorter fallback point. The one
+  native location call is reached only when Shukuchi's exact recast is positively
+  ready, preventing a client-predicted startup that would be rolled back.
+- **Held DRK Shadowbringer:** the separate default-off Dark Knight helper uses
+  ordinary held-key consent. Exact Dark Arts is the first opportunity; otherwise
+  the configurable high-HP/low-pressure fallback runs after Hiebsprung. It
+  selects one reachable low-HP enemy, never changes the visible target, and has
+  no macro-pairing or ReAction dependency.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay key can keep consent active for Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -217,8 +217,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   pre-Guard from HP/pressure prediction. Active own Guard blocks all plugin
   action helpers. Only an exact client-accepted plugin Auto-Guard arms the
   additional cancellation shield: it bridges 1.5 seconds to the exact live
-  Guard status and then follows that status, with deliberate Guard reuse and
-  bounded fail-open release paths.
+  Guard status and then follows that status. A second Guard press is protected
+  for the first two seconds, then becomes the deliberate release path again;
+  bounded fail-open release paths prevent stale ownership.
 - **Experimental Paladin Guardian job tool:** an independent default-off held-key
   option can attempt Guardian on one exact reachable ally. The original critical
   boundary remains unconditional at 20% HP; a fresh exact current hard/cast-
@@ -280,7 +281,7 @@ and Super Focus Glow into one configurable custom-repository plugin.
   LB-display migration. The held-action cast-
   cancellation test remains explicitly off for fresh, reset, and migrated
   configurations. Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
-  Guardian, Auto Low-MP Focus, the DRK macro, pressure Sprint and its native
+  Guardian, Auto Low-MP Focus, held DRK Shadowbringer, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
   and Scholar Critical Strategy remain separate opt-ins. Every action-attempt,
   target-redirect, and party-visible communication feature remains opt-in.
@@ -631,10 +632,11 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar Critical Strategy is Purify, the job-exclusive NIN Seiton
-or VPR Serpentiner-Geist slot, reactive counter-CC, Ally Rescue, PLD Guardian,
-then NIN Guard-Shukuchi. DRK Hiebsprung follows SCH Critical Strategy before Smart
-Recuperate, Emergency Teleport, and the generic helpers. Continuous held consent
+The current request order before Scholar Critical Strategy is Purify, SAM
+reactive actions, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive
+counter-CC, Ally Rescue, PLD Guardian, then NIN Guard-Shukuchi. DRK Dark Arts
+Shadowbringer, Hiebsprung, the safe Shadowbringer fallback, and held Monk combo
+follow before Smart Recuperate, Emergency Teleport, and the generic helpers. Continuous held consent
 can produce a frozen Critical Strategy intent for a distinct eligible episode.
 The frozen enemy is revalidated for exact identity, action readiness, live Guard,
 and native range/line of sight before every possible bounded call. Pressure drift
@@ -710,9 +712,12 @@ recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
 target, with no visible target change, alternate, rerank, or replay. The current
-order is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian >
-NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard >
-pressure Sprint > event Kardia > event Monk**.
+order is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR
+Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD
+Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
+Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart
+Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia
+> event Monk**.
 
 ## Sage Smart Kardia after accepted Eukrasia
 
@@ -994,27 +999,33 @@ and timestamp telemetry are otherwise exact; this prevents an empty slot from
 silently skipping the Bind sequence without weakening foreign-marker safety.
 
 This communication path never changes a hard, soft, focus, or mouseover target,
-initiates another combat action, selects another ally, falls back, or retries.
-A locally issued command is not proof that the party received Quick Chat or saw
+initiates another combat action, selects another ally, or falls back. If FFXIV
+explicitly reports its text-command shell busy before any invocation, the same
+frozen Quick Chat may be offered again only until its original 1.5-second
+deadline; after one native invocation there is no retry. A locally issued command
+is not proof that the party received Quick Chat or saw
 both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all scheduled and automatic action requests,
-including Purify, NIN Seiton, VPR Serpentiner Geist, reactive counter-CC, Ally Rescue, Guardian,
-NIN Guard-Shukuchi, SCH Critical Strategy, Scholar Smart Spread, Hiebsprung,
-Smart Recuperate, Emergency Teleport, Guard, pressure Sprint, accepted-Eukrasia
-Kardia, and Monk. The explicit manual `/panicshu` command is the sole exception: its
+including Purify, SAM counter-CC/Zantetsuken, NIN Seiton, VPR Serpentiner Geist,
+GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi,
+SCH Critical Strategy, Scholar Smart Spread, DRK Shadowbringer/Hiebsprung, held
+Monk combo, Smart Recuperate, Emergency Teleport, Guard, pressure Sprint,
+accepted-Eukrasia Kardia, and Monk Earth's Reply. The explicit manual `/panicshu` command is the sole exception: its
 one immediate Shukuchi request is intentionally allowed to break own Guard.
 The bounded reactive observer may retain an already eligible enemy
 startup/Purify/Guard reservation, but it cannot dispatch it through own Guard.
 Only an exact plugin Auto-Guard request classified `ClientAccepted` can also arm
 central cancellation ownership. Auto-Guard does not dispatch unless both central
 `UseAction` and `UseActionLocation` hooks are enabled. Before any macro token is
-consumed, those boundaries block only a metadata-resolved PvP `Action`/`PvPAction`
-that is not Guard, including deferred or ground-location requests, for up to 1.5
-seconds while waiting for the exact live Guard status; after that status appears,
-protection follows it until the first exact absence. Incoming or resolved Guard
-reuse always passes and releases ownership, and a manual Guard never arms it.
+consumed, those boundaries block a metadata-resolved PvP `Action`/`PvPAction`
+that can cancel Guard, including deferred or ground-location requests, for up to
+1.5 seconds while waiting for the exact live Guard status; after that status
+appears, protection follows it until the first exact absence. An incoming or
+resolved second Guard press is also blocked during the first two seconds from
+automatic acceptance. At the exact two-second boundary it again passes as the
+deliberate release path and atomically drops ownership. A manual Guard never arms it.
 The dedicated `/panicshu` scope releases this ownership before forwarding its
 location call, even if native Shukuchi rejects it. Unsupported or unknown actions,
 disabled/context/player/identity drift, missing propagation, classification
@@ -1102,12 +1113,14 @@ generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
-The current request order is **Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally
-Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Hiebsprung > Smart
-Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**.
-The eight job-specific physical-hold helpers share the second tier; enabled NIN
-Seiton or VPR Serpentiner Geist gets its job-exclusive first slot, then reactive
-counter-CC remains before ally cleanse.
+The current request order is **Purify > SAM staged counter-CC / Zantetsuken > NIN
+Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally
+Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
+Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) >
+Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure
+Sprint > event Kardia > event Monk**. The job-specific physical-hold helpers use
+that deterministic order; SAM runs directly after Purify, and reactive counter-CC
+remains before ally cleanse.
 Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
 freezes one exact-target intent;
@@ -1404,11 +1417,14 @@ Rival Wings remain excluded. Each command invocation reads the character's
 current position and facing, projects only the point 19.5 yalms straight ahead
 onto terrain, and immediately makes at most one native location-action call in
 that same command callback. There is no stored intent, scheduler claim, 500-ms
-lease, wait, expiry, cast/queue/animation-lock gate, cooldown/resource precheck,
-Guard gate, or crowd-control/Purify-priority gate. FFXIV decides whether the one
-request is accepted in the current state; a later macro press is a new explicit
-command rather than a replay. Three Mudra changes Shukuchi into Doton, so any
-adjusted action other than exact Shukuchi `29513` still ends without an attempt.
+lease, wait, expiry, cast/queue/animation-lock gate, Guard gate, or crowd-control/
+Purify-priority gate. Immediately before terrain resolution, the command requires
+the exact adjusted Shukuchi action, native recast group, cooldown, and resource
+boundary to be positively ready; otherwise it ends without starting an animation.
+FFXIV decides whether the one remaining request is accepted in the current state;
+a later macro press is a new explicit command rather than a replay. Three Mudra
+changes Shukuchi into Doton, so any adjusted action other than exact Shukuchi
+`29513` still ends without an attempt.
 
 Client rejection, ambiguity, or exception is terminal for that invocation:
 there is no retry, alternate action, shorter/inward
@@ -1418,67 +1434,6 @@ Focus, or mouseover target. A wall, missing exact terrain hit, excessive vertica
 offset, or native line-of-sight refusal therefore fails closed instead of making
 a different jump. Routine accepted/rejected results are chat-silent and remain
 available only through `/seiton debug` diagnostics.
-
-## DRK Shadowbringer two-line macro
-
-This separate helper is disabled by default and supports exact PvP Dark Knight
-in Crystalline Conflict. It also supports the Wolves' Den only when the existing
-**Enable Wolves' Den testing** option on Start and this DRK helper are both
-enabled. Author exactly two adjacent macro lines:
-
-```text
-/seitonbringer
-/pvpac "Souleater Combo" <t>
-```
-
-On a non-English client, replace only the quoted `Souleater Combo` text with
-the exact localized PvP action name. Keep `/seitonbringer`, the line order, and
-`<t>` unchanged. In ReAction, enable both **Macro Queue** and **Turbo** for this
-macro.
-
-The command may arm only the immediately following exact Souleater Combo route
-against your unchanged current `<t>`. In Crystalline Conflict, that target must
-resolve to one exact canonical `S1`-`S5` enemy, exactly as before. In Wolves'
-Den, it must instead remain the exact native current hard target and resolve to
-the live, targetable combat striking dummy with current NameId `541`. The Den
-path freezes and revalidates that dummy's game-object ID, entity ID, address,
-object/sub-kind, NameId, and the native hard-target ID. It never queries a
-synthetic `S1`, `<e1>`, or the duel-opponent resolver and never accepts a player,
-another attackable object, or an alternate target. Frontline and Rival Wings
-remain blocked.
-
-The helper recognizes a new GCD cycle only from a proven exact 2.40-second combo
-recast restart plus action-sequence change. It may claim at most one
-Shadowbringer attempt for that cycle, and only while the inclusive
-remaining-time window is 0.60-0.80 seconds. A missed window is skipped; 0.50 seconds or
-less never triggers Shadowbringer. The paired combo call still reaches vanilla
-unchanged, and a later Turbo pulse can queue the authored combo line inside
-FFXIV's normal queue window.
-
-Both the preliminary and final checks require the same context, DRK identity,
-GCD token, exact target and combo route; an empty stable native queue; unchanged
-action sequence; no cast or animation lock; clear own Guard/propagation and
-target Guard; native 5-yalm combo and 10-yalm Shadowbringer range and line of
-sight; and exact action/readiness/resource metadata. Base Shadowbringer requires
-strictly more than 12,000 HP. Its adjusted Dark Arts form requires the exact
-Dark Arts status/action state instead.
-
-The cycle's one-attempt token is spent before the final native Shadowbringer
-request. Drift, rejection, or an exception cannot choose another target or
-action, replay the macro, or retry. Seiton Sense never changes the visible hard,
-soft, or Focus Target. `CLIENT ACCEPTED` is local dispatch feedback, not proof
-that the server executed Shadowbringer or that the weave did not clip. ReAction
-mode, native queue ownership, recast-group timing, action effect, and clipping
-remain current-patch live-trace boundaries. A successful striking-dummy trace
-checks only the Wolves' Den path and does not prove live CC timing or execution.
-
-The current metadata gate pins the exact combo-row secondary cost types
-`0/58/58/147/147/147` rather than accepting them loosely. The first native GCD
-sample is taken from the framework update thread instead of synchronously during
-plugin startup; this avoids the observed off-main-thread local-player lookup
-failure while preserving fail-closed cycle priming. If the separately checked
-striking-dummy NameId metadata does not match, only the Den test path is disabled
-and canonical CC support remains available.
 
 ## Optional Auto Low-MP Focus Target
 
@@ -1549,8 +1504,11 @@ focus module to avoid drawing both over the same actor.
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Optional SCH Smart Spread independent held lane | Yes | No | No |
 | Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, only for the exact current hard-target striking dummy when test mode is enabled | No |
+| Optional GNB Continuation held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
+| Optional SAM Soten/Mineuchi and Zantetsuken held helpers | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
+| Optional MNK held combo helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
-| Optional DRK Shadowbringer two-line macro | Yes | Yes, for the exact current hard-target striking dummy when test mode is enabled | No |
+| Optional DRK Shadowbringer held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Optional DPS Smart Tab | Yes | No | No |
 | One-shot Smart Action macro | Yes | No | No |
 | Near Assist | Yes | No | No |
@@ -1561,8 +1519,9 @@ Wolves' Den support is explicitly a test option. Panic Shukuchi chooses no enemy
 and uses no target; its destination comes from the local NIN position, facing,
 and exact forward terrain point. Enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
-nothing. The DRK macro does not use that duel-opponent path: with both existing
-options enabled, it accepts only the exact current hard-target striking dummy.
+nothing. Held GNB, SAM, MNK, and DRK test paths accept only their exact reviewed
+current-target route; Viper remains restricted to the exact current hard-target
+striking dummy.
 Pressure has an additional Wolves' Den opt-in so testing does not create an
 always-on pressure display by surprise.
 
@@ -1577,9 +1536,12 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 35 is current in v0.32.0.1. It forces Emergency Teleport
-and Scholar Smart Spread off for every upgrade, fresh install, and Reset Defaults,
-with Emergency defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
+Configuration schema 37 is current in v0.33.0.0. It keeps GNB Continuation, DRK
+Shadowbringer, Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, and RDM
+Resolution off for every upgrade, fresh install, and Reset Defaults. Schema 36
+adds the local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
+The schema-35 migration still forces Emergency Teleport and Scholar Smart Spread
+off, with Emergency defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
 travel, 10-yalm destination radius, and zero nearby enemies. The historical
 schema-34 migration still leaves the Viper Serpentiner-Geist helper off, and the
 historical schema-33 migration still leaves the target-
@@ -1644,9 +1606,6 @@ update through the same repository.
 - `/panicshu` - on exact PvP NIN, immediately make one Shukuchi attempt at the
   terrain point 19.5 yalms straight ahead in CC or enabled Wolves' Den testing,
   including from own Guard
-- `/seitonbringer` - arm the immediately following exact DRK Souleater Combo
-  macro line for the bounded CC or explicitly enabled Wolves' Den striking-
-  dummy weave check
 - `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -1686,9 +1645,9 @@ one-shot action boundary are documented in [PRIVACY.md](PRIVACY.md).
 Display-only features such as the resource aura and LB cues never target, press
 actions, accept clicks, calibrate a remote gauge, or mutate native UI. The retired
 Combat Frames have no click, hard-target, or native `<mo>` runtime path. Auto
-Low-MP Focus is a separate explicit setter, and
-the DRK macro is a separate explicit action helper; both are default-off and
-bounded as described above. Panic Shukuchi instead has no automatic or held-key
+Low-MP Focus is a separate explicit setter. Held DRK Shadowbringer is a default-
+off participant in the shared physical-input scheduler and is bounded as
+described above. Panic Shukuchi instead has no automatic or held-key
 trigger and no dedicated saved toggle: only the user-authored `/panicshu` command
 can make its one immediate forward-location attempt. For one already incoming,
 enabled CC action attempt
@@ -1708,13 +1667,14 @@ armed, already incoming macro action. Smart Tab is separate: while enabled it
 may replace only an owned native forward world-target cycle with one exact hard-
 target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-action helpers use this current request priority: **Purify > NIN Seiton / VPR Serpentiner Geist > reactive
-counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
-Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia >
-event Monk**. The eight job-specific physical-hold helpers share the second tier
-and use that deterministic urgency order; enabled NIN Seiton or VPR Serpentiner
-Geist takes the first job-exclusive slot, and reactive counter-CC still leads ally
-cleanse. Kardia requires its
+action helpers use this current request priority: **Purify > SAM staged counter-
+CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation >
+reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
+Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK
+Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency
+Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**. The
+job-specific physical-hold helpers use that deterministic urgency order;
+reactive counter-CC still leads ally cleanse. Kardia requires its
 separate accepted-Eukrasia trigger and does not originate from the physical key;
 Monk is an automatic follow-up.
 The same continuous hold can authorize later distinct exact held episodes; a
@@ -1724,14 +1684,15 @@ active, all scheduled/automatic Seiton action-request helpers are blocked; the
 explicit manual `/panicshu` command is the sole exception. The same scheduler gate applies for
 the bounded propagation interval after an exact client-accepted plugin
 Auto-Guard; the central `UseAction` and `UseActionLocation` hooks then follow the
-exact live Guard status, release on Guard reuse, and fail open on drift or their
-six-second cap. Auto-Guard cannot dispatch if either protection hook is unavailable;
+exact live Guard status, block a second Guard press during its first two seconds,
+restore deliberate Guard reuse afterward, and fail open on drift or their six-
+second cap. Auto-Guard cannot dispatch if either protection hook is unavailable;
 the dedicated `/panicshu` scope releases ownership before its location request.
 Manual Guard never creates this ownership. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-For the thirteen shared physical-hold helpers, key choice prefers stable movement, then any
+For the eighteen shared physical-hold option trackers, key choice prefers stable movement, then any
 other stable held gameplay key, then fresh movement and fresh other gameplay
 keys as fallbacks. Each helper evaluates its held lease before fresh input and
 retains the exact frozen key until its normal release, ineligibility, reset, or
@@ -1740,17 +1701,20 @@ from displacing a valid long-held WASD lease.
 
 The separate **Cancel my active cast for an otherwise-ready held helper** test
 is disabled by default. It applies only to exact frozen physical-hold intents
-for Purify, NIN Seiton, reactive counter-CC, Ally Rescue, Guardian, NIN
-Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung, Smart Recuperate,
-Emergency Teleport, Guard, and
-pressure Sprint. Smart
+for Purify, SAM counter-CC/Zantetsuken, NIN Seiton, reactive counter-CC, Ally
+Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Shadowbringer,
+DRK Hiebsprung, Smart Recuperate, Emergency Teleport, Guard, and pressure
+Sprint. Smart
 Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
-all macro helpers are excluded as well. Viper Serpentiner Geist is also excluded:
-it polls only the currently transformed carrier and deliberately cannot cancel
-the current cast. Scholar Smart Spread also deliberately has no cast-cancel path
+all macro helpers are excluded as well. Viper Serpentiner Geist is excluded
+because it polls only the currently transformed carrier. GNB Continuation and
+held Monk combo likewise wait for a clear cast instead of cancelling it. Scholar
+Smart Spread also deliberately has no cast-cancel path
 because its independent lane waits for the native boundary. The cast-cancellation
-experiment therefore covers exactly twelve of the thirteen shared physical-hold helpers.
+experiment therefore constructs fourteen reviewed request shapes across fifteen
+ordered selection slots; held Shadowbringer occupies separate Dark Arts and safe-
+fallback positions through the same exact request adapter.
 
 When the highest-priority frozen intent passes its ordinary action, actor/
 target, status/episode, key, context, Guard, resource, cooldown, range, line-of-
@@ -1797,18 +1761,21 @@ helper in the listed priority declines; it has no alternate action or retry.
 
 The separate default-off Hiebsprung helper may initiate at most one exact DRK
 `29092` request per proven ready epoch against a frozen canonical enemy at 30%
-HP or lower within its strict 10-yalm cap and native reachability. It closes the
-job-specific second tier before Smart Recuperate, Emergency Teleport, and the generic helpers. A
+HP or lower within its strict 10-yalm cap and native reachability. It runs between
+Dark Arts Shadowbringer and the safe Shadowbringer fallback; held Monk combo then
+closes the job-specific second tier before Smart Recuperate, Emergency Teleport,
+and the generic helpers. A
 continuous hold repeats only after an observed
 cooldown not-ready-to-ready transition, never from a guessed reset, and it has
 no selected-target mutation, alternate, rerank, or replay. A clean explicit
 client rejection may use only the shared bounded retry for that same frozen
 ready epoch.
 
-The separate DRK macro does not use that physical-input priority chain. It may
-add only one already-spent Shadowbringer attempt to the exact authored
-Souleater Combo carrier inside one proven GCD window; the carrier and visible
-target remain unchanged, with no alternate or retry.
+The separate default-off held DRK Shadowbringer helper uses that physical-input
+priority chain. Exact Dark Arts runs before Hiebsprung; the configurable safe HP-
+cost fallback runs after it. Both freeze one exact reachable low-HP enemy, leave
+the visible target unchanged, and allow only the common same-intent explicit-
+false retry.
 
 The isolation warning is local and display-only. The optional Attack1 focus
 module is not display-only: it issues one normal, hardcoded party-visible marker
@@ -1829,7 +1796,8 @@ pair. It sends no free text or character name and does not start the marker
 sequence while either sign is occupied or uncertain. Bind2 is confirmed before
 Bind1; a later Bind1 failure can clean only the proven-owned Bind2, and every
 cleanup remains exact per sign. It does not issue another combat action or
-retry a failed command.
+retry after a native command invocation. A pre-invocation shell-busy result may
+re-offer only the same frozen Quick Chat within its original 1.5-second deadline.
 
 The Scholar helper is not display-only either. When explicitly enabled, a
 continuous hold may authorize one Critical Strategy intent for each distinct
@@ -1869,10 +1837,10 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.32.0.1, the exact 423-test Core registry and source checks pin
-configuration schema 35, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
-the separate default-off Viper helper, Emergency Teleport, and independent
-Scholar Smart Spread. Smart Tab checks retain the paired
+For current v0.33.0.0, the exact 440-test Core registry and source checks pin
+configuration schema 37, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
+the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, and RDM
+paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only
 ownership, complete actor freeze, one hard-target setter/readback, and no retry or
 alternate. They additionally pin one 25-yalm tier for BRD/BLM/SMN/MCH/RDM/PCT,
@@ -1891,13 +1859,16 @@ source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
 enabled-Den testing remains required.
 
-Current scheduler verification uses **Purify > NIN Seiton / VPR Serpentiner
-Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >
-SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport >
-generic Guard > pressure Sprint > event Kardia > event Monk**. Thirteen physical-
-hold helpers share the scheduler; held-action cast cancellation covers twelve
-and explicitly excludes Viper. Scholar Smart Spread is not a fourteenth shared
-helper: it reads raw hold consent in its own lane and never consumes that frame.
+Current scheduler verification uses **Purify > SAM staged counter-CC /
+Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
+counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
+Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
+(safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic
+Guard > pressure Sprint > event Kardia > event Monk**. Eighteen physical-hold
+option enable edges share the scheduler input. Held-action cast cancellation
+constructs fourteen reviewed request shapes across fifteen ordered selection
+slots and explicitly excludes Viper, GNB, and held Monk combo. Scholar Smart
+Spread remains an independent raw-hold lane and never consumes that frame.
 
 Emergency tests pin MNK/BLM/SGE/VPR action mappings, strict HP/MP/direct-focus
 edges, safety-before-distance ranking, target-specific native action status,

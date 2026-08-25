@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.33.0.0
+
+- Replaced the retired `/seitonbringer` macro pair with a default-off **held
+  Shadowbringer** helper for PvP Dark Knight. Exact Dark Arts from a broken
+  Blackest Night gets the first DRK slot; otherwise the configurable base-action
+  fallback requires HP strictly above 85% and fresh pressure strictly below two
+  by default. It freezes one reachable lowest-HP enemy without changing the
+  visible target. Dark Arts runs before Hiebsprung; the HP-cost fallback runs
+  after it.
+- Added a default-off **Gunbreaker Continuation** held helper for the exact
+  transformed carrier and own proc status. It supports Hypervelocity, Jugular
+  Rip, Abdomen Tear, Eye Gouge, and Fated Brand, spends one exposure once, and
+  uses only the frozen exact reachable enemy. It neither cancels casts nor
+  changes the selected target.
+- Added a default-off **Monk held combo** helper with native melee/ranged routing
+  and the reviewed knockback, Thunderclap, Rising Phoenix, and Phantom Rush
+  sequence. It preserves the required attack-buff resource, freezes every
+  action/target/key intent, and remains behind the earlier job-specific lanes.
+- Added optional **Samurai Soten -> Mineuchi** follow-ups after exact enemy
+  Purify/Guard evidence and optional held **Zantetsuken** for an enemy carrying
+  the Samurai's own Kuzushi with exactly zero shield. A client-accepted Soten
+  reserves the helper slot for its 1.5-second Mineuchi stage. Wolves' Den testing
+  uses only the exact current reviewed target.
+- Extended protection-end counter-CC with optional PLD Intervene and RDM
+  Resolution profiles. WHM Miracle, BRD Silent Nocturne, and NIN Raiju now retain
+  exact source-sequence/protection evidence through the bounded three-second
+  release lease; positive team pressure improves ranking but is never required.
+- Accepted **Auto-Guard** can now show a local activation card and play a small
+  configurable sound. Its owned input shield also blocks an accidental second
+  Guard press for the first two seconds; after that, Guard reuse is again the
+  deliberate release path. The explicit `/panicshu` override remains unchanged.
+- Guardian communication may re-offer the same frozen localized Quick Chat only
+  while FFXIV's text-command shell is explicitly busy and only before the
+  original 1.5-second deadline. Once the native shell is invoked there is no
+  retry. German clients use the localized `/schnellchat <n> Ziel decken` form.
+- Hardened `/panicshu` only at its immediate native boundary: exact adjusted
+  Shukuchi, recast group, cooldown, and resource readiness must all be positively
+  ready before the single location call. This prevents the predicted animation
+  start and cooldown rollback while preserving its command-only, own-Guard,
+  no-wait, no-retry behavior.
+- Bumped the plugin to `0.33.0.0` and configuration schema to `37`. Every new
+  hostile action path remains off for upgrades, fresh installs, and Reset
+  Defaults. All `440` Core tests and the full zero-warning release build pass in
+  this source snapshot; current-patch in-game behavior remains a separate live
+  validation boundary.
+
 ## 0.32.0.1
 
 - Fixed **Scholar Smart Spread** running during Crystalline Conflict

@@ -2,8 +2,9 @@ namespace SeitonSense.Core;
 
 /// <summary>
 /// Identifies the held helper which owns the single prioritized cancellation
-/// request. Numeric order mirrors the canonical physical-held scheduler order;
-/// it never selects another action or target.
+/// request. Existing numeric identities remain stable; the central scheduler,
+/// not enum sorting, chooses the canonical request order. It never selects
+/// another action or target.
 /// </summary>
 public enum HeldCastCancellationHelperKind : byte
 {
@@ -20,6 +21,7 @@ public enum HeldCastCancellationHelperKind : byte
     EmergencyTeleport = 10,
     Guard = 11,
     PressureEscapeSprint = 12,
+    DarkKnightShadowbringer = 13,
 }
 
 /// <summary>

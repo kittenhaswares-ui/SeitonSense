@@ -15,6 +15,7 @@ public enum AutoGuardProtectionDecisionReason : byte
     GuardEnded = 10,
     MaximumDurationReached = 11,
     HardReset = 12,
+    GuardReuseProtected = 13,
 }
 
 public readonly record struct AutoGuardProtectionState(
@@ -56,12 +57,14 @@ public readonly record struct AutoGuardProtectionDecision(
 /// Owns only a client-accepted Guard request produced by the optional automatic
 /// Guard helper. The short propagation interval bridges the native call to the
 /// first exact status sample; once that status is visible, protection follows it
-/// until it ends. Guard reuse is always an explicit native escape hatch and a
-/// hard maximum prevents stale state from trapping later input.
+/// until it ends. Guard reuse is suppressed for the short initial safety window,
+/// then becomes an explicit native escape hatch. A hard maximum prevents stale
+/// state from trapping later input.
 /// </summary>
 public static class AutoGuardProtectionRules
 {
     public const long StatusPropagationMilliseconds = 1_500;
+    public const long GuardReuseProtectionMilliseconds = 2_000;
     public const long MaximumOwnedDurationMilliseconds = 6_000;
 
     public static bool CanArmFromAcceptedAttempt(
@@ -136,14 +139,30 @@ public static class AutoGuardProtectionRules
         if (observation.NowMilliseconds >= previous.MaximumExpiresAtMilliseconds)
             return Released(AutoGuardProtectionDecisionReason.MaximumDurationReached);
 
-        // Reusing Guard is the game's deliberate release path. It must never be
-        // mistaken for a random action and atomically gives up plugin ownership.
-        if (observation.IsExplicitGuardReuse)
-            return Released(AutoGuardProtectionDecisionReason.ExplicitGuardReuse);
-
         var exactGuardObserved = previous.ExactGuardObserved || observation.ExactGuardActive;
         if (previous.ExactGuardObserved && !observation.ExactGuardActive)
             return Released(AutoGuardProtectionDecisionReason.GuardEnded);
+
+        // An accidental second Guard press is the easiest way to erase a freshly
+        // generated survival window. Protect it briefly, then restore Guard's
+        // ordinary deliberate-release behavior. /panicshu remains a separate,
+        // explicit emergency override outside this rule.
+        if (observation.IsExplicitGuardReuse)
+        {
+            var reuseProtectionEndsAt = SaturatingAdd(
+                previous.AcceptedAtMilliseconds,
+                GuardReuseProtectionMilliseconds);
+            if (observation.NowMilliseconds < reuseProtectionEndsAt)
+            {
+                return new AutoGuardProtectionDecision(
+                    previous with { ExactGuardObserved = exactGuardObserved },
+                    ShouldBlockAction: true,
+                    Math.Max(0, reuseProtectionEndsAt - observation.NowMilliseconds),
+                    AutoGuardProtectionDecisionReason.GuardReuseProtected);
+            }
+
+            return Released(AutoGuardProtectionDecisionReason.ExplicitGuardReuse);
+        }
 
         if (!exactGuardObserved &&
             observation.NowMilliseconds >=

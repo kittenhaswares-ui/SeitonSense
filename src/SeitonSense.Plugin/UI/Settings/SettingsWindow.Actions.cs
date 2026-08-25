@@ -13,9 +13,9 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK " +
-            "Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. The eight " +
-            "job-specific physical-hold helpers share the second tier. NIN Seiton and VPR Serpentiner Geist get their first job slot; " +
+            "Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
+            "DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. " +
+            "The job-specific physical-hold helpers use this deterministic order. SAM's staged exact follow-up runs directly after Purify; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
             "frame. Scholar Smart Spread reads the same raw hold in an independent recast lane after this scheduler; " +
@@ -48,8 +48,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader(
-                "Reactive counter-CC: WHM Wunder der Natur / Miracle of Nature · " +
-                "BRD Stumme Nocturne / Silent Nocturne",
+                "Reactive counter-CC: WHM / BRD / NIN / PLD / RDM / SAM",
                 ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= DrawReactiveCcControls();
@@ -174,6 +173,23 @@ internal sealed partial class SettingsWindow
             "At 3+ incoming enemies and Stun: Purify, then Guard as a later exact episode",
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
+        changed |= Checkbox(
+            "Show the Auto-Guard activation card",
+            configuration.ShowAutoGuardActivationNotification,
+            value => configuration.ShowAutoGuardActivationNotification = value);
+        changed |= Checkbox(
+            "Play a small sound when Auto-Guard is accepted and protected",
+            configuration.PlayAutoGuardActivationSound,
+            value => configuration.PlayAutoGuardActivationSound = value);
+        changed |= SliderInt(
+            "Auto-Guard sound",
+            configuration.AutoGuardActivationSoundId,
+            1,
+            16,
+            value => configuration.AutoGuardActivationSoundId = value,
+            "Sound %d");
+        if (ImGui.Button("Test Auto-Guard sound"))
+            personalStatus.PlayAutoGuardActivationSoundPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Crystalline Conflict only and disabled by default. If high-pressure Stun triggers Purify, Guard is " +
@@ -183,8 +199,9 @@ internal sealed partial class SettingsWindow
             "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
             "every Seiton Sense action-request helper is blocked so none can cancel it. A client-accepted automatic " +
             "Guard also owns a native input shield: ordinary Action/PvPAction presses are ignored through the exact " +
-            "live Guard status, while pressing Guard again remains the deliberate release path. Manual Guard is never " +
-            "owned, the explicit /panicshu emergency-location command remains an intentional override, and stale " +
+            "live Guard status. A second Guard press is also ignored for the first two seconds, then becomes the " +
+            "deliberate release path again. Manual Guard is never owned, the explicit /panicshu emergency-location " +
+            "command remains an intentional override, and stale " +
             "ownership expires after six seconds. Auto-Guard waits instead of dispatching if the protection hook is " +
             "unavailable.");
         ImGui.PopTextWrapPos();
@@ -369,12 +386,12 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
-                ? "ON — WHM Wunder der Natur / Miracle of Nature or BRD Stumme Nocturne / " +
-                  "Silent Nocturne, plus NIN Forked/Fleeting Raiju, may schedule one frozen exact-target intent " +
+                ? "ON — enabled WHM Miracle, BRD Silent Nocturne, NIN Raiju, PLD Intervene, RDM Resolution, or SAM Soten/Mineuchi " +
+                  "may schedule one frozen exact-target intent " +
                   "for an eligible CC opportunity."
                 : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
 
-        ImGui.TextUnformatted("WHM / BRD / NIN triggers:");
+        ImGui.TextUnformatted("Shared protection-end triggers:");
         changed |= Checkbox(
             "DNC Contradance startup",
             configuration.ReactiveCcDancerLimitBreak,
@@ -387,6 +404,34 @@ internal sealed partial class SettingsWindow
             "After enemy Guard ends: ranked exact release",
             configuration.ReactiveCcAfterEnemyGuard,
             value => configuration.ReactiveCcAfterEnemyGuard = value);
+
+        ImGui.TextUnformatted("Optional job-specific counter actions:");
+        changed |= Checkbox(
+            "PLD Intervene after enemy Purify / Guard",
+            configuration.ReactiveCcPaladinIntervene,
+            value => configuration.ReactiveCcPaladinIntervene = value);
+        changed |= Slider(
+            "PLD Intervene maximum range",
+            configuration.ReactiveCcPaladinInterveneMaximumRangeYalms,
+            ReactiveCounterCcProfileRules.MinimumConfiguredInterveneRangeYalms,
+            ReactiveCounterCcProfileRules.InterveneMaximumRangeYalms,
+            value => configuration.ReactiveCcPaladinInterveneMaximumRangeYalms = value,
+            "%.0f yalm");
+        changed |= Checkbox(
+            "RDM Resolution after enemy Purify / Guard",
+            configuration.ReactiveCcRedMageResolution,
+            value => configuration.ReactiveCcRedMageResolution = value);
+        changed |= Checkbox(
+            "SAM Soten -> Mineuchi after enemy Purify / Guard",
+            configuration.ReactiveCcSamuraiSotenMineuchi,
+            value => configuration.ReactiveCcSamuraiSotenMineuchi = value);
+        changed |= Slider(
+            "SAM Soten maximum range",
+            configuration.ReactiveCcSamuraiSotenMaximumRangeYalms,
+            SamuraiReactiveCounterCcRules.MineuchiMaximumRangeYalms,
+            SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms,
+            value => configuration.ReactiveCcSamuraiSotenMaximumRangeYalms = value,
+            "%.0f yalm");
 
         ImGui.TextUnformatted("Additional WHM / BRD / NIN urgent startup triggers:");
         changed |= Checkbox(
@@ -430,7 +475,16 @@ internal sealed partial class SettingsWindow
             "selected; simultaneous losers " +
             "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
             "3054/3673 was observed present and then verified absent. Early Guard cancellation releases immediately. " +
-            "WHM and BRD retain the 1.5-second held lease; NIN uses 3 seconds to cover one verified 2.5-second Raiju recast.");
+            "WHM, BRD, PLD, and RDM retain the 1.5-second held lease; NIN uses 3 seconds to cover one verified 2.5-second Raiju recast. " +
+            "PLD uses the configured Intervene cap up to its native 20 yalms; RDM uses the exact 25-yalm line-AoE Resolution. " +
+            "In enabled Wolves' Den testing, these helpers act only on the exact current hard target matching the observed episode.");
+        ImGui.TextDisabled(
+            "SAM's separate staged option mirrors the exact enemy self-Purify/Guard packet from the same shared hook, " +
+            "requires the matching live Resilience/Guard status and then its authoritative absence. Inside 5 yalms it " +
+            "uses Mineuchi directly; otherwise it may use Soten once up to the configured cap, then reserves only that " +
+            "same actor/key for Mineuchi for 1.5 seconds. It never changes target, reranks, substitutes, or retries a " +
+            "completed native boundary. Wolves' Den requires the observed actor to be the exact current duel target or " +
+            "the reviewed current striking dummy.");
         ImGui.TextDisabled(
             "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
             "frozen target intent. A later distinct episode may authorize another action without a key release; no " +

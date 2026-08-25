@@ -91,6 +91,16 @@ internal static class MiracleCleanseFollowupSelfTests
             True(retired.NextPending is null, "closed gate retains no pending resolution");
         }
 
+        var wolvesDen = MiracleCleanseFollowupRules.ResolvePendingSignal(
+            pending,
+            ResolutionObservation(target, now: 1_001) with
+            {
+                IsCrystallineConflict = false,
+                IsWolvesDenTesting = true,
+            });
+        True(wolvesDen.DidResolve,
+            "explicit Wolves' Den testing reuses the exact-target lifecycle without opening other contexts");
+
         Equal(5, MiracleCleanseFollowupRules.MaximumPendingResolutions,
             "pending storage is bounded to the five canonical enemy slots");
     }

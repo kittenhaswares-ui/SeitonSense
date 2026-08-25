@@ -146,7 +146,15 @@ public readonly record struct MiracleCleanseFollowupResolutionObservation(
     int FeatureGeneration,
     MiracleCleanseFollowupTargetIdentity? UniqueCanonicalTarget,
     long NowMilliseconds,
-    bool HardReset = false);
+    bool HardReset = false)
+{
+    public bool IsWolvesDenTesting { get; init; }
+
+    public bool IsSupportedContext =>
+        ReactiveCounterCcProfileRules.IsSupportedContext(
+            IsCrystallineConflict,
+            IsWolvesDenTesting);
+}
 
 public readonly record struct MiracleCleanseFollowupResolutionDecision(
     MiracleCleanseFollowupResolutionDecisionKind Kind,
@@ -239,7 +247,15 @@ public readonly record struct MiracleCleanseFollowupObservation(
     bool TeamTargetCountKnown,
     int TeamTargetCount,
     long NowMilliseconds,
-    bool HardReset = false);
+    bool HardReset = false)
+{
+    public bool IsWolvesDenTesting { get; init; }
+
+    public bool IsSupportedContext =>
+        ReactiveCounterCcProfileRules.IsSupportedContext(
+            IsCrystallineConflict,
+            IsWolvesDenTesting);
+}
 
 public readonly record struct MiracleCleanseFollowupDecision(
     MiracleCleanseFollowupState NextState,
@@ -369,7 +385,7 @@ public static class MiracleCleanseFollowupRules
         if (!observation.ConfigurationEnabled)
             return RetiredResolution(
                 MiracleCleanseFollowupResolutionRetireReason.ConfigurationDisabled);
-        if (!observation.IsCrystallineConflict)
+        if (!observation.IsSupportedContext)
             return RetiredResolution(
                 MiracleCleanseFollowupResolutionRetireReason.OutsideCrystallineConflict);
         if (!observation.IsLocalCounterJobValid || observation.LocalCounterJobId == 0)
@@ -813,7 +829,7 @@ public static class MiracleCleanseFollowupRules
     {
         if (!observation.ConfigurationEnabled)
             return MiracleCleanseFollowupCancelReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
+        if (!observation.IsSupportedContext)
             return MiracleCleanseFollowupCancelReason.OutsideCrystallineConflict;
         if (!observation.IsLocalCounterJobValid)
             return MiracleCleanseFollowupCancelReason.LocalCounterJobInvalid;

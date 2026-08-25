@@ -25,8 +25,14 @@ internal sealed partial class SettingsWindow
         var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
+        var samurai = personalStatus.SamuraiReactiveDiagnostics;
+        var samuraiCapture = personalStatus.SamuraiReactiveCaptureDiagnostics;
+        var samuraiMetadata = personalStatus.SamuraiReactiveMetadata;
         var guardShukuchi = personalStatus.NinjaGuardShukuchiDiagnostics;
         var viper = personalStatus.ViperSerpentTailDiagnostics;
+        var gunbreaker = personalStatus.GunbreakerContinuationDiagnostics;
+        var shadowbringer = personalStatus.DarkKnightShadowbringerDiagnostics;
+        var monkCombo = personalStatus.MonkHeldComboDiagnostics;
         var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
@@ -87,6 +93,8 @@ internal sealed partial class SettingsWindow
             $"attempt={defense.UseActionAttempted}/{defense.UseActionAccepted}, " +
             $"Guardian popup={defense.GuardianPopup?.PartySlot ?? 0}/" +
             $"{Math.Max(0, (defense.GuardianPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
+            $"Auto-Guard popup={defense.AutoGuardPopup?.Token ?? 0}/" +
+            $"{Math.Max(0, (defense.AutoGuardPopup?.EndsAtMilliseconds ?? 0) - Environment.TickCount64)} ms, " +
             $"count={defense.AttemptCount}/{defense.AcceptedCount}, metadata=" +
             $"{defense.GuardMetadataVerified}/{defense.GuardianMetadataVerified}, last={defense.LastEvent}");
         ImGui.TextWrapped(
@@ -155,6 +163,36 @@ internal sealed partial class SettingsWindow
             $"count accepted/rejected/unknown/soft={viper.AcceptedCount}/{viper.RejectedCount}/" +
             $"{viper.UnknownCount}/{viper.SoftWaitCount}, last={viper.LastEvent}");
         ImGui.TextWrapped(
+            $"GNB Continuation: {gunbreaker.Phase}/{gunbreaker.Decision}/{gunbreaker.Reason}, " +
+            $"action/proc/generation={gunbreaker.ResolvedActionId}/{gunbreaker.ResolvedProcStatusId}/" +
+            $"{gunbreaker.ExposureGeneration}, spent={gunbreaker.ExposureSpent}, S={gunbreaker.EnemySlot}, " +
+            $"target={gunbreaker.TargetGameObjectId:X}/{gunbreaker.TargetEntityId:X}, ready/boundary=" +
+            $"{gunbreaker.LocallyReady}/{gunbreaker.NativeBoundaryReady}, key={gunbreaker.HeldGameplayKey}, " +
+            $"claim={gunbreaker.InputClaimed}, attempt={gunbreaker.UseActionAttempted}/{gunbreaker.UseActionAccepted}, " +
+            $"native={gunbreaker.NativeAttemptCount}/{gunbreaker.LastNativeOutcome}, last={gunbreaker.LastEvent}");
+        ImGui.TextWrapped(
+            $"DRK Shadowbringer: {shadowbringer.Decision}/{shadowbringer.Reason}/{shadowbringer.Opportunity}, " +
+            $"action={shadowbringer.ResolvedAdjustedActionId}, dark-arts={shadowbringer.DarkArtsGeneration}/" +
+            $"{shadowbringer.DarkArtsExposed}/{shadowbringer.DarkArtsSpent}, fallback=" +
+            $"{shadowbringer.FallbackGeneration}/{shadowbringer.FallbackEligible}/{shadowbringer.FallbackSpent}, " +
+            $"pressure={shadowbringer.PressureKnown}/{shadowbringer.IncomingPressure}/" +
+            $"{shadowbringer.PressureAgeMilliseconds} ms, ready={shadowbringer.ActionLocallyReady}/" +
+            $"{shadowbringer.NativeBoundaryReady}, deferred={shadowbringer.CanRunDeferredSafeFallback}/" +
+            $"{shadowbringer.DeferredFrameToken}, S={shadowbringer.EnemySlot}, target=" +
+            $"{shadowbringer.TargetGameObjectId:X}/{shadowbringer.TargetEntityId:X}, key=" +
+            $"{shadowbringer.HeldGameplayKey}, claim={shadowbringer.InputClaimed}, attempt=" +
+            $"{shadowbringer.UseActionAttempted}/{shadowbringer.UseActionAccepted}, last={shadowbringer.LastEvent}");
+        ImGui.TextWrapped(
+            $"Monk held combo: {monkCombo.Phase}/{monkCombo.Decision}/{monkCombo.Reason}, " +
+            $"combo/pending={monkCombo.ResolvedComboActionId}/{monkCombo.PendingActionId}/" +
+            $"{monkCombo.PendingPurpose}, S={monkCombo.EnemySlot}, target=" +
+            $"{monkCombo.TargetGameObjectId:X}/{monkCombo.TargetEntityId:X}, proof pressure/fire=" +
+            $"{monkCombo.PressurePointConfirmed}/{monkCombo.FireResonanceConfirmed}, boundary=" +
+            $"{monkCombo.NativeBoundaryReady}, key={monkCombo.HeldGameplayKey}, claim=" +
+            $"{monkCombo.InputClaimed}, attempt={monkCombo.UseActionAttempted}/" +
+            $"{monkCombo.UseActionAccepted}, native={monkCombo.NativeAttemptCount}/" +
+            $"{monkCombo.LastNativeOutcome}, last={monkCombo.LastEvent}");
+        ImGui.TextWrapped(
             $"Held cast cancellation: enabled={configuration.AllowHeldHelpersToCancelOwnCast}, " +
             $"state={castCancellation.Decision}/{castCancellation.Reason}, " +
             $"cast={castCancellation.CastActionId}, epoch={castCancellation.CastEpochToken}, " +
@@ -222,6 +260,20 @@ internal sealed partial class SettingsWindow
             $"last-winner pressure={protectionEndRankPressure}, " +
             $"HP={protectionEndRankHp}, trusted-MP={protectionEndRankMp}");
         ImGui.TextWrapped(
+            $"SAM reactive: counter={samurai.CounterPhase}/{samurai.ProtectionKind}, " +
+            $"protection-seen={samurai.ProtectionObserved}, S={samurai.EnemySlot}, target=" +
+            $"{samurai.TargetGameObjectId:X}/{samurai.TargetEntityId:X}, job={samurai.TargetJobId}, " +
+            $"key={samurai.ReservedKey}, claim={samurai.InputClaimed}, last-action/outcome=" +
+            $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome}, attempts Soten/Mineuchi/Zan=" +
+            $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/{samurai.ZantetsukenAttemptCount}, " +
+            $"accepted={samurai.AcceptedCount}, Zan={samurai.ZantetsukenPhase}, mirror queue/capture/drop=" +
+            $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
+            $"{samurai.DroppedProtectionSignalCount}, shared hook/queue/capture/drop/gen=" +
+            $"{samuraiCapture.CaptureRunning}/{samuraiCapture.QueueDepth}/{samuraiCapture.CapturedSignals}/" +
+            $"{samuraiCapture.DroppedSignals}/{samuraiCapture.FeatureGeneration}, metadata counter/Zan/dummy=" +
+            $"{samuraiMetadata.CounterCcVerified}/{samuraiMetadata.ZantetsukenWorkflowVerified}/" +
+            $"{samuraiMetadata.WolvesDenStrikingDummyVerified}, last={samurai.LastEvent}");
+        ImGui.TextWrapped(
             $"NIN Guard-Shukuchi: {guardShukuchi.Decision}/{guardShukuchi.Reason}, " +
             $"ready/action={guardShukuchi.LocallyReady}/{guardShukuchi.ResolvedActionId}, " +
             $"candidates={guardShukuchi.CandidateCount}, S={guardShukuchi.EnemySlot}, " +
@@ -256,18 +308,17 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > NIN Seiton / VPR Serpentiner Geist > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
-            "SCH Critical Strategy > DRK Hiebsprung > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The job-specific physical-hold helpers share the second tier; NIN Seiton and VPR Serpentiner Geist are first for their jobs, " +
+            "The current request order is Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
+            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; SAM runs directly after Purify, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof and never changes a target or cancels a cast. " +
             "Scholar Smart Spread reads the same raw hold independently and never consumes the shared priority lane. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
-            "blocked while your own Guard is active. The " +
-            "separate DRK macro may make one exact Shadowbringer attempt from its authored " +
-            "two-line macro but does not join the physical-generation chain or mutate a selected target. Automatic " +
+            "blocked while your own Guard is active. Held DRK Shadowbringer joins the physical-generation chain at " +
+            "separate Dark Arts and safe-fallback positions without mutating a selected target. Automatic " +
             "action helpers, Auto Low-MP Focus, and the team-visible Attack1 marker are disabled by default. " +
             "Like all third-party modifications, use " +
             "it at your own risk.");

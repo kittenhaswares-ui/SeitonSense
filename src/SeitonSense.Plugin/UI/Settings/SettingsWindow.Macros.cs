@@ -9,50 +9,6 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.82f, 0.48f, 1f, 1f), "DARK KNIGHT SHADOWBRINGER MACRO (OPT-IN)");
-        changed |= Checkbox(
-            "Enable the exact two-line /seitonbringer weave helper",
-            configuration.EnableDarkKnightShadowbringerMacro,
-            value => configuration.EnableDarkKnightShadowbringerMacro = value);
-        if (ImGui.CollapsingHeader("DRK macro lines and safety boundary", ImGuiTreeNodeFlags.DefaultOpen))
-        {
-            ImGui.TextUnformatted("Use exactly these two adjacent macro lines:");
-            ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbringer");
-            ImGui.TextColored(
-                new Vector4(0.85f, 0.9f, 1f, 1f),
-                "/pvpac \"Souleater Combo\" <t>");
-            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
-            ImGui.TextDisabled(
-                "On a non-English client, replace only the quoted Souleater Combo action name with its exact " +
-                "localized PvP action name; keep /seitonbringer, the line order, and <t> unchanged. In ReAction, " +
-                "enable both Macro Queue and Turbo for this macro.");
-            ImGui.TextDisabled(
-                "Default off and PvP Dark Knight only. Exact Crystalline Conflict is supported directly. " +
-                "Wolves' Den additionally requires the existing Start-page test option and accepts only your exact current " +
-                "hard-target striking dummy. Frontline and Rival Wings remain blocked. From one proven 2.40-second " +
-                "Souleater Combo GCD, the helper may make " +
-                "at most one Shadowbringer attempt in the inclusive 0.60-0.80 seconds-remaining window. " +
-                "A missed window is skipped; 0.50 seconds or less never triggers Shadowbringer. " +
-                "A later Turbo pulse can then queue the authored combo line normally.");
-            ImGui.TextDisabled(
-                "In CC, the exact current <t> must remain one canonical S1-S5 enemy. In the Den, it must remain the " +
-                "same verified native striking-dummy hard target; synthetic S1, <e1>, duel-opponent resolution, " +
-                "players, and other targets are never fallbacks. Your own Guard and its propagation gate must be " +
-                "clear, the target must not have Guard, the combo and Shadowbringer must pass their " +
-                "native 5-yalm/10-yalm range and line-of-sight checks, and every queue, animation-lock, action, and " +
-                "readiness check must remain exact. Shadowbringer additionally requires " +
-                "more than 12,000 HP or the exact Dark Arts status/action state.");
-            ImGui.TextDisabled(
-                "This cycle's one-attempt token is spent before the final native Shadowbringer request. Seiton Sense " +
-                "never changes a target, chooses an alternate action or enemy, replays the macro, or retries a " +
-                "rejected or throwing request. CLIENT " +
-                "ACCEPTED is local dispatch feedback only; live Macro Queue/Turbo mode, recast-group timing, " +
-                "clipping, and server execution still require a current-patch trace in the relevant context. A " +
-                "successful Den dummy test does not prove live CC behavior.");
-            ImGui.PopTextWrapPos();
-        }
-
-        ImGui.Separator();
         ImGui.TextColored(new Vector4(0.3f, 0.8f, 1f, 1f), "MACRO TARGET HELPERS (OPT-IN)");
         changed |= Checkbox(
             "Enable one-shot /nearassist, /nearhelp, and /farhelp targeting",
@@ -208,8 +164,9 @@ internal sealed partial class SettingsWindow
                 "Start-page testing option. Frontline and Rival Wings remain blocked. The command is intentionally allowed " +
                 "from your own Guard so Shukuchi may break it. Three Mudra changing Shukuchi into Doton still rejects the command.");
             ImGui.TextDisabled(
-                "There is no pending state, 500-ms lease, wait, expiry, scheduler priority, cooldown precheck, or automatic " +
-                "retry. FFXIV immediately accepts or rejects that one request in the current Guard/cast/queue/animation state. " +
+                "There is no pending state, 500-ms lease, wait, expiry, scheduler priority, or automatic retry. The command " +
+                "first requires Shukuchi's exact native recast to be positively ready, preventing a predicted startup that the " +
+                "server would roll back. FFXIV then accepts or rejects that one request in the current Guard/cast/queue/animation state. " +
                 "Normal results stay out of chat and remain visible in /seiton debug. A wall or invalid terrain never causes " +
                 "a shorter fallback, new point, alternate action, or later jump.");
             ImGui.PopTextWrapPos();

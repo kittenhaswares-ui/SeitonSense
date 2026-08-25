@@ -28,10 +28,15 @@ public readonly record struct MiracleInterceptPendingAttempt(
          RemovedStatusId == 0 ||
          MiracleCleanseFollowupRules.IsPurifyRemovableStatus(RemovedStatusId)) &&
         UseActionAccepted &&
-        ExpectedSourceSequence != 0 &&
         AttemptedAtMilliseconds >= 0;
 
     public uint RemovedStatusId { get; init; }
+
+    /// <summary>
+    /// False means the native request was accepted before ActionManager exposed
+    /// its source sequence. The first later exact ActionEffect may bind it.
+    /// </summary>
+    public bool HasBoundSourceSequence => ExpectedSourceSequence != 0;
 }
 
 public readonly record struct MiracleInterceptLandedObservation(
@@ -90,9 +95,13 @@ public readonly record struct MiracleInterceptConfirmationDecision(
     MiracleInterceptConfirmationPopup? TriggeredPopup);
 
 /// <summary>
-/// Correlates the sole native WHM Miracle, BRD Silent Nocturne, or NIN Raiju
+/// Correlates one accepted native reactive counter-CC request
 /// attempt made by the reactive helper with the exact server status-add on the intended target
-/// and the same non-zero client source sequence. A manual request cannot inherit the pending.
+/// and, when it was available at dispatch, the same non-zero client source
+/// sequence. If the accepted native boundary has not exposed a sequence yet,
+/// the first later exact non-zero ActionEffect sequence is allowed to bind that
+/// still-frozen caster/action/target/status episode. A mismatched packet cannot
+/// consume or retarget the pending attempt.
 /// This proves only that the counter-CC landed; it never claims the hostile
 /// action was interrupted.
 /// </summary>
@@ -104,6 +113,9 @@ public static class MiracleInterceptConfirmationRules
     public const ushort SilenceStatusId = 1_347;
     public const uint ForkedRaijuActionId = 29_510;
     public const uint FleetingRaijuActionId = 29_707;
+    public const uint InterveneActionId = 29_065;
+    public const uint MineuchiActionId = 29_535;
+    public const uint ResolutionActionId = 41_492;
     public const ushort StunStatusId = 1_343;
     public const byte AddStatusEffectType = 0x0E;
     public const long CorrelationMilliseconds = 1_500;
@@ -247,6 +259,9 @@ public static class MiracleInterceptConfirmationRules
             MiracleOfNatureActionId => MiracleOfNatureStatusId,
             SilentNocturneActionId => SilenceStatusId,
             ForkedRaijuActionId or FleetingRaijuActionId => StunStatusId,
+            InterveneActionId => StunStatusId,
+            MineuchiActionId => StunStatusId,
+            ResolutionActionId => SilenceStatusId,
             _ => 0,
         };
 
@@ -260,11 +275,15 @@ public static class MiracleInterceptConfirmationRules
             return false;
         }
 
-        return observation.CasterEntityId == pending.LocalCasterEntityId &&
+        var exactShape = observation.CasterEntityId == pending.LocalCasterEntityId &&
                observation.ActionId == pending.ActionId &&
                observation.TargetEntityId == pending.TargetEntityId &&
                observation.EffectType == AddStatusEffectType &&
                observation.EffectValue == ExpectedStatusForAction(pending.ActionId) &&
+               observation.SourceSequence != 0;
+        if (!exactShape) return false;
+
+        return pending.ExpectedSourceSequence == 0 ||
                observation.SourceSequence == pending.ExpectedSourceSequence;
     }
 

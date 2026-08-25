@@ -37,7 +37,7 @@ internal sealed record GuardianCommunicationDiagnostics(
     long QuickChatInvocationCount,
     long MarkerSetInvocationCount,
     long MarkerClearInvocationCount,
-    long DeferredMarkerCount,
+    long DeferredBeforeInvocationCount,
     long TerminalFailureCount,
     string LastEvent)
 {
@@ -83,7 +83,7 @@ internal sealed record GuardianCommunicationDiagnostics(
         $"cleanup={CleanupRemainingMilliseconds},episodes={ObservedEpisodeCount}," +
         $"decisions={CommandDecisionCount},invoked={QuickChatInvocationCount}/" +
         $"{MarkerSetInvocationCount}/{MarkerClearInvocationCount}," +
-        $"deferred={DeferredMarkerCount},terminal={TerminalFailureCount},last={LastEvent}";
+        $"deferred={DeferredBeforeInvocationCount},terminal={TerminalFailureCount},last={LastEvent}";
 }
 
 /// <summary>
@@ -111,7 +111,7 @@ internal sealed class GuardianCommunicationService
     private long quickChatInvocationCount;
     private long markerSetInvocationCount;
     private long markerClearInvocationCount;
-    private long deferredMarkerCount;
+    private long deferredBeforeInvocationCount;
     private long terminalFailureCount;
     private long nextErrorLogAt;
     private bool forceHardReset;
@@ -249,7 +249,7 @@ internal sealed class GuardianCommunicationService
             QuickChatInvocationCount = Interlocked.Read(ref quickChatInvocationCount),
             MarkerSetInvocationCount = Interlocked.Read(ref markerSetInvocationCount),
             MarkerClearInvocationCount = Interlocked.Read(ref markerClearInvocationCount),
-            DeferredMarkerCount = Interlocked.Read(ref deferredMarkerCount),
+            DeferredBeforeInvocationCount = Interlocked.Read(ref deferredBeforeInvocationCount),
             TerminalFailureCount = Interlocked.Read(ref terminalFailureCount),
             LastEvent = "Reset",
         });
@@ -383,7 +383,7 @@ internal sealed class GuardianCommunicationService
             Interlocked.Read(ref quickChatInvocationCount),
             Interlocked.Read(ref markerSetInvocationCount),
             Interlocked.Read(ref markerClearInvocationCount),
-            Interlocked.Read(ref deferredMarkerCount),
+            Interlocked.Read(ref deferredBeforeInvocationCount),
             Interlocked.Read(ref terminalFailureCount),
             lastEvent);
     }
@@ -520,6 +520,9 @@ internal sealed class GuardianCommunicationService
         {
             ReviewedPvpCommandDispatchResult.Invoked =>
                 GuardianTeamCommunicationCommandOutcome.Invoked,
+            ReviewedPvpCommandDispatchResult.TextCommandUnavailableBeforeInvocation
+                when command.Kind == GuardianTeamCommunicationCommandKind.SendQuickChat =>
+                GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation,
             ReviewedPvpCommandDispatchResult.MarkerRateLimited
                 when command.Kind != GuardianTeamCommunicationCommandKind.SendQuickChat =>
                 GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation,
@@ -533,7 +536,7 @@ internal sealed class GuardianCommunicationService
     {
         if (outcome == GuardianTeamCommunicationCommandOutcome.DeferredBeforeInvocation)
         {
-            Interlocked.Increment(ref deferredMarkerCount);
+            Interlocked.Increment(ref deferredBeforeInvocationCount);
             return;
         }
 

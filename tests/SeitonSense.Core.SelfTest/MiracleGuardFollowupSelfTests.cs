@@ -476,6 +476,18 @@ internal static class MiracleGuardFollowupSelfTests
             });
         Equal(MiracleGuardFollowupCancelReason.OutsideCrystallineConflict, context.CancelReason, "context gate");
 
+        var wolvesDen = MiracleGuardFollowupRules.Observe(
+            MiracleGuardFollowupState.Initial,
+            Observation(Candidate(target, guardCount: 1), 2_100) with
+            {
+                IsCrystallineConflict = false,
+                IsWolvesDenTesting = true,
+            });
+        Equal(
+            MiracleGuardFollowupPhase.GuardPresent,
+            Find(wolvesDen.NextState, target.EnemySlot).Phase,
+            "explicit Wolves' Den testing reuses Guard memory for only its exact current target");
+
         present = MiracleGuardFollowupRules.Observe(
             MiracleGuardFollowupState.Initial,
             Observation(Candidate(target, guardCount: 1), 3_000));
