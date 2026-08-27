@@ -460,9 +460,11 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         {
             try
             {
-                // Our cadence returned false to the native scanner. The owner
-                // may now execute this exact slot once, and only once, after
-                // the scan; there is no synthetic native true to double-fire.
+                // A due cadence is reported as a normal pressed result so the
+                // game owns its hotbar flash, input history, and slot gates.
+                // Reaching this callback means that native scan did not consume
+                // the exact same-scan activation; the runtime may record that
+                // miss, but must never bypass the scanner with a direct slot call.
                 onUnconsumedInjectedRepeat(activation);
             }
             catch
@@ -571,7 +573,11 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
                                     now),
                                 activeScanId,
                                 RequiresOwnerCoalesce: false);
-                            reportPressed = false;
+                            // Preserve the core decision's true result. The
+                            // native hotbar scanner must observe the Turbo pulse
+                            // just like a normal pressed binding; the exact
+                            // pending activation coalesces its one slot call.
+                            reportPressed = decision.ShouldReportPressed;
                             Interlocked.Increment(ref injectedRepeats);
                             break;
                         }

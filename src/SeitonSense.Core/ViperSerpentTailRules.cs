@@ -198,6 +198,12 @@ public static class ViperSerpentTailRules
         _ => 0,
     };
 
+    public static bool IsEligibleWolvesDenCurrentTarget(
+        bool isPlayerCharacter,
+        bool hostileFlag,
+        bool exactVerifiedStrikingDummy) =>
+        exactVerifiedStrikingDummy || isPlayerCharacter && hostileFlag;
+
     /// <summary>
     /// Converts the carrier's currently adjusted action into a monotone local
     /// exposure generation. A different exact follow-up is immediately a new

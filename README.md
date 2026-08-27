@@ -2,9 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.35.0.0 integrates a generic
-one-shot action buffer and a separate default-off native Hotbar Turbo directly
-into Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
+assistance, and target highlights. Version 0.35.0.1 routes native Hotbar Turbo
+through XIV's own hotbar scan so its presses can appear on the bar and in
+Latest Input, fixes Viper's exact hostile `<t>` path in Wolves' Den, removes the
+nonfunctional Scholar dot/shield/Deployment Tactics automation, and prevents
+automatic Purify or Recuperate from breaking Ninja Shukuchi Hidden. The generic
+one-shot action buffer remains available directly in Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
 one exact direct instant action for 1,000 ms by default, adjustable from
 100-1,500 ms; the movable learning panel shows its key, slot, action, and live
 countdown. Turbo repeats only the newest certified current slot, emits no
@@ -16,8 +19,8 @@ target-circle safety plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
 fixes. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
-v0.32's Emergency Teleport and Scholar Smart Spread plus v0.31's ranged Smart
-Tab, direct Viper carrier handling, and explicit Wolves' Den testing additions. `/smarttab`
+Emergency Teleport plus v0.31's ranged Smart Tab, direct Viper carrier handling,
+and explicit Wolves' Den testing additions. `/smarttab`
 (`/sstarget`) toggles the native forward-target replacement; paired handler/helper
 hooks preserve the game's own binding and UI/input gates. The v0.30 line moved the optional harmful-action
 redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the
@@ -137,20 +140,6 @@ and Super Focus Glow into one configurable custom-repository plugin.
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
   exact HP does; every target still requires native 25-yalm range/line of sight.
-- **Experimental Scholar Smart Spread helper:** a default-off raw held-key lane
-  runs independently from the shared physical-input priority and stays inactive
-  until exact CC Duty Start. It prepares
-  plugin-owned Biolysis and Deployment Tactics steps for the largest exact new
-  enemy coverage. Adloquium may be spread only when Deployment remains available
-  for the next Biolysis window and its seed is damaged or on the tactical crystal.
-  Each setup transition requires an exact plugin request that the client already
-  accepted. Its matching local-source ActionEffect may confirm ownership, but
-  Deployment waits until the complete exact locally owned setup pair has been
-  observed once on the frozen target. After that proof, either remaining status
-  keeps Deployment eligible at the next safe native boundary. Unusable packet
-  sequence metadata waits for the complete-pair proof inside the bounded ownership
-  window instead of cancelling the chain. One completed chain requires key
-  release before a new one, and manually pressed Scholar actions are never adopted.
 - **Experimental Sage Smart Kardia helper:** a separate default-off option arms
   only after the existing Eukrasia call is forwarded unchanged and accepted by
   the client. Inside that two-second opportunity it requires causal Eukrasia
@@ -670,61 +659,6 @@ not swallow the original key. A client-accepted return is dispatch feedback only
 it does not prove that Critical Strategy landed or changed Guard. Exact current-
 patch held-input timing, dispatch, and effect behavior require a live CC test.
 
-## Scholar Smart Spread held-key helper
-
-The separate **Scholar Smart Spread on held gameplay key** experiment is
-disabled by default and runs only on PvP Scholar in exact Crystalline Conflict.
-It reads the raw held-key snapshot independently and never claims the shared
-physical-input frame or generation. Purify, Smart Recuperate, Emergency
-Teleport, and every other shared helper therefore retain their normal priority;
-Scholar advances only when FFXIV exposes a clear GCD, cast, action-queue, and
-animation-lock boundary. The helper remains inactive during preparation and
-arms only after the current territory's Duty Start event or live started state.
-One completed setup -> Deployment chain latches the current hold; every physical
-gameplay key must be released before a new chain can begin.
-
-When Biolysis `29233` and Deployment Tactics `29234` are ready, the workflow
-requires at least two individually double-resolved, stable, unique canonical
-`S1`-`S5` actors and chooses the reachable
-seed that gives the largest exact new
-15-yalm DoT coverage, then freezes Biolysis -> Deployment on that actor. A spread
-must benefit at least two currently exact targets; unresolved actors are omitted
-instead of invalidating every otherwise exact candidate. Shield work is considered only when no DoT
-plan is ready and requires at least two individually stable exact party members,
-including the local Scholar exactly once: Adloquium
-`29232` prefers an exact party member inside the
-conservative 5-yalm edge radius around the uniquely resolved tactical-crystal
-actor, then lowest exact HP and stable party identity. Adloquium -> Deployment
-is allowed only with two current Deployment charges or when dynamically observed
-recast timing proves the next charge will return no later than the next Biolysis
-opportunity. Unknown timing blocks only that one-charge shield reservation; DoT
-and two-charge shield plans still use their final native readiness checks.
-Unknown coverage for any retained party member blocks shield ranking. A full-health candidate away
-from the tactical crystal is not an eligible shield seed, preventing idle
-Adloquium loops while preserving proactive objective shielding.
-
-Every plugin-issued setup and Deployment step is tied to its exact local source,
-target, action, and episode. Single-target setup capture uses the first exact
-effect recipient; area Deployment retains the animation target. A synchronously
-exposed native source sequence is bound immediately; otherwise an exact matching
-server ActionEffect, including one without a usable source sequence, may confirm
-that already accepted request. ActionEffect alone cannot authorize Deployment:
-the complete exact locally owned status pair must be observed once on the frozen
-target. A delayed or metadata-disagreeing matching packet waits for that pair
-rather than cancelling the armed step. The ownership deadline is checked before
-either packet or status confirmation, so evidence after 2.5 seconds cannot revive
-an expired episode. After complete-pair proof, either remaining exact status keeps
-Deployment eligible; this intentionally permits Catalyze to spread after Galvanize
-has already absorbed damage. Deployment becomes eligible immediately when that proof appears
-inside that window and uses the first safe native animation boundary; the
-timeout is not a fixed delay. Transient action readiness waits without retiring
-the chain. An independently pressed Adloquium, Biolysis, or Deployment cannot be
-adopted; manual conflicts and ordinary target/readiness drift reset for a fresh
-plan under the same physical hold. Ambiguous ownership evidence, exhausted native
-rejection, or an expired accepted request still latches until release. Client dispatch and source/build
-checks do not prove the current server effect; exact live CC behavior remains a
-required in-game validation boundary.
-
 ## Dark Knight Hiebsprung held-key helper
 
 The separate **Hiebsprung on held gameplay key** experiment is disabled by
@@ -1045,7 +979,7 @@ and cleanup behavior remain current-patch live-confirmation boundaries.
 While your own Guard is active, Seiton Sense blocks all scheduled and automatic action requests,
 including Purify, SAM counter-CC/Zantetsuken, NIN Seiton, VPR Serpentiner Geist,
 GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi,
-SCH Critical Strategy, Scholar Smart Spread, DRK Shadowbringer/Hiebsprung, held
+SCH Critical Strategy, DRK Shadowbringer/Hiebsprung, held
 Monk combo, Smart Recuperate, Emergency Teleport, Guard, pressure Sprint,
 accepted-Eukrasia Kardia, and Monk Earth's Reply. The explicit manual `/panicshu` command is the sole exception: its
 one immediate Shukuchi request is intentionally allowed to break own Guard.
@@ -1590,7 +1524,6 @@ focus module to avoid drawing both over the same actor.
 | Optional NIN Guard-Shukuchi held-key helper | Yes | No | No |
 | Optional NIN Seiton held-key helper | Yes | No | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
-| Optional SCH Smart Spread independent held lane | Yes | No | No |
 | Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, for the exact current hostile duel opponent or reviewed dummy when test mode is enabled | No |
 | Optional GNB Continuation held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Optional SAM Soten/Mineuchi and Zantetsuken held helpers | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
@@ -1619,8 +1552,8 @@ The sidebar order is Start, Alerts, HUD & Nameplates, Action Helpers, Job Tools,
 Macro Helpers, Targets, and Diagnostics. Enemy LB nameplate controls live under
 HUD & Nameplates; self/ally LB notifications and local MP sounds live under
 Alerts. Reactive defensive utilities, Smart Recuperate, and Emergency Teleport
-remain under Action Helpers; independent PLD Guardian, Scholar Smart Spread,
-accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
+remain under Action Helpers; independent PLD Guardian, accepted-Eukrasia Smart
+Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
@@ -1636,14 +1569,14 @@ impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
 SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
 Frost Star remain off for every upgrade, fresh install, and Reset Defaults. Schema 36
 adds the local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
-The schema-35 migration still forces Emergency Teleport and Scholar Smart Spread
-off, with Emergency defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
+The schema-35 migration initializes Emergency Teleport
+off, with defaults of 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
 travel, 10-yalm destination radius, and zero nearby enemies. The historical
 schema-34 migration still leaves the Viper Serpentiner-Geist helper off, and the
 historical schema-33 migration still leaves the target-
 writing Smart Tab option off while preserving an older explicitly enabled shared
 macro-helper opt-in as the separate Smart Action option. Smart Tab, Smart Action,
-Viper, Emergency Teleport, and Scholar Smart Spread are all off for fresh and
+Viper, and Emergency Teleport are all off for fresh and
 reset configurations; existing unrelated opt-ins are preserved.
 
 The integrated buffer observes only a freshly certified physical press on one
@@ -1673,12 +1606,16 @@ held, it repeats only the same current standard-hotbar slot at the configured
 cadence; the newest physical hotbar input owns repetition, there are no catch-up
 bursts, and disabling or reconfiguring Turbo requires release before a new hold
 can begin. Enabling the outside-combat test scope also starts a new lifecycle,
-so a key which was already held cannot be inherited. Because the game remains responsible for executing the slot, ordinary
-actions and macros keep their native slot semantics. Seiton's critical held
-utilities pause Turbo and final buffered dispatch without creating a competing
-queue. Neither feature writes position, range, animation lock, cast state, or a
-visible target. The movable learning panel shows the certified key/slot, resolved
-action, live one-shot countdown, and current held/released state.
+so a key which was already held cannot be inherited. Each due cadence is exposed
+to FFXIV's native hotbar scanner as that binding's pressed result. The game remains
+responsible for consuming and executing the slot, so ordinary actions and macros
+keep their native slot semantics; if the scanner does not consume the exact slot,
+Seiton records only a diagnostic miss and makes no post-scan slot or action call.
+Seiton's critical held utilities pause Turbo and final buffered dispatch without
+creating a competing queue. Neither feature writes position, range, animation
+lock, cast state, or a visible target. The movable learning panel is seeded by
+the certified physical direct-slot press, not by repeat pulses, and shows its
+key/slot, resolved action, live one-shot countdown, and held/released state.
 
 Historical v0.30.0.0 baseline: schema 32 disabled the retired Combat Frames
 master and mapped its optional name-display preference to the ally LB feed,
@@ -1839,9 +1776,7 @@ Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
 all macro helpers are excluded as well. Viper Serpentiner Geist is excluded
 because it polls only the currently transformed carrier. GNB Continuation and
-held Monk combo likewise wait for a clear cast instead of cancelling it. Scholar
-Smart Spread also deliberately has no cast-cancel path
-because its independent lane waits for the native boundary. The cast-cancellation
+held Monk combo likewise wait for a clear cast instead of cancelling it. The cast-cancellation
 experiment therefore constructs fourteen reviewed request shapes across fifteen
 ordered selection slots; held Shadowbringer occupies separate Dark Arts and safe-
 fallback positions through the same exact request adapter.
@@ -1969,12 +1904,12 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 518-test Core registry and source checks pin
+For the current source, the exact 510-test Core registry and source checks pin
 configuration schema 40, the generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,
 ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
-paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
+paths and Emergency Teleport. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only
 ownership, metadata-verified native range/line-of-sight admission, a stateless
 current-target-anchored ranked cycle with wrap, complete actor freeze, one
@@ -2007,20 +1942,14 @@ Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
 Guard > pressure Sprint > event Kardia > event Monk**. Eighteen physical-hold
 option enable edges share the scheduler input. Held-action cast cancellation
 constructs fourteen reviewed request shapes across fifteen ordered selection
-slots and explicitly excludes Viper, GNB, and held Monk combo. Scholar Smart
-Spread remains an independent raw-hold lane and never consumes that frame.
+slots and explicitly excludes Viper, GNB, and held Monk combo.
 
 Emergency tests pin MNK/BLM/SGE/VPR action mappings, strict HP/MP/direct-focus
 edges, safety-before-distance ranking, target-specific native action status,
 complete enemy geometry, exact actor/key/context freeze, final-preflight
 retirement, frame consumption only after final commit, and one committed native
-request with no fallback or retry. Scholar tests pin DoT-first coverage,
-Deployment reserve math, Duty Start gating, useful tactical-crystal/HP shield
-ranking, independent input ownership, exact single-target setup capture,
-accepted-action/server-sequence or exact own-status-pair confirmation, dynamic
-optional recast timing, one-chain-per-hold completion, manual-action
-isolation, and terminal target drift. These are source/build assertions, not
-live proof that a current server accepted the movement or status spread.
+request with no fallback or retry. These are source/build assertions, not live
+proof that a current server accepted the movement action.
 
 Historical v0.30.0.0 baseline: the exact 388-test Core registry and source checks
 pinned Smart Target's reach-first deterministic ranking, complete exact actor/action freeze,

@@ -33,7 +33,6 @@ internal sealed partial class SettingsWindow
         var gunbreaker = personalStatus.GunbreakerContinuationDiagnostics;
         var shadowbringer = personalStatus.DarkKnightShadowbringerDiagnostics;
         var monkCombo = personalStatus.MonkHeldComboDiagnostics;
-        var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
         var criticalCoordination = personalStatus.CriticalUtilityCoordinationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
@@ -149,27 +148,6 @@ internal sealed partial class SettingsWindow
             $"claim={emergencyTeleport.InputClaimed}, attempt={emergencyTeleport.UseActionAttempted}/" +
             $"{emergencyTeleport.NativeOutcome}, count={emergencyTeleport.AttemptCount}/" +
             $"{emergencyTeleport.AcceptedCount}, last={emergencyTeleport.LastEvent}");
-        ImGui.TextWrapped(
-            $"Scholar Smart Spread (independent lane): {scholarSpread.Phase}/{scholarSpread.Kind}, " +
-            $"plan/intent/effect={scholarSpread.PlanReason}/{scholarSpread.IntentReason}/" +
-            $"{scholarSpread.EffectReason}, capture={scholarSpread.CaptureRunning}/" +
-            $"{scholarSpread.CaptureQueueDepth}/{scholarSpread.CaptureCount}/" +
-            $"{scholarSpread.CaptureDropCount}, duty/raw-latched-complete=" +
-            $"{scholarSpread.DutyStartedRaw}/{scholarSpread.MatchStartedLatched}/" +
-            $"{scholarSpread.MatchCompletedLatched}, raw-held/consumed=" +
-            $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}, " +
-            $"key={scholarSpread.HeldGameplayKey}, next={scholarSpread.NextActionId}, charges=" +
-            $"{scholarSpread.DeploymentCharges}, deploy/bio={scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
-            $"{scholarSpread.BiolysisRemainingMilliseconds} ms, native/boundary=" +
-            $"{scholarSpread.NativeStateKnown}/{scholarSpread.NativeBoundaryClear}, " +
-            $"dot/shield candidates={scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount}, " +
-            $"slot={scholarSpread.TargetSlot}, target={scholarSpread.TargetGameObjectId:X}/" +
-            $"{scholarSpread.TargetEntityId:X}, coverage={scholarSpread.PredictedAffectedCount}/" +
-            $"{scholarSpread.CurrentAffectedCount}, crystal={scholarSpread.TacticalCrystalResolved}/" +
-            $"{scholarSpread.TacticalCrystalPriorityRadiusYalms:0.0}y, attempt=" +
-            $"{scholarSpread.UseActionAttempted}/{scholarSpread.NativeOutcome}, confirmations=" +
-            $"{scholarSpread.SetupConfirmationCount}/{scholarSpread.DeploymentConfirmationCount}, " +
-            $"manual-conflicts={scholarSpread.ManualConflictCount}, last={scholarSpread.LastEvent}");
         ImGui.TextWrapped(
             $"Viper Serpentiner Geist: {viper.Phase}/{viper.Decision}/{viper.Reason}, " +
             $"action/generation={viper.ResolvedActionId}/{viper.ExposureGeneration}, " +
@@ -343,7 +321,6 @@ internal sealed partial class SettingsWindow
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof and never changes a target or cancels a cast. " +
-            "Scholar Smart Spread reads the same raw hold independently and never consumes the shared priority lane. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
             "blocked while your own Guard is active. Held DRK Shadowbringer joins the physical-generation chain at " +

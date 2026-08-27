@@ -66,7 +66,7 @@ internal readonly record struct SamuraiReactiveActionEffectCapture(
     uint LocalEntityId,
     int FeatureGeneration);
 
-internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarSpreadActionEffectCapture
+internal unsafe sealed class MachinistLimitBreakCapture : IDisposable
 {
     private const int EffectSlotsPerTarget = 8;
     private const int MaximumQueuedWarnings = 64;
@@ -74,7 +74,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private const int MaximumQueuedMiracleInterceptThreats = 64;
     private const int MaximumQueuedMiracleInterceptConfirmations = 64;
     private const int MaximumQueuedPressureEvents = 128;
-    private const int MaximumQueuedScholarSpreadEffects = 64;
     private const int MaximumQueuedSamuraiReactiveProtectionSignals = 64;
     private const int MaximumQueuedSamuraiReactiveActionEffects = 64;
     private const int MaximumTargetsPerAction = 32;
@@ -90,7 +89,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private readonly ConcurrentQueue<MiracleInterceptThreatEvent> pendingMiracleInterceptThreats = new();
     private readonly ConcurrentQueue<MiracleInterceptLandedEffect> pendingMiracleInterceptConfirmations = new();
     private readonly ConcurrentQueue<TargetPressureCaptureEvent> pendingPressureEvents = new();
-    private readonly ConcurrentQueue<ScholarSpreadCapturedActionEffect> pendingScholarSpreadEffects = new();
     private readonly ConcurrentQueue<SamuraiReactiveProtectionCapture> pendingSamuraiReactiveProtectionSignals = new();
     private readonly ConcurrentQueue<SamuraiReactiveActionEffectCapture> pendingSamuraiReactiveActionEffects = new();
 
@@ -102,8 +100,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private int miracleCleanseFollowupLocalEntityIdBits;
     private int miracleCleanseFollowupGeneration;
     private int pressureLocalEntityIdBits;
-    private int scholarSpreadLocalEntityIdBits;
-    private int scholarSpreadGeneration;
     private int samuraiReactiveLocalEntityIdBits;
     private int samuraiReactiveGeneration;
     private int queuedWarningCount;
@@ -111,12 +107,10 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private int queuedMiracleInterceptThreatCount;
     private int queuedMiracleInterceptConfirmationCount;
     private int queuedPressureEventCount;
-    private int queuedScholarSpreadEffectCount;
     private int queuedSamuraiReactiveProtectionSignalCount;
     private int queuedSamuraiReactiveActionEffectCount;
     private int captureBlocked = 1;
     private long captureErrors;
-    private long scholarSpreadCaptureErrors;
     private long droppedWarnings;
     private long capturedAllyRescueCleanses;
     private long droppedAllyRescueCleanses;
@@ -125,8 +119,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     private long capturedMiracleInterceptConfirmations;
     private long droppedMiracleInterceptConfirmations;
     private long droppedPressureEvents;
-    private long capturedScholarSpreadEffects;
-    private long droppedScholarSpreadEffects;
     private long capturedSamuraiReactiveProtectionSignals;
     private long droppedSamuraiReactiveProtectionSignals;
     private long capturedSamuraiReactiveActionEffects;
@@ -148,9 +140,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         unchecked((uint)Volatile.Read(ref miracleCleanseFollowupLocalEntityIdBits));
     public int CurrentMiracleCleanseFollowupGeneration => Volatile.Read(ref miracleCleanseFollowupGeneration);
     public uint CurrentPressureLocalEntityId => unchecked((uint)Volatile.Read(ref pressureLocalEntityIdBits));
-    public uint CurrentScholarSpreadLocalEntityId =>
-        unchecked((uint)Volatile.Read(ref scholarSpreadLocalEntityIdBits));
-    public int CurrentScholarSpreadGeneration => Volatile.Read(ref scholarSpreadGeneration);
     public uint CurrentSamuraiReactiveLocalEntityId =>
         unchecked((uint)Volatile.Read(ref samuraiReactiveLocalEntityIdBits));
     public int CurrentSamuraiReactiveGeneration =>
@@ -161,7 +150,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     public int MiracleInterceptConfirmationQueueDepth =>
         Math.Max(0, Volatile.Read(ref queuedMiracleInterceptConfirmationCount));
     public int PressureQueueDepth => Math.Max(0, Volatile.Read(ref queuedPressureEventCount));
-    public int ScholarSpreadQueueDepth => Math.Max(0, Volatile.Read(ref queuedScholarSpreadEffectCount));
     public int SamuraiReactiveProtectionQueueDepth =>
         Math.Max(0, Volatile.Read(ref queuedSamuraiReactiveProtectionSignalCount));
     public int SamuraiReactiveActionEffectQueueDepth =>
@@ -175,9 +163,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     public long CapturedMiracleInterceptConfirmations => Interlocked.Read(ref capturedMiracleInterceptConfirmations);
     public long DroppedMiracleInterceptConfirmations => Interlocked.Read(ref droppedMiracleInterceptConfirmations);
     public long DroppedPressureEvents => Interlocked.Read(ref droppedPressureEvents);
-    public long CapturedScholarSpreadEffects => Interlocked.Read(ref capturedScholarSpreadEffects);
-    public long DroppedScholarSpreadEffects => Interlocked.Read(ref droppedScholarSpreadEffects);
-    public long ScholarSpreadCaptureErrors => Interlocked.Read(ref scholarSpreadCaptureErrors);
     public long CapturedSamuraiReactiveProtectionSignals =>
         Interlocked.Read(ref capturedSamuraiReactiveProtectionSignals);
     public long DroppedSamuraiReactiveProtectionSignals =>
@@ -261,18 +246,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         if (previous != normalized) ClearPressureEvents();
     }
 
-    public void SetScholarSpreadLocalEntityId(uint entityId)
-    {
-        var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
-        var previous = unchecked((uint)Interlocked.Exchange(
-            ref scholarSpreadLocalEntityIdBits,
-            unchecked((int)normalized)));
-        if (previous == normalized) return;
-
-        Interlocked.Increment(ref scholarSpreadGeneration);
-        ClearScholarSpreadEffects();
-    }
-
     public void SetSamuraiReactiveLocalEntityId(uint entityId)
     {
         var normalized = IsNetworkEntityId(entityId) ? entityId : 0u;
@@ -317,13 +290,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
     {
         if (!pendingPressureEvents.TryDequeue(out pressureEvent)) return false;
         Interlocked.Decrement(ref queuedPressureEventCount);
-        return true;
-    }
-
-    public bool TryDequeueScholarSpreadEffect(out ScholarSpreadCapturedActionEffect effect)
-    {
-        if (!pendingScholarSpreadEffects.TryDequeue(out effect)) return false;
-        Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
         return true;
     }
 
@@ -397,12 +363,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             Interlocked.Decrement(ref queuedPressureEventCount);
     }
 
-    public void ClearScholarSpreadEffects()
-    {
-        while (pendingScholarSpreadEffects.TryDequeue(out _))
-            Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
-    }
-
     public void ClearSamuraiReactiveProtectionSignals()
     {
         while (pendingSamuraiReactiveProtectionSignals.TryDequeue(out _))
@@ -427,8 +387,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         Interlocked.Exchange(ref miracleCleanseFollowupLocalEntityIdBits, 0);
         Interlocked.Increment(ref miracleCleanseFollowupGeneration);
         Interlocked.Exchange(ref pressureLocalEntityIdBits, 0);
-        Interlocked.Exchange(ref scholarSpreadLocalEntityIdBits, 0);
-        Interlocked.Increment(ref scholarSpreadGeneration);
         Interlocked.Exchange(ref samuraiReactiveLocalEntityIdBits, 0);
         Interlocked.Increment(ref samuraiReactiveGeneration);
         combatLimitBreakCaptureBuffer.SetEnabled(false);
@@ -439,7 +397,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         ClearMiracleInterceptThreats();
         ClearMiracleInterceptConfirmations();
         ClearPressureEvents();
-        ClearScholarSpreadEffects();
         ClearSamuraiReactiveProtectionSignals();
         ClearSamuraiReactiveActionEffects();
     }
@@ -457,7 +414,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         MiracleInterceptThreatEvent? capturedMiracleInterceptThreat = null;
         MiracleInterceptLandedEffect? capturedMiracleInterceptConfirmation = null;
         TargetPressureCaptureEvent? capturedPressure = null;
-        ScholarSpreadCapturedActionEffect? capturedScholarSpreadEffect = null;
         SamuraiReactiveProtectionCapture? capturedSamuraiReactiveProtectionSignal = null;
         SamuraiReactiveActionEffectCapture? capturedSamuraiReactiveActionEffect = null;
         try
@@ -494,7 +450,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
                 }
                 catch (Exception exception)
                 {
-                    RecordCaptureError(exception, scholarSpread: false);
+                    RecordCaptureError(exception);
                 }
 
                 // Keep SAM's protection-start mirror isolated from older
@@ -514,23 +470,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
                 }
                 catch (Exception exception)
                 {
-                    RecordCaptureError(exception, scholarSpread: false);
-                }
-
-                // Scholar reliability is isolated from all older consumers of
-                // this shared detour: an unrelated parser failure cannot skip
-                // or invalidate the independent Scholar workflow.
-                try
-                {
-                    capturedScholarSpreadEffect = TryCaptureScholarSpreadEffect(
-                        casterEntityId,
-                        header,
-                        effects,
-                        targetEntityIds);
-                }
-                catch (Exception exception)
-                {
-                    RecordCaptureError(exception, scholarSpread: true);
+                    RecordCaptureError(exception);
                 }
 
                 try
@@ -543,7 +483,7 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
                 }
                 catch (Exception exception)
                 {
-                    RecordCaptureError(exception, scholarSpread: false);
+                    RecordCaptureError(exception);
                 }
             }
         }
@@ -565,37 +505,21 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         if (capturedMiracleInterceptConfirmation is { } miracleConfirmation)
             EnqueueMiracleInterceptConfirmation(miracleConfirmation);
         if (capturedPressure is { } pressure) EnqueuePressure(pressure);
-        if (capturedScholarSpreadEffect is { } scholarSpreadEffect)
-            EnqueueScholarSpreadEffect(scholarSpreadEffect);
         if (capturedSamuraiReactiveProtectionSignal is { } samuraiSignal)
             EnqueueSamuraiReactiveProtectionSignal(samuraiSignal);
         if (capturedSamuraiReactiveActionEffect is { } samuraiEffect)
             EnqueueSamuraiReactiveActionEffect(samuraiEffect);
     }
 
-    private void RecordCaptureError(Exception exception, bool scholarSpread)
+    private void RecordCaptureError(Exception exception)
     {
         var errorCount = Interlocked.Increment(ref captureErrors);
-        var scholarErrorCount = scholarSpread
-            ? Interlocked.Increment(ref scholarSpreadCaptureErrors)
-            : 0;
-        if (errorCount <= 3 || errorCount % 100 == 0 || scholarErrorCount is 1 or 2 or 3)
+        if (errorCount <= 3 || errorCount % 100 == 0)
         {
-            if (scholarSpread)
-            {
-                log.Error(
-                    exception,
-                    "Seiton Sense Scholar action-effect capture failed closed; Scholar error #{ScholarCount}, shared error #{Count}.",
-                    scholarErrorCount,
-                    errorCount);
-            }
-            else
-            {
-                log.Error(
-                    exception,
-                    "Seiton Sense failed closed while reading a bounded action-effect signal; shared error #{Count}.",
-                    errorCount);
-            }
+            log.Error(
+                exception,
+                "Seiton Sense failed closed while reading a bounded action-effect signal; shared error #{Count}.",
+                errorCount);
         }
     }
 
@@ -1060,62 +984,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
             : null;
     }
 
-    private ScholarSpreadCapturedActionEffect? TryCaptureScholarSpreadEffect(
-        uint casterEntityId,
-        ActionEffectHandler.Header* header,
-        ActionEffectHandler.TargetEffects* effects,
-        GameObjectId* targetEntityIds)
-    {
-        var localEntityId = CurrentScholarSpreadLocalEntityId;
-        var featureGeneration = CurrentScholarSpreadGeneration;
-        if (!IsNetworkEntityId(localEntityId) ||
-            casterEntityId != localEntityId ||
-            header == null ||
-            effects == null ||
-            targetEntityIds == null ||
-            header->NumTargets is 0 or > MaximumTargetsPerAction)
-        {
-            return null;
-        }
-
-        var actionId = header->SpellId != 0 ? header->SpellId : header->ActionId;
-        if (!ScholarSpreadRules.IsRelevantAction(actionId)) return null;
-        if (actionId != ScholarSpreadRules.DeploymentTacticsActionId &&
-            header->NumTargets != 1)
-        {
-            return null;
-        }
-
-        uint primaryTargetEntityId;
-        if (actionId == ScholarSpreadRules.DeploymentTacticsActionId)
-        {
-            var animationTargetId = header->AnimationTargetId;
-            if (animationTargetId > uint.MaxValue) return null;
-            primaryTargetEntityId = (uint)animationTargetId;
-        }
-        else
-        {
-            primaryTargetEntityId = targetEntityIds[0].ObjectId;
-        }
-
-        if (!IsNetworkEntityId(primaryTargetEntityId)) return null;
-
-        if (featureGeneration != CurrentScholarSpreadGeneration ||
-            localEntityId != CurrentScholarSpreadLocalEntityId)
-        {
-            return null;
-        }
-
-        return new ScholarSpreadCapturedActionEffect(
-            Environment.TickCount64,
-            casterEntityId,
-            primaryTargetEntityId,
-            actionId,
-            featureGeneration,
-            header->GlobalSequence,
-            header->SourceSequence);
-    }
-
     private void Enqueue(MachinistLimitBreakWarning warning)
     {
         if (disposed ||
@@ -1230,29 +1098,6 @@ internal unsafe sealed class MachinistLimitBreakCapture : IDisposable, IScholarS
         }
 
         pendingPressureEvents.Enqueue(pressureEvent);
-    }
-
-    private void EnqueueScholarSpreadEffect(ScholarSpreadCapturedActionEffect effect)
-    {
-        if (disposed ||
-            Volatile.Read(ref captureBlocked) != 0 ||
-            effect.CasterEntityId != CurrentScholarSpreadLocalEntityId ||
-            effect.FeatureGeneration != CurrentScholarSpreadGeneration ||
-            !IsNetworkEntityId(effect.PrimaryTargetEntityId))
-        {
-            return;
-        }
-
-        var depth = Interlocked.Increment(ref queuedScholarSpreadEffectCount);
-        if (depth > MaximumQueuedScholarSpreadEffects)
-        {
-            Interlocked.Decrement(ref queuedScholarSpreadEffectCount);
-            Interlocked.Increment(ref droppedScholarSpreadEffects);
-            return;
-        }
-
-        pendingScholarSpreadEffects.Enqueue(effect);
-        Interlocked.Increment(ref capturedScholarSpreadEffects);
     }
 
     private void EnqueueSamuraiReactiveProtectionSignal(

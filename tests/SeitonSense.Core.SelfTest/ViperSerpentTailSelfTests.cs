@@ -29,6 +29,30 @@ internal static class ViperSerpentTailSelfTests
         }
         False(ViperSerpentTailRules.IsExactFollowUpAction(39_183), "carrier is never dispatched");
         False(ViperSerpentTailRules.IsExactFollowUpAction(39_173), "unknown action");
+        True(
+            ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: true,
+                hostileFlag: true,
+                exactVerifiedStrikingDummy: false),
+            "Wolves' Den hostile player <t> needs no duel-manager slot");
+        False(
+            ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: true,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: false),
+            "Wolves' Den non-hostile player <t> is rejected");
+        False(
+            ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: false,
+                hostileFlag: true,
+                exactVerifiedStrikingDummy: false),
+            "Wolves' Den hostile non-player is not a duel target");
+        True(
+            ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: false,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: true),
+            "Wolves' Den exact verified dummy remains independently eligible");
 
         var first = Exposure(ViperSerpentTailRules.DeathRattleActionId);
         True(first.IsValid && first.HasCurrentFollowUp, "carrier alone creates an exposure");

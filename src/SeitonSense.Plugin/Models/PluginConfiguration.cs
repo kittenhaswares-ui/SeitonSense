@@ -59,7 +59,6 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
     public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
-    public bool EnableScholarSpreadOnHeldKey { get; set; }
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
@@ -634,7 +633,6 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EmergencyTeleportMinimumTravelYalms = 10f;
             EmergencyTeleportEnemySafetyRadiusYalms = 10f;
             EmergencyTeleportMaximumNearbyEnemies = 0;
-            EnableScholarSpreadOnHeldKey = false;
         }
 
         if (Version < 36)
@@ -728,7 +726,6 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNinjaSeitonOnHeldGameplayKey = false;
         EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
-        EnableScholarSpreadOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;

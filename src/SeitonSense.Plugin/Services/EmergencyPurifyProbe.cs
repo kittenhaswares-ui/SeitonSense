@@ -82,8 +82,14 @@ internal sealed class EmergencyPurifyProbe
         long nowMilliseconds,
         long bufferMilliseconds,
         EmergencyActionInputFrame inputFrame,
+        uint ninjaShukuchiHiddenStatusId,
         bool hardReset = false)
     {
+        var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
+            localPlayer,
+            ninjaShukuchiHiddenStatusId);
+        var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
+        var effectiveHardReset = hardReset || stealthSuppressed;
         var alive = IsAlive(localPlayer);
         var localPlayerIdentityValid = alive && HasValidLocalPlayer(localPlayer!);
         var input = inputFrame.Snapshot;
@@ -98,8 +104,8 @@ internal sealed class EmergencyPurifyProbe
                                       localPlayer!,
                                       out actionStructurallyReady,
                                       out globalQueueReady);
-        var locallyReady = !hardReset &&
-                           configurationEnabled &&
+        var locallyReady = !effectiveHardReset &&
+                           effectiveConfigurationEnabled &&
                            isSupportedPvPContext &&
                            localPlayerIdentityValid &&
                            statusCurrentlyObserved &&
@@ -112,7 +118,7 @@ internal sealed class EmergencyPurifyProbe
         var decision = EmergencyPurifyBufferRules.Observe(
             state,
             new EmergencyPurifyBufferObservation(
-                configurationEnabled,
+                effectiveConfigurationEnabled,
                 isSupportedPvPContext,
                 alive,
                 localPlayerIdentityValid,
@@ -128,7 +134,7 @@ internal sealed class EmergencyPurifyProbe
                 allowHeldKeyAtStatusEntry,
                 locallyReady,
                 nowMilliseconds,
-                hardReset,
+                effectiveHardReset,
                 bufferMilliseconds,
                 (int)input.FreshGameplayKey,
                 (int)input.HeldGameplayKey,
@@ -141,7 +147,7 @@ internal sealed class EmergencyPurifyProbe
         var exactConsentStillDown = state.FrozenKeyCode > 0 &&
                                     inputFrame.IsGameplayKeyPhysicallyDown(
                                         (VirtualKey)state.FrozenKeyCode);
-        var inputClaimed = configurationEnabled &&
+        var inputClaimed = effectiveConfigurationEnabled &&
                            isSupportedPvPContext &&
                            localPlayerIdentityValid &&
                            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
@@ -157,7 +163,7 @@ internal sealed class EmergencyPurifyProbe
         var castCancellationRequest = BuildCastCancellationRequest(
             localPlayer,
             isSupportedPvPContext,
-            configurationEnabled,
+            effectiveConfigurationEnabled,
             statusInstance,
             statusCurrentlyObserved,
             resilienceActive,
@@ -165,7 +171,8 @@ internal sealed class EmergencyPurifyProbe
             inputClaimed,
             actionStateReadable && actionStructurallyReady,
             state,
-            inputFrame);
+            inputFrame,
+            ninjaShukuchiHiddenStatusId);
 
         var attempted = false;
         var accepted = false;
@@ -179,7 +186,7 @@ internal sealed class EmergencyPurifyProbe
             {
                 nativeOutcome = TryUsePurify(
                     localPlayer!,
-                    configurationEnabled,
+                    effectiveConfigurationEnabled,
                     isSupportedPvPContext,
                     frozenStatus,
                     statusInstance,
@@ -188,6 +195,7 @@ internal sealed class EmergencyPurifyProbe
                     input.IsTextInputActive,
                     inputFrame,
                     frozenKeyCode,
+                    ninjaShukuchiHiddenStatusId,
                     out attempted);
             }
             catch (Exception exception)
@@ -337,6 +345,7 @@ internal sealed class EmergencyPurifyProbe
         bool textInputActive,
         EmergencyActionInputFrame inputFrame,
         int expectedKeyCode,
+        uint ninjaShukuchiHiddenStatusId,
         out bool attempted)
     {
         attempted = false;
@@ -348,6 +357,9 @@ internal sealed class EmergencyPurifyProbe
             resilienceActive ||
             textInputActive ||
             !HasValidLocalPlayer(localPlayer) ||
+            NinjaShukuchiStealthGate.IsActive(
+                localPlayer,
+                ninjaShukuchiHiddenStatusId) ||
             expectedKeyCode <= 0 ||
             !inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)expectedKeyCode))
         {
@@ -443,7 +455,8 @@ internal sealed class EmergencyPurifyProbe
         bool inputClaimed,
         bool actionStructurallyReady,
         EmergencyPurifyBufferState currentState,
-        EmergencyActionInputFrame inputFrame)
+        EmergencyActionInputFrame inputFrame,
+        uint ninjaShukuchiHiddenStatusId)
     {
         if (!configurationEnabled ||
             !isSupportedPvPContext ||
@@ -460,6 +473,9 @@ internal sealed class EmergencyPurifyProbe
                 (VirtualKey)currentState.FrozenKeyCode) ||
             localPlayer is null ||
             !HasValidLocalPlayer(localPlayer) ||
+            NinjaShukuchiStealthGate.IsActive(
+                localPlayer,
+                ninjaShukuchiHiddenStatusId) ||
             !HasCastCancellationBoundary(localPlayer))
         {
             return null;

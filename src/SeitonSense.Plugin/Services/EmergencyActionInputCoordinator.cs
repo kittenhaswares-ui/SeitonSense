@@ -11,8 +11,6 @@ namespace SeitonSense.Plugin.Services;
 /// Hiebsprung, DRK safe-fallback Shadowbringer, held Monk combo, Smart
 /// Recuperate, Emergency Teleport, reactive Guard, then high-pressure Sprint.
 /// Accepted-Eukrasia Kardia and Monk Earth's Reply follow as event lanes.
-/// Independent Scholar spread only observes the immutable held snapshot after
-/// that whole priority chain and never suppresses or consumes it.
 /// Consumption is deliberately frame-local: one helper can own the current
 /// framework frame without destroying the still-held physical consent needed
 /// by a later distinct action episode.

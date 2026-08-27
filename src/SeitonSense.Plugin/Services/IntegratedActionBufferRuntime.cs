@@ -318,6 +318,28 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
     }
 
     /// <summary>
+    /// Seeds the teaching window from an exact direct hotbar slot rooted in a
+    /// certified physical press. The native scanner may refresh it for that
+    /// same held press after consuming a Turbo pulse. This is observation-only:
+    /// it cannot arm, replace, extend, cancel, or dispatch a buffered action.
+    /// </summary>
+    internal void ObserveCertifiedDirectHotbarInput(
+        IntegratedActionBufferHotbarRoot hotbarRoot,
+        uint actionId)
+    {
+        if (!hotbarRoot.IsValid || actionId == 0) return;
+
+        lock (gate)
+        {
+            if (disposed) return;
+            latestLearningInput = new LearningInput(
+                hotbarRoot,
+                actionId,
+                DescribeAction(actionId));
+        }
+    }
+
+    /// <summary>
     /// Called immediately before NearAssistRedirector's one native Original
     /// invocation. Calling this method is itself the certification that the root
     /// came from a direct standard-hotbar action slot, never a macro/cross-hotbar

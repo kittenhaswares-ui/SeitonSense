@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Keys;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
@@ -676,15 +677,12 @@ internal sealed unsafe class ViperSerpentTailProbe
                 return null;
             }
             case SupportedPvPContext.WolvesDen:
-                return DarkKnightWolvesDenCurrentTargetResolver
-                    .TryResolveExactCurrentHardTarget(
+                return TryResolveExactWolvesDenCurrentHardTarget(
                         objectTable,
                         wolvesDenDummyMetadataVerified,
                         localPlayer,
                         out _,
-                        out var identity,
-                        out _,
-                        out _)
+                        out var identity)
                     ? ResolveExactCandidate(
                         localPlayer,
                         context,
@@ -753,15 +751,12 @@ internal sealed unsafe class ViperSerpentTailProbe
             }
             case SupportedPvPContext.WolvesDen:
                 if (enemySlot != 0 ||
-                    !DarkKnightWolvesDenCurrentTargetResolver
-                        .TryResolveExactCurrentHardTarget(
+                    !TryResolveExactWolvesDenCurrentHardTarget(
                             objectTable,
                             wolvesDenDummyMetadataVerified,
                             localPlayer,
                             out target,
-                            out var currentIdentity,
-                            out _,
-                            out _) ||
+                            out var currentIdentity) ||
                     currentIdentity != expectedTarget)
                 {
                     return null;
@@ -815,6 +810,96 @@ internal sealed unsafe class ViperSerpentTailProbe
                 nativeRangeAndLineOfSight),
             target,
             targetActionReady);
+    }
+
+    /// <summary>
+    /// Resolves the exact current native Wolves' Den hard target. Duel targets
+    /// follow the same direct object-table path as GNB Continuation and require
+    /// a live hostile player; they do not depend on a duel-manager enemy slot.
+    /// The previously reviewed exact current-target dummy remains a separate,
+    /// metadata-gated test target. No synthetic slot or alternate is resolved.
+    /// </summary>
+    private static bool TryResolveExactWolvesDenCurrentHardTarget(
+        IObjectTable objectTable,
+        bool strikingDummyMetadataVerified,
+        IPlayerCharacter localPlayer,
+        out IBattleChara? target,
+        out TargetPressureActorIdentity identity)
+    {
+        target = null;
+        identity = default;
+        if (!HasValidNativeIdentity(localPlayer)) return false;
+
+        if (StrictWolvesDenStrikingDummyResolver.TryResolveExactCurrentHardTarget(
+                objectTable,
+                strikingDummyMetadataVerified,
+                localPlayer,
+                out var dummy,
+                out var dummyIdentity,
+                out _) &&
+            ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: false,
+                hostileFlag: false,
+                exactVerifiedStrikingDummy: true))
+        {
+            target = dummy;
+            identity = dummyIdentity;
+            return true;
+        }
+
+        var nativeTargetId = GetNativeHardTargetId(localPlayer);
+        if (!IsNetworkObjectId(nativeTargetId)) return false;
+
+        var byObjectId = objectTable.SearchById(nativeTargetId)
+            as IPlayerCharacter;
+        var byEntityId = nativeTargetId <= uint.MaxValue
+            ? objectTable.SearchByEntityId((uint)nativeTargetId)
+                as IPlayerCharacter
+            : null;
+        if (HasValidNativeIdentity(byObjectId) &&
+            HasValidNativeIdentity(byEntityId) &&
+            !HasSameNativeIdentity(byObjectId, byEntityId))
+        {
+            return false;
+        }
+
+        var candidate = HasValidNativeIdentity(byObjectId)
+            ? byObjectId
+            : byEntityId;
+        var hostileFlag = candidate is not null &&
+                          (candidate.StatusFlags & StatusFlags.Hostile) != 0;
+        if (!HasValidNativeIdentity(candidate) ||
+            !ViperSerpentTailRules.IsEligibleWolvesDenCurrentTarget(
+                isPlayerCharacter: true,
+                hostileFlag,
+                exactVerifiedStrikingDummy: false) ||
+            !ActorIdMatches(nativeTargetId, candidate!) ||
+            HasSameNativeIdentity(localPlayer, candidate) ||
+            !IsLivePlayer(candidate) ||
+            !candidate!.IsTargetable)
+        {
+            return false;
+        }
+
+        var canonicalByObject = objectTable.SearchById(candidate.GameObjectId)
+            as IPlayerCharacter;
+        var canonicalByEntity = objectTable.SearchByEntityId(candidate.EntityId)
+            as IPlayerCharacter;
+        if (!HasSameNativeIdentity(candidate, canonicalByObject) ||
+            !HasSameNativeIdentity(candidate, canonicalByEntity) ||
+            GetNativeHardTargetId(localPlayer) != nativeTargetId ||
+            (candidate.StatusFlags & StatusFlags.Hostile) == 0)
+        {
+            return false;
+        }
+
+        identity = new TargetPressureActorIdentity(
+            candidate.GameObjectId,
+            candidate.EntityId);
+        if (!identity.IsValid) return false;
+
+        target = candidate;
+        return true;
     }
 
     private static bool TryObserveActionState(

@@ -21,21 +21,6 @@ internal static class EnemyCombatConstants
     internal const ushort ScholarCriticalStrategyRecast100ms = 200;
     internal const int ScholarCriticalStrategySheetRange = 25;
 
-    internal const uint ScholarAdloquiumActionId = 29232;
-    internal const uint ScholarAdloquiumIconId = 9283;
-    internal const ushort ScholarAdloquiumRecast100ms = 120;
-    internal const uint ScholarBiolysisActionId = 29233;
-    internal const uint ScholarBiolysisIconId = 9390;
-    internal const ushort ScholarBiolysisRecast100ms = 160;
-    internal const uint ScholarDeploymentTacticsActionId = 29234;
-    internal const uint ScholarDeploymentTacticsIconId = 9612;
-    internal const ushort ScholarDeploymentTacticsRecast100ms = 120;
-    internal const uint ScholarGalvanizeStatusId = 3087;
-    internal const uint ScholarCatalyzeStatusId = 3088;
-    internal const uint ScholarBiolysisStatusId = 3089;
-    internal const uint ScholarBiolyticStatusId = 3090;
-    internal const uint TacticalCrystalBattleNpcNameId = 11350;
-
     internal const uint EmergencyTeleportMonkActionId = 29484;
     internal const uint EmergencyTeleportMonkActionIconId = 9645;
     internal const uint EmergencyTeleportBlackMageActionId = 29660;

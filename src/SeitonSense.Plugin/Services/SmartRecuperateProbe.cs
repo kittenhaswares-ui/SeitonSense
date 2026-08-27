@@ -108,9 +108,14 @@ internal sealed unsafe class SmartRecuperateProbe
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
+        uint ninjaShukuchiHiddenStatusId,
         bool hardReset = false)
     {
-        var effectiveHardReset = hardReset || nowMilliseconds < 0;
+        var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
+            localPlayer,
+            ninjaShukuchiHiddenStatusId);
+        var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
+        var effectiveHardReset = hardReset || stealthSuppressed || nowMilliseconds < 0;
         var localIdentityValid = TryGetExactIdentity(localPlayer, out var localIdentity);
         var localAlive = localIdentityValid && IsAlive(localPlayer);
         var localTargetable = localIdentityValid && localPlayer!.IsTargetable;
@@ -137,7 +142,7 @@ internal sealed unsafe class SmartRecuperateProbe
         var decision = SmartRecuperateRules.Observe(
             state,
             new SmartRecuperateObservation(
-                ConfigurationEnabled: configurationEnabled,
+                ConfigurationEnabled: effectiveConfigurationEnabled,
                 Context: context,
                 LocalPlayer: localIdentity,
                 IsLocalPlayerAlive: localAlive,
@@ -168,7 +173,7 @@ internal sealed unsafe class SmartRecuperateProbe
         var castCancellationRequest = BuildCastCancellationRequest(
             localPlayer,
             localIdentity,
-            configurationEnabled,
+            effectiveConfigurationEnabled,
             metadataVerified,
             actionHelpersSuppressedByGuard,
             higherPriorityClaimed,
@@ -180,7 +185,8 @@ internal sealed unsafe class SmartRecuperateProbe
             maximumMp,
             inputClaimed,
             state,
-            inputFrame);
+            inputFrame,
+            ninjaShukuchiHiddenStatusId);
 
         var attempted = false;
         var accepted = false;
@@ -192,10 +198,11 @@ internal sealed unsafe class SmartRecuperateProbe
                 nativeOutcome = TryUseRecuperate(
                     intent,
                     localPlayer!.Address,
-                    configurationEnabled,
+                    effectiveConfigurationEnabled,
                     metadataVerified,
                     higherPriorityClaimed,
                     inputFrame,
+                    ninjaShukuchiHiddenStatusId,
                     out attempted);
             }
             catch (Exception exception)
@@ -302,11 +309,18 @@ internal sealed unsafe class SmartRecuperateProbe
         bool metadataVerified,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
+        uint ninjaShukuchiHiddenStatusId,
         out bool attempted)
     {
         attempted = false;
         var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer, expectedLocalAddress);
-        if (currentLocal is null) return ClientActionAttemptOutcome.NotInvoked;
+        if (currentLocal is null ||
+            NinjaShukuchiStealthGate.IsActive(
+                currentLocal,
+                ninjaShukuchiHiddenStatusId))
+        {
+            return ClientActionAttemptOutcome.NotInvoked;
+        }
 
         var guardSuppressed = IsCurrentlySuppressedByGuard(
             currentLocal,
@@ -384,13 +398,17 @@ internal sealed unsafe class SmartRecuperateProbe
         uint maximumMp,
         bool inputClaimed,
         SmartRecuperateState currentState,
-        EmergencyActionInputFrame inputFrame)
+        EmergencyActionInputFrame inputFrame,
+        uint ninjaShukuchiHiddenStatusId)
     {
         if (!inputClaimed ||
             !actionStructurallyReady ||
             currentState.Phase != SmartRecuperatePhase.Buffered ||
             currentState.Intent is not { IsValid: true } intent ||
             localPlayer is null ||
+            NinjaShukuchiStealthGate.IsActive(
+                localPlayer,
+                ninjaShukuchiHiddenStatusId) ||
             !TryGetExactIdentity(localPlayer, out var currentIdentity) ||
             currentIdentity != localIdentity ||
             !HasCastCancellationBoundary(localPlayer) ||

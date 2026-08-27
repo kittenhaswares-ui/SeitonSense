@@ -110,12 +110,6 @@ following data already available in the local FFXIV client:
   positions, complete current enemy positions, native target action status,
   range/line-of-sight result, destination safety counts/clearance, and one-shot
   danger-episode state;
-- when Scholar Smart Spread is enabled, the exact local Scholar identity and raw
-  held-key state, current Biolysis/Adloquium/Deployment charges and optional
-  dynamic recast timing, canonical enemy and party identities, local-source
-  status pairs, positions, native target action/range/line-of-sight results, the
-  uniquely resolved tactical-crystal actor/position, and bounded plugin-owned
-  ActionEffect target/source sequences;
 - when the Viper Serpentiner-Geist helper is enabled, the directly observed
   adjusted carrier/follow-up action, its in-memory exposure generation/spent
   state, exact local/current-hard-target identities, context, territory, own
@@ -313,8 +307,7 @@ hold helpers use that deterministic urgency order; reactive counter-CC leads all
 its LB and protection-end windows are shorter. One framework frame permits at
 most one held-helper native boundary, but a continuously held key remains consent
 for later distinct exact episodes. Kardia and Monk retain their separate event-
-driven origins. Scholar Smart Spread is independent of this shared priority and
-never claims or consumes its physical-input frame.
+driven origins.
 
 ## Optional team-visible Attack1 focus sign
 
@@ -730,8 +723,7 @@ Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency
 Teleport, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
 Viper Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded
-because they poll their current native state and deliberately do not cancel a cast. Scholar Smart Spread also
-has no cast-cancel path because its independent lane waits for the native boundary.
+because they poll their current native state and deliberately do not cancel a cast.
 Cast cancellation therefore constructs fourteen reviewed request shapes across
 fifteen ordered selection slots; held Shadowbringer uses the same exact request
 adapter at its separate Dark Arts and safe-fallback positions.
@@ -1070,62 +1062,6 @@ state and diagnostics remain local in memory and are not saved as combat,
 target, or key history or uploaded. A client-accepted request does not prove
 that Critical Strategy landed or changed Guard; exact dispatch and effect
 behavior remain current-patch live-validation boundaries.
-
-## Experimental Scholar Smart Spread held-key helper
-
-This separate persisted option is disabled by default and runs only for PvP
-Scholar in exact Crystalline Conflict. It reads immutable raw held-key consent in
-an independent lane. It never claims the shared helper frame/generation and never
-requests cast cancellation; it waits for FFXIV's real GCD, cast, queue, and
-animation-lock boundary instead. A territory-local Duty Start/recommence latch
-keeps the helper inactive during preparation and a duty-completion/context reset
-closes it. One completed chain is retained as terminal until every physical
-gameplay key is released.
-
-The DoT path requires at least two individually double-resolved, stable, unique
-canonical enemy actors and reads
-local-source Biolysis/Biolytic statuses, position, and native reachability to
-choose the exact seed with the largest new 15-yalm coverage of at least two
-retained targets. Unresolved actors are omitted instead of poisoning every exact
-candidate; unknown coverage on a retained actor still blocks ranking. The
-shield path is considered only when no DoT plan is ready and
-requires at least two individually stable exact party members including the
-local Scholar exactly once. It reads exact party
-HP/status/position and the
-single language-independent tactical-crystal battle-NPC identity; when that actor
-is uniquely resolved, candidates inside a conservative 5-yalm edge radius rank
-first, then lower HP and stable identity. Unknown coverage for any party member
-blocks this ranking. A full-health candidate away from that tactical-crystal
-radius is ineligible. Adloquium spread is permitted only when two Deployment
-charges exist or dynamically observed native recast timing proves the next
-charge will return no later than the next Biolysis window. Unknown timing blocks
-only that one-charge shield reservation, not DoT or two-charge shield planning;
-final native readiness is still required.
-
-Every plugin-owned Adloquium/Biolysis/Deployment request freezes one action,
-actor, and episode. Single-target setup capture uses the exact first effect
-recipient; area Deployment retains the animation target. If a nonzero native
-source sequence is synchronously available it is bound immediately. The
-matching exact local-source ActionEffect may confirm the already accepted setup
-even when its packet source sequence is zero, but ActionEffect alone cannot
-authorize Deployment. The complete exact locally sourced status pair must first
-be observed on the frozen actor for that same accepted setup. After that proof,
-either remaining status may keep Deployment eligible; this permits Catalyze to
-remain deployable after Galvanize has absorbed damage. A delayed matching packet
-is ignored rather than cancelling Deployment. Missing, zero, or disagreeing
-packet sequence metadata waits for complete-pair proof or expiry; it does not
-cancel ahead of that proof. Deployment
-becomes eligible as soon as that proof appears inside the ownership window;
-evidence after 2.5 seconds cannot revive the workflow and the timeout is not a
-fixed dispatch delay.
-Separately pressed Scholar actions are not adopted. Manual conflicts, transient
-readiness, and ordinary identity/status drift reset or wait for a fresh exact
-plan under the same physical hold; ambiguous ownership, expired accepted
-requests, and exhausted native rejection remain terminal until release. All plans, source sequences, confirmations, conflicts, and aggregate
-diagnostics are bounded in local memory and are not persisted or uploaded.
-Client dispatch/packet evidence does not prove the status spread; current-patch
-ActionEffect correlation, Duty Start signal, and the conservative crystal radius
-require live testing.
 
 ## Experimental Sage Smart Kardia after accepted Eukrasia
 
@@ -1521,7 +1457,7 @@ scale, self/ally LB activation messages, optional ally names and ally LB damage,
 acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
-Critical Strategy and independent Scholar Smart Spread held-key opt-ins,
+Critical Strategy held-key opt-in,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer and
   separate DRK Hiebsprung held-key opt-ins,
@@ -1543,14 +1479,14 @@ Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of
 Thorns, and Frost Star remain off for every upgrade, fresh install, and Reset
 Defaults. Schema 36
 adds local Auto-Guard card/sound defaults without enabling Auto-Guard itself.
-The schema-35 migration still forces Emergency Teleport and Scholar Smart Spread
-off; Emergency initializes to 50% HP, 4,000 MP, one direct focuser, 10-yalm minimum
+The schema-35 migration initializes Emergency Teleport off at 50% HP, 4,000 MP,
+one direct focuser, 10-yalm minimum
 travel, 10-yalm destination radius, and zero nearby enemies. The historical
 schema-34 migration still forces Viper Serpentiner Geist off. The historical
 schema-33 migration still leaves Smart Tab
 off while preserving an older explicitly enabled shared macro-helper opt-in as
-the separate Smart Action option. Smart Tab, Smart Action, Viper, Emergency
-Teleport, and Scholar Smart Spread are all off for fresh and reset configurations;
+the separate Smart Action option. Smart Tab, Smart Action, Viper, and Emergency
+Teleport are all off for fresh and reset configurations;
 unrelated existing opt-ins are preserved.
 
 The integrated input path reads only the local standard-keyboard-hotbar binding,
@@ -1588,7 +1524,7 @@ including schema 28's default-off post-Guard migration. Schema 32 forces the
 retired Combat Frames master off, maps its optional name preference to the ally
 LB feed, enables the replacement LB surfaces, and initializes local MP sounds to
 built-in IDs 4 and 6. Fresh and reset configurations keep NIN Guard-Shukuchi,
-Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro
+Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro
 helpers, and all other
 action-helper masters off; post-Guard defaults on only behind the disabled
 reactive-counter master. The replacement LB and local-MP presentation options
@@ -1598,8 +1534,8 @@ configuration does not save observed actors, targets,
 combat events, status timers, key state, marker ownership, pending helper state,
 NIN Guard-Shukuchi actor/location/cooldown epochs, Panic Shukuchi ground
 destinations, Viper carrier exposures/frozen action-actor-context-key intents,
-Emergency danger/destination episodes, Scholar spread plans/source sequences,
-ActionEffect confirmation state, or in-memory counters.
+Emergency danger/destination episodes, ActionEffect confirmation state, or
+in-memory counters.
 
 The integrated focus preset does not read, import, modify, or delete standalone
 Super Focus Glow configuration. Likewise, Seiton Sense does not modify the

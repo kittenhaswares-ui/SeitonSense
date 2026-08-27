@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.35.0.1
+
+- Fixed native Hotbar Turbo so a due repeat is consumed by XIV's normal hotbar
+  scan. The game can now own the visible slot press and Seiton's Latest Input;
+  an unconsumed scan is diagnostic-only and never bypasses the hotbar with a
+  hidden direct action call.
+- Fixed Viper Serpent's Tail in Wolves' Den duels by resolving the exact live
+  hostile current hard target directly. The separately verified striking dummy
+  remains supported, and Crystalline Conflict still uses exact e1-e5 actors.
+- Automatic Purify and Recuperate now fail closed while Ninja's metadata-
+  verified Shukuchi Hidden status is active. The status is checked both before
+  scheduler ownership/cast cancellation and again immediately before the sole
+  native action call; manual actions and other Ninja helpers are unaffected.
+- Removed the nonfunctional Scholar Biolysis/Adloquium/Deployment Tactics held
+  workflow completely. Scholar Critical Strategy remains unchanged. Added
+  compact buffer/Turbo counters to `/seiton debug` and one unload summary; no
+  live file scanning or per-frame log spam was added.
+- Configuration schema remains `40`; all `510` Core tests, the warning-free
+  Release build, source safety contract, and package checks pass. Current-patch
+  live in-game behavior remains a separate validation boundary.
+
 ## 0.35.0.0
 
 - Integrated a generic one-shot action buffer directly into Seiton Sense. A

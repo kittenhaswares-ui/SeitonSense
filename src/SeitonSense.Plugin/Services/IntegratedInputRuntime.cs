@@ -39,9 +39,6 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
     private static int hotbarExecutionDepth;
 
     [ThreadStatic]
-    private static int injectedRepeatDispatchDepth;
-
-    [ThreadStatic]
     private static ActiveBufferRootScope? activeBufferRoot;
 
     private readonly PluginConfiguration configuration;
@@ -230,6 +227,8 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
     public void Dispose()
     {
         if (disposed) return;
+        var finalDiagnostics = Diagnostics;
+        var finalHotbar = finalDiagnostics.HotbarInput ?? default;
         disposed = true;
         Volatile.Write(ref started, 0);
         Volatile.Write(ref available, 0);
@@ -282,6 +281,29 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         }
 
         ActionBuffer.Dispose();
+        log.Information(
+            "Seiton Sense integrated input session: roots={PhysicalRoots}, " +
+            "turbo-consumed/rejected={TurboConsumed}/{TurboRejected}, " +
+            "native-press/repeat/delegated/fail-open={NativePresses}/{NativeRepeats}/" +
+            "{DelegatedRepeats}/{FailedOpen}, " +
+            "buffer-observed/armed/dispatched/accepted/rejected/cancelled=" +
+            "{Observed}/{Armed}/{Dispatched}/{Accepted}/{Rejected}/{Cancelled}, " +
+            "buffer-last={BufferLast}, input-last={InputLast}.",
+            finalDiagnostics.PhysicalRoots,
+            finalDiagnostics.InjectedRepeatsDispatched,
+            finalDiagnostics.InjectedRepeatsRejected,
+            finalHotbar.PhysicalPresses,
+            finalHotbar.InjectedRepeats,
+            finalHotbar.DelegatedRepeats,
+            finalHotbar.FailedOpenEvents,
+            finalDiagnostics.ActionBuffer.ObservedRootCount,
+            finalDiagnostics.ActionBuffer.ArmedCount,
+            finalDiagnostics.ActionBuffer.DispatchedCount,
+            finalDiagnostics.ActionBuffer.AcceptedDispatchCount,
+            finalDiagnostics.ActionBuffer.RejectedDispatchCount,
+            finalDiagnostics.ActionBuffer.CancelledCount,
+            finalDiagnostics.ActionBuffer.LastEvent,
+            finalDiagnostics.LastEvent);
     }
 
     private byte ExecuteSlotDetour(
@@ -293,6 +315,9 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
 
         var previousRoot = activeBufferRoot;
         var ownsRoot = false;
+        var nativeTurboPulse = false;
+        IntegratedHotbarActivation? nativeTurboActivation = null;
+        var nativeTurboActionId = 0u;
         try
         {
             IntegratedHotbarActivation? activation = null;
@@ -306,6 +331,19 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             }
 
             if (ShouldSuppress(activation)) return 0;
+            nativeTurboPulse = activation is
+            {
+                Kind: IntegratedHotbarActivationKind.InjectedRepeat,
+            };
+            if (nativeTurboPulse &&
+                activation is { } turboActivation &&
+                slot != null &&
+                (uint)slot->CommandType == DirectActionHotbarSlotType &&
+                slot->CommandId != 0)
+            {
+                nativeTurboActivation = turboActivation;
+                nativeTurboActionId = slot->CommandId;
+            }
             ownsRoot = TryCreatePhysicalBufferRoot(activation, slot, out var scope);
             if (ownsRoot) activeBufferRoot = scope;
         }
@@ -320,7 +358,16 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         hotbarExecutionDepth++;
         try
         {
-            return hook.Original(thisPtr, slot);
+            var result = hook.Original(thisPtr, slot);
+            if (nativeTurboPulse)
+            {
+                Interlocked.Increment(ref injectedRepeatsDispatched);
+                SetLastEvent("Native hotbar scanner consumed an exact Turbo input");
+                if (nativeTurboActivation is { } turboActivation)
+                    ObserveNativeTurboLearningInput(turboActivation, nativeTurboActionId);
+            }
+
+            return result;
         }
         finally
         {
@@ -339,6 +386,9 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
 
         var previousRoot = activeBufferRoot;
         var ownsRoot = false;
+        var nativeTurboPulse = false;
+        IntegratedHotbarActivation? nativeTurboActivation = null;
+        var nativeTurboActionId = 0u;
         try
         {
             IntegratedHotbarActivation? activation = null;
@@ -352,8 +402,21 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             }
 
             if (ShouldSuppress(activation)) return 0;
+            nativeTurboPulse = activation is
+            {
+                Kind: IntegratedHotbarActivationKind.InjectedRepeat,
+            };
 
             var slot = thisPtr == null ? null : thisPtr->GetSlotById(hotbarId, slotId);
+            if (nativeTurboPulse &&
+                activation is { } turboActivation &&
+                slot != null &&
+                (uint)slot->CommandType == DirectActionHotbarSlotType &&
+                slot->CommandId != 0)
+            {
+                nativeTurboActivation = turboActivation;
+                nativeTurboActionId = slot->CommandId;
+            }
             ownsRoot = TryCreatePhysicalBufferRoot(activation, slot, out var scope);
             if (ownsRoot) activeBufferRoot = scope;
         }
@@ -368,7 +431,16 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         hotbarExecutionDepth++;
         try
         {
-            return hook.Original(thisPtr, hotbarId, slotId);
+            var result = hook.Original(thisPtr, hotbarId, slotId);
+            if (nativeTurboPulse)
+            {
+                Interlocked.Increment(ref injectedRepeatsDispatched);
+                SetLastEvent("Native hotbar scanner consumed an exact Turbo input");
+                if (nativeTurboActivation is { } turboActivation)
+                    ObserveNativeTurboLearningInput(turboActivation, nativeTurboActionId);
+            }
+
+            return result;
         }
         finally
         {
@@ -424,11 +496,38 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             hotbarInput?.IsStillHeld(observed.Press) == true);
         if (!root.IsValid) return false;
 
+        ActionBuffer.ObserveCertifiedDirectHotbarInput(root, slot->CommandId);
         scope = new ActiveBufferRootScope(this, slot->CommandId, root);
         Interlocked.Increment(ref physicalRoots);
         SetLastEvent(
             $"Certified physical hotbar {observed.Binding.HotbarId + 1}, slot {observed.Binding.SlotId + 1}");
         return true;
+    }
+
+    private void ObserveNativeTurboLearningInput(
+        IntegratedHotbarActivation activation,
+        uint actionId)
+    {
+        if (activation.Kind != IntegratedHotbarActivationKind.InjectedRepeat ||
+            actionId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var root = CreateBufferRoot(
+                activation.Press,
+                hotbarInput?.IsStillHeld(activation.Press) == true);
+            if (root.IsValid)
+                ActionBuffer.ObserveCertifiedDirectHotbarInput(root, actionId);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense Turbo learning-panel observation failed; native input continues.");
+        }
     }
 
     private void OnCertifiedPhysicalPress(IntegratedHotbarPress press)
@@ -466,71 +565,13 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
 
     private void OnUnconsumedInjectedRepeat(IntegratedHotbarActivation activation)
     {
-        var input = hotbarInput;
-        var hook = executeSlotByIdHook;
-        try
-        {
-            var policy = CaptureTurboPolicy();
-            var repeat = input?.RepeatSnapshot ?? default;
-            if (disposed ||
-                Volatile.Read(ref started) == 0 ||
-                Volatile.Read(ref available) == 0 ||
-                activation.Kind != IntegratedHotbarActivationKind.InjectedRepeat ||
-                activation.SuppressedByNewerInput ||
-                activation.SuppressedByInternalPriority ||
-                hotbarExecutionDepth != 0 ||
-                injectedRepeatDispatchDepth != 0 ||
-                hook is null ||
-                input is null ||
-                !LogicalHotbarRepeatPolicy.IsRepeatEnabled(policy) ||
-                repeat.OwnerLogicalInputId != (long)activation.Binding.InputId ||
-                !input.IsStillHeld(activation.Press))
-            {
-                Interlocked.Increment(ref injectedRepeatsRejected);
-                SetLastEvent("Injected repeat ended at final owner, hold, context, or priority validation");
-                return;
-            }
+        if (activation.Kind != IntegratedHotbarActivationKind.InjectedRepeat) return;
 
-            var hotbarModule = RaptureHotbarModule.Instance();
-            if (hotbarModule == null ||
-                hotbarModule->GetSlotById(
-                    activation.Binding.HotbarId,
-                    activation.Binding.SlotId) == null)
-            {
-                Interlocked.Increment(ref injectedRepeatsRejected);
-                SetLastEvent("Injected repeat ended because its exact current slot was unavailable");
-                return;
-            }
-
-            // The input source returned false to the native scanner. Execute
-            // this exact current slot once after scan unwind. No active buffer
-            // root is exposed: Turbo cadence must not replace the physical
-            // press's one-shot generic buffer intent.
-            injectedRepeatDispatchDepth++;
-            hotbarExecutionDepth++;
-            try
-            {
-                hook.Original(
-                    hotbarModule,
-                    activation.Binding.HotbarId,
-                    activation.Binding.SlotId);
-            }
-            finally
-            {
-                hotbarExecutionDepth--;
-                injectedRepeatDispatchDepth--;
-            }
-
-            Interlocked.Increment(ref injectedRepeatsDispatched);
-            SetLastEvent(
-                $"Repeated exact hotbar {activation.Binding.HotbarId + 1}, slot {activation.Binding.SlotId + 1}");
-        }
-        catch (Exception exception)
-        {
-            Interlocked.Increment(ref injectedRepeatsRejected);
-            SetLastEvent("Injected repeat failed closed");
-            LogFailure(exception, "Seiton Sense exact native Turbo pulse failed closed.");
-        }
+        // The cadence was surfaced as a native pressed binding. If the native
+        // scanner did not consume that exact same-scan token, its own slot gates
+        // declined it. Record the miss, but never bypass those gates afterward.
+        Interlocked.Increment(ref injectedRepeatsRejected);
+        SetLastEvent("Native hotbar scanner did not consume the exact due Turbo input");
     }
 
     private IntegratedHotbarInputSettings GetHotbarInputSettings()

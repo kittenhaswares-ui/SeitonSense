@@ -55,7 +55,6 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly ViperSerpentTailProbe viperSerpentTail;
     private readonly GunbreakerContinuationProbe gunbreakerContinuation;
     private readonly ScholarCriticalStrategyProbe scholarCriticalStrategy;
-    private readonly ScholarSpreadProbe scholarSpread;
     private readonly MonkEarthReplyProbe monkEarthReply;
     private readonly DarkKnightPlungeProbe darkKnightPlunge;
     private readonly DarkKnightShadowbringerProbe darkKnightShadowbringer;
@@ -224,14 +223,6 @@ internal sealed class PersonalStatusService : IDisposable
             pressureTracker,
             nearAssist,
             log);
-        scholarSpread = new ScholarSpreadProbe(
-            clientState,
-            objectTable,
-            dutyState,
-            configuration,
-            nearAssist,
-            machinistLimitBreakCapture,
-            log);
         monkEarthReply = new MonkEarthReplyProbe(nearAssist, log);
         darkKnightPlunge = new DarkKnightPlungeProbe(
             clientState,
@@ -293,7 +284,6 @@ internal sealed class PersonalStatusService : IDisposable
         gunbreakerContinuation.Snapshot;
     internal ScholarCriticalStrategyProbeSnapshot ScholarCriticalStrategyDiagnostics =>
         scholarCriticalStrategy.Snapshot;
-    internal ScholarSpreadProbeSnapshot ScholarSpreadDiagnostics => scholarSpread.Snapshot;
     internal MonkEarthReplyProbeSnapshot MonkEarthReplyDiagnostics => monkEarthReply.Snapshot;
     internal DarkKnightPlungeProbeSnapshot DarkKnightPlungeDiagnostics =>
         darkKnightPlunge.Snapshot;
@@ -357,7 +347,7 @@ internal sealed class PersonalStatusService : IDisposable
         {
             log.Warning(
                 exception,
-                "Seiton Sense shared action-effect capture is unavailable; dependent MCH, pressure, reactive, and Scholar signals are disabled while other features remain active.");
+                "Seiton Sense shared action-effect capture is unavailable; dependent MCH, pressure, and reactive signals are disabled while other features remain active.");
         }
         framework.Update += OnFrameworkUpdate;
     }
@@ -372,7 +362,6 @@ internal sealed class PersonalStatusService : IDisposable
             ResolveSupportedPvPContext(),
             Environment.TickCount64);
         ResetRuntime();
-        scholarSpread.Dispose();
         machinistLimitBreakCapture.Dispose();
     }
 
@@ -414,7 +403,6 @@ internal sealed class PersonalStatusService : IDisposable
             viperSerpentTail.FailClosed();
             gunbreakerContinuation.FailClosed();
             scholarCriticalStrategy.FailClosed();
-            scholarSpread.FailClosed();
             monkEarthReply.FailClosed(now);
             darkKnightPlunge.FailClosed();
             darkKnightShadowbringer.FailClosed();
@@ -464,7 +452,6 @@ internal sealed class PersonalStatusService : IDisposable
             viperSerpentTail.Reset();
             gunbreakerContinuation.Reset();
             scholarCriticalStrategy.Reset();
-            scholarSpread.Reset();
             monkEarthReply.Reset();
             darkKnightPlunge.Reset();
             darkKnightShadowbringer.Reset();
@@ -670,11 +657,6 @@ internal sealed class PersonalStatusService : IDisposable
                                                            configuration.EnableScholarCriticalStrategyOnHeldKey &&
                                                            isCrystallineConflict &&
                                                            isScholar;
-        var scholarSpreadConfigurationEnabled = configuration.Enabled &&
-                                                configuration.EnableScholarSpreadOnHeldKey &&
-                                                isCrystallineConflict &&
-                                                isScholar &&
-                                                metadata.ScholarSpreadVerified;
         var darkKnightPlungeConfigurationEnabled = configuration.Enabled &&
                                                     configuration.EnableDarkKnightPlungeOnHeldKey;
         var darkKnightShadowbringerConfigurationEnabled = configuration.Enabled &&
@@ -813,7 +795,6 @@ internal sealed class PersonalStatusService : IDisposable
                                              samuraiCounterCcHeldInputEnabled ||
                                              samuraiZantetsukenHeldInputEnabled ||
                                              scholarCriticalStrategyHeldInputEnabled ||
-                                             scholarSpreadConfigurationEnabled ||
                                              emergencyTeleportHeldInputEnabled ||
                                              pressureEscapeSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
@@ -840,10 +821,9 @@ internal sealed class PersonalStatusService : IDisposable
              viperSerpentTailHeldInputEnabled ||
              gunbreakerContinuationHeldInputEnabled ||
              darkKnightShadowbringerHeldInputEnabled ||
-             monkHeldComboInputEnabled ||
-             scholarCriticalStrategyHeldInputEnabled ||
-             scholarSpreadConfigurationEnabled ||
-             emergencyTeleportHeldInputEnabled ||
+              monkHeldComboInputEnabled ||
+              scholarCriticalStrategyHeldInputEnabled ||
+              emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
              pressureEscapeSprintHeldInputEnabled ||
              darkKnightPlungeHeldInputEnabled),
@@ -876,6 +856,7 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             configuration.ExperimentalPurifyBufferMilliseconds,
             emergencyInputFrame,
+            metadata.NinjaShukuchiHiddenStatusId,
             hardReset);
         // Self-Purify owns the scheduler while its exact enabled CC/key lease is
         // actionable or waiting at the global native boundary. It no longer
@@ -1230,6 +1211,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
+            metadata.NinjaShukuchiHiddenStatusId,
             hardReset);
         var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         now = Environment.TickCount64;
@@ -1393,20 +1375,6 @@ internal sealed class PersonalStatusService : IDisposable
             request: castCancellationRequest,
             inputFrame: emergencyInputFrame,
             hardReset: hardReset);
-
-        // Scholar owns a separate recast lane. It reads the immutable raw held
-        // snapshot after the entire shared scheduler/cast-cancel pass, never
-        // consumes that frame, and simply waits for the real native boundary.
-        now = Environment.TickCount64;
-        scholarSpread.Observe(
-            localPlayer,
-            isCrystallineConflict,
-            scholarSpreadConfigurationEnabled,
-            metadata.ScholarSpreadVerified,
-            guardActive,
-            emergencyInputFrame,
-            now,
-            hardReset);
 
         Interlocked.Exchange(ref snapshot, new PersonalAlertSnapshot(
             configuration.Enabled && isSupportedPvPContext && alive && !hardReset,
@@ -1790,7 +1758,6 @@ internal sealed class PersonalStatusService : IDisposable
         viperSerpentTail.Reset();
         gunbreakerContinuation.Reset();
         scholarCriticalStrategy.Reset();
-        scholarSpread.Reset();
         monkEarthReply.Reset();
         darkKnightPlunge.Reset();
         darkKnightShadowbringer.Reset();

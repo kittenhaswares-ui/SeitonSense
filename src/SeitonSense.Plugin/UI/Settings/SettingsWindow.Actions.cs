@@ -19,8 +19,7 @@ internal sealed partial class SettingsWindow
             "The job-specific physical-hold helpers use this deterministic order. SAM's staged exact follow-up runs directly after Purify; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
-            "frame. Scholar Smart Spread reads the same raw hold in an independent recast lane after this scheduler; " +
-            "Kardia and Monk retain their separate event-driven origins.");
+            "frame. Kardia and Monk retain their separate event-driven origins.");
 
         if (ImGui.CollapsingHeader(
                 "General action buffer / native Turbo",

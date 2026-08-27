@@ -28,7 +28,6 @@ internal sealed record PvPMetadataValidation(
     bool FuriousBacklashVerified,
     bool MonkEarthReplyVerified,
     bool ScholarCriticalStrategyVerified,
-    bool ScholarSpreadVerified,
     bool EmergencyTeleportMonkVerified,
     bool EmergencyTeleportBlackMageVerified,
     bool EmergencyTeleportSageVerified,
@@ -41,13 +40,14 @@ internal sealed record PvPMetadataValidation(
     bool RedMageResolutionVerified,
     bool RedMageViceOfThornsVerified,
     bool BlackMageFrostStarVerified,
-    bool MonkHeldComboVerified)
+    bool MonkHeldComboVerified,
+    uint NinjaShukuchiHiddenStatusId)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        false);
+        0);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -321,40 +321,6 @@ internal static class PvPMetadataGuard
                    description.Contains("Increases target's damage taken by 10%", StringComparison.Ordinal) &&
                    description.Contains(
                        "Halves the defensive bonus of Guard instead when targeting enemies under its effect.",
-                       StringComparison.Ordinal);
-        });
-
-        var scholarSpreadVerified = ValidateFeature("Scholar held spread", log, () =>
-        {
-            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
-            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
-            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
-            var battleNpcNames = dataManager.GetExcelSheet<BNpcName>(ClientLanguage.English);
-            if (!actions.TryGetRow(EnemyCombatConstants.ScholarAdloquiumActionId, out var adloquium) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.ScholarAdloquiumActionId, out var adloquiumText) ||
-                !actions.TryGetRow(EnemyCombatConstants.ScholarBiolysisActionId, out var biolysis) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.ScholarBiolysisActionId, out var biolysisText) ||
-                !actions.TryGetRow(EnemyCombatConstants.ScholarDeploymentTacticsActionId, out var deployment) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.ScholarDeploymentTacticsActionId, out var deploymentText) ||
-                !statuses.TryGetRow(EnemyCombatConstants.ScholarGalvanizeStatusId, out var galvanize) ||
-                !statuses.TryGetRow(EnemyCombatConstants.ScholarCatalyzeStatusId, out var catalyze) ||
-                !statuses.TryGetRow(EnemyCombatConstants.ScholarBiolysisStatusId, out var biolysisStatus) ||
-                !statuses.TryGetRow(EnemyCombatConstants.ScholarBiolyticStatusId, out var biolytic) ||
-                !battleNpcNames.TryGetRow(EnemyCombatConstants.TacticalCrystalBattleNpcNameId, out var tacticalCrystal))
-            {
-                return false;
-            }
-
-            return ValidateScholarAdloquium(adloquium, adloquiumText.Description.ToString()) &&
-                   ValidateScholarBiolysis(biolysis, biolysisText.Description.ToString()) &&
-                   ValidateScholarDeployment(deployment, deploymentText.Description.ToString()) &&
-                   ValidateScholarSpreadStatus(galvanize, "Galvanize", 212_801, 1, "barrier") &&
-                   ValidateScholarSpreadStatus(catalyze, "Catalyze", 212_814, 1, "Damage taken is reduced") &&
-                   ValidateScholarSpreadStatus(biolysisStatus, "Biolysis", 212_812, 2, "damage over time") &&
-                   ValidateScholarSpreadStatus(biolytic, "Biolytic", 210_506, 2, "HP recovery") &&
-                   string.Equals(
-                       tacticalCrystal.Singular.ToString(),
-                       "tactical crystal",
                        StringComparison.Ordinal);
         });
 
@@ -965,41 +931,60 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var ninjaShukuchiHiddenStatusId = 0u;
         var panicShukuchiVerified = ValidateFeature("Panic Shukuchi", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
             var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
             if (!actions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var action) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var transient))
+                !descriptions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var transient) ||
+                !TryResolvePanicShukuchiHiddenStatus(
+                    action,
+                    procStatuses,
+                    statuses,
+                    out var hiddenStatusId))
             {
                 return false;
             }
 
             var description = transient.Description.ToString();
-            return string.Equals(action.Name.ToString(), "Shukuchi", StringComparison.Ordinal) &&
-                   action.Icon == EnemyCombatConstants.PanicShukuchiActionIconId &&
-                   action.IsPvP &&
-                   action.IsPlayerAction &&
-                   action.ClassJob.IsValid &&
-                   action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId &&
-                   action.Range == EnemyCombatConstants.PanicShukuchiSheetRange &&
-                   action.EffectRange == 1 &&
-                   action.CastType == 7 &&
-                   action.Cast100ms == 0 &&
-                   action.Recast100ms == EnemyCombatConstants.PanicShukuchiRecast100ms &&
-                   !action.CanTargetSelf &&
-                   !action.CanTargetHostile &&
-                   !action.CanTargetParty &&
-                   !action.CanTargetAlly &&
-                   !action.CanTargetAlliance &&
-                   action.TargetArea &&
-                   action.RequiresLineOfSight &&
-                   action.NeedToFaceTarget &&
-                   action.AffectsPosition &&
-                   description.Contains("Move quickly to the specified location.", StringComparison.Ordinal) &&
-                   description.Contains("Grants Hidden", StringComparison.Ordinal) &&
-                   description.Contains("Cannot be executed while bound.", StringComparison.Ordinal) &&
-                   description.Contains("Action changes to Doton while under the effect of Three Mudra.", StringComparison.Ordinal);
+            var verified = string.Equals(
+                               action.Name.ToString(),
+                               "Shukuchi",
+                               StringComparison.Ordinal) &&
+                           action.Icon == EnemyCombatConstants.PanicShukuchiActionIconId &&
+                           action.IsPvP &&
+                           action.IsPlayerAction &&
+                           action.ClassJob.IsValid &&
+                           action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId &&
+                           action.Range == EnemyCombatConstants.PanicShukuchiSheetRange &&
+                           action.EffectRange == 1 &&
+                           action.CastType == 7 &&
+                           action.Cast100ms == 0 &&
+                           action.Recast100ms == EnemyCombatConstants.PanicShukuchiRecast100ms &&
+                           !action.CanTargetSelf &&
+                           !action.CanTargetHostile &&
+                           !action.CanTargetParty &&
+                           !action.CanTargetAlly &&
+                           !action.CanTargetAlliance &&
+                           action.TargetArea &&
+                           action.RequiresLineOfSight &&
+                           action.NeedToFaceTarget &&
+                           action.AffectsPosition &&
+                           description.Contains(
+                               "Move quickly to the specified location.",
+                               StringComparison.Ordinal) &&
+                           description.Contains("Grants Hidden", StringComparison.Ordinal) &&
+                           description.Contains(
+                               "Cannot be executed while bound.",
+                               StringComparison.Ordinal) &&
+                           description.Contains(
+                               "Action changes to Doton while under the effect of Three Mudra.",
+                               StringComparison.Ordinal);
+            if (verified) ninjaShukuchiHiddenStatusId = hiddenStatusId;
+            return verified;
         });
 
         var contradanceVerified = ValidateFeature("Contradance", log, () =>
@@ -1434,7 +1419,6 @@ internal static class PvPMetadataGuard
             furiousBacklashVerified,
             monkEarthReplyVerified,
             scholarCriticalStrategyVerified,
-            scholarSpreadVerified,
             emergencyTeleportMonkVerified,
             emergencyTeleportBlackMageVerified,
             emergencyTeleportSageVerified,
@@ -1447,7 +1431,8 @@ internal static class PvPMetadataGuard
             redMageResolutionVerified,
             redMageViceOfThornsVerified,
             blackMageFrostStarVerified,
-            monkHeldComboVerified);
+            monkHeldComboVerified,
+            ninjaShukuchiHiddenStatusId);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -1455,9 +1440,10 @@ internal static class PvPMetadataGuard
             "SmartActionProtectionStatuses={SmartActionProtectionStatuses}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
-            "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
+            "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, ShukuchiHidden={ShukuchiHidden}, " +
+            "Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
             "FuriousBacklash={FuriousBacklash}, MonkEarthReply={MonkEarthReply}, " +
-            "ScholarCriticalStrategy={ScholarCriticalStrategy}, ScholarSpread={ScholarSpread}, " +
+            "ScholarCriticalStrategy={ScholarCriticalStrategy}, " +
             "EmergencyTeleport={EmergencyTeleportMonk}/{EmergencyTeleportBlackMage}/" +
             "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
@@ -1479,12 +1465,12 @@ internal static class PvPMetadataGuard
             validation.MiracleOfNatureActionVerified,
             validation.SilentNocturneVerified,
             validation.PanicShukuchiVerified,
+            validation.NinjaShukuchiHiddenStatusId,
             validation.ContradanceVerified,
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
             validation.MonkEarthReplyVerified,
             validation.ScholarCriticalStrategyVerified,
-            validation.ScholarSpreadVerified,
             validation.EmergencyTeleportMonkVerified,
             validation.EmergencyTeleportBlackMageVerified,
             validation.EmergencyTeleportSageVerified,
@@ -1706,155 +1692,6 @@ internal static class PvPMetadataGuard
                    StringComparison.Ordinal);
     }
 
-    private static bool ValidateScholarAdloquium(
-        ActionSheet action,
-        string description) =>
-        ValidateScholarActionBase(
-            action,
-            EnemyCombatConstants.ScholarAdloquiumActionId,
-            "Adloquium",
-            EnemyCombatConstants.ScholarAdloquiumIconId,
-            actionCategoryId: 2,
-            range: 30,
-            effectRange: 0,
-            EnemyCombatConstants.ScholarAdloquiumRecast100ms,
-            cooldownGroup: 7,
-            additionalCooldownGroup: 58,
-            maximumCharges: 2,
-            canTargetSelf: true,
-            canTargetParty: true,
-            canTargetAlliance: true,
-            canTargetHostile: false,
-            canTargetAlly: true,
-            needToFaceTarget: false,
-            castType: 1) &&
-        description.Contains("Grants Galvanize and Catalyze to target", StringComparison.Ordinal) &&
-        description.Contains("Duration: 12s", StringComparison.Ordinal);
-
-    private static bool ValidateScholarBiolysis(
-        ActionSheet action,
-        string description) =>
-        ValidateScholarActionBase(
-            action,
-            EnemyCombatConstants.ScholarBiolysisActionId,
-            "Biolysis",
-            EnemyCombatConstants.ScholarBiolysisIconId,
-            actionCategoryId: 2,
-            range: 25,
-            effectRange: 0,
-            EnemyCombatConstants.ScholarBiolysisRecast100ms,
-            cooldownGroup: 1,
-            additionalCooldownGroup: 58,
-            maximumCharges: 0,
-            canTargetSelf: false,
-            canTargetParty: false,
-            canTargetAlliance: false,
-            canTargetHostile: true,
-            canTargetAlly: false,
-            needToFaceTarget: true,
-            castType: 1) &&
-        description.Contains("Afflicts target with Biolysis and Biolytic.", StringComparison.Ordinal) &&
-        description.Contains("Duration: 12s", StringComparison.Ordinal);
-
-    private static bool ValidateScholarDeployment(
-        ActionSheet action,
-        string description) =>
-        ValidateScholarActionBase(
-            action,
-            EnemyCombatConstants.ScholarDeploymentTacticsActionId,
-            "Deployment Tactics",
-            EnemyCombatConstants.ScholarDeploymentTacticsIconId,
-            actionCategoryId: 4,
-            range: 30,
-            effectRange: 15,
-            EnemyCombatConstants.ScholarDeploymentTacticsRecast100ms,
-            cooldownGroup: 2,
-            additionalCooldownGroup: 71,
-            maximumCharges: 2,
-            canTargetSelf: true,
-            canTargetParty: true,
-            canTargetAlliance: false,
-            canTargetHostile: true,
-            canTargetAlly: false,
-            needToFaceTarget: false,
-            castType: 2) &&
-        description.Contains(
-            "Extends Galvanize and Catalyze effects cast on self or target",
-            StringComparison.Ordinal) &&
-        description.Contains(
-            "extends Biolysis and Biolytic effects to other nearby enemies",
-            StringComparison.Ordinal) &&
-        description.Contains("effects applied by you", StringComparison.Ordinal);
-
-    private static bool ValidateScholarActionBase(
-        ActionSheet action,
-        uint actionId,
-        string expectedName,
-        uint expectedIcon,
-        uint actionCategoryId,
-        sbyte range,
-        byte effectRange,
-        ushort recast100ms,
-        byte cooldownGroup,
-        byte additionalCooldownGroup,
-        byte maximumCharges,
-        bool canTargetSelf,
-        bool canTargetParty,
-        bool canTargetAlliance,
-        bool canTargetHostile,
-        bool canTargetAlly,
-        bool needToFaceTarget,
-        byte castType) =>
-        action.RowId == actionId &&
-        string.Equals(action.Name.ToString(), expectedName, StringComparison.Ordinal) &&
-        action.Icon == expectedIcon &&
-        action.IsPvP &&
-        action.IsPlayerAction &&
-        action.ClassJob.IsValid &&
-        action.ClassJob.RowId == EnemyCombatConstants.ScholarJobId &&
-        action.ClassJobCategory.IsValid &&
-        action.ClassJobCategory.RowId == 29 &&
-        action.ActionCategory.IsValid &&
-        action.ActionCategory.RowId == actionCategoryId &&
-        action.Range == range &&
-        action.EffectRange == effectRange &&
-        action.Cast100ms == 0 &&
-        action.Recast100ms == recast100ms &&
-        action.PrimaryCostType == 0 &&
-        action.PrimaryCostValue == 0 &&
-        action.SecondaryCostType == 0 &&
-        action.SecondaryCostValue.RowId == 0 &&
-        action.CooldownGroup == cooldownGroup &&
-        action.AdditionalCooldownGroup == additionalCooldownGroup &&
-        action.MaxCharges == maximumCharges &&
-        action.CanTargetSelf == canTargetSelf &&
-        action.CanTargetParty == canTargetParty &&
-        action.CanTargetAlliance == canTargetAlliance &&
-        action.CanTargetHostile == canTargetHostile &&
-        action.CanTargetAlly == canTargetAlly &&
-        !action.CanTargetOwnPet &&
-        !action.CanTargetPartyPet &&
-        !action.TargetArea &&
-        action.RequiresLineOfSight &&
-        action.NeedToFaceTarget == needToFaceTarget &&
-        !action.AffectsPosition &&
-        action.CastType == castType;
-
-    private static bool ValidateScholarSpreadStatus(
-        Status status,
-        string expectedName,
-        uint expectedIcon,
-        byte expectedCategory,
-        string expectedDescriptionFragment) =>
-        string.Equals(status.Name.ToString(), expectedName, StringComparison.Ordinal) &&
-        status.Icon == expectedIcon &&
-        status.StatusCategory == expectedCategory &&
-        !status.CanDispel &&
-        !status.IsPermanent &&
-        status.Description.ToString().Contains(
-            expectedDescriptionFragment,
-            StringComparison.OrdinalIgnoreCase);
-
     private static bool ValidateFeature(string feature, IPluginLog log, Func<bool> validate)
     {
         try
@@ -1870,6 +1707,41 @@ internal static class PvPMetadataGuard
             return false;
         }
     }
+
+    private static bool TryResolvePanicShukuchiHiddenStatus(
+        ActionSheet action,
+        ExcelSheet<ActionProcStatus> procStatuses,
+        ExcelSheet<Status> statuses,
+        out uint hiddenStatusId)
+    {
+        hiddenStatusId = 0;
+        var directStatusId = action.StatusGainSelf.RowId;
+        if (IsExpectedPanicShukuchiHiddenStatus(statuses, directStatusId))
+        {
+            hiddenStatusId = directStatusId;
+            return true;
+        }
+
+        var procRowId = action.ActionProcStatus.RowId;
+        if (procRowId == 0 ||
+            !procStatuses.TryGetRow(procRowId, out var procStatus) ||
+            !IsExpectedPanicShukuchiHiddenStatus(
+                statuses,
+                procStatus.Status.RowId))
+        {
+            return false;
+        }
+
+        hiddenStatusId = procStatus.Status.RowId;
+        return hiddenStatusId != 0;
+    }
+
+    private static bool IsExpectedPanicShukuchiHiddenStatus(
+        ExcelSheet<Status> statuses,
+        uint statusId) =>
+        statusId != 0 &&
+        statuses.TryGetRow(statusId, out var status) &&
+        string.Equals(status.Name.ToString(), "Hidden", StringComparison.Ordinal);
 
     private static bool ValidateSeitonAction(
         ExcelSheet<ActionSheet> actions,

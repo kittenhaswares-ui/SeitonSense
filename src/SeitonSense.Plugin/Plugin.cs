@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.35.0.0";
+    private const string CurrentReleaseVersion = "0.35.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -340,9 +340,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Seiton Sense now includes a 1,000-ms one-shot action buffer, adjustable from 100-1,500 ms, for fresh physical standard-keyboard hotbar presses. It freezes one exact instant action and target; casts, ground targets, macros, mouse clicks, and controller input are not buffered.",
-                "Native Hotbar Turbo is a separate default-off hold option: it repeats only the newest certified current slot, has no catch-up bursts, and yields to Purify and every higher-priority held helper. The movable learning panel shows the current key, slot, action, and buffer countdown.",
-                "Smart Action protection is checked again before the sole replay. ReAction or MOAction conflicts disable only that buffer opportunity, not native input or Turbo. Configuration schema 40 is current; all 518 Core tests pass.",
+                "Hotbar Turbo now travels through XIV's native hotbar scan, so the game can show the press on the bar and in Seiton's Latest Input panel. A missed scan is recorded only; it never falls back to a hidden direct action call.",
+                "Viper's held Serpent's Tail now uses the exact hostile <t> in Wolves' Den duels. The reviewed striking dummy remains supported, while Crystalline Conflict keeps its exact e1-e5 targeting.",
+                "Ninja Shukuchi Hidden now blocks automatic Purify and Recuperate both while scheduling and again at the final native boundary. Manual actions and every other Ninja helper remain unchanged.",
+                "The nonfunctional Scholar dot/shield/Deployment Tactics automation was removed; Scholar Critical Strategy remains. Buffer diagnostics now expose compact counters without live file scanning. All 510 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -748,7 +749,6 @@ public sealed class Plugin : IDalamudPlugin
                 var viper = personalStatus.ViperSerpentTailDiagnostics;
                 var gunbreaker = personalStatus.GunbreakerContinuationDiagnostics;
                 var scholar = personalStatus.ScholarCriticalStrategyDiagnostics;
-                var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
                 var monk = personalStatus.MonkEarthReplyDiagnostics;
                 var plunge = personalStatus.DarkKnightPlungeDiagnostics;
                 var shadowbringer = personalStatus.DarkKnightShadowbringerDiagnostics;
@@ -757,6 +757,7 @@ public sealed class Plugin : IDalamudPlugin
                 var criticalCoordination =
                     personalStatus.CriticalUtilityCoordinationDiagnostics;
                 var integrated = integratedInput.Diagnostics;
+                var nativeHotbar = integrated.HotbarInput;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
                 var assist = nearAssist.Diagnostics;
                 var smartTab = smartTabTargeting.Diagnostics;
@@ -793,8 +794,17 @@ public sealed class Plugin : IDalamudPlugin
                     $"priority={integrated.InternalPriorityClaimed}," +
                     $"roots/repeats/rejected={integrated.PhysicalRoots}/" +
                     $"{integrated.InjectedRepeatsDispatched}/{integrated.InjectedRepeatsRejected}," +
+                    $"native-press/repeat/delegated/fail-open=" +
+                    $"{nativeHotbar?.PhysicalPresses ?? 0}/{nativeHotbar?.InjectedRepeats ?? 0}/" +
+                    $"{nativeHotbar?.DelegatedRepeats ?? 0}/{nativeHotbar?.FailedOpenEvents ?? 0}," +
                     $"buffer={integrated.ActionBuffer.Pending}/" +
                     $"{integrated.ActionBuffer.RemainingMilliseconds}ms," +
+                    $"buffer-counts[observed/armed/dispatched/accepted/rejected/cancelled=" +
+                    $"{integrated.ActionBuffer.ObservedRootCount}/{integrated.ActionBuffer.ArmedCount}/" +
+                    $"{integrated.ActionBuffer.DispatchedCount}/" +
+                    $"{integrated.ActionBuffer.AcceptedDispatchCount}/" +
+                    $"{integrated.ActionBuffer.RejectedDispatchCount}/" +
+                    $"{integrated.ActionBuffer.CancelledCount}]," +
                     $"compat={integrated.ActionBuffer.Compatibility.BufferMutationAllowed}/" +
                     $"{integrated.ActionBuffer.Compatibility.ReActionProfile}/" +
                     $"{integrated.ActionBuffer.Compatibility.MOActionLoaded}/" +
@@ -1098,27 +1108,6 @@ public sealed class Plugin : IDalamudPlugin
                     $"attempt={scholar.UseActionAttempted}/{scholar.UseActionAccepted}," +
                     $"count={scholar.AttemptCount}/{scholar.AcceptedCount}," +
                     $"resolve={scholar.CandidateResolution},last={scholar.LastEvent}]");
-                chatGui.Print(
-                    $"[Seiton Sense] scholar-spread[phase={scholarSpread.Phase},kind={scholarSpread.Kind}," +
-                    $"plan/intent/effect={scholarSpread.PlanReason}/{scholarSpread.IntentReason}/" +
-                    $"{scholarSpread.EffectReason},capture={scholarSpread.CaptureRunning}/" +
-                    $"{scholarSpread.CaptureQueueDepth}/{scholarSpread.CaptureCount}/" +
-                    $"{scholarSpread.CaptureDropCount},raw-held/consumed=" +
-                    $"{scholarSpread.RawHeldGameplayKeyEligible}/{scholarSpread.SharedInputFrameWasConsumed}," +
-                    $"key={scholarSpread.HeldGameplayKey},next={scholarSpread.NextActionId},charges=" +
-                    $"{scholarSpread.DeploymentCharges},deploy/bio=" +
-                    $"{scholarSpread.DeploymentNextChargeRemainingMilliseconds}/" +
-                    $"{scholarSpread.BiolysisRemainingMilliseconds},native/boundary=" +
-                    $"{scholarSpread.NativeStateKnown}/{scholarSpread.NativeBoundaryClear},dot/shield=" +
-                    $"{scholarSpread.DotCandidateCount}/{scholarSpread.ShieldCandidateCount},slot=" +
-                    $"{scholarSpread.TargetSlot},target={scholarSpread.TargetGameObjectId:X}/" +
-                    $"{scholarSpread.TargetEntityId:X},coverage=" +
-                    $"{scholarSpread.PredictedAffectedCount}/{scholarSpread.CurrentAffectedCount}," +
-                    $"crystal={scholarSpread.TacticalCrystalResolved}/" +
-                    $"{scholarSpread.TacticalCrystalPriorityRadiusYalms:0.0},attempt=" +
-                    $"{scholarSpread.UseActionAttempted}/{scholarSpread.NativeOutcome},confirm=" +
-                    $"{scholarSpread.SetupConfirmationCount}/{scholarSpread.DeploymentConfirmationCount}," +
-                    $"manual={scholarSpread.ManualConflictCount},last={scholarSpread.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] monk-reply[phase={monk.Phase},decision={monk.Decision}," +
                     $"reason={monk.Reason},trigger={monk.Trigger},resonance={monk.ResonancePresent}," +
