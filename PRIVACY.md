@@ -54,9 +54,10 @@ following data already available in the local FFXIV client:
   range/line-of-sight results, the current hard-target anchor, one frozen actor,
   and the native setter readback;
 - when Smart Action is enabled and one local macro token is live, the exact
-  incoming non-area PvP action, unique canonical `S1`-`S5` candidates, Guard,
-  current HP, fresh optional team pressure, trusted MP ratio, native action
-  range/line-of-sight result, and one frozen action/actor intent;
+  incoming non-ground-target PvP action, unique canonical `S1`-`S5` candidates,
+  Chiten/Guard/Covered/Hallowed Ground/Undead Redemption, current HP, fresh
+  optional team pressure, trusted MP ratio, actor position/hitbox geometry,
+  native action range/line-of-sight result, and one frozen action/actor intent;
 - when enemy LB nameplates are enabled, fresh exact canonical `S1`-`S5`
   identities, visible native nameplate anchors, reviewed LB activation evidence,
   and matching live status duration needed for a bounded icon/countdown or flash;
@@ -502,15 +503,35 @@ at most 750 ms. The authored macro then supplies the harmful action first with
 `<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
 does not read or retain the macro text and does not require a current target.
 
-Only an exact non-area PvP hostile action and one complete, unique canonical
-`S1`-`S5` set may qualify. Live Guard is excluded. Candidates rank by native
-reach tier first (melee, gap closer, then ranged/other), followed by lowest HP,
-fresh positive team pressure, known Guard-cooldown unavailability, trusted MP
-ratio, and stable S-slot/identity. The token is consumed before selection. One
-action and actor freeze and are finally revalidated; drift suppresses that
-carrier call without reranking, alternate, or retry, leaving only the authored
-`<t>` line. The plugin creates no action, changes no selected target, stores no
-input, and persists or uploads none of these observations.
+Only an exact non-ground-target PvP hostile action and one complete, unique
+canonical `S1`-`S5` set may qualify. Active Chiten, Guard, Covered, Paladin LB
+Hallowed Ground, and Dark Knight LB Undead Redemption are protection blockers;
+unverified Chiten metadata conservatively blocks every Samurai. Candidates that
+pass protection safety rank by native reach tier first (melee, gap closer, then
+ranged/other), followed by lowest HP, fresh positive team pressure, known
+Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity.
+Target-centered circles also compare their effect radius with every protected
+actor's current position and hitbox. Other unreviewed AoE shapes do not redirect
+while any protected actor exists.
+
+The token is consumed before selection only while it is strictly live; an
+expired arm remains on the vanilla path. One action and actor freeze and the
+complete protection snapshot is rebuilt immediately before forwarding. Drift
+suppresses that carrier call without reranking or retry. A fresh post-claim
+safety lease of at most 750 ms keeps the same semantic resolved action and its
+authored raw identity under the protection check for the authored `<t>` fallback
+after native rejection. Adjusted-action drift is blocked rather than treated as
+unrelated. Equivalent raw carriers for the same resolved skill remain inspected,
+an unresolved exact raw fallback is blocked, and a safe default-target carrier
+is frozen to the inspected canonical enemy ID before forwarding. The lease is
+bound to the same local identity and territory, ignores unrelated resolved
+actions, and ends after a safe accepted call or expiry. If semantic resolution
+is unavailable, supported macro calls stay blocked through only that fresh
+lease because an `Action`/`PvPAction` alias cannot be disproved. Protection that
+appears only after native acceptance or during later cast/projectile travel is
+outside this local pre-dispatch boundary. The plugin creates no action, changes
+no selected target, stores no input, and persists or uploads none of these
+observations.
 
 ## One-shot Near Assist
 
@@ -1502,7 +1523,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 38 is current in v0.34.0.3. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.4. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options, starts calibration revision
 1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
 Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of

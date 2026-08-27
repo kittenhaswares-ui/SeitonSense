@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, Scholar Smart Spread, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.34.0.3",
-    "Changelog": "Fixed Smart Tab targeting enemies behind walls: every geometrically eligible enemy now also needs FFXIV's native range/line-of-sight result and the frozen target is checked again immediately before the one exact hard-target write. Repeated forward Tab now advances through the smart-ranked reachable list and wraps instead of repeatedly selecting rank one; manual target changes automatically re-anchor the stateless cycle. Reverse targeting and unsupported or metadata-unverified contexts remain vanilla. Schema 38 remains current; all 454 Core tests pass; current-patch in-game validation remains separate.",
+    "AssemblyVersion": "0.34.0.4",
+    "Changelog": "Smart Action now replaces the incoming harmful action's target ID with the exact selected Smart Target without changing the visible target. Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are excluded; target-centered circles also avoid protected actors inside their effect radius, and unreviewed AoE shapes fail closed. The exact canonical target and protection snapshot are rechecked immediately before the sole native action call, while a bounded exact-action lease protects the authored fallback after native rejection. Schema 38 remains current; all 461 Core tests pass; current-patch in-game validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,6 +33,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787800038"
+    "LastUpdate": "1787811575"
   }
 ]

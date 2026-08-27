@@ -2,13 +2,14 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.34.0.3 fixes Smart Tab's ranged
-line-of-sight and repeated-target lock: every geometrically admitted enemy must
-now pass FFXIV's native range/line-of-sight result, and repeated forward Tab
-presses advance through the smart-ranked reachable list with wrap. Manual target
-changes automatically re-anchor that stateless cycle. It retains v0.34.0.2's
-Scholar and Monk reliability fixes plus v0.34's measured counter-CC timing and default-off RDM Vice of Thorns
-and BLM Frost Star. Accepted Auto-Guard can show a card/sound and protects
+assistance, and target highlights. Version 0.34.0.4 makes Smart Action replace
+the incoming harmful action's target ID with the exact selected Smart Target
+without changing the visible target. Chiten, Guard, Covered, Paladin LB, and
+Dark Knight LB protection are excluded; target-centered circles also avoid
+protected actors inside their effect radius, while unreviewed AoE shapes fail
+closed. It retains v0.34.0.3's Smart Tab line-of-sight and ranked-cycle fixes,
+v0.34.0.2's Scholar and Monk reliability fixes, and v0.34's measured counter-CC
+timing plus default-off RDM Vice of Thorns and BLM Frost Star. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
 v0.32's Emergency Teleport and Scholar Smart Spread plus v0.31's ranged Smart
@@ -1281,7 +1282,9 @@ spatial validity; Smart Tab never sends a combat action or keeps pending work.
 
 The previous harmful-action targeting helper is now the separately default-off
 Smart Action option. `/smartaction` (`/ssaction`) arms one 750-ms Crystalline
-Conflict token for the next already incoming harmful PvP macro action. The
+Conflict token for the next already incoming harmful PvP macro action. Smart
+Action replaces only that call's target ID with its selected Smart Target; it
+never changes your visible hard, soft, Focus, or mouseover target. The
 recommended authored shape is:
 
 ```text
@@ -1293,18 +1296,39 @@ recommended authored shape is:
 
 No selected target is required; `<t>` is only the user-authored fallback when
 the carrier is deliberately invalidated. At action time, Smart Action resolves
-the actual non-area hostile action and its native range/line-of-sight result. It
-considers only unique, living, targetable exact canonical `S1`-`S5` enemies and
-excludes live Guard. Reach tier wins first: melee jobs prefer current five-yalm
+the actual non-ground-target hostile action and its native range/line-of-sight
+result. It considers only unique, living, targetable exact canonical `S1`-`S5`
+enemies. Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark
+Knight LB Undead Redemption make an actor protection-blocked. A protected
+candidate is skipped and the next safe Smart Target remains eligible. If Chiten
+metadata cannot be verified, every Samurai (and any unknown-job actor) is
+conservatively excluded. Guard/Covered/LB protection rows use an independent
+status-only metadata proof, so unrelated action-cost or recast changes do not
+disable this safety path. Reach tier wins first: melee jobs prefer current five-yalm
 melee reach, then a reviewed job-specific gap-closer tier; ranged/other jobs use
 the general tier. Within a tier the order is lowest exact HP ratio, highest
 positive fresh team pressure, observed Guard-cooldown unavailability, lowest
 trusted MP ratio, then stable S-slot.
 
-The one-shot token is consumed before selection. The selected action/actor tuple
-is frozen and revalidated immediately before the original call is forwarded.
-Drift cancels that carrier without reranking, selecting an alternate, retrying,
-dispatching a generated action, or changing the visible hard/soft/Focus target.
+For a target-centered circle, protection safety includes the exact effect radius
+plus each protected actor's hitbox. An unreviewed line, cone, or other AoE shape
+is not redirected while any protected enemy exists. The one-shot token is
+consumed before selection only while it is strictly live; an expired arm remains
+on the vanilla path. The selected action/actor tuple is frozen and the
+complete protection snapshot is rebuilt immediately before the original call is
+forwarded with the exact canonical enemy ID, never a mutable selected-target
+carrier. Drift cancels that carrier without reranking, retrying, dispatching a
+generated action, or changing the visible target. A short exact-action lease
+keeps the authored `<t>` fallback under the same protection check after a native
+rejection. Equivalent raw action carriers for the same resolved skill stay
+inside the lease; an unresolved exact raw fallback is blocked. Unrelated actions
+with a resolved identity are untouched. If resolution is unavailable and an
+`Action`/`PvPAction` alias cannot be disproved, supported macro calls stay blocked
+only through a fresh post-claim safety lease of at most 750 ms. Acceptance ends
+the lease.
+This is a final local pre-dispatch check: protection that appears only after a
+queued/cast action was accepted, or during projectile/travel time, cannot be
+recalled by the target-rewrite hook.
 Smart Action has its own explicit opt-in; Near Assist, Near Help, and Far Help
 continue to share their existing macro-helper option.
 
@@ -1592,7 +1616,7 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 38 is current in v0.34.0.3. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.4. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options and resets unversioned
 impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
 SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
@@ -1895,7 +1919,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.34.0.3, the exact 454-test Core registry and source checks pin
+For current v0.34.0.4, the exact 461-test Core registry and source checks pin
 configuration schema 38, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
@@ -1906,6 +1930,10 @@ hard-target setter/readback, and no retry or alternate. They additionally pin on
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
 paths. Smart Action remains a separate one-shot harmful-action macro contract.
+Its checks now require caller-proven target protection safety, exact Chiten,
+Guard, Covered, Hallowed Ground, and Undead Redemption handling, conservative
+target-centered-circle geometry, a frozen canonical target ID for the sole
+native action call, and a bounded exact-action fallback lease.
 
 The same current checks pin Smart Recuperate's exact CC-or-enabled-Den context
 freeze and no cross-context drift. Viper checks pin carrier `39183`, follow-ups
@@ -2059,9 +2087,11 @@ activation banner, and up to three directly attributable ally damage cards
 without HP-delta inference. Local MP checks pin trusted exact 10,000-MP identity,
 independent 4,000/2,000 downward-crossing hysteresis, critical-only direct double
 crossings, and local built-in sounds. Smart Target checks pin one consumed macro
-token, exact non-area PvP action identity, unique canonical eligibility, Guard
-exclusion, reach-tier-first ranking, one frozen actor/action, final revalidation,
-and no rerank, alternate, retry, hard-target write, or plugin-created action.
+token, exact non-ground-target PvP action identity, complete unique canonical
+eligibility, Chiten/Guard/Covered/PLD-LB/DRK-LB exclusion, protected-AoE geometry,
+reach-tier-first ranking, exact target-ID replacement, one frozen actor/action,
+the same-action fallback lease, final revalidation, and no retry, hard-target
+write, or plugin-created action.
 Auto-Seiton checks pin the NIN-only action-bar tile, persisted explicit opt-in,
 and the still-required physical held-key consent. What's New checks pin the local
 `0.30.0.0` acknowledgement without chat or network output. Configuration checks

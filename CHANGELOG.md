@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.34.0.4
+
+- Smart Action now treats protection safety as part of target replacement. A
+  Samurai with active Chiten, any enemy in Guard, a Covered target, Paladin LB
+  Hallowed Ground, and Dark Knight LB Undead Redemption are excluded before
+  the usual reach -> HP -> pressure -> Guard-CD -> MP ranking. If the best
+  ranked actor is protected, the next safe Smart Target is selected instead.
+- Target-centered circle attacks also reject any candidate whose exact current
+  effect radius plus the protected actor's hitbox would hit one of those
+  enemies. Other unreviewed AoE shapes are not redirected while any protected
+  enemy is present. The frozen target and complete protection snapshot are
+  rebuilt immediately before the sole native action call, which receives the
+  exact canonical target ID rather than a mutable selected-target carrier.
+- Closed the authored `<t>` fallback gap with a post-claim 750-ms lease bound
+  to the exact semantic resolved action, its authored raw action identity,
+  local actor, and territory. The arm token must still be strictly live when
+  that exact action is claimed; an expired arm is not consumed and remains on
+  the vanilla path. Equivalent `Action`/
+  `PvPAction` carriers for that same resolved skill remain inspected; adjusted-
+  action drift and an unresolved exact raw fallback are blocked.
+  Native rejection keeps the same action under protection inspection. Unrelated
+  resolved actions pass unchanged; if resolution is unavailable and aliases
+  therefore cannot be disproved, supported macro calls stay blocked only for
+  that fresh at-most-750-ms safety lease. An accepted safe replacement/fallback
+  releases the lease. Chiten metadata drift conservatively excludes every
+  Samurai or unknown-job actor. The Guard/Covered/LB proof is status-only, so
+  unrelated NIN or Guard action-balance changes do not disable Smart Action.
+- Configuration schema remains `38`; all `461` Core tests pass.
+
 ## 0.34.0.3
 
 - Fixed **Smart Tab** admitting enemies behind walls. Every geometrically

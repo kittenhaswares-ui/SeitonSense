@@ -187,6 +187,11 @@ $localMpWarningRulesPath = Join-Path $coreRoot 'LocalMpWarningRules.cs'
 $localMpWarningSelfTestsPath = Join-Path $coreSelfTestRoot 'LocalMpWarningSelfTests.cs'
 $smartTargetSelectionRulesPath = Join-Path $coreRoot 'SmartTargetSelectionRules.cs'
 $smartTargetSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetSelectionSelfTests.cs'
+$smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRules.cs'
+$smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
+$smartActionProtectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionProtectionSelfTests.cs'
+$smartActionSafetyLeaseSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionSafetyLeaseSelfTests.cs'
+$samuraiReactiveMetadataGuardPath = Join-Path $pluginServicesRoot 'SamuraiReactiveMetadataGuard.cs'
 $limitBreakNotificationRendererPath = Join-Path $pluginUiRoot 'LimitBreakNotificationRenderer.cs'
 $overlayRendererLimitBreaksPath = Join-Path $pluginUiRoot 'OverlayRenderer.LimitBreaks.cs'
 $autoSeitonToggleWindowPath = Join-Path $pluginUiRoot 'AutoSeitonToggleWindow.cs'
@@ -682,6 +687,157 @@ if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult 
     $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\) \{ shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
     $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
     throw 'The legacy one-shot harmful-action redirect must be exposed only as separately gated Smart Action, independent of the Smart Tab toggle.'
+}
+
+$smartTargetSelectionRules = Read-RequiredSource $smartTargetSelectionRulesPath 'Smart Action target selection rules'
+$smartTargetSelectionSelfTests = Read-RequiredSource $smartTargetSelectionSelfTestsPath 'Smart Action target selection self-tests'
+$smartActionProtectionRules = Read-RequiredSource $smartActionProtectionRulesPath 'Smart Action protected-target rules'
+$smartActionSafetyLeaseRules = Read-RequiredSource $smartActionSafetyLeaseRulesPath 'Smart Action exact-fallback safety lease'
+$smartActionProtectionSelfTests = Read-RequiredSource $smartActionProtectionSelfTestsPath 'Smart Action protected-target self-tests'
+$smartActionSafetyLeaseSelfTests = Read-RequiredSource $smartActionSafetyLeaseSelfTestsPath 'Smart Action exact-fallback lease self-tests'
+$smartActionTestProgram = Read-RequiredSource (
+    Join-Path $coreSelfTestRoot 'Program.cs') 'Smart Action Core test registry'
+$samuraiReactiveMetadataGuard = Read-RequiredSource $samuraiReactiveMetadataGuardPath 'SAM Chiten metadata guard'
+$normalizedSmartActionRuntime = (Read-RequiredSource $nearAssistPath 'Smart Action protected-target runtime') -replace '\s+', ' '
+Assert-Literals $smartActionProtectionRules @(
+    'public const uint ChitenStatusId = 1_240;',
+    'public const uint GuardStatusId = 3_054;',
+    'public const uint GuardLargeScaleStatusId = 3_673;',
+    'NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId',
+    'NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId',
+    'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
+    'SmartActionAttackShape.DirectSingleTarget',
+    'SmartActionAttackShape.TargetCenteredCircle',
+    'SmartActionAttackShape.UnsupportedAreaOfEffect => actors.Count == 0',
+    'public static SmartActionAttackShape ClassifyAttackShape(byte effectRange, byte castType)',
+    '(0, 1) => SmartActionAttackShape.DirectSingleTarget',
+    '(> 0, 2) => SmartActionAttackShape.TargetCenteredCircle',
+    '_ => SmartActionAttackShape.UnsupportedAreaOfEffect',
+    'var hitRadius = (double)effectRange + protectedGeometry.HitboxRadius;',
+    'distanceSquared <= hitRadius * hitRadius',
+    '!occupiedSlots.Add(geometry.EnemySlot)',
+    '!occupiedGameObjectIds.Add(geometry.Actor.GameObjectId)',
+    '!occupiedEntityIds.Add(geometry.Actor.EntityId)'
+) 'Exact Smart Action Chiten, Guard, Cover, LB, and AoE protection policy'
+Assert-Literals $smartTargetSelectionRules @(
+    'bool CallerProvenProtectionSafe = false',
+    'candidate.CallerProvenProtectionSafe'
+) 'Smart Action selection requires caller-proven protection safety'
+Assert-Literals $smartActionSafetyLeaseRules @(
+    'public const long DefaultLifetimeMilliseconds = 750;',
+    'territoryId != token.TerritoryId',
+    'localPlayer != token.LocalPlayer',
+    'rawActionType == token.RawActionType',
+    'rawActionId == token.RawActionId',
+    'token.ResolvedActionId != 0',
+    'resolvedActionId == token.ResolvedActionId',
+    'if (token.ResolvedActionId == 0 || resolvedActionId == 0)',
+    'SmartActionSafetyLeaseDecisionKind.InspectExactAction',
+    'SmartActionSafetyLeaseDecisionKind.RejectExactActionDrift'
+) 'Smart Action exact-action fallback lease ownership'
+Assert-Literals $normalizedSmartActionRuntime @(
+    'Environment.TickCount64 >= candidate.ExpiresAtMilliseconds',
+    'Expired before exact Smart Action claim',
+    'nowMilliseconds + SmartActionSafetyLeaseRules.DefaultLifetimeMilliseconds'
+) 'Smart Action strict arm expiry and fresh post-claim safety lease'
+Assert-Literals $samuraiReactiveMetadataGuard @(
+    'bool ChitenVerified',
+    'internal const uint ChitenStatusId = 1_240;',
+    'internal const uint ChitenIconId = 214_820;',
+    '"Chiten"',
+    '"countering attacks"',
+    'will conservatively exclude SAM from Smart Action'
+) 'English-sheet Chiten metadata pin and conservative drift policy'
+Assert-Literals $pluginSource @(
+    'metadata.SmartActionProtectionStatusesVerified,',
+    'samuraiReactiveMetadata.ChitenVerified,'
+) 'Smart Action exact protection metadata wiring'
+$smartActionStatusMetadataGuard = Read-RequiredSource (
+    Join-Path $pluginServicesRoot 'SeitonMetadataGuard.cs') 'Smart Action status-only metadata guard'
+Assert-Literals $smartActionStatusMetadataGuard @(
+    'bool SmartActionProtectionStatusesVerified',
+    '"Smart Action protection statuses"',
+    'NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId',
+    'NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId',
+    'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
+    'EnemyCombatConstants.GuardStatusId',
+    'EnemyCombatConstants.GuardStatusAlternateId'
+) 'Independent Smart Action protection-status metadata proof'
+$normalizedSmartActionStatusMetadataGuard = $smartActionStatusMetadataGuard -replace '\s+', ' '
+$smartActionStatusOnlyBlock = [regex]::Match(
+    $normalizedSmartActionStatusMetadataGuard,
+    'var smartActionProtectionStatusesVerified = ValidateFeature\( "Smart Action protection statuses", log, \(\) => \{.*?\}\);')
+if (!$smartActionStatusOnlyBlock.Success -or
+    $smartActionStatusOnlyBlock.Value -notmatch 'GetExcelSheet<Status>\(ClientLanguage\.English\)' -or
+    $smartActionStatusOnlyBlock.Value -match '\b(?:ActionSheet|ActionTransient|seitonVerified|guardVerified|Recast|Cost)\b' -or
+    $normalizedSmartActionStatusMetadataGuard -notmatch 'new PvPMetadataValidation\( seitonVerified, viperSerpentTailVerified, wolvesDenStrikingDummyVerified, guardVerified, smartActionProtectionStatusesVerified, guardianVerified,') {
+    throw 'Smart Action protection metadata must remain a status-only proof wired independently between Guard and Guardian validation fields.'
+}
+if ($smartActionProtectionRules -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $smartActionSafetyLeaseRules -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b') {
+    throw 'Smart Action protection and exact-fallback lease policy must remain pure value-only Core code.'
+}
+if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtectionSnapshot\(').Count -ne 4 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 3 -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionMetadataVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?!occupiedGameObjectIds\.Contains\(player\.GameObjectId\).*?!occupiedEntityIds\.Contains\(player\.EntityId\).*?observedHostileGameObjectIds\.SetEquals\(occupiedGameObjectIds\).*?observedHostileEntityIds\.SetEquals\(occupiedEntityIds\)' -or
+    $normalizedSmartActionRuntime -notmatch 'var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
+    $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
+    $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, out var rewritten, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
+    $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
+    $normalizedSmartActionRuntime -notmatch 'Smart Action arm failed closed: protection metadata unverified') {
+    throw 'Smart Action must replace its target only after complete current protection geometry, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
+}
+if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\).*?if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId = smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe \? inspectedSmartActionTargetId : targetId;.*?TryConsumeEligibleSmartTargetToken' -or
+    $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, targetId, out smartToken, out consumedFallbackCarrier, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool TryConsumeEligibleSmartTargetToken\( ArmedSmartTarget expectedToken,.*?if \(!candidate\.Equals\(expectedToken\)\).*?ownershipChanged = true; return false;.*?armedSmartTarget = null;' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?return action\.CanTargetHostile && !action\.TargetArea && action\.Range > 0;' -or
+    $normalizedSmartActionRuntime -notmatch 'ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\);.*?TryBuildSmartActionProtectionSnapshot' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
+    $normalizedSmartActionRuntime -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \} var clientAccepted = useActionHook!\.Original\(' -or
+    $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId;.*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe.*?if \(safe\) canonicalTargetId = target\.Player\.GameObjectId;' -or
+    $normalizedSmartActionRuntime -notmatch 'ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(Environment\.TickCount64 >= candidate\.ExpiresAtMilliseconds\).*?armedSmartTarget = null;.*?ownershipChanged = false;.*?Expired before exact Smart Action claim.*?return false;' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartActionSafetyLeaseRules\.Arm\( token\.TerritoryId, localPlayer, \(uint\)actionType, rawActionId, resolvedActionId, nowMilliseconds, nowMilliseconds \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);' -or
+    $normalizedSmartActionRuntime -match 'configuration\.EnableSmartActionMacro && token\.ExpiresAtMilliseconds >= now' -or
+    $normalizedSmartActionRuntime -notmatch 'potentiallyExactAction \|= resolvedActionId == 0 && IsSupportedActionType\(actionType\);' -or
+    $normalizedSmartActionRuntime -notmatch 'catch \(Exception exception\) \{ potentiallyExactAction \|= IsSupportedActionType\(actionType\); if \(!potentiallyExactAction\)' -or
+    $smartActionSafetyLeaseSelfTests -notmatch 'resolvedActionId:\s*0' -or
+    $smartActionSafetyLeaseSelfTests -notmatch 'raw alias inspection keeps the exact lease closed' -or
+    (($smartActionSafetyLeaseSelfTests -replace '\s+', ' ') -notmatch 'var unresolvedAlias = SmartActionSafetyLeaseRules\.Observe\( Arm\(\), 250, Local, rawActionType: 2, rawActionId: 4_242, resolvedActionId: 0, nowMilliseconds: 1_001\); True\(unresolvedAlias\.ShouldRejectDrift')) {
+    throw 'Smart Action must inspect an authored same-action fallback before redirect handling, retain it through native rejection, and release it only after an accepted safe replacement or fallback.'
+}
+foreach ($method in @(
+    'ExactProtectionStatusKindsArePinned',
+    'DirectAndTargetCircleSafetyAreExact',
+    'UnsupportedShapesAndInvalidGeometryFailClosed',
+    'ProtectedCandidatesCannotWinOrReplaceFrozenIntent'
+)) {
+    Assert-Literals $smartActionProtectionSelfTests @("public static void $method()") "Smart Action protection self-test $method"
+    Assert-Literals $smartActionTestProgram @("SmartActionProtectionSelfTests.$method") "Smart Action protection test registration $method"
+}
+foreach ($method in @(
+    'ExactFallbackRemainsInspectableUntilExpiry',
+    'UnrelatedActionsDoNotConsumeTheLease',
+    'DriftAndExpiryClearFailClosedOwnership'
+)) {
+    Assert-Literals $smartActionSafetyLeaseSelfTests @("public static void $method()") "Smart Action fallback lease self-test $method"
+    Assert-Literals $smartActionTestProgram @("SmartActionSafetyLeaseSelfTests.$method") "Smart Action fallback lease test registration $method"
+}
+if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 4 -or
+    [regex]::Matches($smartActionTestProgram, '\bSmartActionSafetyLeaseSelfTests\.\w+').Count -ne 3) {
+    throw 'All four Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -3173,8 +3329,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 454) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 454-test Core registry must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 461) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 461-test Core registry must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4406,7 +4562,7 @@ if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = gu
     throw 'Automatic Guard must fail closed before dispatch unless both central protection hooks are enabled.'
 }
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\) return false; var forwardedTargetId' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\) return false; var bypassRedirect = internalRedirectBypassDepth > 0; var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\) : SmartActionSafetyInspectionOutcome\.NotApplicable; if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?if \(explicitAutoGuardBreakBypassDepth > 0\).*?ClearAutoGuardProtection\("Released: explicit /panicshu override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
     $normalizedNearAssistAutoGuard -notmatch 'private static bool IsSupportedActionType\(ActionType actionType\) => actionType is ActionType\.Action or ActionType\.PvPAction;' -or
     $normalizedNearAssistAutoGuard -notmatch 'var explicitGuardReuse = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?var actionCanCancelGuard = supportedActionType && resolvedActionId != 0 && TryGetActionMetadata\(.*?action\.IsPvP && !explicitGuardReuse;.*?ApplyAutoGuardProtectionObservation') {
@@ -6099,7 +6255,7 @@ if (-not $guardAttemptObserverMatch.Success) {
 }
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
-if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\); var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); if \(clientAccepted && hasSmartKardiaPreflight\) ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
+if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?var clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\) \{ ClearSmartActionSafetyLease\(\); \} smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); if \(clientAccepted && hasSmartKardiaPreflight\) ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
     $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \};' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
@@ -6164,7 +6320,7 @@ $allConditionalZeroAssignments = [regex]::Matches(
 if ($normalizedUseActionDetour -notmatch 'var targetSuppressedByRedirect = false;' -or
     $directZeroSuppressions.Count -ne $allDirectZeroAssignments.Count -or
     $conditionalZeroSuppressions.Count -ne $allConditionalZeroAssignments.Count -or
-    $allDirectZeroAssignments.Count -ne 6 -or
+    $allDirectZeroAssignments.Count -ne 8 -or
     $allConditionalZeroAssignments.Count -ne 2) {
     throw 'Every reviewed Smart Target/Near/Far path that can author target zero must set explicit targetSuppressedByRedirect provenance before the CC brake inspects the call.'
 }
@@ -6403,11 +6559,11 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 6) {
-    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression, Near Assist, Near Help, Far Help, and passive Smart Paean without consuming a macro token or recursively transforming the plugin-owned action.'
+if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 8) {
+    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression, Near Assist, Near Help, Far Help, passive Smart Paean, and the exact Smart Action final recheck without consuming a macro token or recursively transforming the plugin-owned action.'
 }
 if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
-    throw 'The redirect bypass may guard only the six reviewed redirect/transform branches; it must never wrap or skip the unconditional final CC brake or Auto-Guard protector.'
+    throw 'The redirect bypass may guard only the eight reviewed redirect/transform/safety branches; it must never wrap or skip the unconditional final CC brake or Auto-Guard protector.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 $normalizedNearHelpSelection = $nearHelpSelection -replace '\s+', ' '
@@ -6678,11 +6834,11 @@ $farHelpConsumeState = [regex]::Match($nearAssist, 'farHelpState\s*=\s*FarHelpOn
 if (-not $farHelpConsumeState.Success -or $farHelpConsumeState.Index -gt $originalCall.Index) {
     throw 'Far Help must consume its one-shot state before the sole Original call.'
 }
-if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedSmartTarget is not null \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed \|\| farHelpFallbackSuppressionState\.IsArmed;.*?armedTarget = null;.*?armedSmartTarget = null;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;.*?farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState\.Initial;') {
+if ($normalizedNearAssist -notmatch 'var hadToken = armedTarget is not null \|\| oneShotState\.IsArmed \|\| armedSmartTarget is not null \|\| smartActionSafetyLeaseState\.IsArmed \|\| armedHelpTarget is not null \|\| nearHelpState\.IsArmed \|\| armedFarHelpTarget is not null \|\| farHelpState\.IsArmed \|\| farHelpFallbackSuppressionState\.IsArmed;.*?armedTarget = null;.*?armedSmartTarget = null;.*?smartActionSafetyLeaseState = SmartActionSafetyLeaseState\.Initial;.*?armedHelpTarget = null;.*?armedFarHelpTarget = null;.*?farHelpFallbackSuppressionState = FarHelpFallbackSuppressionState\.Initial;') {
     throw 'Near Assist, Smart Action, Near Help, and Far Help tokens must be mutually exclusive and cleared together.'
 }
-if ($normalizedNearAssist -notmatch 'catch \(Exception exception\) \{ var failedSmartTarget = handlingSmartTarget;.*?failedSmartTarget \|= armedSmartTarget is not null;.*?armedSmartTarget = null;.*?if \(failedSmartTarget\) \{ smartTargetLastEnemySlot = 0; smartTargetLastEvent = "Redirect failed closed; one-shot Smart Action token cleared";') {
-    throw 'The shared redirect exception path must detect an in-flight or still-armed Smart Action token, clear it, and publish fail-closed diagnostics.'
+if ($normalizedNearAssist -notmatch 'catch \(Exception exception\) \{ var failedSmartTarget = handlingSmartTarget; var failedSmartTargetToken = handlingSmartTargetToken;.*?ArmedSmartTarget\? preservedSmartTargetToken = null;.*?if \(potentialSmartTargetToken is \{ \} evaluatedSmartTarget\) \{ failedSmartTarget = true; failedSmartTargetToken \?\?= evaluatedSmartTarget; \} if \(armedSmartTarget is \{ \} currentSmartTarget && \(failedSmartTargetToken is not \{ \} failedToken \|\| !currentSmartTarget\.Equals\(failedToken\)\)\).*?preservedSmartTargetToken = currentSmartTarget;.*?if \(failedSmartTarget && preservedSmartTargetToken is null\) \{ EnsureSmartActionSafetyLeaseAfterFailure\( thisPtr, actionType, actionId, failedSmartTargetToken\); \}.*?armedSmartTarget = preservedSmartTargetToken;.*?if \(failedSmartTarget\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; smartTargetLastEnemySlot = 0; smartTargetLastEvent = "Redirect failed closed; Smart Action and its fallback are suppressed";') {
+    throw 'The shared redirect exception path must fail closed only the exact evaluated or consumed Smart Action call, preserve a newer arm token, and publish diagnostics.'
 }
 
 $partySlotResolver = Read-RequiredSource $partySlotResolverPath 'Party slot resolver'
@@ -8357,16 +8513,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.34.0.3</Version>',
-    '<AssemblyVersion>0.34.0.3</AssemblyVersion>',
-    '<FileVersion>0.34.0.3</FileVersion>'
-) 'v0.34.0.3 project version'
+    '<Version>0.34.0.4</Version>',
+    '<AssemblyVersion>0.34.0.4</AssemblyVersion>',
+    '<FileVersion>0.34.0.4</FileVersion>'
+) 'v0.34.0.4 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.34.0.3";',
-    'Smart Tab now requires FFXIV''s native range and line-of-sight result, so enemies behind walls are excluded before targeting and checked again immediately before the target write.',
-    'Repeated forward Tab presses now advance through the smart-ranked reachable enemies and wrap, instead of repeatedly selecting the same best target. Manual target changes automatically re-anchor the cycle.',
-    'Reverse targeting and every unsupported context remain vanilla. Smart Tab still performs one exact hard-target write with no action, retry, alternate, or fallback. Schema 38 is unchanged; all 454 Core tests pass.'
-) 'v0.34.0.3 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.34.0.4";',
+    'Smart Action now sends the chosen Smart Target''s exact canonical target ID with the incoming harmful action while leaving your visible hard, soft, Focus, and mouseover targets unchanged.',
+    'Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are skipped.',
+    'Target-centered circles also avoid protected enemies inside their effect radius; unreviewed AoE shapes fail closed.',
+    'The target and full protection snapshot are checked again immediately before the sole native action call, and the authored fallback remains under a short exact-action safety lease. Schema 38 is unchanged; all 461 Core tests pass.'
+) 'v0.34.0.4 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8385,22 +8542,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.34.0.3 plugin manifest metadata'
+) 'v0.34.0.4 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.34.0.3"',
-    'Fixed Smart Tab targeting enemies behind walls:',
-    'every geometrically eligible enemy now also needs FFXIV''s native range/line-of-sight result',
-    'the frozen target is checked again immediately before the one exact hard-target write.',
-    'Repeated forward Tab now advances through the smart-ranked reachable list and wraps instead of repeatedly selecting rank one;',
-    'manual target changes automatically re-anchor the stateless cycle.',
-    'Reverse targeting and unsupported or metadata-unverified contexts remain vanilla.',
-    'Schema 38 remains current; all 454 Core tests pass',
+    '"AssemblyVersion": "0.34.0.4"',
+    'Smart Action now replaces the incoming harmful action''s target ID with the exact selected Smart Target without changing the visible target.',
+    'Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are excluded;',
+    'target-centered circles also avoid protected actors inside their effect radius, and unreviewed AoE shapes fail closed.',
+    'The exact canonical target and protection snapshot are rechecked immediately before the sole native action call,',
+    'a bounded exact-action lease protects the authored fallback after native rejection.',
+    'Schema 38 remains current; all 461 Core tests pass',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.34.0.3 custom-repository metadata'
+) 'v0.34.0.4 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8422,18 +8578,18 @@ Assert-Literals $normalizedPrivacy @(
     'No persistent cursor is retained, so manual target changes re-anchor the cycle.',
     'including a second native spatial query immediately before the setter.',
     'The spatial probe does not execute an action.',
-    'Configuration schema 38 is current in v0.34.0.3.'
-) 'v0.34.0.3 Smart Tab transient-data, native-LoS, and stateless-cycle disclosure'
+    'Configuration schema 38 is current in v0.34.0.4.'
+) 'v0.34.0.4 Smart Tab transient-data, native-LoS, and stateless-cycle disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.34.0.3 fixes Smart Tab''s ranged line-of-sight and repeated-target lock:',
-    'every geometrically admitted enemy must now pass FFXIV''s native range/line-of-sight result',
-    'repeated forward Tab presses advance through the smart-ranked reachable list with wrap.',
-    'Manual target changes automatically re-anchor that stateless cycle.',
+    'Version 0.34.0.4 makes Smart Action replace the incoming harmful action''s target ID with the exact selected Smart Target without changing the visible target.',
+    'Chiten, Guard, Covered, Paladin LB, and Dark Knight LB protection are excluded;',
+    'target-centered circles also avoid protected actors inside their effect radius, while unreviewed AoE shapes fail closed.',
+    'It retains v0.34.0.3''s Smart Tab line-of-sight and ranked-cycle fixes,',
     'requires at least two individually double-resolved, stable, unique canonical',
     'Deployment waits until the complete exact locally owned setup pair has been observed once on the frozen target.',
     'After complete-pair proof, either remaining exact status keeps Deployment eligible;',
     'manual conflicts and ordinary target/readiness drift reset for a fresh plan under the same physical hold.',
-    'retains v0.34.0.2''s Scholar and Monk reliability fixes plus v0.34''s measured counter-CC timing and default-off RDM Vice of Thorns and BLM Frost Star.',
+    'v0.34.0.2''s Scholar and Monk reliability fixes, and v0.34''s measured counter-CC timing plus default-off RDM Vice of Thorns and BLM Frost Star.',
     'dynamically observed recast timing proves the next charge will return no later than the next Biolysis opportunity.',
     'Unknown timing blocks only that one-charge shield reservation; DoT and two-charge shield plans still use their final native readiness checks.',
     'Single-target setup capture uses the first exact effect recipient; area Deployment retains the animation target.',
@@ -8455,16 +8611,29 @@ Assert-Literals $normalizedReadme @(
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 38 is current in v0.34.0.3',
-    'For current v0.34.0.3, the exact 454-test Core registry and source checks pin',
+    'Configuration schema 38 is current in v0.34.0.4',
+    'For current v0.34.0.4, the exact 461-test Core registry and source checks pin',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
+    'caller-proven target protection safety',
+    'a frozen canonical target ID for the sole native action call',
+    'a bounded exact-action fallback lease',
     'Eighteen physical-hold option enable edges share the scheduler input.',
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'Scholar Smart Spread remains an independent raw-hold lane and never consumes that frame.',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.34.0.3 current README release and safety contract'
+) 'v0.34.0.4 current README release and safety contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.34.0.4',
+    'Smart Action now treats protection safety as part of target replacement.',
+    'If the best ranked actor is protected, the next safe Smart Target is selected instead.',
+    'Target-centered circle attacks also reject any candidate whose exact current effect radius plus the protected actor''s hitbox would hit one of those enemies.',
+    'exact canonical target ID rather than a mutable selected-target carrier.',
+    'Closed the authored `<t>` fallback gap with a post-claim 750-ms lease',
+    'an expired arm is not consumed and remains on the vanilla path.',
+    'Configuration schema remains `38`; all `461` Core tests pass.'
+) 'v0.34.0.4 Smart Action target replacement and protection release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.34.0.3',
     'Fixed **Smart Tab** admitting enemies behind walls.',
@@ -8570,7 +8739,7 @@ Assert-Literals $normalizedPrivacy @(
     'Missing, zero, or disagreeing packet sequence metadata waits for complete-pair proof or expiry',
     'evidence after 2.5 seconds cannot revive the workflow',
     'Separately pressed Scholar actions are not adopted. Manual conflicts, transient readiness, and ordinary identity/status drift reset or wait for a fresh exact plan under the same physical hold;',
-    'Configuration schema 38 is current in v0.34.0.3.',
+    'Configuration schema 38 is current in v0.34.0.4.',
     'Emergency danger/destination episodes, Scholar spread plans/source sequences, ActionEffect confirmation state, or in-memory counters.'
 ) 'v0.32.0.1 Emergency Teleport and independent Scholar spread transient-data contract'
 Assert-Literals $normalizedReadme @(
@@ -8701,7 +8870,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 38 is current in v0.34.0.3'
+    'Configuration schema 38 is current in v0.34.0.4'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8808,7 +8977,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 38 is current in v0.34.0.3',
+    'Configuration schema 38 is current in v0.34.0.4',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -9176,7 +9345,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 38 is current in v0.34.0.3',
+    'Configuration schema 38 is current in v0.34.0.4',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -9256,7 +9425,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 38 is current in v0.34.0.3'
+    'Configuration schema 38 is current in v0.34.0.4'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -9681,4 +9850,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.34.0.3 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 454-test Core registry. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."
+Write-Host "Seiton Sense v0.34.0.4 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 461-test Core registry. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."

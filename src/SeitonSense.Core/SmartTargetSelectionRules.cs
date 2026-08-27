@@ -32,7 +32,8 @@ public readonly record struct SmartTargetSelectionCandidate(
     GuardAvailability GuardAvailability,
     bool HasTrustedMp,
     uint CurrentMp,
-    uint MaximumMp);
+    uint MaximumMp,
+    bool CallerProvenProtectionSafe = false);
 
 /// <summary>
 /// The sole action and actor selected for one already incoming macro action.
@@ -145,7 +146,8 @@ public static class SmartTargetSelectionRules
         candidate.CurrentHp > 0 &&
         candidate.MaximumHp >= candidate.CurrentHp &&
         candidate.HasValidActionTarget &&
-        candidate.HasNativeRangeAndLineOfSight;
+        candidate.HasNativeRangeAndLineOfSight &&
+        candidate.CallerProvenProtectionSafe;
 
     private static bool IsStructurallyValid(
         SmartTargetSelectionCandidate candidate,

@@ -12,6 +12,7 @@ internal sealed record PvPMetadataValidation(
     bool ViperSerpentTailVerified,
     bool WolvesDenStrikingDummyVerified,
     bool GuardVerified,
+    bool SmartActionProtectionStatusesVerified,
     bool GuardianVerified,
     bool RecuperateVerified,
     bool WildfireVerified,
@@ -45,7 +46,7 @@ internal sealed record PvPMetadataValidation(
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false,
         false);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
@@ -195,6 +196,49 @@ internal static class PvPMetadataGuard
                    statuses.TryGetRow(EnemyCombatConstants.GuardStatusAlternateId, out var alternateGuardStatus) &&
                    alternateGuardStatus.Name.ToString() == "Guard";
         });
+
+        // Smart Action depends only on these exact status meanings. Keep that
+        // proof independent from NIN/Guard action costs, recasts, and other
+        // balance metadata so an unrelated patch cannot disable safe targeting.
+        var smartActionProtectionStatusesVerified = ValidateFeature(
+            "Smart Action protection statuses",
+            log,
+            () =>
+            {
+                var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+                return ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId,
+                           "Covered") &&
+                       ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.CoveredStatusId,
+                           "Covered") &&
+                       ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId,
+                           "Covered") &&
+                       ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
+                           "Covered") &&
+                       ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId,
+                           "Hallowed Ground") &&
+                       ValidateSeitonProtectionStatus(
+                           statuses,
+                           NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
+                           "Undead Redemption") &&
+                       ValidateNamedStatus(
+                           statuses,
+                           EnemyCombatConstants.GuardStatusId,
+                           "Guard") &&
+                       ValidateNamedStatus(
+                           statuses,
+                           EnemyCombatConstants.GuardStatusAlternateId,
+                           "Guard");
+            });
 
         var guardianVerified = ValidateFeature("Guardian", log, () =>
         {
@@ -1374,6 +1418,7 @@ internal static class PvPMetadataGuard
             viperSerpentTailVerified,
             wolvesDenStrikingDummyVerified,
             guardVerified,
+            smartActionProtectionStatusesVerified,
             guardianVerified,
             recuperateVerified,
             wildfireVerified,
@@ -1406,7 +1451,8 @@ internal static class PvPMetadataGuard
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
-            "WolvesDenStrikingDummy={WolvesDenStrikingDummy}, Guard={Guard}, Guardian={Guardian}, Recuperate={Recuperate}, " +
+            "WolvesDenStrikingDummy={WolvesDenStrikingDummy}, Guard={Guard}, " +
+            "SmartActionProtectionStatuses={SmartActionProtectionStatuses}, Guardian={Guardian}, Recuperate={Recuperate}, " +
             "Wildfire={Wildfire}, DeathWarrant={DeathWarrant}, MarksmanSpite={MarksmanSpite}, " +
             "Purify={Purify}, AllyRescueStatuses={AllyRescueStatuses}, MiracleAction={MiracleAction}, " +
             "SilentNocturne={SilentNocturne}, PanicShukuchi={PanicShukuchi}, Contradance={Contradance}, Zantetsuken={Zantetsuken}, " +
@@ -1422,6 +1468,7 @@ internal static class PvPMetadataGuard
             validation.ViperSerpentTailVerified,
             validation.WolvesDenStrikingDummyVerified,
             validation.GuardVerified,
+            validation.SmartActionProtectionStatusesVerified,
             validation.GuardianVerified,
             validation.RecuperateVerified,
             validation.WildfireVerified,
@@ -1897,6 +1944,14 @@ internal static class PvPMetadataGuard
             status.Name.ToString(),
             expectedName,
             StringComparison.Ordinal);
+
+    private static bool ValidateNamedStatus(
+        ExcelSheet<Status> statuses,
+        uint statusId,
+        string expectedName) =>
+        statuses.TryGetRow(statusId, out var status) &&
+        status.RowId == statusId &&
+        string.Equals(status.Name.ToString(), expectedName, StringComparison.Ordinal);
 
     private static bool ValidateWarningDebuff(
         Status status,

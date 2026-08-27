@@ -93,6 +93,7 @@ internal static class SmartTargetSelectionSelfTests
             valid with { CurrentHp = 101, MaximumHp = 100 },
             valid with { HasValidActionTarget = false },
             valid with { HasNativeRangeAndLineOfSight = false },
+            valid with { CallerProvenProtectionSafe = false },
         };
         foreach (var candidate in ineligible)
         {
@@ -221,7 +222,8 @@ internal static class SmartTargetSelectionSelfTests
             guard,
             mpTrusted,
             mp,
-            maxMp);
+            maxMp,
+            CallerProvenProtectionSafe: true);
     }
 
     private static void True(bool condition, string message)

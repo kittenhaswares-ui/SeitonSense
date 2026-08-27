@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.34.0.3";
+    private const string CurrentReleaseVersion = "0.34.0.4";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -197,6 +197,8 @@ public sealed class Plugin : IDalamudPlugin
             tracker,
             smartWardensPaean,
             ccImmunityBrake,
+            metadata.SmartActionProtectionStatusesVerified,
+            samuraiReactiveMetadata.ChitenVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
             configuration,
@@ -312,9 +314,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Tab now requires FFXIV's native range and line-of-sight result, so enemies behind walls are excluded before targeting and checked again immediately before the target write.",
-                "Repeated forward Tab presses now advance through the smart-ranked reachable enemies and wrap, instead of repeatedly selecting the same best target. Manual target changes automatically re-anchor the cycle.",
-                "Reverse targeting and every unsupported context remain vanilla. Smart Tab still performs one exact hard-target write with no action, retry, alternate, or fallback. Schema 38 is unchanged; all 454 Core tests pass.",
+                "Smart Action now sends the chosen Smart Target's exact canonical target ID with the incoming harmful action while leaving your visible hard, soft, Focus, and mouseover targets unchanged.",
+                "Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are skipped. Target-centered circles also avoid protected enemies inside their effect radius; unreviewed AoE shapes fail closed.",
+                "The target and full protection snapshot are checked again immediately before the sole native action call, and the authored fallback remains under a short exact-action safety lease. Schema 38 is unchanged; all 461 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

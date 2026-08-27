@@ -12,6 +12,7 @@ internal sealed record SamuraiReactiveMetadataValidation(
     bool MineuchiVerified,
     bool ZantetsukenVerified,
     bool KuzushiVerified,
+    bool ChitenVerified,
     bool ProtectionSignalPrerequisitesVerified,
     bool WolvesDenStrikingDummyVerified)
 {
@@ -20,6 +21,7 @@ internal sealed record SamuraiReactiveMetadataValidation(
     internal bool ZantetsukenWorkflowVerified => ZantetsukenVerified && KuzushiVerified;
 
     internal static SamuraiReactiveMetadataValidation None { get; } = new(
+        false,
         false,
         false,
         false,
@@ -38,6 +40,8 @@ internal static class SamuraiReactiveMetadataGuard
     internal const uint MineuchiIconId = 9_665;
     internal const uint ZantetsukenIconId = 9_666;
     internal const uint KuzushiIconId = 214_954;
+    internal const uint ChitenStatusId = 1_240;
+    internal const uint ChitenIconId = 214_820;
 
     internal static SamuraiReactiveMetadataValidation Validate(
         IDataManager dataManager,
@@ -98,6 +102,19 @@ internal static class SamuraiReactiveMetadataGuard
                           kuzushiRow.Description.ExtractText().Contains(
                               "samurai who applied this effect",
                               StringComparison.Ordinal);
+            var chiten = statuses.TryGetRow(ChitenStatusId, out var chitenRow) &&
+                         chitenRow.RowId == ChitenStatusId &&
+                         string.Equals(
+                             chitenRow.Name.ExtractText(),
+                             "Chiten",
+                             StringComparison.Ordinal) &&
+                         chitenRow.Icon == ChitenIconId &&
+                         chitenRow.StatusCategory == 1 &&
+                         !chitenRow.CanDispel &&
+                         !chitenRow.IsPermanent &&
+                         chitenRow.Description.ExtractText().Contains(
+                             "countering attacks",
+                             StringComparison.Ordinal);
             var protectionSignalPrerequisites =
                 actions.TryGetRow(
                     SamuraiReactiveRuntimeRules.PurifyActionId,
@@ -143,6 +160,11 @@ internal static class SamuraiReactiveMetadataGuard
                 log.Warning("Seiton Sense disabled unverified SAM Zantetsuken runtime.");
             if (!kuzushi)
                 log.Warning("Seiton Sense disabled unverified SAM Kuzushi runtime.");
+            if (!chiten)
+            {
+                log.Warning(
+                    "Seiton Sense will conservatively exclude SAM from Smart Action because Chiten metadata drifted.");
+            }
             if (!protectionSignalPrerequisites)
             {
                 log.Warning(
@@ -154,6 +176,7 @@ internal static class SamuraiReactiveMetadataGuard
                 mineuchi,
                 zantetsuken,
                 kuzushi,
+                chiten,
                 protectionSignalPrerequisites,
                 dummy);
         }
