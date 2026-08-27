@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.35.0.2";
+    private const string CurrentReleaseVersion = "0.35.0.3";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -206,6 +206,7 @@ public sealed class Plugin : IDalamudPlugin
             smartWardensPaean,
             ccImmunityBrake,
             metadata.SmartActionProtectionStatusesVerified,
+            metadata.SmartActionGuardBypassActions,
             samuraiReactiveMetadata.ChitenVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
@@ -340,9 +341,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed the v0.35.0.1 Panic Shukuchi regression: /panicshu and Guard-Shukuchi again use their original independent Shukuchi action validation and are never disabled by supplemental Hidden-status discovery.",
-                "Ninja Hidden protection remains active. Seiton resolves every exact English Hidden status row once at startup, then blocks only automatic Purify and Recuperate by language-independent status IDs at scheduling and final native boundaries.",
-                "Turbo/Latest Input, Viper Wolves' Den targeting, and the Scholar Smart Spread removal from v0.35.0.1 remain unchanged. All 510 Core tests pass.",
+                "/smartaction now allows a Guarded enemy only for the exact resolved PvP action whose current English description explicitly says its damage ignores Guard, including transformed combo actions.",
+                "This exception removes Guard only. Chiten, Cover, Paladin LB, Dark Knight LB, and every mixed Guard-plus-protection state remain blocked for direct attacks and AoE.",
+                "Initial selection, frozen-target validation, authored fallback, and delayed buffer replay all use the same fail-closed rule. Configuration schema 40 is unchanged; all 511 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

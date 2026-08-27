@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.35.0.3
+
+- Fixed `/smartaction` for PvP attacks that explicitly ignore Guard. Seiton now
+  resolves the adjusted action first and admits a Guarded target only when that
+  exact current English `ActionTransient` description contains the canonical
+  Guard-ignore sentence. This covers transformed combo steps without a brittle
+  job or action-ID allowlist; missing or drifted metadata remains blocked.
+- The exception removes only Guard. Protection state is now a bit mask, so
+  Chiten, Covered, Paladin LB Hallowed Ground, Dark Knight LB Undead Redemption,
+  and mixed Guard-plus-protection actors remain blocked regardless of status
+  order. The same rule applies to direct attacks, target-centered AoE, initial
+  selection, frozen-target validation, authored fallback, and buffer replay.
+- Configuration schema remains `40`; the warning-free Release build, source
+  safety contract, package checks, and all `511` Core tests pass. Live current-
+  patch behavior remains a separate in-game validation boundary.
+
 ## 0.35.0.2
 
 - Fixed the v0.35.0.1 `/panicshu` regression. Panic Shukuchi and the NIN

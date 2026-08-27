@@ -193,6 +193,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartWardensPaeanService smartWardensPaean;
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly bool smartActionProtectionMetadataVerified;
+    private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool chitenMetadataVerified;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
@@ -260,6 +261,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartWardensPaeanService smartWardensPaean,
         CcImmunityBrakeService ccImmunityBrake,
         bool smartActionProtectionMetadataVerified,
+        SmartActionGuardBypassCatalog smartActionGuardBypassActions,
         bool chitenMetadataVerified,
         IPluginLog log)
     {
@@ -275,6 +277,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.smartWardensPaean = smartWardensPaean;
         this.ccImmunityBrake = ccImmunityBrake;
         this.smartActionProtectionMetadataVerified = smartActionProtectionMetadataVerified;
+        this.smartActionGuardBypassActions = smartActionGuardBypassActions;
         this.chitenMetadataVerified = chitenMetadataVerified;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
@@ -1910,7 +1913,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ClassifySmartActionAttackShape(action),
             CreateSmartActionActorGeometry(target),
             action.EffectRange,
-            protectedActors);
+            protectedActors,
+            actionIgnoresGuard:
+                smartActionGuardBypassActions.Contains(resolvedActionId));
         SetSmartActionSafetyEvent(
             safe
                 ? $"Safe exact generic buffer replay S{target.Slot}"
@@ -2385,6 +2390,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         var attackShape = ClassifySmartActionAttackShape(action);
+        var actionIgnoresGuard =
+            smartActionGuardBypassActions.Contains(resolvedActionId);
 
         var candidates = new List<SmartTargetRuntimeCandidate>(5);
         foreach (var canonicalEnemy in canonicalEnemies)
@@ -2403,7 +2410,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 attackShape,
                 CreateSmartActionActorGeometry(canonicalEnemy),
                 action.EffectRange,
-                protectedActors);
+                protectedActors,
+                actionIgnoresGuard);
             int? freshTeamPressure = pressureTracker.TryGetFreshTeamTargetCount(
                 localActor,
                 actor,
@@ -2499,7 +2507,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                       CreateSmartActionActorGeometry(
                                           new CanonicalEnemy(intent.EnemySlot, currentEnemy)),
                                       action.EffectRange,
-                                      finalProtectedActors);
+                                      finalProtectedActors,
+                                      actionIgnoresGuard);
         var finalCandidate = selected.Selection with
         {
             Alive = IsLivePlayer(currentEnemy),
@@ -3285,7 +3294,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 ClassifySmartActionAttackShape(action),
                 CreateSmartActionActorGeometry(target),
                 action.EffectRange,
-                protectedActors);
+                protectedActors,
+                actionIgnoresGuard:
+                    smartActionGuardBypassActions.Contains(resolvedActionId));
             SetSmartActionSafetyEvent(
                 safe
                     ? $"Safe exact Smart Action fallback S{target.Slot}"
@@ -3378,12 +3389,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         return false;
                     }
 
-                    protectionKind = exactKind;
-                    break;
+                    protectionKind |= exactKind;
+                    continue;
                 }
 
-                if (protectionKind == SmartActionProtectionKind.None)
-                    protectionKind = exactKind;
+                protectionKind |= exactKind;
             }
 
             if (protectionKind != SmartActionProtectionKind.None)

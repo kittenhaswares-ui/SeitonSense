@@ -244,6 +244,143 @@ internal static class SmartActionProtectionSelfTests
             "protection drift never reranks to another now-safe actor");
     }
 
+    public static void GuardIgnoringActionsBypassOnlyGuard()
+    {
+        True(SmartActionGuardBypassRules.HasExactEnglishDescription(
+                $"Delivers an attack. {SmartActionGuardBypassRules.ExactEnglishDescriptionSentence}"),
+            "the exact current English Guard-ignore sentence is accepted");
+        foreach (var driftedDescription in new[]
+                 {
+                     "Ignores the effect of Guard when dealing damage.",
+                     "ignores the effects of Guard when dealing damage.",
+                     "Ignores the effects of Guard when dealing damage",
+                     string.Empty,
+                 })
+        {
+            False(SmartActionGuardBypassRules.HasExactEnglishDescription(driftedDescription),
+                "partial, case, punctuation, or empty metadata drift fails closed");
+        }
+        False(SmartActionGuardBypassRules.HasExactEnglishDescription(null),
+            "missing ActionTransient metadata fails closed");
+
+        var target = Geometry(1);
+        var guard = Protected(target, SmartActionProtectionKind.Guard);
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.DirectSingleTarget,
+                target,
+                effectRange: 0f,
+                [guard]),
+            "an ordinary direct action remains blocked by Guard");
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.DirectSingleTarget,
+                target,
+                effectRange: 0f,
+                [guard],
+                actionIgnoresGuard: true),
+            "an exactly verified Guard-ignoring direct action may target Guard");
+
+        foreach (var hardProtection in new[]
+                 {
+                     SmartActionProtectionKind.Chiten,
+                     SmartActionProtectionKind.Covered,
+                     SmartActionProtectionKind.Invulnerability,
+                 })
+        {
+            False(SmartActionProtectionRules.IsActionProtectionSafe(
+                    SmartActionAttackShape.DirectSingleTarget,
+                    target,
+                    effectRange: 0f,
+                    [Protected(target, hardProtection)],
+                    actionIgnoresGuard: true),
+                $"Guard bypass never opens {hardProtection}");
+            False(SmartActionProtectionRules.IsActionProtectionSafe(
+                    SmartActionAttackShape.DirectSingleTarget,
+                    target,
+                    effectRange: 0f,
+                    [Protected(
+                        target,
+                        SmartActionProtectionKind.Guard | hardProtection)],
+                    actionIgnoresGuard: true),
+                $"Guard combined with {hardProtection} remains blocked");
+        }
+
+        var guardPeer = Protected(
+            Geometry(2, x: 6f, hitboxRadius: 1f),
+            SmartActionProtectionKind.Guard);
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.TargetCenteredCircle,
+                target,
+                effectRange: 5f,
+                [guardPeer],
+                actionIgnoresGuard: true),
+            "a Guard-only peer inside a verified Guard-ignoring circle is safe");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.TargetCenteredCircle,
+                target,
+                effectRange: 5f,
+                [guardPeer with
+                {
+                    Kind = SmartActionProtectionKind.Guard |
+                           SmartActionProtectionKind.Covered,
+                }],
+                actionIgnoresGuard: true),
+            "a covered peer touched by the same circle remains blocked");
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.UnsupportedAreaOfEffect,
+                target,
+                effectRange: 20f,
+                [guardPeer],
+                actionIgnoresGuard: true),
+            "unsupported AoE may ignore a complete Guard-only protection set");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.UnsupportedAreaOfEffect,
+                target,
+                effectRange: 20f,
+                [Protected(guardPeer.Geometry, SmartActionProtectionKind.Chiten)],
+                actionIgnoresGuard: true),
+            "unsupported AoE still fails closed around a hard protection");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.DirectSingleTarget,
+                target,
+                effectRange: 0f,
+                null,
+                actionIgnoresGuard: true),
+            "Guard bypass never makes an unknown protection snapshot safe");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.DirectSingleTarget,
+                target,
+                effectRange: 0f,
+                [Protected(
+                    target,
+                    SmartActionProtectionKind.Guard |
+                    (SmartActionProtectionKind)16)],
+                actionIgnoresGuard: true),
+            "unknown protection bits fail closed");
+
+        var guardCandidate = Candidate(
+            1,
+            hp: 20,
+            callerProvenProtectionSafe: true);
+        var hardProtectedCandidate = Candidate(
+            2,
+            hp: 1,
+            callerProvenProtectionSafe: false);
+        True(SmartTargetSelectionRules.TryCreateIntent(
+                29_507,
+                [hardProtectedCandidate, guardCandidate],
+                LocalPlayer,
+                out var intent),
+            "a verified Guard target can win while a harder protection is excluded");
+        Equal(1, intent.EnemySlot,
+            "the verified Guard target owns the frozen intent");
+        False(SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                guardCandidate with { CallerProvenProtectionSafe = false },
+                LocalPlayer,
+                29_507),
+            "a frozen Guard target gaining a harder protection cancels without reranking");
+    }
+
     private static SmartActionActorGeometry Geometry(
         int slot,
         float x = 0f,

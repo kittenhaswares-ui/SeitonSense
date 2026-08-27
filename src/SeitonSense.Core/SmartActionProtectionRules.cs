@@ -6,13 +6,14 @@ namespace SeitonSense.Core;
 /// Exact, reviewed protection semantics which make a harmful Smart Action
 /// target blocked. Unknown status rows never acquire one of these meanings.
 /// </summary>
+[Flags]
 public enum SmartActionProtectionKind : byte
 {
     None = 0,
     Chiten = 1,
     Guard = 2,
-    Covered = 3,
-    Invulnerability = 4,
+    Covered = 4,
+    Invulnerability = 8,
 }
 
 /// <summary>
@@ -38,7 +39,7 @@ public readonly record struct SmartActionActorGeometry(
     float HitboxRadius);
 
 /// <summary>
-/// One canonical actor carrying one exact reviewed protection kind.
+/// One canonical actor carrying one or more exact reviewed protection kinds.
 /// </summary>
 public readonly record struct SmartActionProtectedActor(
     SmartActionActorGeometry Geometry,
@@ -70,11 +71,15 @@ public static class SmartActionProtectionRules
             _ => SmartActionProtectionKind.None,
         };
 
+    private const SmartActionProtectionKind AllProtectionKinds =
+        SmartActionProtectionKind.Chiten |
+        SmartActionProtectionKind.Guard |
+        SmartActionProtectionKind.Covered |
+        SmartActionProtectionKind.Invulnerability;
+
     public static bool IsExactProtectionKind(SmartActionProtectionKind kind) =>
-        kind is SmartActionProtectionKind.Chiten or
-            SmartActionProtectionKind.Guard or
-            SmartActionProtectionKind.Covered or
-            SmartActionProtectionKind.Invulnerability;
+        kind != SmartActionProtectionKind.None &&
+        (kind & ~AllProtectionKinds) == SmartActionProtectionKind.None;
 
     /// <summary>
     /// Maps only reviewed Action-sheet geometry to a supported attack shape.
@@ -95,12 +100,14 @@ public static class SmartActionProtectionRules
     /// </summary>
     public static bool IsDirectTargetSafe(
         SmartActionActorGeometry target,
-        IReadOnlyList<SmartActionProtectedActor>? protectedActors)
+        IReadOnlyList<SmartActionProtectedActor>? protectedActors,
+        bool actionIgnoresGuard = false)
     {
         if (!TryValidateInputs(target, protectedActors, out var actors)) return false;
 
         foreach (var protectedActor in actors)
         {
+            if (!IsBlockingProtection(protectedActor.Kind, actionIgnoresGuard)) continue;
             if (SharesSlotOrEitherId(target, protectedActor.Geometry))
                 return false;
         }
@@ -116,7 +123,8 @@ public static class SmartActionProtectionRules
     public static bool IsTargetCenteredCircleSafe(
         SmartActionActorGeometry target,
         float effectRange,
-        IReadOnlyList<SmartActionProtectedActor>? protectedActors)
+        IReadOnlyList<SmartActionProtectedActor>? protectedActors,
+        bool actionIgnoresGuard = false)
     {
         if (!IsFiniteNonNegative(effectRange) || effectRange <= 0f ||
             !TryValidateInputs(target, protectedActors, out var actors))
@@ -126,6 +134,7 @@ public static class SmartActionProtectionRules
 
         foreach (var protectedActor in actors)
         {
+            if (!IsBlockingProtection(protectedActor.Kind, actionIgnoresGuard)) continue;
             var protectedGeometry = protectedActor.Geometry;
             if (SharesSlotOrEitherId(target, protectedGeometry)) return false;
 
@@ -143,7 +152,8 @@ public static class SmartActionProtectionRules
         SmartActionAttackShape shape,
         SmartActionActorGeometry target,
         float effectRange,
-        IReadOnlyList<SmartActionProtectedActor>? protectedActors)
+        IReadOnlyList<SmartActionProtectedActor>? protectedActors,
+        bool actionIgnoresGuard = false)
     {
         if (!TryValidateInputs(target, protectedActors, out var actors) ||
             !IsFiniteNonNegative(effectRange))
@@ -154,13 +164,26 @@ public static class SmartActionProtectionRules
         return shape switch
         {
             SmartActionAttackShape.DirectSingleTarget =>
-                effectRange == 0f && IsDirectTargetSafe(target, actors),
+                effectRange == 0f &&
+                IsDirectTargetSafe(target, actors, actionIgnoresGuard),
             SmartActionAttackShape.TargetCenteredCircle =>
-                IsTargetCenteredCircleSafe(target, effectRange, actors),
-            SmartActionAttackShape.UnsupportedAreaOfEffect => actors.Count == 0,
+                IsTargetCenteredCircleSafe(
+                    target,
+                    effectRange,
+                    actors,
+                    actionIgnoresGuard),
+            SmartActionAttackShape.UnsupportedAreaOfEffect =>
+                actors.All(actor =>
+                    !IsBlockingProtection(actor.Kind, actionIgnoresGuard)),
             _ => false,
         };
     }
+
+    private static bool IsBlockingProtection(
+        SmartActionProtectionKind kind,
+        bool actionIgnoresGuard) =>
+        !actionIgnoresGuard ||
+        (kind & ~SmartActionProtectionKind.Guard) != SmartActionProtectionKind.None;
 
     private static bool TryValidateInputs(
         SmartActionActorGeometry target,

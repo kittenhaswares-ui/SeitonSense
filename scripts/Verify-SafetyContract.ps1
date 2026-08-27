@@ -203,10 +203,12 @@ $localMpWarningSelfTestsPath = Join-Path $coreSelfTestRoot 'LocalMpWarningSelfTe
 $smartTargetSelectionRulesPath = Join-Path $coreRoot 'SmartTargetSelectionRules.cs'
 $smartTargetSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetSelectionSelfTests.cs'
 $smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRules.cs'
+$smartActionGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionGuardBypassRules.cs'
 $smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
 $smartActionProtectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionProtectionSelfTests.cs'
 $smartActionSafetyLeaseSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionSafetyLeaseSelfTests.cs'
 $samuraiReactiveMetadataGuardPath = Join-Path $pluginServicesRoot 'SamuraiReactiveMetadataGuard.cs'
+$smartActionGuardBypassCatalogPath = Join-Path $pluginServicesRoot 'SmartActionGuardBypassCatalog.cs'
 $limitBreakNotificationRendererPath = Join-Path $pluginUiRoot 'LimitBreakNotificationRenderer.cs'
 $overlayRendererLimitBreaksPath = Join-Path $pluginUiRoot 'OverlayRenderer.LimitBreaks.cs'
 $autoSeitonToggleWindowPath = Join-Path $pluginUiRoot 'AutoSeitonToggleWindow.cs'
@@ -647,7 +649,7 @@ Assert-Literals $normalizedNearAssistForIntegratedInput @(
 ) 'Exact buffered replay scope, Smart Action protection, and passive Smart Kardia observer'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'if \(integratedBufferReplayDepth > 0 && !TryConsumeIntegratedBufferedReplay\( thisPtr, actionType, actionId, forwardedTargetId, mode\)\) \{ return false; \}.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'private bool TryConsumeIntegratedBufferedReplay\(.*?integratedBufferReplayDepth != 1 \|\| scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.Consumed.*?scope\.Consumed = true;.*?mode != ActionManager\.UseActionMode\.None \|\| actionType != intent\.ActionType \|\| requestedActionId != intent\.RequestedActionId \|\| resolvedActionId != intent\.ResolvedActionId \|\| targetId != intent\.TargetId.*?if \(!intent\.RequiresSmartActionProtectionRecheck\) return true; return IsExactBufferedSmartActionProtectionSafe\( resolvedActionId, targetId\);.*?catch \(Exception exception\).*?return false;' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe\( ClassifySmartActionAttackShape\(action\), CreateSmartActionActorGeometry\(target\), action\.EffectRange, protectedActors\);') {
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe\( ClassifySmartActionAttackShape\(action\), CreateSmartActionActorGeometry\(target\), action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\);') {
     throw 'Buffered replay must single-consume one exact immutable tuple, rerun complete Smart Action protection when inherited, and preserve accepted Eukrasia observation without redirect/token rewriting.'
 }
 Assert-Literals $integratedActionBufferRuntime @(
@@ -674,7 +676,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all schema-40 buffer/repeat/compatibility suites and the exact current
-# 510-test registry.
+# 511-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -694,11 +696,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 469 -or
+if ($staticIntegratedTestCount -ne 470 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 510 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 511 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -706,7 +708,7 @@ if ($staticIntegratedTestCount -ne 469 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 40 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 510-test combined Core registry.'
+    throw 'Schema 40 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 511-test combined Core registry.'
 }
 $monkRouteResolverSource = Read-RequiredSource $monkHeldComboProbePath 'Monk native PvP combo-route resolver'
 $normalizedMonkRouteResolverSource = $monkRouteResolverSource -replace '\s+', ' '
@@ -1073,6 +1075,8 @@ if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult 
 $smartTargetSelectionRules = Read-RequiredSource $smartTargetSelectionRulesPath 'Smart Action target selection rules'
 $smartTargetSelectionSelfTests = Read-RequiredSource $smartTargetSelectionSelfTestsPath 'Smart Action target selection self-tests'
 $smartActionProtectionRules = Read-RequiredSource $smartActionProtectionRulesPath 'Smart Action protected-target rules'
+$smartActionGuardBypassRules = Read-RequiredSource $smartActionGuardBypassRulesPath 'Smart Action Guard-bypass metadata rules'
+$smartActionGuardBypassCatalog = Read-RequiredSource $smartActionGuardBypassCatalogPath 'Smart Action Guard-bypass startup catalog'
 $smartActionSafetyLeaseRules = Read-RequiredSource $smartActionSafetyLeaseRulesPath 'Smart Action exact-fallback safety lease'
 $smartActionProtectionSelfTests = Read-RequiredSource $smartActionProtectionSelfTestsPath 'Smart Action protected-target self-tests'
 $smartActionSafetyLeaseSelfTests = Read-RequiredSource $smartActionSafetyLeaseSelfTestsPath 'Smart Action exact-fallback lease self-tests'
@@ -1092,7 +1096,13 @@ Assert-Literals $smartActionProtectionRules @(
     'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
     'SmartActionAttackShape.DirectSingleTarget',
     'SmartActionAttackShape.TargetCenteredCircle',
-    'SmartActionAttackShape.UnsupportedAreaOfEffect => actors.Count == 0',
+    '[Flags]',
+    'Covered = 4,',
+    'Invulnerability = 8,',
+    'bool actionIgnoresGuard = false',
+    '(kind & ~SmartActionProtectionKind.Guard) != SmartActionProtectionKind.None',
+    'SmartActionAttackShape.UnsupportedAreaOfEffect =>',
+    'actors.All(actor =>',
     'public static SmartActionAttackShape ClassifyAttackShape(byte effectRange, byte castType)',
     '(0, 1) => SmartActionAttackShape.DirectSingleTarget',
     '(> 0, 2) => SmartActionAttackShape.TargetCenteredCircle',
@@ -1103,6 +1113,20 @@ Assert-Literals $smartActionProtectionRules @(
     '!occupiedGameObjectIds.Add(geometry.Actor.GameObjectId)',
     '!occupiedEntityIds.Add(geometry.Actor.EntityId)'
 ) 'Exact Smart Action Chiten, Guard, Cover, LB, and AoE protection policy'
+Assert-Literals $smartActionGuardBypassRules @(
+    'public const string ExactEnglishDescriptionSentence =',
+    '"Ignores the effects of Guard when dealing damage.";',
+    'public static bool HasExactEnglishDescription(string? description)',
+    'StringComparison.Ordinal'
+) 'Exact English Smart Action Guard-bypass sentence policy'
+Assert-Literals $smartActionGuardBypassCatalog @(
+    'internal sealed class SmartActionGuardBypassCatalog',
+    'internal static SmartActionGuardBypassCatalog Empty { get; } = new([]);',
+    '.Where(actionId => actionId != 0)',
+    '.Distinct()',
+    '.OrderBy(actionId => actionId)',
+    'Array.BinarySearch(actionIds, resolvedActionId) >= 0'
+) 'Immutable resolved-action Smart Action Guard-bypass catalog'
 Assert-Literals $smartTargetSelectionRules @(
     'bool CallerProvenProtectionSafe = false',
     'candidate.CallerProvenProtectionSafe'
@@ -1134,6 +1158,7 @@ Assert-Literals $samuraiReactiveMetadataGuard @(
 ) 'English-sheet Chiten metadata pin and conservative drift policy'
 Assert-Literals $pluginSource @(
     'metadata.SmartActionProtectionStatusesVerified,',
+    'metadata.SmartActionGuardBypassActions,',
     'samuraiReactiveMetadata.ChitenVerified,'
 ) 'Smart Action exact protection metadata wiring'
 $smartActionStatusMetadataGuard = Read-RequiredSource (
@@ -1150,6 +1175,23 @@ Assert-Literals $smartActionStatusMetadataGuard @(
     'EnemyCombatConstants.GuardStatusId',
     'EnemyCombatConstants.GuardStatusAlternateId'
 ) 'Independent Smart Action protection-status metadata proof'
+Assert-Literals $smartActionStatusMetadataGuard @(
+    'SmartActionGuardBypassCatalog SmartActionGuardBypassActions',
+    'var smartActionGuardBypassActions = SmartActionGuardBypassCatalog.Empty;',
+    '"Smart Action Guard-bypass actions"',
+    'GetExcelSheet<ActionSheet>(ClientLanguage.English)',
+    'GetExcelSheet<ActionTransient>(ClientLanguage.English)',
+    'action.RowId == 0',
+    '!action.IsPvP',
+    '!action.CanTargetHostile',
+    'action.TargetArea',
+    'action.Range <= 0',
+    '!descriptions.TryGetRow(action.RowId, out var transient)',
+    'transient.RowId != action.RowId',
+    'SmartActionGuardBypassRules.HasExactEnglishDescription(',
+    'SmartActionGuardBypassCatalog.Create(actionIds)',
+    'smartActionGuardBypassActions = resolved;'
+) 'Independent exact resolved-action Guard-bypass discovery'
 $normalizedSmartActionStatusMetadataGuard = $smartActionStatusMetadataGuard -replace '\s+', ' '
 $smartActionStatusOnlyBlock = [regex]::Match(
     $normalizedSmartActionStatusMetadataGuard,
@@ -1171,6 +1213,9 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtecti
     $normalizedSmartActionRuntime -notmatch 'var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 3 -or
+    $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = smartActionGuardBypassActions\.Contains\(resolvedActionId\);.*?var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?protectedActors, actionIgnoresGuard\).*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?finalProtectedActors, actionIgnoresGuard\)' -or
+    $normalizedSmartActionRuntime -notmatch 'protectionKind \|= exactKind; continue;.*?protectionKind \|= exactKind;' -or
     $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, out var rewritten, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
@@ -1203,7 +1248,8 @@ foreach ($method in @(
     'ExactProtectionStatusKindsArePinned',
     'DirectAndTargetCircleSafetyAreExact',
     'UnsupportedShapesAndInvalidGeometryFailClosed',
-    'ProtectedCandidatesCannotWinOrReplaceFrozenIntent'
+    'ProtectedCandidatesCannotWinOrReplaceFrozenIntent',
+    'GuardIgnoringActionsBypassOnlyGuard'
 )) {
     Assert-Literals $smartActionProtectionSelfTests @("public static void $method()") "Smart Action protection self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionProtectionSelfTests.$method") "Smart Action protection test registration $method"
@@ -1216,9 +1262,9 @@ foreach ($method in @(
     Assert-Literals $smartActionSafetyLeaseSelfTests @("public static void $method()") "Smart Action fallback lease self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionSafetyLeaseSelfTests.$method") "Smart Action fallback lease test registration $method"
 }
-if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 4 -or
+if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 5 -or
     [regex]::Matches($smartActionTestProgram, '\bSmartActionSafetyLeaseSelfTests\.\w+').Count -ne 3) {
-    throw 'All four Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
+    throw 'All five Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -3544,8 +3590,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 469) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 469-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 470) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 470-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -8801,20 +8847,19 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.35.0.2</Version>',
-    '<AssemblyVersion>0.35.0.2</AssemblyVersion>',
-    '<FileVersion>0.35.0.2</FileVersion>'
-) 'v0.35.0.2 project version'
+    '<Version>0.35.0.3</Version>',
+    '<AssemblyVersion>0.35.0.3</AssemblyVersion>',
+    '<FileVersion>0.35.0.3</FileVersion>'
+) 'v0.35.0.3 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.35.0.2";',
-    'Fixed the v0.35.0.1 Panic Shukuchi regression:',
-    '/panicshu and Guard-Shukuchi again use their original independent Shukuchi action validation',
-    'Ninja Hidden protection remains active.',
-    'resolves every exact English Hidden status row once at startup',
-    'language-independent status IDs at scheduling and final native boundaries.',
-    'Turbo/Latest Input, Viper Wolves'' Den targeting, and the Scholar Smart Spread removal from v0.35.0.1 remain unchanged.',
-    'All 510 Core tests pass.'
-) 'v0.35.0.2 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.35.0.3";',
+    '/smartaction now allows a Guarded enemy only for the exact resolved PvP action',
+    'including transformed combo actions.',
+    'This exception removes Guard only.',
+    'Chiten, Cover, Paladin LB, Dark Knight LB, and every mixed Guard-plus-protection state remain blocked',
+    'Initial selection, frozen-target validation, authored fallback, and delayed buffer replay all use the same fail-closed rule.',
+    'Configuration schema 40 is unchanged; all 511 Core tests pass.'
+) 'v0.35.0.3 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8832,22 +8877,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.35.0.2 plugin manifest metadata'
+) 'v0.35.0.3 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.35.0.2"',
-    'Fixed the v0.35.0.1 Panic Shukuchi regression:',
-    '/panicshu and Guard-Shukuchi again use the original independent Action/ActionTransient metadata validation',
-    'supplemental Hidden-status discovery can never disable them.',
-    'Ninja stealth protection remains independent and collects every exact English Hidden status row once at startup;',
-    'runtime Auto-Purify and Auto-Recup compare only language-independent IDs at scheduling, cast-cancel, and final native boundaries.',
-    'The v0.35.0.1 Turbo/Latest Input, Viper Wolves'' Den, diagnostics, and Scholar-removal changes remain intact.',
-    'Configuration schema 40 remains current; all 510 Core tests pass;',
+    '"AssemblyVersion": "0.35.0.3"',
+    'Fixed /smartaction for attacks whose exact resolved PvP action explicitly ignores Guard.',
+    'startup catalog from the current English ActionTransient sentence',
+    'adjusted combo steps work without job or action-ID allowlists',
+    'Only Guard is bypassed: Chiten, Covered, Paladin LB, Dark Knight LB, and mixed Guard-plus-protection states still block direct attacks and AoE.',
+    'Initial selection, frozen-target validation, authored fallback, and delayed buffer replay share the same rule.',
+    'Configuration schema 40 remains current; all 511 Core tests pass;',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.35.0.2 custom-repository metadata'
+) 'v0.35.0.3 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8880,19 +8924,18 @@ Assert-Literals $normalizedPrivacy @(
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'Configuration schema 40 is current.'
-) 'v0.35.0.2 Smart Tab and integrated-input disclosure'
+) 'v0.35.0.3 Smart Tab and integrated-input disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.35.0.2 restores `/panicshu` and Guard-Shukuchi''s original independent action validation',
-    'v0.35.0.1 tied it incorrectly to supplemental Hidden-status discovery.',
-    'Ninja Hidden protection now discovers exact English Hidden rows separately at startup',
-    'language-independent IDs while blocking automatic Purify or Recuperate.',
-    'retains v0.35.0.1''s native Turbo/Latest Input path, exact Viper Wolves'' Den targeting, and removal of the nonfunctional Scholar spread workflow.',
+    'Version 0.35.0.3 lets `/smartaction` select a Guarded enemy only when the exact resolved PvP action''s current English description explicitly says its damage ignores Guard.',
+    'Chiten, Covered, Paladin LB, Dark Knight LB, and mixed Guard-plus-protection states remain blocked.',
+    'retains v0.35.0.2''s Panic Shukuchi repair and Ninja Hidden protection',
+    'v0.35.0.1''s native Turbo/Latest Input path, exact Viper Wolves'' Den targeting, and removal of the nonfunctional Scholar spread workflow.',
     'The generic one-shot action buffer remains available directly in Seiton Sense.',
     'A fresh physical standard-keyboard-hotbar press may retain one exact direct instant action for 1,000 ms by default, adjustable from 100-1,500 ms;',
     'the movable learning panel shows its key, slot, action, and live countdown.',
     'Turbo repeats only the newest certified current slot, emits no catch-up bursts, and yields to Purify and every higher-priority held helper.',
     'Smart Action protection is rebuilt directly before a sole delayed replay, while audited ReAction/MOAction conflicts disable only that buffer opportunity.',
-    'It retains v0.34.0.4''s Chiten, Guard, Covered, Paladin-LB, Dark-Knight-LB, and target-circle safety',
+    'retains v0.34.0.4''s Chiten, Covered, Paladin-LB, Dark-Knight-LB, and target-circle safety, with Guard bypassed only by exact Guard-ignoring actions',
     'v0.34.0.3''s Smart Tab line-of-sight and ranked-cycle fixes.',
     'Accepted Auto-Guard can show a card/sound and protects an accidental second Guard press for two seconds.',
     '`/panicshu` now reaches its one location call only after exact native Shukuchi recast and resource readiness.',
@@ -8914,17 +8957,30 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 40 is current',
-    'For the current source, the exact 510-test Core registry and source checks pin',
+    'For the current source, the exact 511-test Core registry and source checks pin',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
+    'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
     'Eighteen physical-hold option enable edges share the scheduler input.',
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.35.0.2 current README release and safety contract'
+) 'v0.35.0.3 current README release and safety contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.35.0.3',
+    'Fixed `/smartaction` for PvP attacks that explicitly ignore Guard.',
+    'resolves the adjusted action first',
+    'exact current English `ActionTransient` description contains the canonical Guard-ignore sentence.',
+    'without a brittle job or action-ID allowlist;',
+    'Protection state is now a bit mask',
+    'mixed Guard-plus-protection actors remain blocked regardless of status order.',
+    'initial selection, frozen-target validation, authored fallback, and buffer replay.',
+    'Configuration schema remains `40`;',
+    'all `511` Core tests pass.'
+) 'v0.35.0.3 Smart Action Guard-bypass release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.2',
     'Fixed the v0.35.0.1 `/panicshu` regression.',
@@ -8934,7 +8990,7 @@ Assert-Literals $normalizedChangelog @(
     'runtime Auto-Purify/Auto-Recup checks compare only those language-independent IDs.',
     'The v0.35.0.1 Turbo/Latest Input, Viper Wolves'' Den, diagnostics, and Scholar removal changes remain intact.',
     'Configuration schema stays `40`; all `510` Core tests'
-) 'v0.35.0.2 Panic Shukuchi regression release notes'
+) 'v0.35.0.2 historical Panic Shukuchi regression release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.1',
     'Fixed native Hotbar Turbo so a due repeat is consumed by XIV''s normal hotbar scan.',
@@ -10197,4 +10253,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.35.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 510-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."
+Write-Host "Seiton Sense v0.35.0.3 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 511-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call; exact resolved PvP actions whose English metadata explicitly ignores Guard bypass only Guard, never Chiten, Covered, or PLD/DRK LB invulnerability. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."

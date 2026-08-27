@@ -41,13 +41,15 @@ internal sealed record PvPMetadataValidation(
     bool RedMageViceOfThornsVerified,
     bool BlackMageFrostStarVerified,
     bool MonkHeldComboVerified,
-    NinjaShukuchiHiddenStatusCatalog NinjaShukuchiHiddenStatuses)
+    NinjaShukuchiHiddenStatusCatalog NinjaShukuchiHiddenStatuses,
+    SmartActionGuardBypassCatalog SmartActionGuardBypassActions)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        NinjaShukuchiHiddenStatusCatalog.Empty);
+        NinjaShukuchiHiddenStatusCatalog.Empty,
+        SmartActionGuardBypassCatalog.Empty);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -239,6 +241,37 @@ internal static class PvPMetadataGuard
                            EnemyCombatConstants.GuardStatusAlternateId,
                            "Guard");
             });
+
+        var smartActionGuardBypassActions = SmartActionGuardBypassCatalog.Empty;
+        _ = ValidateFeature("Smart Action Guard-bypass actions", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            var actionIds = new List<uint>();
+            foreach (var action in actions)
+            {
+                if (action.RowId == 0 ||
+                    !action.IsPvP ||
+                    !action.CanTargetHostile ||
+                    action.TargetArea ||
+                    action.Range <= 0 ||
+                    !descriptions.TryGetRow(action.RowId, out var transient) ||
+                    transient.RowId != action.RowId ||
+                    !SmartActionGuardBypassRules.HasExactEnglishDescription(
+                        transient.Description.ToString()))
+                {
+                    continue;
+                }
+
+                actionIds.Add(action.RowId);
+            }
+
+            var resolved = SmartActionGuardBypassCatalog.Create(actionIds);
+            if (!resolved.IsVerified) return false;
+
+            smartActionGuardBypassActions = resolved;
+            return true;
+        });
 
         var guardianVerified = ValidateFeature("Guardian", log, () =>
         {
@@ -1442,7 +1475,8 @@ internal static class PvPMetadataGuard
             redMageViceOfThornsVerified,
             blackMageFrostStarVerified,
             monkHeldComboVerified,
-            ninjaShukuchiHiddenStatuses);
+            ninjaShukuchiHiddenStatuses,
+            smartActionGuardBypassActions);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -1459,7 +1493,8 @@ internal static class PvPMetadataGuard
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
             "GunbreakerContinuation={GunbreakerContinuation}, DarkKnightShadowbringer={DarkKnightShadowbringer}, " +
             "RedMageResolution={RedMageResolution}, RedMageViceOfThorns={RedMageViceOfThorns}, " +
-            "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}.",
+            "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}, " +
+            "SmartActionGuardBypassActions={SmartActionGuardBypassActions}.",
             validation.SeitonVerified,
             validation.ViperSerpentTailVerified,
             validation.WolvesDenStrikingDummyVerified,
@@ -1493,7 +1528,8 @@ internal static class PvPMetadataGuard
             validation.RedMageResolutionVerified,
             validation.RedMageViceOfThornsVerified,
             validation.BlackMageFrostStarVerified,
-            validation.MonkHeldComboVerified);
+            validation.MonkHeldComboVerified,
+            validation.SmartActionGuardBypassActions.Count);
 
         return validation;
     }

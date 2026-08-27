@@ -2,13 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.35.0.2 restores `/panicshu` and
-Guard-Shukuchi's original independent action validation after v0.35.0.1 tied it
-incorrectly to supplemental Hidden-status discovery. Ninja Hidden protection
-now discovers exact English Hidden rows separately at startup and compares only
-language-independent IDs while blocking automatic Purify or Recuperate. It
-retains v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den
-targeting, and removal of the nonfunctional Scholar spread workflow. The generic
+assistance, and target highlights. Version 0.35.0.3 lets `/smartaction` select a
+Guarded enemy only when the exact resolved PvP action's current English
+description explicitly says its damage ignores Guard. Chiten, Covered, Paladin
+LB, Dark Knight LB, and mixed Guard-plus-protection states remain blocked. It
+retains v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection plus
+v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den targeting,
+and removal of the nonfunctional Scholar spread workflow. The generic
 one-shot action buffer remains available directly in Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
 one exact direct instant action for 1,000 ms by default, adjustable from
 100-1,500 ms; the movable learning panel shows its key, slot, action, and live
@@ -16,8 +16,9 @@ countdown. Turbo repeats only the newest certified current slot, emits no
 catch-up bursts, and yields to Purify and every higher-priority held helper. Smart
 Action protection is rebuilt directly before a sole delayed replay, while
 audited ReAction/MOAction conflicts disable only that buffer opportunity. It
-retains v0.34.0.4's Chiten, Guard, Covered, Paladin-LB, Dark-Knight-LB, and
-target-circle safety plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
+retains v0.34.0.4's Chiten, Covered, Paladin-LB, Dark-Knight-LB, and
+target-circle safety, with Guard bypassed only by exact Guard-ignoring actions,
+plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
 fixes. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
@@ -1242,9 +1243,12 @@ No selected target is required; `<t>` is only the user-authored fallback when
 the carrier is deliberately invalidated. At action time, Smart Action resolves
 the actual non-ground-target hostile action and its native range/line-of-sight
 result. It considers only unique, living, targetable exact canonical `S1`-`S5`
-enemies. Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark
-Knight LB Undead Redemption make an actor protection-blocked. A protected
-candidate is skipped and the next safe Smart Target remains eligible. If Chiten
+enemies. Active Chiten, Covered, Paladin LB Hallowed Ground, and Dark Knight LB
+Undead Redemption make an actor protection-blocked. Active Guard does too unless
+the exact resolved action's current English description explicitly says its
+damage ignores Guard. This is action-specific, so transformed combo steps are
+classified after adjustment rather than by the raw hotbar carrier or job. A
+protected candidate is skipped and the next safe Smart Target remains eligible. If Chiten
 metadata cannot be verified, every Samurai (and any unknown-job actor) is
 conservatively excluded. Guard/Covered/LB protection rows use an independent
 status-only metadata proof, so unrelated action-cost or recast changes do not
@@ -1255,8 +1259,10 @@ positive fresh team pressure, observed Guard-cooldown unavailability, lowest
 trusted MP ratio, then stable S-slot.
 
 For a target-centered circle, protection safety includes the exact effect radius
-plus each protected actor's hitbox. An unreviewed line, cone, or other AoE shape
-is not redirected while any protected enemy exists. The one-shot token is
+plus each protected actor's hitbox. A verified Guard-ignoring action ignores only
+Guard-only actors in that geometry; Chiten, Covered, and LB invulnerability still
+block, including when combined with Guard. An unreviewed line, cone, or other AoE
+shape is not redirected while any non-bypassed protected enemy exists. The one-shot token is
 consumed before selection only while it is strictly live; an expired arm remains
 on the vanilla path. The selected action/actor tuple is frozen and the
 complete protection snapshot is rebuilt immediately before the original call is
@@ -1906,7 +1912,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 510-test Core registry and source checks pin
+For the current source, the exact 511-test Core registry and source checks pin
 configuration schema 40, the generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,
 ranged Smart Tab, Wolves' Den Smart Recuperate testing,
@@ -1920,7 +1926,8 @@ one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
 paths. Smart Action remains a separate one-shot harmful-action macro contract.
 Its checks now require caller-proven target protection safety, exact Chiten,
-Guard, Covered, Hallowed Ground, and Undead Redemption handling, conservative
+Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact
+resolved-action English metadata gate for Guard-ignoring damage, conservative
 target-centered-circle geometry, a frozen canonical target ID for the sole
 native action call, and a bounded exact-action fallback lease.
 

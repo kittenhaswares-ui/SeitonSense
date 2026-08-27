@@ -293,6 +293,7 @@ var tests = new (string Name, Action Run)[]
     ("Smart Action direct and circle protection is exact", SmartActionProtectionSelfTests.DirectAndTargetCircleSafetyAreExact),
     ("Smart Action unsupported geometry fails closed", SmartActionProtectionSelfTests.UnsupportedShapesAndInvalidGeometryFailClosed),
     ("Smart Action protected targets never win", SmartActionProtectionSelfTests.ProtectedCandidatesCannotWinOrReplaceFrozenIntent),
+    ("Smart Action Guard bypass opens only Guard", SmartActionProtectionSelfTests.GuardIgnoringActionsBypassOnlyGuard),
     ("Smart Action fallback remains inspected", SmartActionSafetyLeaseSelfTests.ExactFallbackRemainsInspectableUntilExpiry),
     ("Smart Action fallback ignores unrelated actions", SmartActionSafetyLeaseSelfTests.UnrelatedActionsDoNotConsumeTheLease),
     ("Smart Action fallback drift and expiry are exact", SmartActionSafetyLeaseSelfTests.DriftAndExpiryClearFailClosedOwnership),
