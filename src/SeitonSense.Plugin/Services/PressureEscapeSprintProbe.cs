@@ -298,6 +298,7 @@ internal sealed class PressureEscapeSprintProbe
                     lastEvent = DescribeSprintAttempt(
                         "retry",
                         frozen.Retry.NativeAttemptCount + 1,
+                        frozen.Retry,
                         outcome);
                 }
             }
@@ -340,7 +341,7 @@ internal sealed class PressureEscapeSprintProbe
                         sprintActionSpecificReady);
                 }
 
-                lastEvent = DescribeSprintAttempt("initial", 1, outcome);
+                lastEvent = DescribeSprintAttempt("initial", 1, initialIntent.Retry, outcome);
             }
         }
 
@@ -545,8 +546,9 @@ internal sealed class PressureEscapeSprintProbe
     private static string DescribeSprintAttempt(
         string phase,
         int attempt,
+        HeldActionRetryState retryState,
         ClientActionAttemptOutcome outcome) =>
-        $"Sprint {phase} attempt {attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
+        $"Sprint {phase} attempt {attempt}/{HeldActionRetryRules.ResolveAttemptLimit(retryState)}: {outcome}";
 
     private static unsafe bool TryGetExactLiveIdentity(
         IPlayerCharacter? player,

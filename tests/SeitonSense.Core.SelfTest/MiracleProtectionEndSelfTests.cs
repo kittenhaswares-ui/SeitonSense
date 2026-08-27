@@ -30,6 +30,7 @@ internal static class MiracleProtectionEndSelfTests
                      Observation(token: 0, physicallyDown: true) with { Enabled = false },
                      Observation(token: 0, physicallyDown: true) with { IsTextInputActive = true },
                      Observation(token: 0, physicallyDown: true) with { HardReset = true },
+                     Observation(token: 65, physicallyDown: true) with { HardReset = true },
                  })
         {
             var cleared = MiracleProtectionEndRules.ObserveHeldConsent(
@@ -707,6 +708,32 @@ internal static class MiracleProtectionEndSelfTests
             {
                 Equal(MiracleProtectionEndAttemptOutcome.RejectedTerminal, rejected.Outcome, "final retry-budget false is terminal");
             }
+        }
+
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(true, 1_000);
+        try
+        {
+            var extended = HeldActionRetryState.Initial;
+            for (var attempt = 1; attempt <= 9; attempt++)
+            {
+                var now = observedAt +
+                          ((attempt - 1) * MiracleProtectionEndRules.NativeRetryThrottleMilliseconds);
+                var rejected = MiracleProtectionEndRules.CompleteNativeAttempt(
+                    extended,
+                    observedAt,
+                    now,
+                    ClientActionAttemptOutcome.ClientRejected);
+                Equal(
+                    MiracleProtectionEndAttemptOutcome.RetryScheduled,
+                    rejected.Outcome,
+                    $"extended protection-end false {attempt} retries");
+                Equal(21, rejected.NextState.NativeAttemptLimit, "protection-end preserves the extended budget");
+                extended = rejected.NextState;
+            }
+        }
+        finally
+        {
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
         }
 
         var accepted = MiracleProtectionEndRules.CompleteNativeAttempt(

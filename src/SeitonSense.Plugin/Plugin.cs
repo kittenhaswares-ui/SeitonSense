@@ -45,6 +45,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoSeitonToggleWindow autoSeitonToggle;
     private readonly WhatsNewWindow whatsNew;
     private readonly NearAssistRedirector nearAssist;
+    private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
+    private readonly IntegratedInputRuntime integratedInput;
+    private readonly BufferLearningWindow bufferLearningWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
     private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
@@ -82,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         IGameGui gameGui,
         INamePlateGui namePlateGui,
         IKeyState keyState,
+        ICondition condition,
         ITextureProvider textureProvider,
         IGameInteropProvider interop,
         ISigScanner sigScanner,
@@ -101,6 +105,10 @@ public sealed class Plugin : IDalamudPlugin
             log);
         var combatLimitBreakMetadata = CombatLimitBreakMetadataGuard.Validate(dataManager, log);
         var machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
+        criticalUtilityCoordination = new CriticalUtilityCoordinationService(
+            pluginInterface,
+            configuration,
+            log);
         tracker = new ExecuteTracker(
             clientState,
             objectTable,
@@ -230,7 +238,22 @@ public sealed class Plugin : IDalamudPlugin
             configuration,
             metadata,
             samuraiReactiveMetadata,
-            reviewedPvpCommands);
+            reviewedPvpCommands,
+            criticalUtilityCoordination);
+        integratedInput = new IntegratedInputRuntime(
+            configuration,
+            pluginInterface,
+            interop,
+            framework,
+            clientState,
+            objectTable,
+            targetManager,
+            condition,
+            dataManager,
+            log,
+            nearAssist,
+            criticalUtilityCoordination);
+        nearAssist.AttachIntegratedInputRuntime(integratedInput);
         panicShukuchi = new PanicShukuchiService(
             configuration,
             clientState,
@@ -287,6 +310,9 @@ public sealed class Plugin : IDalamudPlugin
             textureProvider,
             gameGui,
             pluginInterface);
+        bufferLearningWindow = new BufferLearningWindow(
+            configuration,
+            integratedInput.ActionBuffer);
         autoSeitonToggle = new AutoSeitonToggleWindow(
             objectTable,
             textureProvider,
@@ -334,8 +360,10 @@ public sealed class Plugin : IDalamudPlugin
             overlay,
             pressureTracker,
             isolationAwareness,
-            pressureCounter);
+            pressureCounter,
+            bufferLearningWindow.ResetWindowPosition);
         windowSystem.AddWindow(pressureCounter);
+        windowSystem.AddWindow(bufferLearningWindow);
         windowSystem.AddWindow(autoSeitonToggle);
         windowSystem.AddWindow(whatsNew);
         windowSystem.AddWindow(settingsWindow);
@@ -543,6 +571,7 @@ public sealed class Plugin : IDalamudPlugin
         isolationAwareness.Start();
         nearAssist.Start();
         personalStatus.Start();
+        integratedInput.Start();
         combatLimitBreakRuntime.Start();
     }
 
@@ -568,7 +597,9 @@ public sealed class Plugin : IDalamudPlugin
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
         combatLimitBreakRuntime.Dispose();
+        integratedInput.Dispose();
         personalStatus.Dispose();
+        criticalUtilityCoordination.Dispose();
         smartTabTargeting.Dispose();
         nearAssist.Dispose();
         isolationAwareness.Dispose();
@@ -723,6 +754,9 @@ public sealed class Plugin : IDalamudPlugin
                 var shadowbringer = personalStatus.DarkKnightShadowbringerDiagnostics;
                 var monkCombo = personalStatus.MonkHeldComboDiagnostics;
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
+                var criticalCoordination =
+                    personalStatus.CriticalUtilityCoordinationDiagnostics;
+                var integrated = integratedInput.Diagnostics;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
                 var assist = nearAssist.Diagnostics;
                 var smartTab = smartTabTargeting.Diagnostics;
@@ -744,6 +778,34 @@ public sealed class Plugin : IDalamudPlugin
                     $"actionfx[hook={mchLimitBreak.CaptureRunning},mch-q={mchLimitBreak.QueueDepth}," +
                     $"accepted={mchLimitBreak.AcceptedWarnings},active={mchLimitBreak.WarningActive}," +
                     $"shared-errors={mchLimitBreak.CaptureErrors},mch-drops={mchLimitBreak.DroppedWarnings}], " +
+                    $"latency[enabled={configuration.EnablePvpLatencyResponseHelper}," +
+                    $"window={configuration.PvpLatencyResponseWindowMilliseconds}," +
+                    $"new-intent-budget={HeldActionRetryRules.CurrentMaximumNativeAttempts}," +
+                    $"ipc/eligible/claimed={criticalCoordination.ProviderAvailable}/" +
+                    $"{criticalCoordination.Eligible}/{criticalCoordination.Claimed}," +
+                    $"internal/eligible/claimed={criticalCoordination.IntegratedEligible}/" +
+                    $"{criticalCoordination.IntegratedClaimed}," +
+                    $"claims/queries/positive={criticalCoordination.ClaimCount}/" +
+                    $"{criticalCoordination.QueryCount}/{criticalCoordination.PositiveQueryCount}], " +
+                    $"input[available/started={integrated.Available}/{integrated.Started}," +
+                    $"turbo/configured/context={integrated.TurboConfigured}/" +
+                    $"{integrated.TurboEnabledForCurrentContext}/{integrated.ContextValid}," +
+                    $"priority={integrated.InternalPriorityClaimed}," +
+                    $"roots/repeats/rejected={integrated.PhysicalRoots}/" +
+                    $"{integrated.InjectedRepeatsDispatched}/{integrated.InjectedRepeatsRejected}," +
+                    $"buffer={integrated.ActionBuffer.Pending}/" +
+                    $"{integrated.ActionBuffer.RemainingMilliseconds}ms," +
+                    $"compat={integrated.ActionBuffer.Compatibility.BufferMutationAllowed}/" +
+                    $"{integrated.ActionBuffer.Compatibility.ReActionProfile}/" +
+                    $"{integrated.ActionBuffer.Compatibility.MOActionLoaded}/" +
+                    $"{integrated.ActionBuffer.Compatibility.MOActionOwnershipPublished}/" +
+                    $"{integrated.ActionBuffer.Compatibility.QuarantinedThisFrame}," +
+                    $"checks={integrated.ActionBuffer.Compatibility.ArmCheckCount}/" +
+                    $"{integrated.ActionBuffer.Compatibility.DispatchCheckCount}/" +
+                    $"{integrated.ActionBuffer.Compatibility.BlockedCheckCount}," +
+                    $"buffer-last={integrated.ActionBuffer.LastEvent}," +
+                    $"compat-last={integrated.ActionBuffer.Compatibility.LastEvent}," +
+                    $"input-last={integrated.LastEvent}], " +
                     $"assist[hook={assist.HookAvailable},cmd={nearAssistCommandRegistered},armed={assist.Armed}," +
                     $"S={assist.EnemySlot},ttl={assist.RemainingMilliseconds},arm={assist.ArmedCount}," +
                     $"redirect={assist.RedirectedCount},fallback={assist.FallbackCount},last={assist.LastEvent}], " +

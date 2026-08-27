@@ -35,6 +35,7 @@ internal sealed partial class SettingsWindow
         var monkCombo = personalStatus.MonkHeldComboDiagnostics;
         var scholarSpread = personalStatus.ScholarSpreadDiagnostics;
         var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
+        var criticalCoordination = personalStatus.CriticalUtilityCoordinationDiagnostics;
         var protectionEndRankPresent = miracle.ProtectionEndRankMaximumHp > 0;
         var protectionEndRankPressure = !protectionEndRankPresent
             ? "none"
@@ -72,6 +73,22 @@ internal sealed partial class SettingsWindow
             $"mch-queue={mchLimitBreak.QueueDepth}, mch-accepted={mchLimitBreak.AcceptedWarnings}, " +
             $"mch-active={mchLimitBreak.WarningActive}, shared-errors={mchLimitBreak.CaptureErrors}, " +
             $"mch-drops={mchLimitBreak.DroppedWarnings}");
+        ImGui.TextWrapped(
+            $"PvP latency helper: enabled={configuration.EnablePvpLatencyResponseHelper}, " +
+            $"window={configuration.PvpLatencyResponseWindowMilliseconds} ms, " +
+            $"new-intent-native-budget={HeldActionRetryRules.CurrentMaximumNativeAttempts}, " +
+            $"internal eligible/claimed={criticalCoordination.IntegratedEligible}/" +
+            $"{criticalCoordination.IntegratedClaimed}, legacy IPC eligible/claimed=" +
+            $"{criticalCoordination.Eligible}/{criticalCoordination.Claimed}");
+        ImGui.TextWrapped(
+            $"General smart buffer: enabled={configuration.EnableSmartActionBuffer}, " +
+            $"window={configuration.SmartActionBufferWindowMilliseconds} ms, learning=" +
+            $"{configuration.ShowBufferLearningWindow}/locked={configuration.BufferLearningWindowLocked}");
+        ImGui.TextWrapped(
+            $"Native standard-hotbar Turbo: enabled={configuration.EnableNativeHotbarTurbo}, " +
+            $"initial/repeat={configuration.TurboInitialDelayMilliseconds}/" +
+            $"{configuration.TurboRepeatIntervalMilliseconds} ms, " +
+            $"outside-combat={configuration.TurboOutsideCombat}");
         ImGui.TextWrapped(
             $"High-pressure escape: active={pressureEscape.Active}, visual/sound/sprint=" +
             $"{pressureEscape.WarningEnabled}/{configuration.PlayHighPressureWarningSound}/" +

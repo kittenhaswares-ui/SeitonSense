@@ -7,6 +7,13 @@ namespace SeitonSense.Plugin.Models;
 
 public sealed class PluginConfiguration : IPluginConfiguration
 {
+    public const int DefaultTurboInitialDelayMilliseconds = 0;
+    public const int DefaultTurboRepeatIntervalMilliseconds = 60;
+    public const int MinimumTurboInitialDelayMilliseconds = 0;
+    public const int MaximumTurboInitialDelayMilliseconds = 1_000;
+    public const int MinimumTurboRepeatIntervalMilliseconds = 0;
+    public const int MaximumTurboRepeatIntervalMilliseconds = 1_000;
+
     private static readonly uint[] SupportedCcBrakeJobIds =
     [
         19, // PLD
@@ -36,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 38;
+    public int Version { get; set; } = 40;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -68,6 +75,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableGunbreakerContinuationOnHeldKey { get; set; }
     public bool EnableMonkHeldComboOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
+    public bool EnablePvpLatencyResponseHelper { get; set; }
+    public int PvpLatencyResponseWindowMilliseconds { get; set; } =
+        HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
+    public bool EnableSmartActionBuffer { get; set; } = true;
+    public int SmartActionBufferWindowMilliseconds { get; set; } =
+        SmartActionBufferWindowRules.DefaultMilliseconds;
+    public bool ShowBufferLearningWindow { get; set; } = true;
+    public bool BufferLearningWindowLocked { get; set; }
+    public bool EnableNativeHotbarTurbo { get; set; }
+    public int TurboInitialDelayMilliseconds { get; set; } =
+        DefaultTurboInitialDelayMilliseconds;
+    public int TurboRepeatIntervalMilliseconds { get; set; } =
+        DefaultTurboRepeatIntervalMilliseconds;
+    public bool TurboOutsideCombat { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
     public bool EnableDarkKnightShadowbringerOnHeldKey { get; set; }
     public int DarkKnightShadowbringerMinimumHpPercent { get; set; } = 85;
@@ -152,7 +173,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public int ReactiveCcImpactCalibrationRevision { get; set; } =
         ReactiveCounterCcImpactTimingRules.CalibrationRevision;
     public Dictionary<uint, List<ReactiveCounterCcImpactSample>>
-        ReactiveCcImpactCalibrationSamples { get; set; } = [];
+        ReactiveCcImpactCalibrationSamples
+    { get; set; } = [];
     public bool ReactiveCcSamuraiSotenMineuchi { get; set; }
     public float ReactiveCcSamuraiSotenMaximumRangeYalms { get; set; } = 20f;
     public bool EnableSamuraiZantetsukenOnHeldKey { get; set; }
@@ -259,7 +281,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 38)
+        if (Version >= 40)
         {
             if (repaired) Save();
             return;
@@ -655,7 +677,35 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ReactiveCcImpactCalibrationSamples = [];
         }
 
-        Version = 38;
+        if (Version < 39)
+        {
+            // Cross-plugin scheduling coordination changes when another input
+            // plugin yields. Existing installations must opt in deliberately.
+            EnablePvpLatencyResponseHelper = false;
+            PvpLatencyResponseWindowMilliseconds =
+                HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
+        }
+
+        if (Version < 40)
+        {
+            // The general one-shot buffer is useful in PvE, PvP, and Wolves' Den,
+            // so it starts enabled with the requested one-second learning window.
+            // Native held-input Turbo creates repeated input and therefore remains
+            // an explicit opt-in, including its separate outside-combat test scope.
+            EnableSmartActionBuffer = true;
+            SmartActionBufferWindowMilliseconds =
+                SmartActionBufferWindowRules.DefaultMilliseconds;
+            ShowBufferLearningWindow = true;
+            BufferLearningWindowLocked = false;
+            EnableNativeHotbarTurbo = false;
+            TurboInitialDelayMilliseconds =
+                DefaultTurboInitialDelayMilliseconds;
+            TurboRepeatIntervalMilliseconds =
+                DefaultTurboRepeatIntervalMilliseconds;
+            TurboOutsideCombat = false;
+        }
+
+        Version = 40;
         ClampSettings();
         Save();
     }
@@ -664,7 +714,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 38;
+        Version = 40;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -693,6 +743,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableGunbreakerContinuationOnHeldKey = false;
         EnableMonkHeldComboOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
+        EnablePvpLatencyResponseHelper = false;
+        PvpLatencyResponseWindowMilliseconds =
+            HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
+        EnableSmartActionBuffer = true;
+        SmartActionBufferWindowMilliseconds =
+            SmartActionBufferWindowRules.DefaultMilliseconds;
+        ShowBufferLearningWindow = true;
+        BufferLearningWindowLocked = false;
+        EnableNativeHotbarTurbo = false;
+        TurboInitialDelayMilliseconds =
+            DefaultTurboInitialDelayMilliseconds;
+        TurboRepeatIntervalMilliseconds =
+            DefaultTurboRepeatIntervalMilliseconds;
+        TurboOutsideCombat = false;
         EnableDarkKnightPlungeOnHeldKey = false;
         EnableDarkKnightShadowbringerOnHeldKey = false;
         DarkKnightShadowbringerMinimumHpPercent = 85;
@@ -1029,6 +1093,51 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (emergencyTeleportMpThreshold != EmergencyTeleportMpThreshold)
         {
             EmergencyTeleportMpThreshold = emergencyTeleportMpThreshold;
+            changed = true;
+        }
+
+        var pvpLatencyResponseWindowMilliseconds = Math.Clamp(
+            PvpLatencyResponseWindowMilliseconds,
+            HeldActionRetryRules.MinimumLatencyResponseWindowMilliseconds,
+            HeldActionRetryRules.MaximumLatencyResponseWindowMilliseconds);
+        if (pvpLatencyResponseWindowMilliseconds !=
+            PvpLatencyResponseWindowMilliseconds)
+        {
+            PvpLatencyResponseWindowMilliseconds =
+                pvpLatencyResponseWindowMilliseconds;
+            changed = true;
+        }
+
+        var smartActionBufferWindowMilliseconds =
+            SmartActionBufferWindowRules.Normalize(
+                SmartActionBufferWindowMilliseconds);
+        if (smartActionBufferWindowMilliseconds !=
+            SmartActionBufferWindowMilliseconds)
+        {
+            SmartActionBufferWindowMilliseconds =
+                smartActionBufferWindowMilliseconds;
+            changed = true;
+        }
+
+        var turboInitialDelayMilliseconds = Math.Clamp(
+            TurboInitialDelayMilliseconds,
+            MinimumTurboInitialDelayMilliseconds,
+            MaximumTurboInitialDelayMilliseconds);
+        if (turboInitialDelayMilliseconds !=
+            TurboInitialDelayMilliseconds)
+        {
+            TurboInitialDelayMilliseconds = turboInitialDelayMilliseconds;
+            changed = true;
+        }
+
+        var turboRepeatIntervalMilliseconds = Math.Clamp(
+            TurboRepeatIntervalMilliseconds,
+            MinimumTurboRepeatIntervalMilliseconds,
+            MaximumTurboRepeatIntervalMilliseconds);
+        if (turboRepeatIntervalMilliseconds !=
+            TurboRepeatIntervalMilliseconds)
+        {
+            TurboRepeatIntervalMilliseconds = turboRepeatIntervalMilliseconds;
             changed = true;
         }
 

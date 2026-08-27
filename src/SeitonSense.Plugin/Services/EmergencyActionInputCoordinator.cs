@@ -20,13 +20,16 @@ namespace SeitonSense.Plugin.Services;
 internal sealed class EmergencyActionInputFrame
 {
     private readonly GameInputContextProbe? probe;
+    private readonly Action? onConsumed;
 
     internal EmergencyActionInputFrame(
         GameInputContextSnapshot snapshot,
-        GameInputContextProbe? probe)
+        GameInputContextProbe? probe,
+        Action? onConsumed = null)
     {
         Snapshot = snapshot;
         this.probe = probe;
+        this.onConsumed = onConsumed;
     }
 
     internal GameInputContextSnapshot Snapshot { get; }
@@ -35,6 +38,19 @@ internal sealed class EmergencyActionInputFrame
     internal void Consume()
     {
         if (IsConsumed) return;
+        IsConsumed = true;
+        onConsumed?.Invoke();
+    }
+
+    /// <summary>
+    /// Retires this frame and every currently held gameplay-key generation for
+    /// an administrative lifecycle transition. The keys remain ineligible until
+    /// physical release, and no action owner is advertised to cooperating input
+    /// plugins.
+    /// </summary>
+    internal void RetireWithoutActionClaim()
+    {
+        probe?.ConsumeHeldGameplayKeys();
         IsConsumed = true;
     }
 
@@ -64,6 +80,7 @@ internal sealed class EmergencyActionInputFrame
 internal sealed class EmergencyActionInputCoordinator
 {
     private readonly GameInputContextProbe probe;
+    private readonly Action? onFrameConsumed;
     private bool purifyHeldWasEnabled;
     private bool defensiveUtilityHeldWasEnabled;
     private bool paladinGuardianHeldWasEnabled;
@@ -83,9 +100,12 @@ internal sealed class EmergencyActionInputCoordinator
     private bool samuraiCounterCcHeldWasEnabled;
     private bool samuraiZantetsukenHeldWasEnabled;
 
-    internal EmergencyActionInputCoordinator(IKeyState keyState)
+    internal EmergencyActionInputCoordinator(
+        IKeyState keyState,
+        Action? onFrameConsumed = null)
     {
         probe = new GameInputContextProbe(keyState);
+        this.onFrameConsumed = onFrameConsumed;
     }
 
     internal EmergencyActionInputFrame Observe(
@@ -114,7 +134,8 @@ internal sealed class EmergencyActionInputCoordinator
             Reset();
             return new EmergencyActionInputFrame(
                 GameInputContextSnapshot.NotObserved,
-                null);
+                null,
+                onFrameConsumed);
         }
 
         var input = probe.Observe();
@@ -170,7 +191,7 @@ internal sealed class EmergencyActionInputCoordinator
             };
         }
 
-        return new EmergencyActionInputFrame(input, probe);
+        return new EmergencyActionInputFrame(input, probe, onFrameConsumed);
     }
 
     internal EmergencyActionInputFrame Observe(

@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using SeitonSense.Core;
+using SeitonSense.Plugin.Models;
 
 namespace SeitonSense.Plugin.UI;
 
@@ -21,6 +22,19 @@ internal sealed partial class SettingsWindow
             "frame. Scholar Smart Spread reads the same raw hold in an independent recast lane after this scheduler; " +
             "Kardia and Monk retain their separate event-driven origins.");
 
+        if (ImGui.CollapsingHeader(
+                "General action buffer / native Turbo",
+                ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawGeneralActionBufferControls();
+
+        ImGui.Separator();
+
+        if (ImGui.CollapsingHeader(
+                "Held-helper latency response (experimental)",
+                ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawPvpLatencyResponseControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader(
                 "Held-action cast cancellation (experimental)",
                 ImGuiTreeNodeFlags.DefaultOpen))
@@ -70,6 +84,110 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Team-visible enemy focus sign", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawAutoEnemyFocusMarkControls();
 
+        return changed;
+    }
+
+    private bool DrawGeneralActionBufferControls()
+    {
+        var changed = Checkbox(
+            "Enable the one-shot smart action buffer",
+            configuration.EnableSmartActionBuffer,
+            value => configuration.EnableSmartActionBuffer = value);
+        changed |= SliderInt(
+            "Buffer window",
+            configuration.SmartActionBufferWindowMilliseconds,
+            SmartActionBufferWindowRules.MinimumMilliseconds,
+            SmartActionBufferWindowRules.MaximumMilliseconds,
+            value => configuration.SmartActionBufferWindowMilliseconds = value,
+            "%d ms");
+        ImGui.TextDisabled(
+            "Default 1000 ms, maximum 1500 ms. The buffer is generic: it is available in PvE, PvP, " +
+            "Crystalline Conflict, the Wolves' Den, and ordinary duty/open-world contexts. It has no PvP-only gate.");
+        ImGui.TextDisabled(
+            "Current scope is instant, non-ground, non-movement actions on standard keyboard hotbars. " +
+            "Cast-time spells, ground targeting, movement actions, mouse clicks, and cross-hotbar/controller input are excluded.");
+
+        changed |= Checkbox(
+            "Show the live buffer learning window",
+            configuration.ShowBufferLearningWindow,
+            value => configuration.ShowBufferLearningWindow = value);
+        changed |= Checkbox(
+            "Lock the learning window position",
+            configuration.BufferLearningWindowLocked,
+            value => configuration.BufferLearningWindowLocked = value);
+        if (ImGui.Button("Reset learning window position"))
+            resetBufferLearningWindowPosition();
+        ImGui.TextDisabled(
+            "The movable panel shows the observed key or standard-hotbar slot, resolved action, and live buffer countdown.");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Native held-input Turbo (standard keyboard hotbars)");
+        changed |= Checkbox(
+            "Enable native held-input Turbo",
+            configuration.EnableNativeHotbarTurbo,
+            value => configuration.EnableNativeHotbarTurbo = value);
+        changed |= SliderInt(
+            "Turbo initial delay",
+            configuration.TurboInitialDelayMilliseconds,
+            PluginConfiguration.MinimumTurboInitialDelayMilliseconds,
+            PluginConfiguration.MaximumTurboInitialDelayMilliseconds,
+            value => configuration.TurboInitialDelayMilliseconds = value,
+            "%d ms");
+        changed |= SliderInt(
+            "Turbo repeat interval",
+            configuration.TurboRepeatIntervalMilliseconds,
+            PluginConfiguration.MinimumTurboRepeatIntervalMilliseconds,
+            PluginConfiguration.MaximumTurboRepeatIntervalMilliseconds,
+            value => configuration.TurboRepeatIntervalMilliseconds = value,
+            "%d ms");
+        changed |= Checkbox(
+            "Allow Turbo outside combat (PvE / Wolves' Den / dummy testing)",
+            configuration.TurboOutsideCombat,
+            value => configuration.TurboOutsideCombat = value);
+        ImGui.TextDisabled(
+            "Turbo is opt-in. In combat it is not territory-gated and can be used in PvE, PvP, and the Wolves' Den. " +
+            "Outside-combat repeating requires the separate option above.");
+        ImGui.TextDisabled(
+            "Current scope is held logical inputs on standard keyboard hotbars. Cross-hotbar/controller input and " +
+            "direct mouse clicks do not provide a supported held input in this version.");
+        return changed;
+    }
+
+    private bool DrawPvpLatencyResponseControls()
+    {
+        var changed = Checkbox(
+            "Enable the PvP latency response helper",
+            configuration.EnablePvpLatencyResponseHelper,
+            value => configuration.EnablePvpLatencyResponseHelper = value);
+        changed |= SliderInt(
+            "Exact held-intent retry window",
+            configuration.PvpLatencyResponseWindowMilliseconds,
+            HeldActionRetryRules.MinimumLatencyResponseWindowMilliseconds,
+            HeldActionRetryRules.MaximumLatencyResponseWindowMilliseconds,
+            value => configuration.PvpLatencyResponseWindowMilliseconds = value,
+            "%d ms");
+
+        ImGui.TextColored(
+            configuration.EnablePvpLatencyResponseHelper
+                ? new Vector4(0.35f, 0.9f, 1f, 1f)
+                : new Vector4(0.7f, 0.72f, 0.78f, 1f),
+            configuration.EnablePvpLatencyResponseHelper
+                ? "ON — exact held-helper retries use the configured bounded window."
+                : "OFF — exact held-helper retries keep the legacy bounded budget.");
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off. This keeps the existing one-queue Seiton scheduler and extends only the bounded clean-client-false " +
+            "budget for the same frozen action, target, key, context, and episode. The 50 ms cadence stays unchanged; " +
+            "the legacy eight-call budget is never reduced. Client acceptance or ambiguous acceptance remains terminal, " +
+            "and temporary native/GCD/animation waits spend no retry call. Action-specific Purify, Guard-end, and " +
+            "projectile-impact deadlines remain authoritative.");
+        ImGui.TextDisabled(
+            "The integrated smart buffer and Turbo yield whenever Seiton's critical held scheduler owns the native " +
+            "action boundary. This never writes position or animation lock, extends range, changes a target/action, " +
+            "or creates a second queue. Held-helper retry expansion itself works in exact Crystalline Conflict and in " +
+            "Wolves' Den only when the separate Wolves' Den testing option is enabled; the generic buffer remains " +
+            "available in PvE as described above.");
+        ImGui.PopTextWrapPos();
         return changed;
     }
 

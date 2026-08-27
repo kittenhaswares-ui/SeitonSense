@@ -62,7 +62,8 @@ public readonly record struct AllyRescueBufferState(
     ImmutableArray<AllyRescueIntent> SpentIntents,
     int GameplayKeyToken,
     int NativeAttemptCount,
-    long NextNativeAttemptAtMilliseconds)
+    long NextNativeAttemptAtMilliseconds,
+    int NativeAttemptLimit)
 {
     public static AllyRescueBufferState Initial => new(
         AllyRescueBufferPhase.WaitingForCandidate,
@@ -74,7 +75,8 @@ public readonly record struct AllyRescueBufferState(
         ImmutableArray<AllyRescueIntent>.Empty,
         0,
         0,
-        -1);
+        -1,
+        0);
 
     public bool HasSpent(AllyRescueIntent intent) =>
         !SpentIntents.IsDefaultOrEmpty && SpentIntents.Contains(intent);
@@ -293,7 +295,8 @@ public static class AllyRescueBufferRules
         var shared = HeldActionRetryRules.Complete(
             new HeldActionRetryState(
                 previous.NativeAttemptCount,
-                previous.NextNativeAttemptAtMilliseconds),
+                previous.NextNativeAttemptAtMilliseconds,
+                previous.NativeAttemptLimit),
             nowMilliseconds,
             outcome);
         if (shared.Disposition == HeldActionRetryDisposition.SoftWait)
@@ -323,6 +326,7 @@ public static class AllyRescueBufferRules
                 NativeAttemptCount = shared.NextState.NativeAttemptCount,
                 NextNativeAttemptAtMilliseconds =
                     shared.NextState.NextNativeAttemptAtMilliseconds,
+                NativeAttemptLimit = shared.NextState.NativeAttemptLimit,
                 LastObservedAtMilliseconds = nowMilliseconds,
             },
             AllyRescueNativeAttemptOutcome.RetryScheduled);
@@ -378,6 +382,7 @@ public static class AllyRescueBufferRules
             GameplayKeyToken = keyToken,
             NativeAttemptCount = 0,
             NextNativeAttemptAtMilliseconds = observation.NowMilliseconds,
+            NativeAttemptLimit = 0,
         };
 
         return observation.DispatchAllowed && observation.ActionLocallyReady
@@ -437,6 +442,7 @@ public static class AllyRescueBufferRules
             GameplayKeyToken = 0,
             NativeAttemptCount = 0,
             NextNativeAttemptAtMilliseconds = -1,
+            NativeAttemptLimit = 0,
         };
 
     private static AllyRescueBufferState StopTracking(
@@ -453,6 +459,7 @@ public static class AllyRescueBufferRules
             GameplayKeyToken = 0,
             NativeAttemptCount = 0,
             NextNativeAttemptAtMilliseconds = -1,
+            NativeAttemptLimit = 0,
         };
 
     private static AllyRescueBufferState Finish(

@@ -263,6 +263,72 @@ internal static class HeldActionRetrySelfTests
             "actual execution becomes eligible only after both cast signals clear");
     }
 
+    internal static void OptInLatencyWindowExtendsOnlyCleanFalseBudget()
+    {
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(
+            enabled: true,
+            HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds);
+        try
+        {
+            Equal(1_000, HeldActionRetryRules.CurrentLatencyResponseWindowMilliseconds, "configured window");
+            Equal(21, HeldActionRetryRules.CurrentMaximumNativeAttempts, "1000 ms at 50 ms cadence");
+
+            var state = HeldActionRetryState.Initial;
+            for (var attempt = 1; attempt <= 21; attempt++)
+            {
+                var now = 5_000L +
+                          ((attempt - 1) * HeldActionRetryRules.NativeRetryThrottleMilliseconds);
+                var decision = HeldActionRetryRules.Complete(
+                    state,
+                    now,
+                    ClientActionAttemptOutcome.ClientRejected);
+                if (attempt < 21)
+                {
+                    Equal(HeldActionRetryDisposition.RetryScheduled, decision.Disposition, $"extended false {attempt}");
+                    state = decision.NextState;
+                }
+                else
+                {
+                    Equal(HeldActionRetryDisposition.RejectedTerminal, decision.Disposition, "extended terminal");
+                }
+            }
+
+            var accepted = HeldActionRetryRules.Complete(
+                new HeldActionRetryState(12, 6_000),
+                6_000,
+                ClientActionAttemptOutcome.ClientAccepted);
+            Equal(HeldActionRetryDisposition.AcceptedTerminal, accepted.Disposition, "acceptance stays terminal");
+
+            var ambiguous = HeldActionRetryRules.Complete(
+                new HeldActionRetryState(12, 6_000),
+                6_000,
+                ClientActionAttemptOutcome.AcceptanceUnknown);
+            Equal(HeldActionRetryDisposition.AmbiguousTerminal, ambiguous.Disposition, "ambiguity stays terminal");
+
+            var frozenBudget = HeldActionRetryRules.Complete(
+                HeldActionRetryState.Initial,
+                7_000,
+                ClientActionAttemptOutcome.ClientRejected).NextState;
+            Equal(21, frozenBudget.NativeAttemptLimit, "the first clean false freezes the enabled budget");
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
+            Equal(8, HeldActionRetryRules.CurrentMaximumNativeAttempts, "new intents return to legacy budget");
+            True(frozenBudget.IsPending, "an existing exact intent cannot be stranded by a live policy shrink");
+            var afterShrink = HeldActionRetryRules.Complete(
+                frozenBudget,
+                7_050,
+                ClientActionAttemptOutcome.ClientRejected);
+            Equal(HeldActionRetryDisposition.RetryScheduled, afterShrink.Disposition, "frozen extended intent continues after shrink");
+            Equal(21, afterShrink.NextState.NativeAttemptLimit, "frozen limit survives the next retry");
+        }
+        finally
+        {
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
+        }
+
+        Equal(0, HeldActionRetryRules.CurrentLatencyResponseWindowMilliseconds, "legacy reset");
+        Equal(HeldActionRetryRules.MaximumNativeAttempts, HeldActionRetryRules.CurrentMaximumNativeAttempts, "legacy budget restored");
+    }
+
     private static ClientActionAttemptFingerprint Fingerprint(uint actionId) =>
         new(
             Captured: true,

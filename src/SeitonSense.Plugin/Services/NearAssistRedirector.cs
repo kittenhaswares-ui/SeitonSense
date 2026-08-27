@@ -128,6 +128,26 @@ internal readonly record struct AutoGuardProtectionDiagnostics(
     string LastEvent);
 
 /// <summary>
+/// Exact immutable identity of one generic-buffer replay. The protection flag
+/// is carried only when the original physical call was owned by Smart Action or
+/// its exact fallback safety path.
+/// </summary>
+internal readonly record struct IntegratedBufferedReplayIntent(
+    ActionType ActionType,
+    uint RequestedActionId,
+    uint ResolvedActionId,
+    ulong TargetId,
+    bool RequiresSmartActionProtectionRecheck)
+{
+    internal bool IsValid =>
+        ActionType is ActionType.Action or ActionType.PvPAction &&
+        RequestedActionId != 0 &&
+        ResolvedActionId != 0 &&
+        (!RequiresSmartActionProtectionRecheck ||
+         TargetId is not (0 or 0xE0000000));
+}
+
+/// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist,
 /// /smartaction, /nearhelp, and /farhelp macro lines.
 /// It never mutates the game's hard, soft, or focus target and never dispatches an action.
@@ -140,6 +160,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 {
     [ThreadStatic]
     private static int internalRedirectBypassDepth;
+
+    [ThreadStatic]
+    private static int integratedBufferReplayDepth;
+
+    [ThreadStatic]
+    private static IntegratedBufferedReplayScope? integratedBufferedReplayScope;
 
     [ThreadStatic]
     private static int explicitAutoGuardBreakBypassDepth;
@@ -174,6 +200,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly Queue<string> recentTrace = new();
     private readonly Hook<ActionManager.Delegates.UseAction>? useActionHook;
     private readonly Hook<ActionManager.Delegates.UseActionLocation>? useActionLocationHook;
+    private IntegratedInputRuntime? integratedInputRuntime;
 
     private ArmedNearAssistTarget? armedTarget;
     private NearAssistOneShotState oneShotState = NearAssistOneShotState.Initial;
@@ -524,6 +551,48 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             internalRedirectBypassDepth--;
             predictiveCcBrakeBypassScope = previousPredictiveScope;
         }
+    }
+
+    /// <summary>
+    /// Replays one already-frozen generic-buffer tuple without consuming or
+    /// rewriting any assist token. Unlike helper-owned calls, this remains an
+    /// authored physical action for passive accepted-action observers such as
+    /// Smart Kardia. The caller must provide the exact previously validated
+    /// action and post-Smart-Action target tuple.
+    /// </summary>
+    internal T RunExactBufferedReplay<T>(
+        IntegratedBufferedReplayIntent intent,
+        Func<T> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        if (!intent.IsValid || integratedBufferedReplayScope is not null)
+            return default!;
+
+        var previousScope = integratedBufferedReplayScope;
+        integratedBufferedReplayScope = new IntegratedBufferedReplayScope(this, intent);
+        integratedBufferReplayDepth++;
+        internalRedirectBypassDepth++;
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            internalRedirectBypassDepth--;
+            integratedBufferReplayDepth--;
+            integratedBufferedReplayScope = previousScope;
+        }
+    }
+
+    /// <summary>
+    /// Connects standard-hotbar provenance without adding another UseAction
+    /// hook. The runtime is queried only at this class's sole final boundary.
+    /// </summary>
+    internal void AttachIntegratedInputRuntime(IntegratedInputRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (disposed) throw new ObjectDisposedException(nameof(NearAssistRedirector));
+        integratedInputRuntime = runtime;
     }
 
     internal bool TryPeekSmartKardiaTrigger(
@@ -1077,6 +1146,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         disposed = true;
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
+        integratedInputRuntime = null;
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
         lock (guardAttemptGate)
@@ -1586,6 +1656,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             targetId,
             forwardedTargetId,
             bypassRedirect,
+            integratedBufferReplayDepth > 0,
             helperTokenConsumed,
             targetSuppressedByRedirect,
             out var smartKardiaPreflight);
@@ -1612,15 +1683,100 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             forwardedTargetId = finalSmartActionTargetId;
         }
 
-        var clientAccepted = useActionHook!.Original(
-            thisPtr,
-            actionType,
-            actionId,
-            forwardedTargetId,
-            extraParam,
-            mode,
-            comboRouteId,
-            outOptAreaTargeted);
+        // A generic-buffer replay bypasses redirects and the short Smart Action
+        // fallback lease, but never bypasses the protection policy owned by its
+        // original physical call. Consume one exact requested/resolved/target
+        // replay scope and, when required, rebuild the complete current
+        // Chiten/Guard/Cover/invulnerability and targeted-circle snapshot here,
+        // immediately before Original. No actor is reranked or substituted.
+        if (integratedBufferReplayDepth > 0 &&
+            !TryConsumeIntegratedBufferedReplay(
+                thisPtr,
+                actionType,
+                actionId,
+                forwardedTargetId,
+                mode))
+        {
+            return false;
+        }
+
+        var integratedRuntime = integratedInputRuntime;
+        var integratedAttempt = IntegratedActionBufferAttempt.None;
+        if (mode == ActionManager.UseActionMode.None &&
+            integratedRuntime?.TryGetActiveBufferRoot(
+                actionType,
+                actionId,
+                out var integratedHotbarRoot) == true)
+        {
+            try
+            {
+                // The final post-SmartAction target is frozen here, directly
+                // before this detour's sole native Original boundary.
+                integratedAttempt = integratedRuntime.ActionBuffer.BeginExactStandardHotbarRoot(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    forwardedTargetId,
+                    extraParam,
+                    mode,
+                    comboRouteId,
+                    integratedHotbarRoot,
+                    handlingSmartTarget ||
+                    smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe);
+            }
+            catch (Exception exception)
+            {
+                // Buffer observation is optional. The physical action remains
+                // authoritative and still crosses the original boundary.
+                LogFailure(
+                    exception,
+                    "Seiton Sense integrated action-buffer preflight failed open for the physical action.");
+                integratedAttempt = IntegratedActionBufferAttempt.None;
+            }
+        }
+
+        bool clientAccepted;
+        try
+        {
+            clientAccepted = useActionHook!.Original(
+                thisPtr,
+                actionType,
+                actionId,
+                forwardedTargetId,
+                extraParam,
+                mode,
+                comboRouteId,
+                outOptAreaTargeted);
+        }
+        catch
+        {
+            integratedRuntime?.ActionBuffer.AbandonExactStandardHotbarRoot(
+                integratedAttempt,
+                "Native action boundary threw; buffer observation retired");
+            throw;
+        }
+
+        if (integratedAttempt.Eligible && integratedRuntime is not null)
+        {
+            try
+            {
+                integratedRuntime.ActionBuffer.CompleteExactStandardHotbarRoot(
+                    thisPtr,
+                    integratedAttempt,
+                    clientAccepted);
+            }
+            catch (Exception exception)
+            {
+                // Completion cannot change the already authoritative native
+                // result or turn one physical action into an input error.
+                integratedRuntime.ActionBuffer.AbandonExactStandardHotbarRoot(
+                    integratedAttempt,
+                    "Buffer completion failed closed");
+                LogFailure(
+                    exception,
+                    "Seiton Sense integrated action-buffer completion failed closed.");
+            }
+        }
         if (clientAccepted &&
             (handlingSmartTarget ||
              smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe))
@@ -1662,6 +1818,106 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return scope.Intent;
     }
 
+    private bool TryConsumeIntegratedBufferedReplay(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint requestedActionId,
+        ulong targetId,
+        ActionManager.UseActionMode mode)
+    {
+        var scope = integratedBufferedReplayScope;
+        if (integratedBufferReplayDepth != 1 ||
+            scope is null ||
+            !ReferenceEquals(scope.Owner, this) ||
+            scope.Consumed)
+        {
+            SetSmartActionSafetyEvent(
+                "Blocked generic buffer replay: exact replay scope was unavailable");
+            return false;
+        }
+
+        scope.Consumed = true;
+        try
+        {
+            var resolvedActionId = ResolveActionId(
+                actionManager,
+                actionType,
+                requestedActionId);
+            var intent = scope.Intent;
+            if (mode != ActionManager.UseActionMode.None ||
+                actionType != intent.ActionType ||
+                requestedActionId != intent.RequestedActionId ||
+                resolvedActionId != intent.ResolvedActionId ||
+                targetId != intent.TargetId)
+            {
+                SetSmartActionSafetyEvent(
+                    "Blocked generic buffer replay: frozen action or target drifted");
+                return false;
+            }
+
+            if (!intent.RequiresSmartActionProtectionRecheck)
+                return true;
+
+            return IsExactBufferedSmartActionProtectionSafe(
+                resolvedActionId,
+                targetId);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense exact generic-buffer replay inspection failed closed.");
+            SetSmartActionSafetyEvent(
+                "Blocked generic buffer replay: exact inspection failed");
+            return false;
+        }
+    }
+
+    private bool IsExactBufferedSmartActionProtectionSafe(
+        uint resolvedActionId,
+        ulong frozenTargetId)
+    {
+        var local = objectTable.LocalPlayer;
+        if (!IsLivePlayer(local) ||
+            !TryGetExactResolvedPvpActionMetadata(resolvedActionId, out var action) ||
+            !action.CanTargetHostile ||
+            action.TargetArea ||
+            action.Range <= 0 ||
+            !TryBuildSmartActionProtectionSnapshot(
+                local!,
+                GetPartyEntityIds(),
+                out var canonicalEnemies,
+                out var protectedActors))
+        {
+            SetSmartActionSafetyEvent(
+                "Blocked generic buffer replay: protection snapshot was ambiguous");
+            return false;
+        }
+
+        var exactMatches = canonicalEnemies
+            .Where(enemy => enemy.Player.GameObjectId == frozenTargetId)
+            .Take(2)
+            .ToArray();
+        if (exactMatches.Length != 1)
+        {
+            SetSmartActionSafetyEvent(
+                "Blocked generic buffer replay: frozen target was not one canonical enemy");
+            return false;
+        }
+
+        var target = exactMatches[0];
+        var safe = SmartActionProtectionRules.IsActionProtectionSafe(
+            ClassifySmartActionAttackShape(action),
+            CreateSmartActionActorGeometry(target),
+            action.EffectRange,
+            protectedActors);
+        SetSmartActionSafetyEvent(
+            safe
+                ? $"Safe exact generic buffer replay S{target.Slot}"
+                : $"Blocked protected generic buffer replay S{target.Slot}");
+        return safe;
+    }
+
     private bool UseActionLocationDetour(
         ActionManager* thisPtr,
         ActionType actionType,
@@ -1701,6 +1957,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ulong incomingTargetId,
         ulong forwardedTargetId,
         bool bypassRedirect,
+        bool integratedBufferReplay,
         bool helperTokenConsumed,
         bool targetSuppressedByRedirect,
         out SmartKardiaEukrasiaPreflight preflight)
@@ -1712,7 +1969,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 mode is ActionManager.UseActionMode.None or
                     ActionManager.UseActionMode.Macro ||
                 (uint)mode == 100;
-            if (bypassRedirect ||
+            if ((bypassRedirect && !integratedBufferReplay) ||
                 helperTokenConsumed ||
                 targetSuppressedByRedirect ||
                 incomingTargetId != forwardedTargetId ||
@@ -3998,6 +4255,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         internal NearAssistRedirector Owner { get; } = owner;
         internal PredictiveCcBrakeBypassIntent Intent { get; } = intent;
+        internal bool Consumed { get; set; }
+    }
+
+    private sealed class IntegratedBufferedReplayScope(
+        NearAssistRedirector owner,
+        IntegratedBufferedReplayIntent intent)
+    {
+        internal NearAssistRedirector Owner { get; } = owner;
+        internal IntegratedBufferedReplayIntent Intent { get; } = intent;
         internal bool Consumed { get; set; }
     }
 

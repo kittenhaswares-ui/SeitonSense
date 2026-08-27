@@ -306,6 +306,7 @@ internal sealed class NinjaGuardShukuchiProbe
                         lastEvent = DescribeAttempt(
                             retry.Intent,
                             retry.Retry.NativeAttemptCount + 1,
+                            retry.Retry,
                             outcome,
                             targetConfirmed);
                     }
@@ -362,7 +363,12 @@ internal sealed class NinjaGuardShukuchiProbe
                 CompleteAttempt(newRetry, outcome, nowMilliseconds);
                 if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
                     castCancellationRequest = CreateCastCancellationRequest(localPlayer!, newRetry);
-                lastEvent = DescribeAttempt(intent, 1, outcome, targetConfirmed);
+                lastEvent = DescribeAttempt(
+                    intent,
+                    1,
+                    newRetry.Retry,
+                    outcome,
+                    targetConfirmed);
             }
         }
 
@@ -828,10 +834,11 @@ internal sealed class NinjaGuardShukuchiProbe
     private static string DescribeAttempt(
         NinjaGuardShukuchiIntent intent,
         int attempt,
+        HeldActionRetryState retryState,
         ClientActionAttemptOutcome outcome,
         bool hardTargetConfirmed) =>
         $"S{intent.EnemySlot} Guard-Shukuchi attempt {attempt}/" +
-        $"{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}; target={hardTargetConfirmed}";
+        $"{HeldActionRetryRules.ResolveAttemptLimit(retryState)}: {outcome}; target={hardTargetConfirmed}";
 
     private static bool HasLiveGuard(IPlayerCharacter target)
     {

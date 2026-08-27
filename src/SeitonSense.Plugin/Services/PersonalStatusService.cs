@@ -38,6 +38,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
+    private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
     private readonly HeldCastCancellationService heldCastCancellation;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly DefensiveUtilityProbe defensiveUtility;
@@ -99,7 +100,8 @@ internal sealed class PersonalStatusService : IDisposable
         PluginConfiguration configuration,
         PvPMetadataValidation metadata,
         SamuraiReactiveMetadataValidation samuraiReactiveMetadata,
-        ReviewedPvpCommandDispatcher commands)
+        ReviewedPvpCommandDispatcher commands,
+        CriticalUtilityCoordinationService criticalUtilityCoordination)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
@@ -112,7 +114,10 @@ internal sealed class PersonalStatusService : IDisposable
         this.samuraiReactiveMetadata = samuraiReactiveMetadata;
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
-        emergencyInput = new EmergencyActionInputCoordinator(keyState);
+        this.criticalUtilityCoordination = criticalUtilityCoordination;
+        emergencyInput = new EmergencyActionInputCoordinator(
+            keyState,
+            criticalUtilityCoordination.ClaimCurrentFrame);
         heldCastCancellation = new HeldCastCancellationService(log);
         emergencyPurify = new EmergencyPurifyProbe(log);
         defensiveUtility = new DefensiveUtilityProbe(
@@ -297,6 +302,8 @@ internal sealed class PersonalStatusService : IDisposable
     internal MonkHeldComboProbeSnapshot MonkHeldComboDiagnostics => monkHeldCombo.Snapshot;
     internal HeldCastCancellationSnapshot HeldCastCancellationDiagnostics =>
         heldCastCancellation.Snapshot;
+    internal CriticalUtilityCoordinationSnapshot CriticalUtilityCoordinationDiagnostics =>
+        criticalUtilityCoordination.Snapshot;
     internal void ResetAllyRescueStatistics() => allyRescue.RequestStatisticsReset();
     internal MachinistLimitBreakDiagnostics MachinistLimitBreakDiagnostics => new(
         machinistLimitBreakCapture.IsRunning,
@@ -389,6 +396,8 @@ internal sealed class PersonalStatusService : IDisposable
             machinistLimitBreakCapture.ClearSamuraiReactiveProtectionSignals();
             machinistLimitBreakThreat = null;
             emergencyInput.Reset();
+            criticalUtilityCoordination.Clear("Personal-status scan failed closed");
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
             localMpWarningState = LocalMpWarningState.Initial;
             var purify = emergencyPurify.FailClosed(now);
             defensiveUtility.FailClosed(now, exception);
@@ -465,6 +474,19 @@ internal sealed class PersonalStatusService : IDisposable
         var isSupportedPvPContext = context != SupportedPvPContext.None;
         var isCrystallineConflict = context == SupportedPvPContext.CrystallineConflict;
         var alive = IsAlive(localPlayer);
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(
+            configuration.Enabled &&
+            configuration.EnablePvpLatencyResponseHelper &&
+            isSupportedPvPContext &&
+            alive &&
+            !hardReset,
+            configuration.PvpLatencyResponseWindowMilliseconds);
+        criticalUtilityCoordination.BeginFrame(
+            configuration.Enabled,
+            configuration.EnablePvpLatencyResponseHelper,
+            context,
+            alive,
+            hardReset);
         ObserveLocalMpWarnings(
             localPlayer,
             isSupportedPvPContext,
@@ -1748,6 +1770,8 @@ internal sealed class PersonalStatusService : IDisposable
     private void ResetRuntime()
     {
         ClearStatusTracking();
+        criticalUtilityCoordination.Clear("Runtime reset");
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
         emergencyInput.Reset();
         emergencyPurify.Reset();
         defensiveUtility.Reset();

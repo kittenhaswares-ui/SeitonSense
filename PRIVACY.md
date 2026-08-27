@@ -699,7 +699,15 @@ reachability waits can leave the scheduler frame to a usable lower helper;
 global cast, occupied-queue, blocking-animation-lock waits and the short explicit-
 false throttle retain that frame. Only an explicit `false` return after final
 exact revalidation can retain the same intent for another call at least 50 ms
-later, with eight native calls maximum.
+later. The default legacy budget is eight calls. If the separate PvP latency-
+response option is enabled in CC or Wolves' Den, the exact intent freezes the
+selected 100-1500 ms clean-false budget (1000 ms = 21 calls; 1500 ms = 31).
+The same option registers the local Dalamud IPC function
+`SeitonSense.IsCriticalUtilityClaimed`. It returns only one boolean for a
+125-ms lease after the shared held scheduler actually consumes a frame; it does
+not expose an action, actor, target, key, position, or combat log. Claim/query
+counters are memory-only, and a missing or faulting consumer changes no Seiton
+action behavior. Nothing is persisted or uploaded.
 The first client-accepted return is terminal; exceptions, uncertain queue/
 sequence transitions, identity drift, and every other ambiguous result are also
 terminal. Retry exhaustion or an ambiguous/unsafe terminal outcome may latch
@@ -747,8 +755,8 @@ requires live validation. Bounded Settings and `/seiton debug` values retain
 only the current cast decision, the last requested helper/action/target/key/
 intent and native request result, plus request/fault counts in memory; none is
 persisted or uploaded. The separate
-explicit-`false` helper-action retry remains at least 50 ms apart with eight
-native calls maximum.
+explicit-`false` helper-action retry remains at least 50 ms apart. It uses eight
+calls by default or the exact intent's frozen opt-in PvP latency-response budget.
 
 ## Experimental Purify helper
 
@@ -1523,8 +1531,13 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 38 is current in v0.34.0.4. It adds RDM Vice of Thorns and
-BLM Frost Star as default-off protection-end options, starts calibration revision
+Configuration schema 40 is current. It adds the local generic one-shot smart
+action-buffer settings, movable learning-window settings, and default-off native
+standard-keyboard-hotbar Turbo settings. The buffer is available in PvE, PvP,
+and Wolves' Den without uploading input, action, target, position, or timing
+data. Schema 39 adds the default-off 100-1500 ms PvP latency-response budget
+and a legacy read-only external critical-utility claim. The integrated buffer
+and Turbo require no companion plugin. Schema 38 adds RDM Vice of Thorns and BLM Frost Star as default-off protection-end options, starts calibration revision
 1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
 Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of
 Thorns, and Frost Star remain off for every upgrade, fresh install, and Reset
@@ -1539,6 +1552,25 @@ off while preserving an older explicitly enabled shared macro-helper opt-in as
 the separate Smart Action option. Smart Tab, Smart Action, Viper, Emergency
 Teleport, and Scholar Smart Spread are all off for fresh and reset configurations;
 unrelated existing opt-ins are preserved.
+
+The integrated input path reads only the local standard-keyboard-hotbar binding,
+raw held/released state, exact slot identity, and the local action/target/context
+snapshot needed to prove one bounded attempt. The generic buffer stores one
+immutable in-memory action tuple until it succeeds, is cancelled, or expires;
+Turbo retains one current held-slot owner. A newer physical input replaces the
+old buffer/owner. No input history, action history, target history, timing data,
+or learning-window state is uploaded. The learning window is a read-only view of
+the current in-memory key/slot, action, countdown, and held state. Neither path
+writes position, range, animation lock, cast state, or a visible target.
+
+For buffer-only compatibility, Seiton reads Dalamud's in-memory installed-plugin
+list, the audited ReAction action-mutation settings, and MOAction's published
+retargeted-action IPC list. This check runs on plugin-list changes, at a bounded
+five-second cadence, when an eligible buffer is armed, and immediately before
+its sole replay. It does not inspect plugin files, retain historical profiles,
+or upload compatibility data. Unknown or unreadable compatibility state disables
+only that buffer opportunity; native input and the separate Turbo path remain
+unchanged.
 
 Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key
 option off for upgrading configurations and left it off for fresh

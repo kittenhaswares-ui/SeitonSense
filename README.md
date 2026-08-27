@@ -612,8 +612,10 @@ Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
 helper. One exact adjusted-action epoch freezes one target. Known unavailable
 states wait without consuming the common retry budget. Only an explicit client
-rejection may call that same intent again after 50 ms, with eight native calls
-maximum; acceptance or ambiguity is terminal. A genuine accepted base-to-
+rejection may call that same intent again after 50 ms. The default legacy budget
+is eight native calls; the separate default-off PvP latency-response option
+freezes the configured 100-1500 ms clean-false budget for that exact intent
+(1000 ms = 21 calls, 1500 ms = 31). Acceptance or ambiguity is terminal. A genuine accepted base-to-
 Unsealed action transition can create a later distinct epoch on the same hold,
 but rejected base Seiton can never substitute the follow-up. The same frozen
 S-slot and actor identity are resolved before every possible request, and that
@@ -806,8 +808,10 @@ continuous consent when the enabled debuff appears.
 The original key is never swallowed, delayed, or replayed. Purify has absolute
 priority while the exact enabled CC is active. Known cooldown, resource, cast,
 queue, or animation-lock blocks wait without spending an attempt. Only an
-explicit client rejection may retry the same frozen self intent after 50 ms,
-with eight native calls maximum; acceptance or ambiguity ends that CC episode.
+explicit client rejection may retry the same frozen self intent after 50 ms.
+The default remains eight native calls; the separate default-off PvP latency-
+response option can freeze a 100-1500 ms clean-false budget for that exact CC
+episode. Acceptance or ambiguity ends it.
 ReAction Turbo repeat pulses do not create physical consent.
 
 The separate **Smart Recuperate on held gameplay key** experiment is disabled by
@@ -1616,8 +1620,14 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 38 is current in v0.34.0.4. It adds RDM Vice of Thorns and
-BLM Frost Star as default-off protection-end options and resets unversioned
+Configuration schema 40 is current. It integrates the generic one-shot smart
+action buffer and opt-in native standard-keyboard-hotbar Turbo directly into
+Seiton Sense. The buffer defaults to 1,000 ms, is adjustable from 100-1,500 ms,
+and has no PvP-only gate; Turbo remains default-off and has a separate outside-
+combat test option. Schema 39 adds the default-off 100-1500 ms PvP latency-
+response budget and a legacy read-only external critical-utility coordination
+endpoint; the integrated buffer and Turbo do not require another plugin. Schema 38
+adds RDM Vice of Thorns and BLM Frost Star as default-off protection-end options and resets unversioned
 impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
 SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
 Frost Star remain off for every upgrade, fresh install, and Reset Defaults. Schema 36
@@ -1631,6 +1641,40 @@ writing Smart Tab option off while preserving an older explicitly enabled shared
 macro-helper opt-in as the separate Smart Action option. Smart Tab, Smart Action,
 Viper, Emergency Teleport, and Scholar Smart Spread are all off for fresh and
 reset configurations; existing unrelated opt-ins are preserved.
+
+The integrated buffer observes only a freshly certified physical press on one
+of the ten standard keyboard hotbars. For a direct instant action which the
+client rejects solely because its remaining local recast or animation lock is
+inside the configured window, it freezes the exact post-Smart-Action target,
+action, slot, player, territory, and instance. It then makes at most one later
+request for that immutable tuple. A newer physical hotbar press, target or
+identity drift, native queue/sequence progress, an unsafe context, a structural
+or resource failure, expiry, or an ambiguous native result ends the intent.
+Casts, ground-targeted actions, movement actions, macros, mouse clicks, and
+cross-hotbar/controller input are not buffered.
+
+The one-shot buffer also fails closed around other action-mutating plugins.
+ReAction is admitted only for the audited `1.3.5.1` profile with Auto Target
+and Action Stacks inactive; MOAction `4.10.1.0` is admitted only when its
+published ownership list proves that neither the requested nor resolved action
+is retargeted. Unknown versions, unreadable state, ownership changes, or a
+plugin-topology change cancel or quarantine only the generic buffer. Native
+input and Seiton's separate Turbo path remain available. Compatibility is
+assessed in memory on plugin-change events and at a bounded five-second cadence,
+with one final live check when the buffer arms and when it is actually ready to
+replay; Seiton does not scan plugin files.
+
+Native Turbo is a separate default-off path. While its exact certified key is
+held, it repeats only the same current standard-hotbar slot at the configured
+cadence; the newest physical hotbar input owns repetition, there are no catch-up
+bursts, and disabling or reconfiguring Turbo requires release before a new hold
+can begin. Enabling the outside-combat test scope also starts a new lifecycle,
+so a key which was already held cannot be inherited. Because the game remains responsible for executing the slot, ordinary
+actions and macros keep their native slot semantics. Seiton's critical held
+utilities pause Turbo and final buffered dispatch without creating a competing
+queue. Neither feature writes position, range, animation lock, cast state, or a
+visible target. The movable learning panel shows the certified key/slot, resolved
+action, live one-shot countdown, and current held/released state.
 
 Historical v0.30.0.0 baseline: schema 32 disabled the retired Combat Frames
 master and mapped its optional name-display preference to the ally LB feed,
@@ -1814,8 +1858,10 @@ synthesize movement or Escape, clear the native action queue, write cast state,
 or mutate a selected target. It can sacrifice the current cast, and FFXIV may
 refuse to cancel some actions. Stationary casts and mobile BRD Powerful Shot /
 MCH Blast Charge still require current-patch live validation. The ordinary
-clean-`false` action retry remains independent: calls stay at least 50 ms apart
-with eight attempts maximum, and acceptance or ambiguity remains terminal.
+clean-`false` action retry remains independent: calls stay at least 50 ms apart.
+Its legacy default is eight attempts; the separate default-off PvP latency-
+response option freezes the selected extended budget per exact intent, and
+acceptance or ambiguity remains terminal.
 
 The separate default-off Smart Recuperate helper may freeze an exact self
 Recuperate `29711` epoch when missing HP is at least 16,000 and MP is at least
@@ -1919,8 +1965,10 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.34.0.4, the exact 461-test Core registry and source checks pin
-configuration schema 38, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
+For the current source, the exact 518-test Core registry and source checks pin
+configuration schema 40, the generic smart buffer and default-off native Turbo,
+the default-off PvP latency-response/coordination path,
+ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only

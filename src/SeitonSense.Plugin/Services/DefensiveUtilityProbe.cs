@@ -320,6 +320,7 @@ internal sealed class DefensiveUtilityProbe
                     lastEvent = DescribeAttempt(
                         "Guard retry",
                         frozenGuard.Retry.NativeAttemptCount + 1,
+                        frozenGuard.Retry,
                         outcome);
                 }
             }
@@ -371,7 +372,7 @@ internal sealed class DefensiveUtilityProbe
                         guardActionSpecificallyReady);
                 }
 
-                lastEvent = DescribeAttempt("Guard initial", 1, outcome);
+                lastEvent = DescribeAttempt("Guard initial", 1, frozen.Retry, outcome);
             }
         }
 
@@ -644,6 +645,7 @@ internal sealed class DefensiveUtilityProbe
                         $"Guardian P{frozenGuardian.Intent.PartySlot} " +
                         $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) retry",
                         frozenGuardian.Retry.NativeAttemptCount + 1,
+                        frozenGuardian.Retry,
                         outcome);
                 }
             }
@@ -727,6 +729,7 @@ internal sealed class DefensiveUtilityProbe
                         $"Guardian P{selected.PartySlot} " +
                         $"({DescribeGuardianRisk(selected, guardianPressureAgeMilliseconds)}) initial",
                         1,
+                        frozen.Retry,
                         outcome);
                 }
             }
@@ -1569,8 +1572,9 @@ internal sealed class DefensiveUtilityProbe
     private static string DescribeAttempt(
         string label,
         int attempt,
+        HeldActionRetryState retryState,
         ClientActionAttemptOutcome outcome) =>
-        $"{label} attempt {attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
+        $"{label} attempt {attempt}/{HeldActionRetryRules.ResolveAttemptLimit(retryState)}: {outcome}";
 
     private long NextGuardianEpisodeToken()
     {

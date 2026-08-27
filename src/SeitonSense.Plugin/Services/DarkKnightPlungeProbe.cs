@@ -352,6 +352,7 @@ internal sealed class DarkKnightPlungeProbe
                             lastEvent = DescribeAttempt(
                                 retry.Intent,
                                 retry.Retry.NativeAttemptCount + 1,
+                                retry.Retry,
                                 outcome);
                         }
                     }
@@ -389,7 +390,7 @@ internal sealed class DarkKnightPlungeProbe
                     retryIntent);
             }
 
-            lastEvent = DescribeAttempt(intent, 1, outcome);
+            lastEvent = DescribeAttempt(intent, 1, retryIntent.Retry, outcome);
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -1136,9 +1137,10 @@ internal sealed class DarkKnightPlungeProbe
     private static string DescribeAttempt(
         DarkKnightPlungeIntent intent,
         int attempt,
+        HeldActionRetryState retryState,
         ClientActionAttemptOutcome outcome) =>
         $"S{intent.EnemySlot} Plunge attempt " +
-        $"{attempt}/{HeldActionRetryRules.MaximumNativeAttempts} " +
+        $"{attempt}/{HeldActionRetryRules.ResolveAttemptLimit(retryState)} " +
         $"(epoch={intent.ReadyEpochToken}): {outcome}";
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)

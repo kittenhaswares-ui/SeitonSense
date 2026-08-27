@@ -331,6 +331,7 @@ internal sealed class NinjaSeitonDispatchProbe
                                     : DescribeAttempt(
                                         retry.Intent,
                                         retry.Retry.NativeAttemptCount + 1,
+                                        retry.Retry,
                                         outcome);
                             }
                         }
@@ -386,7 +387,7 @@ internal sealed class NinjaSeitonDispatchProbe
 
             lastEvent = protectionDriftCancelled
                 ? $"S{intent.EnemySlot} protection status {observedBlockingStatusId} blocked Seiton"
-                : DescribeAttempt(intent, 1, outcome);
+                : DescribeAttempt(intent, 1, retryIntent.Retry, outcome);
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
@@ -1084,9 +1085,10 @@ internal sealed class NinjaSeitonDispatchProbe
     private static string DescribeAttempt(
         NinjaSeitonDispatchIntent intent,
         int attempt,
+        HeldActionRetryState retryState,
         ClientActionAttemptOutcome outcome) =>
         $"S{intent.EnemySlot} action {intent.ActionId} attempt " +
-        $"{attempt}/{HeldActionRetryRules.MaximumNativeAttempts}: {outcome}";
+        $"{attempt}/{HeldActionRetryRules.ResolveAttemptLimit(retryState)}: {outcome}";
 
     private void LogAttemptFailure(Exception exception, long nowMilliseconds)
     {

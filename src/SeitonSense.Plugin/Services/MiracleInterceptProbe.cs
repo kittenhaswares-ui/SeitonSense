@@ -333,7 +333,7 @@ internal sealed class MiracleInterceptProbe
         {
             // Retire the pre-job physical generation in the shared coordinator;
             // a job swap can never inherit the old exact held key as new consent.
-            inputFrame.Consume();
+            inputFrame.RetireWithoutActionClaim();
             capture.ClearMiracleInterceptThreats();
             activeThreat = null;
             ClearCleanseFollowupStates();
@@ -854,7 +854,7 @@ internal sealed class MiracleInterceptProbe
                 candidate,
                 "Armed",
                 $"Proven-false retry throttle: {threat.RetryState.NativeAttemptCount}/" +
-                HeldActionRetryRules.MaximumNativeAttempts,
+                HeldActionRetryRules.ResolveAttemptLimit(threat.RetryState),
                 triggerKey,
                 false,
                 false,

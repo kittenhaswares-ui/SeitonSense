@@ -60,6 +60,7 @@ public readonly record struct EmergencyPurifyBufferState(
     EmergencyPurifyInputTrigger FrozenInputTrigger,
     int NativeAttemptCount,
     long NextNativeAttemptAtMilliseconds,
+    int NativeAttemptLimit,
     ClientActionAttemptOutcome LastNativeOutcome)
 {
     public static EmergencyPurifyBufferState Initial => new(
@@ -73,6 +74,7 @@ public readonly record struct EmergencyPurifyBufferState(
         EmergencyPurifyInputTrigger.None,
         0,
         -1,
+        0,
         ClientActionAttemptOutcome.None);
 }
 
@@ -232,7 +234,11 @@ public static class EmergencyPurifyBufferRules
                     EmergencyPurifyBufferCancelReason.ExactKeyReleased);
             }
 
-            if (current.NativeAttemptCount >= MaximumNativeAttempts)
+            if (HeldActionRetryRules.IsRetryBudgetExhausted(
+                    new HeldActionRetryState(
+                        current.NativeAttemptCount,
+                        current.NextNativeAttemptAtMilliseconds,
+                        current.NativeAttemptLimit)))
             {
                 return Cancelled(
                     WaitingForFreshKey(status.Value, observation.NowMilliseconds),
@@ -316,7 +322,8 @@ public static class EmergencyPurifyBufferRules
         var retry = HeldActionRetryRules.Complete(
             new HeldActionRetryState(
                 current.NativeAttemptCount,
-                current.NextNativeAttemptAtMilliseconds),
+                current.NextNativeAttemptAtMilliseconds,
+                current.NativeAttemptLimit),
             nowMilliseconds,
             outcome);
         if (retry.Disposition == HeldActionRetryDisposition.AcceptedTerminal)
@@ -336,6 +343,7 @@ public static class EmergencyPurifyBufferRules
                 NativeAttemptCount = retry.NextState.NativeAttemptCount,
                 NextNativeAttemptAtMilliseconds =
                     retry.NextState.NextNativeAttemptAtMilliseconds,
+                NativeAttemptLimit = retry.NextState.NativeAttemptLimit,
                 LastObservedAtMilliseconds = nowMilliseconds,
                 LastNativeOutcome = outcome,
             };
@@ -426,6 +434,7 @@ public static class EmergencyPurifyBufferRules
             FrozenInputTrigger = inputTrigger,
             NativeAttemptCount = 0,
             NextNativeAttemptAtMilliseconds = observation.NowMilliseconds,
+            NativeAttemptLimit = 0,
             LastNativeOutcome = ClientActionAttemptOutcome.None,
         };
 
@@ -470,6 +479,7 @@ public static class EmergencyPurifyBufferRules
             EmergencyPurifyInputTrigger.None,
             0,
             -1,
+            0,
             ClientActionAttemptOutcome.None);
 
     private static EmergencyPurifyBufferDecision Armed(EmergencyPurifyBufferState state) =>

@@ -14,6 +14,22 @@ var tests = new (string Name, Action Run)[]
     ("accepted held action leaves later distinct episodes available", HeldActionRetrySelfTests.AcceptedEpisodeDoesNotLatchAContinuousHeldKey),
     ("frozen throttle and global waits retain only eligible priority", HeldActionRetrySelfTests.FrozenThrottleAndGlobalWaitRetainOnlyEligiblePriority),
     ("initial exact intents claim cast soft waits without spending attempts", HeldActionRetrySelfTests.InitialExactIntentClaimsCastSoftWaitWithoutSpendingBudget),
+    ("opt-in latency window extends only clean-false held retries", HeldActionRetrySelfTests.OptInLatencyWindowExtendsOnlyCleanFalseBudget),
+    ("critical utility IPC publication requires every exact gate", CriticalUtilityCoordinationSelfTests.PublicationRequiresEveryExactGate),
+    ("integrated input reservation is independent of external IPC opt-in", CriticalUtilityCoordinationSelfTests.IntegratedReservationIgnoresExternalPublicationToggle),
+    ("action timing uses the next charge boundary", ActionChargeTimingSelfTests.NextChargeBoundaryUsesPerChargeRecast),
+    ("smart buffer compatibility allows audited non-mutating integrations", SmartActionBufferCompatibilitySelfTests.AuditedNonMutatingProfileIsAllowed),
+    ("smart buffer compatibility blocks unknown or mutating ReAction", SmartActionBufferCompatibilitySelfTests.UnknownAndMutatingReActionProfilesFailClosed),
+    ("smart buffer compatibility blocks unreadable MOAction ownership", SmartActionBufferCompatibilitySelfTests.UnreadableMOActionOwnershipFailsClosed),
+    ("smart buffer compatibility quarantines one clean frame", SmartActionBufferCompatibilitySelfTests.QuarantineConsumesExactlyOneCleanFrame),
+    ("smart buffer compatibility detects profile signature drift", SmartActionBufferCompatibilitySelfTests.InitialSignatureIsBaselineAndLaterDriftIsDetected),
+    ("smart action buffer window defaults and bounds are exact", SmartActionBufferSelfTests.WindowDefaultsAndBoundsAreExact),
+    ("smart action buffer arms only eligible transient failures", SmartActionBufferSelfTests.OnlyEligibleTransientFailuresArm),
+    ("smart action buffer freezes action and target identity", SmartActionBufferSelfTests.FrozenIdentityNeverRetargetsOrSubstitutes),
+    ("smart action buffer internal priority pauses only dispatch", SmartActionBufferSelfTests.InternalPriorityPausesOnlyFinalDispatch),
+    ("smart action buffer runtime safety gates cancel while paused", SmartActionBufferSelfTests.EveryRuntimeSafetyGateCancels),
+    ("smart action buffer expires at the exact default deadline", SmartActionBufferSelfTests.DefaultWindowExpiresAtItsExactDeadline),
+    ("smart action buffer dispatches exactly once under contention", SmartActionBufferSelfTests.ConcurrentEvaluationDispatchesExactlyOnce),
     ("held helper scheduler priority order is pinned", HeldCastCancellationSelfTests.CanonicalHelperPriorityOrderIsPinned),
     ("held cast cancel requests once per observed cast epoch", HeldCastCancellationSelfTests.ExactRequestIsOncePerObservedCastEpoch),
     ("held cast cancel can become eligible inside the same cast", HeldCastCancellationSelfTests.IntentMayBecomeEligibleInsideTheSameCast),
@@ -464,6 +480,12 @@ var tests = new (string Name, Action Run)[]
     ("Monk Earth Reply status flicker cannot rearm", MonkEarthReplySelfTests.AbsenceGracePreventsFlickerRearm),
     ("Monk Earth Reply safety gates fail closed", MonkEarthReplySelfTests.SafetyGatesAndInvalidInputsFailClosed),
 };
+
+tests = tests
+    .Concat(LogicalHotbarRepeatSelfTests.All())
+    .Concat(PhysicalHoldLatchSelfTests.All())
+    .Concat(LogicalHotbarRepeatPolicySelfTests.All())
+    .ToArray();
 
 var failures = new List<string>();
 foreach (var test in tests)

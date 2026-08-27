@@ -159,7 +159,7 @@ public static class MiracleProtectionEndRules
     {
         if (observedAtMilliseconds < 0 ||
             nowMilliseconds < observedAtMilliseconds ||
-            previous.NativeAttemptCount is < 0 or > MaximumNativeAttempts)
+            !HeldActionRetryRules.IsValidState(previous))
         {
             return new MiracleProtectionEndAttemptDecision(
                 HeldActionRetryState.Initial,

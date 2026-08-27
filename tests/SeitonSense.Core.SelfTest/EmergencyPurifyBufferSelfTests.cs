@@ -408,6 +408,39 @@ internal static class EmergencyPurifyBufferSelfTests
             }
         }
 
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(true, 1_000);
+        try
+        {
+            var extended = Observe(
+                EmergencyPurifyBufferState.Initial,
+                StatusA,
+                heldKeyEligible: true,
+                allowHeldKey: true,
+                locallyReady: true,
+                now: 3_000).NextState;
+            for (var attempt = 1; attempt <= 9; attempt++)
+            {
+                var now = 3_000L +
+                          ((attempt - 1) * HeldActionRetryRules.NativeRetryThrottleMilliseconds);
+                var completion = Complete(
+                    extended,
+                    ClientActionAttemptOutcome.ClientRejected,
+                    now);
+                True(completion.RetryScheduled, $"extended Purify retry {attempt}");
+                Equal(21, completion.NextState.NativeAttemptLimit, "Purify preserves the frozen extended budget");
+                extended = Observe(
+                    completion.NextState,
+                    StatusA,
+                    locallyReady: true,
+                    now: now + HeldActionRetryRules.NativeRetryThrottleMilliseconds,
+                    frozenKeyStillDown: true).NextState;
+            }
+        }
+        finally
+        {
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
+        }
+
         first = Observe(
             EmergencyPurifyBufferState.Initial,
             StatusA,

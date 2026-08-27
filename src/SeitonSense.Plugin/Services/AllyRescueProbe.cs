@@ -274,7 +274,7 @@ internal sealed class AllyRescueProbe
             state.NextNativeAttemptAtMilliseconds > nowMilliseconds)
         {
             lastEvent =
-                $"Proven-false retry throttle: {state.NativeAttemptCount}/{AllyRescueBufferRules.MaximumNativeAttempts}";
+                $"Proven-false retry throttle: {state.NativeAttemptCount}/{HeldActionRetryRules.ResolveAttemptLimit(new HeldActionRetryState(state.NativeAttemptCount, state.NextNativeAttemptAtMilliseconds, state.NativeAttemptLimit))}";
         }
         else if (!decision.ShouldDispatch &&
                  state.Phase == AllyRescueBufferPhase.Buffered &&
@@ -358,7 +358,7 @@ internal sealed class AllyRescueProbe
                 if (completion.Outcome == AllyRescueNativeAttemptOutcome.RetryScheduled)
                 {
                     lastEvent +=
-                        $"; retry {state.NativeAttemptCount + 1}/{AllyRescueBufferRules.MaximumNativeAttempts} " +
+                        $"; retry {state.NativeAttemptCount + 1}/{HeldActionRetryRules.ResolveAttemptLimit(new HeldActionRetryState(state.NativeAttemptCount, state.NextNativeAttemptAtMilliseconds, state.NativeAttemptLimit))} " +
                         $"after {AllyRescueBufferRules.NativeRetryThrottleMilliseconds} ms";
                 }
 
