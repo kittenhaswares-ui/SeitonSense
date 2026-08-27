@@ -50,7 +50,8 @@ following data already available in the local FFXIV client:
   locally available job, HP, distance, CC slot, and pressure state;
 - when Smart Tab is enabled and its scoped native forward world-target cycle is
   pressed, the unique canonical `S1`-`S5` candidates, current HP, Guard, fresh
-  optional team pressure, trusted MP ratio, hitbox geometry, one frozen actor,
+  optional team pressure, trusted MP ratio, hitbox geometry, native
+  range/line-of-sight results, the current hard-target anchor, one frozen actor,
   and the native setter readback;
 - when Smart Action is enabled and one local macro token is live, the exact
   incoming non-area PvP action, unique canonical `S1`-`S5` candidates, Guard,
@@ -473,18 +474,25 @@ jobs, and unsupported contexts call the native paths unchanged.
 For one owned request, the plugin transiently resolves unique, living, hostile,
 targetable canonical `S1`-`S5` enemies and excludes live Guard. It first admits
 hitbox-edge melee reach, then only the reviewed melee job's gap-closer cap.
-Ranged jobs have one action-free geometric tier and no melee preference: BRD,
+Ranged jobs have one geometric tier and no melee preference: BRD,
 BLM, SMN, MCH, RDM, and PCT use 25 yalms, while DNC uses 15 yalms. Ranking inside
 the first non-empty tier is lowest HP ratio, fresh positive team pressure, known
 Guard-cooldown
-unavailability, trusted MP ratio, then stable slot. One actor is frozen and
-revalidated. Missing candidates or any identity, geometry, context, or reach
+unavailability, trusted MP ratio, then stable slot. Every geometrically admitted
+candidate must also pass FFXIV's native range/line-of-sight query through a
+metadata-verified hostile spatial probe; geometry still enforces each job's
+narrower cap. If the exact current hard target is eligible, the request advances
+to its successor in that ranking and wraps; otherwise it starts at rank one. No
+persistent cursor is retained, so manual target changes re-anchor the cycle. One
+actor is frozen and revalidated, including a second native spatial query
+immediately before the setter. Missing candidates or any identity, geometry, context, or reach
 failure before the setter consume only that owned forward cycle without a target
 write, so the current hard target remains unchanged. Otherwise the plugin calls
 the native hard-target setter once and checks exact readback once. Setter
 rejection or readback mismatch is terminal, with no retry, rerank, or alternate
 target. The plugin does not claim that the pre-call target was restored after
-those post-setter outcomes. There is no action, persisted input, or upload.
+those post-setter outcomes. The spatial probe does not execute an action. There
+is no persisted input or upload.
 
 ## One-shot Smart Action
 
@@ -1494,7 +1502,7 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 38 is current in v0.34.0.2. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.3. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options, starts calibration revision
 1, and clears unversioned timing samples. GNB Continuation, DRK Shadowbringer,
 Monk combo, SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of

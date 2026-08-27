@@ -16,6 +16,8 @@ internal static class SmartTabInterceptionSelfTests
         False(Owns(Valid() with { HookAvailable = false }), "missing hook stays vanilla");
         False(Owns(Valid() with { ExactCrystallineConflict = false }), "outside exact CC stays vanilla");
         False(Owns(Valid() with { ReviewedSmartTabJob = false }), "unsupported jobs stay vanilla");
+        False(Owns(Valid() with { NativeLineOfSightProbeVerified = false }),
+            "unverified native line-of-sight probe stays vanilla");
         False(Owns(Valid() with { LocalPlayerAvailable = false }), "missing player stays vanilla");
     }
 
@@ -37,6 +39,7 @@ internal static class SmartTabInterceptionSelfTests
         InsideNativeTargetingHandler: true,
         ExactCrystallineConflict: true,
         ReviewedSmartTabJob: true,
+        NativeLineOfSightProbeVerified: true,
         LocalPlayerAvailable: true,
         NativeWorldForwardCycle: true);
 

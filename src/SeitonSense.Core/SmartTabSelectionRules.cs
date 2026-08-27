@@ -2,9 +2,8 @@ namespace SeitonSense.Core;
 
 /// <summary>
 /// One value-only observation of an exact native CC enemy slot for one owned
-/// Smart Tab target request. Reach is caller-proven by
-/// <see cref="SmartTargetReachRules"/>; no action-specific range result is
-/// invented for this action-free selection path.
+/// Smart Tab target request. The caller proves both the reviewed geometric
+/// reach tier and FFXIV's native range/line-of-sight result before selection.
 /// </summary>
 public readonly record struct SmartTabSelectionCandidate(
     int EnemySlot,
@@ -14,6 +13,7 @@ public readonly record struct SmartTabSelectionCandidate(
     bool Alive,
     bool Targetable,
     bool HasActiveGuard,
+    bool HasNativeRangeAndLineOfSight,
     uint CurrentHp,
     uint MaximumHp,
     SmartTargetReachTier ReachTier,
@@ -63,13 +63,75 @@ public static class SmartTabSelectionRules
         return bestIndex;
     }
 
+    /// <summary>
+    /// Selects the first candidate in the deterministic ranking when the
+    /// current actor is absent, invalid, ineligible, or not part of this exact
+    /// candidate set. When the current actor exactly matches one eligible
+    /// candidate, selects the following ranked candidate and wraps at the end.
+    /// No cursor state is retained between requests.
+    /// </summary>
+    public static int SelectNextCandidateIndex(
+        IReadOnlyList<SmartTabSelectionCandidate>? candidates,
+        TargetPressureActorIdentity localPlayer,
+        TargetPressureActorIdentity? currentActor)
+    {
+        if (!HasUnambiguousCandidateSet(candidates, localPlayer)) return -1;
+
+        var rankedEligibleIndices = new List<int>(candidates!.Count);
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (IsEligibleCandidate(candidates[index], localPlayer))
+                rankedEligibleIndices.Add(index);
+        }
+
+        if (rankedEligibleIndices.Count == 0) return -1;
+
+        rankedEligibleIndices.Sort((leftIndex, rightIndex) =>
+            Compare(candidates[leftIndex], candidates[rightIndex]));
+
+        if (currentActor is not { IsValid: true } exactCurrentActor)
+            return rankedEligibleIndices[0];
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Actor != exactCurrentActor &&
+                SharesEitherId(candidate.Actor, exactCurrentActor))
+            {
+                return -1;
+            }
+        }
+
+        for (var rank = 0; rank < rankedEligibleIndices.Count; rank++)
+        {
+            var index = rankedEligibleIndices[rank];
+            var candidateActor = candidates[index].Actor;
+            if (candidateActor != exactCurrentActor)
+            {
+                if (SharesEitherId(candidateActor, exactCurrentActor)) return -1;
+                continue;
+            }
+
+            var nextRank = (rank + 1) % rankedEligibleIndices.Count;
+            return rankedEligibleIndices[nextRank];
+        }
+
+        return rankedEligibleIndices[0];
+    }
+
     public static bool TryCreateIntent(
         IReadOnlyList<SmartTabSelectionCandidate>? candidates,
         TargetPressureActorIdentity localPlayer,
         out SmartTabSelectionIntent intent)
+        => TryCreateIntent(candidates, localPlayer, currentActor: null, out intent);
+
+    public static bool TryCreateIntent(
+        IReadOnlyList<SmartTabSelectionCandidate>? candidates,
+        TargetPressureActorIdentity localPlayer,
+        TargetPressureActorIdentity? currentActor,
+        out SmartTabSelectionIntent intent)
     {
         intent = default;
-        var selectedIndex = SelectBestCandidateIndex(candidates, localPlayer);
+        var selectedIndex = SelectNextCandidateIndex(candidates, localPlayer, currentActor);
         if (selectedIndex < 0) return false;
 
         var selected = candidates![selectedIndex];
@@ -122,6 +184,7 @@ public static class SmartTabSelectionRules
         candidate.Alive &&
         candidate.Targetable &&
         !candidate.HasActiveGuard &&
+        candidate.HasNativeRangeAndLineOfSight &&
         candidate.CurrentHp > 0 &&
         candidate.MaximumHp >= candidate.CurrentHp;
 

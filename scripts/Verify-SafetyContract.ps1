@@ -442,8 +442,22 @@ Assert-Literals $smartTabTargeting @(
     'NativeWorldTargetCycleDetour);',
     'interop.HookFromAddress<TargetSystem.Delegates.HandleTargetingKeybinds>(',
     'TargetSystem.MemberFunctionPointers.HandleTargetingKeybinds,',
-    'HandleTargetingKeybindsDetour);'
+    'HandleTargetingKeybindsDetour);',
+    'bool lineOfSightProbeMetadataVerified,',
+    'NativeLineOfSightProbeVerified: lineOfSightProbeMetadataVerified,',
+    'LineOfSightProbeVerified = lineOfSightProbeMetadataVerified,',
+    '$"los-probe={LineOfSightProbeVerified},cc={IsCrystallineConflict},job={LocalJobId},"',
+    'var currentHardTargetAddress = (nint)targetSystem->GetHardTarget();',
+    'candidate.Address == currentHardTargetAddress',
+    'HasNativeRangeAndLineOfSight: hasNativeRangeAndLineOfSight,',
+    'ActionManager.GetActionInRangeOrLoS(',
+    'EnemyCombatConstants.ScholarCriticalStrategyActionId,',
+    'return SeitonRangeRules.HasNativeRangeAndLineOfSight(result);'
 ) 'Smart Tab paired native handler/helper hooks, pinned helper signature, and byte ABI'
+Assert-Literals $pluginSource @(
+    'new SmartTabTargetingService(',
+    'metadata.ScholarCriticalStrategyVerified,'
+) 'Smart Tab metadata-verified native line-of-sight probe wiring'
 if ([regex]::Matches($smartTabTargeting, '\bIGameInteropProvider\b').Count -ne 1 -or
     [regex]::Matches($smartTabTargeting, '\bISigScanner\b').Count -ne 1 -or
     [regex]::Matches($smartTabTargeting, '\bHookFromAddress\b').Count -ne 2 -or
@@ -490,36 +504,38 @@ if ([regex]::Matches($smartTabCycleDetour, 'targetCycleHook!\.Original').Count -
     $normalizedSmartTabCycleDetour -notmatch 'catch \(Exception exception\) \{ if \(owned\).*?return 0; \}.*?Interlocked\.Increment\(ref vanillaPassThroughCount\); return targetCycleHook!\.Original\( targetSystem, targetingContext, candidateArray, reverse\);') {
     throw 'Smart Tab must preserve the original helper for outside-scope, reverse, ineligible, and pre-ownership failure paths.'
 }
-if ($normalizedSmartTabCycleDetour -notmatch 'owned = true; Interlocked\.Increment\(ref consumedRequestCount\); if \(SelectBestTargetOnce\(targetSystem\)\) return 1; Interlocked\.Increment\(ref consumedWithoutSelectionCount\); return 0;' -or
+if ($normalizedSmartTabCycleDetour -notmatch 'owned = true; Interlocked\.Increment\(ref consumedRequestCount\); if \(SelectNextTargetOnce\(targetSystem\)\) return 1; Interlocked\.Increment\(ref consumedWithoutSelectionCount\); return 0;' -or
     $normalizedSmartTabCycleDetour -notmatch 'if \(owned\) \{ LogFailure\(exception, "Smart Tab owned forward-target request failed closed; no fallback was attempted"\); Interlocked\.Increment\(ref consumedWithoutSelectionCount\); return 0; \}') {
     throw 'Once Smart Tab owns an exact forward cycle it must consume it without native-cycle fallback, retry, or alternate selection.'
 }
 
 $smartTabSelectionMethodMatch = [regex]::Match(
     $smartTabTargeting,
-    '(?s)private bool SelectBestTargetOnce\(.*?\n    \}\r?\n\r?\n    private bool TryCreateCandidate')
+    '(?s)private bool SelectNextTargetOnce\(.*?\n    \}\r?\n\r?\n    private bool TryCreateCandidate')
 if (-not $smartTabSelectionMethodMatch.Success) {
     throw 'Smart Tab single-selection boundary is missing.'
 }
 $smartTabSelectionMethod = $smartTabSelectionMethodMatch.Value
 $normalizedSmartTabSelectionMethod = $smartTabSelectionMethod -replace '\s+', ' '
 if ($smartTabSelectionMethod -match 'targetCycleHook|\.Original\s*\(|\bUseAction(?:Location)?\b|\bSetSoftTarget\b' -or
-    $smartTabTargeting -match '\b(?:ActionManager|UseAction|UseActionLocation|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget|ITargetManager)\b' -or
+    $smartTabTargeting -match '\b(?:UseAction|UseActionLocation|SetTarget|SetFocusTarget|SetSoftTarget|SetMouseOverTarget|SetMouseOverNameplateTarget|SetGPoseTarget|ITargetManager)\b' -or
     $smartTabTargeting -match '->\s*(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
-    [regex]::Matches($smartTabSelectionMethod, '\bSelectBestTargetOnce\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartTabSelectionMethod, '\bSelectNextTargetOnce\s*\(').Count -ne 1 -or
     [regex]::Matches($smartTabTargeting, 'SmartTabSelectionRules\.TryCreateIntent').Count -ne 1 -or
     [regex]::Matches($smartTabTargeting, 'SmartTabSelectionRules\.CanSetExactIntent').Count -ne 1 -or
     [regex]::Matches($smartTabTargeting, '->SetHardTarget\s*\(').Count -ne 1 -or
-    [regex]::Matches($smartTabTargeting, '->GetHardTarget\s*\(').Count -ne 1) {
-    throw 'Smart Tab must rank once, revalidate only the frozen actor, and own exactly one native hard-target setter/readback boundary with no action or Original call.'
+    [regex]::Matches($smartTabTargeting, '->GetHardTarget\s*\(').Count -ne 2 -or
+    [regex]::Matches($smartTabTargeting, '\bActionManager\.GetActionInRangeOrLoS\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartTabTargeting, '\bSeitonRangeRules\.HasNativeRangeAndLineOfSight\s*\(').Count -ne 1) {
+    throw 'Smart Tab must rank/cycle once, revalidate only the frozen actor, use one native spatial probe helper, and own exactly one native hard-target setter with anchor/readback boundaries and no action dispatch or Original call.'
 }
-if ($normalizedSmartTabSelectionMethod -notmatch 'SmartTabSelectionRules\.TryCreateIntent\( selectionCandidates, localActor, out var intent\).*?var exactTarget = EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\);.*?SmartTabSelectionRules\.CanSetExactIntent\(intent, revalidated, localActor\).*?Interlocked\.Increment\(ref setterInvocationCount\); var setterAccepted = targetSystem->SetHardTarget\(\(GameObject\*\)exactTarget\.Address\); if \(!setterAccepted\).*?if \(\(nint\)targetSystem->GetHardTarget\(\) != exactTarget\.Address\).*?Interlocked\.Increment\(ref exactReadbackCount\);') {
-    throw 'Smart Tab must freeze one intent, revalidate that exact actor, invoke SetHardTarget once, and confirm exact native readback in order.'
+if ($normalizedSmartTabSelectionMethod -notmatch 'var currentHardTargetAddress = \(nint\)targetSystem->GetHardTarget\(\);.*?SmartTabSelectionRules\.TryCreateIntent\( selectionCandidates, localActor, currentActor, out var intent\).*?var exactTarget = EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\);.*?SmartTabSelectionRules\.CanSetExactIntent\(intent, revalidated, localActor\).*?Interlocked\.Increment\(ref setterInvocationCount\); var setterAccepted = targetSystem->SetHardTarget\(\(GameObject\*\)exactTarget\.Address\); if \(!setterAccepted\).*?if \(\(nint\)targetSystem->GetHardTarget\(\) != exactTarget\.Address\).*?Interlocked\.Increment\(ref exactReadbackCount\);') {
+    throw 'Smart Tab must snapshot one current anchor, freeze the next ranked intent, revalidate that exact actor, invoke SetHardTarget once, and confirm exact native readback in order.'
 }
 
 $smartTabInterceptionRules = Read-RequiredSource $smartTabInterceptionRulesPath 'Smart Tab interception rules'
 $normalizedSmartTabInterceptionRules = $smartTabInterceptionRules -replace '\s+', ' '
-if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled && observation\.FeatureEnabled && observation\.HookAvailable && observation\.InsideNativeTargetingHandler && observation\.ExactCrystallineConflict && observation\.ReviewedSmartTabJob && observation\.LocalPlayerAvailable && observation\.NativeWorldForwardCycle;' -or
+if ($normalizedSmartTabInterceptionRules -notmatch 'observation\.PluginEnabled && observation\.FeatureEnabled && observation\.HookAvailable && observation\.InsideNativeTargetingHandler && observation\.ExactCrystallineConflict && observation\.ReviewedSmartTabJob && observation\.NativeLineOfSightProbeVerified && observation\.LocalPlayerAvailable && observation\.NativeWorldForwardCycle;' -or
     $normalizedSmartTabInterceptionRules -match '\|\|') {
     throw 'Smart Tab ownership must require every exact native-forward, handler-scope, context, job, player, hook, feature, and plugin gate.'
 }
@@ -531,8 +547,9 @@ Assert-Literals $smartTabSelectionRules @(
     'SmartTargetReachTier.GapCloser or',
     'SmartTargetReachTier.RangedOrOther',
     '!candidate.HasActiveGuard',
+    'candidate.HasNativeRangeAndLineOfSight',
     'SmartTabSelectionIntent(',
-    'SelectBestCandidateIndex(candidates, localPlayer)',
+    'SelectNextCandidateIndex(candidates, localPlayer, currentActor)',
     'candidate.Actor == intent.Target',
     'return left.EnemySlot.CompareTo(right.EnemySlot);'
 ) 'Smart Tab exact eligibility, frozen intent, and stable ranking'
@@ -622,8 +639,15 @@ Assert-Literals $smartTargetReachSelfTests @(
 ) 'Reviewed ranged Smart Tab jobs, exact BRD/DNC caps, and no melee-first ranged tier'
 Assert-Literals $smartTabSelectionSelfTests @(
     'valid with { ReachTier = SmartTargetReachTier.RangedOrOther }',
-    '"a caller-proven reviewed ranged tier is eligible"'
-) 'Smart Tab caller-proven reviewed ranged-tier eligibility'
+    '"a caller-proven reviewed ranged tier is eligible"',
+    'HasNativeRangeAndLineOfSight = false',
+    '"a blocked rank-one enemy is skipped for the reachable candidate"',
+    '"the frozen actor losing native line of sight cancels without substitution"',
+    '"an exact current rank one advances to rank two"',
+    '"the last exact ranked actor wraps to rank one"',
+    '"one eligible actor wraps to itself"',
+    '"a partial current identity match fails closed"'
+) 'Smart Tab caller-proven reachability, ranked cycling, and frozen native-LoS revalidation'
 
 $smartTabCommandMatch = [regex]::Match(
     $pluginSource,
@@ -8333,16 +8357,16 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.34.0.2</Version>',
-    '<AssemblyVersion>0.34.0.2</AssemblyVersion>',
-    '<FileVersion>0.34.0.2</FileVersion>'
-) 'v0.34.0.2 project version'
+    '<Version>0.34.0.3</Version>',
+    '<AssemblyVersion>0.34.0.3</AssemblyVersion>',
+    '<FileVersion>0.34.0.3</FileVersion>'
+) 'v0.34.0.3 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.34.0.2";',
-    'Scholar now requires the complete owned setup pair once, then still spreads Catalyze after Galvanize is consumed and replans ordinary live drift without a full WASD release.',
-    'Scholar preserves DoT-first planning across the shared PvP GCD, accepts stable exact 2-5 actor slices, waits through transient readiness, and logs every plugin-issued spread attempt.',
-    'Monk now reserves Wind''s Reply, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering. Schema 38 is unchanged; all 454 Core tests pass.'
-) 'v0.34.0.2 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.34.0.3";',
+    'Smart Tab now requires FFXIV''s native range and line-of-sight result, so enemies behind walls are excluded before targeting and checked again immediately before the target write.',
+    'Repeated forward Tab presses now advance through the smart-ranked reachable enemies and wrap, instead of repeatedly selecting the same best target. Manual target changes automatically re-anchor the cycle.',
+    'Reverse targeting and every unsupported context remain vanilla. Smart Tab still performs one exact hard-target write with no action, retry, alternate, or fallback. Schema 38 is unchanged; all 454 Core tests pass.'
+) 'v0.34.0.3 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8361,24 +8385,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.34.0.2 plugin manifest metadata'
+) 'v0.34.0.3 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.34.0.2"',
-    'Fixed Scholar Smart Spread''s live CC blockers:',
-    'after the complete owned setup pair is observed once, a surviving status such as Catalyze remains deployable after Galvanize is consumed',
-    'stable exact 2-5 actor slices no longer fail because one roster actor is unresolved',
-    'DoT-first planning survives the shared PvP GCD',
-    'transient readiness waits',
-    'ordinary drift/manual conflicts replan under the same hold.',
-    'Plugin-issued Scholar attempts are now logged.',
-    'Monk now reserves Wind, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering.',
+    '"AssemblyVersion": "0.34.0.3"',
+    'Fixed Smart Tab targeting enemies behind walls:',
+    'every geometrically eligible enemy now also needs FFXIV''s native range/line-of-sight result',
+    'the frozen target is checked again immediately before the one exact hard-target write.',
+    'Repeated forward Tab now advances through the smart-ranked reachable list and wraps instead of repeatedly selecting rank one;',
+    'manual target changes automatically re-anchor the stateless cycle.',
+    'Reverse targeting and unsupported or metadata-unverified contexts remain vanilla.',
     'Schema 38 remains current; all 454 Core tests pass',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.34.0.2 custom-repository metadata'
+) 'v0.34.0.3 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8393,15 +8415,25 @@ $privacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Privacy d
 $normalizedReadme = $readme -replace '\s+', ' '
 $normalizedChangelog = $changelog -replace '\s+', ' '
 $normalizedPrivacy = $privacy -replace '\s+', ' '
+Assert-Literals $normalizedPrivacy @(
+    '## DPS Smart Tab',
+    'Every geometrically admitted candidate must also pass FFXIV''s native range/line-of-sight query through a metadata-verified hostile spatial probe;',
+    'If the exact current hard target is eligible, the request advances to its successor in that ranking and wraps;',
+    'No persistent cursor is retained, so manual target changes re-anchor the cycle.',
+    'including a second native spatial query immediately before the setter.',
+    'The spatial probe does not execute an action.',
+    'Configuration schema 38 is current in v0.34.0.3.'
+) 'v0.34.0.3 Smart Tab transient-data, native-LoS, and stateless-cycle disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.34.0.2 fixes Scholar''s live half-status, incomplete-roster, shared-GCD planning, transient-readiness, and terminal-hold blockers;',
-    'every plugin-issued Scholar attempt is now identifiable in the local Dalamud log.',
-    'Held Monk now reserves Wind''s Reply before Phantom, then guarantees a confirmed Wind''s Reply -> Thunderclap -> Phantom Rush order across transient GCD/readiness and knockback-position frames.',
+    'Version 0.34.0.3 fixes Smart Tab''s ranged line-of-sight and repeated-target lock:',
+    'every geometrically admitted enemy must now pass FFXIV''s native range/line-of-sight result',
+    'repeated forward Tab presses advance through the smart-ranked reachable list with wrap.',
+    'Manual target changes automatically re-anchor that stateless cycle.',
     'requires at least two individually double-resolved, stable, unique canonical',
     'Deployment waits until the complete exact locally owned setup pair has been observed once on the frozen target.',
     'After complete-pair proof, either remaining exact status keeps Deployment eligible;',
     'manual conflicts and ordinary target/readiness drift reset for a fresh plan under the same physical hold.',
-    'retains v0.34''s measured counter-CC timing plus default-off RDM Vice of Thorns and BLM Frost Star.',
+    'retains v0.34.0.2''s Scholar and Monk reliability fixes plus v0.34''s measured counter-CC timing and default-off RDM Vice of Thorns and BLM Frost Star.',
     'dynamically observed recast timing proves the next charge will return no later than the next Biolysis opportunity.',
     'Unknown timing blocks only that one-charge shield reservation; DoT and two-charge shield plans still use their final native readiness checks.',
     'Single-target setup capture uses the first exact effect recipient; area Deployment retains the animation target.',
@@ -8423,30 +8455,28 @@ Assert-Literals $normalizedReadme @(
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
     'dedicated `/panicshu` scope releases this ownership before forwarding its location call',
-    'Configuration schema 38 is current in v0.34.0.2',
-    'For current v0.34.0.2, the exact 454-test Core registry and source checks pin',
+    'Configuration schema 38 is current in v0.34.0.3',
+    'For current v0.34.0.3, the exact 454-test Core registry and source checks pin',
+    'metadata-verified native range/line-of-sight admission',
+    'current-target-anchored ranked cycle with wrap',
     'Eighteen physical-hold option enable edges share the scheduler input.',
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'Scholar Smart Spread remains an independent raw-hold lane and never consumes that frame.',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.34.0.2 current README release and safety contract'
+) 'v0.34.0.3 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.34.0.2',
-    'Fixed the live **Scholar Smart Spread** shield blocker:',
-    'complete locally owned setup pair has first been observed',
-    'first staggered status alone cannot authorize Deployment.',
-    'stable exact slice of two to five unique actors.',
-    'Scholar now separates Biolysis''s own recast from the shared PvP GCD while planning',
-    'charged Adloquium cannot outrank a ready DoT during that GCD.',
-    'Scholar also soft-waits through transient charged-action readiness.',
-    'manual conflicts, and a final preflight miss replan on the continuing hold',
-    'Every plugin-issued native Scholar attempt is now recorded in the local Dalamud log',
-    'confirmed Wind''s Reply always prefers Thunderclap before Phantom Rush',
-    'Stable cooldown/charge evidence now reserves Wind''s Reply, Thunderclap, and Rising Phoenix across transient GCD/readiness frames;',
-    'Wind remains a melee and ranged setup before Phantom.',
+    '## 0.34.0.3',
+    'Fixed **Smart Tab** admitting enemies behind walls.',
+    'metadata-verified hostile spatial probe.',
+    'The frozen target is probed again immediately before the single hard-target write;',
+    'Fixed repeated forward Tab presses selecting the same highest-ranked enemy.',
+    'advances from the exact current eligible target through the freshly ranked reachable list',
+    'The cycle stores no cursor, so manual target changes re-anchor it automatically.',
+    'Reverse targeting, unsupported jobs and contexts, and metadata-unverified clients remain on FFXIV''s native path.',
+    'one-setter, exact-readback, no-retry/no-alternate boundary.',
     'Configuration schema remains `38`; all `454` Core tests pass.'
-) 'v0.34.0.2 Scholar and Monk reliability release notes'
+) 'v0.34.0.3 Smart Tab native-LoS and ranked-cycle release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.34.0.0',
     'native PvP `ActionComboRoute` function and invoking route `55` in Combo mode',
@@ -8540,7 +8570,7 @@ Assert-Literals $normalizedPrivacy @(
     'Missing, zero, or disagreeing packet sequence metadata waits for complete-pair proof or expiry',
     'evidence after 2.5 seconds cannot revive the workflow',
     'Separately pressed Scholar actions are not adopted. Manual conflicts, transient readiness, and ordinary identity/status drift reset or wait for a fresh exact plan under the same physical hold;',
-    'Configuration schema 38 is current in v0.34.0.2.',
+    'Configuration schema 38 is current in v0.34.0.3.',
     'Emergency danger/destination episodes, Scholar spread plans/source sequences, ActionEffect confirmation state, or in-memory counters.'
 ) 'v0.32.0.1 Emergency Teleport and independent Scholar spread transient-data contract'
 Assert-Literals $normalizedReadme @(
@@ -8671,7 +8701,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 38 is current in v0.34.0.2'
+    'Configuration schema 38 is current in v0.34.0.3'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -8778,7 +8808,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 38 is current in v0.34.0.2',
+    'Configuration schema 38 is current in v0.34.0.3',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -9146,7 +9176,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 38 is current in v0.34.0.2',
+    'Configuration schema 38 is current in v0.34.0.3',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Scholar Smart Spread, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -9226,7 +9256,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 38 is current in v0.34.0.2'
+    'Configuration schema 38 is current in v0.34.0.3'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -9651,4 +9681,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.34.0.2 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 454-test Core registry. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."
+Write-Host "Seiton Sense v0.34.0.3 safety contract verified across $($sourceFiles.Count) source files with schema 38 and the exact 454-test Core registry. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."

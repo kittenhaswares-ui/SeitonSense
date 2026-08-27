@@ -48,6 +48,25 @@ internal static class SmartTabSelectionSelfTests
             Candidate(5, pressure: 0, guard: GuardAvailability.Unknown, mpTrusted: false),
             Candidate(2, pressure: null, guard: GuardAvailability.Ready, mpTrusted: false),
         ]), "stable native slot is the final tie break");
+
+        var cycleCandidates = new[]
+        {
+            Candidate(5, hp: 30),
+            Candidate(2, hp: 10),
+            Candidate(4, hp: 20),
+        };
+        Equal(1, SelectNext(cycleCandidates, currentActor: null),
+            "no current actor starts at rank one regardless of input order");
+        Equal(2, SelectNext(cycleCandidates, cycleCandidates[1].Actor),
+            "an exact current rank one advances to rank two");
+        Equal(0, SelectNext(cycleCandidates, cycleCandidates[2].Actor),
+            "an exact current rank two advances to rank three");
+        Equal(1, SelectNext(cycleCandidates, cycleCandidates[0].Actor),
+            "the last exact ranked actor wraps to rank one");
+        Equal(1, SelectNext(cycleCandidates, new TargetPressureActorIdentity(0x999, 0x999)),
+            "an actor outside the exact eligible set restarts at rank one");
+        Equal(0, SelectNext([cycleCandidates[0]], cycleCandidates[0].Actor),
+            "one eligible actor wraps to itself");
     }
 
     public static void EligibilityAndAmbiguityFailClosed()
@@ -60,6 +79,7 @@ internal static class SmartTabSelectionSelfTests
             valid with { Alive = false },
             valid with { Targetable = false },
             valid with { HasActiveGuard = true },
+            valid with { HasNativeRangeAndLineOfSight = false },
             valid with { CurrentHp = 0 },
             valid with { MaximumHp = 0 },
             valid with { CurrentHp = 101, MaximumHp = 100 },
@@ -78,6 +98,11 @@ internal static class SmartTabSelectionSelfTests
                 LocalPlayer),
             "a caller-proven reviewed ranged tier is eligible");
 
+        Equal(1, Select([
+            Candidate(1, hp: 1) with { HasNativeRangeAndLineOfSight = false },
+            Candidate(2, hp: 50),
+        ]), "a blocked rank-one enemy is skipped for the reachable candidate");
+
         Equal(-1, Select([
             Candidate(1),
             Candidate(1, entityId: 0x302),
@@ -90,6 +115,20 @@ internal static class SmartTabSelectionSelfTests
             Candidate(1, gameObjectId: 0x401, entityId: 0x301),
             Candidate(2, gameObjectId: 0x402, entityId: 0x301),
         ]), "duplicate entity identity fails closed");
+
+        Equal(-1, SelectNext([
+            Candidate(1),
+            Candidate(1, entityId: 0x302),
+        ], currentActor: null), "ranked cycling also fails closed on an ambiguous set");
+
+        var eligible = Candidate(2, hp: 40);
+        var currentButIneligible = Candidate(3, hp: 1) with { HasActiveGuard = true };
+        Equal(0, SelectNext([eligible, currentButIneligible], currentButIneligible.Actor),
+            "an exact but ineligible current actor restarts at eligible rank one");
+        Equal(-1, SelectNext(
+                [eligible],
+                new TargetPressureActorIdentity(eligible.Actor.GameObjectId, 0x999)),
+            "a partial current identity match fails closed");
     }
 
     public static void FrozenIntentNeverReranksOrChangesActor()
@@ -119,10 +158,34 @@ internal static class SmartTabSelectionSelfTests
                 selected with { HasActiveGuard = true },
                 LocalPlayer),
             "the frozen actor becoming ineligible cancels without substitution");
+        False(SmartTabSelectionRules.CanSetExactIntent(
+                intent,
+                selected with { HasNativeRangeAndLineOfSight = false },
+                LocalPlayer),
+            "the frozen actor losing native line of sight cancels without substitution");
+
+        True(SmartTabSelectionRules.TryCreateIntent(
+                [selected, other],
+                LocalPlayer,
+                selected.Actor,
+                out var cycledIntent),
+            "an exact eligible current actor can freeze the next ranked actor");
+        Equal(other.Actor, cycledIntent.Target,
+            "cycle intent freezes only the next exact ranked actor");
+        False(SmartTabSelectionRules.CanSetExactIntent(
+                cycledIntent,
+                selected,
+                LocalPlayer),
+            "cycle intent cannot fall back to the formerly current actor");
     }
 
     private static int Select(IReadOnlyList<SmartTabSelectionCandidate> candidates) =>
         SmartTabSelectionRules.SelectBestCandidateIndex(candidates, LocalPlayer);
+
+    private static int SelectNext(
+        IReadOnlyList<SmartTabSelectionCandidate> candidates,
+        TargetPressureActorIdentity? currentActor) =>
+        SmartTabSelectionRules.SelectNextCandidateIndex(candidates, LocalPlayer, currentActor);
 
     private static SmartTabSelectionCandidate Candidate(
         int slot,
@@ -147,6 +210,7 @@ internal static class SmartTabSelectionSelfTests
             Alive: true,
             Targetable: true,
             HasActiveGuard: false,
+            HasNativeRangeAndLineOfSight: true,
             hp,
             maxHp,
             reach,

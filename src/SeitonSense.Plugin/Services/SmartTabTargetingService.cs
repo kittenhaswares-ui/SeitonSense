@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using SeitonSense.Core;
@@ -20,6 +21,7 @@ internal enum SmartTabTargetingOutcome
     NotCrystallineConflict,
     LocalPlayerUnavailable,
     UnsupportedJob,
+    LineOfSightProbeUnavailable,
     CanonicalIdentityRejected,
     AmbiguousCanonicalIdentity,
     NoEligibleTarget,
@@ -34,6 +36,7 @@ internal sealed record SmartTabTargetingDiagnostics(
     bool HookAvailable,
     bool Started,
     bool Configured,
+    bool LineOfSightProbeVerified,
     bool IsCrystallineConflict,
     uint LocalJobId,
     int ResolvedSlotCount,
@@ -59,6 +62,7 @@ internal sealed record SmartTabTargetingDiagnostics(
         false,
         false,
         false,
+        false,
         0,
         0,
         0,
@@ -80,7 +84,7 @@ internal sealed record SmartTabTargetingDiagnostics(
 
     internal string ToChatLine() =>
         $"hook={HookAvailable},started={Started},configured={Configured}," +
-        $"cc={IsCrystallineConflict},job={LocalJobId}," +
+        $"los-probe={LineOfSightProbeVerified},cc={IsCrystallineConflict},job={LocalJobId}," +
         $"slots={ResolvedSlotCount},candidates={CandidateCount}," +
         $"selected=S{SelectedEnemySlot}/{SelectedGameObjectId:X}/{SelectedEntityId:X}/" +
         $"{SelectedReachTier},outcome={Outcome}," +
@@ -96,8 +100,9 @@ internal sealed record SmartTabTargetingDiagnostics(
 /// TARGET_NEXT binding and UI/input gates, so remaps remain native while reverse
 /// targeting and unrelated inputs never become owned requests. Toggle-off,
 /// unsupported jobs, and unsupported contexts call the original cycle unchanged.
-/// An owned request sets at most one exact hard target and never dispatches an
-/// action, calls the native cycle, retries, reranks, restores, or substitutes.
+/// An owned request ranks once, advances from the exact current target, and
+/// sets at most one exact hard target. It never dispatches an action, calls the
+/// native cycle, retries, reranks, restores, or substitutes.
 /// </summary>
 internal sealed unsafe class SmartTabTargetingService : IDisposable
 {
@@ -123,6 +128,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
     private readonly IDutyState dutyState;
+    private readonly bool lineOfSightProbeMetadataVerified;
     private readonly TargetPressureTracker pressureTracker;
     private readonly ExecuteTracker executeTracker;
     private readonly IPluginLog log;
@@ -149,6 +155,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
         IObjectTable objectTable,
         IPartyList partyList,
         IDutyState dutyState,
+        bool lineOfSightProbeMetadataVerified,
         IGameInteropProvider interop,
         ISigScanner sigScanner,
         TargetPressureTracker pressureTracker,
@@ -160,6 +167,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
         this.objectTable = objectTable;
         this.partyList = partyList;
         this.dutyState = dutyState;
+        this.lineOfSightProbeMetadataVerified = lineOfSightProbeMetadataVerified;
         this.pressureTracker = pressureTracker;
         this.executeTracker = executeTracker;
         this.log = log;
@@ -216,6 +224,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
         HookAvailable = HooksAvailable,
         Started = started && !disposed,
         Configured = configuration.Enabled && configuration.EnableSmartTabTargeting,
+        LineOfSightProbeVerified = lineOfSightProbeMetadataVerified,
         NativeForwardRequestCount = Volatile.Read(ref nativeForwardRequestCount),
         ConsumedRequestCount = Volatile.Read(ref consumedRequestCount),
         ConsumedWithoutSelectionCount = Volatile.Read(ref consumedWithoutSelectionCount),
@@ -341,6 +350,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
                 ExactCrystallineConflict:
                     IsExactCrystallineConflictContext(executeTracker.Diagnostics),
                 ReviewedSmartTabJob: SmartTargetReachRules.IsReviewedSmartTabJob(localJobId),
+                NativeLineOfSightProbeVerified: lineOfSightProbeMetadataVerified,
                 LocalPlayerAvailable: localPlayerAvailable,
                 NativeWorldForwardCycle: true);
             if (!SmartTabInterceptionRules.ShouldConsumeNativeForwardTarget(observation))
@@ -355,7 +365,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
 
             owned = true;
             Interlocked.Increment(ref consumedRequestCount);
-            if (SelectBestTargetOnce(targetSystem))
+            if (SelectNextTargetOnce(targetSystem))
                 return 1;
 
             Interlocked.Increment(ref consumedWithoutSelectionCount);
@@ -386,7 +396,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
         targetingKeybindsHook?.IsEnabled == true &&
         targetCycleHook?.IsEnabled == true;
 
-    private bool SelectBestTargetOnce(TargetSystem* targetSystem)
+    private bool SelectNextTargetOnce(TargetSystem* targetSystem)
     {
         Interlocked.Increment(ref requestCount);
         var configured = configuration.Enabled && configuration.EnableSmartTabTargeting;
@@ -432,6 +442,28 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
                     "Smart Tab ignored: current job is not a reviewed DPS",
                     localJobId);
             }
+
+            if (!lineOfSightProbeMetadataVerified)
+            {
+                return Reject(
+                    SmartTabTargetingOutcome.LineOfSightProbeUnavailable,
+                    configured,
+                    true,
+                    "Smart Tab ignored: native line-of-sight probe metadata unavailable",
+                    localJobId);
+            }
+
+            if (targetSystem == null)
+            {
+                return Fail(
+                    SmartTabTargetingOutcome.ContextChanged,
+                    configured,
+                    true,
+                    "Smart Tab left the current target unchanged: native target system unavailable",
+                    localJobId);
+            }
+
+            var currentHardTargetAddress = (nint)targetSystem->GetHardTarget();
 
             var localActor = new TargetPressureActorIdentity(local.GameObjectId, local.EntityId);
             var partyEntityIds = GetPartyEntityIds();
@@ -493,9 +525,34 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
             var selectionCandidates = candidates
                 .Select(static candidate => candidate.Selection)
                 .ToArray();
+
+            TargetPressureActorIdentity? currentActor = null;
+            if (currentHardTargetAddress != nint.Zero)
+            {
+                var currentMatches = candidates
+                    .Where(candidate => candidate.Address == currentHardTargetAddress)
+                    .Take(2)
+                    .ToArray();
+                if (currentMatches.Length > 1)
+                {
+                    return Reject(
+                        SmartTabTargetingOutcome.AmbiguousCanonicalIdentity,
+                        configured,
+                        true,
+                        "Smart Tab failed closed: current hard-target address was ambiguous",
+                        localJobId,
+                        resolvedSlotCount,
+                        candidates.Count);
+                }
+
+                if (currentMatches.Length == 1)
+                    currentActor = currentMatches[0].Selection.Actor;
+            }
+
             if (!SmartTabSelectionRules.TryCreateIntent(
                     selectionCandidates,
                     localActor,
+                    currentActor,
                     out var intent))
             {
                 return Reject(
@@ -601,21 +658,6 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
                     exactIntent.Selection.ReachTier);
             }
 
-            if (targetSystem == null)
-            {
-                return Fail(
-                    SmartTabTargetingOutcome.ContextChanged,
-                    configured,
-                    true,
-                    "Smart Tab left the current target unchanged: native target system unavailable",
-                    localJobId,
-                    resolvedSlotCount,
-                    candidates.Count,
-                    intent.EnemySlot,
-                    intent.Target,
-                    exactIntent.Selection.ReachTier);
-            }
-
             Interlocked.Increment(ref setterInvocationCount);
             var setterAccepted = targetSystem->SetHardTarget((GameObject*)exactTarget.Address);
             if (!setterAccepted)
@@ -659,7 +701,9 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
                 intent.Target,
                 exactIntent.Selection.ReachTier,
                 SmartTabTargetingOutcome.Selected,
-                $"Selected S{intent.EnemySlot} through the native hard-target setter");
+                currentActor is { } anchor
+                    ? $"Advanced from {anchor.EntityId:X} to S{intent.EnemySlot} through the native hard-target setter"
+                    : $"Selected ranked S{intent.EnemySlot} through the native hard-target setter");
             return true;
         }
         catch (Exception exception)
@@ -732,6 +776,10 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
             }
         }
 
+        var hasNativeRangeAndLineOfSight = HasNativeRangeAndLineOfSight(
+            localPlayer,
+            enemy);
+
         candidate = new SmartTabSelectionCandidate(
             enemySlot,
             actor,
@@ -740,6 +788,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
             Alive: IsLiveTarget(enemy),
             Targetable: enemy.IsTargetable,
             HasActiveGuard: HasActiveGuardStatus(enemy),
+            HasNativeRangeAndLineOfSight: hasNativeRangeAndLineOfSight,
             enemy.CurrentHp,
             enemy.MaxHp,
             reachTier,
@@ -749,6 +798,23 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
             currentMp,
             maximumMp);
         return true;
+    }
+
+    private static bool HasNativeRangeAndLineOfSight(
+        IPlayerCharacter source,
+        IPlayerCharacter target)
+    {
+        if (!HasValidIdentity(source) || !HasValidIdentity(target)) return false;
+
+        var sourceObject = (GameObject*)source.Address;
+        var targetObject = (GameObject*)target.Address;
+        if (sourceObject == null || targetObject == null) return false;
+
+        var result = ActionManager.GetActionInRangeOrLoS(
+            EnemyCombatConstants.ScholarCriticalStrategyActionId,
+            sourceObject,
+            targetObject);
+        return SeitonRangeRules.HasNativeRangeAndLineOfSight(result);
     }
 
     private HashSet<uint> GetPartyEntityIds() => partyList
@@ -896,6 +962,7 @@ internal sealed unsafe class SmartTabTargetingService : IDisposable
             HooksAvailable,
             started && !disposed,
             configured,
+            lineOfSightProbeMetadataVerified,
             isCrystallineConflict,
             localJobId,
             resolvedSlotCount,

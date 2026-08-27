@@ -11,6 +11,7 @@ public readonly record struct SmartTabInterceptionObservation(
     bool InsideNativeTargetingHandler,
     bool ExactCrystallineConflict,
     bool ReviewedSmartTabJob,
+    bool NativeLineOfSightProbeVerified,
     bool LocalPlayerAvailable,
     bool NativeWorldForwardCycle);
 
@@ -29,6 +30,7 @@ public static class SmartTabInterceptionRules
         observation.InsideNativeTargetingHandler &&
         observation.ExactCrystallineConflict &&
         observation.ReviewedSmartTabJob &&
+        observation.NativeLineOfSightProbeVerified &&
         observation.LocalPlayerAvailable &&
         observation.NativeWorldForwardCycle;
 }

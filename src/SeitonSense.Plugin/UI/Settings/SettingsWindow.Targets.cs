@@ -26,7 +26,7 @@ internal sealed partial class SettingsWindow
             "Toggle OFF is fully vanilla. Shift+Tab/reverse targeting, chat/UI Tab input, other targeting commands, " +
             "unsupported jobs, and all other content remain unchanged. /smarttab and /sstarget toggle this option.");
         ImGui.TextDisabled(
-            "One press first considers enemies within 5 yalms of hitbox-edge melee reach, then only enemies inside " +
+            "The ranked cycle first considers enemies within 5 yalms of hitbox-edge melee reach, then only enemies inside " +
             "the reviewed range of that melee job's gap closer. Inside the first non-empty tier it ranks lowest HP%, " +
             "highest fresh team pressure, observed Wehr cooldown unavailable, lowest trusted MP%, then stable S-slot. " +
             "An enemy with live Wehr is excluded.");
@@ -35,11 +35,11 @@ internal sealed partial class SettingsWindow
             "DNC uses its 15-yalm Cascade/Fountain range. Only living, targetable canonical enemies inside that exact " +
             "hitbox-edge range are considered.");
         ImGui.TextDisabled(
-            "Because no combat action is being attempted, Smart Tab uses exact geometric reach rather than pretending " +
-            "to have an action-specific native range/line-of-sight result. For an owned Tab press it freezes one exact " +
-            "S1-S5 actor, revalidates it, sets the hard target once, and verifies readback. If no valid candidate " +
-            "exists, the current target remains unchanged instead of running the vanilla cycle. There is no action, " +
-            "retry, rerank, or alternate target.");
+            "Every geometrically admitted enemy must also pass a metadata-verified native FFXIV range/line-of-sight " +
+            "probe. If the current target is in the reachable ranked list, the next forward Tab advances to its " +
+            "successor and wraps; otherwise it starts at the best-ranked enemy. Manual targeting automatically " +
+            "re-anchors this stateless cycle. The chosen exact S1-S5 actor is revalidated, including line of sight, " +
+            "then set once with exact readback. There is no combat action, retry, rerank, or alternate target.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.34.0.3
+
+- Fixed **Smart Tab** admitting enemies behind walls. Every geometrically
+  eligible enemy now also needs FFXIV's native range/line-of-sight result from a
+  metadata-verified hostile spatial probe. The frozen target is probed again
+  immediately before the single hard-target write; blocked, out-of-range, or
+  unknown results fail closed without an alternate target.
+- Fixed repeated forward Tab presses selecting the same highest-ranked enemy.
+  Smart Tab now advances from the exact current eligible target through the
+  freshly ranked reachable list and wraps after the last actor. If the current
+  target is absent or ineligible, selection starts at rank one. The cycle stores
+  no cursor, so manual target changes re-anchor it automatically.
+- Reverse targeting, unsupported jobs and contexts, and metadata-unverified
+  clients remain on FFXIV's native path. Smart Tab still performs no combat
+  action and keeps its one-setter, exact-readback, no-retry/no-alternate
+  boundary. Configuration schema remains `38`; all `454` Core tests pass.
+
 ## 0.34.0.2
 
 - Fixed the live **Scholar Smart Spread** shield blocker: Galvanize can be

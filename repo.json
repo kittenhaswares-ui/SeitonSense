@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, Scholar Smart Spread, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.34.0.2",
-    "Changelog": "Fixed Scholar Smart Spread's live CC blockers: after the complete owned setup pair is observed once, a surviving status such as Catalyze remains deployable after Galvanize is consumed; stable exact 2-5 actor slices no longer fail because one roster actor is unresolved; DoT-first planning survives the shared PvP GCD; transient readiness waits; and ordinary drift/manual conflicts replan under the same hold. Plugin-issued Scholar attempts are now logged. Monk now reserves Wind, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering. Schema 38 remains current; all 454 Core tests pass; current-patch in-game validation remains separate.",
+    "AssemblyVersion": "0.34.0.3",
+    "Changelog": "Fixed Smart Tab targeting enemies behind walls: every geometrically eligible enemy now also needs FFXIV's native range/line-of-sight result and the frozen target is checked again immediately before the one exact hard-target write. Repeated forward Tab now advances through the smart-ranked reachable list and wraps instead of repeatedly selecting rank one; manual target changes automatically re-anchor the stateless cycle. Reverse targeting and unsupported or metadata-unverified contexts remain vanilla. Schema 38 remains current; all 454 Core tests pass; current-patch in-game validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -33,6 +33,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787674491"
+    "LastUpdate": "1787800038"
   }
 ]

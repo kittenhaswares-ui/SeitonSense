@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.34.0.2";
+    private const string CurrentReleaseVersion = "0.34.0.3";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -204,6 +204,7 @@ public sealed class Plugin : IDalamudPlugin
             objectTable,
             partyList,
             dutyState,
+            metadata.ScholarCriticalStrategyVerified,
             interop,
             sigScanner,
             pressureTracker,
@@ -311,9 +312,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Scholar now requires the complete owned setup pair once, then still spreads Catalyze after Galvanize is consumed and replans ordinary live drift without a full WASD release.",
-                "Scholar preserves DoT-first planning across the shared PvP GCD, accepts stable exact 2-5 actor slices, waits through transient readiness, and logs every plugin-issued spread attempt.",
-                "Monk now reserves Wind's Reply, Thunderclap, and Rising Phoenix across transient readiness and guarantees confirmed Wind -> Thunderclap -> Phantom ordering. Schema 38 is unchanged; all 454 Core tests pass.",
+                "Smart Tab now requires FFXIV's native range and line-of-sight result, so enemies behind walls are excluded before targeting and checked again immediately before the target write.",
+                "Repeated forward Tab presses now advance through the smart-ranked reachable enemies and wrap, instead of repeatedly selecting the same best target. Manual target changes automatically re-anchor the cycle.",
+                "Reverse targeting and every unsupported context remain vanilla. Smart Tab still performs one exact hard-target write with no action, retry, alternate, or fallback. Schema 38 is unchanged; all 454 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

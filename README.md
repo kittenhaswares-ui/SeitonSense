@@ -2,13 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.34.0.2 fixes Scholar's live
-half-status, incomplete-roster, shared-GCD planning, transient-readiness, and terminal-hold blockers;
-every plugin-issued Scholar attempt is now identifiable in the local Dalamud
-log. Held Monk now reserves Wind's Reply before Phantom, then guarantees a
-confirmed Wind's Reply -> Thunderclap -> Phantom Rush order across transient
-GCD/readiness and knockback-position frames. It
-retains v0.34's measured counter-CC timing plus default-off RDM Vice of Thorns
+assistance, and target highlights. Version 0.34.0.3 fixes Smart Tab's ranged
+line-of-sight and repeated-target lock: every geometrically admitted enemy must
+now pass FFXIV's native range/line-of-sight result, and repeated forward Tab
+presses advance through the smart-ranked reachable list with wrap. Manual target
+changes automatically re-anchor that stateless cycle. It retains v0.34.0.2's
+Scholar and Monk reliability fixes plus v0.34's measured counter-CC timing and default-off RDM Vice of Thorns
 and BLM Frost Star. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
@@ -1250,9 +1249,11 @@ commands, unsupported jobs, and contexts outside exact CC call the native paths
 unchanged.
 
 One owned forward-target press resolves unique, living, hostile, targetable,
-exact canonical `S1`-`S5` enemies and excludes live Guard. Reach is geometric
-because no combat action is being attempted: hitbox-edge distance is center
-distance minus both actors' hitbox radii, clamped at zero. Melee jobs first use
+exact canonical `S1`-`S5` enemies and excludes live Guard. Geometric reach is
+hitbox-edge distance: center distance minus both actors' hitbox radii, clamped
+at zero. Every geometrically admitted candidate must additionally pass FFXIV's
+native range/line-of-sight query through a metadata-verified hostile 25-yalm
+probe; geometry still enforces each job's narrower authored cap. Melee jobs first use
 the 5-yalm melee tier, then the reviewed gap cap: 20 yalms for MNK, DRG, NIN,
 SAM, and VPR, or 15 yalms for RPR. Ranged jobs have no melee preference: BRD,
 BLM, SMN, MCH, RDM, and PCT use one 25-yalm tier, while DNC uses one 15-yalm
@@ -1262,15 +1263,19 @@ enemies beyond the reviewed job cap fail closed.
 Inside the first non-empty reach tier, ranking is lowest exact HP ratio, highest
 fresh positive team pressure, verified Guard cooldown unavailable, lowest
 trusted MP ratio, then stable native S-slot. Zero, unavailable, or stale pressure
-is neutral. The winner's exact slot, game-object ID, entity ID, address, and
-reach tier are frozen and revalidated. Missing candidates or any identity,
-geometry, context, or reach failure before the setter consume only that owned
+is neutral. When the current hard target exactly belongs to that eligible ranked
+list, the press selects its successor and wraps after the last actor. Otherwise
+it starts at rank one. No persistent cursor is stored, so a manual target change
+automatically re-anchors the next press. The selected actor's exact slot,
+game-object ID, entity ID, address, and reach tier are frozen and revalidated,
+including a second native line-of-sight check immediately before the setter.
+Missing candidates or any identity, geometry, context, or reach failure consume only that owned
 forward cycle without a target write, so the current hard target remains
 unchanged. Otherwise Seiton Sense invokes the visible hard-target setter once
 and verifies exact readback once. Setter rejection or readback mismatch is
 terminal: there is no retry, rerank, or alternate candidate, and the plugin does
-not claim that the pre-call target was restored. Smart Tab never sends an action
-or keeps pending work.
+not claim that the pre-call target was restored. The native probe only asks for
+spatial validity; Smart Tab never sends a combat action or keeps pending work.
 
 ## One-shot Smart Action macro
 
@@ -1587,7 +1592,7 @@ accepted-Eukrasia Smart Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 38 is current in v0.34.0.2. It adds RDM Vice of Thorns and
+Configuration schema 38 is current in v0.34.0.3. It adds RDM Vice of Thorns and
 BLM Frost Star as default-off protection-end options and resets unversioned
 impact-calibration evidence. GNB Continuation, DRK Shadowbringer, Monk combo,
 SAM counter-CC/Zantetsuken, PLD Intervene, RDM Resolution, Vice of Thorns, and
@@ -1890,13 +1895,14 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For current v0.34.0.2, the exact 454-test Core registry and source checks pin
+For current v0.34.0.3, the exact 454-test Core registry and source checks pin
 configuration schema 38, ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths, Emergency Teleport, and independent Scholar Smart Spread. Smart Tab checks retain the paired
 targeting-handler/helper scope, native binding and UI/input gates, forward-only
-ownership, complete actor freeze, one hard-target setter/readback, and no retry or
-alternate. They additionally pin one 25-yalm tier for BRD/BLM/SMN/MCH/RDM/PCT,
+ownership, metadata-verified native range/line-of-sight admission, a stateless
+current-target-anchored ranked cycle with wrap, complete actor freeze, one
+hard-target setter/readback, and no retry or alternate. They additionally pin one 25-yalm tier for BRD/BLM/SMN/MCH/RDM/PCT,
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
 paths. Smart Action remains a separate one-shot harmful-action macro contract.
