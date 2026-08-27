@@ -2,14 +2,18 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.34.0.4 makes Smart Action replace
-the incoming harmful action's target ID with the exact selected Smart Target
-without changing the visible target. Chiten, Guard, Covered, Paladin LB, and
-Dark Knight LB protection are excluded; target-centered circles also avoid
-protected actors inside their effect radius, while unreviewed AoE shapes fail
-closed. It retains v0.34.0.3's Smart Tab line-of-sight and ranked-cycle fixes,
-v0.34.0.2's Scholar and Monk reliability fixes, and v0.34's measured counter-CC
-timing plus default-off RDM Vice of Thorns and BLM Frost Star. Accepted Auto-Guard can show a card/sound and protects
+assistance, and target highlights. Version 0.35.0.0 integrates a generic
+one-shot action buffer and a separate default-off native Hotbar Turbo directly
+into Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
+one exact direct instant action for 1,000 ms by default, adjustable from
+100-1,500 ms; the movable learning panel shows its key, slot, action, and live
+countdown. Turbo repeats only the newest certified current slot, emits no
+catch-up bursts, and yields to Purify and every higher-priority held helper. Smart
+Action protection is rebuilt directly before a sole delayed replay, while
+audited ReAction/MOAction conflicts disable only that buffer opportunity. It
+retains v0.34.0.4's Chiten, Guard, Covered, Paladin-LB, Dark-Knight-LB, and
+target-circle safety plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
+fixes. Accepted Auto-Guard can show a card/sound and protects
 an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
 v0.32's Emergency Teleport and Scholar Smart Spread plus v0.31's ranged Smart

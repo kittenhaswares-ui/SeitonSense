@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.35.0.0
+
+- Integrated a generic one-shot action buffer directly into Seiton Sense. A
+  fresh physical press on a standard keyboard hotbar may retain one exact
+  direct instant action for 1,000 ms by default, adjustable from 100-1,500 ms,
+  when the client rejects it only for a short local recast or animation lock.
+  The post-Smart-Action target, resolved action, slot, local actor, territory,
+  and instance remain immutable; at most one later native request is made.
+  Casts, ground-targeted or movement actions, macros, mouse clicks, controller/
+  cross-hotbar input, resource failures, and ambiguous results are excluded.
+- Added a separate default-off native Hotbar Turbo. Holding a certified key
+  repeats only its current standard-hotbar slot; the newest physical input owns
+  repetition, no catch-up burst is emitted, and native slot/macro semantics stay
+  with the game. Disabling or reconfiguring Turbo, including enabling its
+  outside-combat test scope, requires a real release and new press. A movable,
+  lockable learning panel shows the certified key, slot, action, held state, and
+  live buffer countdown.
+- Connected both paths to Seiton's Purify-first held scheduler. Critical
+  utilities pause final buffered dispatch and Turbo for that framework frame
+  without consuming their intent. The optional PvP latency-response budget may
+  extend only proven clean-false held retries; it does not fabricate acceptance
+  or broaden action, target, range, or context ownership.
+- Preserved Smart Action safety across delayed replay: the requested/resolved
+  action and target must still match, then Chiten, Guard, Covered, Paladin LB,
+  Dark Knight LB, and supported target-circle protection are rebuilt directly
+  before the sole native call. Audited ReAction/MOAction conflicts fail closed
+  for only that buffer opportunity; ordinary native input and Turbo are not
+  blocked. Compatibility is checked in memory without scanning plugin files.
+- Configuration schema is now `40`; all `518` Core tests, the warning-free
+  Release build, package safety contract, and artifact parity checks pass.
+  Current-patch live in-game behavior remains a separate validation boundary.
+
 ## 0.34.0.4
 
 - Smart Action now treats protection safety as part of target replacement. A

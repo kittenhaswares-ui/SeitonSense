@@ -8921,17 +8921,21 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.34.0.4</Version>',
-    '<AssemblyVersion>0.34.0.4</AssemblyVersion>',
-    '<FileVersion>0.34.0.4</FileVersion>'
-) 'v0.34.0.4 project version'
+    '<Version>0.35.0.0</Version>',
+    '<AssemblyVersion>0.35.0.0</AssemblyVersion>',
+    '<FileVersion>0.35.0.0</FileVersion>'
+) 'v0.35.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.34.0.4";',
-    'Smart Action now sends the chosen Smart Target''s exact canonical target ID with the incoming harmful action while leaving your visible hard, soft, Focus, and mouseover targets unchanged.',
-    'Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are skipped.',
-    'Target-centered circles also avoid protected enemies inside their effect radius; unreviewed AoE shapes fail closed.',
-    'The target and full protection snapshot are checked again immediately before the sole native action call, and the authored fallback remains under a short exact-action safety lease. Schema 38 is unchanged; all 461 Core tests pass.'
-) 'v0.34.0.4 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.35.0.0";',
+    'Seiton Sense now includes a 1,000-ms one-shot action buffer, adjustable from 100-1,500 ms, for fresh physical standard-keyboard hotbar presses.',
+    'It freezes one exact instant action and target; casts, ground targets, macros, mouse clicks, and controller input are not buffered.',
+    'Native Hotbar Turbo is a separate default-off hold option:',
+    'it repeats only the newest certified current slot, has no catch-up bursts, and yields to Purify and every higher-priority held helper.',
+    'The movable learning panel shows the current key, slot, action, and buffer countdown.',
+    'Smart Action protection is checked again before the sole replay.',
+    'ReAction or MOAction conflicts disable only that buffer opportunity, not native input or Turbo.',
+    'Configuration schema 40 is current; all 518 Core tests pass.'
+) 'v0.35.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8950,21 +8954,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.34.0.4 plugin manifest metadata'
+) 'v0.35.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.34.0.4"',
-    'Smart Action now replaces the incoming harmful action''s target ID with the exact selected Smart Target without changing the visible target.',
-    'Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are excluded;',
-    'target-centered circles also avoid protected actors inside their effect radius, and unreviewed AoE shapes fail closed.',
-    'The exact canonical target and protection snapshot are rechecked immediately before the sole native action call,',
-    'a bounded exact-action lease protects the authored fallback after native rejection.',
-    'Schema 38 remains current; all 461 Core tests pass',
+    '"AssemblyVersion": "0.35.0.0"',
+    'Seiton Sense now includes a generic one-shot action buffer for fresh physical standard-keyboard hotbar presses:',
+    '1,000 ms by default, adjustable from 100-1,500 ms, with one immutable instant action and target plus a movable learning panel.',
+    'Native Hotbar Turbo is a separate default-off hold option which repeats only the newest certified current slot, has no catch-up bursts, and yields to Purify and every higher-priority held helper.',
+    'Smart Action protection is rechecked before the sole replay;',
+    'audited ReAction/MOAction conflicts disable only that buffer opportunity, never native input or Turbo.',
+    'Casts, ground targets, macros, mouse clicks, and controller input are not buffered.',
+    'Configuration schema 40 is current; all 518 Core tests pass;',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.34.0.4 custom-repository metadata'
+) 'v0.35.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8994,17 +8999,19 @@ Assert-Literals $normalizedPrivacy @(
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'Configuration schema 40 is current.'
-) 'v0.34.0.4 Smart Tab transient-data, native-LoS, and stateless-cycle disclosure'
+) 'v0.35.0.0 Smart Tab and integrated-input disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.34.0.4 makes Smart Action replace the incoming harmful action''s target ID with the exact selected Smart Target without changing the visible target.',
-    'Chiten, Guard, Covered, Paladin LB, and Dark Knight LB protection are excluded;',
-    'target-centered circles also avoid protected actors inside their effect radius, while unreviewed AoE shapes fail closed.',
-    'It retains v0.34.0.3''s Smart Tab line-of-sight and ranked-cycle fixes,',
+    'Version 0.35.0.0 integrates a generic one-shot action buffer and a separate default-off native Hotbar Turbo directly into Seiton Sense.',
+    'A fresh physical standard-keyboard-hotbar press may retain one exact direct instant action for 1,000 ms by default, adjustable from 100-1,500 ms;',
+    'the movable learning panel shows its key, slot, action, and live countdown.',
+    'Turbo repeats only the newest certified current slot, emits no catch-up bursts, and yields to Purify and every higher-priority held helper.',
+    'Smart Action protection is rebuilt directly before a sole delayed replay, while audited ReAction/MOAction conflicts disable only that buffer opportunity.',
+    'It retains v0.34.0.4''s Chiten, Guard, Covered, Paladin-LB, Dark-Knight-LB, and target-circle safety',
+    'v0.34.0.3''s Smart Tab line-of-sight and ranked-cycle fixes.',
     'requires at least two individually double-resolved, stable, unique canonical',
     'Deployment waits until the complete exact locally owned setup pair has been observed once on the frozen target.',
     'After complete-pair proof, either remaining exact status keeps Deployment eligible;',
     'manual conflicts and ordinary target/readiness drift reset for a fresh plan under the same physical hold.',
-    'v0.34.0.2''s Scholar and Monk reliability fixes, and v0.34''s measured counter-CC timing plus default-off RDM Vice of Thorns and BLM Frost Star.',
     'dynamically observed recast timing proves the next charge will return no later than the next Biolysis opportunity.',
     'Unknown timing blocks only that one-charge shield reservation; DoT and two-charge shield plans still use their final native readiness checks.',
     'Single-target setup capture uses the first exact effect recipient; area Deployment retains the animation target.',
@@ -9043,17 +9050,18 @@ Assert-Literals $normalizedReadme @(
     'Scholar Smart Spread remains an independent raw-hold lane and never consumes that frame.',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.34.0.4 current README release and safety contract'
+) 'v0.35.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.34.0.4',
-    'Smart Action now treats protection safety as part of target replacement.',
-    'If the best ranked actor is protected, the next safe Smart Target is selected instead.',
-    'Target-centered circle attacks also reject any candidate whose exact current effect radius plus the protected actor''s hitbox would hit one of those enemies.',
-    'exact canonical target ID rather than a mutable selected-target carrier.',
-    'Closed the authored `<t>` fallback gap with a post-claim 750-ms lease',
-    'an expired arm is not consumed and remains on the vanilla path.',
-    'Configuration schema remains `38`; all `461` Core tests pass.'
-) 'v0.34.0.4 Smart Action target replacement and protection release notes'
+    '## 0.35.0.0',
+    'Integrated a generic one-shot action buffer directly into Seiton Sense.',
+    'The post-Smart-Action target, resolved action, slot, local actor, territory, and instance remain immutable;',
+    'Added a separate default-off native Hotbar Turbo.',
+    'Disabling or reconfiguring Turbo, including enabling its outside-combat test scope, requires a real release and new press.',
+    'Connected both paths to Seiton''s Purify-first held scheduler.',
+    'Preserved Smart Action safety across delayed replay:',
+    'Audited ReAction/MOAction conflicts fail closed for only that buffer opportunity;',
+    'Configuration schema is now `40`; all `518` Core tests'
+) 'v0.35.0.0 integrated input release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.34.0.3',
     'Fixed **Smart Tab** admitting enemies behind walls.',
@@ -10331,4 +10339,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.34.0.4 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 518-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."
+Write-Host "Seiton Sense v0.35.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 518-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path. Scholar Smart Spread is an independent raw-hold lane outside that shared priority: it never consumes the shared frame or cancels a cast, stays gated behind live CC Duty Start, requires stable exact 2-5 actor slices, and may advance its own accepted exact setup from its matching ActionEffect, but requires one observed complete exact owned setup pair on the frozen target before Deployment; only after that proof may either remaining expected owned status keep Deployment eligible."

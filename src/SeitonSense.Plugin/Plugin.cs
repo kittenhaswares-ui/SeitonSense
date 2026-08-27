@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.34.0.4";
+    private const string CurrentReleaseVersion = "0.35.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -340,9 +340,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Action now sends the chosen Smart Target's exact canonical target ID with the incoming harmful action while leaving your visible hard, soft, Focus, and mouseover targets unchanged.",
-                "Active Chiten, Guard, Covered, Paladin LB Hallowed Ground, and Dark Knight LB Undead Redemption are skipped. Target-centered circles also avoid protected enemies inside their effect radius; unreviewed AoE shapes fail closed.",
-                "The target and full protection snapshot are checked again immediately before the sole native action call, and the authored fallback remains under a short exact-action safety lease. Schema 38 is unchanged; all 461 Core tests pass.",
+                "Seiton Sense now includes a 1,000-ms one-shot action buffer, adjustable from 100-1,500 ms, for fresh physical standard-keyboard hotbar presses. It freezes one exact instant action and target; casts, ground targets, macros, mouse clicks, and controller input are not buffered.",
+                "Native Hotbar Turbo is a separate default-off hold option: it repeats only the newest certified current slot, has no catch-up bursts, and yields to Purify and every higher-priority held helper. The movable learning panel shows the current key, slot, action, and buffer countdown.",
+                "Smart Action protection is checked again before the sole replay. ReAction or MOAction conflicts disable only that buffer opportunity, not native input or Turbo. Configuration schema 40 is current; all 518 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
