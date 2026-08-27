@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.35.0.2
+
+- Fixed the v0.35.0.1 `/panicshu` regression. Panic Shukuchi and the NIN
+  Guard-Shukuchi helper once again use the original exact Action/ActionTransient
+  metadata predicate; supplemental Hidden-status discovery can no longer turn
+  either feature into a permanent `Metadata mismatch`.
+- Kept Ninja stealth protection independent: every exact English `Hidden`
+  status row is collected once at startup, and runtime Auto-Purify/Auto-Recup
+  checks compare only those language-independent IDs. The catalog is checked at
+  scheduling, cast-cancel, and final native boundaries without changing manual
+  Purify or Recuperate.
+- The v0.35.0.1 Turbo/Latest Input, Viper Wolves' Den, diagnostics, and Scholar
+  removal changes remain intact. Configuration schema stays `40`; all `510`
+  Core tests and the warning-free Release build pass.
+
 ## 0.35.0.1
 
 - Fixed native Hotbar Turbo so a due repeat is consumed by XIV's normal hotbar

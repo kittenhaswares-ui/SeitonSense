@@ -108,12 +108,12 @@ internal sealed unsafe class SmartRecuperateProbe
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
-        uint ninjaShukuchiHiddenStatusId,
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         bool hardReset = false)
     {
         var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
             localPlayer,
-            ninjaShukuchiHiddenStatusId);
+            ninjaShukuchiHiddenStatuses);
         var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
         var effectiveHardReset = hardReset || stealthSuppressed || nowMilliseconds < 0;
         var localIdentityValid = TryGetExactIdentity(localPlayer, out var localIdentity);
@@ -186,7 +186,7 @@ internal sealed unsafe class SmartRecuperateProbe
             inputClaimed,
             state,
             inputFrame,
-            ninjaShukuchiHiddenStatusId);
+            ninjaShukuchiHiddenStatuses);
 
         var attempted = false;
         var accepted = false;
@@ -202,7 +202,7 @@ internal sealed unsafe class SmartRecuperateProbe
                     metadataVerified,
                     higherPriorityClaimed,
                     inputFrame,
-                    ninjaShukuchiHiddenStatusId,
+                    ninjaShukuchiHiddenStatuses,
                     out attempted);
             }
             catch (Exception exception)
@@ -309,7 +309,7 @@ internal sealed unsafe class SmartRecuperateProbe
         bool metadataVerified,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
-        uint ninjaShukuchiHiddenStatusId,
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         out bool attempted)
     {
         attempted = false;
@@ -317,7 +317,7 @@ internal sealed unsafe class SmartRecuperateProbe
         if (currentLocal is null ||
             NinjaShukuchiStealthGate.IsActive(
                 currentLocal,
-                ninjaShukuchiHiddenStatusId))
+                ninjaShukuchiHiddenStatuses))
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -399,7 +399,7 @@ internal sealed unsafe class SmartRecuperateProbe
         bool inputClaimed,
         SmartRecuperateState currentState,
         EmergencyActionInputFrame inputFrame,
-        uint ninjaShukuchiHiddenStatusId)
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses)
     {
         if (!inputClaimed ||
             !actionStructurallyReady ||
@@ -408,7 +408,7 @@ internal sealed unsafe class SmartRecuperateProbe
             localPlayer is null ||
             NinjaShukuchiStealthGate.IsActive(
                 localPlayer,
-                ninjaShukuchiHiddenStatusId) ||
+                ninjaShukuchiHiddenStatuses) ||
             !TryGetExactIdentity(localPlayer, out var currentIdentity) ||
             currentIdentity != localIdentity ||
             !HasCastCancellationBoundary(localPlayer) ||

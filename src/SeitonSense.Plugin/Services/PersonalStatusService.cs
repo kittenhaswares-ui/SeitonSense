@@ -856,7 +856,7 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             configuration.ExperimentalPurifyBufferMilliseconds,
             emergencyInputFrame,
-            metadata.NinjaShukuchiHiddenStatusId,
+            metadata.NinjaShukuchiHiddenStatuses,
             hardReset);
         // Self-Purify owns the scheduler while its exact enabled CC/key lease is
         // actionable or waiting at the global native boundary. It no longer
@@ -1211,7 +1211,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
-            metadata.NinjaShukuchiHiddenStatusId,
+            metadata.NinjaShukuchiHiddenStatuses,
             hardReset);
         var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         now = Environment.TickCount64;

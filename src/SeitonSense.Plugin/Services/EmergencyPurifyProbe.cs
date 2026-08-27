@@ -82,12 +82,12 @@ internal sealed class EmergencyPurifyProbe
         long nowMilliseconds,
         long bufferMilliseconds,
         EmergencyActionInputFrame inputFrame,
-        uint ninjaShukuchiHiddenStatusId,
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         bool hardReset = false)
     {
         var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
             localPlayer,
-            ninjaShukuchiHiddenStatusId);
+            ninjaShukuchiHiddenStatuses);
         var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
         var effectiveHardReset = hardReset || stealthSuppressed;
         var alive = IsAlive(localPlayer);
@@ -172,7 +172,7 @@ internal sealed class EmergencyPurifyProbe
             actionStateReadable && actionStructurallyReady,
             state,
             inputFrame,
-            ninjaShukuchiHiddenStatusId);
+            ninjaShukuchiHiddenStatuses);
 
         var attempted = false;
         var accepted = false;
@@ -195,7 +195,7 @@ internal sealed class EmergencyPurifyProbe
                     input.IsTextInputActive,
                     inputFrame,
                     frozenKeyCode,
-                    ninjaShukuchiHiddenStatusId,
+                    ninjaShukuchiHiddenStatuses,
                     out attempted);
             }
             catch (Exception exception)
@@ -345,7 +345,7 @@ internal sealed class EmergencyPurifyProbe
         bool textInputActive,
         EmergencyActionInputFrame inputFrame,
         int expectedKeyCode,
-        uint ninjaShukuchiHiddenStatusId,
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         out bool attempted)
     {
         attempted = false;
@@ -359,7 +359,7 @@ internal sealed class EmergencyPurifyProbe
             !HasValidLocalPlayer(localPlayer) ||
             NinjaShukuchiStealthGate.IsActive(
                 localPlayer,
-                ninjaShukuchiHiddenStatusId) ||
+                ninjaShukuchiHiddenStatuses) ||
             expectedKeyCode <= 0 ||
             !inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)expectedKeyCode))
         {
@@ -456,7 +456,7 @@ internal sealed class EmergencyPurifyProbe
         bool actionStructurallyReady,
         EmergencyPurifyBufferState currentState,
         EmergencyActionInputFrame inputFrame,
-        uint ninjaShukuchiHiddenStatusId)
+        NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses)
     {
         if (!configurationEnabled ||
             !isSupportedPvPContext ||
@@ -475,7 +475,7 @@ internal sealed class EmergencyPurifyProbe
             !HasValidLocalPlayer(localPlayer) ||
             NinjaShukuchiStealthGate.IsActive(
                 localPlayer,
-                ninjaShukuchiHiddenStatusId) ||
+                ninjaShukuchiHiddenStatuses) ||
             !HasCastCancellationBoundary(localPlayer))
         {
             return null;

@@ -41,13 +41,13 @@ internal sealed record PvPMetadataValidation(
     bool RedMageViceOfThornsVerified,
     bool BlackMageFrostStarVerified,
     bool MonkHeldComboVerified,
-    uint NinjaShukuchiHiddenStatusId)
+    NinjaShukuchiHiddenStatusCatalog NinjaShukuchiHiddenStatuses)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        0);
+        NinjaShukuchiHiddenStatusCatalog.Empty);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -931,60 +931,70 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
-        var ninjaShukuchiHiddenStatusId = 0u;
         var panicShukuchiVerified = ValidateFeature("Panic Shukuchi", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
             var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
-            var procStatuses = dataManager.GetExcelSheet<ActionProcStatus>(ClientLanguage.English);
-            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
             if (!actions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var action) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var transient) ||
-                !TryResolvePanicShukuchiHiddenStatus(
-                    action,
-                    procStatuses,
-                    statuses,
-                    out var hiddenStatusId))
+                !descriptions.TryGetRow(EnemyCombatConstants.PanicShukuchiActionId, out var transient))
             {
                 return false;
             }
 
             var description = transient.Description.ToString();
-            var verified = string.Equals(
-                               action.Name.ToString(),
-                               "Shukuchi",
-                               StringComparison.Ordinal) &&
-                           action.Icon == EnemyCombatConstants.PanicShukuchiActionIconId &&
-                           action.IsPvP &&
-                           action.IsPlayerAction &&
-                           action.ClassJob.IsValid &&
-                           action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId &&
-                           action.Range == EnemyCombatConstants.PanicShukuchiSheetRange &&
-                           action.EffectRange == 1 &&
-                           action.CastType == 7 &&
-                           action.Cast100ms == 0 &&
-                           action.Recast100ms == EnemyCombatConstants.PanicShukuchiRecast100ms &&
-                           !action.CanTargetSelf &&
-                           !action.CanTargetHostile &&
-                           !action.CanTargetParty &&
-                           !action.CanTargetAlly &&
-                           !action.CanTargetAlliance &&
-                           action.TargetArea &&
-                           action.RequiresLineOfSight &&
-                           action.NeedToFaceTarget &&
-                           action.AffectsPosition &&
-                           description.Contains(
-                               "Move quickly to the specified location.",
-                               StringComparison.Ordinal) &&
-                           description.Contains("Grants Hidden", StringComparison.Ordinal) &&
-                           description.Contains(
-                               "Cannot be executed while bound.",
-                               StringComparison.Ordinal) &&
-                           description.Contains(
-                               "Action changes to Doton while under the effect of Three Mudra.",
-                               StringComparison.Ordinal);
-            if (verified) ninjaShukuchiHiddenStatusId = hiddenStatusId;
-            return verified;
+            return string.Equals(action.Name.ToString(), "Shukuchi", StringComparison.Ordinal) &&
+                   action.Icon == EnemyCombatConstants.PanicShukuchiActionIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.NinjaJobId &&
+                   action.Range == EnemyCombatConstants.PanicShukuchiSheetRange &&
+                   action.EffectRange == 1 &&
+                   action.CastType == 7 &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.PanicShukuchiRecast100ms &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetHostile &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetAlliance &&
+                   action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.NeedToFaceTarget &&
+                   action.AffectsPosition &&
+                   description.Contains(
+                       "Move quickly to the specified location.",
+                       StringComparison.Ordinal) &&
+                   description.Contains("Grants Hidden", StringComparison.Ordinal) &&
+                   description.Contains(
+                       "Cannot be executed while bound.",
+                       StringComparison.Ordinal) &&
+                   description.Contains(
+                       "Action changes to Doton while under the effect of Three Mudra.",
+                       StringComparison.Ordinal);
+        });
+
+        var ninjaShukuchiHiddenStatuses = NinjaShukuchiHiddenStatusCatalog.Empty;
+        _ = ValidateFeature("Ninja Shukuchi Hidden statuses", log, () =>
+        {
+            var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+            var hiddenStatusIds = new List<uint>();
+            foreach (var status in statuses)
+            {
+                if (string.Equals(
+                        status.Name.ToString(),
+                        "Hidden",
+                        StringComparison.Ordinal))
+                {
+                    hiddenStatusIds.Add(status.RowId);
+                }
+            }
+
+            var resolved = NinjaShukuchiHiddenStatusCatalog.Create(hiddenStatusIds);
+            if (!resolved.IsVerified) return false;
+
+            ninjaShukuchiHiddenStatuses = resolved;
+            return true;
         });
 
         var contradanceVerified = ValidateFeature("Contradance", log, () =>
@@ -1432,7 +1442,7 @@ internal static class PvPMetadataGuard
             redMageViceOfThornsVerified,
             blackMageFrostStarVerified,
             monkHeldComboVerified,
-            ninjaShukuchiHiddenStatusId);
+            ninjaShukuchiHiddenStatuses);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -1465,7 +1475,7 @@ internal static class PvPMetadataGuard
             validation.MiracleOfNatureActionVerified,
             validation.SilentNocturneVerified,
             validation.PanicShukuchiVerified,
-            validation.NinjaShukuchiHiddenStatusId,
+            validation.NinjaShukuchiHiddenStatuses.Count,
             validation.ContradanceVerified,
             validation.ZantetsukenVerified,
             validation.FuriousBacklashVerified,
@@ -1707,41 +1717,6 @@ internal static class PvPMetadataGuard
             return false;
         }
     }
-
-    private static bool TryResolvePanicShukuchiHiddenStatus(
-        ActionSheet action,
-        ExcelSheet<ActionProcStatus> procStatuses,
-        ExcelSheet<Status> statuses,
-        out uint hiddenStatusId)
-    {
-        hiddenStatusId = 0;
-        var directStatusId = action.StatusGainSelf.RowId;
-        if (IsExpectedPanicShukuchiHiddenStatus(statuses, directStatusId))
-        {
-            hiddenStatusId = directStatusId;
-            return true;
-        }
-
-        var procRowId = action.ActionProcStatus.RowId;
-        if (procRowId == 0 ||
-            !procStatuses.TryGetRow(procRowId, out var procStatus) ||
-            !IsExpectedPanicShukuchiHiddenStatus(
-                statuses,
-                procStatus.Status.RowId))
-        {
-            return false;
-        }
-
-        hiddenStatusId = procStatus.Status.RowId;
-        return hiddenStatusId != 0;
-    }
-
-    private static bool IsExpectedPanicShukuchiHiddenStatus(
-        ExcelSheet<Status> statuses,
-        uint statusId) =>
-        statusId != 0 &&
-        statuses.TryGetRow(statusId, out var status) &&
-        string.Equals(status.Name.ToString(), "Hidden", StringComparison.Ordinal);
 
     private static bool ValidateSeitonAction(
         ExcelSheet<ActionSheet> actions,

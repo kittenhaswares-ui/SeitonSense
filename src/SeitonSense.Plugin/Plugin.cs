@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.35.0.1";
+    private const string CurrentReleaseVersion = "0.35.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -340,10 +340,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Hotbar Turbo now travels through XIV's native hotbar scan, so the game can show the press on the bar and in Seiton's Latest Input panel. A missed scan is recorded only; it never falls back to a hidden direct action call.",
-                "Viper's held Serpent's Tail now uses the exact hostile <t> in Wolves' Den duels. The reviewed striking dummy remains supported, while Crystalline Conflict keeps its exact e1-e5 targeting.",
-                "Ninja Shukuchi Hidden now blocks automatic Purify and Recuperate both while scheduling and again at the final native boundary. Manual actions and every other Ninja helper remain unchanged.",
-                "The nonfunctional Scholar dot/shield/Deployment Tactics automation was removed; Scholar Critical Strategy remains. Buffer diagnostics now expose compact counters without live file scanning. All 510 Core tests pass.",
+                "Fixed the v0.35.0.1 Panic Shukuchi regression: /panicshu and Guard-Shukuchi again use their original independent Shukuchi action validation and are never disabled by supplemental Hidden-status discovery.",
+                "Ninja Hidden protection remains active. Seiton resolves every exact English Hidden status row once at startup, then blocks only automatic Purify and Recuperate by language-independent status IDs at scheduling and final native boundaries.",
+                "Turbo/Latest Input, Viper Wolves' Den targeting, and the Scholar Smart Spread removal from v0.35.0.1 remain unchanged. All 510 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

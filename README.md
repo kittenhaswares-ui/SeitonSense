@@ -2,11 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.35.0.1 routes native Hotbar Turbo
-through XIV's own hotbar scan so its presses can appear on the bar and in
-Latest Input, fixes Viper's exact hostile `<t>` path in Wolves' Den, removes the
-nonfunctional Scholar dot/shield/Deployment Tactics automation, and prevents
-automatic Purify or Recuperate from breaking Ninja Shukuchi Hidden. The generic
+assistance, and target highlights. Version 0.35.0.2 restores `/panicshu` and
+Guard-Shukuchi's original independent action validation after v0.35.0.1 tied it
+incorrectly to supplemental Hidden-status discovery. Ninja Hidden protection
+now discovers exact English Hidden rows separately at startup and compares only
+language-independent IDs while blocking automatic Purify or Recuperate. It
+retains v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den
+targeting, and removal of the nonfunctional Scholar spread workflow. The generic
 one-shot action buffer remains available directly in Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
 one exact direct instant action for 1,000 ms by default, adjustable from
 100-1,500 ms; the movable learning panel shows its key, slot, action, and live

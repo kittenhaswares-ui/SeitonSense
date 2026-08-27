@@ -1699,6 +1699,22 @@ Assert-Literals $panicShukuchiMetadata @(
     'action.AffectsPosition',
     'Action changes to Doton while under the effect of Three Mudra.'
 ) 'Current-patch Panic Shukuchi metadata gate'
+$panicShukuchiMetadataBlock = [regex]::Match(
+    $panicShukuchiMetadata,
+    '(?s)        var panicShukuchiVerified = ValidateFeature\("Panic Shukuchi".*?(?=\r?\n        var ninjaShukuchiHiddenStatuses =)')
+if (-not $panicShukuchiMetadataBlock.Success -or
+    $panicShukuchiMetadataBlock.Value -match '\b(?:ActionProcStatus|StatusGainSelf|NinjaShukuchiHiddenStatusCatalog|GetExcelSheet<Status>)\b') {
+    throw 'Panic Shukuchi action validation must remain independent of supplemental Hidden-status discovery.'
+}
+Assert-Literals $panicShukuchiMetadata @(
+    'ValidateFeature("Ninja Shukuchi Hidden statuses"',
+    'var hiddenStatusIds = new List<uint>();',
+    'string.Equals(',
+    'status.Name.ToString(),',
+    '"Hidden",',
+    'NinjaShukuchiHiddenStatusCatalog.Create(hiddenStatusIds)',
+    'ninjaShukuchiHiddenStatuses = resolved;'
+) 'Independent best-effort Ninja Hidden status catalog'
 
 Assert-Literals $pluginSource @(
     'private readonly PanicShukuchiService panicShukuchi',
@@ -3705,10 +3721,14 @@ Assert-Literals $purifyProbe @(
     'InputClaimed = inputClaimed'
 ) 'Emergency Purify shared retry boundary and absolute scheduler claim'
 Assert-Literals $ninjaShukuchiStealthGate @(
-    'verifiedHiddenStatusId == 0',
+    'internal sealed class NinjaShukuchiHiddenStatusCatalog',
+    '.Where(statusId => statusId != 0)',
+    '.Distinct()',
+    '.OrderBy(statusId => statusId)',
+    'verifiedHiddenStatuses is not { IsVerified: true }',
     'localPlayer.ClassJob.RowId != EnemyCombatConstants.NinjaJobId',
-    'status.StatusId == verifiedHiddenStatusId'
-) 'Metadata-ID-only Ninja Shukuchi Hidden gate'
+    'verifiedHiddenStatuses.Contains(status.StatusId)'
+) 'Language-independent metadata-ID catalog for Ninja Shukuchi Hidden'
 Assert-Literals $purifyProbe @(
     'var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(',
     'var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;',
@@ -8544,10 +8564,8 @@ Assert-Literals $metadata @(
     'EnemyCombatConstants.ScholarCriticalStrategySheetRange',
     'EnemyCombatConstants.ScholarCriticalStrategyRecast100ms',
     'EnemyCombatConstants.SilentNocturneActionId',
-    'TryResolvePanicShukuchiHiddenStatus(',
-    'action.StatusGainSelf.RowId',
-    'action.ActionProcStatus.RowId',
-    'string.Equals(status.Name.ToString(), "Hidden", StringComparison.Ordinal)',
+    'ValidateFeature("Ninja Shukuchi Hidden statuses"',
+    'NinjaShukuchiHiddenStatusCatalog.Create(hiddenStatusIds)',
     'EnemyCombatConstants.ContradanceActionId',
     'EnemyCombatConstants.SeducedStatusId',
     'EnemyCombatConstants.ZantetsukenActionId',
@@ -8702,8 +8720,8 @@ Assert-Literals $personalStatus @(
     'PvPMatchRules.ResolveSupportedContext',
     'configuration.EnableWolvesDenTesting'
 ) 'Personal status service'
-if ([regex]::Matches($personalStatus, '\bmetadata\.NinjaShukuchiHiddenStatusId\b').Count -ne 2) {
-    throw 'The metadata-verified Ninja Hidden ID must be injected exactly once into Auto-Purify and once into Auto-Recuperate.'
+if ([regex]::Matches($personalStatus, '\bmetadata\.NinjaShukuchiHiddenStatuses\b').Count -ne 2) {
+    throw 'The metadata-verified Ninja Hidden catalog must be injected exactly once into Auto-Purify and once into Auto-Recuperate.'
 }
 if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
     throw 'Self warnings and self-Purify must not depend on resolving an enemy HUD actor.'
@@ -8783,20 +8801,20 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.35.0.1</Version>',
-    '<AssemblyVersion>0.35.0.1</AssemblyVersion>',
-    '<FileVersion>0.35.0.1</FileVersion>'
-) 'v0.35.0.1 project version'
+    '<Version>0.35.0.2</Version>',
+    '<AssemblyVersion>0.35.0.2</AssemblyVersion>',
+    '<FileVersion>0.35.0.2</FileVersion>'
+) 'v0.35.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.35.0.1";',
-    'Hotbar Turbo now travels through XIV''s native hotbar scan',
-    'A missed scan is recorded only; it never falls back to a hidden direct action call.',
-    'Viper''s held Serpent''s Tail now uses the exact hostile <t> in Wolves'' Den duels.',
-    'Ninja Shukuchi Hidden now blocks automatic Purify and Recuperate both while scheduling and again at the final native boundary.',
-    'The nonfunctional Scholar dot/shield/Deployment Tactics automation was removed;',
-    'Buffer diagnostics now expose compact counters without live file scanning.',
+    'private const string CurrentReleaseVersion = "0.35.0.2";',
+    'Fixed the v0.35.0.1 Panic Shukuchi regression:',
+    '/panicshu and Guard-Shukuchi again use their original independent Shukuchi action validation',
+    'Ninja Hidden protection remains active.',
+    'resolves every exact English Hidden status row once at startup',
+    'language-independent status IDs at scheduling and final native boundaries.',
+    'Turbo/Latest Input, Viper Wolves'' Den targeting, and the Scholar Smart Spread removal from v0.35.0.1 remain unchanged.',
     'All 510 Core tests pass.'
-) 'v0.35.0.1 version-acknowledged What''s New content'
+) 'v0.35.0.2 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -8814,22 +8832,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.35.0.1 plugin manifest metadata'
+) 'v0.35.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.35.0.1"',
-    'Hotbar Turbo now travels through XIV''s native hotbar scan',
-    'an unconsumed scan is diagnostic-only and never triggers a hidden direct fallback.',
-    'Viper Serpent''s Tail now uses the exact hostile current target in Wolves'' Den duels',
-    'Ninja Shukuchi Hidden blocks automatic Purify and Recuperate at scheduler and final native boundaries.',
-    'The nonfunctional Scholar dot/shield/Deployment Tactics automation was removed while Scholar Critical Strategy remains.',
-    'Compact buffer/Turbo counters were added without live file scanning or per-frame log spam.',
+    '"AssemblyVersion": "0.35.0.2"',
+    'Fixed the v0.35.0.1 Panic Shukuchi regression:',
+    '/panicshu and Guard-Shukuchi again use the original independent Action/ActionTransient metadata validation',
+    'supplemental Hidden-status discovery can never disable them.',
+    'Ninja stealth protection remains independent and collects every exact English Hidden status row once at startup;',
+    'runtime Auto-Purify and Auto-Recup compare only language-independent IDs at scheduling, cast-cancel, and final native boundaries.',
+    'The v0.35.0.1 Turbo/Latest Input, Viper Wolves'' Den, diagnostics, and Scholar-removal changes remain intact.',
     'Configuration schema 40 remains current; all 510 Core tests pass;',
     'current-patch in-game validation remains separate.',
     '"IsHide": false'
-) 'v0.35.0.1 custom-repository metadata'
+) 'v0.35.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -8862,12 +8880,13 @@ Assert-Literals $normalizedPrivacy @(
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'Configuration schema 40 is current.'
-) 'v0.35.0.1 Smart Tab and integrated-input disclosure'
+) 'v0.35.0.2 Smart Tab and integrated-input disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.35.0.1 routes native Hotbar Turbo through XIV''s own hotbar scan so its presses can appear on the bar and in Latest Input',
-    'fixes Viper''s exact hostile `<t>` path in Wolves'' Den',
-    'removes the nonfunctional Scholar dot/shield/Deployment Tactics automation',
-    'prevents automatic Purify or Recuperate from breaking Ninja Shukuchi Hidden.',
+    'Version 0.35.0.2 restores `/panicshu` and Guard-Shukuchi''s original independent action validation',
+    'v0.35.0.1 tied it incorrectly to supplemental Hidden-status discovery.',
+    'Ninja Hidden protection now discovers exact English Hidden rows separately at startup',
+    'language-independent IDs while blocking automatic Purify or Recuperate.',
+    'retains v0.35.0.1''s native Turbo/Latest Input path, exact Viper Wolves'' Den targeting, and removal of the nonfunctional Scholar spread workflow.',
     'The generic one-shot action buffer remains available directly in Seiton Sense.',
     'A fresh physical standard-keyboard-hotbar press may retain one exact direct instant action for 1,000 ms by default, adjustable from 100-1,500 ms;',
     'the movable learning panel shows its key, slot, action, and live countdown.',
@@ -8905,7 +8924,17 @@ Assert-Literals $normalizedReadme @(
     'constructs fourteen reviewed request shapes across fifteen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.35.0.1 current README release and safety contract'
+) 'v0.35.0.2 current README release and safety contract'
+Assert-Literals $normalizedChangelog @(
+    '## 0.35.0.2',
+    'Fixed the v0.35.0.1 `/panicshu` regression.',
+    'supplemental Hidden-status discovery can no longer turn either feature into a permanent `Metadata mismatch`.',
+    'Kept Ninja stealth protection independent:',
+    'every exact English `Hidden` status row is collected once at startup',
+    'runtime Auto-Purify/Auto-Recup checks compare only those language-independent IDs.',
+    'The v0.35.0.1 Turbo/Latest Input, Viper Wolves'' Den, diagnostics, and Scholar removal changes remain intact.',
+    'Configuration schema stays `40`; all `510` Core tests'
+) 'v0.35.0.2 Panic Shukuchi regression release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.1',
     'Fixed native Hotbar Turbo so a due repeat is consumed by XIV''s normal hotbar scan.',
@@ -8915,7 +8944,7 @@ Assert-Literals $normalizedChangelog @(
     'Removed the nonfunctional Scholar Biolysis/Adloquium/Deployment Tactics held workflow completely.',
     'compact buffer/Turbo counters to `/seiton debug` and one unload summary;',
     'Configuration schema remains `40`; all `510` Core tests'
-) 'v0.35.0.1 hotfix release notes'
+) 'v0.35.0.1 historical hotfix release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.0',
     'Integrated a generic one-shot action buffer directly into Seiton Sense.',
@@ -10168,4 +10197,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.35.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 510-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."
+Write-Host "Seiton Sense v0.35.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 40 and the exact 510-test Core registry. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Eighteen held-option enable edges share physical-input ownership. Cast cancellation constructs fourteen reviewed request shapes across fifteen ordered selection slots. Runtime priority is Purify > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."
