@@ -22,6 +22,7 @@ internal sealed partial class SettingsWindow
         var defense = personalStatus.DefensiveUtilityDiagnostics;
         var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
+        var astrologianOrbis = personalStatus.AstrologianHarmonicOrbisDiagnostics;
         var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
@@ -133,6 +134,24 @@ internal sealed partial class SettingsWindow
             $"rejected/unknown/soft={recuperate.RejectedCount}/{recuperate.UnknownCount}/" +
             $"{recuperate.SoftWaitCount}, " +
             $"last={recuperate.LastEvent}");
+        ImGui.TextWrapped(
+            $"AST held Near Help: metadata={personalStatus.AstrologianHarmonicOrbisMetadataVerified}, " +
+            $"state={astrologianOrbis.Phase}/{astrologianOrbis.Decision}, action/adjusted=" +
+            $"{astrologianOrbis.ResolvedActionId}/{astrologianOrbis.AdjustedDoubleCastActionId}, " +
+            $"candidates={astrologianOrbis.CandidateCount}, P={astrologianOrbis.PartySlot}, target=" +
+            $"{astrologianOrbis.TargetGameObjectId:X}/{astrologianOrbis.TargetEntityId:X}, HP=" +
+            $"{astrologianOrbis.TargetCurrentHp}/{astrologianOrbis.TargetMaximumHp}, pressure-ranking=" +
+            $"{astrologianOrbis.PreferIncomingPressure}, Double Cast ready/charges=" +
+            $"{astrologianOrbis.DoubleCastWasReadyBeforeBase}/" +
+            $"{astrologianOrbis.DoubleCastChargesBeforeBase}, transition=" +
+            $"{astrologianOrbis.TransitionRemainingMilliseconds} ms, ready/boundary=" +
+            $"{astrologianOrbis.LocallyReady}/{astrologianOrbis.NativeBoundaryReady}, key=" +
+            $"{astrologianOrbis.HeldGameplayKey}, claim={astrologianOrbis.InputClaimed}, native=" +
+            $"{astrologianOrbis.NativeAttemptCount}/{astrologianOrbis.LastNativeOutcome}, attempt=" +
+            $"{astrologianOrbis.UseActionAttempted}/{astrologianOrbis.UseActionAccepted}, base=" +
+            $"{astrologianOrbis.BaseAttemptCount}/{astrologianOrbis.BaseAcceptedCount}, double=" +
+            $"{astrologianOrbis.FollowUpAttemptCount}/{astrologianOrbis.FollowUpAcceptedCount}, " +
+            $"last={astrologianOrbis.LastEvent}");
         ImGui.TextWrapped(
             $"Emergency Teleport: {emergencyTeleport.Decision}/{emergencyTeleport.Reason}, " +
             $"danger={emergencyTeleport.Danger}, action={emergencyTeleport.ResolvedActionId}, " +
@@ -315,9 +334,9 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "The current request order is Purify > AST held Near Help > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
             "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; SAM runs directly after Purify, " +
+            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; AST runs directly after Purify and SAM follows AST, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof and never changes a target or cancels a cast. " +

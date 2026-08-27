@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 40;
+    public int Version { get; set; } = 41;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -59,6 +59,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
     public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
+    public bool EnableAstrologianHarmonicOrbisOnHeldKey { get; set; }
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
@@ -280,7 +281,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 40)
+        if (Version >= 41)
         {
             if (repaired) Save();
             return;
@@ -703,7 +704,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             TurboOutsideCombat = false;
         }
 
-        Version = 40;
+        if (Version < 41)
+        {
+            // This helper can issue one direct AST heal and, only when it was
+            // already available, one same-target Double Cast follow-up. Every
+            // upgrading installation must opt in deliberately.
+            EnableAstrologianHarmonicOrbisOnHeldKey = false;
+        }
+
+        Version = 41;
         ClampSettings();
         Save();
     }
@@ -712,7 +721,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 40;
+        Version = 41;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -726,6 +735,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNinjaSeitonOnHeldGameplayKey = false;
         EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
+        EnableAstrologianHarmonicOrbisOnHeldKey = false;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;

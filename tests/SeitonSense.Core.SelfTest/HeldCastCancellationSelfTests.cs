@@ -29,6 +29,7 @@ internal static class HeldCastCancellationSelfTests
             HeldCastCancellationHelperKind.Guard,
             HeldCastCancellationHelperKind.PressureEscapeSprint,
             HeldCastCancellationHelperKind.DarkKnightShadowbringer,
+            HeldCastCancellationHelperKind.AstrologianHarmonicOrbis,
         };
         var actual = Enum.GetValues<HeldCastCancellationHelperKind>()
             .Where(static helper => helper != HeldCastCancellationHelperKind.None)

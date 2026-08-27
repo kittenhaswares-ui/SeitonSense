@@ -13,6 +13,7 @@ internal enum HeldCastCancellationNativeStatus : byte
     Requested = 1,
     NativeBoundaryUnavailable = 2,
     RequestFaulted = 3,
+    BlockedByOwnGuard = 4,
 }
 
 internal sealed record HeldCastCancellationSnapshot(
@@ -51,6 +52,8 @@ internal sealed record HeldCastCancellationSnapshot(
 internal sealed unsafe class HeldCastCancellationService
 {
     private readonly IPluginLog log;
+    private readonly Func<TargetPressureActorIdentity, bool>
+        finalOwnGuardActiveOrPropagating;
     private HeldCastCancellationState state = HeldCastCancellationState.Initial;
     private HeldCastCancellationSnapshot snapshot = HeldCastCancellationSnapshot.Initial;
     private HeldCastCancellationRequest? lastRequestedIntent;
@@ -59,9 +62,16 @@ internal sealed unsafe class HeldCastCancellationService
     private long nativeFaultCount;
     private long nextErrorLogAt;
 
-    internal HeldCastCancellationService(IPluginLog log)
+    internal HeldCastCancellationService(
+        IPluginLog log,
+        Func<TargetPressureActorIdentity, bool>
+            finalOwnGuardActiveOrPropagating)
     {
         this.log = log;
+        this.finalOwnGuardActiveOrPropagating =
+            finalOwnGuardActiveOrPropagating ??
+            throw new ArgumentNullException(
+                nameof(finalOwnGuardActiveOrPropagating));
     }
 
     internal HeldCastCancellationSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -133,6 +143,12 @@ internal sealed unsafe class HeldCastCancellationService
                 {
                     nativeStatus = HeldCastCancellationNativeStatus.NativeBoundaryUnavailable;
                     nativeFaultCount++;
+                }
+                else if (finalOwnGuardActiveOrPropagating(
+                             request!.Value.LocalPlayer))
+                {
+                    nativeStatus =
+                        HeldCastCancellationNativeStatus.BlockedByOwnGuard;
                 }
                 else
                 {
@@ -212,6 +228,8 @@ internal sealed unsafe class HeldCastCancellationService
         {
             HeldCastCancellationNativeStatus.Requested =>
                 "Native cast cancellation requested; awaiting a later clear-cast frame",
+            HeldCastCancellationNativeStatus.BlockedByOwnGuard =>
+                "Native cast cancellation vetoed by a fresh exact own-Guard check",
             HeldCastCancellationNativeStatus.NativeBoundaryUnavailable =>
                 "Native cast-cancel boundary unavailable; no retry in this cast epoch",
             HeldCastCancellationNativeStatus.RequestFaulted =>

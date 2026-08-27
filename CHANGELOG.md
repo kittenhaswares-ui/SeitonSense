@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.36.0.0
+
+- Added a separate default-off Astrologian held-key helper that applies the
+  exact `/nearhelp` friendly selection to living self/party players at or below
+  60% HP, then requests Harmonischer Orbis / Aspected Benefic `29243` directly
+  without changing the visible target. It supports exact Crystalline Conflict
+  and the existing opt-in Wolves' Den test context.
+- If Double Cast `29245` was already locally available before a client-accepted
+  Orbis, the same frozen ally may receive the exact adjusted Orbis repeat
+  `29247` on a later scheduler frame. The follow-up never reranks after the first
+  heal, adopts another Double Cast form, changes targets, or shares an action
+  frame with the base heal.
+- Purify remains absolute scheduler and cast-cancel priority. The AST sequence
+  uses exact metadata, actor/key/context freeze, distinct observed Orbis charge
+  epochs, native readiness/range/line-of-sight revalidation, and the common
+  bounded same-intent retry policy. Active or still-propagating own Guard is
+  checked again at the final action-hook boundary and immediately before any
+  optional native cast cancellation, so neither AST action may break Guard.
+  Configuration schema is `41`; the warning-
+  free Release build, source safety contract, package checks, and all `516` Core
+  tests pass. Live current-patch behavior remains a separate in-game validation
+  boundary.
+
 ## 0.35.0.3
 
 - Fixed `/smartaction` for PvP attacks that explicitly ignore Guard. Seiton now

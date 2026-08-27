@@ -22,6 +22,7 @@ public enum HeldCastCancellationHelperKind : byte
     Guard = 11,
     PressureEscapeSprint = 12,
     DarkKnightShadowbringer = 13,
+    AstrologianHarmonicOrbis = 14,
 }
 
 /// <summary>

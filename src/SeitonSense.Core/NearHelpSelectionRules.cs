@@ -62,10 +62,59 @@ public static class NearHelpSelectionRules
             preferIncomingPressure,
             hasTrustedPressureView).SelectedIndex;
 
+    /// <summary>
+    /// Applies the normal Near Help ordering to the subset at or below one
+    /// exact HP-percentage boundary. Existing Near Help callers remain
+    /// unconstrained; held healing helpers can share the same eligibility,
+    /// pressure, and deterministic tie policy without copying its comparer.
+    /// </summary>
+    public static int SelectBestIndexAtOrBelowHealthPercent(
+        IReadOnlyList<NearHelpSelectionCandidate>? candidates,
+        int maximumHealthPercent,
+        bool preferIncomingPressure = false,
+        bool hasTrustedPressureView = false) =>
+        SelectBestAtOrBelowHealthPercent(
+            candidates,
+            maximumHealthPercent,
+            preferIncomingPressure,
+            hasTrustedPressureView).SelectedIndex;
+
     public static NearHelpSelectionDecision SelectBest(
         IReadOnlyList<NearHelpSelectionCandidate>? candidates,
         bool preferIncomingPressure = false,
-        bool hasTrustedPressureView = false)
+        bool hasTrustedPressureView = false) =>
+        SelectBestCore(
+            candidates,
+            maximumHealthPercent: null,
+            preferIncomingPressure,
+            hasTrustedPressureView);
+
+    public static NearHelpSelectionDecision SelectBestAtOrBelowHealthPercent(
+        IReadOnlyList<NearHelpSelectionCandidate>? candidates,
+        int maximumHealthPercent,
+        bool preferIncomingPressure = false,
+        bool hasTrustedPressureView = false) =>
+        maximumHealthPercent is >= 1 and <= 100
+            ? SelectBestCore(
+                candidates,
+                maximumHealthPercent,
+                preferIncomingPressure,
+                hasTrustedPressureView)
+            : NoEligibleCandidate();
+
+    public static bool IsAtOrBelowHealthPercent(
+        NearHelpSelectionCandidate candidate,
+        int maximumHealthPercent) =>
+        IsEligible(candidate) &&
+        maximumHealthPercent is >= 1 and <= 100 &&
+        (ulong)candidate.CurrentHp * 100UL <=
+        (ulong)candidate.MaximumHp * (uint)maximumHealthPercent;
+
+    private static NearHelpSelectionDecision SelectBestCore(
+        IReadOnlyList<NearHelpSelectionCandidate>? candidates,
+        int? maximumHealthPercent,
+        bool preferIncomingPressure,
+        bool hasTrustedPressureView)
     {
         if (candidates is null || candidates.Count == 0)
             return NoEligibleCandidate();
@@ -74,7 +123,7 @@ public static class NearHelpSelectionRules
         for (var index = 0; index < candidates.Count; index++)
         {
             var candidate = candidates[index];
-            if (!IsEligible(candidate)) continue;
+            if (!IsEligibleForSelection(candidate, maximumHealthPercent)) continue;
             if (healthAnchorIndex < 0 || IsBetterByHealth(candidate, candidates[healthAnchorIndex]))
                 healthAnchorIndex = index;
         }
@@ -108,7 +157,8 @@ public static class NearHelpSelectionRules
         for (var index = 0; index < candidates.Count; index++)
         {
             var candidate = candidates[index];
-            if (!IsEligible(candidate) || !IsInsidePressureWindow(candidate, healthAnchor))
+            if (!IsEligibleForSelection(candidate, maximumHealthPercent) ||
+                !IsInsidePressureWindow(candidate, healthAnchor))
                 continue;
 
             if (candidate.UniqueIncomingEnemyPressureCount is not >= 0)
@@ -137,6 +187,13 @@ public static class NearHelpSelectionRules
             healthAnchorIndex,
             NearHelpSelectionReason.IncomingPressure);
     }
+
+    private static bool IsEligibleForSelection(
+        NearHelpSelectionCandidate candidate,
+        int? maximumHealthPercent) =>
+        IsEligible(candidate) &&
+        (!maximumHealthPercent.HasValue ||
+         IsAtOrBelowHealthPercent(candidate, maximumHealthPercent.Value));
 
     public static bool IsEligible(NearHelpSelectionCandidate candidate) =>
         TargetHighlightRules.IsValidGameObjectId(candidate.GameObjectId) &&

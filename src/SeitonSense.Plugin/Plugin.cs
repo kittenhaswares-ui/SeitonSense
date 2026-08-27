@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.35.0.3";
+    private const string CurrentReleaseVersion = "0.36.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -341,9 +341,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "/smartaction now allows a Guarded enemy only for the exact resolved PvP action whose current English description explicitly says its damage ignores Guard, including transformed combo actions.",
-                "This exception removes Guard only. Chiten, Cover, Paladin LB, Dark Knight LB, and every mixed Guard-plus-protection state remain blocked for direct attacks and AoE.",
-                "Initial selection, frozen-target validation, authored fallback, and delayed buffer replay all use the same fail-closed rule. Configuration schema 40 is unchanged; all 511 Core tests pass.",
+                "New default-off AST held Near Help: while a gameplay key is held, living self/party players at 60% HP or lower use the exact /nearhelp ranking for Harmonischer Orbis / Aspected Benefic without a visible target change.",
+                "If Double Cast was already ready before an accepted Orbis, its exact Orbis repeat is reserved for the same frozen player on a later frame. The first heal never causes a rerank or alternate follow-up.",
+                "Purify and your own Guard remain absolute safety gates. Crystalline Conflict and the existing Wolves' Den test mode are supported. Configuration schema 41 is current; all 516 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -735,6 +735,7 @@ public sealed class Plugin : IDalamudPlugin
                 var defense = personalStatus.DefensiveUtilityDiagnostics;
                 var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
                 var recuperate = personalStatus.SmartRecuperateDiagnostics;
+                var astrologianOrbis = personalStatus.AstrologianHarmonicOrbisDiagnostics;
                 var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
                 var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
@@ -849,6 +850,25 @@ public sealed class Plugin : IDalamudPlugin
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
                     $"{CcProtectionStatusCatalog.Definitions.Count}]");
                 chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
+                chatGui.Print(
+                    $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +
+                    $"phase={astrologianOrbis.Phase},decision={astrologianOrbis.Decision}," +
+                    $"action/adjusted={astrologianOrbis.ResolvedActionId}/" +
+                    $"{astrologianOrbis.AdjustedDoubleCastActionId},candidates=" +
+                    $"{astrologianOrbis.CandidateCount},P={astrologianOrbis.PartySlot},target=" +
+                    $"{astrologianOrbis.TargetGameObjectId:X}/{astrologianOrbis.TargetEntityId:X}," +
+                    $"HP={astrologianOrbis.TargetCurrentHp}/{astrologianOrbis.TargetMaximumHp}," +
+                    $"pressure={astrologianOrbis.PreferIncomingPressure},double-cast=" +
+                    $"{astrologianOrbis.DoubleCastWasReadyBeforeBase}/" +
+                    $"{astrologianOrbis.DoubleCastChargesBeforeBase},transition=" +
+                    $"{astrologianOrbis.TransitionRemainingMilliseconds}ms,ready=" +
+                    $"{astrologianOrbis.LocallyReady}/{astrologianOrbis.NativeBoundaryReady},key=" +
+                    $"{astrologianOrbis.HeldGameplayKey},claim={astrologianOrbis.InputClaimed},attempt=" +
+                    $"{astrologianOrbis.UseActionAttempted}/{astrologianOrbis.UseActionAccepted},native=" +
+                    $"{astrologianOrbis.NativeAttemptCount}/{astrologianOrbis.LastNativeOutcome}," +
+                    $"count-base={astrologianOrbis.BaseAttemptCount}/{astrologianOrbis.BaseAcceptedCount}," +
+                    $"count-double={astrologianOrbis.FollowUpAttemptCount}/" +
+                    $"{astrologianOrbis.FollowUpAcceptedCount},last={astrologianOrbis.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] rescue[phase={rescue.Phase},decision={rescue.Decision}," +
                     $"cancel={rescue.CancelReason},trigger={rescue.InputTrigger},candidates={rescue.CandidateCount}," +

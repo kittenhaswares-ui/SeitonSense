@@ -2,11 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.35.0.3 lets `/smartaction` select a
-Guarded enemy only when the exact resolved PvP action's current English
-description explicitly says its damage ignores Guard. Chiten, Covered, Paladin
-LB, Dark Knight LB, and mixed Guard-plus-protection states remain blocked. It
-retains v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection plus
+assistance, and target highlights. Version 0.36.0.0 adds a default-off
+Astrologian held-key helper: the exact `/nearhelp` friendly ranking at or below
+60% HP, direct Harmonischer Orbis / Aspected Benefic `29243`, and an exact same-
+target Double Cast repeat `29247` only when Double Cast was ready before the
+accepted base heal. Purify remains first, and the helper never visibly changes
+or reranks a target. It retains v0.35.0.3's exact Guard-ignoring Smart Action
+support, v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection, plus
 v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den targeting,
 and removal of the nonfunctional Scholar spread workflow. The generic
 one-shot action buffer remains available directly in Seiton Sense. A fresh physical standard-keyboard-hotbar press may retain
@@ -55,9 +57,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the same direct-enemy count is at least three. The movement key still reaches
   FFXIV. Known unavailability waits, explicit client rejection permits only the
   bounded same-intent retry, and any later native PvP action ends Sprint.
-- **Stable held-action leases:** Purify, NIN Seiton, VPR Serpentiner Geist,
-  reactive counter-CC, Ally
-  Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK, Smart
+- **Stable held-action leases:** Purify, AST held Near Help, SAM, NIN Seiton,
+  VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue,
+  Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK, held Monk, Smart
   Recuperate, Emergency Teleport, Guard, and pressure Sprint prefer an
   already-held movement key, then any other stable held key, before fresh
   movement/other fallbacks. Every helper keeps its exact key lease once bound
@@ -179,6 +181,16 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the resolved action explicitly supports it. Lowest HP is the anchor; above
   the critical 25% boundary, optional incoming pressure can win only within a
   10-percentage-point health window. Unknown pressure falls back to exact HP.
+- **Experimental AST held Near Help:** a separate default-off Astrologian option
+  applies the same exact friendly ranking continuously while a gameplay key is
+  held, restricted to self/party players at 60% HP or lower. It uses Harmonischer
+  Orbis / Aspected Benefic `29243` without changing the visible target. If Double
+  Cast was already available before that accepted heal, the helper reserves its
+  exact adjusted repeat `29247` for the same frozen player; otherwise it ends
+  after Orbis. The follow-up never reranks when the first heal raises HP.
+  Your own active or still-propagating Guard suppresses the entire sequence and
+  is rechecked at the final action/cast-cancel boundaries, so neither the base
+  heal, its follow-up, nor optional held-cast cancellation can break it.
 - **One-shot Far Help:** `/farhelp` redirects one already incoming, reviewed
   friendly movement action to a reachable non-self party member. It first
   prefers destinations with strictly more than 10 yalms of horizontal
@@ -645,8 +657,9 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar Critical Strategy is Purify, SAM
-reactive actions, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive
+The current request order before Scholar Critical Strategy is Purify, AST same-
+target healing, SAM reactive actions, NIN Seiton, VPR Serpentiner Geist, GNB
+Continuation, reactive
 counter-CC, Ally Rescue, PLD Guardian, then NIN Guard-Shukuchi. DRK Dark Arts
 Shadowbringer, Hiebsprung, the safe Shadowbringer fallback, and held Monk combo
 follow before Smart Recuperate, Emergency Teleport, and the generic helpers. Continuous held consent
@@ -681,7 +694,8 @@ recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
 target, with no visible target change, alternate, rerank, or replay. The current
-order is **Purify > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR
+order is **Purify > AST same-target heal chain > SAM staged counter-CC /
+Zantetsuken > NIN Seiton > VPR
 Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD
 Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
 Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart
@@ -825,8 +839,8 @@ The ranged Uncoiled follow-ups `39177` and `39178` use their native 20-yalm rang
 the other reviewed follow-ups use 5 yalms. The exact adjusted action, current
 hard-target actor, context, territory, physical key, readiness, native range,
 and line of sight are frozen and revalidated before every possible call.
-Purify retains absolute priority, and Viper occupies the first job-specific slot
-after Purify. Own Guard blocks it; target Guard is not an added blocker. Action,
+Purify retains absolute priority, and this is Viper's earliest held job helper.
+Own Guard blocks it; target Guard is not an added blocker. Action,
 resource, target-status, or range unavailability yields the framework frame to a
 usable lower-priority helper. Only an otherwise-ready exact intent waiting on the
 native boundary or its retry throttle keeps Viper's priority. Only a clean client
@@ -980,7 +994,8 @@ both markers. The exact localized row-35 syntax, party display, marker pairing,
 and cleanup behavior remain current-patch live-confirmation boundaries.
 
 While your own Guard is active, Seiton Sense blocks all scheduled and automatic action requests,
-including Purify, SAM counter-CC/Zantetsuken, NIN Seiton, VPR Serpentiner Geist,
+including Purify, AST same-target healing, SAM counter-CC/Zantetsuken, NIN
+Seiton, VPR Serpentiner Geist,
 GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi,
 SCH Critical Strategy, DRK Shadowbringer/Hiebsprung, held
 Monk combo, Smart Recuperate, Emergency Teleport, Guard, pressure Sprint,
@@ -1108,13 +1123,14 @@ generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
-The current request order is **Purify > SAM staged counter-CC / Zantetsuken > NIN
+The current request order is **Purify > AST same-target heal chain > SAM staged
+counter-CC / Zantetsuken > NIN
 Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally
 Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
 Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) >
 Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure
 Sprint > event Kardia > event Monk**. The job-specific physical-hold helpers use
-that deterministic order; SAM runs directly after Purify, and reactive counter-CC
+that deterministic order; AST runs directly after Purify, and reactive counter-CC
 remains before ally cleanse.
 Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
@@ -1531,6 +1547,7 @@ focus module to avoid drawing both over the same actor.
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Guard-Shukuchi held-key helper | Yes | No | No |
 | Optional NIN Seiton held-key helper | Yes | No | No |
+| Optional AST held Near Help | Yes | Yes, for living self/party players when test mode is enabled | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, for the exact current hostile duel opponent or reviewed dummy when test mode is enabled | No |
 | Optional GNB Continuation held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
@@ -1550,7 +1567,8 @@ and exact forward terrain point. Enemy visuals require one
 strict native hostile duel opponent; missing or ambiguous identity shows
 nothing. Held GNB, SAM, MNK, and DRK test paths accept only their exact reviewed
 current-target route; Viper accepts the same exact current native hostile duel
-opponent or the reviewed NameId-`541` striking dummy.
+opponent or the reviewed NameId-`541` striking dummy. AST uses only living,
+targetable self/party players and never an enemy or striking dummy.
 Pressure has an additional Wolves' Den opt-in so testing does not create an
 always-on pressure display by surprise.
 
@@ -1565,8 +1583,10 @@ Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 40 is current. It integrates the generic one-shot smart
-action buffer and opt-in native standard-keyboard-hotbar Turbo directly into
+Configuration schema 41 is current. It adds the default-off AST held Near Help
+option without enabling it for upgrades, fresh installs, or Reset Defaults.
+Schema 40 integrates the generic one-shot smart action buffer and opt-in native
+standard-keyboard-hotbar Turbo directly into
 Seiton Sense. The buffer defaults to 1,000 ms, is adjustable from 100-1,500 ms,
 and has no PvP-only gate; Turbo remains default-off and has a separate outside-
 combat test option. Schema 39 adds the default-off 100-1500 ms PvP latency-
@@ -1742,7 +1762,8 @@ armed, already incoming macro action. Smart Tab is separate: while enabled it
 may replace only an owned native forward world-target cycle with one exact hard-
 target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-action helpers use this current request priority: **Purify > SAM staged counter-
+action helpers use this current request priority: **Purify > AST same-target
+heal chain > SAM staged counter-
 CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation >
 reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
 Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK
@@ -1767,7 +1788,7 @@ Manual Guard never creates this ownership. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-For the eighteen shared physical-hold option trackers, key choice prefers stable movement, then any
+For the nineteen shared physical-hold option trackers, key choice prefers stable movement, then any
 other stable held gameplay key, then fresh movement and fresh other gameplay
 keys as fallbacks. Each helper evaluates its held lease before fresh input and
 retains the exact frozen key until its normal release, ineligibility, reset, or
@@ -1776,7 +1797,7 @@ from displacing a valid long-held WASD lease.
 
 The separate **Cancel my active cast for an otherwise-ready held helper** test
 is disabled by default. It applies only to exact frozen physical-hold intents
-for Purify, SAM counter-CC/Zantetsuken, NIN Seiton, reactive counter-CC, Ally
+for Purify, AST same-target Orbis, SAM counter-CC/Zantetsuken, NIN Seiton, reactive counter-CC, Ally
 Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Shadowbringer,
 DRK Hiebsprung, Smart Recuperate, Emergency Teleport, Guard, and pressure
 Sprint. Smart
@@ -1785,7 +1806,7 @@ held input; every already-incoming manual/Turbo redirect, including Paean, and
 all macro helpers are excluded as well. Viper Serpentiner Geist is excluded
 because it polls only the currently transformed carrier. GNB Continuation and
 held Monk combo likewise wait for a clear cast instead of cancelling it. The cast-cancellation
-experiment therefore constructs fourteen reviewed request shapes across fifteen
+experiment therefore constructs fifteen reviewed request shapes across sixteen
 ordered selection slots; held Shadowbringer occupies separate Dark Arts and safe-
 fallback positions through the same exact request adapter.
 
@@ -1818,9 +1839,10 @@ without starving a currently usable lower helper. Only an explicit client
 rejection may use the common bounded same-intent retry; acceptance, ambiguity,
 or context drift is terminal with no target change, alternate, or replay.
 
-The separate default-off Ninja helper occupies Ninja's first job-specific slot
-directly after Purify; Viper's Serpentiner-Geist helper occupies the equivalent
-job-exclusive slot on VPR. A
+The separate default-off Ninja helper is Ninja's earliest held job helper after
+Purify; Viper's Serpentiner-Geist helper occupies the equivalent job-exclusive
+slot on VPR. AST and SAM occupy earlier documented scheduler positions only on
+their own jobs, so these mutually exclusive job lanes cannot coexist at runtime. A
 continuous held gameplay key can authorize one frozen target for each exact
 adjusted-action epoch of Seiton `29515`/`29516`, selected by lowest exact HP ratio
 among canonical, reachable `S1`-`S5` enemies below 50%. A clean explicit client
@@ -1912,8 +1934,9 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 511-test Core registry and source checks pin
-configuration schema 40, the generic smart buffer and default-off native Turbo,
+For the current source, the exact 516-test Core registry and source checks pin
+configuration schema 41, the default-off AST held Near Help sequence, the
+generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,
 ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
@@ -1943,14 +1966,14 @@ source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
 enabled-Den testing remains required.
 
-Current scheduler verification uses **Purify > SAM staged counter-CC /
+Current scheduler verification uses **Purify > AST same-target heal chain > SAM staged counter-CC /
 Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
 (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic
-Guard > pressure Sprint > event Kardia > event Monk**. Eighteen physical-hold
+Guard > pressure Sprint > event Kardia > event Monk**. Nineteen physical-hold
 option enable edges share the scheduler input. Held-action cast cancellation
-constructs fourteen reviewed request shapes across fifteen ordered selection
+constructs fifteen reviewed request shapes across sixteen ordered selection
 slots and explicitly excludes Viper, GNB, and held Monk combo.
 
 Emergency tests pin MNK/BLM/SGE/VPR action mappings, strict HP/MP/direct-focus

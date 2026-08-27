@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.35.0.3",
-    "Changelog": "Fixed /smartaction for attacks whose exact resolved PvP action explicitly ignores Guard. Seiton builds a startup catalog from the current English ActionTransient sentence, so adjusted combo steps work without job or action-ID allowlists while missing or drifted metadata remains blocked. Only Guard is bypassed: Chiten, Covered, Paladin LB, Dark Knight LB, and mixed Guard-plus-protection states still block direct attacks and AoE. Initial selection, frozen-target validation, authored fallback, and delayed buffer replay share the same rule. Configuration schema 40 remains current; all 511 Core tests pass; current-patch in-game validation remains separate.",
+    "AssemblyVersion": "0.36.0.0",
+    "Changelog": "Added a default-off Astrologian held-key helper: exact /nearhelp friendly selection at or below 60% HP, direct Harmonischer Orbis / Aspected Benefic 29243 without a visible target change, and an exact same-target Double Cast repeat 29247 only when Double Cast 29245 was already ready before a client-accepted base heal. Purify stays first; actor, key, context, charge epoch, metadata, readiness, range, line of sight, and adjusted follow-up are revalidated with no rerank or alternate. Active or still-propagating own Guard is vetoed again at the final action-hook and optional cast-cancel boundaries. Crystalline Conflict and the existing opt-in Wolves' Den test context are supported. Configuration schema 41 is current; all 516 Core tests pass; live current-patch validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -22,6 +22,7 @@
       "focus-target",
       "dark-knight",
       "sage",
+      "astrologian",
       "smart-target",
       "limit-break",
       "targeting",
@@ -33,6 +34,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787858679"
+    "LastUpdate": "1787864481"
   }
 ]

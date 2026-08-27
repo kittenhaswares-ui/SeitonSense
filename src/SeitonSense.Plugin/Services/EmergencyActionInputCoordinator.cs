@@ -5,7 +5,7 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations.
-/// Canonical order is Purify, SAM reactive actions, Ninja Seiton, VPR Serpent's
+/// Canonical order is Purify, AST same-target healing, SAM reactive actions, Ninja Seiton, VPR Serpent's
 /// Tail, GNB Continuation, reactive counter-CC, Ally Rescue, PLD Guardian, NIN
 /// Guard-Shukuchi, Scholar Critical Strategy, DRK Dark-Arts Shadowbringer, DRK
 /// Hiebsprung, DRK safe-fallback Shadowbringer, held Monk combo, Smart
@@ -87,6 +87,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool allyRescueHeldWasEnabled;
     private bool miracleInterceptHeldWasEnabled;
     private bool scholarCriticalStrategyHeldWasEnabled;
+    private bool astrologianHarmonicOrbisHeldWasEnabled;
     private bool pressureEscapeHeldWasEnabled;
     private bool darkKnightPlungeHeldWasEnabled;
     private bool ninjaGuardShukuchiHeldWasEnabled;
@@ -125,7 +126,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool darkKnightShadowbringerHeldEnabled = false,
         bool monkHeldComboEnabled = false,
         bool samuraiCounterCcHeldEnabled = false,
-        bool samuraiZantetsukenHeldEnabled = false)
+        bool samuraiZantetsukenHeldEnabled = false,
+        bool astrologianHarmonicOrbisHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -145,6 +147,7 @@ internal sealed class EmergencyActionInputCoordinator
             (allyRescueHeldEnabled && !allyRescueHeldWasEnabled) ||
             (miracleInterceptHeldEnabled && !miracleInterceptHeldWasEnabled) ||
             (scholarCriticalStrategyHeldEnabled && !scholarCriticalStrategyHeldWasEnabled) ||
+            (astrologianHarmonicOrbisHeldEnabled && !astrologianHarmonicOrbisHeldWasEnabled) ||
             (emergencyTeleportHeldEnabled && !emergencyTeleportHeldWasEnabled) ||
             (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
             (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
@@ -163,6 +166,7 @@ internal sealed class EmergencyActionInputCoordinator
         allyRescueHeldWasEnabled = allyRescueHeldEnabled;
         miracleInterceptHeldWasEnabled = miracleInterceptHeldEnabled;
         scholarCriticalStrategyHeldWasEnabled = scholarCriticalStrategyHeldEnabled;
+        astrologianHarmonicOrbisHeldWasEnabled = astrologianHarmonicOrbisHeldEnabled;
         emergencyTeleportHeldWasEnabled = emergencyTeleportHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
         darkKnightPlungeHeldWasEnabled = darkKnightPlungeHeldEnabled;
@@ -218,6 +222,7 @@ internal sealed class EmergencyActionInputCoordinator
         allyRescueHeldWasEnabled = false;
         miracleInterceptHeldWasEnabled = false;
         scholarCriticalStrategyHeldWasEnabled = false;
+        astrologianHarmonicOrbisHeldWasEnabled = false;
         emergencyTeleportHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
         darkKnightPlungeHeldWasEnabled = false;

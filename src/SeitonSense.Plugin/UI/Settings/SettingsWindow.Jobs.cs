@@ -13,9 +13,40 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. SAM runs directly after Purify; " +
+            "in deterministic urgency order: AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after Purify and SAM follows AST; " +
             "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
+
+        if (ImGui.CollapsingHeader("Astrologian — Harmonischer Orbis", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Harmonischer Orbis + optional Zweifacher Zauber on held key (includes WASD)",
+                configuration.EnableAstrologianHarmonicOrbisOnHeldKey,
+                value => configuration.EnableAstrologianHarmonicOrbisOnHeldKey = value);
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and PvP Astrologian only. While an eligible gameplay key remains held, this uses the " +
+                "same exact friendly selection as /nearhelp, restricted to living self/party players at exactly " +
+                "60% HP or lower. Lowest exact HP is the anchor; the shared Near Help pressure preference may refine " +
+                "only its existing narrow health window. Every candidate must pass the action's native range and " +
+                "line-of-sight check. No hard, soft, focus, or mouseover target is changed.");
+            ImGui.TextDisabled(
+                "The helper freezes one exact player and uses Harmonischer Orbis / Aspected Benefic (29243). If and " +
+                "only if Zweifacher Zauber was already locally available before that Orbis, a client-accepted Orbis " +
+                "reserves the next clear scheduler frame for the exact adjusted Orbis repeat (29247) on the same " +
+                "player. The heal may raise the player above 60%; that does not rerank or cancel the planned repeat. " +
+                "If Double Cast was not ready, the sequence deliberately ends after Orbis.");
+            ImGui.TextDisabled(
+                "Purify remains absolute priority. Your own Guard suppresses the full sequence and cannot be " +
+                "cancelled by this helper or its optional cast-cancel path. Exact actor identity, held key, English action metadata, native " +
+                "readiness, range, line of sight, and the 29245-to-29247 Double Cast adjustment are revalidated. A " +
+                "clean client rejection may retry only the same frozen action/target; ambiguity, drift, expiry, or " +
+                "release ends the sequence without an alternate. The global held-helper cast-cancel test can cancel " +
+                "your current cast only for an otherwise-ready frozen Orbis intent.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
 
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
         {
@@ -147,8 +178,8 @@ internal sealed partial class SettingsWindow
                 "range/line-of-sight check. A target with Guardian's Covered status, a Paladin's Phalanx self-" +
                 "invulnerability, or a Dark Knight's Eventide invulnerability is excluded; Guard itself remains valid. " +
                 "The lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
-                "its bounded propagation gate blocks the helper. When enabled, Auto-Seiton is the first held helper " +
-                "after Purify and can claim before every other job-specific helper in that framework frame.");
+                "its bounded propagation gate blocks the helper. On Ninja, Auto-Seiton is the earliest NIN held job " +
+                "helper after Purify and can claim before the later NIN/reactive helpers in that framework frame.");
             ImGui.TextDisabled(
                 "Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same " +
                 "intent after a short delay while every gate and the same key remain valid; client acceptance ends the " +
@@ -276,7 +307,7 @@ internal sealed partial class SettingsWindow
                 "exact attempt/retry episode. The helper does not select, rerank, visibly change, or substitute a target " +
                 "or a different follow-up.");
             ImGui.TextDisabled(
-                "Purify keeps absolute priority; this is Viper's first held helper after Purify. Own Guard blocks it, " +
+                "Purify keeps absolute priority; this is Viper's earliest held job helper. Own Guard blocks it, " +
                 "while enemy Guard remains valid because these follow-ups natively ignore Guard when dealing damage. " +
                 "Action, resource, target-status, or reach waits yield the frame to a usable lower helper; only an " +
                 "otherwise-ready native-boundary or retry-throttle wait keeps Viper's priority. Cast cancellation is " +
@@ -340,7 +371,7 @@ internal sealed partial class SettingsWindow
                 "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
                 "client acceptance does not prove that Critical Strategy landed or changed Guard.");
             ImGui.TextDisabled(
-                "Purify, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. " +
+                "Purify, AST, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. " +
                 "DRK Dark Arts, Hiebsprung, the safe DRK fallback, and held Monk combo follow before the cross-job survival helpers.");
             ImGui.PopTextWrapPos();
         }

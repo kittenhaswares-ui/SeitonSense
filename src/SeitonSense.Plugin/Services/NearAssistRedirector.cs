@@ -173,6 +173,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     [ThreadStatic]
     private static PredictiveCcBrakeBypassScope? predictiveCcBrakeBypassScope;
 
+    [ThreadStatic]
+    private static AstrologianOwnGuardVetoScope? astrologianOwnGuardVetoScope;
+
     internal const int TokenLifetimeMilliseconds = 750;
     internal const float MinimumAllyDistance = 5f;
     internal const float MaximumAllyDistance = 30f;
@@ -553,6 +556,48 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             internalRedirectBypassDepth--;
             predictiveCcBrakeBypassScope = previousPredictiveScope;
+        }
+    }
+
+    /// <summary>
+    /// Runs exactly one authored AST Harmonic Orbis action through the ordinary
+    /// redirect bypass while retaining a final hook-boundary veto for the exact
+    /// local actor's active or propagating Guard. No other bypass caller opts in
+    /// to this scope, and an action/target mismatch fails closed.
+    /// </summary>
+    internal bool RunAstrologianHarmonicOrbisWithoutRedirect(
+        uint actionId,
+        TargetPressureActorIdentity localPlayer,
+        ulong targetGameObjectId,
+        Func<bool> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        if (useActionHook is null ||
+            !useActionHook.IsEnabled ||
+            astrologianOwnGuardVetoScope is not null ||
+            AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
+                actionId,
+                localPlayer,
+                localPlayer,
+                targetGameObjectId,
+                targetGameObjectId,
+                ownGuardActiveOrPropagating: false))
+        {
+            return false;
+        }
+
+        astrologianOwnGuardVetoScope = new AstrologianOwnGuardVetoScope(
+            this,
+            actionId,
+            localPlayer,
+            targetGameObjectId);
+        try
+        {
+            return RunWithoutRedirect(action);
+        }
+        finally
+        {
+            astrologianOwnGuardVetoScope = null;
         }
     }
 
@@ -1736,6 +1781,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     "Seiton Sense integrated action-buffer preflight failed open for the physical action.");
                 integratedAttempt = IntegratedActionBufferAttempt.None;
             }
+        }
+
+        if (ShouldVetoAstrologianOwnGuardAtFinalBoundary(
+                actionType,
+                actionId,
+                forwardedTargetId,
+                mode))
+        {
+            integratedRuntime?.ActionBuffer.AbandonExactStandardHotbarRoot(
+                integratedAttempt,
+                "AST own Guard became active or began propagating at the final native boundary");
+            return false;
         }
 
         bool clientAccepted;
@@ -3108,6 +3165,71 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    internal bool IsExactLocalGuardActiveOrPropagating(
+        TargetPressureActorIdentity expectedLocalPlayer)
+    {
+        try
+        {
+            var local = objectTable.LocalPlayer;
+            if (!expectedLocalPlayer.IsValid ||
+                !IsLivePlayer(local) ||
+                GetNativeObject(local!) == null)
+            {
+                return true;
+            }
+            var currentLocalPlayer = new TargetPressureActorIdentity(
+                local!.GameObjectId,
+                local.EntityId);
+            if (currentLocalPlayer != expectedLocalPlayer) return true;
+            if (DefensiveUtilityProbe.HasActiveGuard(local)) return true;
+
+            return TryGetRecentExactLocalGuardAttempt(
+                clientState.TerritoryType,
+                local.GameObjectId,
+                local.EntityId,
+                Environment.TickCount64,
+                DefensiveUtilityRules.GuardPropagationLatchMilliseconds,
+                out _);
+        }
+        catch
+        {
+            // This dependency owns a native safety boundary. Uncertain current
+            // local identity or Guard telemetry must veto the helper action.
+            return true;
+        }
+    }
+
+    private bool ShouldVetoAstrologianOwnGuardAtFinalBoundary(
+        ActionType actionType,
+        uint actionId,
+        ulong forwardedTargetId,
+        ActionManager.UseActionMode mode)
+    {
+        if (astrologianOwnGuardVetoScope is not { } scope) return false;
+        if (scope.Owner != this || scope.Consumed) return true;
+        scope.Consumed = true;
+
+        var local = objectTable.LocalPlayer;
+        var currentLocalPlayer = IsLivePlayer(local)
+            ? new TargetPressureActorIdentity(
+                local!.GameObjectId,
+                local.EntityId)
+            : default;
+        var ownGuardActiveOrPropagating =
+            IsExactLocalGuardActiveOrPropagating(scope.LocalPlayer);
+        return actionType != ActionType.Action ||
+               mode != ActionManager.UseActionMode.None ||
+               actionId != scope.ActionId ||
+               AstrologianHarmonicOrbisRules
+                   .ShouldVetoNativeBoundaryForOwnGuard(
+                       actionId,
+                       scope.LocalPlayer,
+                       currentLocalPlayer,
+                       scope.TargetGameObjectId,
+                       forwardedTargetId,
+                       ownGuardActiveOrPropagating);
+    }
+
     private void ClearSmartActionSafetyLease()
     {
         lock (tokenGate)
@@ -4265,6 +4387,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         internal NearAssistRedirector Owner { get; } = owner;
         internal PredictiveCcBrakeBypassIntent Intent { get; } = intent;
+        internal bool Consumed { get; set; }
+    }
+
+    private sealed class AstrologianOwnGuardVetoScope(
+        NearAssistRedirector owner,
+        uint actionId,
+        TargetPressureActorIdentity localPlayer,
+        ulong targetGameObjectId)
+    {
+        internal NearAssistRedirector Owner { get; } = owner;
+        internal uint ActionId { get; } = actionId;
+        internal TargetPressureActorIdentity LocalPlayer { get; } = localPlayer;
+        internal ulong TargetGameObjectId { get; } = targetGameObjectId;
         internal bool Consumed { get; set; }
     }
 

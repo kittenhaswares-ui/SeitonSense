@@ -297,7 +297,7 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > SAM staged counter-CC /
+The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC /
 Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
@@ -580,6 +580,29 @@ A compact `<t>` form otherwise preserves its incoming target. The token is
 consumed before the one original game call. Near Help does not initiate an
 action, visibly change a target, try a second candidate, or retry.
 
+## Experimental Astrologian held Near Help
+
+The separate default-off AST helper reuses Near Help's transient exact
+party/self observations while an eligible physical gameplay key remains held.
+It considers only living, targetable self/party players at an exact 60% HP or
+lower and reads the same current HP, party slot, optional incoming-pressure
+count, position, native action target, range, and line-of-sight result. With the
+existing Wolves' Den testing option enabled, the same friendly/self path is
+available there without reading or selecting an enemy or striking dummy.
+
+One selected player, context, local identity, and key generation are frozen for
+Harmonischer Orbis / Aspected Benefic `29243`. The plugin also records whether
+Double Cast was already locally available before that Orbis. Only a
+client-accepted Orbis may reserve the exact adjusted Orbis repeat `29247`, and
+that later request revalidates the same actor without applying the 60% boundary
+again. It never reranks after the first heal, changes a visible target, uses a
+different Double Cast form, or substitutes another player. Exact action,
+identity, readiness, range, and retry state exist only in memory for the active
+held episode and are cleared on completion, drift, release, reset, or failure.
+Your own active or still-propagating Guard suppresses both action requests and
+is rechecked at the final action-hook and optional held-cast-cancel boundaries;
+this helper cannot remove or break Guard.
+
 ## One-shot Far Help
 
 Far Help is disabled by default and runs only in Crystalline Conflict. It
@@ -667,8 +690,9 @@ behavior.
 
 Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
-the same exact key may remain consent for a later distinct Purify, counter-CC,
-NIN Seiton, VPR Serpentiner Geist, ally cleanse, Guardian, NIN Guard-Shukuchi,
+the same exact key may remain consent for a later distinct Purify, AST same-
+target healing, counter-CC, NIN Seiton, VPR Serpentiner Geist, ally cleanse,
+Guardian, NIN Guard-Shukuchi,
 SCH Critical Strategy, DRK, Recuperate, Emergency Teleport,
 Guard, or pressure Sprint episode. Enabling an option while a key is already
 down still requires a release and new press. Release, text input, context/job/identity loss, death, metadata
@@ -676,7 +700,7 @@ failure, or reset clears the relevant leases. Own Guard suppresses every native
 helper boundary without consuming the physical hold; individual frozen episodes
 either wait or cancel according to their exact action-specific contract.
 
-The eighteen shared physical-hold option trackers prefer an already-held movement key, then another
+The nineteen shared physical-hold option trackers prefer an already-held movement key, then another
 stable held gameplay key, before fresh movement/other fallback. Each helper
 checks its held lease before fresh input and retains the exact frozen key until
 release, ineligibility, reset, or its action-specific terminal outcome. A short
@@ -717,15 +741,15 @@ are neither persisted nor uploaded.
 ## Experimental held-action cast cancellation
 
 This separate test is disabled by default. It applies only to otherwise-ready
-exact physical-hold intents for Purify, SAM counter-CC/Zantetsuken, NIN Seiton,
+exact physical-hold intents for Purify, AST same-target Orbis, SAM counter-CC/Zantetsuken, NIN Seiton,
 reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical
 Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency
 Teleport, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
 Viper Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded
 because they poll their current native state and deliberately do not cancel a cast.
-Cast cancellation therefore constructs fourteen reviewed request shapes across
-fifteen ordered selection slots; held Shadowbringer uses the same exact request
+Cast cancellation therefore constructs fifteen reviewed request shapes across
+sixteen ordered selection slots; held Shadowbringer uses the same exact request
 adapter at its separate Dark Arts and safe-fallback positions.
 
 For the highest-priority eligible intent, the plugin rechecks exact local and
@@ -985,7 +1009,7 @@ beats a proactive candidate; proactive ties rank higher pressure first, then
 lower exact HP, before deterministic identity tie-breakers. The frozen winner
 must pass FFXIV's native 20-yalm Guardian range/line-of-sight check and remain
 exact. No custom center-distance cap is applied; the 10-yalm condition governs
-staying close enough for protection after the jump. Purify, SAM reactive actions,
+staying close enough for protection after the jump. Purify, AST same-target healing, SAM reactive actions,
 NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, and
 Ally Rescue keep priority. Guardian precedes NIN Guard-
 Shukuchi, SCH Critical Strategy, DRK, Smart Recuperate, Emergency Teleport,
@@ -1418,7 +1442,7 @@ epoch uses final revalidation and the common bounded explicit-false retry for
 only that frozen direct target, with no selected-target mutation, alternate,
 rerank, or replay.
 
-Hiebsprung runs after Purify, SAM reactive actions, NIN Seiton, VPR Serpentiner
+Hiebsprung runs after Purify, AST same-target healing, SAM reactive actions, NIN Seiton, VPR Serpentiner
 Geist, GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-
 Shukuchi, SCH, and Dark Arts Shadowbringer. It runs before the safe Shadowbringer
 fallback, held Monk combo, Smart Recuperate, Emergency Teleport, generic Guard,
@@ -1457,7 +1481,7 @@ scale, self/ally LB activation messages, optional ally names and ally LB damage,
 acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
-Critical Strategy held-key opt-in,
+Critical Strategy and Astrologian held Near Help opt-ins,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer and
   separate DRK Hiebsprung held-key opt-ins,
@@ -1467,8 +1491,10 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 40 is current. It adds the local generic one-shot smart
-action-buffer settings, movable learning-window settings, and default-off native
+Configuration schema 41 is current. It adds the default-off Astrologian held
+Near Help option without enabling it for upgrades, fresh installs, or Reset
+Defaults. Schema 40 adds the local generic one-shot smart action-buffer settings,
+movable learning-window settings, and default-off native
 standard-keyboard-hotbar Turbo settings. The buffer is available in PvE, PvP,
 and Wolves' Den without uploading input, action, target, position, or timing
 data. Schema 39 adds the default-off 100-1500 ms PvP latency-response budget

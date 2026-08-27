@@ -35,12 +35,14 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
     private readonly SamuraiReactiveMetadataValidation samuraiReactiveMetadata;
+    private readonly bool astrologianHarmonicOrbisMetadataVerified;
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
     private readonly HeldCastCancellationService heldCastCancellation;
     private readonly EmergencyPurifyProbe emergencyPurify;
+    private readonly AstrologianHarmonicOrbisProbe astrologianHarmonicOrbis;
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
     private readonly EmergencyTeleportProbe emergencyTeleport;
@@ -111,14 +113,24 @@ internal sealed class PersonalStatusService : IDisposable
         this.configuration = configuration;
         this.metadata = metadata;
         this.samuraiReactiveMetadata = samuraiReactiveMetadata;
+        astrologianHarmonicOrbisMetadataVerified =
+            AstrologianHarmonicOrbisProbe.ValidateMetadata(dataManager, log);
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
         this.criticalUtilityCoordination = criticalUtilityCoordination;
         emergencyInput = new EmergencyActionInputCoordinator(
             keyState,
             criticalUtilityCoordination.ClaimCurrentFrame);
-        heldCastCancellation = new HeldCastCancellationService(log);
+        heldCastCancellation = new HeldCastCancellationService(
+            log,
+            nearAssist.IsExactLocalGuardActiveOrPropagating);
         emergencyPurify = new EmergencyPurifyProbe(log);
+        astrologianHarmonicOrbis = new AstrologianHarmonicOrbisProbe(
+            clientState,
+            objectTable,
+            pressureTracker,
+            nearAssist,
+            log);
         defensiveUtility = new DefensiveUtilityProbe(
             objectTable,
             dataManager,
@@ -253,6 +265,10 @@ internal sealed class PersonalStatusService : IDisposable
     internal AutoGuardProtectionDiagnostics AutoGuardProtectionDiagnostics =>
         nearAssist.AutoGuardProtectionDiagnostics;
     internal SmartRecuperateProbeSnapshot SmartRecuperateDiagnostics => smartRecuperate.Snapshot;
+    internal AstrologianHarmonicOrbisProbeSnapshot AstrologianHarmonicOrbisDiagnostics =>
+        astrologianHarmonicOrbis.Snapshot;
+    internal bool AstrologianHarmonicOrbisMetadataVerified =>
+        astrologianHarmonicOrbisMetadataVerified;
     internal EmergencyTeleportProbeSnapshot EmergencyTeleportDiagnostics =>
         emergencyTeleport.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
@@ -389,6 +405,7 @@ internal sealed class PersonalStatusService : IDisposable
             HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
             localMpWarningState = LocalMpWarningState.Initial;
             var purify = emergencyPurify.FailClosed(now);
+            astrologianHarmonicOrbis.FailClosed();
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
             emergencyTeleport.FailClosed();
@@ -436,6 +453,7 @@ internal sealed class PersonalStatusService : IDisposable
             ClearStatusTracking();
             emergencyInput.Reset();
             emergencyPurify.Reset();
+            astrologianHarmonicOrbis.Reset();
             defensiveUtility.Reset();
             smartRecuperate.Reset();
             emergencyTeleport.Reset();
@@ -497,6 +515,7 @@ internal sealed class PersonalStatusService : IDisposable
         var isViper = localJobId == ViperSerpentTailRules.ViperJobId;
         var isGunbreaker = localJobId == GunbreakerContinuationRules.GunbreakerJobId;
         var isSamurai = localJobId == SamuraiReactiveCounterCcRules.SamuraiJobId;
+        var isAstrologian = localJobId == AstrologianHarmonicOrbisRules.AstrologianJobId;
         var isEmergencyTeleportJob =
             EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var anyPurifyAutomationEnabled = AnyPurifyAutomationEnabled();
@@ -667,6 +686,10 @@ internal sealed class PersonalStatusService : IDisposable
                                                 configuration.EnableMonkHeldComboOnHeldKey &&
                                                 isSupportedPvPContext &&
                                                 isMonk;
+        var astrologianHarmonicOrbisConfigurationEnabled = configuration.Enabled &&
+                                                            configuration.EnableAstrologianHarmonicOrbisOnHeldKey &&
+                                                            isSupportedPvPContext &&
+                                                            isAstrologian;
 
         // Keep the shared physical-key observer enabled from stable opt-in gates,
         // not from the current action opportunity. Guard suppresses every direct
@@ -761,6 +784,9 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.DarkKnightShadowbringerVerified;
         var monkHeldComboInputEnabled = monkHeldComboConfigurationEnabled &&
                                         metadata.MonkHeldComboVerified;
+        var astrologianHarmonicOrbisHeldInputEnabled =
+            astrologianHarmonicOrbisConfigurationEnabled &&
+            astrologianHarmonicOrbisMetadataVerified;
         var ninjaGuardShukuchiHeldInputEnabled =
             ninjaGuardShukuchiConfigurationEnabled &&
             metadata.PanicShukuchiVerified &&
@@ -803,7 +829,8 @@ internal sealed class PersonalStatusService : IDisposable
                                             viperSerpentTailHeldInputEnabled ||
                                             gunbreakerContinuationHeldInputEnabled ||
                                             darkKnightShadowbringerHeldInputEnabled ||
-                                            monkHeldComboInputEnabled;
+                                            monkHeldComboInputEnabled ||
+                                            astrologianHarmonicOrbisHeldInputEnabled;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -826,7 +853,8 @@ internal sealed class PersonalStatusService : IDisposable
               emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
              pressureEscapeSprintHeldInputEnabled ||
-             darkKnightPlungeHeldInputEnabled),
+             darkKnightPlungeHeldInputEnabled ||
+             astrologianHarmonicOrbisHeldInputEnabled),
             purifyHeldInputEnabled,
             defensiveUtilityHeldInputEnabled,
             paladinGuardianHeldInputEnabled,
@@ -844,7 +872,8 @@ internal sealed class PersonalStatusService : IDisposable
             darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled,
             monkHeldComboEnabled: monkHeldComboInputEnabled,
             samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
-            samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled);
+            samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled,
+            astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -862,8 +891,24 @@ internal sealed class PersonalStatusService : IDisposable
         // actionable or waiting at the global native boundary. It no longer
         // consumes that physical hold through release.
         var purifyClaimedPriority = purify.InputClaimed;
+        // AST's held Near Help lane is immediately below Purify. It freezes one
+        // exact <=60% party member and may reserve only its accepted base
+        // Orbis' exact same-target Double Cast form for a later framework frame.
+        now = Environment.TickCount64;
+        var astrologianOrbis = astrologianHarmonicOrbis.Observe(
+            localPlayer,
+            context,
+            astrologianHarmonicOrbisConfigurationEnabled,
+            astrologianHarmonicOrbisMetadataVerified,
+            configuration.NearHelpPreferIncomingPressure,
+            guardActive,
+            purifyClaimedPriority || emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var astrologianClaimedPriority = astrologianOrbis.InputClaimed;
         // SAM's exact post-protection sequence is a job helper directly after
-        // Purify. Counter-CC runs before Zantetsuken so an accepted Soten can
+        // AST. Counter-CC runs before Zantetsuken so an accepted Soten can
         // reserve its bounded Mineuchi arrival window without another SAM
         // action inserting animation lock.
         now = Environment.TickCount64;
@@ -877,6 +922,7 @@ internal sealed class PersonalStatusService : IDisposable
             dispatchAllowed:
                 !guardActive &&
                 !purifyClaimedPriority &&
+                !astrologianClaimedPriority &&
                 !emergencyInputFrame.IsConsumed,
             configuration.ReactiveCcSamuraiSotenMaximumRangeYalms,
             emergencyInputFrame,
@@ -892,16 +938,20 @@ internal sealed class PersonalStatusService : IDisposable
                 dispatchAllowed:
                     !guardActive &&
                     !purifyClaimedPriority &&
+                    !astrologianClaimedPriority &&
                     !samuraiCounter.InputClaimed &&
                     !emergencyInputFrame.IsConsumed,
                 emergencyInputFrame,
                 now,
                 hardReset)
             : samuraiReactive.ResetZantetsukenLane();
-        var samuraiClaimedPriority = samurai.InputClaimed;
+        // This cumulative scheduler gate carries AST and SAM ownership into
+        // every lower helper without coupling either job probe to the other.
+        var samuraiClaimedPriority = astrologianClaimedPriority || samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
-        // Purify is absolute. Auto-Seiton is the next action-level priority;
+        // Purify is absolute. AST, SAM, then Auto-Seiton are the next
+        // action-level priorities;
         // once it claims this frame, every later held helper observes that
         // claim and stays armed for a later free frame.
         now = Environment.TickCount64;
@@ -1318,6 +1368,9 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                astrologianOrbis.InputClaimed,
+                astrologianOrbis.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 samurai.InputClaimed,
                 samurai.CastCancellationRequest) ??
@@ -1742,6 +1795,7 @@ internal sealed class PersonalStatusService : IDisposable
         HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
         emergencyInput.Reset();
         emergencyPurify.Reset();
+        astrologianHarmonicOrbis.Reset();
         defensiveUtility.Reset();
         smartRecuperate.Reset();
         emergencyTeleport.Reset();

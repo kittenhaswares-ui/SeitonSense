@@ -322,6 +322,8 @@ internal sealed class TargetPressureTracker : IDisposable
             EmergencyTeleportRules.TryGetActionForJob(localJobId, out _);
         var isBard = localJobId == EnemyCombatConstants.BardJobId;
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
+        var isAstrologian = localJobId ==
+                             AstrologianHarmonicOrbisRules.AstrologianJobId;
         var condition = dutyState.ContentFinderCondition;
         var supportedContext = PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
@@ -372,6 +374,9 @@ internal sealed class TargetPressureTracker : IDisposable
              oneShotAllyPressureRequested ||
              (isBard && configuration.EnableBardWardensPaeanPressureRedirect) ||
              (isPaladin && configuration.PaladinGuardianLowAlly) ||
+             (isAstrologian &&
+              configuration.EnableAstrologianHarmonicOrbisOnHeldKey &&
+              configuration.NearHelpPreferIncomingPressure) ||
              (configuration.EnableNearAssistMacro &&
               configuration.NearHelpPreferIncomingPressure));
         var pressureStateTrackingEnabled =
