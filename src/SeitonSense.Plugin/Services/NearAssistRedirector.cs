@@ -560,6 +560,114 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     /// <summary>
+    /// Resolves one already concrete held-action target through the same CC
+    /// Smart Action ranking and protection policy as /smartaction. The held
+    /// helper's own opt-in is authoritative, so the macro toggle is deliberately
+    /// not consulted. No game target is changed and no action is dispatched.
+    /// </summary>
+    internal bool TryResolveHeldSmartActionTarget(
+        uint resolvedActionId,
+        out int enemySlot,
+        out TargetPressureActorIdentity target,
+        out bool selectedWinnerInvalidated,
+        out string reason)
+    {
+        enemySlot = 0;
+        target = default;
+        selectedWinnerInvalidated = false;
+        reason = "Held Smart Action target unavailable";
+
+        if (disposed ||
+            !started ||
+            !configuration.Enabled ||
+            resolvedActionId == 0 ||
+            ResolveContext() != SupportedPvPContext.CrystallineConflict)
+        {
+            return false;
+        }
+
+        var actionManager = ActionManager.Instance();
+        var local = objectTable.LocalPlayer;
+        if (actionManager == null || !IsLivePlayer(local)) return false;
+
+        var hardTargetId = GetNativeHardTargetId(local!);
+        var token = new ArmedSmartTarget(
+            clientState.TerritoryType,
+            local!.EntityId,
+            local.GameObjectId,
+            0,
+            0,
+            long.MaxValue);
+        var selectedTargetId = TryResolveSmartTargetRedirect(
+            actionManager,
+            ActionType.Action,
+            resolvedActionId,
+            ActionManager.UseActionMode.None,
+            hardTargetId,
+            token,
+            heldActionSelection: true,
+            out var rewritten,
+            out var smartWinnerSelected,
+            out var selectedSlot,
+            out var selectionReason);
+
+        if (rewritten &&
+            TryResolveExactHeldSmartActionTargetIdentity(
+                selectedSlot,
+                selectedTargetId,
+                out target))
+        {
+            enemySlot = selectedSlot;
+            reason = selectionReason;
+            return true;
+        }
+
+        if (smartWinnerSelected)
+        {
+            // A ranked winner existed but drifted during exact revalidation.
+            // Never substitute <t> after that one actor was selected.
+            selectedWinnerInvalidated = true;
+            reason = selectionReason;
+            return false;
+        }
+
+        // Smart Action's authored <t> fallback remains last. It is accepted
+        // only when that exact current actor independently passes the same
+        // canonical identity, protection, native range and LoS policy. The
+        // resulting concrete tuple is frozen by the held Viper caller.
+        if (TryValidateExactHeldSmartActionTarget(
+                resolvedActionId,
+                hardTargetId,
+                expectedSlot: 0,
+                expectedTarget: default,
+                out enemySlot,
+                out target))
+        {
+            reason = $"{selectionReason}; exact safe hard-target fallback";
+            return true;
+        }
+
+        reason = selectionReason;
+        return false;
+    }
+
+    /// <summary>
+    /// Revalidates only a previously frozen held Smart Action tuple. Ranking is
+    /// never rerun here, so drift cancels instead of selecting another enemy.
+    /// </summary>
+    internal bool CanUseExactHeldSmartActionTarget(
+        uint resolvedActionId,
+        int enemySlot,
+        TargetPressureActorIdentity target) =>
+        TryValidateExactHeldSmartActionTarget(
+            resolvedActionId,
+            target.GameObjectId,
+            enemySlot,
+            target,
+            out _,
+            out _);
+
+    /// <summary>
     /// Runs exactly one authored AST Harmonic Orbis action through the ordinary
     /// redirect bypass while retaining a final hook-boundary veto for the exact
     /// local actor's active or propagating Guard. No other bypass caller opts in
@@ -1340,7 +1448,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     mode,
                     targetId,
                     smartToken,
+                    heldActionSelection: false,
                     out var rewritten,
+                    out _,
                     out var selectedSlot,
                     out var reason);
                 if (!rewritten)
@@ -2363,6 +2473,155 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private bool TryResolveExactHeldSmartActionTargetIdentity(
+        int enemySlot,
+        ulong targetId,
+        out TargetPressureActorIdentity target)
+    {
+        target = default;
+        if (!EnemySlotRules.IsValidSlot(enemySlot) ||
+            !IsNetworkObjectId(targetId))
+        {
+            return false;
+        }
+
+        var enemy = EnemySlotResolver.Resolve(objectTable, enemySlot);
+        if (!IsLivePlayer(enemy) ||
+            targetId != enemy!.GameObjectId && targetId != enemy.EntityId)
+        {
+            return false;
+        }
+
+        var byObjectId = objectTable.SearchById(enemy.GameObjectId)
+            as IPlayerCharacter;
+        var byEntityId = objectTable.SearchByEntityId(enemy.EntityId)
+            as IPlayerCharacter;
+        if (!HasSameNativeIdentity(enemy, byObjectId) ||
+            !HasSameNativeIdentity(enemy, byEntityId))
+        {
+            return false;
+        }
+
+        target = new TargetPressureActorIdentity(
+            enemy.GameObjectId,
+            enemy.EntityId);
+        return target.IsValid;
+    }
+
+    private bool TryValidateExactHeldSmartActionTarget(
+        uint resolvedActionId,
+        ulong targetId,
+        int expectedSlot,
+        TargetPressureActorIdentity expectedTarget,
+        out int enemySlot,
+        out TargetPressureActorIdentity target)
+    {
+        enemySlot = 0;
+        target = default;
+        if (disposed ||
+            !started ||
+            !configuration.Enabled ||
+            resolvedActionId == 0 ||
+            !IsNetworkObjectId(targetId) ||
+            ResolveContext() != SupportedPvPContext.CrystallineConflict)
+        {
+            return false;
+        }
+
+        var local = objectTable.LocalPlayer;
+        if (!IsLivePlayer(local) ||
+            !TryGetExactResolvedPvpActionMetadata(
+                resolvedActionId,
+                out var action) ||
+            !action.CanTargetHostile ||
+            action.TargetArea ||
+            action.Range <= 0)
+        {
+            return false;
+        }
+
+        var partyEntityIds = GetPartyEntityIds();
+        var sourceObject = GetNativeObject(local!);
+        if (sourceObject == null ||
+            !TryBuildSmartActionProtectionSnapshot(
+                local!,
+                partyEntityIds,
+                out var canonicalEnemies,
+                out var protectedActors))
+        {
+            return false;
+        }
+
+        var exactMatches = canonicalEnemies
+            .Where(candidate =>
+                (expectedSlot == 0 || candidate.Slot == expectedSlot) &&
+                (!expectedTarget.IsValid ||
+                 candidate.Player.GameObjectId == expectedTarget.GameObjectId &&
+                 candidate.Player.EntityId == expectedTarget.EntityId) &&
+                (targetId == candidate.Player.GameObjectId ||
+                 targetId == candidate.Player.EntityId))
+            .Take(2)
+            .ToArray();
+        if (exactMatches.Length != 1) return false;
+
+        var exact = exactMatches[0];
+        if (!TryResolveSmartTargetReachTier(
+                local!,
+                exact.Player,
+                out var reachTier))
+        {
+            return false;
+        }
+
+        var targetObject = GetNativeObject(exact.Player);
+        var rangeResult = targetObject != null
+            ? ActionManager.GetActionInRangeOrLoS(
+                resolvedActionId,
+                sourceObject,
+                targetObject)
+            : uint.MaxValue;
+        var protectionSafe = SmartActionProtectionRules.IsActionProtectionSafe(
+            ClassifySmartActionAttackShape(action),
+            CreateSmartActionActorGeometry(exact),
+            action.EffectRange,
+            protectedActors,
+            smartActionGuardBypassActions.Contains(resolvedActionId));
+        var exactIdentity = new TargetPressureActorIdentity(
+            exact.Player.GameObjectId,
+            exact.Player.EntityId);
+        var candidate = new SmartTargetSelectionCandidate(
+            exact.Slot,
+            exactIdentity,
+            ExactCanonicalIdentity: true,
+            IsHostile: true,
+            Alive: IsLivePlayer(exact.Player),
+            Targetable: exact.Player.IsTargetable,
+            exact.Player.CurrentHp,
+            exact.Player.MaxHp,
+            reachTier,
+            HasValidActionTarget: targetObject != null,
+            HasNativeRangeAndLineOfSight:
+                SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeResult),
+            FreshTeamPressureCount: null,
+            GuardAvailability.Unknown,
+            HasTrustedMp: false,
+            CurrentMp: 0,
+            MaximumMp: 0,
+            CallerProvenProtectionSafe: protectionSafe);
+        if (!SmartTargetSelectionRules.IsEligibleCandidate(
+                candidate,
+                new TargetPressureActorIdentity(
+                    local!.GameObjectId,
+                    local.EntityId)))
+        {
+            return false;
+        }
+
+        enemySlot = exact.Slot;
+        target = exactIdentity;
+        return true;
+    }
+
     private ulong TryResolveSmartTargetRedirect(
         ActionManager* actionManager,
         ActionType actionType,
@@ -2370,11 +2629,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ActionManager.UseActionMode mode,
         ulong originalTargetId,
         ArmedSmartTarget token,
+        bool heldActionSelection,
         out bool rewritten,
+        out bool smartWinnerSelected,
         out int selectedSlot,
         out string reason)
     {
         rewritten = false;
+        smartWinnerSelected = false;
         selectedSlot = 0;
         reason = "Smart Action fallback: invalid context";
 
@@ -2384,13 +2646,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                  localPlayer!.EntityId == token.LocalEntityId &&
                                  localPlayer.GameObjectId == token.LocalGameObjectId;
         var supportedContext = configuration.Enabled &&
-                               configuration.EnableSmartActionMacro &&
+                               (heldActionSelection ||
+                                configuration.EnableSmartActionMacro) &&
                                clientState.TerritoryType == token.TerritoryId &&
                                ResolveContext() == SupportedPvPContext.CrystallineConflict &&
                                localIdentityValid;
-        var supportedMode = IsCertifiedMacroInvocationMode(mode) &&
-                            mode != ActionManager.UseActionMode.Queue;
-        var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+        var supportedMode = heldActionSelection
+            ? mode == ActionManager.UseActionMode.None
+            : IsCertifiedMacroInvocationMode(mode) &&
+              mode != ActionManager.UseActionMode.Queue;
+        var resolvedActionId = heldActionSelection
+            ? actionId
+            : ResolveActionId(actionManager, actionType, actionId);
         if (!supportedContext ||
             !supportedMode ||
             !IsSupportedActionType(actionType) ||
@@ -2402,13 +2669,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var local = localPlayer!;
         var localActor = new TargetPressureActorIdentity(local.GameObjectId, local.EntityId);
-        ArmSmartActionSafetyLease(
-            token,
-            localActor,
-            actionType,
-            actionId,
-            resolvedActionId,
-            now);
+        if (!heldActionSelection)
+        {
+            ArmSmartActionSafetyLease(
+                token,
+                localActor,
+                actionType,
+                actionId,
+                resolvedActionId,
+                now);
+        }
 
         if (resolvedActionId == 0)
         {
@@ -2531,6 +2801,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             reason = "Smart Action fallback: no exact reachable candidate";
             return originalTargetId;
         }
+
+        smartWinnerSelected = true;
 
         var selected = candidates.SingleOrDefault(candidate =>
             candidate.Selection.EnemySlot == intent.EnemySlot &&
@@ -4344,6 +4616,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         !player.IsDead &&
         player.CurrentHp > 0 &&
         player.MaxHp >= player.CurrentHp;
+
+    private static bool HasSameNativeIdentity(
+        IPlayerCharacter? left,
+        IPlayerCharacter? right) =>
+        left is not null &&
+        right is not null &&
+        left.Address != 0 &&
+        right.Address != 0 &&
+        left.Address == right.Address &&
+        left.GameObjectId == right.GameObjectId &&
+        left.EntityId == right.EntityId;
 
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000;

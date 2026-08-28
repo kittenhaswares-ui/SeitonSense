@@ -55,9 +55,10 @@ internal sealed partial class SettingsWindow
             value => configuration.PersonalWarningBackgroundOpacity = value,
             "%.2f");
         ImGui.TextDisabled(
-            "These controls move and scale personal warning cards, including the MCH LB card, plus CLEANSED, " +
-            "AUTO CC LANDED, and GUARDIAN TRIGGERED feedback. They do not move the top-center focus alert or " +
-            "the top-left isolation alert. At 0 opacity, text, icons, and borders remain visible.");
+            "These controls move and scale ordinary personal warning cards, including the MCH LB card, plus CLEANSED, " +
+            "AUTO CC LANDED, and GUARDIAN TRIGGERED feedback. The DRG airborne card stays in its separate top-center " +
+            "lane but shares warning scale and background opacity. They do not move the top-center focus alert or the " +
+            "top-left isolation alert. At 0 opacity, text, icons, and borders remain visible.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Your MP");
@@ -164,34 +165,35 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(isolationAwareness.Diagnostics.ToChatLine());
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Marksman's Spite");
+        ImGui.TextUnformatted("Dangerous enemy Limit Breaks");
         changed |= Checkbox(
-            "Show Marksman's Spite / MCH LB warning",
+            "Show MCH-on-you and airborne DRG LB warnings",
             configuration.WarnMarksmanSpite,
             value => configuration.WarnMarksmanSpite = value);
         changed |= Slider(
-            "MCH LB warning size",
+            "Dangerous LB warning size",
             configuration.MarksmanSpiteWarningScale,
             1f,
             2f,
             value => configuration.MarksmanSpiteWarningScale = value,
             "%.2f x");
         changed |= Checkbox(
-            "Play a sound for a verified MCH LB warning",
+            "Play a sound for verified MCH / airborne DRG LB warnings",
             configuration.MchLimitBreakSoundEnabled,
             value => configuration.MchLimitBreakSoundEnabled = value);
         changed |= SliderInt(
-            "MCH warning sound",
+            "Dangerous LB warning sound",
             configuration.MchLimitBreakSoundId,
             1,
             16,
             value => configuration.MchLimitBreakSoundId = value,
             "Sound %d");
-        if (ImGui.Button("Test MCH warning sound"))
+        if (ImGui.Button("Test dangerous LB warning sound"))
             personalStatus.PlayMachinistLimitBreakSoundPreview();
         ImGui.TextDisabled(
-            "Live MCH capture and its sound require both the personal-debuff warning master and this Marksman's " +
-            "Spite warning. The Test button remains available for setup. The alert never presses Guard or another action.");
+            "The MCH alert requires its exact early marker on you. The DRG alert starts from exact enemy Sky High " +
+            "activation while airborne and never waits for impact. Both require the personal-warning master and this " +
+            "toggle. Sound is one-shot per verified threat; neither alert presses Guard or another action.");
 
         return changed;
     }

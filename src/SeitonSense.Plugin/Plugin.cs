@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.36.0.0";
+    private const string CurrentReleaseVersion = "0.36.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -130,7 +130,8 @@ public sealed class Plugin : IDalamudPlugin
             () => configuration.Enabled &&
                   (configuration.ShowEnemyLimitBreaksOnNameplates ||
                    configuration.ShowLimitBreakActivationMessages ||
-                   configuration.ShowAllyLimitBreakDamageEvents),
+                   configuration.ShowAllyLimitBreakDamageEvents ||
+                   (configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite)),
             () => configuration.ShowAllyLimitBreakDamageEvents);
         pressureTracker = new TargetPressureTracker(
             clientState,
@@ -302,8 +303,12 @@ public sealed class Plugin : IDalamudPlugin
                 configuration.Enabled,
                 configuration.ShowLimitBreakActivationMessages,
                 configuration.ShowAllyLimitBreakDamageEvents,
+                configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite,
+                configuration.MchLimitBreakSoundEnabled,
+                configuration.MchLimitBreakSoundId,
                 configuration.LimitBreakFeedShowNames,
                 configuration.PersonalWarningScale,
+                configuration.MarksmanSpiteWarningScale,
                 configuration.PersonalWarningBackgroundOpacity));
         pressureCounter = new PressureCounterWindow(
             configuration,
@@ -341,9 +346,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New default-off AST held Near Help: while a gameplay key is held, living self/party players at 60% HP or lower use the exact /nearhelp ranking for Harmonischer Orbis / Aspected Benefic without a visible target change.",
-                "If Double Cast was already ready before an accepted Orbis, its exact Orbis repeat is reserved for the same frozen player on a later frame. The first heal never causes a rerank or alternate follow-up.",
-                "Purify and your own Guard remain absolute safety gates. Crystalline Conflict and the existing Wolves' Den test mode are supported. Configuration schema 41 is current; all 516 Core tests pass.",
+                "Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in Crystalline Conflict. Your exact current target remains only the fully validated last fallback; no visible target changes.",
+                "The chosen Viper action, actor, context, key, and carrier exposure stay frozen. If that actor dies, becomes protected, or leaves range/line of sight, the exposure ends instead of reranking. Wolves' Den remains exact <t>.",
+                "Enemy DRG Sky High now raises an immediate top-center airborne LB warning with its icon and one-shot sound; only the live Sky High status extends the countdown. Configuration schema 41 remains current; all 517 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

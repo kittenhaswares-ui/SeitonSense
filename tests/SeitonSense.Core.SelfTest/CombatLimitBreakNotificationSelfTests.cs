@@ -94,6 +94,67 @@ internal static class CombatLimitBreakNotificationSelfTests
             "overlong event lifetime");
     }
 
+    internal static void DragoonAirborneWarningRequiresExactFreshEpisode()
+    {
+        const long now = 10_000;
+        var observation = new DragoonLimitBreakWarningObservation(
+            new TargetPressureActorIdentity(100, 200),
+            true,
+            3,
+            CombatLimitBreakNotificationRules.DragoonJobId,
+            CombatLimitBreakNotificationRules.DragoonSkyHighActionId,
+            CombatLimitBreakNotificationRules.DragoonSkyHighIconId,
+            CombatLimitBreakPresentationKind.Duration,
+            false,
+            0,
+            now - 100,
+            now + CombatLimitBreakCatalog.InstantFlashMilliseconds - 100,
+            now,
+            7);
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(
+                observation,
+                now,
+                out var immediate),
+            "exact Sky High activation warns immediately");
+        False(immediate.ShowCountdown, "activation flash does not invent a duration");
+        Equal(7UL, immediate.EpisodeToken, "exact episode token");
+
+        var confirmed = observation with
+        {
+            DurationConfirmed = true,
+            EvidenceStatusId = CombatLimitBreakNotificationRules.DragoonSkyHighStatusId,
+            ExpiresAtMilliseconds = now + 3_900,
+        };
+        True(
+            CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(
+                confirmed,
+                now,
+                out var airborne),
+            "exact airborne status extends countdown");
+        True(airborne.ShowCountdown, "confirmed airborne countdown");
+        False(TryDragoon(observation with { IsEnemy = false }, now), "ally DRG fails closed");
+        False(TryDragoon(observation with { JobId = 30 }, now), "wrong job fails closed");
+        False(TryDragoon(observation with { ActivationActionId = 29_498 }, now), "impact is not startup");
+        False(TryDragoon(observation with { EpisodeToken = 0 }, now), "missing episode token");
+        False(
+            TryDragoon(confirmed with { EvidenceStatusId = 9_999 }, now),
+            "unknown status cannot extend warning");
+        False(
+            TryDragoon(confirmed with { EvidenceStatusId = 3_181 }, now),
+            "Sky Shatter impact is not the airborne phase");
+        False(
+            TryDragoon(
+                observation with
+                {
+                    SnapshotPublishedAtMilliseconds =
+                        now - CombatLimitBreakNotificationRules.MaximumSnapshotAgeMilliseconds - 1,
+                },
+                now),
+            "stale snapshot fails closed");
+    }
+
     internal static void NotificationLayoutStaysInsideSafeScreenLanes()
     {
         True(
@@ -108,6 +169,39 @@ internal static class CombatLimitBreakNotificationSelfTests
         NearlyEqual(700f, self.Left, "self centered left");
         NearlyEqual(1_220f, self.Right, "self centered right");
         True(self.Bottom <= 1_080f * 0.45f, "self remains in top safe lane");
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(
+                0f,
+                0f,
+                1_920f,
+                1_080f,
+                1f,
+                out var danger),
+            "normal enemy danger banner layout");
+        True(danger.Bottom < self.Top, "enemy danger and self banner lanes never overlap");
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(
+                0f,
+                0f,
+                1_920f,
+                1_080f,
+                1.45f,
+                out var defaultScaledDanger),
+            "default scaled enemy danger banner layout");
+        True(
+            CombatLimitBreakNotificationRules.TryBuildSelfBannerRectangleBelow(
+                0f,
+                0f,
+                1_920f,
+                1_080f,
+                1f,
+                defaultScaledDanger,
+                out var stackedSelf),
+            "self banner remains visible below default DRG danger scale");
+        True(defaultScaledDanger.Bottom < stackedSelf.Top,
+            "default DRG danger and self activation never overlap");
 
         True(
             CombatLimitBreakNotificationRules.TryBuildDamageCardRectangles(
@@ -158,6 +252,11 @@ internal static class CombatLimitBreakNotificationSelfTests
         in CombatLimitBreakDamageNotificationObservation observation,
         long now) =>
         CombatLimitBreakNotificationRules.TryBuildDamagePlan(observation, now, out _);
+
+    private static bool TryDragoon(
+        in DragoonLimitBreakWarningObservation observation,
+        long now) =>
+        CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(observation, now, out _);
 
     private static void NearlyEqual(float expected, float actual, string message)
     {

@@ -196,6 +196,88 @@ internal static class ViperSerpentTailSelfTests
             ViperSerpentTailRules.UncoiledTwinbloodActionId);
         False(CanUse(intent, newer, candidate), "new carrier generation invalidates frozen intent");
 
+        // Once CC ranking has selected this exact actor, later identity,
+        // protection, range, or LoS drift must retire this exposure. The same
+        // still-held key may never rank a second actor until the carrier really
+        // exposes a new proc generation.
+        var targetDrift = ViperSerpentTailRules.Observe(
+            decision.NextState,
+            Observation(exposure) with
+            {
+                Candidate = null,
+                NowMilliseconds = 1_001,
+            });
+        Equal(ViperSerpentTailDecisionKind.Cancelled, targetDrift.Kind,
+            "frozen CC target drift cancels");
+        Equal(ViperSerpentTailDecisionReason.CandidateUnavailable, targetDrift.Reason,
+            "frozen CC target drift reason");
+        var retiredExposure = ViperSerpentTailRules
+            .RetireCarrierExposureAfterExactTargetDrift(
+                exposure,
+                intent,
+                targetDrift);
+        True(retiredExposure.IsSpent, "frozen CC target drift retires exact exposure");
+        var alternate = Candidate() with
+        {
+            EnemySlot = 4,
+            Actor = new TargetPressureActorIdentity(0x2002, 0x202),
+        };
+        var noRerank = Observe(Observation(retiredExposure) with
+        {
+            Candidate = alternate,
+            NowMilliseconds = 1_002,
+        });
+        Equal(ViperSerpentTailDecisionReason.ExposureSpent, noRerank.Reason,
+            "same held-key exposure cannot rerank an alternate CC actor");
+        False(noRerank.ShouldDispatch, "retired exposure cannot dispatch alternate");
+
+        // If a buffered 39177 is superseded by 39178 in the same frame and the
+        // new Smart Action winner disappears before an intent can be frozen,
+        // the retirement must spend 39178 itself (never the stale 39177).
+        var oldExposure = Exposure(ViperSerpentTailRules.UncoiledTwinfangActionId);
+        var oldDecision = Observe(Observation(oldExposure) with
+        {
+            Candidate = Candidate(),
+        });
+        var oldIntent = oldDecision.Intent ??
+                        throw new InvalidOperationException("missing superseded intent");
+        var currentExposure = ViperSerpentTailRules.ObserveCarrierExposure(
+            oldExposure,
+            ViperSerpentTailRules.UncoiledTwinbloodActionId);
+        False(
+            ViperSerpentTailRules.IsTrackedUnspentExposure(
+                currentExposure,
+                oldIntent.ExposureGeneration,
+                oldIntent.ActionId),
+            "superseded 39177 intent does not own current 39178 exposure");
+        var currentRetired = ViperSerpentTailRules
+            .RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation(
+                currentExposure,
+                selectedWinnerInvalidated: true);
+        True(currentRetired.IsSpent,
+            "pre-freeze winner drift spends current superseding 39178 exposure");
+        Equal(ViperSerpentTailRules.UncoiledTwinbloodActionId,
+            currentRetired.EpisodeActionId,
+            "pre-freeze retirement never spends stale 39177 intent");
+        var supersededNoRerank = Observe(Observation(currentRetired) with
+        {
+            Candidate = alternate,
+            NowMilliseconds = 1_003,
+        });
+        Equal(ViperSerpentTailDecisionReason.ExposureSpent, supersededNoRerank.Reason,
+            "superseding 39178 exposure cannot rerank an alternate CC actor");
+        False(supersededNoRerank.ShouldDispatch,
+            "superseding exposure winner drift cannot dispatch an alternate");
+
+        var initialAbsence = Observe(Observation(exposure) with { Candidate = null });
+        var stillAvailable = ViperSerpentTailRules
+            .RetireCarrierExposureAfterExactTargetDrift(
+                exposure,
+                frozenIntent: null,
+                initialAbsence);
+        False(stillAvailable.IsSpent,
+            "no initial Smart Target winner leaves carrier available");
+
         // A proc may appear before consent. The same exposure remains available
         // and dispatches as soon as any eligible gameplay key, including WASD,
         // becomes held.

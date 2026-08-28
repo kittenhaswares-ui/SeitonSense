@@ -680,7 +680,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all schema-41 buffer/repeat/compatibility suites and the exact current
-# 516-test registry.
+# 517-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -700,11 +700,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 475 -or
+if ($staticIntegratedTestCount -ne 476 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 516 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 517 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -712,7 +712,7 @@ if ($staticIntegratedTestCount -ne 475 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 41 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 516-test combined Core registry.'
+    throw 'Schema 41 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 517-test combined Core registry.'
 }
 $monkRouteResolverSource = Read-RequiredSource $monkHeldComboProbePath 'Monk native PvP combo-route resolver'
 $normalizedMonkRouteResolverSource = $monkRouteResolverSource -replace '\s+', ' '
@@ -1070,10 +1070,32 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
 if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\).*?configuration\.EnableSmartActionMacro' -or
-    $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && configuration\.EnableSmartActionMacro &&' -or
+    $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && \(heldActionSelection \|\| configuration\.EnableSmartActionMacro\) && clientState\.TerritoryType == token\.TerritoryId && ResolveContext\(\) == SupportedPvPContext\.CrystallineConflict && localIdentityValid;' -or
     $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\) \{ shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
     $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
     throw 'The legacy one-shot harmful-action redirect must be exposed only as separately gated Smart Action, independent of the Smart Tab toggle.'
+}
+
+$heldSmartActionSelector = [regex]::Match(
+    $normalizedNearAssistForSmartAction,
+    'internal bool TryResolveHeldSmartActionTarget\(.*?\}\s*/// <summary>\s*/// Revalidates only a previously frozen held Smart Action tuple\.')
+$heldSmartActionRevalidation = [regex]::Match(
+    $normalizedNearAssistForSmartAction,
+    'internal bool CanUseExactHeldSmartActionTarget\(.*?private bool TryResolveExactHeldSmartActionTargetIdentity\(.*?private ulong TryResolveSmartTargetRedirect\(')
+if (!$heldSmartActionSelector.Success -or
+    !$heldSmartActionRevalidation.Success -or
+    $heldSmartActionSelector.Value -notmatch 'ResolveContext\(\) != SupportedPvPContext\.CrystallineConflict' -or
+    $heldSmartActionSelector.Value -notmatch 'TryResolveSmartTargetRedirect\( actionManager, ActionType\.Action, resolvedActionId, ActionManager\.UseActionMode\.None, hardTargetId, token, heldActionSelection: true, out var rewritten, out var smartWinnerSelected, out var selectedSlot, out var selectionReason\)' -or
+    $heldSmartActionSelector.Value -notmatch 'if \(smartWinnerSelected\).*?selectedWinnerInvalidated = true;.*?return false;' -or
+    $heldSmartActionSelector.Value -notmatch 'TryValidateExactHeldSmartActionTarget\( resolvedActionId, hardTargetId, expectedSlot: 0, expectedTarget: default' -or
+    $heldSmartActionSelector.Value -match '\b(?:EnableSmartActionMacro|UseAction|UseActionLocation|Original|SetTarget|ITargetManager|TargetManager)\b' -or
+    $heldSmartActionRevalidation.Value -notmatch 'TryValidateExactHeldSmartActionTarget\( resolvedActionId, target\.GameObjectId, enemySlot, target' -or
+    $heldSmartActionRevalidation.Value -notmatch 'TryBuildSmartActionProtectionSnapshot\( local!, partyEntityIds, out var canonicalEnemies, out var protectedActors\)' -or
+    $heldSmartActionRevalidation.Value -notmatch 'exactMatches\.Length != 1' -or
+    $heldSmartActionRevalidation.Value -notmatch 'SmartActionProtectionRules\.IsActionProtectionSafe\(.*?smartActionGuardBypassActions\.Contains\(resolvedActionId\)' -or
+    $heldSmartActionRevalidation.Value -notmatch 'SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\)' -or
+    $heldSmartActionRevalidation.Value -notmatch 'SmartTargetSelectionRules\.IsEligibleCandidate\(') {
+    throw 'Held VPR Smart Action selection must remain exact-CC-only, macro-toggle independent, protection/range/LoS safe, freeze one canonical actor, reject a drifted ranked winner without hard-target substitution, and own no action or target boundary.'
 }
 
 $smartTargetSelectionRules = Read-RequiredSource $smartTargetSelectionRulesPath 'Smart Action target selection rules'
@@ -1210,20 +1232,20 @@ if ($smartActionProtectionRules -match '\b(?:ActionManager|IPlayerCharacter|Stat
     $smartActionSafetyLeaseRules -match '\b(?:ActionManager|IPlayerCharacter|StatusList|ObjectTable|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b') {
     throw 'Smart Action protection and exact-fallback lease policy must remain pure value-only Core code.'
 }
-if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtectionSnapshot\(').Count -ne 5 -or
-    [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 4 -or
+if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtectionSnapshot\(').Count -ne 6 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 5 -or
     $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionMetadataVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
     $normalizedSmartActionRuntime -notmatch 'foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?!occupiedGameObjectIds\.Contains\(player\.GameObjectId\).*?!occupiedEntityIds\.Contains\(player\.EntityId\).*?observedHostileGameObjectIds\.SetEquals\(occupiedGameObjectIds\).*?observedHostileEntityIds\.SetEquals\(occupiedEntityIds\)' -or
     $normalizedSmartActionRuntime -notmatch 'var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
-    [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 3 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 4 -or
     $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = smartActionGuardBypassActions\.Contains\(resolvedActionId\);.*?var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?protectedActors, actionIgnoresGuard\).*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?finalProtectedActors, actionIgnoresGuard\)' -or
     $normalizedSmartActionRuntime -notmatch 'protectionKind \|= exactKind; continue;.*?protectionKind \|= exactKind;' -or
     $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
-    $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, out var rewritten, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
-    $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
+    $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out _, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
+    $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'Smart Action arm failed closed: protection metadata unverified') {
     throw 'Smart Action must replace its target only after complete current protection geometry, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
 }
@@ -1231,13 +1253,13 @@ if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = 
     $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, targetId, out smartToken, out consumedFallbackCarrier, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryConsumeEligibleSmartTargetToken\( ArmedSmartTarget expectedToken,.*?if \(!candidate\.Equals\(expectedToken\)\).*?ownershipChanged = true; return false;.*?armedSmartTarget = null;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?return action\.CanTargetHostile && !action\.TargetArea && action\.Range > 0;' -or
-    $normalizedSmartActionRuntime -notmatch 'ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\);.*?TryBuildSmartActionProtectionSnapshot' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \}.*?TryBuildSmartActionProtectionSnapshot' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
     $normalizedSmartActionRuntime -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?clientAccepted = useActionHook!\.Original\(' -or
     $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId;.*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe.*?if \(safe\) canonicalTargetId = target\.Player\.GameObjectId;' -or
-    $normalizedSmartActionRuntime -notmatch 'ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \} if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
     $normalizedSmartActionRuntime -notmatch 'if \(Environment\.TickCount64 >= candidate\.ExpiresAtMilliseconds\).*?armedSmartTarget = null;.*?ownershipChanged = false;.*?Expired before exact Smart Action claim.*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionSafetyLeaseRules\.Arm\( token\.TerritoryId, localPlayer, \(uint\)actionType, rawActionId, resolvedActionId, nowMilliseconds, nowMilliseconds \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);' -or
     $normalizedSmartActionRuntime -match 'configuration\.EnableSmartActionMacro && token\.ExpiresAtMilliseconds >= now' -or
@@ -2712,6 +2734,8 @@ Assert-Literals $viperSerpentTailRules @(
     'public uint CurrentActionId => HasCurrentFollowUp ? EpisodeActionId : 0;',
     'public static ViperSerpentTailExposureState ObserveCarrierExposure(',
     'public static ViperSerpentTailExposureState MarkCarrierExposureSpent(',
+    'public static ViperSerpentTailExposureState RetireCarrierExposureAfterExactTargetDrift(',
+    'RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation(',
     'public static bool IsCurrentUnspentExposure(',
     'public static bool IsTrackedUnspentExposure(',
     'long ExposureGeneration,',
@@ -2736,11 +2760,12 @@ Assert-Literals $viperSerpentTailRules @(
 ) 'Exact VPR carrier/follow-up IDs, direct exposure generation, frozen intent, and shared retry policy'
 if ([regex]::Matches($viperSerpentTailRules, '\bHeldActionRetryRules\.RetainsSchedulerFrame\s*\(').Count -ne 2 -or
     [regex]::Matches($viperSerpentTailRules, '\bObserveCarrierExposure\s*\(').Count -ne 1 -or
-    [regex]::Matches($viperSerpentTailRules, '\bMarkCarrierExposureSpent\s*\(').Count -ne 1 -or
+    [regex]::Matches($viperSerpentTailRules, '\bMarkCarrierExposureSpent\s*\(').Count -ne 3 -or
     [regex]::Matches($viperSerpentTailRules, '\bClassifyFollowUpBoundary\s*\(').Count -ne 1 -or
     $normalizedViperSerpentTailRules -notmatch 'if \(IsExactFollowUpAction\(resolvedCarrierActionId\)\).*?previous\.HasTrackedEpisode && previous\.EpisodeActionId == resolvedCarrierActionId.*?IsCurrentlyExposed = true.*?ConsecutiveNonFollowUpObservations = 0.*?var nextGeneration = NextExposureGeneration\(previous\.Generation\);.*?IsSpent: false' -or
     $normalizedViperSerpentTailRules -notmatch 'var misses = Math\.Min\( 2, previous\.ConsecutiveNonFollowUpObservations \+ 1\); if \(previous\.HasTrackedEpisode && misses == 1\).*?IsCurrentlyExposed = false.*?ConsecutiveNonFollowUpObservations = 1.*?new ViperSerpentTailExposureState\( previous\.Generation, 0, IsCurrentlyExposed: false, IsSpent: false, ConsecutiveNonFollowUpObservations: misses\)' -or
     $normalizedViperSerpentTailRules -notmatch 'state\.Generation == generation && state\.EpisodeActionId == actionId \? state with \{ IsSpent = true \}' -or
+    $normalizedViperSerpentTailRules -notmatch 'RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation\(.*?selectedWinnerInvalidated\) => selectedWinnerInvalidated \? MarkCarrierExposureSpent\( exposure, exposure\.Generation, exposure\.CurrentActionId\) : exposure;' -or
     $normalizedViperSerpentTailRules -notmatch 'IsTrackedUnspentExposure\(exposure, generation, actionId\) && exposure\.IsCurrentlyExposed' -or
     $normalizedViperSerpentTailRules -notmatch 'if \(!IsTrackedUnspentExposure\( observation\.Exposure, intent\.ExposureGeneration, intent\.ActionId\)\).*?observation\.Exposure\.HasCurrentFollowUp && !observation\.Exposure\.IsSpent.*?return TryCreateIntent\(observation\)' -or
     $normalizedViperSerpentTailRules -notmatch 'ClassifyFollowUpBoundary\(.*?if \(clientReturnedAccepted\) return ClientActionAttemptOutcome\.ClientAccepted; if \(expectedActionId == 0 \|\| targetStatusBefore != 0 \|\| targetStatusAfter != 0 \|\| carrierBefore != expectedActionId \|\| carrierAfter != expectedActionId\).*?return ClientActionAttemptOutcome\.AcceptanceUnknown;.*?return ClientActionAttemptBoundaryRules\.Classify\( false, expectedActionId, before, after\);' -or
@@ -2784,6 +2809,13 @@ Assert-Literals $viperSerpentTailSelfTests @(
     '"carrier exposure with pre-existing hold"',
     '"proc before key dispatches when hold arrives"',
     '"new carrier generation invalidates frozen intent"',
+    '"frozen CC target drift retires exact exposure"',
+    '"same held-key exposure cannot rerank an alternate CC actor"',
+    '"superseded 39177 intent does not own current 39178 exposure"',
+    '"pre-freeze winner drift spends current superseding 39178 exposure"',
+    '"pre-freeze retirement never spends stale 39177 intent"',
+    '"superseding 39178 exposure cannot rerank an alternate CC actor"',
+    '"no initial Smart Target winner leaves carrier available"',
     '"soft wait spends no retry"',
     '"action wait yields lower helpers"',
     '"range wait freezes intent"',
@@ -2823,9 +2855,16 @@ Assert-Literals $viperSerpentTailProbe @(
     'completion.SpendExposure',
     'ResolveCurrentExactCandidate(',
     'ResolveExactCandidate(',
+    'nearAssist.TryResolveHeldSmartActionTarget(',
+    'nearAssist.CanUseExactHeldSmartActionTarget(',
+    'selectedWinnerInvalidated',
+    'freshSelectedIntent',
+    'currentIntentStillTracked',
+    '.RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation(',
+    '.RetireCarrierExposureAfterExactTargetDrift(',
     'EnemySlotResolver.Resolve(objectTable, enemySlot)',
     'GetNativeHardTargetId(localPlayer)',
-    'ActorIdMatches(nativeHardTargetId, enemy!)',
+    'ActorIdMatches(nativeTargetId, candidate!)',
     'var metadataVerified = actionMetadataVerified;',
     'TryResolveExactWolvesDenCurrentHardTarget(',
     'StrictWolvesDenStrikingDummyResolver.TryResolveExactCurrentHardTarget(',
@@ -2847,7 +2886,7 @@ Assert-Literals $viperSerpentTailProbe @(
     'completion.Disposition',
     'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
     'inputFrame.Consume();'
-) 'VPR direct carrier polling, exact current-hard-target freeze, exact spent latch, and one direct-target native boundary'
+) 'VPR direct carrier polling, Smart Action CC selection, exact frozen-target spent latch, Wolves Den current-target path, and one direct-target native boundary'
 if ([regex]::Matches($viperSerpentTailProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($viperSerpentTailProbe, '\bRunWithoutRedirect\s*\(').Count -ne 1 -or
     [regex]::Matches($viperSerpentTailProbe, '\bObserveCarrierExposure\s*\(').Count -ne 1 -or
@@ -2858,10 +2897,15 @@ if ([regex]::Matches($viperSerpentTailProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($viperSerpentTailProbe, '\bGetActionStatus\s*\(').Count -ne 3 -or
     [regex]::Matches($viperSerpentTailProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
     $normalizedViperSerpentTailProbe -notmatch 'exposure = ViperSerpentTailRules\.ObserveCarrierExposure\( exposure, resolvedActionId, hardReset: !featureGateReady\)' -or
-    $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.CrystallineConflict:.*?var nativeHardTargetId = GetNativeHardTargetId\(localPlayer\);.*?EnemySlotResolver\.Resolve\(objectTable, slot\).*?ActorIdMatches\(nativeHardTargetId, enemy!\).*?ResolveExactCandidate\( localPlayer, context, slot, enemyIdentity, actionId, wolvesDenDummyMetadataVerified\)' -or
+    $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.CrystallineConflict:.*?nearAssist\.TryResolveHeldSmartActionTarget\( actionId, out var slot, out var smartIdentity, out selectedWinnerInvalidated, out _\).*?selectedEnemySlot = slot; selectedTarget = smartIdentity; return ResolveExactCandidate\( localPlayer, context, slot, smartIdentity, actionId, wolvesDenDummyMetadataVerified\)' -or
+    $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.CrystallineConflict:.*?nearAssist\.CanUseExactHeldSmartActionTarget\( actionId, enemySlot, expectedTarget\).*?EnemySlotResolver\.Resolve\(objectTable, enemySlot\).*?player!\.GameObjectId != expectedTarget\.GameObjectId.*?player\.EntityId != expectedTarget\.EntityId' -or
+    $normalizedViperSerpentTailProbe -notmatch 'var exactFrozenTargetInvalid = selectedWinnerInvalidated \|\| runtimeCandidate is null && \(currentIntentStillTracked && previousIntent is \{ IsValid: true \} \|\| freshSelectedIntent is \{ IsValid: true \}\);.*?if \(exactFrozenTargetInvalid\).*?CandidateUnavailable.*?ClearFrozenRuntime\(\);' -or
+    $normalizedViperSerpentTailProbe -notmatch 'var selectedOrFrozenIntent = currentIntentStillTracked \? previousIntent : freshSelectedIntent;' -or
+    $normalizedViperSerpentTailProbe -notmatch 'exposure = ViperSerpentTailRules\s*\.RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation\( exposure, selectedWinnerInvalidated\);' -or
+    $normalizedViperSerpentTailProbe -notmatch 'exposure = ViperSerpentTailRules\s*\.RetireCarrierExposureAfterExactTargetDrift\( exposure, selectedOrFrozenIntent, decision\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'var metadataVerified = actionMetadataVerified;' -or
     $normalizedViperSerpentTailProbe -match 'metadataVerified = actionMetadataVerified &&.*?wolvesDenDummyMetadataVerified' -or
-    $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.WolvesDen: return TryResolveExactWolvesDenCurrentHardTarget\( objectTable, wolvesDenDummyMetadataVerified, localPlayer, out _, out var identity\).*?\? ResolveExactCandidate\( localPlayer, context, 0, identity, actionId, wolvesDenDummyMetadataVerified\)' -or
+    $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.WolvesDen: if \(!TryResolveExactWolvesDenCurrentHardTarget\( objectTable, wolvesDenDummyMetadataVerified, localPlayer, out _, out var identity\)\).*?return null;.*?selectedTarget = identity; return ResolveExactCandidate\( localPlayer, context, 0, identity, actionId, wolvesDenDummyMetadataVerified\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'case SupportedPvPContext\.WolvesDen: if \(enemySlot != 0 \|\| !TryResolveExactWolvesDenCurrentHardTarget\( objectTable, wolvesDenDummyMetadataVerified, localPlayer, out target, out var currentIdentity\) \|\| currentIdentity != expectedTarget\)' -or
     $normalizedViperSerpentTailProbe -notmatch 'private static bool TryResolveExactWolvesDenCurrentHardTarget\(.*?StrictWolvesDenStrikingDummyResolver\.TryResolveExactCurrentHardTarget\(.*?ViperSerpentTailRules\.IsEligibleWolvesDenCurrentTarget\( isPlayerCharacter: false, hostileFlag: false, exactVerifiedStrikingDummy: true\).*?var nativeTargetId = GetNativeHardTargetId\(localPlayer\);.*?objectTable\.SearchById\(nativeTargetId\).*?objectTable\.SearchByEntityId\(\(uint\)nativeTargetId\).*?ViperSerpentTailRules\.IsEligibleWolvesDenCurrentTarget\( isPlayerCharacter: true, hostileFlag, exactVerifiedStrikingDummy: false\).*?ActorIdMatches\(nativeTargetId, candidate!\).*?!IsLivePlayer\(candidate\).*?!candidate!\.IsTargetable.*?GetNativeHardTargetId\(localPlayer\) != nativeTargetId.*?\(candidate\.StatusFlags & StatusFlags\.Hostile\) == 0.*?identity = new TargetPressureActorIdentity\( candidate\.GameObjectId, candidate\.EntityId\);' -or
     $normalizedViperSerpentTailProbe -notmatch 'actionManager->GetActionStatus\( ActionType\.Action, actionId, expectedTarget\.GameObjectId, checkRecastActive: true, checkCastingActive: true\) == 0' -or
@@ -2871,7 +2915,7 @@ if ([regex]::Matches($viperSerpentTailProbe, '\bUseAction\s*\(').Count -ne 1 -or
     $normalizedViperSerpentTailProbe -notmatch 'if \(completion\.SpendExposure\).*?exposure = ViperSerpentTailRules\.MarkCarrierExposureSpent\( exposure, intent\.ExposureGeneration, intent\.ActionId\)' -or
     $normalizedViperSerpentTailProbe -notmatch 'if \(completion\.Terminal && HeldActionRetryRules\.ShouldLatchHeldKeyUntilRelease\( completion\.Disposition\)\).*?terminalHeldKey = \(VirtualKey\)intent\.FrozenKeyCode;' -or
     $viperSerpentTailProbe -match '\b(?:HeldCastCancellationRequest|HeldCastCancellationHelperKind|CancelCast|ITargetManager|TargetManager|SetTarget|QueueAction|UseActionLocation|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget|WolvesDenOpponentResolver|ResolveWolvesDenDuelOpponent|PvPDuelManager)\b|ActionManager\.UseActionMode\.Queue|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
-    throw 'VPR runtime must poll carrier 39183, freeze the exact current hard target, preserve CC e-slots, use exact Wolves Den <t> duel identity without a dummy-metadata gate, own exactly one RunWithoutRedirect direct-target UseActionMode.None boundary with strict before/after proof, and never cancel casts, mutate targets, enqueue, alternate, or infer a predecessor.'
+    throw 'VPR runtime must poll carrier 39183, select one protection-safe canonical CC Smart Target or exact-safe hard-target fallback, freeze it without reranking and spend its exposure on drift, preserve the exact Wolves Den <t> duel/dummy path, own exactly one RunWithoutRedirect direct-target UseActionMode.None boundary with strict before/after proof, and never cancel casts, mutate targets, enqueue, alternate, or infer a predecessor.'
 }
 
 Assert-Literals $strictWolvesDenDummyResolver @(
@@ -2895,8 +2939,8 @@ if ([regex]::Matches($strictWolvesDenDummyResolver, '\b541\b').Count -ne 0 -or
     throw 'The shared Den resolver must reference the one Core NameId constant, require the exact live targetable current native hard-target striking dummy, and never query duel/S-slot/nearest/action/target-mutation fallbacks.'
 }
 
-if ($viperNearAssist -match '(?i)\bviper(?:serpenttail)?\b|viperSerpentTail|ViperSerpentTail|AcceptedActionEpoch|TryCaptureViper|ArmAcceptedViper|pendingViper|Viper.*(?:Trigger|Preflight|Promotion|Queue|Epoch|Chain)') {
-    throw 'Near Assist must remain completely independent of VPR carrier exposure: no Viper trigger, preflight, promotion, queue provenance, accepted epoch, target capture, or chained-arm API may remain.'
+if ($viperNearAssist -match '(?i)ViperSerpentTail(?:Exposure|Intent|State|Rules)|AcceptedActionEpoch|TryCaptureViper|ArmAcceptedViper|pendingViper|Viper.*(?:Trigger|Preflight|Promotion|Queue|Epoch|Chain)') {
+    throw 'Near Assist may expose only the stateless protection-safe VPR Smart Action selector; no VPR carrier exposure, intent/state ownership, trigger, preflight, promotion, queue provenance, accepted epoch, or chained-arm API may remain.'
 }
 
 Assert-Literals $viperMetadataGuard @(
@@ -3595,8 +3639,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 475) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 475-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 476) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 476-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -6463,12 +6507,13 @@ if ($normalizedTargetPressureTracker -notmatch 'var isAstrologian = localJobId =
 }
 if ($normalizedTargetPressureTracker -notmatch 'var isAllyRescueJob = localJobId is EnemyCombatConstants\.WhiteMageJobId or EnemyCombatConstants\.BardJobId; var isReactiveCounterCcJob = isAllyRescueJob \|\| localJobId == EnemyCombatConstants\.NinjaJobId;' -or
     $normalizedTargetPressureTracker -notmatch 'var isScholar = localJobId == EnemyCombatConstants\.ScholarJobId; var isDarkKnight = localJobId == DarkKnightShadowbringerRules\.DarkKnightJobId;' -or
-    $normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(isReactiveCounterCcJob && configuration\.EnableReactiveCcUtilities && \(configuration\.ReactiveCcAfterEnemyPurify \|\| configuration\.ReactiveCcAfterEnemyGuard\)\) \|\| \(isScholar && configuration\.EnableScholarCriticalStrategyOnHeldKey\) \|\| \(isDarkKnight && configuration\.EnableDarkKnightShadowbringerOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark') {
-    throw 'Pressure tracking must remain independently active with exact WHM/BRD/NIN job gates for either post-Purify or post-Guard counter-CC, SCH ranking, and enabled DRK Shadowbringer, plus defensive and Attack-1 consumers.'
+    $normalizedTargetPressureTracker -notmatch 'var isViper = localJobId == ViperSerpentTailRules\.ViperJobId;' -or
+    $normalizedTargetPressureTracker -notmatch 'configuration\.EnableDefensiveUtilities \|\| \(isReactiveCounterCcJob && configuration\.EnableReactiveCcUtilities && \(configuration\.ReactiveCcAfterEnemyPurify \|\| configuration\.ReactiveCcAfterEnemyGuard\)\) \|\| \(isScholar && configuration\.EnableScholarCriticalStrategyOnHeldKey\) \|\| \(isDarkKnight && configuration\.EnableDarkKnightShadowbringerOnHeldKey\) \|\| \(isViper && configuration\.EnableViperSerpentTailOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark') {
+    throw 'Pressure tracking must remain independently active with exact WHM/BRD/NIN job gates for either post-Purify or post-Guard counter-CC, SCH ranking, enabled DRK Shadowbringer, and the opt-in VPR held Smart Target rank, plus defensive and Attack-1 consumers.'
 }
-if ($normalizedTargetPressureTracker -notmatch '\(isDarkKnight && configuration\.EnableDarkKnightShadowbringerOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark \|\| configuration\.ShowHighPressureWarning \|\| configuration\.PlayHighPressureWarningSound \|\| configuration\.EnablePressureEscapeSprintOnHeldKey \|\| \(isEmergencyTeleportJob && configuration\.EnableEmergencyTeleportOnHeldKey\);' -or
+if ($normalizedTargetPressureTracker -notmatch '\(isDarkKnight && configuration\.EnableDarkKnightShadowbringerOnHeldKey\) \|\| \(isViper && configuration\.EnableViperSerpentTailOnHeldKey\) \|\| configuration\.EnableAutoEnemyFocusMark \|\| configuration\.ShowHighPressureWarning \|\| configuration\.PlayHighPressureWarningSound \|\| configuration\.EnablePressureEscapeSprintOnHeldKey \|\| \(isEmergencyTeleportJob && configuration\.EnableEmergencyTeleportOnHeldKey\);' -or
     $normalizedTargetPressureTracker -notmatch '!isWolvesDen \|\| configuration\.PressureIncludeWolvesDen \|\| \(isEmergencyTeleportJob && configuration\.EnableEmergencyTeleportOnHeldKey\) \|\| \(isDarkKnight && configuration\.EnableDarkKnightShadowbringerOnHeldKey\)') {
-    throw 'Direct pressure tracking must activate independently for each high-pressure visual, FFXIV-system-sound, held-Sprint, Emergency Teleport, or enabled DRK Shadowbringer option; Den Teleport and DRK testing must not depend on the visible pressure opt-in.'
+    throw 'Direct pressure tracking must activate independently for each high-pressure visual, FFXIV-system-sound, held-Sprint, Emergency Teleport, enabled DRK Shadowbringer, or opt-in VPR Smart Target rank; Den Teleport and DRK testing must not depend on the visible pressure opt-in.'
 }
 if ($targetPressureTracker -match '\bEnableSageKardia(?:OnHeldKey|AfterEukrasia)\b' -or
     $normalizedTargetPressureTracker -notmatch 'oneShotAllyPressureRequested = requestedAllyPressureAt >= 0 && now >= requestedAllyPressureAt && now - requestedAllyPressureAt < SmartKardiaRules\.TriggerLifetimeMilliseconds' -or
@@ -6986,9 +7031,9 @@ if (-not $consumeState.Success -or -not $originalCall.Success -or $consumeState.
 if ($nearAssist -match '\bCanUseActionOnTarget\s*\(') {
     throw 'Near Assist must not restore the transient target-usability prefilter that defeats native macro queuing.'
 }
-if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.None').Count -ne 4 -or
+if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.None').Count -ne 5 -or
     [regex]::Matches($nearAssist, '\bmode\s*!=\s*ActionManager\.UseActionMode\.Queue').Count -lt 2) {
-    throw 'Near Assist may recognize normal-mode calls only in its two reviewed public gates, the exact one-call plugin-helper scope, and the certified physical-buffer provenance gate; Queue must remain rejected.'
+    throw 'Near Assist may recognize normal-mode calls only in its two reviewed public gates, the exact one-call plugin-helper scope, the held VPR Smart Action selector, and the certified physical-buffer provenance gate; Queue must remain rejected.'
 }
 if ($nearAssist -match 'RaptureShellModule|MacroLocked|MacroCurrentLine|MacroLineText') {
     throw 'Near Assist must not restore the live macro-line timing dependency that caused valid Turbo calls to be missed.'
@@ -8467,11 +8512,77 @@ Assert-Literals ($overlayRendererLimitBreaks + $limitBreakNotificationRenderer) 
     'CombatLimitBreakNameplateRules.TryBuildDisplayPlan(',
     'CombatLimitBreakNameplateRules.TryBuildVerticalStack(',
     'CombatLimitBreakNotificationRules.TryBuildSelfPlan(',
+    'CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(',
+    'CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(',
     'CombatLimitBreakNotificationRules.TryBuildDamagePlan(',
     'CombatLimitBreakNotificationRules.MaximumVisibleDamageCards',
     'LB ACTIVATED!',
     'runtime.TryResolveCurrentDamageDisplayNames('
 ) 'Standalone enemy-nameplate and self/ally LB renderers'
+Assert-Literals $combatLimitBreakNotificationRules @(
+    'public const uint DragoonJobId = 22;',
+    'public const uint DragoonSkyHighActionId = 29_497;',
+    'public const uint DragoonSkyHighIconId = 9_652;',
+    'public const uint DragoonSkyHighStatusId = 3_180;',
+    'public const long MaximumDragoonAirborneEpisodeMilliseconds = 5_000;',
+    'observation.IsEnemy',
+    'observation.EnemySlot is < FirstEnemySlot or > LastEnemySlot',
+    'observation.EpisodeToken == 0',
+    'observation.EvidenceStatusId != DragoonSkyHighStatusId',
+    'lifetime is <= 0 or > MaximumDragoonAirborneEpisodeMilliseconds',
+    'lifetime is <= 0 or > CombatLimitBreakCatalog.InstantFlashMilliseconds',
+    'TryBuildEnemyDangerBannerRectangle(',
+    'TryBuildSelfBannerRectangleBelow(',
+    'if (!RectanglesOverlap(rectangle, upperBanner)) return true;',
+    'var shiftedTop = upperBanner.Bottom + (12f * uiScale);'
+) 'Exact enemy DRG 29497 / status-3180-only airborne warning and safe card lane'
+$normalizedCombatLimitBreakNotificationRules = $combatLimitBreakNotificationRules -replace '\s+', ' '
+if ($normalizedCombatLimitBreakNotificationRules -notmatch 'public static bool TryBuildDragoonWarningPlan\(.*?!observation\.Actor\.IsValid.*?!observation\.IsEnemy.*?observation\.JobId != DragoonJobId.*?observation\.ActivationActionId != DragoonSkyHighActionId.*?observation\.IconId != DragoonSkyHighIconId.*?observation\.Presentation != CombatLimitBreakPresentationKind\.Duration.*?observation\.EpisodeToken == 0.*?!IsFresh\(' -or
+    $normalizedCombatLimitBreakNotificationRules -notmatch 'if \(observation\.DurationConfirmed\).*?observation\.EvidenceStatusId != DragoonSkyHighStatusId.*?MaximumDragoonAirborneEpisodeMilliseconds.*?else if \(observation\.EvidenceStatusId != 0.*?CombatLimitBreakCatalog\.InstantFlashMilliseconds' -or
+    $combatLimitBreakNotificationRules -match '\b(?:3_181|29_498|29_499|GaugeChargeSeconds|EstimatedRecharge|UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget)\b') {
+    throw 'DRG airborne admission must use only a fresh exact enemy job-22 action-29497 episode, extend only from live status 3180, reject Sky Shatter/landing/gauge inference, and remain action/target free.'
+}
+Assert-Literals $combatLimitBreakRuntime @(
+    'var exactDragoonSkyHigh =',
+    'caster.Actor.JobId == CombatLimitBreakNotificationRules.DragoonJobId &&',
+    'actionId == CombatLimitBreakNotificationRules.DragoonSkyHighActionId;',
+    '(caster.Player.IsTargetable || exactDragoonSkyHigh) &&'
+) 'Exact DRG 29497-only untargetable takeoff admission'
+if ([regex]::Matches($combatLimitBreakRuntime, '\bexactDragoonSkyHigh\b').Count -ne 2 -or
+    $normalizedCombatLimitBreakRuntime -notmatch 'private static bool IsLiveActivationCaster\(.*?var exactDragoonSkyHigh = caster\.Actor\.JobId == CombatLimitBreakNotificationRules\.DragoonJobId && actionId == CombatLimitBreakNotificationRules\.DragoonSkyHighActionId; return caster\.Player\.IsValid\(\).*?caster\.Player\.CurrentHp > 0.*?\(caster\.Player\.IsTargetable \|\| exactDragoonSkyHigh\).*?CreateIdentity\(caster\.Player\) == caster\.Actor\.Identity;' -or
+    $normalizedCombatLimitBreakRuntime -match 'IsTargetable \|\| action\.Role|IsTargetable \|\| \(action\.Role') {
+    throw 'Only exact enemy DRG job 22 action 29497 may bypass activation-caster targetability; every other activation and all follow-up/landing damage must retain the normal targetable boundary.'
+}
+Assert-Literals $limitBreakNotificationRenderer @(
+    'bool ShowEnemyDangerWarnings,',
+    'bool PlayEnemyDangerWarningSound,',
+    'int EnemyDangerWarningSoundId,',
+    'float EnemyDangerWarningScale,',
+    'TryResolveDragoonWarning(snapshot, now, out var dragoon)',
+    'dragoonWarningSound.TryPlayThreat(',
+    'dragoon.EpisodeToken,',
+    'options.EnemyDangerWarningSoundId,',
+    'state.Side == CombatLimitBreakRosterSide.Enemy',
+    'state.ActivationActionId,',
+    'state.EvidenceStatusId,',
+    'snapshot.PublishedAtMilliseconds,',
+    'state.EpisodeToken)',
+    'state.ActivatedAtMilliseconds < selectedState.ActivatedAtMilliseconds',
+    'state.EpisodeToken <= selectedState.EpisodeToken',
+    'DRG LIMIT BREAK!',
+    'IN THE AIR  •  SKY SHATTER INCOMING'
+) 'DRG airborne card, newest exact episode selection, and one episode-token sound'
+$normalizedLimitBreakNotificationRenderer = $limitBreakNotificationRenderer -replace '\s+', ' '
+if ($normalizedLimitBreakNotificationRenderer -notmatch 'if \(options\.ShowEnemyDangerWarnings && TryResolveDragoonWarning\(snapshot, now, out var dragoon\)\).*?dangerBannerDrawn = true; dangerBannerRectangle = dangerRectangle;.*?if \(options\.ShowSelfActivation && TryResolveSelfNotification\(snapshot, now, out var self\)\).*?var selfRectangleReady = dangerBannerDrawn \? CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangleBelow\(.*?dangerBannerRectangle, out var bannerRectangle\) : CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangle\(') {
+    throw 'The DRG danger banner and self-activation banner must render independently in the same frame, with the self banner moved below an already-drawn danger banner.'
+}
+Assert-Literals $pluginSource @(
+    'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite)),',
+    'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite,',
+    'configuration.MchLimitBreakSoundEnabled,',
+    'configuration.MchLimitBreakSoundId,',
+    'configuration.MarksmanSpiteWarningScale,'
+) 'Existing LB danger settings wire both MCH and exact DRG warning runtime/card/sound'
 if (($overlayRendererLimitBreaks + $limitBreakNotificationRenderer) -match
     '\b(?:UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'Replacement LB renderers must remain non-interactive and target-mutation free.'
@@ -8483,9 +8594,14 @@ $replacementLbTests = @(
         'VerticalStackIsDeterministicAndNeverOverlaps')),
     @($combatLimitBreakNotificationSelfTests, 'CombatLimitBreakNotificationSelfTests', @(
         'SelfBannerRequiresExactFreshEvidence',
+        'DragoonAirborneWarningRequiresExactFreshEpisode',
         'AllyDamageCardsRequireExactBoundedEvents',
         'NotificationLayoutStaysInsideSafeScreenLanes'))
 )
+Assert-Literals $combatLimitBreakNotificationSelfTests @(
+    'self banner remains visible below default DRG danger scale',
+    'default DRG danger and self activation never overlap'
+) 'Default-scale simultaneous DRG danger and self-banner non-overlap coverage'
 foreach ($testGroup in $replacementLbTests) {
     foreach ($method in $testGroup[2]) {
         Assert-Literals $testGroup[0] @("internal static void $method()") "$($testGroup[1]) self-test $method"
@@ -8937,6 +9053,15 @@ Assert-Literals $personalStatus @(
 if ([regex]::Matches($personalStatus, '\bmetadata\.NinjaShukuchiHiddenStatuses\b').Count -ne 2) {
     throw 'The metadata-verified Ninja Hidden catalog must be injected exactly once into Auto-Purify and once into Auto-Recuperate.'
 }
+Assert-Literals $settingsWindow @(
+    'Show MCH-on-you and airborne DRG LB warnings',
+    'Play a sound for verified MCH / airborne DRG LB warnings',
+    'The MCH alert requires its exact early marker on you.',
+    'The DRG alert starts from exact enemy Sky High',
+    'activation while airborne and never waits for impact.',
+    'Both require the personal-warning master and this',
+    'toggle. Sound is one-shot per verified threat; neither alert presses Guard or another action.'
+) 'Shared MCH / exact airborne-DRG warning settings copy'
 if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
     throw 'Self warnings and self-Purify must not depend on resolving an enemy HUD actor.'
 }
@@ -9015,20 +9140,20 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.36.0.0</Version>',
-    '<AssemblyVersion>0.36.0.0</AssemblyVersion>',
-    '<FileVersion>0.36.0.0</FileVersion>'
-) 'v0.36.0.0 project version'
+    '<Version>0.36.0.1</Version>',
+    '<AssemblyVersion>0.36.0.1</AssemblyVersion>',
+    '<FileVersion>0.36.0.1</FileVersion>'
+) 'v0.36.0.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.36.0.0";',
-    'New default-off AST held Near Help:',
-    'living self/party players at 60% HP or lower use the exact /nearhelp ranking',
-    'without a visible target change.',
-    'If Double Cast was already ready before an accepted Orbis, its exact Orbis repeat is reserved for the same frozen player on a later frame.',
-    'The first heal never causes a rerank or alternate follow-up.',
-    'Purify and your own Guard remain absolute safety gates.',
-    'Configuration schema 41 is current; all 516 Core tests pass.'
-) 'v0.36.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.36.0.1";',
+    'Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in Crystalline Conflict.',
+    'Your exact current target remains only the fully validated last fallback; no visible target changes.',
+    'The chosen Viper action, actor, context, key, and carrier exposure stay frozen.',
+    'the exposure ends instead of reranking. Wolves'' Den remains exact <t>.',
+    'Enemy DRG Sky High now raises an immediate top-center airborne LB warning with its icon and one-shot sound;',
+    'only the live Sky High status extends the countdown.',
+    'Configuration schema 41 remains current; all 517 Core tests pass.'
+) 'v0.36.0.1 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9047,23 +9172,23 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.36.0.0 plugin manifest metadata'
+) 'v0.36.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.36.0.0"',
-    'Added a default-off Astrologian held-key helper:',
-    'exact /nearhelp friendly selection at or below 60% HP',
-    'direct Harmonischer Orbis / Aspected Benefic 29243 without a visible target change',
-    'exact same-target Double Cast repeat 29247 only when Double Cast 29245 was already ready before a client-accepted base heal.',
-    'Purify stays first;',
-    'charge epoch, metadata, readiness, range, line of sight, and adjusted follow-up are revalidated with no rerank or alternate.',
-    'Active or still-propagating own Guard is vetoed again at the final action-hook and optional cast-cancel boundaries.',
-    'Configuration schema 41 is current; all 516 Core tests pass;',
+    '"AssemblyVersion": "0.36.0.1"',
+    'Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in exact Crystalline Conflict',
+    'the exact current target only as a fully validated last fallback and no visible target change.',
+    'carrier generation, and native identities freeze; later target or protection drift spends that exact exposure instead of reranking.',
+    'Wolves'' Den remains exact <t>.',
+    'Enemy DRG Sky High 29497 now raises an immediate top-center airborne LB warning with icon and one-shot selectable sound;',
+    'only live exact caster status 3180 extends its countdown, never Sky Shatter impact or gauge inference.',
+    'Existing warning controls are reused.',
+    'Configuration schema 41 is current; all 517 Core tests pass;',
     'live current-patch validation remains separate.',
     '"IsHide": false'
-) 'v0.36.0.0 custom-repository metadata'
+) 'v0.36.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9096,18 +9221,25 @@ Assert-Literals $normalizedPrivacy @(
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'Configuration schema 41 is current.',
+    'canonical `S1`-`S5` candidates, HP ratio, fresh optional team pressure, trusted Guard/MP evidence, positions, complete protection geometry, chosen/fallback actor',
+    'Drift ends and spends that carrier exposure; the same held episode cannot rerank.',
+    '## MCH and DRG limit-break danger warnings',
+    'exact `Sky High` activation `29497`',
+    'continued airborne timing requires the exact caster''s live `Sky High` status `3180`.',
+    'It does not infer an LB from gauge state, movement, disappearance, `Sky Shatter` status `3181`, or the later landing damage actions `29498`/`29499`.',
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.36.0.0 Smart Tab, AST, and integrated-input disclosure'
+) 'v0.36.0.1 Smart Tab, VPR/DRG, AST, and integrated-input disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.36.0.0 adds a default-off Astrologian held-key helper:',
-    'the exact `/nearhelp` friendly ranking at or below 60% HP',
-    'direct Harmonischer Orbis / Aspected Benefic `29243`',
-    'exact same- target Double Cast repeat `29247` only when Double Cast was ready before the accepted base heal.',
-    'Purify remains first, and the helper never visibly changes or reranks a target.',
+    'Version 0.36.0.1 moves the default-off Viper held Serpentiner-Geist follow-ups onto the existing Smart Action target policy in Crystalline Conflict',
+    'including its protection-safe ranking and exact `<t>` fallback, without a visible target change.',
+    'immediate enemy DRG `Sky High` airborne warning with the LB icon, live confirmed countdown, and a one-shot selectable sound.',
+    'A fully protection-safe current hard target is only the last fallback.',
+    'later drift ends that carrier exposure instead of reranking.',
+    'a countdown continues only from its live mapped caster status and clears with that exact episode.',
     'Your own active or still-propagating Guard suppresses the entire sequence and is rechecked at the final action/cast-cancel boundaries',
-    'retains v0.35.0.3''s exact Guard-ignoring Smart Action support',
+    'v0.35.0.3''s exact Guard-ignoring Smart Action support',
     'v0.35.0.2''s Panic Shukuchi repair and Ninja Hidden protection',
     'v0.35.0.1''s native Turbo/Latest Input path, exact Viper Wolves'' Den targeting, and removal of the nonfunctional Scholar spread workflow.',
     'The generic one-shot action buffer remains available directly in Seiton Sense.',
@@ -9137,7 +9269,7 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 41 is current',
-    'For the current source, the exact 516-test Core registry and source checks pin',
+    'For the current source, the exact 517-test Core registry and source checks pin',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9148,20 +9280,19 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across sixteen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.36.0.0 current README release and safety contract'
+) 'v0.36.0.1 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.36.0.0',
-    'Added a separate default-off Astrologian held-key helper',
-    'exact `/nearhelp` friendly selection',
-    'Harmonischer Orbis / Aspected Benefic `29243` directly without changing the visible target.',
-    'Double Cast `29245` was already locally available before a client-accepted Orbis',
-    'exact adjusted Orbis repeat `29247` on a later scheduler frame.',
-    'The follow-up never reranks after the first heal',
-    'Purify remains absolute scheduler and cast-cancel priority.',
-    'Active or still-propagating own Guard is checked again at the final action-hook boundary and immediately before any optional native cast cancellation',
-    'Configuration schema is `41`;',
-    'all `516` Core tests pass.'
-) 'v0.36.0.0 AST held Near Help release notes'
+    '## 0.36.0.1',
+    'Changed the default-off Viper held Serpentiner-Geist follow-ups in exact Crystalline Conflict from current-target-only dispatch to the existing Smart Action target policy.',
+    'the exact current target retained only as a last fallback after the identical full protection/range/line-of-sight validation.',
+    'Later death, ambiguity, protection, range, or line-of-sight drift cancels and spends that exact carrier exposure;',
+    'the same hold cannot rerank or jump to an alternate enemy.',
+    'exact `Sky High` activation `29497`',
+    'Only the live exact caster status `3180` may extend the warning with a countdown;',
+    '`3181`, landing damage, gauge estimates, and ambiguous actors do not.',
+    'configuration schema remains `41`.',
+    'all `517` Core tests pass.'
+) 'v0.36.0.1 VPR Smart Target and exact DRG airborne release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.3',
     'Fixed `/smartaction` for PvP attacks that explicitly ignore Guard.',
@@ -9284,10 +9415,10 @@ Assert-Literals $normalizedPrivacy @(
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
     'The helper does not hook, record, require, or attempt to prove the preceding Viper action, its invocation mode, or its native queue history.',
-    'The exact adjusted action, current hard-target actor, context, territory, physical key, readiness, native range, and line of sight are frozen and revalidated',
+    'The exact adjusted action, chosen actor, context, territory, physical key, readiness, native range, and line of sight are frozen and revalidated',
     'One false carrier sample is treated as flicker and cannot rearm a spent exposure',
     'Uncoiled `39177` to `39178` transformation is handled by that same carrier rule'
-) 'v0.31.0.1 VPR direct-carrier exposure and continuous-hold README contract'
+) 'VPR direct-carrier Smart Target freeze and continuous-hold README contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.31.0.1',
     'Reworked the default-off Viper Serpentiner-Geist held helper around the native transformed carrier `39183`',
@@ -9330,11 +9461,12 @@ Assert-Literals $normalizedChangelog @(
 Assert-Literals $normalizedPrivacy @(
     'polls FFXIV''s currently adjusted Serpent''s Tail carrier directly on each active framework frame',
     'No preceding action, invocation mode, sequence advance, native queue drain, accepted-action epoch, or invented wall-clock trigger is recorded or required.',
-    'The current hard target is resolved only when that follow-up is actually exposed and consent is available',
+    'In CC, only when that follow-up and held consent are both available, the shared Smart Action policy reads the complete canonical enemy set',
+    'It selects a ranked winner first; the exact current hard target is considered only as the fully validated last fallback.',
     'One false carrier sample is treated as flicker and cannot rearm a spent exposure',
     'a different exact follow-up such as `39177` to `39178` becomes a new generation immediately',
     'Exposure, intent, retry, native-result, and aggregate diagnostic state remain bounded in memory'
-) 'v0.31.0.1 VPR direct-carrier local-data and lifecycle disclosure'
+) 'VPR direct-carrier Smart Target local-data and lifecycle disclosure'
 Assert-Literals $normalizedChangelog @(
     '## 0.29.0.1',
     'Guardian''s target-side `Covered` / `Gedeckt` status',
@@ -10450,4 +10582,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.36.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 41 and the exact 516-test Core registry. The default-off AST held Near Help helper uses the inclusive 60% /nearhelp selection, freezes one exact actor/key/charge epoch, promotes only a client-accepted base heal to an exact same-target later-frame Double Cast repeat, and rechecks active or propagating own Guard at both the final action hook and immediate cast-cancel boundary. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call; exact resolved PvP actions whose English metadata explicitly ignores Guard bypass only Guard, never Chiten, Covered, or PLD/DRK LB invulnerability. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Nineteen held-option enable edges share physical-input ownership. Cast cancellation constructs fifteen reviewed request shapes across sixteen ordered selection slots. Runtime priority is Purify > AST same-target heal chain > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."
+Write-Host "Seiton Sense v0.36.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 41 and the exact 517-test Core registry. Viper's default-off held Serpentiner-Geist helper uses the existing complete protection-safe Smart Action rank in exact CC, admits the current hard target only as an equally validated last fallback, freezes one exact action/actor/key/carrier exposure, and spends that exposure on drift instead of reranking; Wolves' Den remains exact current target. The enemy DRG airborne warning admits only a fresh exact job-22 Sky High 29497 episode, extends only from live caster status 3180, rejects status 3181/landing/gauge inference, draws no interactive surface, and keys its optional sound to one exact episode. The default-off AST held Near Help helper uses the inclusive 60% /nearhelp selection, freezes one exact actor/key/charge epoch, promotes only a client-accepted base heal to an exact same-target later-frame Double Cast repeat, and rechecks active or propagating own Guard at both the final action hook and immediate cast-cancel boundary. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call; exact resolved PvP actions whose English metadata explicitly ignores Guard bypass only Guard, never Chiten, Covered, or PLD/DRK LB invulnerability. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Nineteen held-option enable edges share physical-input ownership. Cast cancellation constructs fifteen reviewed request shapes across sixteen ordered selection slots. Runtime priority is Purify > AST same-target heal chain > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."

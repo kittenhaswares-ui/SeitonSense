@@ -376,6 +376,7 @@ var tests = new (string Name, Action Run)[]
     ("PvP LB nameplate countdown and flash are exact", CombatLimitBreakNameplateSelfTests.CountdownRequiresConfirmedDurationAndFlashIsBounded),
     ("PvP LB and CC nameplate emblems stack deterministically", CombatLimitBreakNameplateSelfTests.VerticalStackIsDeterministicAndNeverOverlaps),
     ("PvP LB self notification requires exact fresh evidence", CombatLimitBreakNotificationSelfTests.SelfBannerRequiresExactFreshEvidence),
+    ("PvP DRG airborne warning requires exact startup episode", CombatLimitBreakNotificationSelfTests.DragoonAirborneWarningRequiresExactFreshEpisode),
     ("PvP LB ally damage notifications require exact events", CombatLimitBreakNotificationSelfTests.AllyDamageCardsRequireExactBoundedEvents),
     ("PvP LB notifications stay inside safe screen lanes", CombatLimitBreakNotificationSelfTests.NotificationLayoutStaysInsideSafeScreenLanes),
     ("CC protection allowlist metadata is exact", CcProtectionRulesSelfTests.AllowlistMetadataIsExact),

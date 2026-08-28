@@ -112,9 +112,12 @@ following data already available in the local FFXIV client:
   danger-episode state;
 - when the Viper Serpentiner-Geist helper is enabled, the directly observed
   adjusted carrier/follow-up action, its in-memory exposure generation/spent
-  state, exact local/current-hard-target identities, context, territory, own
-  Guard, held-key generation, readiness, and native range/line-of-sight result.
-  No preceding-action or native-queue history is recorded. Wolves' Den
+  state, exact local identity, canonical `S1`-`S5` candidates, HP ratio, fresh
+  optional team pressure, trusted Guard/MP evidence, positions, complete
+  protection geometry, chosen/fallback actor, context, territory, own Guard,
+  held-key generation, readiness, and native range/line-of-sight result needed
+  for the shared Smart Action rank and exact frozen-target revalidation. No
+  preceding-action or native-queue history is recorded. Wolves' Den
   additionally reads the exact current hard target only when it is either the
   native hostile duel opponent or the reviewed combat striking dummy with NameId
   `541`;
@@ -223,6 +226,11 @@ Separate local-only notification options can draw a top-center self
 accept only a direct ActionEffect positive-damage record attributed to an exact
 party caster and reviewed LB action, never an inferred HP delta. The optional
 name leaf reads only the ally's current client name for that transient card.
+When the existing LB danger warning is enabled, an exact enemy DRG `Sky High`
+activation may also draw a top-center airborne card immediately. Its continuation
+uses only the fresh exact enemy episode and live mapped caster-status duration;
+loss of actor, episode, context, metadata, or status clears it without estimation.
+One selectable built-in FFXIV sound may play once for that exact episode.
 Activation evidence, names, actor identities, durations, damage events, card
 state, and nameplate bounds remain bounded in memory and are not logged,
 persisted, transmitted, or uploaded.
@@ -365,12 +373,19 @@ remain in memory only and are cleared with feature/context/player lifetime.
 Nothing is persisted or uploaded. The current-patch setter, HUD/`<f>` result,
 and native range probe remain live A/B boundaries.
 
-## Marksman's Spite warning
+## MCH and DRG limit-break danger warnings
 
 When the warning is enabled, the same local observer verifies action ID `29415`,
 the exact early target-marker shape, the hostile MCH caster identity, and that
 the sole target is your local player. The later damage/miss event is rejected.
 The warning is deduplicated and held only for its short in-memory lifetime.
+
+For DRG, the shared metadata-validated LB capture accepts only enemy job `22`
+using exact `Sky High` activation `29497` in the canonical Crystalline Conflict
+roster. That episode can warn immediately from the activation; continued
+airborne timing requires the exact caster's live `Sky High` status `3180`.
+It does not infer an LB from gauge state, movement, disappearance, `Sky Shatter`
+status `3181`, or the later landing damage actions `29498`/`29499`.
 
 The optional alert sound calls one selectable built-in FFXIV UI sound after a
 verified warning. No audio file is downloaded, recorded, or transmitted. The
@@ -954,9 +969,12 @@ It polls FFXIV's currently adjusted Serpent's Tail carrier directly on each
 active framework frame. No preceding action, invocation mode, sequence advance,
 native queue drain, accepted-action epoch, or invented wall-clock trigger is
 recorded or required. The carrier's exact exposed follow-up defines one local
-in-memory generation. The current hard target is resolved only when that
-follow-up is actually exposed and consent is available; no macro text is read
-and no physical input is created.
+in-memory generation. In CC, only when that follow-up and held consent are both
+available, the shared Smart Action policy reads the complete canonical enemy
+set, current HP, optional fresh team pressure, trusted Guard/MP data, geometry,
+protection, and native reachability. It selects a ranked winner first; the exact
+current hard target is considered only as the fully validated last fallback.
+No macro text is read and no physical input is created.
 
 FFXIV must adjust Serpent's Tail / Serpentiner Geist carrier `39183` to the exact
 expected follow-up `39174`-`39182`. The carrier itself is never submitted.
@@ -964,7 +982,7 @@ Follow-ups `39177` and `39178` use their native 20-yalm range; the other reviewe
 follow-ups use 5 yalms. Any eligible currently held physical gameplay key,
 including WASD, may supply consent while the follow-up is exposed, including
 when the proc appeared before the hold. Only then are that key and the exact
-current hard target frozen for the episode; the same key, actor, action,
+chosen actor frozen for the episode; the same key, actor, action,
 context, territory, local Viper identity, own-Guard state,
 metadata, readiness, native target validity, range, and line of sight are checked
 again before a possible native call. Purify keeps absolute priority. Temporary
@@ -982,7 +1000,9 @@ replay. Ambiguity or retry exhaustion additionally latches the frozen key until
 its physical release.
 
 In Crystalline Conflict the frozen target must remain one exact canonical
-`S1`-`S5` enemy. In Wolves' Den, the separate testing option must remain enabled
+`S1`-`S5` enemy and must remain safe under the full Smart Action protection
+matrix. Drift ends and spends that carrier exposure; the same held episode
+cannot rerank. In Wolves' Den, the separate testing option must remain enabled
 and the target must remain the exact current hard-target living, targetable
 native hostile duel opponent or reviewed combat striking dummy with NameId
 `541`. Arbitrary NPCs, synthetic enemy slots, Frontline, and Rival Wings fail
@@ -1456,7 +1476,7 @@ server execution or damage.
 
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
-MCH warning size/sound selection, the high-pressure warning/native-sound/Sprint
+MCH/DRG danger-warning size/sound selection, the high-pressure warning/native-sound/Sprint
 opt-ins and sound selection, the separate Smart Tab and Smart Action opt-ins,
 the shared Near Assist/Near Help/Far Help opt-in, Near Assist search/preferences,
 the Near Help incoming-pressure preference,

@@ -12,8 +12,12 @@ internal readonly record struct LimitBreakNotificationOptions(
     bool Enabled,
     bool ShowSelfActivation,
     bool ShowAllyDamageEvents,
+    bool ShowEnemyDangerWarnings,
+    bool PlayEnemyDangerWarningSound,
+    int EnemyDangerWarningSoundId,
     bool ShowNames,
     float Scale,
+    float EnemyDangerWarningScale,
     float BackgroundOpacity);
 
 /// <summary>
@@ -27,6 +31,8 @@ internal sealed class LimitBreakNotificationRenderer
 
     private static readonly Vector4 AccentColor = new(1f, 0.7f, 0.1f, 1f);
     private static readonly Vector4 AccentBrightColor = new(1f, 0.93f, 0.58f, 1f);
+    private static readonly Vector4 DangerAccentColor = new(1f, 0.12f, 0.22f, 1f);
+    private static readonly Vector4 DangerAccentBrightColor = new(1f, 0.82f, 0.86f, 1f);
     private static readonly Vector4 BackgroundColor = new(0.018f, 0.01f, 0.035f, 1f);
     private static readonly Vector4 TextColor = new(0.98f, 0.99f, 1f, 1f);
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.98f);
@@ -36,6 +42,7 @@ internal sealed class LimitBreakNotificationRenderer
     private readonly ITextureProvider textureProvider;
     private readonly IPluginLog log;
     private readonly Func<LimitBreakNotificationOptions> optionsProvider;
+    private readonly MachinistLimitBreakWarningSound dragoonWarningSound;
     private long nextErrorLogAtMilliseconds;
 
     internal LimitBreakNotificationRenderer(
@@ -50,6 +57,7 @@ internal sealed class LimitBreakNotificationRenderer
         this.textureProvider = textureProvider ?? throw new ArgumentNullException(nameof(textureProvider));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.optionsProvider = optionsProvider ?? throw new ArgumentNullException(nameof(optionsProvider));
+        dragoonWarningSound = new MachinistLimitBreakWarningSound(log);
     }
 
     internal void Draw()
@@ -60,7 +68,9 @@ internal sealed class LimitBreakNotificationRenderer
         {
             var options = Sanitize(optionsProvider());
             if (!options.Enabled ||
-                (!options.ShowSelfActivation && !options.ShowAllyDamageEvents))
+                (!options.ShowSelfActivation &&
+                 !options.ShowAllyDamageEvents &&
+                 !options.ShowEnemyDangerWarnings))
             {
                 return;
             }
@@ -76,24 +86,89 @@ internal sealed class LimitBreakNotificationRenderer
                 0.5f,
                 4f);
             var draw = ImGui.GetForegroundDrawList();
+            var dangerBannerDrawn = false;
+            var dangerBannerRectangle = default(LimitBreakNotificationRectangle);
+
+            if (options.ShowEnemyDangerWarnings &&
+                TryResolveDragoonWarning(snapshot, now, out var dragoon))
+            {
+                if (options.PlayEnemyDangerWarningSound)
+                {
+                    dragoonWarningSound.TryPlayThreat(
+                        dragoon.EpisodeToken,
+                        options.EnemyDangerWarningSoundId,
+                        now);
+                }
+
+                var dangerConfiguredScale = Math.Clamp(
+                    configuredScale * options.EnemyDangerWarningScale,
+                    0.65f,
+                    3.5f);
+                var dangerScale = Math.Clamp(
+                    Math.Max(0.5f, ImGuiHelpers.GlobalScale) * dangerConfiguredScale,
+                    0.5f,
+                    4f);
+                if (CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(
+                        viewport.WorkPos.X,
+                        viewport.WorkPos.Y,
+                        viewport.WorkSize.X,
+                        viewport.WorkSize.Y,
+                        dangerScale,
+                        out var dangerRectangle))
+                {
+                    DrawBanner(
+                        draw,
+                        new BannerNotification(
+                            "DRG LIMIT BREAK!",
+                            "IN THE AIR  •  SKY SHATTER INCOMING",
+                            dragoon.IconId,
+                            dragoon.ShowCountdown,
+                            dragoon.RemainingMilliseconds,
+                            true),
+                        dangerRectangle,
+                        dangerConfiguredScale,
+                        dangerScale,
+                        options.BackgroundOpacity);
+                    dangerBannerDrawn = true;
+                    dangerBannerRectangle = dangerRectangle;
+                }
+            }
 
             if (options.ShowSelfActivation &&
-                TryResolveSelfNotification(snapshot, now, out var self) &&
-                CombatLimitBreakNotificationRules.TryBuildSelfBannerRectangle(
-                    viewport.WorkPos.X,
-                    viewport.WorkPos.Y,
-                    viewport.WorkSize.X,
-                    viewport.WorkSize.Y,
-                    scale,
-                    out var bannerRectangle))
+                TryResolveSelfNotification(snapshot, now, out var self))
             {
-                DrawSelfBanner(
-                    draw,
-                    self,
-                    bannerRectangle,
-                    configuredScale,
-                    scale,
-                    options.BackgroundOpacity);
+                var selfRectangleReady = dangerBannerDrawn
+                    ? CombatLimitBreakNotificationRules.TryBuildSelfBannerRectangleBelow(
+                        viewport.WorkPos.X,
+                        viewport.WorkPos.Y,
+                        viewport.WorkSize.X,
+                        viewport.WorkSize.Y,
+                        scale,
+                        dangerBannerRectangle,
+                        out var bannerRectangle)
+                    : CombatLimitBreakNotificationRules.TryBuildSelfBannerRectangle(
+                        viewport.WorkPos.X,
+                        viewport.WorkPos.Y,
+                        viewport.WorkSize.X,
+                        viewport.WorkSize.Y,
+                        scale,
+                        out bannerRectangle);
+                if (selfRectangleReady)
+                {
+                    DrawBanner(
+                        draw,
+                        new BannerNotification(
+                            "LB ACTIVATED!",
+                            self.Name,
+                            self.IconId,
+                            self.ShowCountdown,
+                            self.RemainingMilliseconds,
+                            false),
+                        bannerRectangle,
+                        configuredScale,
+                        scale,
+                        options.BackgroundOpacity);
+                }
             }
 
             if (!options.ShowAllyDamageEvents) return;
@@ -178,6 +253,60 @@ internal sealed class LimitBreakNotificationRenderer
         return true;
     }
 
+    private static bool TryResolveDragoonWarning(
+        CombatLimitBreakRuntimeSnapshot snapshot,
+        long nowMilliseconds,
+        out DragoonNotification notification)
+    {
+        notification = default;
+        CombatLimitBreakActorState selectedState = default;
+        DragoonLimitBreakWarningPlan selectedPlan = default;
+        var found = false;
+        foreach (var state in snapshot.Actors)
+        {
+            if (!CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(
+                    new DragoonLimitBreakWarningObservation(
+                        state.Actor,
+                        state.Side == CombatLimitBreakRosterSide.Enemy,
+                        state.Slot,
+                        state.JobId,
+                        state.ActivationActionId,
+                        state.IconId,
+                        state.Presentation,
+                        state.DurationConfirmed,
+                        state.EvidenceStatusId,
+                        state.ActivatedAtMilliseconds,
+                        state.ExpiresAtMilliseconds,
+                        snapshot.PublishedAtMilliseconds,
+                        state.EpisodeToken),
+                    nowMilliseconds,
+                    out var plan))
+            {
+                continue;
+            }
+
+            if (found &&
+                (state.ActivatedAtMilliseconds < selectedState.ActivatedAtMilliseconds ||
+                 state.ActivatedAtMilliseconds == selectedState.ActivatedAtMilliseconds &&
+                 state.EpisodeToken <= selectedState.EpisodeToken))
+            {
+                continue;
+            }
+
+            found = true;
+            selectedState = state;
+            selectedPlan = plan;
+        }
+
+        if (!found) return false;
+        notification = new DragoonNotification(
+            selectedPlan.IconId,
+            selectedPlan.ShowCountdown,
+            selectedPlan.RemainingMilliseconds,
+            selectedPlan.EpisodeToken);
+        return true;
+    }
+
     private IReadOnlyList<DamageNotification> ResolveDamageCards(
         CombatLimitBreakRuntimeSnapshot snapshot,
         bool showNames,
@@ -245,9 +374,9 @@ internal sealed class LimitBreakNotificationRenderer
         return cards;
     }
 
-    private void DrawSelfBanner(
+    private void DrawBanner(
         ImDrawListPtr draw,
-        SelfNotification notification,
+        BannerNotification notification,
         LimitBreakNotificationRectangle rectangle,
         float configuredScale,
         float scale,
@@ -269,11 +398,13 @@ internal sealed class LimitBreakNotificationRenderer
         var pulsePhase = Math.Max(0L, Environment.TickCount64 % 900L) / 900f;
         var pulse = 0.5f + (0.5f * MathF.Sin(pulsePhase * MathF.PI * 2f));
         var rounding = 12f * scale;
+        var accent = notification.Danger ? DangerAccentColor : AccentColor;
+        var accentBright = notification.Danger ? DangerAccentBrightColor : AccentBrightColor;
 
         draw.AddRectFilled(
             minimum - new Vector2(7f * scale),
             maximum + new Vector2(7f * scale),
-            Pack(new Vector4(AccentColor.X, AccentColor.Y, AccentColor.Z, (0.08f + (0.08f * pulse)) * fade)),
+            Pack(new Vector4(accent.X, accent.Y, accent.Z, (0.08f + (0.08f * pulse)) * fade)),
             rounding + (7f * scale));
         draw.AddRectFilled(
             minimum,
@@ -287,12 +418,12 @@ internal sealed class LimitBreakNotificationRenderer
         draw.AddRectFilled(
             minimum,
             new Vector2(minimum.X + (8f * scale), maximum.Y),
-            Pack(new Vector4(AccentColor.X, AccentColor.Y, AccentColor.Z, fade)),
+            Pack(new Vector4(accent.X, accent.Y, accent.Z, fade)),
             rounding);
         draw.AddRect(
             minimum,
             maximum,
-            Pack(new Vector4(AccentColor.X, AccentColor.Y, AccentColor.Z, (0.76f + (0.24f * pulse)) * fade)),
+            Pack(new Vector4(accent.X, accent.Y, accent.Z, (0.76f + (0.24f * pulse)) * fade)),
             rounding,
             ImDrawFlags.None,
             Math.Max(2f, (2.4f + pulse) * scale));
@@ -313,14 +444,14 @@ internal sealed class LimitBreakNotificationRenderer
             draw.AddRectFilled(
                 iconMinimum,
                 iconMaximum,
-                Pack(new Vector4(AccentColor.X * 0.24f, AccentColor.Y * 0.24f, 0.02f, fade)),
+                Pack(new Vector4(accent.X * 0.24f, accent.Y * 0.24f, accent.Z * 0.24f, fade)),
                 6f * scale);
         }
 
         draw.AddRect(
             iconMinimum - new Vector2(2f * scale),
             iconMaximum + new Vector2(2f * scale),
-            Pack(new Vector4(AccentColor.X, AccentColor.Y, AccentColor.Z, fade)),
+            Pack(new Vector4(accent.X, accent.Y, accent.Z, fade)),
             8f * scale,
             ImDrawFlags.None,
             Math.Max(1.5f, 2f * scale));
@@ -328,13 +459,13 @@ internal sealed class LimitBreakNotificationRenderer
         var timerWidth = notification.ShowCountdown ? 92f * scale : 0f;
         var contentLeft = iconMaximum.X + (16f * scale);
         var contentRight = maximum.X - (18f * scale) - timerWidth;
-        var headline = FitText("LB ACTIVATED!", contentRight - contentLeft, 1.18f * configuredScale);
+        var headline = FitText(notification.Headline, contentRight - contentLeft, 1.18f * configuredScale);
         DrawOutlinedText(
             draw,
             new Vector2(contentLeft, minimum.Y + (11f * scale)),
             headline,
             1.18f * configuredScale,
-            new Vector4(AccentBrightColor.X, AccentBrightColor.Y, AccentBrightColor.Z, fade));
+            new Vector4(accentBright.X, accentBright.Y, accentBright.Z, fade));
         var name = FitText(notification.Name, contentRight - contentLeft, 0.78f * configuredScale);
         DrawOutlinedText(
             draw,
@@ -358,7 +489,7 @@ internal sealed class LimitBreakNotificationRenderer
         draw.AddRect(
             timerMinimum,
             timerMaximum,
-            Pack(new Vector4(AccentColor.X, AccentColor.Y, AccentColor.Z, fade)),
+            Pack(new Vector4(accent.X, accent.Y, accent.Z, fade)),
             8f * scale,
             ImDrawFlags.None,
             Math.Max(1.5f, 2f * scale));
@@ -368,7 +499,7 @@ internal sealed class LimitBreakNotificationRenderer
             timerMaximum,
             $"{remaining / 1000d:0.0}s",
             0.94f * configuredScale,
-            new Vector4(AccentBrightColor.X, AccentBrightColor.Y, AccentBrightColor.Z, fade));
+            new Vector4(accentBright.X, accentBright.Y, accentBright.Z, fade));
     }
 
     private void DrawDamageCard(
@@ -551,6 +682,10 @@ internal sealed class LimitBreakNotificationRenderer
             Scale = float.IsFinite(options.Scale)
                 ? Math.Clamp(options.Scale, 0.65f, 1.75f)
                 : 1f,
+            EnemyDangerWarningSoundId = Math.Clamp(options.EnemyDangerWarningSoundId, 1, 16),
+            EnemyDangerWarningScale = float.IsFinite(options.EnemyDangerWarningScale)
+                ? Math.Clamp(options.EnemyDangerWarningScale, 1f, 2f)
+                : 1.45f,
             BackgroundOpacity = float.IsFinite(options.BackgroundOpacity)
                 ? Math.Clamp(options.BackgroundOpacity, 0.35f, 1f)
                 : 0.92f,
@@ -571,6 +706,20 @@ internal sealed class LimitBreakNotificationRenderer
         uint IconId,
         bool ShowCountdown,
         long RemainingMilliseconds);
+
+    private readonly record struct DragoonNotification(
+        uint IconId,
+        bool ShowCountdown,
+        long RemainingMilliseconds,
+        ulong EpisodeToken);
+
+    private readonly record struct BannerNotification(
+        string Headline,
+        string Name,
+        uint IconId,
+        bool ShowCountdown,
+        long RemainingMilliseconds,
+        bool Danger);
 
     private readonly record struct DamageNotification(
         string CasterName,

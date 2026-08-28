@@ -278,6 +278,47 @@ public static class ViperSerpentTailRules
             ? state with { IsSpent = true }
             : state;
 
+    /// <summary>
+    /// Retires the one carrier exposure that already selected an exact actor
+    /// when that actor later fails exact validation. The next frame may not
+    /// rank another actor for the same held-key exposure.
+    /// </summary>
+    public static ViperSerpentTailExposureState RetireCarrierExposureAfterExactTargetDrift(
+        ViperSerpentTailExposureState exposure,
+        ViperSerpentTailIntent? frozenIntent,
+        ViperSerpentTailDecision decision)
+    {
+        if (frozenIntent is not { IsValid: true } intent ||
+            decision.Kind != ViperSerpentTailDecisionKind.Cancelled ||
+            decision.Reason is not (ViperSerpentTailDecisionReason.CandidateUnavailable or
+                ViperSerpentTailDecisionReason.CandidateInvalid))
+        {
+            return exposure;
+        }
+
+        return MarkCarrierExposureSpent(
+            exposure,
+            intent.ExposureGeneration,
+            intent.ActionId);
+    }
+
+    /// <summary>
+    /// A Smart Action winner can disappear between ranking and exact identity
+    /// resolution, before an intent exists to carry its generation/action. In
+    /// that case retire the currently exposed carrier directly so the same
+    /// held key cannot rank a different enemy on the next framework frame.
+    /// </summary>
+    public static ViperSerpentTailExposureState
+        RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation(
+            ViperSerpentTailExposureState exposure,
+            bool selectedWinnerInvalidated) =>
+        selectedWinnerInvalidated
+            ? MarkCarrierExposureSpent(
+                exposure,
+                exposure.Generation,
+                exposure.CurrentActionId)
+            : exposure;
+
     public static bool IsCurrentUnspentExposure(
         ViperSerpentTailExposureState exposure,
         long generation,

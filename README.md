@@ -2,12 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.36.0.0 adds a default-off
-Astrologian held-key helper: the exact `/nearhelp` friendly ranking at or below
-60% HP, direct Harmonischer Orbis / Aspected Benefic `29243`, and an exact same-
-target Double Cast repeat `29247` only when Double Cast was ready before the
-accepted base heal. Purify remains first, and the helper never visibly changes
-or reranks a target. It retains v0.35.0.3's exact Guard-ignoring Smart Action
+assistance, and target highlights. Version 0.36.0.1 moves the default-off Viper
+held Serpentiner-Geist follow-ups onto the existing Smart Action target policy
+in Crystalline Conflict, including its protection-safe ranking and exact `<t>`
+fallback, without a visible target change. It also adds an immediate enemy DRG
+`Sky High` airborne warning with the LB icon, live confirmed countdown, and a
+one-shot selectable sound. It retains v0.36.0.0's AST held `/nearhelp` heal,
+v0.35.0.3's exact Guard-ignoring Smart Action
 support, v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection, plus
 v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den targeting,
 and removal of the nonfunctional Scholar spread workflow. The generic
@@ -98,8 +99,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   redirects, or retries it. A strict complete-party fallback can certify an
   exact public-CC `<e1>`-`<e5>` enemy when FFXIV omits its `Hostile` flag.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
-  and Marksman's Spite receive stable warnings. The MCH LB card is larger by
-  default and can play one selectable built-in FFXIV sound per verified threat.
+  Marksman's Spite, and an enemy DRG entering `Sky High` receive stable warnings.
+  The LB danger card is larger by default and can play one selectable built-in
+  FFXIV sound once per verified MCH threat or DRG airborne episode.
   Warning-card background opacity is independent from its icon, text, and
   border, so the fill can be fully transparent without hiding the warning.
 - **Urgent isolation warning:** in exact Crystalline Conflict, a large gently
@@ -114,6 +116,8 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Exact Limit Break cues without Combat Frames:** reviewed enemy LB activations
   draw an icon above the exact actor's fresh native nameplate, with a countdown
   only when live status duration is confirmed and a bounded flash otherwise.
+  Enemy DRG `Sky High` additionally raises an immediate top-center airborne
+  danger card and one-shot sound, then follows only the confirmed live phase.
   Your own activation uses a separate top-center `LB ACTIVATED!` lane, while
   direct attributable ally LB damage uses at most three left-side cards. The
   retired frame renderer, calibrated remote gauges, row clicks, and native
@@ -133,14 +137,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Experimental Viper Serpentiner Geist helper:** a separate default-off option
   checks FFXIV's currently transformed Serpent's Tail carrier `39183` while any
   eligible gameplay key, including WASD, remains held. If the carrier exposes
-  one reviewed follow-up `39174`-`39182`, the helper may use that exact action on
-  the exact current hard target when usable. It does not capture, require, or
-  prove a preceding Viper action. The exact action, current hard target, and held
-  key freeze for the attempt/retry episode. The helper never changes the selected
+  one reviewed follow-up `39174`-`39182`, exact CC uses the existing Smart Action
+  rank across reachable canonical `S1`-`S5` enemies. A fully protection-safe
+  current hard target is only the last fallback. The exact action, chosen actor,
+  and held key freeze for the attempt/retry episode; later drift ends that carrier
+  exposure instead of reranking. The helper never visibly changes the selected
   target, substitutes a follow-up, dispatches carrier `39183`, or cancels your cast.
-  Exact CC uses canonical `S1`-`S5`; explicitly enabled Wolves' Den testing uses
-  the exact current hard target only when it is either the native hostile duel
-  opponent or the reviewed combat striking dummy with NameId `541`.
+  Explicitly enabled Wolves' Den testing remains restricted to the exact current
+  hard target when it is either the native hostile duel opponent or the reviewed
+  combat striking dummy with NameId `541`.
 - **Experimental Scholar Critical Strategy helper:** a separate default-off
   held-key option selects only among the complete canonical `S1`-`S5` enemies
   with live Guard. Fully trusted positive team pressure ranks first, otherwise
@@ -411,6 +416,8 @@ evidence is now split into narrow, non-interactive surfaces:
   native nameplate and never covers the HP/MP row;
 - a duration countdown appears only from confirmed live status timing; instant
   or unconfirmed activations use the catalog-bounded brief flash;
+- an exact enemy DRG `Sky High` episode also draws an immediate top-center
+  airborne danger card and plays at most one configured built-in sound;
 - the local player's activation appears in a separate top-center
   `LB ACTIVATED!` banner; and
 - direct attributable ally LB damage appears in at most three left-side
@@ -750,9 +757,12 @@ native reachability, dispatch, and server behavior require a live CC test.
 
 Wildfire and Death Warrant receive danger warnings. Marksman's Spite uses its
 exact early target-marker event to show the larger `MCH LIMIT BREAK ON YOU`
-card before the later damage event. The optional sound uses FFXIV's built-in
-sound effects, plays at most once for a verified threat, and has a test button.
-It never presses Guard or another action.
+card before the later damage event. An exact enemy DRG `Sky High` activation
+starts a matching airborne LB warning immediately; a countdown continues only
+from its live mapped caster status and clears with that exact episode. The
+optional sound uses FFXIV's built-in effects and plays once per verified MCH
+threat or DRG airborne episode. These warnings never press Guard or another
+action.
 
 Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature receive urgent
 Purify warnings. The experimental **Self-Purify physical-key helper** is disabled
@@ -836,9 +846,18 @@ carrier.
 
 Carrier `39183` itself is never dispatched.
 The ranged Uncoiled follow-ups `39177` and `39178` use their native 20-yalm range;
-the other reviewed follow-ups use 5 yalms. The exact adjusted action, current
-hard-target actor, context, territory, physical key, readiness, native range,
-and line of sight are frozen and revalidated before every possible call.
+the other reviewed follow-ups use 5 yalms. In exact Crystalline Conflict, target
+selection uses the shared Smart Action order: reach tier, lowest HP ratio, fresh
+team pressure, unavailable Guard, then trusted low MP and stable slot order.
+The complete protection snapshot also excludes Chiten, Covered, Paladin LB, and
+Dark Knight LB; these Viper follow-ups may bypass only Guard because their exact
+metadata says they ignore it. If no ranked winner exists, the exact current hard
+target is admitted only when it independently passes the same canonical,
+protection, reach, native range, and line-of-sight checks.
+
+The exact adjusted action, chosen actor, context, territory, physical key,
+readiness, native range, and line of sight are frozen and revalidated before
+every possible call.
 Purify retains absolute priority, and this is Viper's earliest held job helper.
 Own Guard blocks it; target Guard is not an added blocker. Action,
 resource, target-status, or range unavailability yields the framework frame to a
@@ -852,8 +871,10 @@ rearm a spent exposure. A newly exposed reviewed carrier action is a distinct
 opportunity; the Uncoiled `39177` to `39178` transformation is handled by that
 same carrier rule.
 
-In exact Crystalline Conflict the target must remain one canonical `S1`-`S5`
-enemy. Wolves' Den is available only with the separate testing option and only
+Once CC has chosen an actor, identity, protection, death, targetability, range,
+or line-of-sight drift retires that exact carrier exposure; the same held-key
+episode cannot select an alternate. Wolves' Den is available only with the
+separate testing option and only
 for the exact current hard-target living, targetable native hostile duel opponent
 or reviewed combat striking dummy with NameId `541`. Arbitrary NPCs and synthetic
 `S1`/`<e1>` identities are rejected. Frontline and Rival Wings remain excluded.
@@ -1934,7 +1955,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 516-test Core registry and source checks pin
+For the current source, the exact 517-test Core registry and source checks pin
 configuration schema 41, the default-off AST held Near Help sequence, the
 generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,

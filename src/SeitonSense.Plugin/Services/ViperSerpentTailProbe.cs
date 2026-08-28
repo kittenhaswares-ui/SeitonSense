@@ -65,10 +65,12 @@ internal sealed record ViperSerpentTailProbeSnapshot(
 
 /// <summary>
 /// Observes the native Serpent's Tail carrier continuously and converts one
-/// currently exposed follow-up into one exact held action. The action, current
-/// hard target, context, physical key generation, and native addresses are
-/// frozen before bounded retries. It never changes selected target state,
-/// substitutes an action or actor, or cancels casts.
+/// currently exposed follow-up into one exact held action. In CC the concrete
+/// follow-up uses the shared Smart Action target policy; Wolves' Den retains
+/// its exact current-target duel/dummy path. The action, chosen target, context,
+/// physical key generation, and native addresses are frozen before bounded
+/// retries. It never changes selected target state, substitutes an action after
+/// freezing, or cancels casts.
 /// </summary>
 internal sealed unsafe class ViperSerpentTailProbe
 {
@@ -271,6 +273,7 @@ internal sealed unsafe class ViperSerpentTailProbe
             hardReset: !featureGateReady);
 
         var input = inputFrame.Snapshot;
+        var previousIntent = state.Intent;
         var frozenKeyStillDown = state.Intent is { IsValid: true } heldIntent &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(
                                      (VirtualKey)heldIntent.FrozenKeyCode);
@@ -282,9 +285,17 @@ internal sealed unsafe class ViperSerpentTailProbe
         var expectedActionId = currentIntentStillTracked
             ? state.Intent!.Value.ActionId
             : exposure.CurrentActionId;
+        var selectedEnemySlot = 0;
+        var selectedTarget = default(TargetPressureActorIdentity);
+        var selectedWinnerInvalidated = false;
         RuntimeCandidate? runtimeCandidate = null;
         if (exactLocal is not null &&
-            ViperSerpentTailRules.IsExactFollowUpAction(expectedActionId))
+            ViperSerpentTailRules.IsExactFollowUpAction(expectedActionId) &&
+            (currentIntentStillTracked ||
+             terminalHeldKey == VirtualKey.NO_KEY &&
+             inputFrame.HeldGameplayKeyEligible &&
+             !effectiveHigherPriorityClaimed &&
+             !guardSuppressed))
         {
             runtimeCandidate = currentIntentStillTracked
                 ? ResolveExactCandidate(
@@ -298,7 +309,10 @@ internal sealed unsafe class ViperSerpentTailProbe
                     exactLocal,
                     context,
                     expectedActionId,
-                    wolvesDenDummyMetadataVerified);
+                    wolvesDenDummyMetadataVerified,
+                    out selectedEnemySlot,
+                    out selectedTarget,
+                    out selectedWinnerInvalidated);
         }
 
         if (currentIntentStillTracked &&
@@ -308,10 +322,35 @@ internal sealed unsafe class ViperSerpentTailProbe
             runtimeCandidate = null;
         }
 
+        ViperSerpentTailIntent? freshSelectedIntent = null;
+        if (!currentIntentStillTracked && selectedTarget.IsValid)
+        {
+            var selected = new ViperSerpentTailIntent(
+                exposure.Generation,
+                context,
+                selectedEnemySlot,
+                localIdentity,
+                selectedTarget,
+                expectedActionId,
+                (int)input.HeldGameplayKey);
+            if (selected.IsValid) freshSelectedIntent = selected;
+        }
+
+        var exactFrozenTargetInvalid = selectedWinnerInvalidated ||
+                                       runtimeCandidate is null &&
+                                       (currentIntentStillTracked &&
+                                        previousIntent is { IsValid: true } ||
+                                        freshSelectedIntent is { IsValid: true });
+
         var exactActionLocallyReady = actionLocallyReady &&
                                       resolvedActionId == expectedActionId &&
                                       runtimeCandidate?.TargetActionReady == true;
-        var previousIntent = state.Intent;
+        // A buffered intent may belong to a carrier action that was superseded
+        // in this same frame. Only retain it when it still owns the current
+        // exposure; otherwise the freshly selected current-action intent wins.
+        var selectedOrFrozenIntent = currentIntentStillTracked
+            ? previousIntent
+            : freshSelectedIntent;
         var decision = ViperSerpentTailRules.Observe(
             state,
             new ViperSerpentTailObservation(
@@ -336,9 +375,23 @@ internal sealed unsafe class ViperSerpentTailProbe
                 HardReset: effectiveHardReset,
                 NowMilliseconds: nowMilliseconds));
 
+        // Target drift outranks incidental same-frame scheduler/key state. The
+        // exact frozen actor is gone or unsafe, so this carrier exposure must
+        // be retired even if Purify, Guard, or key release would otherwise
+        // explain the frame first.
+        if (exactFrozenTargetInvalid)
+        {
+            decision = new ViperSerpentTailDecision(
+                ViperSerpentTailState.Initial,
+                ViperSerpentTailDecisionKind.Cancelled,
+                ViperSerpentTailDecisionReason.CandidateUnavailable);
+            ClearFrozenRuntime();
+        }
+
         if (decision.NextState.Intent is { IsValid: true } nextIntent &&
             (!previousIntent.HasValue || previousIntent.Value != nextIntent))
         {
+            selectedOrFrozenIntent = nextIntent;
             if (runtimeCandidate is not { } frozenCandidate ||
                 exactLocal is null ||
                 frozenCandidate.Core.Context != nextIntent.Context ||
@@ -360,6 +413,22 @@ internal sealed unsafe class ViperSerpentTailProbe
                     frozenCandidate.Target.Address);
             }
         }
+
+        // A frozen episode owns exactly one actor. If that actor later becomes
+        // ambiguous, protected, dead, untargetable, out of native range/LoS, or
+        // otherwise fails exact revalidation, retire this carrier exposure.
+        // Leaving it unspent would allow the same held key to rerank to a
+        // different enemy on the next framework frame.
+        exposure = ViperSerpentTailRules
+            .RetireCurrentCarrierExposureAfterSelectedWinnerInvalidation(
+                exposure,
+                selectedWinnerInvalidated);
+
+        exposure = ViperSerpentTailRules
+            .RetireCarrierExposureAfterExactTargetDrift(
+                exposure,
+                selectedOrFrozenIntent,
+                decision);
 
         state = decision.NextState;
         var inputClaimed = decision.InputClaimed;
@@ -641,56 +710,59 @@ internal sealed unsafe class ViperSerpentTailProbe
         IPlayerCharacter localPlayer,
         SupportedPvPContext context,
         uint actionId,
-        bool wolvesDenDummyMetadataVerified)
+        bool wolvesDenDummyMetadataVerified,
+        out int selectedEnemySlot,
+        out TargetPressureActorIdentity selectedTarget,
+        out bool selectedWinnerInvalidated)
     {
+        selectedEnemySlot = 0;
+        selectedTarget = default;
+        selectedWinnerInvalidated = false;
         if (!ViperSerpentTailRules.IsExactFollowUpAction(actionId)) return null;
 
         switch (context)
         {
             case SupportedPvPContext.CrystallineConflict:
             {
-                var nativeHardTargetId = GetNativeHardTargetId(localPlayer);
-                if (!IsNetworkObjectId(nativeHardTargetId)) return null;
-                for (var slot = EnemySlotRules.FirstSlot;
-                     slot <= EnemySlotRules.LastSlot;
-                     slot++)
-                {
-                    var enemy = EnemySlotResolver.Resolve(objectTable, slot);
-                    if (!HasValidNativeIdentity(enemy) ||
-                        !ActorIdMatches(nativeHardTargetId, enemy!))
-                    {
-                        continue;
-                    }
-
-                    var enemyIdentity = new TargetPressureActorIdentity(
-                        enemy!.GameObjectId,
-                        enemy.EntityId);
-                    return ResolveExactCandidate(
-                        localPlayer,
-                        context,
-                        slot,
-                        enemyIdentity,
+                if (!nearAssist.TryResolveHeldSmartActionTarget(
                         actionId,
-                        wolvesDenDummyMetadataVerified);
+                        out var slot,
+                        out var smartIdentity,
+                        out selectedWinnerInvalidated,
+                        out _))
+                {
+                    return null;
                 }
 
-                return null;
+                selectedEnemySlot = slot;
+                selectedTarget = smartIdentity;
+                return ResolveExactCandidate(
+                    localPlayer,
+                    context,
+                    slot,
+                    smartIdentity,
+                    actionId,
+                    wolvesDenDummyMetadataVerified);
             }
             case SupportedPvPContext.WolvesDen:
-                return TryResolveExactWolvesDenCurrentHardTarget(
+                if (!TryResolveExactWolvesDenCurrentHardTarget(
                         objectTable,
                         wolvesDenDummyMetadataVerified,
                         localPlayer,
                         out _,
-                        out var identity)
-                    ? ResolveExactCandidate(
-                        localPlayer,
-                        context,
-                        0,
-                        identity,
-                        actionId,
-                        wolvesDenDummyMetadataVerified)
-                    : null;
+                        out var identity))
+                {
+                    return null;
+                }
+
+                selectedTarget = identity;
+                return ResolveExactCandidate(
+                    localPlayer,
+                    context,
+                    0,
+                    identity,
+                    actionId,
+                    wolvesDenDummyMetadataVerified);
             default:
                 return null;
         }
@@ -720,8 +792,9 @@ internal sealed unsafe class ViperSerpentTailProbe
             case SupportedPvPContext.CrystallineConflict:
             {
                 if (!EnemySlotRules.IsValidSlot(enemySlot) ||
-                    !ActorIdMatches(
-                        GetNativeHardTargetId(localPlayer),
+                    !nearAssist.CanUseExactHeldSmartActionTarget(
+                        actionId,
+                        enemySlot,
                         expectedTarget))
                 {
                     return null;

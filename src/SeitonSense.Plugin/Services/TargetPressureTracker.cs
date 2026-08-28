@@ -324,6 +324,7 @@ internal sealed class TargetPressureTracker : IDisposable
         var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;
         var isAstrologian = localJobId ==
                              AstrologianHarmonicOrbisRules.AstrologianJobId;
+        var isViper = localJobId == ViperSerpentTailRules.ViperJobId;
         var condition = dutyState.ContentFinderCondition;
         var supportedContext = PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
@@ -353,6 +354,8 @@ internal sealed class TargetPressureTracker : IDisposable
                                         configuration.EnableScholarCriticalStrategyOnHeldKey) ||
                                        (isDarkKnight &&
                                         configuration.EnableDarkKnightShadowbringerOnHeldKey) ||
+                                       (isViper &&
+                                        configuration.EnableViperSerpentTailOnHeldKey) ||
                                        configuration.EnableAutoEnemyFocusMark ||
                                        configuration.ShowHighPressureWarning ||
                                        configuration.PlayHighPressureWarningSound ||

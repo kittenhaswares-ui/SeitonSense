@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.36.0.1
+
+- Changed the default-off Viper held Serpentiner-Geist follow-ups in exact
+  Crystalline Conflict from current-target-only dispatch to the existing Smart
+  Action target policy. The concrete exposed action now ranks only reachable
+  canonical enemies by reach tier, HP, fresh team pressure, unavailable Guard,
+  trusted MP, and stable slot order, with the exact current target retained only
+  as a last fallback after the identical full protection/range/line-of-sight
+  validation. No visible target is changed. Wolves' Den remains exact `<t>`.
+- Once Viper selects either a Smart winner or the safe fallback, its action,
+  actor, context, key, carrier generation, and native identities remain frozen.
+  Later death, ambiguity, protection, range, or line-of-sight drift cancels and
+  spends that exact carrier exposure; the same hold cannot rerank or jump to an
+  alternate enemy.
+- Added an enemy DRG Limit Break danger warning from the exact `Sky High`
+  activation `29497`, so the top-center icon/card and one-shot selectable FFXIV
+  sound begin at takeoff rather than waiting for `Sky Shatter` impact. Only the
+  live exact caster status `3180` may extend the warning with a countdown;
+  `3181`, landing damage, gauge estimates, and ambiguous actors do not. The
+  existing personal-warning/MCH danger controls are reused, so configuration
+  schema remains `41`. The warning-free Release build, source safety contract,
+  package checks, and all `517` Core tests pass. Live current-patch behavior
+  remains a separate in-game validation boundary.
+
 ## 0.36.0.0
 
 - Added a separate default-off Astrologian held-key helper that applies the

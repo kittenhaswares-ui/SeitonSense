@@ -15,6 +15,27 @@ public readonly record struct CombatLimitBreakSelfNotificationPlan(
     bool ShowCountdown,
     long RemainingMilliseconds);
 
+public readonly record struct DragoonLimitBreakWarningObservation(
+    TargetPressureActorIdentity Actor,
+    bool IsEnemy,
+    int EnemySlot,
+    uint JobId,
+    uint ActivationActionId,
+    uint IconId,
+    CombatLimitBreakPresentationKind Presentation,
+    bool DurationConfirmed,
+    uint EvidenceStatusId,
+    long ActivatedAtMilliseconds,
+    long ExpiresAtMilliseconds,
+    long SnapshotPublishedAtMilliseconds,
+    ulong EpisodeToken);
+
+public readonly record struct DragoonLimitBreakWarningPlan(
+    uint IconId,
+    bool ShowCountdown,
+    long RemainingMilliseconds,
+    ulong EpisodeToken);
+
 public readonly record struct CombatLimitBreakDamageNotificationObservation(
     TargetPressureActorIdentity Caster,
     int CasterPartySlot,
@@ -59,6 +80,11 @@ public readonly record struct LimitBreakNotificationRectangle(
 /// </summary>
 public static class CombatLimitBreakNotificationRules
 {
+    public const uint DragoonJobId = 22;
+    public const uint DragoonSkyHighActionId = 29_497;
+    public const uint DragoonSkyHighIconId = 9_652;
+    public const uint DragoonSkyHighStatusId = 3_180;
+    public const long MaximumDragoonAirborneEpisodeMilliseconds = 5_000;
     public const long MaximumSnapshotAgeMilliseconds = 500;
     public const long AllyDamageLifetimeMilliseconds = 3_000;
     public const int MaximumVisibleDamageCards = 3;
@@ -72,6 +98,7 @@ public static class CombatLimitBreakNotificationRules
     private const float SelfBannerHeight = 84f;
     private const float SelfBannerMinimumWidth = 300f;
     private const float SelfBannerTopOffset = 168f;
+    private const float EnemyDangerBannerTopOffset = 28f;
     private const float DamageCardWidth = 330f;
     private const float DamageCardHeight = 66f;
     private const float DamageCardGap = 7f;
@@ -111,6 +138,57 @@ public static class CombatLimitBreakNotificationRules
             observation.IconId,
             showCountdown,
             observation.ExpiresAtMilliseconds - nowMilliseconds);
+        return true;
+    }
+
+    /// <summary>
+    /// Admits only the exact enemy DRG Sky High activation episode. The first
+    /// short flash is enough to warn immediately; a longer countdown requires
+    /// the exact live Sky High caster status from that same episode. The later
+    /// Sky Shatter impact phase is deliberately not an airborne warning.
+    /// </summary>
+    public static bool TryBuildDragoonWarningPlan(
+        in DragoonLimitBreakWarningObservation observation,
+        long nowMilliseconds,
+        out DragoonLimitBreakWarningPlan plan)
+    {
+        plan = default;
+        if (!observation.Actor.IsValid ||
+            !observation.IsEnemy ||
+            observation.EnemySlot is < FirstEnemySlot or > LastEnemySlot ||
+            observation.JobId != DragoonJobId ||
+            observation.ActivationActionId != DragoonSkyHighActionId ||
+            observation.IconId != DragoonSkyHighIconId ||
+            observation.Presentation != CombatLimitBreakPresentationKind.Duration ||
+            observation.ActivatedAtMilliseconds < 0 ||
+            observation.ActivatedAtMilliseconds > nowMilliseconds ||
+            observation.ExpiresAtMilliseconds <= nowMilliseconds ||
+            observation.EpisodeToken == 0 ||
+            !IsFresh(observation.SnapshotPublishedAtMilliseconds, nowMilliseconds))
+        {
+            return false;
+        }
+
+        var lifetime = observation.ExpiresAtMilliseconds - observation.ActivatedAtMilliseconds;
+        if (observation.DurationConfirmed)
+        {
+            if (observation.EvidenceStatusId != DragoonSkyHighStatusId ||
+                lifetime is <= 0 or > MaximumDragoonAirborneEpisodeMilliseconds)
+            {
+                return false;
+            }
+        }
+        else if (observation.EvidenceStatusId != 0 ||
+                 lifetime is <= 0 or > CombatLimitBreakCatalog.InstantFlashMilliseconds)
+        {
+            return false;
+        }
+
+        plan = new DragoonLimitBreakWarningPlan(
+            observation.IconId,
+            observation.DurationConfirmed,
+            observation.ExpiresAtMilliseconds - nowMilliseconds,
+            observation.EpisodeToken);
         return true;
     }
 
@@ -188,6 +266,66 @@ public static class CombatLimitBreakNotificationRules
                rectangle.Bottom <= safeBandBottom + 0.001f;
     }
 
+    public static bool TryBuildEnemyDangerBannerRectangle(
+        float workLeft,
+        float workTop,
+        float workWidth,
+        float workHeight,
+        float uiScale,
+        out LimitBreakNotificationRectangle rectangle) =>
+        TryBuildTopCenterBannerRectangle(
+            workLeft,
+            workTop,
+            workWidth,
+            workHeight,
+            uiScale,
+            EnemyDangerBannerTopOffset,
+            out rectangle);
+
+    public static bool TryBuildSelfBannerRectangleBelow(
+        float workLeft,
+        float workTop,
+        float workWidth,
+        float workHeight,
+        float uiScale,
+        in LimitBreakNotificationRectangle upperBanner,
+        out LimitBreakNotificationRectangle rectangle)
+    {
+        if (!TryBuildSelfBannerRectangle(
+                workLeft,
+                workTop,
+                workWidth,
+                workHeight,
+                uiScale,
+                out rectangle) ||
+            !upperBanner.IsValid)
+        {
+            return false;
+        }
+
+        if (!RectanglesOverlap(rectangle, upperBanner)) return true;
+        var shiftedTop = upperBanner.Bottom + (12f * uiScale);
+        var height = rectangle.Bottom - rectangle.Top;
+        var shifted = rectangle with
+        {
+            Top = shiftedTop,
+            Bottom = shiftedTop + height,
+        };
+        var safeBandBottom = workTop + (workHeight * 0.65f);
+        if (!shifted.IsValid ||
+            shifted.Left < workLeft ||
+            shifted.Right > workLeft + workWidth ||
+            shifted.Top < workTop ||
+            shifted.Bottom > safeBandBottom)
+        {
+            rectangle = default;
+            return false;
+        }
+
+        rectangle = shifted;
+        return true;
+    }
+
     public static bool TryBuildDamageCardRectangles(
         float workLeft,
         float workTop,
@@ -245,6 +383,49 @@ public static class CombatLimitBreakNotificationRules
         publishedAtMilliseconds >= 0 &&
         nowMilliseconds >= publishedAtMilliseconds &&
         nowMilliseconds - publishedAtMilliseconds <= MaximumSnapshotAgeMilliseconds;
+
+    private static bool RectanglesOverlap(
+        in LimitBreakNotificationRectangle first,
+        in LimitBreakNotificationRectangle second) =>
+        first.Left < second.Right &&
+        first.Right > second.Left &&
+        first.Top < second.Bottom &&
+        first.Bottom > second.Top;
+
+    private static bool TryBuildTopCenterBannerRectangle(
+        float workLeft,
+        float workTop,
+        float workWidth,
+        float workHeight,
+        float uiScale,
+        float topOffset,
+        out LimitBreakNotificationRectangle rectangle)
+    {
+        rectangle = default;
+        if (!IsValidViewport(workLeft, workTop, workWidth, workHeight, uiScale)) return false;
+
+        var padding = ViewportPadding * uiScale;
+        var availableWidth = workWidth - (padding * 2f);
+        var width = Math.Min(SelfBannerWidth * uiScale, availableWidth);
+        var height = SelfBannerHeight * uiScale;
+        if (width < SelfBannerMinimumWidth * uiScale || height + (padding * 2f) > workHeight)
+            return false;
+
+        var safeBandBottom = workTop + (workHeight * 0.45f);
+        var latestSafeTop = safeBandBottom - height;
+        var top = Math.Clamp(
+            workTop + (topOffset * uiScale),
+            workTop + padding,
+            Math.Max(workTop + padding, latestSafeTop));
+        var left = workLeft + ((workWidth - width) * 0.5f);
+        rectangle = new LimitBreakNotificationRectangle(left, top, left + width, top + height);
+        return rectangle.IsValid &&
+               rectangle.Left >= workLeft &&
+               rectangle.Right <= workLeft + workWidth &&
+               rectangle.Top >= workTop &&
+               rectangle.Bottom <= workTop + workHeight &&
+               rectangle.Bottom <= safeBandBottom + 0.001f;
+    }
 
     private static bool IsValidViewport(
         float workLeft,

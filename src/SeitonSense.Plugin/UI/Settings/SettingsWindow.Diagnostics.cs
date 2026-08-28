@@ -339,7 +339,8 @@ internal sealed partial class SettingsWindow
             "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; AST runs directly after Purify and SAM follows AST, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
-            "it requires no preceding-action proof and never changes a target or cancels a cast. " +
+            "it requires no preceding-action proof, uses the shared Smart Action target policy in CC, and never visibly " +
+            "changes a target or cancels a cast. " +
             "One continuous physical hold may authorize later distinct exact held episodes, including Guard after " +
             "Purify; only one held native boundary is allowed per framework frame. Every action-request helper is " +
             "blocked while your own Guard is active. Held DRK Shadowbringer joins the physical-generation chain at " +

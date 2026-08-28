@@ -406,7 +406,7 @@ internal sealed class CombatLimitBreakRuntimeService : IDisposable
                 CombatLimitBreakCatalog.ResolveIconId(definition, action) != activation.IconId ||
                 !roster.ByEntityId.TryGetValue(activation.CasterEntityId, out var caster) ||
                 caster.Actor.JobId != definition.JobId ||
-                !IsLiveActivationCaster(caster))
+                !IsLiveActivationCaster(caster, activation.ActionId))
             {
                 rejectedActivations++;
                 continue;
@@ -533,7 +533,7 @@ internal sealed class CombatLimitBreakRuntimeService : IDisposable
                 caster.Actor.Side != CombatLimitBreakRosterSide.Ally ||
                 target.Actor.Side != CombatLimitBreakRosterSide.Enemy ||
                 caster.Actor.JobId != definition.JobId ||
-                !IsLiveActivationCaster(caster) ||
+                !IsLiveActivationCaster(caster, damage.ActionId) ||
                 !episodes.TryGetValue(caster.Actor.Identity, out var episode) ||
                 episode.Definition.JobId != definition.JobId ||
                 damage.ObservedAtMilliseconds < episode.ActivatedAtMilliseconds ||
@@ -772,13 +772,26 @@ internal sealed class CombatLimitBreakRuntimeService : IDisposable
         return (action.Role & CombatLimitBreakActionRole.FollowUp) != 0;
     }
 
-    private static bool IsLiveActivationCaster(ResolvedRosterActor caster) =>
+    private static bool IsLiveActivationCaster(
+        ResolvedRosterActor caster,
+        uint actionId)
+    {
+        // Sky High makes the exact DRG untargetable as part of the activation.
+        // Depending on framework/packet ordering, requiring IsTargetable here
+        // would discard the 29497 takeoff packet precisely after the airborne
+        // state became visible. This exception admits only that exact job/action;
+        // every other activation and all landing damage retain targetability.
+        var exactDragoonSkyHigh =
+            caster.Actor.JobId == CombatLimitBreakNotificationRules.DragoonJobId &&
+            actionId == CombatLimitBreakNotificationRules.DragoonSkyHighActionId;
+        return
         caster.Player.IsValid() &&
         caster.Player.Address != nint.Zero &&
         !caster.Player.IsDead &&
         caster.Player.CurrentHp > 0 &&
-        caster.Player.IsTargetable &&
+        (caster.Player.IsTargetable || exactDragoonSkyHigh) &&
         CreateIdentity(caster.Player) == caster.Actor.Identity;
+    }
 
     private bool RememberActivationKey(ActivationEventKey key)
     {

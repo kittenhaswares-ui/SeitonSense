@@ -301,14 +301,18 @@ internal sealed partial class SettingsWindow
                 "Default off and PvP Viper only. While any eligible gameplay key, including WASD, remains held, " +
                 "Seiton Sense checks FFXIV's currently transformed Serpent's Tail / Serpentiner Geist carrier (39183) " +
                 "each frame. When FFXIV exposes one reviewed follow-up (39174-39182), the helper may use that exact " +
-                "action on your exact current hard target once it is usable. The transformed carrier is the complete " +
+                "action on the shared Smart Action winner in exact CC. It ranks only reachable canonical enemies by " +
+                "reach tier, HP, fresh team pressure, unavailable Guard, trusted MP, and stable slot order; a fully " +
+                "safe exact current hard target is only the final fallback. The transformed carrier is the complete " +
                 "opportunity signal: Seiton Sense does not record, require, or try to prove a preceding Viper action. " +
-                "Carrier 39183 itself is never dispatched. The action, held key, and current hard target freeze for the " +
-                "exact attempt/retry episode. The helper does not select, rerank, visibly change, or substitute a target " +
-                "or a different follow-up.");
+                "Carrier 39183 itself is never dispatched. The action, held key, and chosen target freeze for the " +
+                "exact attempt/retry episode. Later target or protection drift retires that exposure instead of " +
+                "reranking. The helper never visibly changes a selected target or substitutes a different follow-up.");
             ImGui.TextDisabled(
                 "Purify keeps absolute priority; this is Viper's earliest held job helper. Own Guard blocks it, " +
-                "while enemy Guard remains valid because these follow-ups natively ignore Guard when dealing damage. " +
+                "while enemy Guard may be bypassed only because these exact follow-ups natively ignore Guard when " +
+                "dealing damage. Chiten, Covered, Paladin LB, Dark Knight LB, or incomplete protection evidence still " +
+                "blocks selection. " +
                 "Action, resource, target-status, or reach waits yield the frame to a usable lower helper; only an " +
                 "otherwise-ready native-boundary or retry-throttle wait keeps Viper's priority. Cast cancellation is " +
                 "deliberately unavailable. A clean client rejection may only use the shared bounded same-intent retry " +
