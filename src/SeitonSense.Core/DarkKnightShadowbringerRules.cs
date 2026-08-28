@@ -14,6 +14,63 @@ public enum DarkKnightShadowbringerDispatchPolicy : byte
     SafeHpCostOnly = 2,
 }
 
+public enum DarkKnightBlackbloodGatePhase : byte
+{
+    Ready = 0,
+    AwaitingExposure = 1,
+    AwaitingConsumption = 2,
+    PropagationUnconfirmed = 3,
+}
+
+/// <summary>
+/// Optional duplicate-safety gate for the exact Blackblood status granted by
+/// PvP Shadowbringer. A proven accepted automatic boundary waits briefly for
+/// native status propagation; if the complete short lifecycle falls between
+/// samples, the end of that grace supplies only the first absent observation.
+/// Ambiguous acceptance uses the same bounded inference, while its held key is
+/// independently latched until release by the shared retry policy. Once
+/// observed, the status must disappear stably before another automatic
+/// Shadowbringer may be selected.
+/// </summary>
+public readonly record struct DarkKnightBlackbloodGateState(
+    DarkKnightBlackbloodGatePhase Phase,
+    long ArmedAtMilliseconds,
+    int ConsecutiveAbsentObservations,
+    long LastObservedAtMilliseconds)
+{
+    public static DarkKnightBlackbloodGateState Initial => new(
+        DarkKnightBlackbloodGatePhase.Ready,
+        -1,
+        0,
+        -1);
+
+    public bool IsDispatchAllowed =>
+        Phase == DarkKnightBlackbloodGatePhase.Ready;
+
+    public bool IsValid => Phase switch
+    {
+        DarkKnightBlackbloodGatePhase.Ready =>
+            ArmedAtMilliseconds == -1 &&
+            ConsecutiveAbsentObservations == 0 &&
+            LastObservedAtMilliseconds >= -1,
+        DarkKnightBlackbloodGatePhase.AwaitingExposure =>
+            ArmedAtMilliseconds >= 0 &&
+            ConsecutiveAbsentObservations == 0 &&
+            LastObservedAtMilliseconds >= ArmedAtMilliseconds,
+        DarkKnightBlackbloodGatePhase.AwaitingConsumption =>
+            ArmedAtMilliseconds >= 0 &&
+            ConsecutiveAbsentObservations is >= 0 and <
+                DarkKnightShadowbringerRules
+                    .BlackbloodStableAbsenceObservations &&
+            LastObservedAtMilliseconds >= ArmedAtMilliseconds,
+        DarkKnightBlackbloodGatePhase.PropagationUnconfirmed =>
+            ArmedAtMilliseconds >= 0 &&
+            ConsecutiveAbsentObservations == 0 &&
+            LastObservedAtMilliseconds >= ArmedAtMilliseconds,
+        _ => false,
+    };
+}
+
 /// <summary>
 /// One exact Dark Arts exposure. A single missing sample is treated as native
 /// status-list flicker; two consecutive missing samples close the generation.
@@ -228,9 +285,11 @@ public static class DarkKnightShadowbringerRules
     public const uint ShadowbringerActionId = 29_091;
     public const uint DarkArtsShadowbringerActionId = 29_738;
     public const uint TheBlackestNightActionId = 29_093;
+    public const uint BlackbloodStatusId = 3_033;
     public const uint DarkArtsStatusId = 3_034;
     public const uint ShadowbringerIconId = 9_594;
     public const uint TheBlackestNightIconId = 9_152;
+    public const uint BlackbloodStatusIconId = 213_106;
     public const uint DarkArtsStatusIconId = 213_107;
     public const uint ShadowbringerHpCost = 12_000;
     public const uint WolvesDenStrikingDummyNameId = 541;
@@ -244,6 +303,169 @@ public static class DarkKnightShadowbringerRules
     public const int DefaultPressureLimitExclusive = 2;
     public const int MinimumPressureLimitExclusive = 1;
     public const int MaximumPressureLimitExclusive = 6;
+    public const long BlackbloodPropagationWaitMilliseconds = 1_500;
+    public const int BlackbloodStableAbsenceObservations = 2;
+    public const long AutomaticCadenceMilliseconds = 1_800;
+
+    public static DarkKnightBlackbloodGateState ObserveBlackbloodGate(
+        DarkKnightBlackbloodGateState previous,
+        bool preservationEnabled,
+        bool exactBlackbloodActive,
+        long nowMilliseconds,
+        bool hardReset = false)
+    {
+        if (hardReset || !preservationEnabled || nowMilliseconds < 0)
+            return DarkKnightBlackbloodGateState.Initial;
+
+        if (!previous.IsValid)
+            previous = DarkKnightBlackbloodGateState.Initial;
+
+        if (exactBlackbloodActive)
+        {
+            var armedAt = previous.ArmedAtMilliseconds >= 0
+                ? previous.ArmedAtMilliseconds
+                : nowMilliseconds;
+            return new DarkKnightBlackbloodGateState(
+                DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+                armedAt,
+                0,
+                nowMilliseconds);
+        }
+
+        if (nowMilliseconds <= previous.LastObservedAtMilliseconds)
+            return previous;
+
+        return previous.Phase switch
+        {
+            DarkKnightBlackbloodGatePhase.Ready => previous with
+            {
+                LastObservedAtMilliseconds = nowMilliseconds,
+            },
+            DarkKnightBlackbloodGatePhase.AwaitingExposure
+                when nowMilliseconds >= previous.ArmedAtMilliseconds &&
+                     nowMilliseconds - previous.ArmedAtMilliseconds <
+                     BlackbloodPropagationWaitMilliseconds => previous with
+                     {
+                         LastObservedAtMilliseconds = nowMilliseconds,
+                     },
+            DarkKnightBlackbloodGatePhase.AwaitingExposure =>
+                previous with
+                {
+                    // A proven accepted Shadowbringer plus verified metadata
+                    // establishes that Blackblood was granted. If the row was
+                    // both propagated and consumed between framework samples,
+                    // the end of the conservative grace is only the first
+                    // absence; one later sample is still required to rearm.
+                    Phase = DarkKnightBlackbloodGatePhase
+                        .AwaitingConsumption,
+                    ConsecutiveAbsentObservations = 1,
+                    LastObservedAtMilliseconds = nowMilliseconds,
+                },
+            DarkKnightBlackbloodGatePhase.PropagationUnconfirmed => previous with
+            {
+                LastObservedAtMilliseconds = nowMilliseconds,
+            },
+            DarkKnightBlackbloodGatePhase.AwaitingConsumption =>
+                ObserveBlackbloodAbsence(previous, nowMilliseconds),
+            _ => DarkKnightBlackbloodGateState.Initial,
+        };
+    }
+
+    public static DarkKnightBlackbloodGateState
+        MarkAutomaticShadowbringerBoundary(
+            DarkKnightBlackbloodGateState previous,
+            bool preservationEnabled,
+            ClientActionAttemptOutcome outcome,
+            long nowMilliseconds)
+    {
+        if (!preservationEnabled || nowMilliseconds < 0)
+            return DarkKnightBlackbloodGateState.Initial;
+        if (!previous.IsValid)
+            previous = DarkKnightBlackbloodGateState.Initial;
+        if (!previous.IsDispatchAllowed)
+            return previous;
+        if (outcome is not
+            (ClientActionAttemptOutcome.ClientAccepted or
+             ClientActionAttemptOutcome.AcceptanceUnknown))
+        {
+            return previous;
+        }
+
+        return new DarkKnightBlackbloodGateState(
+            DarkKnightBlackbloodGatePhase.AwaitingExposure,
+            nowMilliseconds,
+            0,
+            nowMilliseconds);
+    }
+
+    public static bool IsAutomaticCadenceReady(
+        long lastAutomaticBoundaryAtMilliseconds,
+        long nowMilliseconds) =>
+        lastAutomaticBoundaryAtMilliseconds == -1
+            ? nowMilliseconds >= 0
+            : lastAutomaticBoundaryAtMilliseconds >= 0 &&
+              nowMilliseconds >= lastAutomaticBoundaryAtMilliseconds &&
+              nowMilliseconds - lastAutomaticBoundaryAtMilliseconds >=
+                  AutomaticCadenceMilliseconds;
+
+    public static long GetAutomaticCadenceRemainingMilliseconds(
+        long lastAutomaticBoundaryAtMilliseconds,
+        long nowMilliseconds)
+    {
+        if (lastAutomaticBoundaryAtMilliseconds == -1 && nowMilliseconds >= 0)
+            return 0;
+        if (lastAutomaticBoundaryAtMilliseconds < 0 || nowMilliseconds < 0 ||
+            nowMilliseconds < lastAutomaticBoundaryAtMilliseconds)
+        {
+            return AutomaticCadenceMilliseconds;
+        }
+
+        return Math.Max(
+            0,
+            AutomaticCadenceMilliseconds -
+            (nowMilliseconds - lastAutomaticBoundaryAtMilliseconds));
+    }
+
+    public static long MarkAutomaticCadenceBoundary(
+        long previousBoundaryAtMilliseconds,
+        ClientActionAttemptOutcome outcome,
+        long nowMilliseconds)
+    {
+        if (previousBoundaryAtMilliseconds < -1)
+            previousBoundaryAtMilliseconds = -1;
+        if (nowMilliseconds < 0 ||
+            previousBoundaryAtMilliseconds > nowMilliseconds ||
+            outcome is not
+                (ClientActionAttemptOutcome.ClientAccepted or
+                 ClientActionAttemptOutcome.AcceptanceUnknown))
+        {
+            return previousBoundaryAtMilliseconds;
+        }
+
+        return nowMilliseconds;
+    }
+
+    public static DarkKnightShadowbringerFallbackState
+        RetireFallbackAfterAutomaticBoundary(
+            DarkKnightShadowbringerFallbackState previous,
+            ClientActionAttemptOutcome outcome)
+    {
+        if (!previous.IsValid ||
+            outcome is not
+                (ClientActionAttemptOutcome.ClientAccepted or
+                 ClientActionAttemptOutcome.AcceptanceUnknown))
+        {
+            return previous.IsValid
+                ? previous
+                : DarkKnightShadowbringerFallbackState.Initial;
+        }
+
+        return new DarkKnightShadowbringerFallbackState(
+            previous.Generation,
+            IsCurrentlyEligible: false,
+            IsSpent: false,
+            ConsecutiveIneligibleObservations: 2);
+    }
 
     public static DarkKnightShadowbringerDarkArtsState ObserveDarkArts(
         DarkKnightShadowbringerDarkArtsState previous,
@@ -955,6 +1177,23 @@ public static class DarkKnightShadowbringerRules
                 opportunity == DarkKnightShadowbringerOpportunityKind.SafeHpCost,
             _ => false,
         };
+
+    private static DarkKnightBlackbloodGateState ObserveBlackbloodAbsence(
+        DarkKnightBlackbloodGateState previous,
+        long nowMilliseconds)
+    {
+        var misses = previous.ConsecutiveAbsentObservations + 1;
+        return misses >= BlackbloodStableAbsenceObservations
+            ? DarkKnightBlackbloodGateState.Initial with
+            {
+                LastObservedAtMilliseconds = nowMilliseconds,
+            }
+            : previous with
+            {
+                ConsecutiveAbsentObservations = misses,
+                LastObservedAtMilliseconds = nowMilliseconds,
+            };
+    }
 
     private static int Compare(
         DarkKnightShadowbringerCandidate left,

@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 42;
+    public int Version { get; set; } = 43;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -105,6 +105,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool TurboOutsideCombat { get; set; }
     public bool EnableDarkKnightPlungeOnHeldKey { get; set; }
     public bool EnableDarkKnightShadowbringerOnHeldKey { get; set; }
+    public bool DarkKnightShadowbringerPreserveBlackblood { get; set; } = true;
     public int DarkKnightShadowbringerMinimumHpPercent { get; set; } = 85;
     public int DarkKnightShadowbringerPressureLimitExclusive { get; set; } = 2;
     public string SeitonKeyLabel { get; set; } = "SHIFT";
@@ -295,7 +296,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 42)
+        if (Version >= 43)
         {
             if (repaired) Save();
             return;
@@ -747,7 +748,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             PvpRangeHelperMaximumColor = new Vector4(1f, 0.62f, 0.08f, 1f);
         }
 
-        Version = 42;
+        if (Version < 43)
+        {
+            // Auto Shadowbringer remains an explicit opt-in. Existing users who
+            // already enabled it receive the requested duplicate-buff protection,
+            // and may independently turn this nested safety option back off.
+            DarkKnightShadowbringerPreserveBlackblood = true;
+        }
+
+        Version = 43;
         ClampSettings();
         Save();
     }
@@ -756,7 +765,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 42;
+        Version = 43;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -815,6 +824,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         TurboOutsideCombat = false;
         EnableDarkKnightPlungeOnHeldKey = false;
         EnableDarkKnightShadowbringerOnHeldKey = false;
+        DarkKnightShadowbringerPreserveBlackblood = true;
         DarkKnightShadowbringerMinimumHpPercent = 85;
         DarkKnightShadowbringerPressureLimitExclusive = 2;
         SeitonKeyLabel = "SHIFT";

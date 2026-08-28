@@ -37,6 +37,7 @@ internal sealed record PvPMetadataValidation(
     bool DarkKnightPlungeVerified,
     bool GunbreakerContinuationVerified,
     bool DarkKnightShadowbringerVerified,
+    bool DarkKnightBlackbloodVerified,
     bool RedMageResolutionVerified,
     bool RedMageViceOfThornsVerified,
     bool BlackMageFrostStarVerified,
@@ -48,6 +49,7 @@ internal sealed record PvPMetadataValidation(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
+        false,
         NinjaShukuchiHiddenStatusCatalog.Empty,
         SmartActionGuardBypassCatalog.Empty);
 
@@ -1247,6 +1249,38 @@ internal static class PvPMetadataGuard
                        !darkArtsStatus.IsPermanent;
             });
 
+        var darkKnightBlackbloodVerified = ValidateFeature(
+            "Dark Knight Blackblood",
+            log,
+            () =>
+            {
+                var statuses = dataManager.GetExcelSheet<Status>(ClientLanguage.English);
+                if (!statuses.TryGetRow(
+                        DarkKnightShadowbringerRules.BlackbloodStatusId,
+                        out var blackblood))
+                {
+                    return false;
+                }
+
+                return string.Equals(
+                           blackblood.Name.ToString(),
+                           "Blackblood",
+                           StringComparison.Ordinal) &&
+                       blackblood.Icon ==
+                           DarkKnightShadowbringerRules.BlackbloodStatusIconId &&
+                       blackblood.ClassJobCategory.IsValid &&
+                       blackblood.ClassJobCategory.RowId ==
+                           DarkKnightShadowbringerRules
+                               .DarkKnightClassJobCategoryId &&
+                       blackblood.StatusCategory == 1 &&
+                       !blackblood.CanDispel &&
+                       !blackblood.IsPermanent &&
+                       blackblood.CanStatusOff &&
+                       blackblood.Description.ToString().Contains(
+                           "Able to execute powerful weaponskills.",
+                           StringComparison.Ordinal);
+            });
+
         var redMageResolutionVerified = ValidateFeature(
             "Red Mage Resolution",
             log,
@@ -1471,6 +1505,7 @@ internal static class PvPMetadataGuard
             darkKnightPlungeVerified,
             gunbreakerContinuationVerified,
             darkKnightShadowbringerVerified,
+            darkKnightBlackbloodVerified,
             redMageResolutionVerified,
             redMageViceOfThornsVerified,
             blackMageFrostStarVerified,
@@ -1492,6 +1527,7 @@ internal static class PvPMetadataGuard
             "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
             "GunbreakerContinuation={GunbreakerContinuation}, DarkKnightShadowbringer={DarkKnightShadowbringer}, " +
+            "DarkKnightBlackblood={DarkKnightBlackblood}, " +
             "RedMageResolution={RedMageResolution}, RedMageViceOfThorns={RedMageViceOfThorns}, " +
             "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}, " +
             "SmartActionGuardBypassActions={SmartActionGuardBypassActions}.",
@@ -1525,6 +1561,7 @@ internal static class PvPMetadataGuard
             validation.DarkKnightPlungeVerified,
             validation.GunbreakerContinuationVerified,
             validation.DarkKnightShadowbringerVerified,
+            validation.DarkKnightBlackbloodVerified,
             validation.RedMageResolutionVerified,
             validation.RedMageViceOfThornsVerified,
             validation.BlackMageFrostStarVerified,

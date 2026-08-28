@@ -13,6 +13,7 @@ $overlayRendererPath = Join-Path $pluginUiRoot 'OverlayRenderer.cs'
 $coreRoot = Join-Path $sourceRoot 'SeitonSense.Core'
 $coreSelfTestRoot = Join-Path $resolvedRoot 'tests\SeitonSense.Core.SelfTest'
 $pluginPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Plugin.cs'
+$configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $smartTabTargetingServicePath = Join-Path $pluginServicesRoot 'SmartTabTargetingService.cs'
 $smartTabInterceptionRulesPath = Join-Path $coreRoot 'SmartTabInterceptionRules.cs'
 $smartTabSelectionRulesPath = Join-Path $coreRoot 'SmartTabSelectionRules.cs'
@@ -187,7 +188,9 @@ $emergencyTeleportRulesPath = Join-Path $coreRoot 'EmergencyTeleportRules.cs'
 $emergencyTeleportProbePath = Join-Path $pluginServicesRoot 'EmergencyTeleportProbe.cs'
 $emergencyTeleportSelfTestsPath = Join-Path $coreSelfTestRoot 'EmergencyTeleportSelfTests.cs'
 $gunbreakerContinuationProbePath = Join-Path $pluginServicesRoot 'GunbreakerContinuationProbe.cs'
+$darkKnightShadowbringerRulesPath = Join-Path $coreRoot 'DarkKnightShadowbringerRules.cs'
 $darkKnightShadowbringerProbePath = Join-Path $pluginServicesRoot 'DarkKnightShadowbringerProbe.cs'
+$darkKnightShadowbringerSelfTestsPath = Join-Path $coreSelfTestRoot 'DarkKnightShadowbringerSelfTests.cs'
 $darkKnightWolvesDenCurrentTargetResolverPath = Join-Path $pluginServicesRoot 'DarkKnightWolvesDenCurrentTargetResolver.cs'
 $samuraiReactiveCounterCcProbePath = Join-Path $pluginServicesRoot 'SamuraiReactiveCounterCcProbe.cs'
 $strictWolvesDenDummyResolverPath = Join-Path $pluginServicesRoot 'StrictWolvesDenStrikingDummyResolver.cs'
@@ -236,6 +239,7 @@ $wolvesDenRotationWindowPath = Join-Path $pluginUiRoot 'WolvesDenRotationWindow.
 $pvpRangeHelperRulesPath = Join-Path $coreRoot 'PvpRangeHelperRules.cs'
 $pvpRangeHelperSelfTestsPath = Join-Path $coreSelfTestRoot 'PvpRangeHelperSelfTests.cs'
 $crystallineConflictRotationRulesPath = Join-Path $coreRoot 'CrystallineConflictRotationRules.cs'
+$crystallineConflictRotationPresentationRulesPath = Join-Path $coreRoot 'CrystallineConflictRotationPresentationRules.cs'
 $pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
 $settingsPartsRoot = Join-Path $pluginUiRoot 'Settings'
 $settingsSourceFiles = @()
@@ -684,8 +688,8 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
     throw 'The generic buffer must freeze the final post-redirect target at the sole Original boundary, retain every resolver/local/instance identity, and cancel rather than retarget or substitute.'
 }
 
-# Pin all schema-42 buffer/repeat/compatibility suites and the exact current
-# 520-test registry.
+# Pin all retained buffer/repeat/compatibility suites and the exact current
+# 522-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -705,11 +709,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 479 -or
+if ($staticIntegratedTestCount -ne 481 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 520 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 522 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -717,7 +721,7 @@ if ($staticIntegratedTestCount -ne 479 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 42 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 520-test combined Core registry.'
+    throw 'Schema 43 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 522-test combined Core registry.'
 }
 
 # Pin the two schema-42 read-only overlays. Neither surface may gain a player
@@ -726,6 +730,7 @@ $pvpRangeHelperRules = Read-RequiredSource $pvpRangeHelperRulesPath 'PvP range-h
 $pvpRangeHelperRenderer = Read-RequiredSource $localReachRingRendererPath 'Local PvP range-ring renderer'
 $pvpRangeHelperSelfTests = Read-RequiredSource $pvpRangeHelperSelfTestsPath 'PvP range-helper self-tests'
 $crystallineConflictRotationRules = Read-RequiredSource $crystallineConflictRotationRulesPath 'Crystalline Conflict rotation rules'
+$crystallineConflictRotationPresentationRules = Read-RequiredSource $crystallineConflictRotationPresentationRulesPath 'Crystalline Conflict rotation presentation rules'
 $wolvesDenRotationWindow = Read-RequiredSource $wolvesDenRotationWindowPath 'Wolves Den rotation window'
 Assert-Literals $pvpRangeHelperRules @(
     'public const float MeleeRangeYalms = 5f;',
@@ -771,7 +776,25 @@ Assert-Literals $crystallineConflictRotationRules @(
     '!isPvPExcludingWolvesDen &&',
     'territoryId == PvPMatchRules.WolvesDenPierTerritoryId;'
 ) 'Exact local Patch-7.5 CC rotation'
+Assert-Literals $crystallineConflictRotationPresentationRules @(
+    'public const float CardReorderSeconds = 0.65f;',
+    'CrystallineConflictArena.ThePalaistra => 112473',
+    'CrystallineConflictArena.TheVolcanicHeart => 112474',
+    'CrystallineConflictArena.CloudNine => 112475',
+    'CrystallineConflictArena.TheClockworkCastletown => 112517',
+    'CrystallineConflictArena.TheRedSands => 112548',
+    'CrystallineConflictArena.TheBaysideBattleground => 112629',
+    'CrystallineConflictArena.ArcheiaHarmonias => 112669',
+    'GetArenaAtForwardSlot(',
+    'ResolveAnimatedCardSlot(',
+    'EaseInOutCubic('
+) 'Seven local duty-artwork IDs and fixed card-reorder presentation'
 Assert-Literals $wolvesDenRotationWindow @(
+    'ITextureProvider textureProvider',
+    'CrystallineConflictRotationPresentationRules.CardReorderSeconds',
+    'DrawRotationCardDeck(',
+    'TryGetFromGameIcon(new GameIconLookup(iconId)',
+    'draw.AddImage(',
     'DateTimeOffset.UtcNow.ToUnixTimeSeconds();',
     'configuration.WolvesDenRotationOffsetSlots',
     'CURRENT  ·',
@@ -788,6 +811,8 @@ Assert-Literals $pluginSource @(
     'localReachRings = new LocalReachRingRenderer(',
     'localReachRings.Draw();',
     'wolvesDenRotationWindow = new WolvesDenRotationWindow(',
+    'gameGui,',
+    'textureProvider);',
     'windowSystem.AddWindow(wolvesDenRotationWindow);'
 ) 'Schema-42 overlay wiring'
 Assert-Literals $settingsWindow @(
@@ -1146,8 +1171,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 42;') {
-    throw 'Schema 42 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 43;') {
+    throw 'Schema 43 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -3721,8 +3746,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 479) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 479-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 481) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 481-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4421,8 +4446,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 42;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 42 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 43;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 43 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -6576,6 +6601,127 @@ if (-not $plungeInitialConsume.Success -or -not $plungeRepeatSpend.Success -or
     $plungeRepeatSpend.Index -lt $plungeNativeCall.Index -or
     $normalizedDarkKnightPlunge -notmatch 'if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\).*?if \(frozen\.Intent\.IsRepeat\).*?DarkKnightPlungeRules\.TrySpendReadyEpoch\(.*?else.*?holdState = DarkKnightPlungeRules\.BeginOwnedHold') {
     throw 'DRK Plunge must claim the current frame before its native boundary, retain clean-false retries, and spend a repeat cooldown epoch or begin hold ownership only after client acceptance.'
+}
+
+# Held DRK Shadowbringer optionally preserves exact Blackblood. The gate sees
+# status-row presence (not RemainingTime), cannot double-count the priority and
+# deferred passes. Exact exposure still needs two absent samples; a proven
+# accepted or ambiguous boundary may infer only miss one after propagation
+# grace; ambiguous native outcomes remain independently key-latched until
+# release. Both paths share one 1.8-second cadence.
+# CC target selection shares Smart Action's protection/geometry path exactly once;
+# every later pass revalidates only the frozen slot+actor tuple.
+$darkKnightShadowbringerRules = Read-RequiredSource $darkKnightShadowbringerRulesPath 'DRK Shadowbringer rules'
+$normalizedDarkKnightShadowbringerRules = $darkKnightShadowbringerRules -replace '\s+', ' '
+$darkKnightShadowbringer = Read-RequiredSource $darkKnightShadowbringerProbePath 'DRK Shadowbringer runtime'
+$normalizedDarkKnightShadowbringer = $darkKnightShadowbringer -replace '\s+', ' '
+$darkKnightShadowbringerSelfTests = Read-RequiredSource $darkKnightShadowbringerSelfTestsPath 'DRK Shadowbringer self-tests'
+$darkKnightShadowbringerConfiguration = Read-RequiredSource $configurationPath 'DRK Blackblood configuration'
+Assert-Literals $darkKnightShadowbringerRules @(
+    'BlackbloodStatusId = 3_033',
+    'BlackbloodStatusIconId = 213_106',
+    'BlackbloodPropagationWaitMilliseconds = 1_500',
+    'BlackbloodStableAbsenceObservations = 2',
+    'AutomaticCadenceMilliseconds = 1_800',
+    'DarkKnightBlackbloodGatePhase.AwaitingExposure',
+    'DarkKnightBlackbloodGatePhase.AwaitingConsumption',
+    'DarkKnightBlackbloodGatePhase.PropagationUnconfirmed',
+    'nowMilliseconds <= previous.LastObservedAtMilliseconds',
+    'ClientActionAttemptOutcome.ClientAccepted or',
+    'ClientActionAttemptOutcome.AcceptanceUnknown'
+) 'Exact DRK Blackblood lifecycle and shared automatic cadence constants'
+if ($normalizedDarkKnightShadowbringerRules -notmatch 'if \(exactBlackbloodActive\).*?DarkKnightBlackbloodGatePhase\.AwaitingConsumption.*?if \(nowMilliseconds <= previous\.LastObservedAtMilliseconds\) return previous;.*?DarkKnightBlackbloodGatePhase\.AwaitingExposure.*?BlackbloodPropagationWaitMilliseconds.*?Phase = DarkKnightBlackbloodGatePhase \.AwaitingConsumption, ConsecutiveAbsentObservations = 1.*?DarkKnightBlackbloodGatePhase\.PropagationUnconfirmed.*?DarkKnightBlackbloodGatePhase\.AwaitingConsumption => ObserveBlackbloodAbsence' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'ClientActionAttemptOutcome\.ClientAccepted or ClientActionAttemptOutcome\.AcceptanceUnknown.*?return new DarkKnightBlackbloodGateState\( DarkKnightBlackbloodGatePhase\.AwaitingExposure' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'var misses = previous\.ConsecutiveAbsentObservations \+ 1; return misses >= BlackbloodStableAbsenceObservations \? DarkKnightBlackbloodGateState\.Initial with') {
+    throw 'Blackblood must remember exact presence, infer only the first absence after accepted or ambiguous propagation grace, deduplicate one timestamp, and rearm only after a later absent sample.'
+}
+if ($normalizedDarkKnightShadowbringerRules -notmatch 'IsAutomaticCadenceReady\( long lastAutomaticBoundaryAtMilliseconds, long nowMilliseconds\).*?nowMilliseconds - lastAutomaticBoundaryAtMilliseconds >= AutomaticCadenceMilliseconds' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'MarkAutomaticCadenceBoundary\( long previousBoundaryAtMilliseconds, ClientActionAttemptOutcome outcome, long nowMilliseconds\).*?ClientActionAttemptOutcome\.ClientAccepted or ClientActionAttemptOutcome\.AcceptanceUnknown.*?return nowMilliseconds;' -or
+    $normalizedDarkKnightShadowbringerRules -notmatch 'RetireFallbackAfterAutomaticBoundary\(.*?ClientActionAttemptOutcome\.ClientAccepted or ClientActionAttemptOutcome\.AcceptanceUnknown.*?ConsecutiveIneligibleObservations: 2') {
+    throw 'DRK automatic cadence must be one shared exact 1800ms boundary, start only on accepted or ambiguous results, and retire the prior fallback cycle for deterministic recurring generation.'
+}
+Assert-Literals $darkKnightShadowbringer @(
+    'HasExactStatusRow(',
+    'if (observeEpisodes)',
+    'else if (blackbloodStatusPresent)',
+    'exactFallbackEligibility = dispatchConfigurationEnabled',
+    'MarkAutomaticShadowbringerBoundary(',
+    'MarkAutomaticCadenceBoundary(',
+    'RetireFallbackAfterAutomaticBoundary(',
+    'IsAutomaticCadenceReady(',
+    'AutomaticCadenceRemainingMilliseconds',
+    'context == SupportedPvPContext.WolvesDen',
+    'TryResolveHeldSmartActionTarget(',
+    'CanUseExactHeldSmartActionTarget(',
+    'selectedWinnerInvalidated = true',
+    'SpendOpportunity(',
+    'DarkKnightShadowbringerRules.IsEligibleCandidate(',
+    'if (boundaryBlackbloodStatusPresent)',
+    'blackbloodGate.IsDispatchAllowed'
+) 'Exact DRK Blackblood runtime and held Smart Action frozen-target wiring'
+if ([regex]::Matches($darkKnightShadowbringer, '\bnearAssist\.TryResolveHeldSmartActionTarget\s*\(').Count -ne 1 -or
+    [regex]::Matches($darkKnightShadowbringer, '\bnearAssist\.CanUseExactHeldSmartActionTarget\s*\(').Count -ne 1 -or
+    [regex]::Matches($darkKnightShadowbringer, '(?:->|\.)UseAction\s*\(').Count -ne 1 -or
+    $normalizedDarkKnightShadowbringer -notmatch 'case SupportedPvPContext\.CrystallineConflict:.*?TryResolveHeldSmartActionTarget\( expectedAdjustedActionId, out var slot, out var smartIdentity, out selectedWinnerInvalidated, out resolution\).*?ResolveExactCandidate\( localPlayer, context, slot, smartIdentity, expectedAdjustedActionId' -or
+    $normalizedDarkKnightShadowbringer -notmatch 'case SupportedPvPContext\.CrystallineConflict:.*?CanUseExactHeldSmartActionTarget\( expectedAdjustedActionId, enemySlot, expectedTarget\).*?EnemySlotResolver\.Resolve\(objectTable, enemySlot\)' -or
+    $normalizedDarkKnightShadowbringer -notmatch 'if \(selectedWinnerInvalidated\).*?SpendOpportunity\( selectedOpportunity, selectedOpportunityGeneration\)' -or
+    $darkKnightShadowbringer -match '(?-i:\b(?:ITargetManager|TargetManager|SetTarget|UseActionLocation|RetryAction|RetryDispatch|QueueAction|PendingDispatch)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
+    throw 'Held DRK Shadowbringer CC must select one Smart Action winner, freeze/revalidate only that slot+actor, retire any invalidated winner, and retain one direct-GOID action boundary with no target mutation or alternate.'
+}
+if ([regex]::Matches($darkKnightShadowbringer, '\bMarkAutomaticCadenceBoundary\s*\(').Count -ne 1 -or
+    $normalizedDarkKnightShadowbringer -notmatch 'dispatchConfigurationEnabled = featureGateReady && automaticCadenceReady &&.*?blackbloodGate\.IsDispatchAllowed' -or
+    $normalizedDarkKnightShadowbringer -notmatch 'boundaryConfigurationEnabled = configurationEnabled && DarkKnightShadowbringerRules\.IsAutomaticCadenceReady\( lastAutomaticBoundaryAtMilliseconds, boundaryNow\).*?blackbloodGate\.IsDispatchAllowed' -or
+    $normalizedDarkKnightShadowbringer -notmatch 'pressureKnown = wolvesDenTestPressureAssumed \|\| featureGateReady && TryGetFreshSelfIncomingPressure' -or
+    $normalizedDarkKnightShadowbringer -notmatch 'pressureKnown = context == SupportedPvPContext\.WolvesDen \|\| TryGetFreshSelfIncomingPressure') {
+    throw 'DRK cadence must gate selection and the final frozen boundary across both paths, while only exact Wolves Den testing receives known-zero pressure.'
+}
+if ($normalizedDarkKnightShadowbringer -notmatch 'nativeOutcome = TryUseOnce\(.*?out attempted\);.*?var boundaryCompletedAtMilliseconds = Math\.Max\( nowMilliseconds, Environment\.TickCount64\);.*?ApplyNativeAttemptOutcome\( state, nativeOutcome, boundaryCompletedAtMilliseconds\).*?MarkAutomaticShadowbringerBoundary\( blackbloodGate, preserveBlackblood, nativeOutcome, boundaryCompletedAtMilliseconds\).*?MarkAutomaticCadenceBoundary\( lastAutomaticBoundaryAtMilliseconds, nativeOutcome, boundaryCompletedAtMilliseconds\)') {
+    throw 'The DRK terminal state, Blackblood gate, and hard 1800ms cadence must all start from a timestamp captured after the sole native action call.'
+}
+if ([regex]::Matches(
+        $darkKnightShadowbringer,
+        '\blastAutomaticBoundaryAtMilliseconds\s*=\s*-1\s*;').Count -ne 1 -or
+    $darkKnightShadowbringer -notmatch
+        'Process-local hard cadence: reset/fail-closed/context drift') {
+    throw 'The hard DRK 1800ms cadence timestamp must initialize once per probe instance and survive every in-process reset, fail-closed, and context-drift path.'
+}
+foreach ($method in @(
+    'BlackbloodMustBeObservedThenStablyDisappear',
+    'BlackbloodConsumptionRearmsSafeFallbackWithoutSpam'
+)) {
+    Assert-Literals $darkKnightShadowbringerSelfTests @("public static void $method()") "DRK Blackblood self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("DarkKnightShadowbringerSelfTests.$method") "DRK Blackblood test registration $method"
+}
+Assert-Literals $darkKnightShadowbringerSelfTests @(
+    '21_799',
+    '21_800',
+    'explicit false does not consume the automatic cadence',
+    'continuous safe conditions open exactly one new cadence generation',
+    'unknown acceptance avoids a permanent manual-only unlock'
+) 'DRK accepted/missed Blackblood and shared 1800ms cadence regressions'
+Assert-Literals $darkKnightShadowbringerConfiguration @(
+    'DarkKnightShadowbringerPreserveBlackblood { get; set; } = true',
+    'DarkKnightShadowbringerPreserveBlackblood = true'
+) 'Default-on nested DRK Blackblood preservation configuration'
+if ([regex]::Matches(
+        $darkKnightShadowbringerConfiguration,
+        '\bDarkKnightShadowbringerPreserveBlackblood\s*=\s*true\s*;').Count -ne 2 -or
+    $darkKnightShadowbringerConfiguration -match
+        '(?m)^\s*public bool EnableDarkKnightShadowbringerOnHeldKey \{ get; set; \}\s*=\s*true;') {
+    throw 'Schema 43 must enable Blackblood preservation for migration and Reset Defaults without enabling the default-off Auto Shadowbringer master.'
+}
+Assert-Literals $metadataGuard @(
+    'DarkKnightBlackbloodVerified',
+    '"Dark Knight Blackblood"',
+    'DarkKnightShadowbringerRules.BlackbloodStatusId',
+    'DarkKnightShadowbringerRules.BlackbloodStatusIconId',
+    '"Blackblood"',
+    '"Able to execute powerful weaponskills."'
+) 'Independent exact Blackblood metadata gate'
+if ($normalizedPersonalStatus -notmatch 'darkKnightShadowbringerHeldInputEnabled = darkKnightShadowbringerConfigurationEnabled && metadata\.DarkKnightShadowbringerVerified && \(!configuration\.DarkKnightShadowbringerPreserveBlackblood \|\| metadata\.DarkKnightBlackbloodVerified\)' -or
+    $normalizedPersonalStatus -notmatch 'ObservePriorityDarkArts\( localPlayer, context, darkKnightShadowbringerConfigurationEnabled, metadata\.DarkKnightShadowbringerVerified, configuration\.DarkKnightShadowbringerPreserveBlackblood, metadata\.DarkKnightBlackbloodVerified' -or
+    $normalizedPersonalStatus -notmatch 'ObserveDeferredSafeFallback\( shadowbringerPre\.DeferredFrameToken, localPlayer, context, darkKnightShadowbringerConfigurationEnabled, metadata\.DarkKnightShadowbringerVerified, configuration\.DarkKnightShadowbringerPreserveBlackblood, metadata\.DarkKnightBlackbloodVerified') {
+    throw 'PersonalStatus must require independent Blackblood metadata only when preservation is enabled and pass that exact option through both DRK scheduler passes.'
 }
 
 $targetPressureTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'TargetPressureTracker.cs') 'Target pressure tracker'
@@ -9223,19 +9369,20 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.37.0.0</Version>',
-    '<AssemblyVersion>0.37.0.0</AssemblyVersion>',
-    '<FileVersion>0.37.0.0</FileVersion>'
-) 'v0.37.0.0 project version'
+    '<Version>0.38.0.0</Version>',
+    '<AssemblyVersion>0.38.0.0</AssemblyVersion>',
+    '<FileVersion>0.38.0.0</FileVersion>'
+) 'v0.38.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.37.0.0";',
-    'A movable, clickable Wolves'' Den panel now shows the current Crystalline Conflict arena, live countdown, and next arena.',
-    'Click the current map for the complete order and a saved local phase correction.',
-    'A new PvP range helper draws a 5-yalm melee ring and this job''s furthest reviewed hostile non-LB reach around you.',
-    'All PvP-enabled jobs are covered; labels, colors, opacity, line width, and foreground placement are configurable.',
-    'Both overlays are read-only and local: no target or action changes, player scans, terrain raycasts, queue tracking, or network requests.',
-    'Configuration schema 42 is current; all 520 Core tests pass.'
-) 'v0.37.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.38.0.0";',
+    'Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback.',
+    'Dark Arts still wins and ignores those sliders.',
+    'The master option remains off by default.',
+    'Preserve Blackblood remains on by default and no longer deadlocks',
+    'Exact CC uses frozen Smart Action targeting; Wolves'' Den uses exact <t> with test-only zero pressure.',
+    'seven local FFXIV duty-artwork cards from current to next',
+    'Configuration schema 43 is current; live validation remains separate.'
+) 'v0.38.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9256,20 +9403,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.37.0.0 plugin manifest metadata'
+) 'v0.38.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.37.0.0"',
-    'Added a movable, clickable Wolves'' Den CC rotation panel with current arena, live countdown, next arena, full seven-map order, and saved local phase calibration.',
-    'Added read-only PvP range rings around the local player:',
-    'furthest reviewed hostile non-LB reach, including hostile gap closers, for all 21 PvP-enabled jobs.',
-    'The overlays scan no player list, make no target or action changes, perform no terrain raycasts, and make no network requests.',
-    'Configuration schema 42 is current; all 520 Core tests pass;',
-    'live current-patch visual and phase validation remains separate.',
+    '"AssemblyVersion": "0.38.0.0"',
+    'Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback.',
+    'Continuous safe HP/pressure opens one later fallback generation',
+    'Preserve Blackblood remains on by default',
+    'Exact CC uses frozen held Smart Action targeting without a visible target change.',
+    'Wolves'' Den uses only exact <t> duel/dummy targeting and test-only zero pressure',
+    'seven local FFXIV duty-artwork cards with a 0.65-second reorder animation',
+    'Configuration schema 43 is current; live current-patch action and visual validation remains separate.',
     '"IsHide": false'
-) 'v0.37.0.0 custom-repository metadata'
+) 'v0.38.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9303,10 +9451,15 @@ Assert-Literals $normalizedPrivacy @(
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'The Wolves'' Den rotation panel reads only local UTC time and the current PvP / territory flags.',
     'stores only its display preferences and an optional whole-map phase correction.',
+    'requests seven reviewed duty-artwork icons from the local game installation;',
     'It does not inspect or upload queue registrations, player identities, ratings, statistics, or roster data and makes no network request.',
     'The PvP range helper reads only the local player''s current job, position, and hitbox radius plus the game''s world-to-screen projection.',
     'does not scan other actors, retain movement history, raycast terrain, change a target, or issue/suppress an action.',
-    'Configuration schema 42 is current.',
+    'Configuration schema 43 is current.',
+    'exact Blackblood status-row presence',
+    'its own opt-in reuses the complete Smart Action ranking and protection snapshot without changing a visible target.',
+    'local last automatic-boundary time needed for the 1.8-second cadence',
+    'Wolves'' Den retains only the exact current `<t>` duel/dummy target and treats unavailable CC pressure telemetry as zero',
     'canonical `S1`-`S5` candidates, HP ratio, fresh optional team pressure, trusted Guard/MP evidence, positions, complete protection geometry, chosen/fallback actor',
     'Drift ends and spends that carrier exposure; the same held episode cannot rerank.',
     '## MCH and DRG limit-break danger warnings',
@@ -9316,19 +9469,29 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.37.0.0 local-overlay plus retained Smart Tab, VPR/DRG, AST, and integrated-input disclosure'
+) 'v0.38.0.0 Blackblood, local-card, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.37.0.0 adds a movable, clickable Wolves'' Den Crystalline Conflict rotation panel with the current arena, countdown, next arena, full order, and local phase calibration.',
-    'an inner 5-yalm melee ring and an outer ring for the current job''s furthest reviewed hostile non-LB action, including hostile gap closers.',
+    'Version 0.38.0.0 gives the default-off Auto Shadowbringer helper a shared 1.8-second auto cadence, a default-on **Preserve Blackblood** gate, and existing held Smart Action target selection in exact CC.',
+    'Its Wolves'' Den test path uses exact `<t>` without requiring CC pressure data.',
+    'seven-card current-to-next deck using local FFXIV duty artwork and a 0.65-second reorder animation, without downloads or network access.',
+    'The inner ring marks nominal 5-yalm melee reach; the outer ring marks the current combat job''s furthest reviewed hostile non-LB action, including hostile gap closers.',
     '**Local CC rotation panel:** while in Wolves'' Den Pier, a movable and lockable panel shows the current Patch 7.5 arena',
     'The order and one-hour interval come from the official Patch 7.5 notes;',
     'the bundled default phase follows the public community calendar reference and can be corrected locally.',
-    'The panel never queries a queue, player roster, service, or network endpoint.',
+    'The panel never queries a queue, player roster, service, or network endpoint, and downloads no artwork.',
     '**PvP range helper:** two flat world-space rings follow the local player in PvP and Wolves'' Den.',
     'All 21 PvP-enabled jobs are covered',
     'it does not claim line of sight, cooldown readiness, terrain reach, or target-hitbox overlap',
     'A fully protection-safe current hard target is only the last fallback.',
     'later drift ends that carrier exposure instead of reranking.',
+    'blocks both exact Dark Arts and the configurable high-HP/low-pressure fallback while exact status `3033` exists.',
+    'Both paths share a fixed 1.8-second cadence;',
+    'Continuous safe HP/pressure can open exactly one new fallback generation when it ends.',
+    'A confirmed or ambiguous automatic request whose complete short Blackblood lifecycle falls between framework samples uses a 1.5-second grace plus one later absent sample',
+    'Disabling preservation removes only the Blackblood wait; the cadence remains.',
+    'without requiring the macro toggle, never changes the visible target, and freezes the exact actor rather than reranking.',
+    'line-AoE protection remains fail-closed.',
+    'Wolves'' Den stays on the exact current `<t>` duel opponent or striking dummy, assumes unavailable CC pressure as zero for testing',
     'a countdown continues only from its live mapped caster status and clears with that exact episode.',
     'Your own active or still-propagating Guard suppresses the entire sequence and is rechecked at the final action/cast-cancel boundaries',
     'v0.35.0.3''s exact Guard-ignoring Smart Action support',
@@ -9360,8 +9523,8 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 42 is current',
-    'For the current source, the exact 520-test Core registry and source checks pin',
+    'Configuration schema 43 is current',
+    'For the current source, the exact 522-test Core registry and source checks pin configuration schema 43',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9372,19 +9535,23 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across sixteen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.37.0.0 current README release and safety contract'
+) 'v0.38.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.37.0.0',
-    'Added a movable, clickable Wolves'' Den Pier panel for the Patch 7.5 Crystalline Conflict arena rotation.',
-    'complete seven-map order and persistent local `<` / `>` phase calibration.',
-    'only in exact territory `250`',
-    'Added a read-only PvP world-range helper around the local player.',
-    'All 21 PvP-enabled jobs fail closed through one exact catalog.',
-    'they do not scan a player list, select a target, issue or suppress an action, inspect queue registrations, raycast terrain, or make a network request.',
-    'fixed 96 world projections per frame at most',
-    'Configuration schema is `42`;',
-    'all `520` Core tests pass.'
-) 'v0.37.0.0 local rotation and PvP range-helper release notes'
+    '## 0.38.0.0',
+    'Added a shared 1.8-second cadence to both held Auto Shadowbringer paths.',
+    'continuously safe HP/pressure state can now open exactly one later HP-cost generation when that cadence ends',
+    'Dark Arts still wins and ignores the configured HP/pressure thresholds',
+    'Added a default-on **Preserve Blackblood** sub-option.',
+    '1.5-second propagation grace plus one later distinct absent sample instead of deadlocking until manual Shadowbringer',
+    'Disabling this sub-option removes only the Blackblood wait, not the shared 1.8-second cadence.',
+    'uses the existing held Smart Action target policy without requiring the `/smartaction` macro toggle.',
+    'invalidation cancels instead of reranking.',
+    'line-AoE protection remains fail-closed under the existing Smart Action policy.',
+    'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
+    'complete seven-map current-to-next deck with local FFXIV duty artwork.',
+    'cards reorder over `0.65` seconds.',
+    'Configuration schema is `43`;'
+) 'v0.38.0.0 DRK Smart Action, Blackblood, and local map-card release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.3',
     'Fixed `/smartaction` for PvP attacks that explicitly ignore Guard.',
@@ -9502,7 +9669,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 42 is current.'
+    'Configuration schema 43 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -9633,7 +9800,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 42 is current'
+    'Configuration schema 43 is current'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -9739,7 +9906,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 42 is current',
+    'Configuration schema 43 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -10107,7 +10274,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 42 is current',
+    'Configuration schema 43 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -10187,7 +10354,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 42 is current'
+    'Configuration schema 43 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -10254,11 +10421,10 @@ Assert-Literals $normalizedPrivacy @(
     'key acquisition, waiting, and retry never restart or extend that deadline'
 ) 'Current post-Purify/post-Guard shared lease, actor/key freeze, exact confirmation, and no-target-mutation disclosure'
 
-$configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 42',
+    'public int Version { get; set; } = 43',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -10405,7 +10571,9 @@ Assert-Literals $configuration @(
     'ShowPvpRangeHelper = true;',
     'PvpRangeHelperDrawInForeground = false;',
     'PvpRangeHelperShowLabels = true;',
-    'Version = 42',
+    'if (Version < 43)',
+    'DarkKnightShadowbringerPreserveBlackblood = true;',
+    'Version = 43',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -10432,7 +10600,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-42 read-only rotation/range overlays plus retained default-off helpers, buffer/Turbo, Smart Tab/Smart Action, and legacy compatibility fields'
+) 'Schema-43 Blackblood preservation plus read-only rotation/range overlays and retained default-off helpers, buffer/Turbo, Smart Tab/Smart Action, and legacy compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -10516,8 +10684,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*42\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 42\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;.*?ReactiveCcRedMageResolution = false;.*?ReactiveCcSamuraiSotenMineuchi = false;.*?ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?ReactiveCcImpactCalibrationRevision = ReactiveCounterCcImpactTimingRules\.CalibrationRevision;.*?ReactiveCcImpactCalibrationSamples = \[\];.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?PvpLatencyResponseWindowMilliseconds = HeldActionRetryRules\.DefaultLatencyResponseWindowMilliseconds;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?SmartActionBufferWindowMilliseconds = SmartActionBufferWindowRules\.DefaultMilliseconds;.*?ShowBufferLearningWindow = true;.*?BufferLearningWindowLocked = false;.*?EnableNativeHotbarTurbo = false;.*?TurboInitialDelayMilliseconds = DefaultTurboInitialDelayMilliseconds;.*?TurboRepeatIntervalMilliseconds = DefaultTurboRepeatIntervalMilliseconds;.*?TurboOutsideCombat = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?PvpRangeHelperDrawInForeground = false;.*?PvpRangeHelperShowLabels = true;.*?Version = 42;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*43\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 43\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;.*?ReactiveCcRedMageResolution = false;.*?ReactiveCcSamuraiSotenMineuchi = false;.*?ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?ReactiveCcImpactCalibrationRevision = ReactiveCounterCcImpactTimingRules\.CalibrationRevision;.*?ReactiveCcImpactCalibrationSamples = \[\];.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?PvpLatencyResponseWindowMilliseconds = HeldActionRetryRules\.DefaultLatencyResponseWindowMilliseconds;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?SmartActionBufferWindowMilliseconds = SmartActionBufferWindowRules\.DefaultMilliseconds;.*?ShowBufferLearningWindow = true;.*?BufferLearningWindowLocked = false;.*?EnableNativeHotbarTurbo = false;.*?TurboInitialDelayMilliseconds = DefaultTurboInitialDelayMilliseconds;.*?TurboRepeatIntervalMilliseconds = DefaultTurboRepeatIntervalMilliseconds;.*?TurboOutsideCombat = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?PvpRangeHelperDrawInForeground = false;.*?PvpRangeHelperShowLabels = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?Version = 43;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableEmergencyTeleportOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -10532,7 +10700,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*42\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableSamuraiZantetsukenOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 42 must preserve every earlier explicit opt-in/migration, keep schema-40 behavior intact, initialize AST held Near Help off, and initialize the read-only rotation/range overlays consistently.'
+    throw 'Schema 43 must preserve every earlier explicit opt-in/migration, initialize the nested Blackblood protection on without enabling Auto Shadowbringer, and retain the read-only rotation/range overlays consistently.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -10679,4 +10847,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.37.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 42 and the exact 520-test Core registry. The Wolves' Den CC clock is a local seven-map/60-minute calculation with exact territory gating and saved display-only phase correction. The PvP range helper uses one O(1) local-player lookup and two fixed 48-segment rings for the exact 21-PvP-job catalog, with no player scan, target/action mutation, terrain raycast, or network path. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.38.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 43 and the exact 522-test Core registry. DRK Auto Shadowbringer preserves exact Blackblood, rearms only after two later absent samples, and reuses one frozen Smart Action target in CC while Wolves' Den remains exact current-target only. The expanded Wolves' Den rotation deck uses seven local game-artwork IDs and a fixed 0.65-second reorder animation without networking. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

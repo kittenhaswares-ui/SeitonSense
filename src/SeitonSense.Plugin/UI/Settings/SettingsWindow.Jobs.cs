@@ -113,6 +113,10 @@ internal sealed partial class SettingsWindow
                 "Shadowbringer on held gameplay key (experimental)",
                 configuration.EnableDarkKnightShadowbringerOnHeldKey,
                 value => configuration.EnableDarkKnightShadowbringerOnHeldKey = value);
+            changed |= Checkbox(
+                "Preserve Blackblood before another automatic Shadowbringer",
+                configuration.DarkKnightShadowbringerPreserveBlackblood,
+                value => configuration.DarkKnightShadowbringerPreserveBlackblood = value);
             changed |= SliderInt(
                 "Base Shadowbringer minimum HP",
                 configuration.DarkKnightShadowbringerMinimumHpPercent,
@@ -129,14 +133,29 @@ internal sealed partial class SettingsWindow
                 "%d");
             ImGui.TextDisabled(
                 "An exact own Dark Arts proc from a broken Blackest Night always gets the first DRK opportunity and " +
-                "does not pay HP. Without Dark Arts, base Shadowbringer is allowed only strictly above the configured " +
+                "does not pay HP or use the configured HP/pressure thresholds. Without Dark Arts, base Shadowbringer is allowed only strictly above the configured " +
                 "HP threshold and with a fresh known incoming-pressure count strictly below the configured limit. " +
-                "Dark Arts runs before Hiebsprung; the HP-cost fallback runs after Hiebsprung. The lowest-HP reachable " +
-                "exact enemy inside native 10-yalm range wins. Unknown pressure blocks only the HP-cost fallback.");
+                "Dark Arts runs before Hiebsprung; the HP-cost fallback runs after Hiebsprung. Unknown pressure blocks " +
+                "only the HP-cost fallback. Wolves' Den testing treats self pressure as known zero while retaining the " +
+                "configured HP gate, exact current target, range, and line of sight.");
             ImGui.TextDisabled(
-                "Default off. Exact Crystalline Conflict uses canonical S1-S5 actors without changing target. Enabled " +
-                "Wolves' Den testing uses only the current exact duel opponent or reviewed striking dummy. Each proc or " +
-                "eligibility episode freezes one actor; explicit client-false is the only retryable result.");
+                "Blackblood preservation is on by default. Exact status 3033 blocks both automatic Shadowbringer " +
+                "paths, including an already-active manual or Eventide buff. After an automatic request, the helper " +
+                "waits for the native status to appear and rearms after stable disappearance through an enhanced " +
+                "weaponskill or natural expiry. If the complete short lifecycle falls between samples, a 1.5-second " +
+                "grace plus one later absent sample avoids a permanent lock. Turning this off removes only the " +
+                "Blackblood wait; the shared cadence remains.");
+            ImGui.TextDisabled(
+                "Both automatic Shadowbringer paths share a fixed 1.8-second cadence. Accepted or ambiguous native " +
+                "boundaries start it; explicit false and soft-unavailable results do not. Continuous safe HP/pressure " +
+                "conditions can open one new base Shadowbringer generation when the cadence finishes; Dark Arts still " +
+                "wins whenever both paths are ready.");
+            ImGui.TextDisabled(
+                "Default off. In Crystalline Conflict, Auto Shadowbringer internally uses the Smart Action target policy " +
+                "without requiring the /smartaction macro toggle and without changing the visible target. The selected " +
+                "actor is frozen for that episode. Because Shadowbringer is a line attack, any protected enemy in its " +
+                "area blocks the request. Wolves' Den testing uses only the current exact duel opponent or reviewed " +
+                "striking dummy; explicit client-false is the only retryable result.");
             ImGui.PopTextWrapPos();
         }
 

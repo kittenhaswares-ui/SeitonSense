@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.37.0.0",
-    "Changelog": "Added a movable, clickable Wolves' Den CC rotation panel with current arena, live countdown, next arena, full seven-map order, and saved local phase calibration. Added read-only PvP range rings around the local player: an inner 5-yalm melee guide and an outer per-job furthest reviewed hostile non-LB reach, including hostile gap closers, for all 21 PvP-enabled jobs. Labels, colors, opacity, line width, and foreground placement are configurable. The overlays scan no player list, make no target or action changes, perform no terrain raycasts, and make no network requests. Configuration schema 42 is current; all 520 Core tests pass; live current-patch visual and phase validation remains separate.",
+    "AssemblyVersion": "0.38.0.0",
+    "Changelog": "Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback. Continuous safe HP/pressure opens one later fallback generation; Dark Arts still wins and ignores those sliders. Preserve Blackblood remains on by default, blocks both paths while exact status 3033 is present, and no longer deadlocks when a confirmed or ambiguous request's complete short status lifecycle falls between samples; ambiguous calls still require the frozen key to be released. Exact CC uses frozen held Smart Action targeting without a visible target change. Wolves' Den uses only exact <t> duel/dummy targeting and test-only zero pressure while retaining HP, range, line-of-sight, cadence, and Blackblood gates. The expanded rotation panel shows seven local FFXIV duty-artwork cards with a 0.65-second reorder animation and no network request. Configuration schema 43 is current; live current-patch action and visual validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787917802"
+    "LastUpdate": "1787933190"
   }
 ]

@@ -190,8 +190,17 @@ internal sealed partial class SettingsWindow
             $"action={shadowbringer.ResolvedAdjustedActionId}, dark-arts={shadowbringer.DarkArtsGeneration}/" +
             $"{shadowbringer.DarkArtsExposed}/{shadowbringer.DarkArtsSpent}, fallback=" +
             $"{shadowbringer.FallbackGeneration}/{shadowbringer.FallbackEligible}/{shadowbringer.FallbackSpent}, " +
+            $"blackblood={shadowbringer.BlackbloodPreservationEnabled}/" +
+            $"{shadowbringer.BlackbloodMetadataVerified}/{shadowbringer.BlackbloodStatusPresent}/" +
+            $"{shadowbringer.BlackbloodGatePhase}/{shadowbringer.BlackbloodAbsentObservations}/" +
+            $"{shadowbringer.BlackbloodLastObservedAtMilliseconds}/" +
+            $"{shadowbringer.BlackbloodDispatchAllowed}, " +
+            $"cadence={shadowbringer.AutomaticCadenceReady}/" +
+            $"{shadowbringer.AutomaticCadenceRemainingMilliseconds} ms/" +
+            $"last={shadowbringer.LastAutomaticBoundaryAtMilliseconds}, " +
             $"pressure={shadowbringer.PressureKnown}/{shadowbringer.IncomingPressure}/" +
-            $"{shadowbringer.PressureAgeMilliseconds} ms, ready={shadowbringer.ActionLocallyReady}/" +
+            $"{shadowbringer.PressureAgeMilliseconds} ms/den-zero=" +
+            $"{shadowbringer.WolvesDenTestPressureAssumed}, ready={shadowbringer.ActionLocallyReady}/" +
             $"{shadowbringer.NativeBoundaryReady}, deferred={shadowbringer.CanRunDeferredSafeFallback}/" +
             $"{shadowbringer.DeferredFrameToken}, S={shadowbringer.EnemySlot}, target=" +
             $"{shadowbringer.TargetGameObjectId:X}/{shadowbringer.TargetEntityId:X}, key=" +

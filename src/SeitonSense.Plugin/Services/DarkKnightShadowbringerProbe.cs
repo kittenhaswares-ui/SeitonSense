@@ -38,6 +38,16 @@ internal sealed record DarkKnightShadowbringerProbeSnapshot(
     long DarkArtsGeneration,
     bool DarkArtsExposed,
     bool DarkArtsSpent,
+    bool BlackbloodPreservationEnabled,
+    bool BlackbloodMetadataVerified,
+    bool BlackbloodStatusPresent,
+    DarkKnightBlackbloodGatePhase BlackbloodGatePhase,
+    int BlackbloodAbsentObservations,
+    long BlackbloodLastObservedAtMilliseconds,
+    bool BlackbloodDispatchAllowed,
+    long LastAutomaticBoundaryAtMilliseconds,
+    long AutomaticCadenceRemainingMilliseconds,
+    bool AutomaticCadenceReady,
     long FallbackGeneration,
     bool FallbackEligible,
     bool FallbackSpent,
@@ -50,6 +60,7 @@ internal sealed record DarkKnightShadowbringerProbeSnapshot(
     bool PressureKnown,
     int IncomingPressure,
     long PressureAgeMilliseconds,
+    bool WolvesDenTestPressureAssumed,
     VirtualKey HeldGameplayKey,
     ulong DeferredFrameToken,
     bool CanRunDeferredSafeFallback,
@@ -80,6 +91,16 @@ internal sealed record DarkKnightShadowbringerProbeSnapshot(
         0,
         false,
         false,
+        false,
+        false,
+        false,
+        DarkKnightBlackbloodGatePhase.Ready,
+        0,
+        -1,
+        true,
+        -1,
+        0,
+        true,
         0,
         false,
         false,
@@ -92,6 +113,7 @@ internal sealed record DarkKnightShadowbringerProbeSnapshot(
         false,
         0,
         -1,
+        false,
         VirtualKey.NO_KEY,
         0,
         false,
@@ -133,8 +155,14 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         DarkKnightShadowbringerState.Initial;
     private DarkKnightShadowbringerDarkArtsState darkArts =
         DarkKnightShadowbringerDarkArtsState.Initial;
+    private DarkKnightBlackbloodGateState blackbloodGate =
+        DarkKnightBlackbloodGateState.Initial;
     private DarkKnightShadowbringerFallbackState fallback =
         DarkKnightShadowbringerFallbackState.Initial;
+    // Process-local hard cadence: reset/fail-closed/context drift may retire
+    // every intent, but must never make a recent automatic boundary younger
+    // than 1.8 seconds eligible again. A new probe instance starts at -1.
+    private long lastAutomaticBoundaryAtMilliseconds = -1;
     private DarkKnightShadowbringerProbeSnapshot snapshot =
         DarkKnightShadowbringerProbeSnapshot.Initial;
     private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
@@ -183,6 +211,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -198,6 +228,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             context,
             configurationEnabled,
             actionMetadataVerified,
+            preserveBlackblood,
+            blackbloodMetadataVerified,
             wolvesDenStrikingDummyMetadataVerified,
             minimumHpPercent,
             pressureLimitExclusive,
@@ -222,6 +254,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -239,6 +273,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             context,
             configurationEnabled,
             actionMetadataVerified,
+            preserveBlackblood,
+            blackbloodMetadataVerified,
             wolvesDenStrikingDummyMetadataVerified,
             minimumHpPercent,
             pressureLimitExclusive,
@@ -263,6 +299,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -285,6 +323,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             context,
             configurationEnabled,
             actionMetadataVerified,
+            preserveBlackblood,
+            blackbloodMetadataVerified,
             wolvesDenStrikingDummyMetadataVerified,
             minimumHpPercent,
             pressureLimitExclusive,
@@ -303,6 +343,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -322,6 +364,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 context,
                 configurationEnabled,
                 actionMetadataVerified,
+                preserveBlackblood,
+                blackbloodMetadataVerified,
                 wolvesDenStrikingDummyMetadataVerified,
                 minimumHpPercent,
                 pressureLimitExclusive,
@@ -348,6 +392,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
     {
         state = DarkKnightShadowbringerState.Initial;
         darkArts = DarkKnightShadowbringerDarkArtsState.Initial;
+        blackbloodGate = DarkKnightBlackbloodGateState.Initial;
         fallback = DarkKnightShadowbringerFallbackState.Initial;
         terminalHeldKey = VirtualKey.NO_KEY;
         ClearPreparedFrame();
@@ -366,6 +411,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             : terminalHeldKey;
         state = DarkKnightShadowbringerState.Initial;
         darkArts = DarkKnightShadowbringerDarkArtsState.Initial;
+        blackbloodGate = DarkKnightBlackbloodGateState.Initial;
         fallback = DarkKnightShadowbringerFallbackState.Initial;
         terminalHeldKey = failedKey;
         ClearPreparedFrame();
@@ -382,6 +428,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool actionMetadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -399,6 +447,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         {
             state = DarkKnightShadowbringerState.Initial;
             darkArts = DarkKnightShadowbringerDarkArtsState.Initial;
+            blackbloodGate = DarkKnightBlackbloodGateState.Initial;
             fallback = DarkKnightShadowbringerFallbackState.Initial;
             terminalHeldKey = VirtualKey.NO_KEY;
             ClearFrozenRuntime();
@@ -426,6 +475,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         var supportedContext = context is
             SupportedPvPContext.CrystallineConflict or
             SupportedPvPContext.WolvesDen;
+        var blackbloodPreservationMetadataReady =
+            !preserveBlackblood || blackbloodMetadataVerified;
         var featureGateReady = !effectiveHardReset &&
                                configurationEnabled &&
                                supportedContext &&
@@ -433,7 +484,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                                localTargetable &&
                                localJobId ==
                                    DarkKnightShadowbringerRules.DarkKnightJobId &&
-                               actionMetadataVerified;
+                               actionMetadataVerified &&
+                               blackbloodPreservationMetadataReady;
         var runtimeDrift = state.Intent is { IsValid: true } frozenIntent &&
                            (!FrozenRuntimeMatches(
                                 frozenIntent,
@@ -447,6 +499,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             effectiveHardReset = true;
             state = DarkKnightShadowbringerState.Initial;
             darkArts = DarkKnightShadowbringerDarkArtsState.Initial;
+            blackbloodGate = DarkKnightBlackbloodGateState.Initial;
             fallback = DarkKnightShadowbringerFallbackState.Initial;
             terminalHeldKey = VirtualKey.NO_KEY;
             ClearFrozenRuntime();
@@ -466,6 +519,46 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                               out var observedNativeState)
             ? observedNativeState
             : ShadowbringerNativeState.Unknown;
+        var blackbloodStatusPresent = featureGateReady &&
+                                      HasExactStatusRow(
+                                          exactLocal!,
+                                          DarkKnightShadowbringerRules
+                                              .BlackbloodStatusId);
+        if (observeEpisodes)
+        {
+            blackbloodGate = DarkKnightShadowbringerRules
+                .ObserveBlackbloodGate(
+                    blackbloodGate,
+                    preserveBlackblood,
+                    blackbloodStatusPresent,
+                    nowMilliseconds,
+                    hardReset: !featureGateReady);
+        }
+        else if (blackbloodStatusPresent)
+        {
+            // The deferred fallback pass may observe a newly propagated row,
+            // but it must never count a second absent sample in one framework
+            // frame. Only the first pass advances absence debounce.
+            blackbloodGate = DarkKnightShadowbringerRules
+                .ObserveBlackbloodGate(
+                    blackbloodGate,
+                    preserveBlackblood,
+                    exactBlackbloodActive: true,
+                    nowMilliseconds);
+        }
+        var automaticCadenceReady =
+            DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                lastAutomaticBoundaryAtMilliseconds,
+                nowMilliseconds);
+        var automaticCadenceRemainingMilliseconds =
+            DarkKnightShadowbringerRules
+                .GetAutomaticCadenceRemainingMilliseconds(
+                    lastAutomaticBoundaryAtMilliseconds,
+                    nowMilliseconds);
+        var dispatchConfigurationEnabled = featureGateReady &&
+                                           automaticCadenceReady &&
+                                           (!preserveBlackblood ||
+                                            blackbloodGate.IsDispatchAllowed);
         var hasDarkArts = featureGateReady &&
                           HasActiveStatus(
                               exactLocal!,
@@ -477,14 +570,20 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                                         .DarkArtsShadowbringerActionId;
         var incomingPressure = 0;
         var pressureAgeMilliseconds = -1L;
-        var pressureKnown = featureGateReady &&
+        var wolvesDenTestPressureAssumed = featureGateReady &&
+                                           context ==
+                                               SupportedPvPContext.WolvesDen;
+        var pressureKnown = wolvesDenTestPressureAssumed ||
+                            featureGateReady &&
                             TryGetFreshSelfIncomingPressure(
                                 localIdentity,
                                 nowMilliseconds,
                                 out incomingPressure,
                                 out pressureAgeMilliseconds);
+        if (wolvesDenTestPressureAssumed)
+            pressureAgeMilliseconds = 0;
 
-        var exactFallbackEligibility = featureGateReady &&
+        var exactFallbackEligibility = dispatchConfigurationEnabled &&
             !hasDarkArts &&
             nativeState.ResolvedAdjustedActionId ==
                 DarkKnightShadowbringerRules.ShadowbringerActionId &&
@@ -514,11 +613,12 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         var hasOpportunity = DarkKnightShadowbringerRules.TrySelectOpportunity(
             darkArts,
             fallback,
-            out _,
-            out _,
+            out var selectedOpportunity,
+            out var selectedOpportunityGeneration,
             out var selectedAdjustedActionId,
             dispatchPolicy);
         var darkArtsSupersedesBufferedFallback =
+            dispatchConfigurationEnabled &&
             state.Intent is
                 {
                     IsValid: true,
@@ -538,8 +638,9 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 : selectedAdjustedActionId;
         RuntimeCandidate? runtimeCandidate = null;
         var candidateCount = 0;
+        var selectedWinnerInvalidated = false;
         var candidateResolution = "Not evaluated: no exact ready opportunity";
-        if (featureGateReady &&
+        if (dispatchConfigurationEnabled &&
             exactLocal is not null &&
             expectedAdjustedActionId != 0)
         {
@@ -575,6 +676,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                     expectedAdjustedActionId,
                     wolvesDenStrikingDummyMetadataVerified,
                     checkCastingActive: false,
+                    out selectedWinnerInvalidated,
                     out candidateResolution);
                 candidateCount = candidates.Count;
                 var coreCandidates = candidates
@@ -588,6 +690,17 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 if (selectedIndex >= 0 && selectedIndex < candidates.Count)
                     runtimeCandidate = candidates[selectedIndex];
             }
+        }
+
+        if (selectedWinnerInvalidated)
+        {
+            // Retire the freshly selected opportunity even when a new Dark
+            // Arts generation was trying to supersede an older buffered HP
+            // fallback. Only that exact new generation is spent; the old
+            // frozen fallback is never relabeled or reranked here.
+            SpendOpportunity(
+                selectedOpportunity,
+                selectedOpportunityGeneration);
         }
 
         if (state.Intent is { IsValid: true } trackedIntent &&
@@ -608,7 +721,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         var decision = DarkKnightShadowbringerRules.Observe(
             state,
             new DarkKnightShadowbringerObservation(
-                configurationEnabled,
+                dispatchConfigurationEnabled,
                 context,
                 localIdentity,
                 localAlive,
@@ -677,6 +790,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 context,
                 configurationEnabled,
                 actionMetadataVerified,
+                preserveBlackblood,
+                blackbloodMetadataVerified,
                 wolvesDenStrikingDummyMetadataVerified,
                 minimumHpPercent,
                 pressureLimitExclusive,
@@ -684,6 +799,12 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 effectiveHigherPriorityClaimed,
                 inputFrame,
                 out attempted);
+            // Start every terminal boundary clock no earlier than the sole
+            // native call. The framework-frame timestamp was captured before
+            // TryUseOnce and could otherwise shorten the hard 1.8-second gate.
+            var boundaryCompletedAtMilliseconds = Math.Max(
+                nowMilliseconds,
+                Environment.TickCount64);
             if (attempted) Interlocked.Increment(ref attemptCount);
             if (nativeOutcome == ClientActionAttemptOutcome.ClientAccepted)
                 Interlocked.Increment(ref acceptedCount);
@@ -696,7 +817,31 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 DarkKnightShadowbringerRules.ApplyNativeAttemptOutcome(
                     state,
                     nativeOutcome,
+                    boundaryCompletedAtMilliseconds);
+            blackbloodGate = DarkKnightShadowbringerRules
+                .MarkAutomaticShadowbringerBoundary(
+                    blackbloodGate,
+                    preserveBlackblood,
+                    nativeOutcome,
+                    boundaryCompletedAtMilliseconds);
+            lastAutomaticBoundaryAtMilliseconds =
+                DarkKnightShadowbringerRules.MarkAutomaticCadenceBoundary(
+                    lastAutomaticBoundaryAtMilliseconds,
+                    nativeOutcome,
+                    boundaryCompletedAtMilliseconds);
+            fallback = DarkKnightShadowbringerRules
+                .RetireFallbackAfterAutomaticBoundary(
+                    fallback,
+                    nativeOutcome);
+            automaticCadenceReady =
+                DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                    lastAutomaticBoundaryAtMilliseconds,
                     nowMilliseconds);
+            automaticCadenceRemainingMilliseconds =
+                DarkKnightShadowbringerRules
+                    .GetAutomaticCadenceRemainingMilliseconds(
+                        lastAutomaticBoundaryAtMilliseconds,
+                        nowMilliseconds);
             if (completion.SpendOpportunity)
                 SpendOpportunity(dispatchIntent);
             state = completion.NextState;
@@ -745,6 +890,9 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 requireCurrent: true);
         var canRunDeferredSafeFallback =
             deferredFrameToken != 0 &&
+            automaticCadenceReady &&
+            (!preserveBlackblood ||
+             blackbloodGate.IsDispatchAllowed) &&
             dispatchPolicy ==
                 DarkKnightShadowbringerDispatchPolicy.DarkArtsOnly &&
             state.Intent is not
@@ -767,6 +915,16 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             darkArts.Generation,
             darkArts.IsCurrentlyExposed,
             darkArts.IsSpent,
+            preserveBlackblood,
+            blackbloodMetadataVerified,
+            blackbloodStatusPresent,
+            blackbloodGate.Phase,
+            blackbloodGate.ConsecutiveAbsentObservations,
+            blackbloodGate.LastObservedAtMilliseconds,
+            blackbloodGate.IsDispatchAllowed,
+            lastAutomaticBoundaryAtMilliseconds,
+            automaticCadenceRemainingMilliseconds,
+            automaticCadenceReady,
             fallback.Generation,
             fallback.IsCurrentlyEligible,
             fallback.IsSpent,
@@ -779,6 +937,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             pressureKnown,
             incomingPressure,
             pressureAgeMilliseconds,
+            wolvesDenTestPressureAssumed,
             observedIntent is { IsValid: true } observed
                 ? (VirtualKey)observed.FrozenKeyCode
                 : input.HeldGameplayKey,
@@ -816,16 +975,50 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         uint expectedAdjustedActionId,
         bool wolvesDenStrikingDummyMetadataVerified,
         bool checkCastingActive,
+        out bool selectedWinnerInvalidated,
         out string resolution)
     {
+        selectedWinnerInvalidated = false;
         switch (context)
         {
             case SupportedPvPContext.CrystallineConflict:
-                return ResolveExactCcCandidates(
+            {
+                if (!nearAssist.TryResolveHeldSmartActionTarget(
+                        expectedAdjustedActionId,
+                        out var slot,
+                        out var smartIdentity,
+                        out selectedWinnerInvalidated,
+                        out resolution))
+                {
+                    return [];
+                }
+
+                var smartCandidate = ResolveExactCandidate(
                     localPlayer,
+                    context,
+                    slot,
+                    smartIdentity,
                     expectedAdjustedActionId,
-                    checkCastingActive,
-                    out resolution);
+                    wolvesDenStrikingDummyMetadataVerified: false,
+                    DarkKnightWolvesDenTargetKind.None,
+                    checkCastingActive);
+                var localIdentity = new TargetPressureActorIdentity(
+                    localPlayer.GameObjectId,
+                    localPlayer.EntityId);
+                if (smartCandidate is null ||
+                    !DarkKnightShadowbringerRules.IsEligibleCandidate(
+                        smartCandidate.Value.Core,
+                        localIdentity))
+                {
+                    selectedWinnerInvalidated = true;
+                    resolution =
+                        "Frozen Smart Action winner failed exact DRK eligibility";
+                    return [];
+                }
+
+                resolution = $"Frozen Smart Action S{slot}: {resolution}";
+                return [smartCandidate.Value];
+            }
             case SupportedPvPContext.WolvesDen:
                 if (!DarkKnightWolvesDenCurrentTargetResolver
                         .TryResolveExactCurrentHardTarget(
@@ -1039,7 +1232,14 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         {
             case SupportedPvPContext.CrystallineConflict:
             {
-                if (!EnemySlotRules.IsValidSlot(enemySlot)) return null;
+                if (!EnemySlotRules.IsValidSlot(enemySlot) ||
+                    !nearAssist.CanUseExactHeldSmartActionTarget(
+                        expectedAdjustedActionId,
+                        enemySlot,
+                        expectedTarget))
+                {
+                    return null;
+                }
                 var player = EnemySlotResolver.Resolve(objectTable, enemySlot);
                 if (!HasValidNativeIdentity(player) ||
                     player!.GameObjectId != expectedTarget.GameObjectId ||
@@ -1132,6 +1332,8 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
         SupportedPvPContext context,
         bool configurationEnabled,
         bool metadataVerified,
+        bool preserveBlackblood,
+        bool blackbloodMetadataVerified,
         bool wolvesDenStrikingDummyMetadataVerified,
         int minimumHpPercent,
         int pressureLimitExclusive,
@@ -1181,14 +1383,40 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                 if (!TryObserveNativeState(currentLocal, out var nativeState))
                     return false;
 
+                var boundaryBlackbloodStatusPresent = HasExactStatusRow(
+                    currentLocal,
+                    DarkKnightShadowbringerRules.BlackbloodStatusId);
+                if (boundaryBlackbloodStatusPresent)
+                {
+                    // Boundary presence is an immediate veto. Absence is not
+                    // sampled here because the once-per-frame observer owns
+                    // the two-sample consumption debounce.
+                    blackbloodGate =
+                        DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+                            blackbloodGate,
+                            preserveBlackblood,
+                            exactBlackbloodActive: true,
+                            boundaryNow);
+                }
+                var boundaryConfigurationEnabled = configurationEnabled &&
+                    DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                        lastAutomaticBoundaryAtMilliseconds,
+                        boundaryNow) &&
+                    (!preserveBlackblood ||
+                     blackbloodMetadataVerified &&
+                     blackbloodGate.IsDispatchAllowed);
+                if (!boundaryConfigurationEnabled) return false;
+
                 var hasDarkArts = HasActiveStatus(
                     currentLocal,
                     DarkKnightShadowbringerRules.DarkArtsStatusId);
-                var pressureKnown = TryGetFreshSelfIncomingPressure(
-                    currentIdentity,
-                    boundaryNow,
-                    out var incomingPressure,
-                    out _);
+                var incomingPressure = 0;
+                var pressureKnown = context == SupportedPvPContext.WolvesDen ||
+                    TryGetFreshSelfIncomingPressure(
+                        currentIdentity,
+                        boundaryNow,
+                        out incomingPressure,
+                        out _);
                 var exactOpportunity = intent.Opportunity switch
                 {
                     DarkKnightShadowbringerOpportunityKind.DarkArts =>
@@ -1231,7 +1459,7 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
                     inputFrame.IsGameplayKeyGenerationEligible(exactKey);
                 if (!DarkKnightShadowbringerRules.CanUseFrozenIntent(
                         intent,
-                        configurationEnabled,
+                        boundaryConfigurationEnabled,
                         context,
                         currentIdentity,
                         IsLivePlayer(currentLocal) && currentLocal.IsTargetable,
@@ -1543,17 +1771,24 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
 
     private void SpendOpportunity(DarkKnightShadowbringerIntent intent)
     {
-        switch (intent.Opportunity)
+        SpendOpportunity(intent.Opportunity, intent.OpportunityGeneration);
+    }
+
+    private void SpendOpportunity(
+        DarkKnightShadowbringerOpportunityKind opportunity,
+        long generation)
+    {
+        switch (opportunity)
         {
             case DarkKnightShadowbringerOpportunityKind.DarkArts:
                 darkArts = DarkKnightShadowbringerRules.MarkDarkArtsSpent(
                     darkArts,
-                    intent.OpportunityGeneration);
+                    generation);
                 break;
             case DarkKnightShadowbringerOpportunityKind.SafeHpCost:
                 fallback = DarkKnightShadowbringerRules.MarkFallbackSpent(
                     fallback,
-                    intent.OpportunityGeneration);
+                    generation);
                 break;
         }
     }
@@ -1796,6 +2031,19 @@ internal sealed unsafe class DarkKnightShadowbringerProbe
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool HasExactStatusRow(IBattleChara actor, uint statusId)
+    {
+        foreach (var status in actor.StatusList)
+        {
+            // Presence is authoritative for the preservation gate. In
+            // particular, an expiry-edge row with zero or non-finite remaining
+            // time must stay blocked until the row itself disappears stably.
+            if (status.StatusId == statusId) return true;
         }
 
         return false;

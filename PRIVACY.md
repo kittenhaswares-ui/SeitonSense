@@ -144,9 +144,15 @@ following data already available in the local FFXIV client:
   read Guard, crowd-control, cast, queue, or animation-lock state before its
   immediate request;
 - when held DRK Shadowbringer is enabled, the exact local DRK identity, held-key
-  ownership, HP, Dark Arts, incoming pressure, own Guard/cast/queue/animation
-  state, native Shadowbringer readiness, and one frozen reachable enemy identity
-  with HP and native range/line-of-sight evidence;
+  ownership, HP, Dark Arts, exact Blackblood status-row presence, incoming
+  pressure, own Guard/cast/queue/animation state, native Shadowbringer readiness,
+  and one frozen reachable enemy identity with HP and native range/line-of-sight
+  evidence. In exact CC its own opt-in reuses the complete Smart Action ranking
+  and protection snapshot without changing a visible target. It keeps only the
+  local last automatic-boundary time needed for the 1.8-second cadence and the
+  in-memory Blackblood gate state. Wolves' Den retains only the exact current
+  `<t>` duel/dummy target and treats unavailable CC pressure telemetry as zero
+  for that local test context;
 - when held GNB Continuation is enabled, the exact local GNB identity, held-key
   ownership, current transformed carrier, own proc status, action readiness, and
   one frozen reachable enemy identity with HP and native range/line-of-sight
@@ -1503,8 +1509,8 @@ Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
 Critical Strategy and Astrologian held Near Help opt-ins,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
-  GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer and
-  separate DRK Hiebsprung held-key opt-ins,
+  GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer,
+  nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,
   the held-action cast-
 cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
 per-action selections. Retired Combat Frames properties remain only as legacy
@@ -1514,6 +1520,8 @@ them to draw frames, change targets, or publish mouseover actors.
 The Wolves' Den rotation panel reads only local UTC time and the current PvP /
 territory flags. It calculates the published arena order entirely in memory and
 stores only its display preferences and an optional whole-map phase correction.
+Its expanded card deck requests seven reviewed duty-artwork icons from the local
+game installation; it does not download, copy, or upload those images.
 It does not inspect or upload queue registrations, player identities, ratings,
 statistics, or roster data and makes no network request.
 
@@ -1522,8 +1530,10 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 42 is current. It adds the local rotation-panel and range-
-helper appearance settings without changing any action or targeting opt-in.
+Configuration schema 43 is current. It keeps the Auto Shadowbringer master off
+and adds its default-on nested Blackblood-preservation option plus local rotation
+card presentation. Schema 42 adds the local rotation-panel and range-helper
+appearance settings without changing any action or targeting opt-in.
 Schema 41 adds the default-off Astrologian held Near Help option without enabling
 it for upgrades, fresh installs, or Reset Defaults. Schema 40 adds the local generic one-shot smart action-buffer settings,
 movable learning-window settings, and default-off native

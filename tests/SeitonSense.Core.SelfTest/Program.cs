@@ -139,6 +139,8 @@ var tests = new (string Name, Action Run)[]
     ("DRK Plunge initial and repeat ownership are distinct", DarkKnightPlungeSelfTests.InitialAndRepeatDispatchUseDistinctOwnership),
     ("DRK Plunge frozen intent requires every terminal gate", DarkKnightPlungeSelfTests.FrozenIntentRequiresEveryTerminalGate),
     ("DRK Shadowbringer metadata and fallback thresholds are exact", DarkKnightShadowbringerSelfTests.ExactMetadataAndSafeFallbackBoundariesArePinned),
+    ("DRK Shadowbringer preserves Blackblood until consumption", DarkKnightShadowbringerSelfTests.BlackbloodMustBeObservedThenStablyDisappear),
+    ("DRK Shadowbringer Blackblood consumption rearms fallback", DarkKnightShadowbringerSelfTests.BlackbloodConsumptionRearmsSafeFallbackWithoutSpam),
     ("DRK Shadowbringer Dark Arts spends one exposure", DarkKnightShadowbringerSelfTests.DarkArtsExposureDebouncesAndSpendsExactlyOnce),
     ("DRK Shadowbringer fallback needs a real eligibility transition", DarkKnightShadowbringerSelfTests.FallbackRequiresARealEligibilityTransition),
     ("DRK Shadowbringer Dark Arts wins with exact identity", DarkKnightShadowbringerSelfTests.DarkArtsAlwaysWinsAndActionIdentityIsExact),
@@ -592,8 +594,55 @@ static void KnownCcTerritoriesAreComplete()
         CrystallineConflictArena.TheRedSands,
     };
     for (var index = 0; index < publishedRotation.Length; index++)
+    {
         Equal(publishedRotation[index], CrystallineConflictRotationRules.GetArena(index),
             $"published rotation slot {index}");
+        True(
+            CrystallineConflictRotationPresentationRules.GetDutyArtworkIconId(publishedRotation[index]) > 0,
+            $"published rotation artwork {index}");
+        Equal(
+            publishedRotation[index],
+            CrystallineConflictRotationPresentationRules.GetArenaAtForwardSlot(
+                CrystallineConflictArena.ThePalaistra,
+                index),
+            $"forward presentation slot {index}");
+    }
+    Equal(
+        publishedRotation.Length,
+        publishedRotation
+            .Select(CrystallineConflictRotationPresentationRules.GetDutyArtworkIconId)
+            .Distinct()
+            .Count(),
+        "all seven duty artwork IDs are unique");
+    Equal(112473u,
+        CrystallineConflictRotationPresentationRules.GetDutyArtworkIconId(
+            CrystallineConflictArena.ThePalaistra),
+        "Palaistra game artwork ID");
+    Equal(112669u,
+        CrystallineConflictRotationPresentationRules.GetDutyArtworkIconId(
+            CrystallineConflictArena.ArcheiaHarmonias),
+        "Archeia game artwork ID");
+    Equal(0f,
+        CrystallineConflictRotationPresentationRules.ResolveAnimatedCardSlot(
+            CrystallineConflictArena.ThePalaistra,
+            CrystallineConflictArena.TheVolcanicHeart,
+            CrystallineConflictArena.ThePalaistra,
+            0f),
+        "departing map begins at top");
+    Equal(6f,
+        CrystallineConflictRotationPresentationRules.ResolveAnimatedCardSlot(
+            CrystallineConflictArena.ThePalaistra,
+            CrystallineConflictArena.TheVolcanicHeart,
+            CrystallineConflictArena.ThePalaistra,
+            1f),
+        "departing map finishes at bottom");
+    Equal(0f,
+        CrystallineConflictRotationPresentationRules.ResolveAnimatedCardSlot(
+            CrystallineConflictArena.ThePalaistra,
+            CrystallineConflictArena.TheVolcanicHeart,
+            CrystallineConflictArena.TheVolcanicHeart,
+            1f),
+        "new current map finishes at top");
     Equal("Archeia Harmonias",
         CrystallineConflictRotationRules.GetDisplayName(CrystallineConflictArena.ArcheiaHarmonias),
         "Archeia display name");

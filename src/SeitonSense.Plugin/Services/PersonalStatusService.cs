@@ -781,7 +781,9 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.GunbreakerContinuationVerified;
         var darkKnightShadowbringerHeldInputEnabled =
             darkKnightShadowbringerConfigurationEnabled &&
-            metadata.DarkKnightShadowbringerVerified;
+            metadata.DarkKnightShadowbringerVerified &&
+            (!configuration.DarkKnightShadowbringerPreserveBlackblood ||
+             metadata.DarkKnightBlackbloodVerified);
         var monkHeldComboInputEnabled = monkHeldComboConfigurationEnabled &&
                                         metadata.MonkHeldComboVerified;
         var astrologianHarmonicOrbisHeldInputEnabled =
@@ -1137,6 +1139,8 @@ internal sealed class PersonalStatusService : IDisposable
             context,
             darkKnightShadowbringerConfigurationEnabled,
             metadata.DarkKnightShadowbringerVerified,
+            configuration.DarkKnightShadowbringerPreserveBlackblood,
+            metadata.DarkKnightBlackbloodVerified,
             metadata.WolvesDenStrikingDummyVerified,
             configuration.DarkKnightShadowbringerMinimumHpPercent,
             configuration.DarkKnightShadowbringerPressureLimitExclusive,
@@ -1189,6 +1193,8 @@ internal sealed class PersonalStatusService : IDisposable
                 context,
                 darkKnightShadowbringerConfigurationEnabled,
                 metadata.DarkKnightShadowbringerVerified,
+                configuration.DarkKnightShadowbringerPreserveBlackblood,
+                metadata.DarkKnightBlackbloodVerified,
                 metadata.WolvesDenStrikingDummyVerified,
                 configuration.DarkKnightShadowbringerMinimumHpPercent,
                 configuration.DarkKnightShadowbringerPressureLimitExclusive,

@@ -2,12 +2,14 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.37.0.0 adds a movable, clickable
-Wolves' Den Crystalline Conflict rotation panel with the current arena,
-countdown, next arena, full order, and local phase calibration. It also adds a
-read-only PvP range helper around the local player: an inner 5-yalm melee ring
-and an outer ring for the current job's furthest reviewed hostile non-LB action,
-including hostile gap closers. It retains v0.36.0.1's protection-safe Viper
+assistance, and target highlights. Version 0.38.0.0 gives the default-off Auto
+Shadowbringer helper a shared 1.8-second auto cadence, a default-on **Preserve
+Blackblood** gate, and existing held Smart Action target selection in exact CC.
+Its Wolves' Den test path uses exact `<t>` without requiring CC pressure data. It also expands the Wolves' Den
+rotation panel into a seven-card current-to-next deck using local FFXIV duty
+artwork and a 0.65-second reorder animation, without downloads or network
+access. It retains v0.37.0.0's movable rotation panel and read-only PvP range helper, plus
+v0.36.0.1's protection-safe Viper
 Smart Action targeting and exact enemy DRG `Sky High` warning, v0.36.0.0's AST held `/nearhelp` heal,
 v0.35.0.3's exact Guard-ignoring Smart Action
 support, v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection, plus
@@ -44,11 +46,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
 
 - **Local CC rotation panel:** while in Wolves' Den Pier, a movable and lockable
   panel shows the current Patch 7.5 arena, the live time remaining, and the next
-  arena. Clicking the current map expands the complete seven-map order and saved
-  `<` / `>` phase calibration. The order and one-hour interval come from the
-  official Patch 7.5 notes; the bundled default phase follows the public
+  arena. Clicking the current map expands a seven-card current-to-next deck with
+  local FFXIV duty artwork and saved `<` / `>` phase calibration. When the map
+  changes, the cards reorder over 0.65 seconds. The order and one-hour interval
+  come from the official Patch 7.5 notes; the bundled default phase follows the public
   community calendar reference and can be corrected locally. The panel never
-  queries a queue, player roster, service, or network endpoint.
+  queries a queue, player roster, service, or network endpoint, and downloads no
+  artwork.
 - **PvP range helper:** two flat world-space rings follow the local player in PvP
   and Wolves' Den. The inner ring marks nominal 5-yalm melee reach; the outer
   ring marks the current combat job's furthest reviewed hostile non-LB action,
@@ -229,10 +233,23 @@ and Super Focus Glow into one configurable custom-repository plugin.
   native location call is reached only when Shukuchi's exact recast is positively
   ready, preventing a client-predicted startup that would be rolled back.
 - **Held DRK Shadowbringer:** the separate default-off Dark Knight helper uses
-  ordinary held-key consent. Exact Dark Arts is the first opportunity; otherwise
-  the configurable high-HP/low-pressure fallback runs after Hiebsprung. It
-  selects one reachable low-HP enemy, never changes the visible target, and has
-  no macro-pairing or ReAction dependency.
+  ordinary held-key consent. Its default-on **Preserve Blackblood** sub-option
+  blocks both exact Dark Arts and the configurable high-HP/low-pressure fallback
+  while exact status `3033` exists. Both paths share a fixed 1.8-second cadence;
+  continuous safe HP/pressure can open exactly one new fallback generation when
+  it ends. Dark Arts remains first and ignores those HP/pressure sliders. Once
+  an observed Blackblood disappears stably, whether consumed or expired, the
+  next eligible cycle may begin. A confirmed or ambiguous automatic request
+  whose complete short Blackblood lifecycle falls between framework samples
+  uses a 1.5-second grace plus one later absent sample rather than requiring a
+  manual Shadowbringer. Ambiguous calls still latch their physical key until
+  release. Disabling preservation removes only the Blackblood wait; the cadence
+  remains. In exact CC the helper uses the existing
+  held Smart Action policy without requiring the macro toggle, never changes the
+  visible target, and freezes the exact actor rather than reranking. Shadowbringer's
+  line-AoE protection remains fail-closed. Wolves' Den stays on the exact current
+  `<t>` duel opponent or striking dummy, assumes unavailable CC pressure as zero
+  for testing, and retains HP, range, line-of-sight, cadence, and Blackblood gates.
 - **Experimental Ally Rescue:** on BRD or WHM, one fresh or explicitly eligible
   held gameplay key can keep consent active for Paean or Aquaveil on an exact party
   member suffering Stun, Silence, Deep Freeze, or Miracle of Nature. Selection
@@ -1591,7 +1608,7 @@ focus module to avoid drawing both over the same actor.
 | Optional SAM Soten/Mineuchi and Zantetsuken held helpers | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Optional MNK held combo helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
-| Optional DRK Shadowbringer held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
+| Optional DRK Shadowbringer held-key helper | Yes, held Smart Action policy with one exact frozen actor | Yes, exact current duel/dummy target when test mode is enabled | No |
 | Optional DPS Smart Tab | Yes | No | No |
 | One-shot Smart Action macro | Yes | No | No |
 | Near Assist | Yes | No | No |
@@ -1620,9 +1637,13 @@ Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 42 is current. It adds the visible-by-default local Wolves'
-Den rotation panel and PvP range helper without changing any targeting or action
-setting. Schema 41 adds the default-off AST held Near Help option without
+Configuration schema 43 is current. It adds the default-on Blackblood-
+preservation sub-option without enabling the default-off Auto Shadowbringer
+master, and expands the local rotation panel with seven local-artwork cards.
+Turning the sub-option off preserves the earlier Shadowbringer behavior. Schema
+42 adds the visible-by-default local Wolves' Den rotation panel and PvP range
+helper without changing any targeting or action setting. Schema 41 adds the
+default-off AST held Near Help option without
 enabling it for upgrades, fresh installs, or Reset Defaults.
 Schema 40 integrates the generic one-shot smart action buffer and opt-in native
 standard-keyboard-hotbar Turbo directly into
@@ -1909,9 +1930,21 @@ ready epoch.
 
 The separate default-off held DRK Shadowbringer helper uses that physical-input
 priority chain. Exact Dark Arts runs before Hiebsprung; the configurable safe HP-
-cost fallback runs after it. Both freeze one exact reachable low-HP enemy, leave
-the visible target unchanged, and allow only the common same-intent explicit-
-false retry.
+cost fallback runs after it. The default-on Blackblood-preservation sub-option
+blocks both paths while exact status `3033` exists. Both paths share a fixed
+1.8-second cadence. Continuous safe HP/pressure opens exactly one new fallback
+generation when the cadence ends; Dark Arts still wins and ignores the fallback
+sliders. Stable Blackblood absence, whether consumed or expired, opens the next
+eligible cycle. If a confirmed or ambiguous automatic request's whole short
+Blackblood lifecycle occurs between framework samples, a 1.5-second propagation
+grace plus one later absent sample prevents a permanent manual-only unlock;
+ambiguous calls still latch their physical key until release. Disabling the
+sub-option removes only the Blackblood wait. In exact CC, selection uses the existing held Smart Action policy
+without requiring its macro toggle. The helper freezes one exact actor, leaves
+the visible target unchanged, and cancels rather than reranking if that actor
+becomes unsafe; line-AoE protection remains fail-closed. Wolves' Den uses only
+the exact current `<t>` duel opponent or striking dummy and treats missing CC
+pressure telemetry as known zero for testing while retaining the remaining gates.
 
 The isolation warning is local and display-only. The optional Attack1 focus
 module is not display-only: it issues one normal, hardcoded party-visible marker
@@ -1973,8 +2006,8 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 520-test Core registry and source checks pin
-configuration schema 42, the deterministic local CC rotation, the complete
+For the current source, the exact 522-test Core registry and source checks pin
+configuration schema 43, the deterministic local CC rotation, the complete
 fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
 generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,

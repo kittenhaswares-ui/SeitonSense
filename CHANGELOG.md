@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.38.0.0
+
+- Added a shared 1.8-second cadence to both held Auto Shadowbringer paths. A
+  continuously safe HP/pressure state can now open exactly one later HP-cost
+  generation when that cadence ends, instead of remaining spent until HP or
+  pressure happens to change. Dark Arts still wins and ignores the configured
+  HP/pressure thresholds, but observes the same cadence.
+- Added a default-on **Preserve Blackblood** sub-option. Exact status `3033`
+  blocks both paths until it is consumed or expires. A confirmed or ambiguous
+  automatic boundary that misses the complete short status lifecycle now uses
+  a 1.5-second propagation grace plus one later distinct absent sample instead
+  of deadlocking until manual Shadowbringer; ambiguous calls still require the
+  frozen physical key to be released. Disabling this sub-option removes only
+  the Blackblood wait, not the shared 1.8-second cadence.
+- Auto Shadowbringer in exact Crystalline Conflict now uses the existing held
+  Smart Action target policy without requiring the `/smartaction` macro toggle.
+  It changes no visible target and freezes the selected exact actor; later
+  invalidation cancels instead of reranking. Its line-AoE protection remains
+  fail-closed under the existing Smart Action policy. Wolves' Den testing stays
+  restricted to the exact current `<t>` duel opponent or striking dummy and
+  treats unavailable CC team-pressure telemetry as known zero for that test
+  context; HP, range, line of sight, cadence, and Blackblood gates remain.
+- The expanded Wolves' Den rotation panel now shows the complete seven-map
+  current-to-next deck with local FFXIV duty artwork. On a rotation change, the
+  cards reorder over `0.65` seconds. The artwork is loaded from the local game
+  installation, with no download or network request. Configuration schema is
+  `43`; live current-patch action behavior and visual timing remain separate
+  in-game validation boundaries.
+
 ## 0.37.0.0
 
 - Added a movable, clickable Wolves' Den Pier panel for the Patch 7.5

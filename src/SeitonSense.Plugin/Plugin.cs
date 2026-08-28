@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.37.0.0";
+    private const string CurrentReleaseVersion = "0.38.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -330,7 +330,8 @@ public sealed class Plugin : IDalamudPlugin
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
             configuration,
             clientState,
-            gameGui);
+            gameGui,
+            textureProvider);
         autoSeitonToggle = new AutoSeitonToggleWindow(
             objectTable,
             textureProvider,
@@ -358,9 +359,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "A movable, clickable Wolves' Den panel now shows the current Crystalline Conflict arena, live countdown, and next arena. Click the current map for the complete order and a saved local phase correction.",
-                "A new PvP range helper draws a 5-yalm melee ring and this job's furthest reviewed hostile non-LB reach around you. All PvP-enabled jobs are covered; labels, colors, opacity, line width, and foreground placement are configurable.",
-                "Both overlays are read-only and local: no target or action changes, player scans, terrain raycasts, queue tracking, or network requests. Configuration schema 42 is current; all 520 Core tests pass.",
+                "Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback. Continuous safe HP/pressure can open one later fallback generation; Dark Arts still wins and ignores those sliders. The master option remains off by default.",
+                "Preserve Blackblood remains on by default and no longer deadlocks when a confirmed or ambiguous request's whole short status lifecycle falls between samples. Exact CC uses frozen Smart Action targeting; Wolves' Den uses exact <t> with test-only zero pressure.",
+                "The expanded Wolves' Den rotation panel now shows seven local FFXIV duty-artwork cards from current to next, reordering over 0.65 seconds with no download or network request. Configuration schema 43 is current; live validation remains separate.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

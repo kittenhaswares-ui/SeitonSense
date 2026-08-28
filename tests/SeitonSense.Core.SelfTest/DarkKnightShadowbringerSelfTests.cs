@@ -18,8 +18,13 @@ internal static class DarkKnightShadowbringerSelfTests
             "Dark Arts adjusted Shadowbringer");
         Equal(29_093u, DarkKnightShadowbringerRules.TheBlackestNightActionId,
             "The Blackest Night");
+        Equal(3_033u, DarkKnightShadowbringerRules.BlackbloodStatusId,
+            "Blackblood status");
         Equal(3_034u, DarkKnightShadowbringerRules.DarkArtsStatusId,
             "Dark Arts status");
+        Equal(213_106u,
+            DarkKnightShadowbringerRules.BlackbloodStatusIconId,
+            "Blackblood icon");
         Equal(12_000u, DarkKnightShadowbringerRules.ShadowbringerHpCost,
             "base HP cost");
         Equal(10, DarkKnightShadowbringerRules.MaximumRangeYalms, "range");
@@ -28,6 +33,9 @@ internal static class DarkKnightShadowbringerSelfTests
         Equal(1_000,
             DarkKnightShadowbringerRules.ExpectedAdjustedRecastMilliseconds,
             "adjusted recast");
+        Equal(1_800L,
+            DarkKnightShadowbringerRules.AutomaticCadenceMilliseconds,
+            "shared automatic cadence");
         True(DarkKnightShadowbringerRules.HasExpectedPlayerActionFlag(
                 DarkKnightShadowbringerRules.ShadowbringerActionId,
                 isPlayerAction: true),
@@ -77,6 +85,330 @@ internal static class DarkKnightShadowbringerSelfTests
                 DarkKnightShadowbringerRules.DefaultMinimumHpPercent,
                 pressureLimitExclusive: 7),
             "out-of-range pressure configuration fails closed");
+    }
+
+    public static void BlackbloodMustBeObservedThenStablyDisappear()
+    {
+        var manual = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            DarkKnightBlackbloodGateState.Initial,
+            preservationEnabled: true,
+            exactBlackbloodActive: true,
+            nowMilliseconds: 1_000);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+            manual.Phase, "pre-existing manual Blackblood blocks automation");
+        False(manual.IsDispatchAllowed,
+            "active manual Blackblood cannot be overwritten");
+
+        var armed = DarkKnightShadowbringerRules
+            .MarkAutomaticShadowbringerBoundary(
+                DarkKnightBlackbloodGateState.Initial,
+                preservationEnabled: true,
+                ClientActionAttemptOutcome.ClientAccepted,
+                nowMilliseconds: 2_000);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingExposure,
+            armed.Phase, "accepted automatic action waits for propagation");
+        False(armed.IsDispatchAllowed,
+            "first missing status sample cannot immediately rearm");
+
+        var stillWaiting = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            armed,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 2_000 +
+                DarkKnightShadowbringerRules
+                    .BlackbloodPropagationWaitMilliseconds - 1);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingExposure,
+            stillWaiting.Phase, "bounded propagation wait remains closed");
+
+        var exposed = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            stillWaiting,
+            preservationEnabled: true,
+            exactBlackbloodActive: true,
+            nowMilliseconds: 3_499);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+            exposed.Phase, "exact Blackblood exposure is remembered");
+
+        var oneMiss = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            exposed,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 3_500);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+            oneMiss.Phase, "one absent sample is treated as status flicker");
+        False(oneMiss.IsDispatchAllowed,
+            "single absence cannot overwrite a still-active buff");
+        var duplicateSameFrame = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                oneMiss,
+                preservationEnabled: true,
+                exactBlackbloodActive: false,
+                nowMilliseconds: 3_500);
+        Equal(1, duplicateSameFrame.ConsecutiveAbsentObservations,
+            "priority and deferred passes cannot count one frame twice");
+        var flickerReturn = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                duplicateSameFrame,
+                preservationEnabled: true,
+                exactBlackbloodActive: true,
+                nowMilliseconds: 3_501);
+        Equal(0, flickerReturn.ConsecutiveAbsentObservations,
+            "visible status clears the absence debounce");
+
+        var absenceOne = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            flickerReturn,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 3_600);
+        var consumed = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            absenceOne,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 3_601);
+        True(consumed.IsDispatchAllowed,
+            "stable consumption or natural expiry rearms automation");
+
+        var inferredOneMiss = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+            armed,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 2_000 +
+                DarkKnightShadowbringerRules
+                    .BlackbloodPropagationWaitMilliseconds);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+            inferredOneMiss.Phase,
+            "accepted action can infer only the first missed absence after propagation grace");
+        Equal(1, inferredOneMiss.ConsecutiveAbsentObservations,
+            "missed complete status lifecycle still requires a later sample");
+        False(inferredOneMiss.IsDispatchAllowed,
+            "accepted missed lifecycle remains blocked at the grace boundary");
+        var sameGraceFrame = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                inferredOneMiss,
+                preservationEnabled: true,
+                exactBlackbloodActive: false,
+                nowMilliseconds: 2_000 +
+                    DarkKnightShadowbringerRules
+                        .BlackbloodPropagationWaitMilliseconds);
+        Equal(1, sameGraceFrame.ConsecutiveAbsentObservations,
+            "same timestamp cannot supply the inferred second absence");
+        var inferredConsumed = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                sameGraceFrame,
+                preservationEnabled: true,
+                exactBlackbloodActive: false,
+                nowMilliseconds: 2_000 +
+                    DarkKnightShadowbringerRules
+                        .BlackbloodPropagationWaitMilliseconds + 1);
+        True(inferredConsumed.IsDispatchAllowed,
+            "one later distinct absence rearms an accepted missed lifecycle");
+
+        var ambiguous = DarkKnightShadowbringerRules
+            .MarkAutomaticShadowbringerBoundary(
+                DarkKnightBlackbloodGateState.Initial,
+                preservationEnabled: true,
+                ClientActionAttemptOutcome.AcceptanceUnknown,
+                nowMilliseconds: 3_000);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingExposure,
+            ambiguous.Phase,
+            "unknown acceptance uses the bounded propagation lifecycle");
+        False(ambiguous.IsDispatchAllowed,
+            "ambiguous native acceptance also fails closed during propagation");
+        var ambiguousLater = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                ambiguous,
+                preservationEnabled: true,
+                exactBlackbloodActive: false,
+                nowMilliseconds: 3_000 +
+                    DarkKnightShadowbringerRules
+                        .BlackbloodPropagationWaitMilliseconds);
+        Equal(DarkKnightBlackbloodGatePhase.AwaitingConsumption,
+            ambiguousLater.Phase,
+            "unknown acceptance infers only one absence after the grace");
+        var ambiguousReleased = DarkKnightShadowbringerRules
+            .ObserveBlackbloodGate(
+                ambiguousLater,
+                preservationEnabled: true,
+                exactBlackbloodActive: false,
+                nowMilliseconds: 3_000 +
+                    DarkKnightShadowbringerRules
+                        .BlackbloodPropagationWaitMilliseconds + 1);
+        True(ambiguousReleased.IsDispatchAllowed,
+            "unknown acceptance avoids a permanent manual-only unlock");
+        var disabled = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            ambiguous,
+            preservationEnabled: false,
+            exactBlackbloodActive: true,
+            nowMilliseconds: 3_001);
+        True(disabled.IsDispatchAllowed,
+            "disabling the nested option preserves the old helper contract");
+    }
+
+    public static void BlackbloodConsumptionRearmsSafeFallbackWithoutSpam()
+    {
+        var fallback = Fallback();
+        fallback = DarkKnightShadowbringerRules.MarkFallbackSpent(
+            fallback,
+            fallback.Generation);
+        True(fallback.IsSpent, "first safe HP-cost opportunity is spent");
+
+        var gate = DarkKnightShadowbringerRules
+            .MarkAutomaticShadowbringerBoundary(
+                DarkKnightBlackbloodGateState.Initial,
+                preservationEnabled: true,
+                ClientActionAttemptOutcome.ClientAccepted,
+                nowMilliseconds: 10_000);
+        gate = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            gate,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 10_001);
+        fallback = DarkKnightShadowbringerRules.ObserveFallback(
+            fallback,
+            exactFallbackEligibility: gate.IsDispatchAllowed);
+        False(gate.IsDispatchAllowed,
+            "propagation sample cannot reopen the helper");
+
+        gate = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            gate,
+            preservationEnabled: true,
+            exactBlackbloodActive: true,
+            nowMilliseconds: 10_002);
+        fallback = DarkKnightShadowbringerRules.ObserveFallback(
+            fallback,
+            exactFallbackEligibility: gate.IsDispatchAllowed);
+        False(fallback.HasTrackedEpisode,
+            "blocked Blackblood interval closes the spent fallback episode");
+
+        gate = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            gate,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 10_003);
+        fallback = DarkKnightShadowbringerRules.ObserveFallback(
+            fallback,
+            exactFallbackEligibility: gate.IsDispatchAllowed);
+        False(gate.IsDispatchAllowed,
+            "first fully absent sample remains blocked");
+
+        gate = DarkKnightShadowbringerRules.ObserveBlackbloodGate(
+            gate,
+            preservationEnabled: true,
+            exactBlackbloodActive: false,
+            nowMilliseconds: 10_004);
+        fallback = DarkKnightShadowbringerRules.ObserveFallback(
+            fallback,
+            exactFallbackEligibility: gate.IsDispatchAllowed);
+        True(gate.IsDispatchAllowed,
+            "two absent samples rearm after proven exposure");
+        True(fallback.HasTrackedEpisode,
+            "safe HP conditions open a distinct fallback episode");
+        False(fallback.IsSpent,
+            "new fallback generation is not stuck on the old spent latch");
+        Equal(2L, fallback.Generation,
+            "rearmed fallback has one new exact generation");
+        var sameReadyEpisode = DarkKnightShadowbringerRules.ObserveFallback(
+            fallback,
+            exactFallbackEligibility: true);
+        Equal(fallback.Generation, sameReadyEpisode.Generation,
+            "later ready samples cannot create one-second recast spam");
+
+        True(DarkKnightShadowbringerRules.TrySelectOpportunity(
+                DarkKnightShadowbringerDarkArtsState.Initial,
+                fallback,
+                out var opportunity,
+                out _,
+                out _),
+            "safe fallback becomes selectable again");
+        Equal(DarkKnightShadowbringerOpportunityKind.SafeHpCost,
+            opportunity, "rearmed opportunity is the HP-cost path");
+
+        True(DarkKnightShadowbringerRules.TrySelectOpportunity(
+                DarkArts(),
+                fallback,
+                out opportunity,
+                out _,
+                out _),
+            "fresh Dark Arts and fallback can coexist");
+        Equal(DarkKnightShadowbringerOpportunityKind.DarkArts,
+            opportunity, "fresh Dark Arts retains first priority");
+
+        var cadence = DarkKnightShadowbringerRules
+            .MarkAutomaticCadenceBoundary(
+                previousBoundaryAtMilliseconds: -1,
+                ClientActionAttemptOutcome.ClientAccepted,
+                nowMilliseconds: 20_000);
+        False(DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                cadence,
+                21_799),
+            "shared cadence blocks both paths at 1799 ms");
+        Equal(1L,
+            DarkKnightShadowbringerRules
+                .GetAutomaticCadenceRemainingMilliseconds(cadence, 21_799),
+            "cadence diagnostics expose the final blocked millisecond");
+        True(DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                cadence,
+                21_800),
+            "shared cadence opens both paths at exactly 1800 ms");
+
+        var recurringFallback = DarkKnightShadowbringerRules
+            .RetireFallbackAfterAutomaticBoundary(
+                Fallback(),
+                ClientActionAttemptOutcome.ClientAccepted);
+        False(recurringFallback.HasTrackedEpisode,
+            "accepted automatic boundary retires the prior safe cycle immediately");
+        recurringFallback = DarkKnightShadowbringerRules.ObserveFallback(
+            recurringFallback,
+            exactFallbackEligibility:
+                DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                    cadence,
+                    21_799));
+        Equal(1L, recurringFallback.Generation,
+            "continuous safe conditions cannot rearm before cadence");
+        recurringFallback = DarkKnightShadowbringerRules.ObserveFallback(
+            recurringFallback,
+            exactFallbackEligibility:
+                DarkKnightShadowbringerRules.IsAutomaticCadenceReady(
+                    cadence,
+                    21_800));
+        Equal(2L, recurringFallback.Generation,
+            "continuous safe conditions open exactly one new cadence generation");
+        var recurringSameFrame = DarkKnightShadowbringerRules.ObserveFallback(
+            recurringFallback,
+            exactFallbackEligibility: true);
+        Equal(recurringFallback.Generation, recurringSameFrame.Generation,
+            "open cadence cannot create a new fallback generation per frame");
+        True(DarkKnightShadowbringerRules.TrySelectOpportunity(
+                DarkArts(),
+                recurringFallback,
+                out opportunity,
+                out _,
+                out _),
+            "both paths can become ready on the shared cadence boundary");
+        Equal(DarkKnightShadowbringerOpportunityKind.DarkArts,
+            opportunity,
+            "Dark Arts wins the cross-path cadence boundary regardless of fallback thresholds");
+
+        var rejectedCadence = DarkKnightShadowbringerRules
+            .MarkAutomaticCadenceBoundary(
+                cadence,
+                ClientActionAttemptOutcome.ClientRejected,
+                nowMilliseconds: 22_000);
+        Equal(cadence, rejectedCadence,
+            "explicit false does not consume the automatic cadence");
+        var rejectedFallback = DarkKnightShadowbringerRules
+            .RetireFallbackAfterAutomaticBoundary(
+                recurringFallback,
+                ClientActionAttemptOutcome.ClientRejected);
+        Equal(recurringFallback, rejectedFallback,
+            "explicit false retains its frozen fallback retry episode");
+        var unknownCadence = DarkKnightShadowbringerRules
+            .MarkAutomaticCadenceBoundary(
+                cadence,
+                ClientActionAttemptOutcome.AcceptanceUnknown,
+                nowMilliseconds: 22_000);
+        Equal(22_000L, unknownCadence,
+            "unknown acceptance consumes the same global cadence");
     }
 
     public static void DarkArtsExposureDebouncesAndSpendsExactlyOnce()
@@ -166,6 +498,18 @@ internal static class DarkKnightShadowbringerSelfTests
     {
         var darkArts = DarkArts();
         var fallback = Fallback();
+        False(Safe(10_000, 100_000, false, 5),
+            "low HP and unknown high pressure reject only the HP-cost path");
+        True(DarkKnightShadowbringerRules.TrySelectOpportunity(
+                darkArts,
+                DarkKnightShadowbringerFallbackState.Initial,
+                out var darkArtsWithoutFallback,
+                out _,
+                out _),
+            "Dark Arts ignores HP and pressure fallback configuration");
+        Equal(DarkKnightShadowbringerOpportunityKind.DarkArts,
+            darkArtsWithoutFallback,
+            "free proc remains available under unsafe fallback conditions");
         True(DarkKnightShadowbringerRules.TrySelectOpportunity(
                 darkArts,
                 fallback,
