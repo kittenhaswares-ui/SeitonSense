@@ -44,7 +44,8 @@ internal sealed record PvPMetadataValidation(
     bool BlackMageFrostStarVerified,
     bool MonkHeldComboVerified,
     NinjaShukuchiHiddenStatusCatalog NinjaShukuchiHiddenStatuses,
-    SmartActionGuardBypassCatalog SmartActionGuardBypassActions)
+    SmartActionGuardBypassCatalog SmartActionGuardBypassActions,
+    BackwardDashMetadataCatalog BackwardDashActions)
 {
     public static PvPMetadataValidation None { get; } = new(
         false, false, false, false, false, false, false, false, false, false, false,
@@ -52,7 +53,8 @@ internal sealed record PvPMetadataValidation(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false,
         NinjaShukuchiHiddenStatusCatalog.Empty,
-        SmartActionGuardBypassCatalog.Empty);
+        SmartActionGuardBypassCatalog.Empty,
+        BackwardDashMetadataCatalog.Empty);
 
     internal bool IsEmergencyTeleportVerified(uint jobId) => jobId switch
     {
@@ -1010,6 +1012,51 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var verifiedBackwardDashActionIds = new List<uint>();
+        foreach (var profile in BackwardDashRules.DirectionalProfiles)
+        {
+            var verified = ValidateFeature($"Backward dash {profile.Name}", log, () =>
+            {
+                var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+                return actions.TryGetRow(profile.ActionId, out var action) &&
+                       string.Equals(
+                           action.Name.ToString(),
+                           profile.Name,
+                           StringComparison.Ordinal) &&
+                       action.Icon == profile.IconId &&
+                       action.IsPvP &&
+                       action.IsPlayerAction &&
+                       action.ClassJob.IsValid &&
+                       action.ClassJob.RowId == profile.JobId &&
+                       action.Range == 0 &&
+                       action.EffectRange == 0 &&
+                       action.CastType == 1 &&
+                       action.Cast100ms == 0 &&
+                       action.Recast100ms == profile.Recast100Milliseconds &&
+                       action.CooldownGroup == profile.SheetCooldownGroup &&
+                       action.AdditionalCooldownGroup ==
+                           profile.SheetAdditionalCooldownGroup &&
+                       action.MaxCharges ==
+                           (profile.MaximumAccessibleCharges > 1
+                               ? profile.MaximumAccessibleCharges
+                               : 0) &&
+                       action.CanTargetSelf &&
+                       !action.CanTargetHostile &&
+                       !action.CanTargetParty &&
+                       !action.CanTargetAlly &&
+                       !action.CanTargetAlliance &&
+                       !action.TargetArea &&
+                       action.RequiresLineOfSight &&
+                       action.NeedToFaceTarget &&
+                       action.AffectsPosition == profile.SheetAffectsPosition &&
+                       action.BehaviourType == profile.BehaviourType;
+            });
+            if (verified) verifiedBackwardDashActionIds.Add(profile.ActionId);
+        }
+
+        var backwardDashActions = BackwardDashMetadataCatalog.Create(
+            verifiedBackwardDashActionIds);
+
         var redMageGuardEngageVerified = ValidateFeature("Red Mage Guard engage", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
@@ -1597,7 +1644,8 @@ internal static class PvPMetadataGuard
             blackMageFrostStarVerified,
             monkHeldComboVerified,
             ninjaShukuchiHiddenStatuses,
-            smartActionGuardBypassActions);
+            smartActionGuardBypassActions,
+            backwardDashActions);
 
         log.Information(
             "Seiton Sense metadata: Seiton={Seiton}, ViperSerpentTail={ViperSerpentTail}, " +
@@ -1616,7 +1664,8 @@ internal static class PvPMetadataGuard
             "DarkKnightBlackblood={DarkKnightBlackblood}, RedMageGuardEngage={RedMageGuardEngage}, " +
             "RedMageResolution={RedMageResolution}, RedMageViceOfThorns={RedMageViceOfThorns}, " +
             "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}, " +
-            "SmartActionGuardBypassActions={SmartActionGuardBypassActions}.",
+            "SmartActionGuardBypassActions={SmartActionGuardBypassActions}, " +
+            "BackwardDashActions={BackwardDashActions}.",
             validation.SeitonVerified,
             validation.ViperSerpentTailVerified,
             validation.WolvesDenStrikingDummyVerified,
@@ -1653,7 +1702,8 @@ internal static class PvPMetadataGuard
             validation.RedMageViceOfThornsVerified,
             validation.BlackMageFrostStarVerified,
             validation.MonkHeldComboVerified,
-            validation.SmartActionGuardBypassActions.Count);
+            validation.SmartActionGuardBypassActions.Count,
+            validation.BackwardDashActions.Count);
 
         return validation;
     }

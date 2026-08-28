@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.39.0.1
+
+- Expanded the default-off `/seitonbw` macro from NIN Shukuchi to the closed
+  current PvP self-dash catalog: AST Epicycle `41506`, DNC En Avant `29430`,
+  DRG Elusive Jump `29494`, RPR Hell's Ingress `29550`, and PCT Smudge `39210`.
+  NIN retains its exact 19.5-yalm ground-location call. The other jobs align
+  only local character facing immediately before one exact self-action so the
+  native movement travels toward camera screen-back; the camera and targets are
+  never changed. Per-action metadata, unchanged adjusted ID, charge/resources,
+  standard camera state, and a clean immediate native boundary are required.
+  There is no wait, queue, retry, rerank, target search, transformed follow-up,
+  or alternate action. The same-thread Auto-Guard exception is scoped to only
+  the exact matching location or standard-action boundary.
+- Made the Wolves' Den CC rotation deck materially easier to read at 1.0x: panel
+  width increases from 520 to 610 pixels, cards from 66 to 84 pixels high, map
+  names to 17 pixels, and countdown/W-L text to roughly 14-15 pixels. Artwork
+  and the statistics column were widened to keep the larger text separated.
+- Retained configuration schema `44`. Source build, 540 Core tests, safety,
+  package parity, and release verification are automated; current-client dash
+  direction/acceptance and final in-game visual sizing remain live validation.
+
 ## 0.39.0.0
 
 - Added the default-off `/seitonbw` NIN macro command. It reuses Panic

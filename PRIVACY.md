@@ -150,14 +150,13 @@ following data already available in the local FFXIV client:
   state, Kardia readiness and animation lock, and FFXIV's native 30-yalm
   range/line-of-sight result for a frozen non-self candidate;
 - for one explicit `/panicshu` or enabled `/seitonbw` invocation, the exact local
-  NIN identity and position, PvP territory/context, exact Shukuchi metadata/
-  adjusted action,
-  native recast-group/cooldown/resource readiness, and the terrain collision
-  point projected 19.5 yalms straight ahead; `/panicshu` reads character facing,
-  while `/seitonbw` reads the normal gameplay camera's control/zoom mode,
-  event-camera flag, and finite horizontal direction. The commands deliberately
-  do not read Guard, crowd-control, cast, queue, or animation-lock state before
-  their immediate request;
+  identity, job, position/facing, PvP territory/context, startup-verified action
+  metadata, exact adjusted action, native recast/charge/resource readiness, and
+  clean cast/queue/animation boundary; `/panicshu` additionally reads the exact
+  19.5-yalm terrain collision point, while `/seitonbw` reads the normal gameplay
+  camera's control/zoom mode, event-camera flag, and finite horizontal direction.
+  `/seitonbw` may write only local character facing immediately before one
+  reviewed self-dash; it never writes camera or target state;
 - when held DRK Shadowbringer is enabled, the exact local DRK identity, held-key
   ownership, HP, Dark Arts, exact Blackblood status-row presence, incoming
   pressure, own Guard/cast/queue/animation state, native Shadowbringer readiness,
@@ -685,29 +684,31 @@ Help does not initiate, repeat, queue, or retry an action; change
 its ID; or visibly change a hard, soft, or focus target. No observed
 party/action data is persisted or uploaded.
 
-## Explicit manual NIN Panic Shukuchi macros
+## Explicit manual Panic Shukuchi and camera-back dash macros
 
-`/panicshu` and the default-off `/seitonbw` sister are command-only,
+`/panicshu` and the default-off `/seitonbw` command are command-only,
 user-authored macro actions. They have no automatic, pressure, enemy, status, or
 held-key trigger and are not part of the shared held-action scheduler. They run
-only for exact PvP Ninja in Crystalline Conflict, or in the Wolves' Den when the
-existing testing option is enabled. Frontline and Rival Wings are excluded.
+only in Crystalline Conflict, or in Wolves' Den when the existing testing option
+is enabled. `/panicshu` remains exact PvP NIN; `/seitonbw` accepts only the
+closed current PvP self-dash mapping for NIN, AST, DNC, DRG, RPR, and PCT.
+Frontline and Rival Wings are excluded.
 
 `/panicshu` computes only the terrain point 19.5 yalms along the local
-character's current facing. `/seitonbw` computes the same distance in the normal
-gameplay camera's screen-back direction: regular third-person uses the camera
-yaw directly and first-person uses its opposite. It never rotates the camera or
-character. Unavailable/non-finite data and event/cutscene, spectator, aiming, or
-lock-on camera modes refuse the backward command. One invocation then makes at
-most one native
-location-action call in the same command callback. It stores no pending intent
-and has no lease, timer, framework wait, expiry, scheduler/Purify claim, Guard or
-crowd-control gate, or cast/queue/animation-lock gate. It reads only the exact
-adjusted action plus native recast-group/cooldown/resource boundary and reaches
-the location call only when that boundary is positively ready. This is
-intentionally allowed from own Guard so Shukuchi may break it. Three Mudra
-adjusts Shukuchi to Doton, so anything other than exact Shukuchi `29513` still
-blocks the attempt.
+character's current facing. `/seitonbw` resolves screen-back from the normal
+gameplay camera. NIN uses the exact 19.5-yalm terrain point; AST Epicycle `41506`,
+DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell's Ingress `29550`, and
+PCT Smudge `39210` set only local character facing immediately before their one
+native self-action. The camera and targets are never written. Unavailable or
+non-finite data and event/cutscene, spectator, aiming, or lock-on camera modes
+refuse the command. One invocation makes at most one matching native location
+or standard-action call in the same command callback. It stores no pending
+intent and has no lease, timer, framework wait, expiry, scheduler/Purify claim,
+retry, target search, or alternate action. Exact metadata, unchanged base action,
+available charge/resources, and a clean immediate cast/queue/animation boundary
+are required. Transformed actions such as Doton, Wyrmwind Thrust, Retrograde, or
+Regress are never substituted. The exact command may intentionally give up
+plugin-owned Auto-Guard for only its matching same-thread native boundary.
 
 A client rejection, ambiguity, or exception cannot retry. A later macro press is
 a new explicit user command. The helper does not
@@ -723,10 +724,10 @@ origin/destination coordinates, bounded camera diagnostics, native acceptance
 outcome, and aggregate command counters may remain
 in plugin memory for local `/seiton debug` diagnostics until unload; they are not
 persisted or uploaded. Source
-checks cannot establish current-client terrain, line-of-sight, or actual movement
-behavior. Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'
-Den remain a live-validation boundary, and a Den result is not proof of CC
-behavior.
+checks cannot establish current-client terrain, line-of-sight, actor-facing
+application, or actual movement behavior. Four-direction testing for all six
+jobs plus NIN slope/wall/invalid-endpoint cases in Wolves' Den remains a live-
+validation boundary, and a Den result is not proof of CC behavior.
 
 ## Shared held-action scheduler
 
@@ -1224,8 +1225,9 @@ observation, protection follows the status until it ends. An explicit second
 Guard press is blocked for the first two seconds after automatic acceptance. At
 the exact two-second boundary it is allowed again and atomically releases
 ownership whether its incoming or resolved ID is Guard. Manual Guard is observed
-but never owned. The dedicated Panic Shukuchi command scope releases ownership
-before forwarding either location request even if native Shukuchi rejects it.
+but never owned. The dedicated exact command scope releases ownership only for
+the matching NIN location action or reviewed directional standard action, even
+if the native request rejects it.
 Disabled/runtime or context, territory, player,
 identity, and availability drift, unknown or non-PvP action resolution, status
 end, missing propagation, exceptions, and a hard six-second maximum all release
@@ -1557,7 +1559,7 @@ acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
 Critical Strategy, Astrologian held Near Help, and RDM fresh-Guard opt-ins, the
-RDM own-HP/MP thresholds, and the backward Panic Shukuchi command opt-in,
+RDM own-HP/MP thresholds, and the camera-back job dash command opt-in,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer,
   nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,

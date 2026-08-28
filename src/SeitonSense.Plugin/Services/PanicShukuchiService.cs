@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -42,14 +43,14 @@ internal readonly record struct PanicShukuchiDiagnostics(
 
 /// <summary>
 /// Executes the explicit /panicshu command and its default-off /seitonbw sister.
-/// Every invocation computes one exact 19.5-yalm ground point and immediately
-/// makes at most one native UseActionLocation call. /panicshu keeps character
-/// facing; /seitonbw reads only the normal gameplay camera and uses its exact
-/// camera-relative screen-back direction. The shared path deliberately has no scheduler,
-/// Guard/CC gate, Purify priority, cast/queue/animation wait, or pending state,
-/// retry, shorter-point fallback, cursor movement, or target mutation.
-/// A positively ready native cooldown is required before the call so an active
-/// recast cannot start a client-predicted animation which later rolls back.
+/// NIN keeps the exact 19.5-yalm ground-point/UseActionLocation implementation.
+/// AST, DNC, DRG, RPR, and PCT use one reviewed self-action: /seitonbw reads the
+/// normal gameplay camera, writes only the local actor facing required for that
+/// action to travel screen-back, and immediately makes at most one UseAction
+/// call. It never rotates the camera or changes a target. Both branches have no
+/// scheduler, Guard/CC gate, Purify priority, wait, pending state, retry, target
+/// search, or alternate action. Exact current metadata, base-action identity,
+/// charge/resource state, and an immediately clean native boundary are required.
 /// </summary>
 internal sealed class PanicShukuchiService
 {
@@ -73,7 +74,8 @@ internal sealed class PanicShukuchiService
     private readonly IDutyState dutyState;
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
-    private readonly bool metadataVerified;
+    private readonly bool panicShukuchiMetadataVerified;
+    private readonly BackwardDashMetadataCatalog backwardDashMetadata;
 
     private long commandCount;
     private long attemptCount;
@@ -86,6 +88,7 @@ internal sealed class PanicShukuchiService
     private string lastCommand;
     private BackwardPanicShukuchiCameraObservation lastCamera;
     private uint lastAdjustedActionId;
+    private bool lastMetadataVerified;
     private string lastEvent;
 
     internal PanicShukuchiService(
@@ -103,9 +106,11 @@ internal sealed class PanicShukuchiService
         this.dutyState = dutyState;
         this.nearAssist = nearAssist;
         this.log = log;
-        metadataVerified = metadata.PanicShukuchiVerified;
+        panicShukuchiMetadataVerified = metadata.PanicShukuchiVerified;
+        backwardDashMetadata = metadata.BackwardDashActions;
+        lastMetadataVerified = panicShukuchiMetadataVerified;
         lastCommand = "none";
-        lastEvent = metadataVerified
+        lastEvent = panicShukuchiMetadataVerified
             ? "Ready for immediate explicit /panicshu"
             : "Metadata mismatch; disabled";
     }
@@ -118,7 +123,7 @@ internal sealed class PanicShukuchiService
             {
                 return new PanicShukuchiDiagnostics(
                     configuration.Enabled,
-                    metadataVerified,
+                    lastMetadataVerified,
                     configuration.EnableBackwardPanicShukuchiCommand,
                     lastContext,
                     lastOrigin,
@@ -139,8 +144,18 @@ internal sealed class PanicShukuchiService
     internal void Execute(string arguments) =>
         ExecuteImmediate(arguments, DestinationMode.CharacterFacingForward);
 
-    internal void ExecuteBackwardCamera(string arguments) =>
-        ExecuteImmediate(arguments, DestinationMode.CameraFacingBackward);
+    internal void ExecuteBackwardCamera(string arguments)
+    {
+        var local = objectTable.LocalPlayer;
+        if (local?.ClassJob.IsValid == true &&
+            local.ClassJob.RowId == PanicShukuchiRules.NinjaJobId)
+        {
+            ExecuteImmediate(arguments, DestinationMode.CameraFacingBackward);
+            return;
+        }
+
+        ExecuteBackwardDirectional(arguments);
+    }
 
     private unsafe void ExecuteImmediate(string arguments, DestinationMode mode)
     {
@@ -152,6 +167,7 @@ internal sealed class PanicShukuchiService
             commandCount++;
             lastCommand = command;
             lastCamera = default;
+            lastMetadataVerified = panicShukuchiMetadataVerified;
         }
 
         if (!string.IsNullOrWhiteSpace(arguments))
@@ -238,39 +254,7 @@ internal sealed class PanicShukuchiService
                 }
                 else
                 {
-                    var cameraManager = CameraManager.Instance();
-                    Camera* normalCamera = cameraManager != null
-                        ? cameraManager->Camera
-                        : null;
-                    var activeCameraIndex = cameraManager != null
-                        ? cameraManager->ActiveCameraIndex
-                        : -1;
-                    Camera* activeCamera = null;
-                    if (cameraManager != null &&
-                        normalCamera != null &&
-                        activeCameraIndex ==
-                        BackwardPanicShukuchiRules.NormalGameplayCameraIndex)
-                    {
-                        activeCamera = cameraManager->GetActiveCamera();
-                    }
-
-                    cameraObservation = new BackwardPanicShukuchiCameraObservation(
-                        CameraManagerAvailable: cameraManager != null,
-                        NormalCameraAvailable: normalCamera != null,
-                        ActiveCameraMatchesNormal:
-                            normalCamera != null && activeCamera == normalCamera,
-                        ActiveCameraIndex: activeCameraIndex,
-                        ControlMode: normalCamera != null
-                            ? (int)normalCamera->ControlMode
-                            : -1,
-                        ZoomMode: normalCamera != null
-                            ? (int)normalCamera->ZoomMode
-                            : -1,
-                        EventCameraAutoControl:
-                            normalCamera != null && normalCamera->IsEventCameraAutoControl,
-                        DirectionRadians: normalCamera != null
-                            ? normalCamera->DirH
-                            : float.NaN);
+                    cameraObservation = CaptureBackwardCameraObservation();
                     probeCreated =
                         BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(
                             origin,
@@ -308,7 +292,7 @@ internal sealed class PanicShukuchiService
             var decision = PanicShukuchiRules.Evaluate(
                 new PanicShukuchiCommandObservation(
                     configuration.Enabled,
-                    metadataVerified,
+                    panicShukuchiMetadataVerified,
                     context,
                     configuration.EnableWolvesDenTesting,
                     localValid && local!.ClassJob.IsValid ? local.ClassJob.RowId : 0,
@@ -422,6 +406,339 @@ internal sealed class PanicShukuchiService
             {
                 log.Error(exception, "Seiton Sense immediate Panic Shukuchi command failed closed.");
             }
+        }
+    }
+
+    private unsafe void ExecuteBackwardDirectional(string arguments)
+    {
+        lock (diagnosticsGate)
+        {
+            commandCount++;
+            lastCommand = BackwardCameraCommand;
+            lastCamera = default;
+            lastMetadataVerified = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            RecordRefused($"Arguments rejected; use {BackwardCameraCommand} without arguments");
+            return;
+        }
+
+        if (!configuration.Enabled)
+        {
+            RecordRefused("Seiton Sense is disabled");
+            return;
+        }
+
+        if (!configuration.EnableBackwardPanicShukuchiCommand)
+        {
+            RecordRefused("/seitonbw is disabled in Macro Helpers");
+            return;
+        }
+
+        GameObject* nativeLocal = null;
+        var originalHeading = 0f;
+        var facingWritten = false;
+        var nativeBoundaryEntered = false;
+        try
+        {
+            var context = ResolveContext();
+            var local = objectTable.LocalPlayer;
+            var localValid = HasValidLocalIdentity(local) &&
+                             !local!.IsDead &&
+                             local.IsTargetable &&
+                             local.CurrentHp > 0 &&
+                             local.MaxHp >= local.CurrentHp &&
+                             local.ClassJob.IsValid;
+            var localJobId = localValid ? local!.ClassJob.RowId : 0;
+            if (!localValid)
+            {
+                RecordRefused("Local player is unavailable or invalid");
+                return;
+            }
+
+            if (!PanicShukuchiRules.IsSupportedContext(
+                    context,
+                    configuration.EnableWolvesDenTesting))
+            {
+                RecordRefused("/seitonbw is available only in CC or enabled Wolves' Den testing");
+                return;
+            }
+
+            if (!BackwardDashRules.TryGetDirectionalProfile(localJobId, out var profile))
+            {
+                RecordRefused("Current job has no reviewed camera-back self dash");
+                return;
+            }
+
+            var profileMetadataVerified = backwardDashMetadata.Contains(profile.ActionId);
+            lock (diagnosticsGate) lastMetadataVerified = profileMetadataVerified;
+            if (!profileMetadataVerified)
+            {
+                RecordRefused($"{profile.Name} metadata mismatch; this job mapping is disabled");
+                return;
+            }
+
+            var actionManager = ActionManager.Instance();
+            if (actionManager == null)
+            {
+                RecordRefused("Action manager unavailable");
+                return;
+            }
+
+            var cameraObservation = CaptureBackwardCameraObservation();
+            var position = local!.Position;
+            var origin = new PanicShukuchiPoint(position.X, position.Y, position.Z);
+            if (!BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(
+                    origin,
+                    cameraObservation,
+                    out var screenBackHeading,
+                    out _) ||
+                !BackwardDashRules.TryResolveActorFacing(
+                    screenBackHeading,
+                    profile.MovementKind,
+                    out var desiredActorHeading))
+            {
+                RecordRefused("Normal gameplay camera direction is unavailable");
+                return;
+            }
+
+            var adjustedActionId = actionManager->GetAdjustedActionId(profile.ActionId);
+            var readiness = ClientActionAttemptBoundary.Capture(
+                actionManager,
+                profile.ActionId);
+            var recastGroup = actionManager->GetRecastGroup(
+                (int)ActionType.Action,
+                profile.ActionId);
+            var recast = recastGroup == profile.RuntimeRecastGroupIndex
+                ? actionManager->GetRecastGroupDetail(recastGroup)
+                : null;
+            var currentCharges = actionManager->GetCurrentCharges(profile.ActionId);
+            var targetStatus = actionManager->GetActionStatus(
+                ActionType.Action,
+                profile.ActionId,
+                local.GameObjectId,
+                checkRecastActive: true,
+                checkCastingActive: true);
+
+            lock (diagnosticsGate)
+            {
+                lastContext = context;
+                lastOrigin = origin;
+                lastDestination = default;
+                lastCamera = cameraObservation;
+                lastAdjustedActionId = adjustedActionId;
+            }
+
+            if (adjustedActionId != profile.ActionId ||
+                !readiness.IsExactActionReady(profile.ActionId) ||
+                readiness.AnimationLockSeconds >
+                    BackwardDashRules.MaximumImmediateAnimationLockSeconds ||
+                local.IsCasting ||
+                recast == null ||
+                ActionManager.GetAdjustedRecastTime(
+                    ActionType.Action,
+                    profile.ActionId,
+                    true) != profile.AdjustedRecastMilliseconds ||
+                currentCharges is 0 ||
+                currentCharges > profile.MaximumAccessibleCharges ||
+                targetStatus != 0)
+            {
+                RecordRefused($"{profile.Name} is not positively ready for one immediate attempt");
+                return;
+            }
+
+            nativeLocal = (GameObject*)local.Address;
+            if (nativeLocal == null ||
+                nativeLocal->EntityId != local.EntityId ||
+                !float.IsFinite(nativeLocal->Rotation))
+            {
+                RecordRefused("Exact local native actor is unavailable");
+                return;
+            }
+
+            originalHeading = nativeLocal->Rotation;
+            nativeLocal->SetRotation(desiredActorHeading);
+            facingWritten = true;
+            if (!BackwardDashRules.AreHeadingsEquivalent(
+                    nativeLocal->Rotation,
+                    desiredActorHeading))
+            {
+                TryRestoreHeading(nativeLocal, originalHeading);
+                facingWritten = false;
+                RecordRefused("Camera-back actor-facing write was not confirmed");
+                return;
+            }
+
+            var finalLocal = objectTable.LocalPlayer;
+            var before = ClientActionAttemptBoundary.Capture(
+                actionManager,
+                profile.ActionId);
+            var beforeCharges = actionManager->GetCurrentCharges(profile.ActionId);
+            if (!configuration.Enabled ||
+                !configuration.EnableBackwardPanicShukuchiCommand ||
+                ResolveContext() != context ||
+                !HasValidLocalIdentity(finalLocal) ||
+                finalLocal!.Address != local.Address ||
+                finalLocal.GameObjectId != local.GameObjectId ||
+                finalLocal.EntityId != local.EntityId ||
+                !finalLocal.ClassJob.IsValid ||
+                finalLocal.ClassJob.RowId != profile.JobId ||
+                !backwardDashMetadata.Contains(profile.ActionId) ||
+                !before.IsExactActionReady(profile.ActionId) ||
+                before.AnimationLockSeconds >
+                    BackwardDashRules.MaximumImmediateAnimationLockSeconds ||
+                beforeCharges is 0 ||
+                beforeCharges > profile.MaximumAccessibleCharges ||
+                actionManager->GetActionStatus(
+                    ActionType.Action,
+                    profile.ActionId,
+                    local.GameObjectId,
+                    checkRecastActive: true,
+                    checkCastingActive: true) != 0)
+            {
+                TryRestoreHeading(nativeLocal, originalHeading);
+                facingWritten = false;
+                RecordRefused("/seitonbw state changed before its native boundary");
+                return;
+            }
+
+            lock (diagnosticsGate) attemptCount++;
+            bool accepted;
+            try
+            {
+                using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(
+                    profile.ActionId,
+                    ExplicitAutoGuardBreakBoundary.StandardAction);
+                nativeBoundaryEntered = true;
+                accepted = nearAssist.RunWithoutRedirect(() =>
+                    actionManager->UseAction(
+                        ActionType.Action,
+                        profile.ActionId,
+                        local.GameObjectId,
+                        0,
+                        ActionManager.UseActionMode.None,
+                        0));
+            }
+            catch (Exception exception)
+            {
+                lock (diagnosticsGate)
+                {
+                    rejectedCount++;
+                    lastEvent = $"Immediate /seitonbw {profile.Name} native call threw; acceptance unknown";
+                }
+
+                log.Error(
+                    exception,
+                    "Seiton Sense immediate /seitonbw {ActionName} native call failed.",
+                    profile.Name);
+                return;
+            }
+
+            var after = ClientActionAttemptBoundary.Capture(
+                actionManager,
+                profile.ActionId);
+            var afterCharges = actionManager->GetCurrentCharges(profile.ActionId);
+            var outcome = ClientActionAttemptBoundaryRules.Classify(
+                accepted,
+                profile.ActionId,
+                before,
+                after);
+            if (!accepted &&
+                outcome == ClientActionAttemptOutcome.ClientRejected &&
+                afterCharges != beforeCharges)
+            {
+                outcome = ClientActionAttemptOutcome.AcceptanceUnknown;
+            }
+            if (outcome == ClientActionAttemptOutcome.ClientRejected)
+            {
+                TryRestoreHeading(nativeLocal, originalHeading);
+                facingWritten = false;
+            }
+
+            lock (diagnosticsGate)
+            {
+                if (accepted)
+                {
+                    acceptedCount++;
+                    lastEvent = $"Immediate /seitonbw {profile.Name} accepted";
+                }
+                else
+                {
+                    rejectedCount++;
+                    lastEvent = $"Immediate /seitonbw {profile.Name} returned {outcome}";
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            if (facingWritten && !nativeBoundaryEntered)
+                TryRestoreHeading(nativeLocal, originalHeading);
+
+            lock (diagnosticsGate)
+            {
+                refusedCount++;
+                lastEvent = nativeBoundaryEntered
+                    ? "Immediate /seitonbw directional validation faulted after native entry"
+                    : "Immediate /seitonbw directional validation failed closed";
+            }
+
+            log.Error(
+                exception,
+                "Seiton Sense immediate directional /seitonbw command failed closed.");
+        }
+    }
+
+    private static unsafe BackwardPanicShukuchiCameraObservation
+        CaptureBackwardCameraObservation()
+    {
+        var cameraManager = CameraManager.Instance();
+        Camera* normalCamera = cameraManager != null
+            ? cameraManager->Camera
+            : null;
+        var activeCameraIndex = cameraManager != null
+            ? cameraManager->ActiveCameraIndex
+            : -1;
+        Camera* activeCamera = null;
+        if (cameraManager != null &&
+            normalCamera != null &&
+            activeCameraIndex == BackwardPanicShukuchiRules.NormalGameplayCameraIndex)
+        {
+            activeCamera = cameraManager->GetActiveCamera();
+        }
+
+        return new BackwardPanicShukuchiCameraObservation(
+            CameraManagerAvailable: cameraManager != null,
+            NormalCameraAvailable: normalCamera != null,
+            ActiveCameraMatchesNormal:
+                normalCamera != null && activeCamera == normalCamera,
+            ActiveCameraIndex: activeCameraIndex,
+            ControlMode: normalCamera != null
+                ? (int)normalCamera->ControlMode
+                : -1,
+            ZoomMode: normalCamera != null
+                ? (int)normalCamera->ZoomMode
+                : -1,
+            EventCameraAutoControl:
+                normalCamera != null && normalCamera->IsEventCameraAutoControl,
+            DirectionRadians: normalCamera != null
+                ? normalCamera->DirH
+                : float.NaN);
+    }
+
+    private static unsafe void TryRestoreHeading(
+        GameObject* local,
+        float originalHeading)
+    {
+        if (local == null || !float.IsFinite(originalHeading)) return;
+        try
+        {
+            local->SetRotation(originalHeading);
+        }
+        catch
+        {
+            // A best-effort facing restore must never create a second action.
         }
     }
 

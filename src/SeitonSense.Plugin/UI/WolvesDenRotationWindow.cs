@@ -97,10 +97,10 @@ internal sealed class WolvesDenRotationWindow : Window
         var scale = Math.Clamp(configuration.WolvesDenRotationPanelScale, 0.75f, 1.75f);
         var globalScale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
         var uiScale = scale * globalScale;
-        var width = 520f * uiScale;
+        var width = 610f * uiScale;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        ImGui.SetWindowFontScale(scale);
+        ImGui.SetWindowFontScale(scale * 1.08f);
         ImGui.TextColored(new Vector4(0.36f, 0.88f, 1f, 1f), "CC MAP ROTATION");
         ImGui.SameLine();
         ImGui.TextDisabled("LOCAL / OFFLINE");
@@ -212,8 +212,8 @@ internal sealed class WolvesDenRotationWindow : Window
         float uiScale)
     {
         const int cardCount = CrystallineConflictRotationRules.ArenaCount;
-        var cardHeight = 66f * uiScale;
-        var cardGap = 6f * uiScale;
+        var cardHeight = 84f * uiScale;
+        var cardGap = 7f * uiScale;
         var cardStride = cardHeight + cardGap;
         var stackHeight = (cardHeight * cardCount) + (cardGap * (cardCount - 1));
         var origin = ImGui.GetCursorScreenPos();
@@ -287,7 +287,7 @@ internal sealed class WolvesDenRotationWindow : Window
         var artworkPadding = 5f * uiScale;
         var artworkMinimum = minimum + new Vector2(artworkPadding, artworkPadding);
         var artworkMaximum = new Vector2(
-            minimum.X + (210f * uiScale),
+            minimum.X + (225f * uiScale),
             maximum.Y - artworkPadding);
         if (!TryDrawArenaArtwork(draw, arena, artworkMinimum, artworkMaximum, current ? 1f : 0.78f))
         {
@@ -306,12 +306,12 @@ internal sealed class WolvesDenRotationWindow : Window
             Pack(new Vector4(0.01f, 0.02f, 0.04f, current ? 0.08f : 0.20f)),
             3f * uiScale);
 
-        var textLeft = artworkMaximum.X + (10f * uiScale);
-        var namePosition = new Vector2(textLeft, minimum.Y + (10f * uiScale));
-        var sequencePosition = new Vector2(textLeft, minimum.Y + (40f * uiScale));
+        var textLeft = artworkMaximum.X + (12f * uiScale);
+        var namePosition = new Vector2(textLeft, minimum.Y + (13f * uiScale));
+        var sequencePosition = new Vector2(textLeft, minimum.Y + (53f * uiScale));
         var font = ImGui.GetFont();
-        var nameFontSize = Math.Max(11f, 12.5f * uiScale);
-        var sequenceFontSize = Math.Max(9.5f, 10.5f * uiScale);
+        var nameFontSize = Math.Max(12.75f, 17f * uiScale);
+        var sequenceFontSize = Math.Max(10.5f, 14f * uiScale);
         draw.AddText(
             font,
             nameFontSize,
@@ -344,11 +344,13 @@ internal sealed class WolvesDenRotationWindow : Window
         var rateText = hasStatistics
             ? CrystallineConflictMapStatisticsRules.FormatWinRate(statistics)
             : string.Empty;
-        var statisticsLeft = maximum.X - (104f * uiScale);
+        var recordFontSize = Math.Max(11.25f, 15f * uiScale);
+        var rateFontSize = Math.Max(10.25f, 13.5f * uiScale);
+        var statisticsLeft = maximum.X - (136f * uiScale);
         draw.AddText(
             font,
-            sequenceFontSize,
-            new Vector2(statisticsLeft, minimum.Y + (10f * uiScale)),
+            recordFontSize,
+            new Vector2(statisticsLeft, minimum.Y + (13f * uiScale)),
             Pack(hasStatistics
                 ? new Vector4(0.84f, 0.94f, 0.98f, 1f)
                 : new Vector4(0.48f, 0.54f, 0.62f, 1f)),
@@ -357,8 +359,8 @@ internal sealed class WolvesDenRotationWindow : Window
         {
             draw.AddText(
                 font,
-                sequenceFontSize,
-                new Vector2(statisticsLeft, minimum.Y + (40f * uiScale)),
+                rateFontSize,
+                new Vector2(statisticsLeft, minimum.Y + (53f * uiScale)),
                 Pack(current
                     ? new Vector4(0.36f, 0.88f, 1f, 1f)
                     : new Vector4(0.55f, 0.68f, 0.76f, 1f)),

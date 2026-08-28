@@ -14,6 +14,12 @@ using GameAction = Lumina.Excel.Sheets.Action;
 
 namespace SeitonSense.Plugin.Services;
 
+internal enum ExplicitAutoGuardBreakBoundary : byte
+{
+    StandardAction = 1,
+    LocationAction = 2,
+}
+
 internal enum NearAssistArmOutcome
 {
     Armed,
@@ -1072,19 +1078,29 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     /// Guard. The scope stays separate from the generic redirect bypass so no
     /// other location action inherits the override.
     /// </summary>
-    internal IDisposable EnterExplicitAutoGuardBreak(uint expectedActionId)
+    internal IDisposable EnterExplicitAutoGuardBreak(
+        uint expectedActionId,
+        ExplicitAutoGuardBreakBoundary boundary =
+            ExplicitAutoGuardBreakBoundary.LocationAction)
     {
-        if (expectedActionId != PanicShukuchiRules.ActionId)
+        var exactLocationShukuchi =
+            boundary == ExplicitAutoGuardBreakBoundary.LocationAction &&
+            expectedActionId == PanicShukuchiRules.ActionId;
+        var exactDirectionalDash =
+            boundary == ExplicitAutoGuardBreakBoundary.StandardAction &&
+            BackwardDashRules.IsReviewedDirectionalAction(expectedActionId);
+        if (!exactLocationShukuchi && !exactDirectionalDash)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(expectedActionId),
                 expectedActionId,
-                "Only exact PvP Shukuchi may explicitly break Auto-Guard ownership.");
+                "Only an exact reviewed /panicshu or /seitonbw action boundary may break Auto-Guard ownership.");
         }
 
         var scope = new ExplicitAutoGuardBreakScope(
             this,
             expectedActionId,
+            boundary,
             Environment.CurrentManagedThreadId);
         if (Interlocked.CompareExchange(
                 ref explicitAutoGuardBreakScope,
@@ -1347,8 +1363,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         // This runs before any redirect/token work. A random action cannot both
         // cancel an automatically owned Guard and consume a macro one-shot.
-        if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
+        if (TryConsumeExplicitAutoGuardBreak(
+                actionType,
+                actionId,
+                ExplicitAutoGuardBreakBoundary.StandardAction))
+        {
+            ClearAutoGuardProtection("Released: explicit camera-back dash command override");
+        }
+        else if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
+        {
             return false;
+        }
 
         var bypassRedirect = internalRedirectBypassDepth > 0;
         var inspectedSmartActionTargetId = targetId;
@@ -2119,7 +2144,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint extraParam,
         byte a7)
     {
-        if (TryConsumeExplicitAutoGuardBreak(actionType, actionId))
+        if (TryConsumeExplicitAutoGuardBreak(
+                actionType,
+                actionId,
+                ExplicitAutoGuardBreakBoundary.LocationAction))
         {
             // Spending the explicit command gives up ownership before the native
             // call, even if Shukuchi is then rejected. The scope is consumed and
@@ -2496,13 +2524,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private bool TryConsumeExplicitAutoGuardBreak(
         ActionType actionType,
-        uint actionId)
+        uint actionId,
+        ExplicitAutoGuardBreakBoundary boundary)
     {
         var scope = Volatile.Read(ref explicitAutoGuardBreakScope);
         if (scope is null ||
             !ReferenceEquals(scope.Owner, this) ||
             scope.ManagedThreadId != Environment.CurrentManagedThreadId ||
-            scope.ExpectedActionId != PanicShukuchiRules.ActionId ||
+            scope.Boundary != boundary ||
             actionType != ActionType.Action ||
             actionId != scope.ExpectedActionId ||
             !scope.TryConsume())
@@ -4713,12 +4742,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private sealed class ExplicitAutoGuardBreakScope(
         NearAssistRedirector owner,
         uint expectedActionId,
+        ExplicitAutoGuardBreakBoundary boundary,
         int managedThreadId) : IDisposable
     {
         private int consumedOrDisposed;
 
         internal NearAssistRedirector Owner { get; } = owner;
         internal uint ExpectedActionId { get; } = expectedActionId;
+        internal ExplicitAutoGuardBreakBoundary Boundary { get; } = boundary;
         internal int ManagedThreadId { get; } = managedThreadId;
 
         internal bool TryConsume() =>

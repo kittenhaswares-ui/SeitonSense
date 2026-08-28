@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.39.0.0";
+    private const string CurrentReleaseVersion = "0.39.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -373,9 +373,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New default-off /seitonbw: one immediate NIN Shukuchi exactly 19.5 yalms in the normal camera's screen-back direction. It rotates nothing, changes no target, and has no pending state, fallback, or retry.",
-                "New default-off RDM fresh-Guard engage: held consent may use Corps-a-corps during the first second of one newly observed enemy Guard when exact Riposte readiness and your configurable HP/MP limits agree. It freezes one actor and never performs the melee follow-up.",
-                "The Wolves' Den rotation panel is now one larger always-visible seven-card deck with fail-closed local per-character W/L for future exact public CC results. Local capture has its own default-on toggle and safe clear control. It stores no names or raw Content IDs and makes no network request. Configuration schema 44 is current; live validation remains separate.",
+                "/seitonbw now uses the matching camera-back self dash on NIN, AST, DNC, DRG, RPR, and PCT. It changes no target, never moves the camera, makes one immediate attempt, and remains default-off.",
+                "The Wolves' Den rotation deck is substantially larger and more readable: wider cards, taller artwork, 17-pixel map names, and larger countdown and W/L text at 1.0x.",
+                "RDM fresh-Guard engage and local per-map W/L remain unchanged. Configuration schema 44 is current; current-patch dash direction and the new visual sizing still require in-game confirmation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -585,14 +585,14 @@ public sealed class Plugin : IDalamudPlugin
             {
                 AllowedInMacros = true,
                 HelpMessage =
-                    "Default-off NIN-only sister command: immediately try one PvP Shukuchi exactly 19.5 yalms " +
-                    "in the normal gameplay camera's screen-back direction, without rotating camera/character or changing target.",
+                    "Default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT: immediately try the " +
+                    "job's reviewed PvP self dash without moving the camera or changing target.",
             });
         if (!backwardPanicShukuchiCommandRegistered)
         {
-            log.Warning("/seitonbw is already owned by another plugin; backward Panic Shukuchi remains unavailable.");
+            log.Warning("/seitonbw is already owned by another plugin; camera-back dash remains unavailable.");
             chatGui.PrintError(
-                "[Seiton Sense] /seitonbw is owned by another plugin. Disable the conflict and reload before using backward Panic Shukuchi.");
+                "[Seiton Sense] /seitonbw is owned by another plugin. Disable the conflict and reload before using the camera-back dash.");
         }
 
         pressureCommandRegistered = commandManager.AddHandler(
@@ -1274,8 +1274,8 @@ public sealed class Plugin : IDalamudPlugin
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
-            "/seitonbw is its default-off Macro Helpers sister and makes the same one immediate attempt exactly " +
-            "19.5 yalms behind the current normal gameplay camera, without rotating it or changing target. " +
+            "/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT. It immediately " +
+            "uses the job's reviewed self dash without moving the camera or changing target. " +
             "/autoseiton [on|off|toggle] controls whether held-key NIN Auto-Seiton is available. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");

@@ -174,26 +174,27 @@ internal sealed partial class SettingsWindow
 
         ImGui.Spacing();
         changed |= Checkbox(
-            "Enable /seitonbw backward-camera Panic Shukuchi",
+            "Enable /seitonbw camera-back job dash",
             configuration.EnableBackwardPanicShukuchiCommand,
             value => configuration.EnableBackwardPanicShukuchiCommand = value);
-        if (ImGui.CollapsingHeader("Backward Panic Shukuchi — camera-back ground jump", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Camera-back dash — NIN / AST / DNC / DRG / RPR / PCT", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextUnformatted("Use this single macro line:");
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbw");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "This default-off NIN command uses the same immediate safety and native Shukuchi boundary as /panicshu, " +
-                "but freezes one terrain point exactly 19.5 yalms in the current camera's screen-back direction. " +
-                "It does not rotate the camera or character and never reads, changes, or substitutes your hard target.");
+                "This default-off command makes one immediate camera-back escape with the current job's reviewed PvP " +
+                "self dash: NIN Shukuchi, AST Epicycle, DNC En Avant, DRG Elusive Jump, RPR Hell's Ingress, or PCT Smudge. " +
+                "It never rotates the camera and never reads, changes, or substitutes your hard target.");
             ImGui.TextDisabled(
                 "Normal first-person and regular third-person camera modes are supported. Missing or non-finite camera " +
-                "data, a cutscene/event, spectator, aiming, or lock-on camera, invalid terrain, transformed Shukuchi, " +
-                "or a non-ready native cooldown ends that command without an action.");
+                "data, a cutscene/event, spectator, aiming, or lock-on camera, an unreviewed job, transformed action, " +
+                "occupied action boundary, or non-ready native charge ends that command without an action.");
             ImGui.TextDisabled(
                 "Crystalline Conflict is supported directly; Wolves' Den still requires the Start-page testing option. " +
-                "Like /panicshu, this explicit command may break your own Guard and makes at most one immediate location " +
-                "request. It has no queue, pending lease, retry, shorter fallback, or later replay.");
+                "The command may deliberately break your own Guard and makes at most one immediate native request. NIN " +
+                "keeps its exact 19.5-yalm ground point; the other jobs briefly align only character facing so their native " +
+                "forward/backward dash travels screen-back. It has no queue, pending lease, retry, fallback, or later replay.");
             ImGui.PopTextWrapPos();
         }
 

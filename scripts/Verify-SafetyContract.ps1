@@ -31,6 +31,9 @@ $crystallineConflictMapStatisticsServicePath = Join-Path $pluginServicesRoot 'Cr
 $crystallineConflictMapResultPacketPath = Join-Path $pluginServicesRoot 'CrystallineConflictMapResultPacket.cs'
 $backwardPanicShukuchiRulesPath = Join-Path $coreRoot 'BackwardPanicShukuchiRules.cs'
 $backwardPanicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'BackwardPanicShukuchiSelfTests.cs'
+$backwardDashRulesPath = Join-Path $coreRoot 'BackwardDashRules.cs'
+$backwardDashSelfTestsPath = Join-Path $coreSelfTestRoot 'BackwardDashSelfTests.cs'
+$backwardDashMetadataCatalogPath = Join-Path $pluginServicesRoot 'BackwardDashMetadataCatalog.cs'
 $ninjaGuardShukuchiProbePath = Join-Path $pluginServicesRoot 'NinjaGuardShukuchiProbe.cs'
 $redMageGuardEngageProbePath = Join-Path $pluginServicesRoot 'RedMageGuardEngageProbe.cs'
 $ninjaGuardShukuchiRulesPath = Join-Path $coreRoot 'NinjaGuardShukuchiRules.cs'
@@ -713,7 +716,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 537-test registry.
+# 540-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -733,11 +736,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 496 -or
+if ($staticIntegratedTestCount -ne 499 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 537 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 540 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -745,7 +748,7 @@ if ($staticIntegratedTestCount -ne 496 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 44 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 537-test combined Core registry.'
+    throw 'Schema 44 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 540-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -892,7 +895,10 @@ if ($crystallineConflictMapStatisticsService -match '\b(HttpClient|WebRequest|So
     throw 'Local CC map statistics must have no network or character-name fallback/data path.'
 }
 Assert-Literals $wolvesDenRotationWindow @(
-    'var width = 520f * uiScale;',
+    'var width = 610f * uiScale;',
+    'var cardHeight = 84f * uiScale;',
+    'var nameFontSize = Math.Max(12.75f, 17f * uiScale);',
+    'var recordFontSize = Math.Max(11.25f, 15f * uiScale);',
     'IPlayerState playerState',
     'ITextureProvider textureProvider',
     'CrystallineConflictMapStatisticsService mapStatistics',
@@ -1886,9 +1892,12 @@ if ($autoLowMpFocusTypeReferences.Count -ne 4 -or
 
 $panicShukuchiRules = Read-RequiredSource $panicShukuchiRulesPath 'Panic Shukuchi rules'
 $backwardPanicShukuchiRules = Read-RequiredSource $backwardPanicShukuchiRulesPath 'Backward Panic Shukuchi camera rules'
+$backwardDashRules = Read-RequiredSource $backwardDashRulesPath 'Directional backward dash rules'
 $panicShukuchiService = Read-RequiredSource $panicShukuchiServicePath 'Panic Shukuchi service'
 $panicShukuchiSelfTests = Read-RequiredSource $panicShukuchiSelfTestsPath 'Panic Shukuchi self-tests'
 $backwardPanicShukuchiSelfTests = Read-RequiredSource $backwardPanicShukuchiSelfTestsPath 'Backward Panic Shukuchi self-tests'
+$backwardDashSelfTests = Read-RequiredSource $backwardDashSelfTestsPath 'Directional backward dash self-tests'
+$backwardDashMetadataCatalog = Read-RequiredSource $backwardDashMetadataCatalogPath 'Directional backward dash metadata catalog'
 $panicShukuchiProgram = Read-RequiredSource (
     Join-Path $coreSelfTestRoot 'Program.cs') 'Panic Shukuchi test registry'
 $panicShukuchiMetadata = Read-RequiredSource (
@@ -1901,6 +1910,7 @@ $panicShukuchiMacroUi = Read-RequiredSource (
     Join-Path $sourceRoot 'SeitonSense.Plugin\UI\Settings\SettingsWindow.Macros.cs') 'Panic Shukuchi macro settings UI'
 $normalizedPanicShukuchiRules = $panicShukuchiRules -replace '\s+', ' '
 $normalizedBackwardPanicShukuchiRules = $backwardPanicShukuchiRules -replace '\s+', ' '
+$normalizedBackwardDashRules = $backwardDashRules -replace '\s+', ' '
 $normalizedPanicShukuchiService = $panicShukuchiService -replace '\s+', ' '
 $normalizedPanicShukuchiPlugin = $pluginSource -replace '\s+', ' '
 
@@ -1971,21 +1981,54 @@ if ($backwardPanicShukuchiRules -match '\b(?:UseAction|UseActionLocation)\s*\(|\
     throw 'Backward Panic Shukuchi must accept only a finite normal first/third-person camera snapshot and derive one exact mode-correct 19.5-yalm screen-back Core probe without native, target, clock, scheduler, or fallback APIs.'
 }
 
+Assert-Literals $backwardDashRules @(
+    'public enum BackwardDashMovementKind : byte',
+    'ForwardFromActorFacing = 1',
+    'BackwardFromActorFacing = 2',
+    'AstrologianJobId = 33',
+    '41_506,',
+    '"Epicycle"',
+    'DancerJobId = 38',
+    '29_430,',
+    '"En Avant"',
+    'DragoonJobId = 22',
+    '29_494,',
+    '"Elusive Jump"',
+    'ReaperJobId = 39',
+    '29_550,',
+    '"Hell''s Ingress"',
+    'PictomancerJobId = 42',
+    '39_210,',
+    '"Smudge"',
+    'MaximumImmediateAnimationLockSeconds = 0.05f',
+    'public static bool TryResolveActorFacing(',
+    'screenBackHeadingRadians + MathF.PI',
+    'public static bool IsReviewedDirectionalAction(uint actionId)'
+) 'Closed five-job directional /seitonbw catalog and heading policy'
+if ([regex]::Matches($backwardDashRules, 'new\(').Count -ne 5 -or
+    $backwardDashRules -match '\b(?:UseAction|UseActionLocation|ActionManager|GameObject|IPlayerCharacter|CameraManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $normalizedBackwardDashRules -match '\b(?:29_399|29_700|29_551|41_507|29_513)\b') {
+    throw 'Directional /seitonbw Core rules must remain a pure closed five-self-dash catalog, excluding hostile-target backsteps, stored returns, and NIN location dispatch.'
+}
+
 Assert-Literals $panicShukuchiService @(
     'internal const string Command = "/panicshu"',
     'internal const string BackwardCameraCommand = "/seitonbw"',
     'Executes the explicit /panicshu command and its default-off /seitonbw sister.',
-    'makes at most one native UseActionLocation call.',
-    'The shared path deliberately has no scheduler',
+    'immediately makes at most one UseAction',
+    'Both branches have no',
     'private const ulong DefaultTargetSentinel = 0xE0000000UL',
     'private const float GroundProbeStartAboveYalms = 5f',
     'private const float GroundProbeMaximumDistanceYalms = 10f',
     'metadata.PanicShukuchiVerified',
     'internal void Execute(string arguments) =>',
     'ExecuteImmediate(arguments, DestinationMode.CharacterFacingForward);',
-    'internal void ExecuteBackwardCamera(string arguments) =>',
+    'internal void ExecuteBackwardCamera(string arguments)',
+    'local.ClassJob.RowId == PanicShukuchiRules.NinjaJobId',
     'ExecuteImmediate(arguments, DestinationMode.CameraFacingBackward);',
+    'ExecuteBackwardDirectional(arguments);',
     'private unsafe void ExecuteImmediate(string arguments, DestinationMode mode)',
+    'private unsafe void ExecuteBackwardDirectional(string arguments)',
     'configuration.EnableBackwardPanicShukuchiCommand',
     'CameraManager.Instance()',
     'cameraManager->GetActiveCamera()',
@@ -2012,6 +2055,12 @@ Assert-Literals $panicShukuchiService @(
     'lock (diagnosticsGate) attemptCount++',
     'using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(',
     'actionManager->UseActionLocation(',
+    'nativeLocal->SetRotation(desiredActorHeading);',
+    'BackwardDashRules.TryResolveActorFacing(',
+    'ClientActionAttemptBoundaryRules.Classify(',
+    'ExplicitAutoGuardBreakBoundary.StandardAction',
+    'nearAssist.RunWithoutRedirect(() =>',
+    'actionManager->UseAction(',
     'ActionType.Action',
     'PanicShukuchiRules.ActionId',
     'DefaultTargetSentinel',
@@ -2021,18 +2070,40 @@ Assert-Literals $panicShukuchiService @(
     'Immediate /seitonbw native Shukuchi rejected',
     'mode=immediate'
 ) 'Explicit manual Panic Shukuchi runtime boundary'
+$panicImmediateMatch = [regex]::Match(
+    $panicShukuchiService,
+    '(?s)private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?(?=\r?\n    private unsafe void ExecuteBackwardDirectional)')
+$backwardDirectionalMatch = [regex]::Match(
+    $panicShukuchiService,
+    '(?s)private unsafe void ExecuteBackwardDirectional\(string arguments\).*?(?=\r?\n    private static unsafe BackwardPanicShukuchiCameraObservation)')
+if (-not $panicImmediateMatch.Success -or -not $backwardDirectionalMatch.Success) {
+    throw 'The NIN location and directional /seitonbw command boundaries could not be isolated.'
+}
+$panicImmediate = $panicImmediateMatch.Value
+$backwardDirectional = $backwardDirectionalMatch.Value
+$normalizedBackwardDirectional = $backwardDirectional -replace '\s+', ' '
 if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -ne 1 -or
-    [regex]::Matches($panicShukuchiService, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
+    [regex]::Matches($panicShukuchiService, '(?<!Location)\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bRaycastMaterialFilter\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bGetActiveCamera\s*\(').Count -ne 1 -or
-    [regex]::Matches($panicShukuchiService, '\bTryCreateBackwardCameraProbe\s*\(').Count -ne 1 -or
-    [regex]::Matches($panicShukuchiService, '\bunsafe\b').Count -ne 1 -or
-    $panicShukuchiService -match '(?-i:\b(?:IFramework|IKeyState|VirtualKey|TargetPressureTracker|Hook<|HookFromAddress|IGameInteropProvider|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction|OnFrameworkUpdate|IsPurifyPriorityClaimed|IsLocalGuardActiveOrPropagatingForPanicShukuchi|PanicShukuchiPending|MaximumPendingMilliseconds|ClientActionAttemptBoundaryRules|LastUsedActionSequence|CheckActionResources|GetActionStatus)\b)|\.(?:StatusList|CastActionId|ActionQueued|AnimationLockSeconds)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
+    [regex]::Matches($panicShukuchiService, '\bTryCreateBackwardCameraProbe\s*\(').Count -ne 2 -or
+    [regex]::Matches($panicShukuchiService, '->SetRotation\s*\(').Count -ne 2 -or
+    $panicShukuchiService -match '(?-i:\b(?:IFramework|IKeyState|VirtualKey|TargetPressureTracker|Hook<|HookFromAddress|IGameInteropProvider|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction|OnFrameworkUpdate|PanicShukuchiPending|MaximumPendingMilliseconds)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
     $panicShukuchiService -match '\b(?:Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $panicShukuchiService -match '\b(?:IChatGui|chatGui|PrintError)\b' -or
     $panicShukuchiService -match '->(?:DirH|DirV|ControlMode|ZoomMode|IsEventCameraAutoControl|ActiveCameraIndex)\s*=(?!=|>)' -or
     $panicShukuchiService -match '\b(?:for|foreach|while|do)\s*\(') {
-    throw 'Panic Shukuchi must remain one chat-silent immediate location call with only its positive native readiness precheck and no scheduler/Guard/CC gate, hook, target/cursor mutation, loop, retry, or fallback search.'
+    throw 'The two explicit dash paths must remain chat-silent, loop-free, immediate one-call commands with no scheduler, input injection, target mutation, retry, or fallback search.'
+}
+if ([regex]::Matches($panicImmediate, '\bUseActionLocation\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicImmediate, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
+    $panicImmediate -match '\b(?:SetRotation|ClientActionAttemptBoundaryRules|GetActionStatus|RunWithoutRedirect)\b') {
+    throw 'The original NIN ground-location path must remain unchanged by directional actor-facing dispatch.'
+}
+if ([regex]::Matches($backwardDirectional, '(?<!Location)\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($backwardDirectional, '\bUseActionLocation\s*\(').Count -ne 0 -or
+    $normalizedBackwardDirectional -notmatch 'TryGetDirectionalProfile\(localJobId, out var profile\).*?backwardDashMetadata\.Contains\(profile\.ActionId\).*?TryCreateBackwardCameraProbe\(.*?TryResolveActorFacing\(.*?GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
+    throw 'Directional /seitonbw must freeze one reviewed base action, positively verify readiness/charge/camera/facing, make one exact self-action call, and restore facing only on a proven clean rejection.'
 }
 $panicDecisionIndex = $panicShukuchiService.IndexOf(
     'var decision = PanicShukuchiRules.Evaluate(',
@@ -2046,7 +2117,7 @@ $panicNativeCallIndex = $panicShukuchiService.IndexOf(
 if ($panicDecisionIndex -lt 0 -or $panicAttemptCountIndex -lt 0 -or
     $panicNativeCallIndex -lt 0 -or $panicDecisionIndex -ge $panicAttemptCountIndex -or
     $panicAttemptCountIndex -ge $panicNativeCallIndex -or
-    $normalizedPanicShukuchiService -notmatch 'private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?var adjustedActionId = actionManager->GetAdjustedActionId\( PanicShukuchiRules\.ActionId\);.*?var readiness = ClientActionAttemptBoundary\.Capture\(.*?var recastGroup = actionManager->GetRecastGroup\(.*?recast->IsActive.*?GetAdjustedRecastTime\(.*?ExpectedAdjustedRecastMilliseconds.*?if \(mode == DestinationMode\.CharacterFacingForward\).*?CameraManager\.Instance\(\).*?cameraManager->GetActiveCamera\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\(.*?BGCollisionModule\.RaycastMaterialFilter\(.*?var decision = PanicShukuchiRules\.Evaluate\(.*?if \(mode == DestinationMode\.CameraFacingBackward && !configuration\.EnableBackwardPanicShukuchiCommand\).*?lock \(diagnosticsGate\) attemptCount\+\+; bool accepted; try \{ using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\( PanicShukuchiRules\.ActionId\); accepted = actionManager->UseActionLocation\(') {
+    ($panicImmediate -replace '\s+', ' ') -notmatch 'private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?var adjustedActionId = actionManager->GetAdjustedActionId\( PanicShukuchiRules\.ActionId\);.*?var readiness = ClientActionAttemptBoundary\.Capture\(.*?var recastGroup = actionManager->GetRecastGroup\(.*?recast->IsActive.*?GetAdjustedRecastTime\(.*?ExpectedAdjustedRecastMilliseconds.*?if \(mode == DestinationMode\.CharacterFacingForward\).*?CaptureBackwardCameraObservation\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\(.*?BGCollisionModule\.RaycastMaterialFilter\(.*?var decision = PanicShukuchiRules\.Evaluate\(.*?if \(mode == DestinationMode\.CameraFacingBackward && !configuration\.EnableBackwardPanicShukuchiCommand\).*?lock \(diagnosticsGate\) attemptCount\+\+; bool accepted; try \{ using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\( PanicShukuchiRules\.ActionId\); accepted = actionManager->UseActionLocation\(') {
     throw 'Both explicit Panic Shukuchi commands must share one synchronous readiness, exact geometry, terrain, accounting, Guard-release, and native location boundary.'
 }
 
@@ -2070,6 +2141,26 @@ Assert-Literals $panicShukuchiMetadata @(
     'action.AffectsPosition',
     'Action changes to Doton while under the effect of Three Mudra.'
 ) 'Current-patch Panic Shukuchi metadata gate'
+Assert-Literals $panicShukuchiMetadata @(
+    'BackwardDashMetadataCatalog BackwardDashActions',
+    'foreach (var profile in BackwardDashRules.DirectionalProfiles)',
+    'ValidateFeature($"Backward dash {profile.Name}"',
+    'action.ClassJob.RowId == profile.JobId',
+    'action.Recast100ms == profile.Recast100Milliseconds',
+    'action.CooldownGroup == profile.SheetCooldownGroup',
+    'action.AdditionalCooldownGroup ==',
+    'action.CanTargetSelf',
+    '!action.CanTargetHostile',
+    'action.AffectsPosition == profile.SheetAffectsPosition',
+    'action.BehaviourType == profile.BehaviourType',
+    'BackwardDashMetadataCatalog.Create('
+) 'Independent per-row current-patch directional dash metadata gates'
+Assert-Literals $backwardDashMetadataCatalog @(
+    'internal static BackwardDashMetadataCatalog Empty { get; } = new([]);',
+    '.Distinct()',
+    '.OrderBy(actionId => actionId)',
+    'Array.BinarySearch(actionIds, actionId) >= 0'
+) 'Immutable exact directional dash metadata allowlist'
 $panicShukuchiMetadataBlock = [regex]::Match(
     $panicShukuchiMetadata,
     '(?s)        var panicShukuchiVerified = ValidateFeature\("Panic Shukuchi".*?(?=\r?\n        var ninjaShukuchiHiddenStatuses =)')
@@ -2099,9 +2190,9 @@ Assert-Literals $pluginSource @(
     'commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand)',
     'panic-shukuchi[cmd={panicShukuchiCommandRegistered}',
     'bw-cmd={backwardPanicShukuchiCommandRegistered}',
-    '/seitonbw is its default-off Macro Helpers sister',
+    '/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT.',
     '/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead'
-) 'Two command-only immediate Panic Shukuchi entry points'
+) 'Two command-only immediate explicit dash entry points'
 if ($normalizedPanicShukuchiPlugin -notmatch 'panicShukuchi = new PanicShukuchiService\( configuration, clientState, objectTable, dutyState, nearAssist, log, metadata\);.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?backwardPanicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.BackwardCameraCommand, new CommandInfo\(OnBackwardPanicShukuchiCommand\).*?AllowedInMacros = true' -or
     [regex]::Matches($pluginSource, '\bnew\s+PanicShukuchiService\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.Command').Count -ne 1 -or
@@ -2111,7 +2202,7 @@ if ($normalizedPanicShukuchiPlugin -notmatch 'panicShukuchi = new PanicShukuchiS
     $pluginSource -match '\bpanicShukuchi\.(?:Arm|Start|Dispose)\s*\(' -or
     [regex]::Matches($pluginSource, '\bOnPanicShukuchiCommand\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bOnBackwardPanicShukuchiCommand\s*\(').Count -ne 1) {
-    throw 'Exactly one macro-allowed /panicshu and one /seitonbw handler may synchronously execute the shared immediate Panic path, with no scheduler lifecycle or automatic source.'
+    throw 'Exactly one macro-allowed /panicshu and one /seitonbw handler may synchronously execute their immediate explicit path, with no scheduler lifecycle or automatic source.'
 }
 $panicServiceTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bPanicShukuchiService\b')
 if (@($panicServiceTypeReferences | Where-Object {
@@ -2125,18 +2216,18 @@ if (@($panicServiceTypeReferences | Where-Object {
     }) -join "`n", '\bpanicShukuchi\.ExecuteBackwardCamera\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiConfiguration, '\bEnableBackwardPanicShukuchiCommand\b').Count -ne 3 -or
     ($panicShukuchiConfiguration -replace '\s+', ' ') -notmatch 'public bool EnableBackwardPanicShukuchiCommand \{ get; set; \} = false;.*?if \(Version < 44\).*?EnableBackwardPanicShukuchiCommand = false;.*?public void ResetToDefaults\(\).*?EnableBackwardPanicShukuchiCommand = false;') {
-    throw 'Both Panic Shukuchi variants must remain command-only with one Plugin.cs provenance each; only /seitonbw may have one default-off configuration gate, migration, and reset.'
+    throw 'Both explicit dash variants must remain command-only with one Plugin.cs provenance each; only /seitonbw may have one default-off configuration gate, migration, and reset.'
 }
 
 Assert-Literals $panicShukuchiMacroUi @(
-    'Enable /seitonbw backward-camera Panic Shukuchi',
+    'Enable /seitonbw camera-back job dash',
     'configuration.EnableBackwardPanicShukuchiCommand',
-    'Backward Panic Shukuchi — camera-back ground jump',
+    'Camera-back dash — NIN / AST / DNC / DRG / RPR / PCT',
     'ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbw")',
-    'same immediate safety and native Shukuchi boundary as /panicshu',
-    'It does not rotate the camera or character',
+    'NIN Shukuchi, AST Epicycle, DNC En Avant, DRG Elusive Jump, RPR Hell''s Ingress, or PCT Smudge.',
+    'It never rotates the camera and never reads, changes, or substitutes your hard target.',
     'Missing or non-finite camera',
-    'It has no queue, pending lease, retry, shorter fallback, or later replay.'
+    'It has no queue, pending lease, retry, fallback, or later replay.'
 ) 'Default-off /seitonbw setting and one-line macro help'
 
 $panicTestMethods = @(
@@ -2173,6 +2264,21 @@ if ([regex]::Matches($backwardPanicShukuchiSelfTests, '(?m)^\s*public static voi
     [regex]::Matches($panicShukuchiProgram, '\bBackwardPanicShukuchiSelfTests\.\w+').Count -ne 4 -or
     $backwardPanicShukuchiSelfTests -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|IPlayerCharacter|BGCollisionModule|ITargetManager|TargetManager)\b') {
     throw 'All four pure backward-camera Panic Shukuchi tests and their exact Core registry entries must remain pinned.'
+}
+
+$backwardDashTestMethods = @(
+    'ReviewedJobActionCatalogIsExact',
+    'ForwardAndNativeBackwardHeadingsReachScreenBack',
+    'InvalidHeadingsAndUnknownActionsFailClosed'
+)
+foreach ($method in $backwardDashTestMethods) {
+    Assert-Literals $backwardDashSelfTests @("public static void $method()") "Directional backward dash test $method"
+    Assert-Literals $panicShukuchiProgram @("BackwardDashSelfTests.$method") "Directional backward dash test registration $method"
+}
+if ([regex]::Matches($backwardDashSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 3 -or
+    [regex]::Matches($panicShukuchiProgram, '\bBackwardDashSelfTests\.\w+').Count -ne 3 -or
+    $backwardDashSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|GameObject|CameraManager|TargetManager)\b') {
+    throw 'All three pure directional backward-dash catalog/heading tests and their exact Core registry entries must remain pinned.'
 }
 
 # The automatic NIN Guard-Shukuchi helper is deliberately separate from the
@@ -2276,13 +2382,14 @@ if ([regex]::Matches($ninjaGuardShukuchiSelfTests, '(?m)^\s*public static void \
 # exact default-off Emergency Teleport boundary,
 # exact default-off Monk Earth's Reply, held Monk combo, GNB Continuation, held
 # DRK Shadowbringer, SAM counter-CC/Zantetsuken, one exact job-tier default-off
-# DRK Plunge call, and the explicit command-only NIN Panic Shukuchi location
-# call. Near Assist/Near Help/Far Help may forward an incoming action through
+# DRK Plunge call, the explicit command-only NIN Panic Shukuchi location call,
+# and one exact reviewed directional /seitonbw self-action. Near Assist/Near
+# Help/Far Help may forward an incoming action through
 # their sole Original.
 $actionMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(UseAction|UseActionLocation|ExecuteAction|SendAction)\s*\(')
 $unexpectedAction = @($actionMatches | Where-Object {
     $reviewedActionBoundary =
-        $_.Path -in @($purifyProbePath, $astrologianHarmonicOrbisProbePath, $redMageGuardEngageProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $viperSerpentTailProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $emergencyTeleportProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $gunbreakerContinuationProbePath, $darkKnightShadowbringerProbePath, $monkHeldComboProbePath, $samuraiReactiveCounterCcProbePath, $nearAssistPath, $integratedInputRuntimePath) -and
+        $_.Path -in @($purifyProbePath, $astrologianHarmonicOrbisProbePath, $redMageGuardEngageProbePath, $defensiveUtilityProbePath, $pressureEscapeSprintProbePath, $allyRescueProbePath, $miracleInterceptProbePath, $ninjaSeitonProbePath, $viperSerpentTailProbePath, $scholarCriticalStrategyProbePath, $smartKardiaProbePath, $smartRecuperateProbePath, $emergencyTeleportProbePath, $monkEarthReplyProbePath, $darkKnightPlungeProbePath, $gunbreakerContinuationProbePath, $darkKnightShadowbringerProbePath, $monkHeldComboProbePath, $samuraiReactiveCounterCcProbePath, $panicShukuchiServicePath, $nearAssistPath, $integratedInputRuntimePath) -and
         $_.Line -match '\bUseAction\b'
     $reviewedPanicLocationBoundary =
         $_.Path -in @($panicShukuchiServicePath, $ninjaGuardShukuchiProbePath) -and
@@ -2297,7 +2404,7 @@ $unexpectedAction = @($actionMatches | Where-Object {
 })
 if ($unexpectedAction.Count -gt 0) {
     $locations = $unexpectedAction | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only the reviewed action probes and explicit location-action boundaries may initiate actions: $($locations -join ', ')"
+    throw "Only the reviewed action probes and explicit dash boundaries may initiate actions: $($locations -join ', ')"
 }
 
 # All party-visible commands share one closed, typed dispatcher. It remains the
@@ -3983,8 +4090,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 496) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 496-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 499) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 499-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -5426,12 +5533,18 @@ $nearAssistAutoGuard = Read-RequiredSource $nearAssistPath 'Auto-Guard central n
 $normalizedNearAssistAutoGuard = $nearAssistAutoGuard -replace '\s+', ' '
 Assert-Literals $nearAssistAutoGuard @(
     'private ExplicitAutoGuardBreakScope? explicitAutoGuardBreakScope;',
-    'internal IDisposable EnterExplicitAutoGuardBreak(uint expectedActionId)',
-    'expectedActionId != PanicShukuchiRules.ActionId',
+    'internal enum ExplicitAutoGuardBreakBoundary : byte',
+    'StandardAction = 1',
+    'LocationAction = 2',
+    'internal IDisposable EnterExplicitAutoGuardBreak(',
+    'boundary == ExplicitAutoGuardBreakBoundary.LocationAction',
+    'expectedActionId == PanicShukuchiRules.ActionId',
+    'boundary == ExplicitAutoGuardBreakBoundary.StandardAction',
+    'BackwardDashRules.IsReviewedDirectionalAction(expectedActionId)',
     'Environment.CurrentManagedThreadId',
-    'TryConsumeExplicitAutoGuardBreak(actionType, actionId)',
+    'TryConsumeExplicitAutoGuardBreak(',
     'scope.ManagedThreadId != Environment.CurrentManagedThreadId',
-    'scope.ExpectedActionId != PanicShukuchiRules.ActionId',
+    'scope.Boundary != boundary',
     'actionType != ActionType.Action',
     'actionId != scope.ExpectedActionId',
     'Interlocked.CompareExchange(',
@@ -5442,16 +5555,17 @@ Assert-Literals $nearAssistAutoGuard @(
     'TryGetActionMetadata(',
     'action.IsPvP',
     'ClearAutoGuardProtection("Action classification failed open")',
-    'ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override")'
+    'ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override")',
+    'ClearAutoGuardProtection("Released: explicit camera-back dash command override")'
 ) 'Dual-hook automatic Guard cancellation protector'
 if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = guardMetadataVerified && nearAssist\.CanProtectAutomaticGuard && IsActionSpecificallyReady' -or
     $normalizedDefensiveUtility -notmatch 'private unsafe ClientActionAttemptOutcome TryUseGuardOnce\(.*?if \(!guardMetadataVerified \|\| !nearAssist\.CanProtectAutomaticGuard') {
     throw 'Automatic Guard must fail closed before dispatch unless both central protection hooks are enabled.'
 }
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\) return false; var bypassRedirect = internalRedirectBypassDepth > 0; var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\) : SmartActionSafetyInspectionOutcome\.NotApplicable; if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?if \(TryConsumeExplicitAutoGuardBreak\(actionType, actionId\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool TryConsumeExplicitAutoGuardBreak\( ActionType actionType, uint actionId\).*?var scope = Volatile\.Read\(ref explicitAutoGuardBreakScope\); if \(scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.ManagedThreadId != Environment\.CurrentManagedThreadId \|\| scope\.ExpectedActionId != PanicShukuchiRules\.ActionId \|\| actionType != ActionType\.Action \|\| actionId != scope\.ExpectedActionId \|\| !scope\.TryConsume\(\)\).*?return false;.*?return ReferenceEquals\( Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, value: null, comparand: scope\), scope\);' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?var forwardedTargetId' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool TryConsumeExplicitAutoGuardBreak\( ActionType actionType, uint actionId, ExplicitAutoGuardBreakBoundary boundary\).*?var scope = Volatile\.Read\(ref explicitAutoGuardBreakScope\); if \(scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.ManagedThreadId != Environment\.CurrentManagedThreadId \|\| scope\.Boundary != boundary \|\| actionType != ActionType\.Action \|\| actionId != scope\.ExpectedActionId \|\| !scope\.TryConsume\(\)\).*?return false;.*?return ReferenceEquals\( Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, value: null, comparand: scope\), scope\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'private static bool IsSupportedActionType\(ActionType actionType\) => actionType is ActionType\.Action or ActionType\.PvPAction;' -or
     $normalizedNearAssistAutoGuard -notmatch 'var explicitGuardReuse = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?var actionCanCancelGuard = supportedActionType && resolvedActionId != 0 && TryGetActionMetadata\(.*?action\.IsPvP && !explicitGuardReuse;.*?ApplyAutoGuardProtectionObservation') {
     throw 'Both central action boundaries must protect owned Auto-Guard before redirect tokens, allow raw/resolved Guard reuse, cover location calls, and fail open for unknown or non-PvP actions.'
@@ -5461,12 +5575,12 @@ $runWithoutRedirectRegion = [regex]::Match(
     'internal T RunWithoutRedirect<T>\(.*?internal IDisposable EnterExplicitAutoGuardBreak\(')
 if ([regex]::Matches(($nearAssistAutoGuard + $defensiveUtility), '\bTryArmAcceptedAutoGuardProtection\s*\(').Count -ne 2 -or
     $nearAssistAutoGuard -match '\bexplicitAutoGuardBreakBypassDepth\b' -or
-    $normalizedNearAssistAutoGuard -notmatch 'internal IDisposable EnterExplicitAutoGuardBreak\(uint expectedActionId\).*?if \(expectedActionId != PanicShukuchiRules\.ActionId\).*?throw new ArgumentOutOfRangeException\(.*?var scope = new ExplicitAutoGuardBreakScope\( this, expectedActionId, Environment\.CurrentManagedThreadId\);.*?Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, scope, comparand: null\) is not null.*?throw new InvalidOperationException\(.*?return scope;' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private sealed class ExplicitAutoGuardBreakScope\( NearAssistRedirector owner, uint expectedActionId, int managedThreadId\) : IDisposable.*?internal NearAssistRedirector Owner \{ get; \} = owner;.*?internal uint ExpectedActionId \{ get; \} = expectedActionId;.*?internal int ManagedThreadId \{ get; \} = managedThreadId;.*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) == 0;.*?internal void Revoke\(\) => Interlocked\.Exchange\(ref consumedOrDisposed, 1\);.*?public void Dispose\(\).*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) != 0.*?Owner\.ReleaseExplicitAutoGuardBreak\(this\);' -or
+    $normalizedNearAssistAutoGuard -notmatch 'internal IDisposable EnterExplicitAutoGuardBreak\( uint expectedActionId, ExplicitAutoGuardBreakBoundary boundary = ExplicitAutoGuardBreakBoundary\.LocationAction\).*?var exactLocationShukuchi = boundary == ExplicitAutoGuardBreakBoundary\.LocationAction && expectedActionId == PanicShukuchiRules\.ActionId; var exactDirectionalDash = boundary == ExplicitAutoGuardBreakBoundary\.StandardAction && BackwardDashRules\.IsReviewedDirectionalAction\(expectedActionId\); if \(!exactLocationShukuchi && !exactDirectionalDash\).*?throw new ArgumentOutOfRangeException\(.*?var scope = new ExplicitAutoGuardBreakScope\( this, expectedActionId, boundary, Environment\.CurrentManagedThreadId\);.*?Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, scope, comparand: null\) is not null.*?throw new InvalidOperationException\(.*?return scope;' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private sealed class ExplicitAutoGuardBreakScope\( NearAssistRedirector owner, uint expectedActionId, ExplicitAutoGuardBreakBoundary boundary, int managedThreadId\) : IDisposable.*?internal NearAssistRedirector Owner \{ get; \} = owner;.*?internal uint ExpectedActionId \{ get; \} = expectedActionId;.*?internal ExplicitAutoGuardBreakBoundary Boundary \{ get; \} = boundary;.*?internal int ManagedThreadId \{ get; \} = managedThreadId;.*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) == 0;.*?internal void Revoke\(\) => Interlocked\.Exchange\(ref consumedOrDisposed, 1\);.*?public void Dispose\(\).*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) != 0.*?Owner\.ReleaseExplicitAutoGuardBreak\(this\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'internal void Reset\(\).*?RevokeExplicitAutoGuardBreak\(\);.*?public void Dispose\(\).*?RevokeExplicitAutoGuardBreak\(\);' -or
     !$runWithoutRedirectRegion.Success -or
     $runWithoutRedirectRegion.Value -match '\b(?:explicitAutoGuardBreakScope|TryConsumeExplicitAutoGuardBreak)\b') {
-    throw 'Only the exact accepted automatic Guard call may arm ownership, and only one same-thread exact-29513 /panicshu or /seitonbw scope may release location dispatch outside the protector.'
+    throw 'Only the exact accepted automatic Guard call may arm ownership, and only one same-thread exact reviewed location or directional dash boundary may release it outside the protector.'
 }
 if ($normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
@@ -9628,21 +9742,19 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.39.0.0</Version>',
-    '<AssemblyVersion>0.39.0.0</AssemblyVersion>',
-    '<FileVersion>0.39.0.0</FileVersion>'
-) 'v0.39.0.0 project version'
+    '<Version>0.39.0.1</Version>',
+    '<AssemblyVersion>0.39.0.1</AssemblyVersion>',
+    '<FileVersion>0.39.0.1</FileVersion>'
+) 'v0.39.0.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.39.0.0";',
-    'New default-off /seitonbw: one immediate NIN Shukuchi exactly 19.5 yalms in the normal camera''s screen-back direction.',
-    'It rotates nothing, changes no target, and has no pending state, fallback, or retry.',
-    'New default-off RDM fresh-Guard engage:',
-    'held consent may use Corps-a-corps during the first second of one newly observed enemy Guard',
-    'It freezes one actor and never performs the melee follow-up.',
-    'one larger always-visible seven-card deck with fail-closed local per-character W/L',
-    'It stores no names or raw Content IDs and makes no network request.',
-    'Configuration schema 44 is current; live validation remains separate.'
-) 'v0.39.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.39.0.1";',
+    '/seitonbw now uses the matching camera-back self dash on NIN, AST, DNC, DRG, RPR, and PCT.',
+    'It changes no target, never moves the camera, makes one immediate attempt, and remains default-off.',
+    'The Wolves'' Den rotation deck is substantially larger and more readable:',
+    'wider cards, taller artwork, 17-pixel map names, and larger countdown and W/L text at 1.0x.',
+    'RDM fresh-Guard engage and local per-map W/L remain unchanged.',
+    'Configuration schema 44 is current; current-patch dash direction and the new visual sizing still require in-game confirmation.'
+) 'v0.39.0.1 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9663,21 +9775,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.39.0.0 plugin manifest metadata'
+) 'v0.39.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.39.0.0"',
-    'Added the default-off /seitonbw NIN macro command:',
-    'one immediate, fail-closed Shukuchi exactly 19.5 yalms in the normal gameplay camera''s screen-back direction',
-    'Added a default-off RDM held helper that may use Corps-a-corps during the first second of one freshly observed enemy Guard',
-    'the frozen accepted actor is hard-targeted once, with no automatic melee follow-up.',
-    'one larger always-visible seven-card deck with fail-closed local per-character W/L',
-    'No names or raw Content IDs are stored and no network request is made.',
-    'Configuration schema 44 is current; live current-patch action, camera, result-packet, and visual validation remains separate.',
+    '"AssemblyVersion": "0.39.0.1"',
+    'Expanded the default-off /seitonbw camera-back macro to the reviewed PvP self dashes on NIN, AST, DNC, DRG, RPR, and PCT.',
+    'It makes one immediate exact job action, changes no target, never moves the camera',
+    'has no wait, queue, retry, transformed-action fallback, or alternate target/action.',
+    '610 pixels wide with 84-pixel cards, 17-pixel map names, and larger countdown and W/L text at 1.0x.',
+    'Configuration schema 44 is unchanged; current-client dash direction/acceptance and final visual sizing remain live validation.',
     '"IsHide": false'
-) 'v0.39.0.0 custom-repository metadata'
+) 'v0.39.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9718,6 +9828,11 @@ Assert-Literals $normalizedPrivacy @(
     'The file contains a random salt, an HMAC-SHA256 per-character key, per-map win/loss totals, and at most 32 recent HMAC-SHA256 match fingerprints per character for duplicate suppression.',
     'If the existing document is malformed, Seiton Sense disables reading and writing it rather than guessing or overwriting it.',
     'maps remain `NO DATA` until an exact future local match is confirmed.',
+    '## Explicit manual Panic Shukuchi and camera-back dash macros',
+    '`/seitonbw` accepts only the closed current PvP self-dash mapping for NIN, AST, DNC, DRG, RPR, and PCT.',
+    'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210` set only local character facing',
+    'The camera and targets are never written.',
+    'The dedicated exact command scope releases ownership only for the matching NIN location action or reviewed directional standard action',
     'The PvP range helper reads only the local player''s current job, position, and hitbox radius plus the game''s world-to-screen projection.',
     'does not scan other actors, retain movement history, raycast terrain, change a target, or issue/suppress an action.',
     'Configuration schema 44 is current.',
@@ -9735,10 +9850,11 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.39.0.0 RDM, backward Shukuchi, local-card, and retained safety/privacy disclosure'
+) 'v0.39.0.1 directional dash, RDM, local-card, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.39.0.0 adds the default-off `/seitonbw` camera-back NIN jump and a default-off RDM held helper',
-    'Corps-a-corps into the first second of a freshly observed enemy Guard.',
+    'Version 0.39.0.1 expands the default-off `/seitonbw` camera-back macro from NIN to the reviewed self dashes on AST, DNC, DRG, RPR, and PCT',
+    'Its Wolves'' Den rotation panel now uses substantially larger cards and typography at 1.0x.',
+    'Version 0.39.0.0 added the default-off RDM held helper for one exact Corps-a-corps into the first second of a freshly observed enemy Guard',
     'Each card can show exact local, per-character W/L for future public CC matches or `NO DATA`;',
     'It retains v0.38.0.0''s shared Auto Shadowbringer cadence, default-on **Preserve Blackblood** gate, frozen exact-CC held Smart Action target policy',
     'The inner ring marks nominal 5-yalm melee reach; the outer ring marks the current combat job''s furthest reviewed hostile non-LB action, including hostile gap closers.',
@@ -9784,14 +9900,14 @@ Assert-Literals $normalizedReadme @(
     'original critical boundary remains unconditional at 20% HP',
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
-    'dedicated Panic Shukuchi command scope releases this ownership before forwarding either location call',
+    'dedicated exact command scope releases ownership only for the matching NIN location request or reviewed directional self-action request.',
     'ReAction is admitted only for the audited `1.3.5.1` profile with Auto Target and Action Stacks inactive;',
     'MOAction `4.10.1.0` is admitted only when its published ownership list proves that neither the requested nor resolved action is retargeted.',
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 44 is current',
-    'For the current source, the exact 537-test Core registry and source checks pin configuration schema 44',
+    'For the current source, the exact 540-test Core registry and source checks pin configuration schema 44',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9802,8 +9918,17 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.39.0.0 current README release and safety contract'
+) 'v0.39.0.1 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.39.0.1',
+    'Expanded the default-off `/seitonbw` macro from NIN Shukuchi to the closed current PvP self-dash catalog:',
+    'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210`.',
+    'align only local character facing immediately before one exact self-action so the native movement travels toward camera screen-back;',
+    'The camera and targets are never changed.',
+    'There is no wait, queue, retry, rerank, target search, transformed follow-up, or alternate action.',
+    'Made the Wolves'' Den CC rotation deck materially easier to read at 1.0x:',
+    'panel width increases from 520 to 610 pixels, cards from 66 to 84 pixels high, map names to 17 pixels',
+    'Source build, 540 Core tests, safety, package parity, and release verification are automated;',
     '## 0.39.0.0',
     'Added the default-off `/seitonbw` NIN macro command.',
     'computes one exact 19.5-yalm terrain point in the current normal gameplay camera''s screen-back direction.',
@@ -9828,7 +9953,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.39.0.0 release notes and retained v0.38.0.0 history'
+) 'v0.39.0.1 release notes and retained v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -10056,42 +10181,36 @@ Assert-Literals $normalizedChangelog @(
     'Configuration schema remains `30`'
 ) 'v0.28.0.1 immediate manual Panic Shukuchi release notes'
 Assert-Literals $normalizedReadme @(
-    '## Manual NIN Panic Shukuchi macros',
-    'Panic Shukuchi uses explicit one-line macro commands, not automatic features or the held-action scheduler.',
+    '## Manual Panic Shukuchi and camera-back dash macros',
+    'These are explicit one-line macro commands, not automatic features or part of the held-action scheduler.',
     '/panicshu',
     '/seitonbw',
-    'exact PvP Ninja in Crystalline Conflict, or in the Wolves'' Den when the existing **Enable Wolves'' Den testing** option is enabled',
-    '`/panicshu` projects the terrain point exactly 19.5 yalms along the character''s current facing.',
-    '`/seitonbw` instead reads the normal gameplay camera and projects exactly 19.5 yalms in its screen-back direction;',
-    'Each invocation immediately makes at most one native location-action call in the same command callback.',
-    'There is no stored intent, scheduler claim, 500-ms lease, wait, expiry, cast/queue/animation-lock gate, Guard gate, or crowd-control/ Purify-priority gate.',
-    'requires the exact adjusted Shukuchi action, native recast group, cooldown, and resource boundary to be positively ready',
-    'FFXIV decides whether the one remaining request is accepted in the current state',
-    'later macro press is a new explicit command rather than a replay',
-    'Three Mudra changes Shukuchi into Doton',
-    'no retry, alternate action, shorter/inward point, path search, or destination fallback',
-    'never moves the mouse or ground-target cursor and never reads, changes, or substitutes a hard, soft, Focus, or mouseover target',
-    'Routine accepted/rejected results are chat-silent and remain available only through `/seiton debug` diagnostics'
-) 'v0.28.0.1 Panic Shukuchi immediate command, own-Guard, no-state, and no-target README contract'
+    '`/panicshu` remains exact PvP NIN and projects one terrain point 19.5 yalms along current character facing.',
+    '`/seitonbw` supports the closed current PvP self-dash set:',
+    'NIN Shukuchi `29513`, AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210`.',
+    'The camera never moves and no hard, soft, Focus, or mouseover target is read, changed, or substituted.',
+    'Each invocation makes at most one native call in the same command callback.',
+    'There is no stored intent, scheduler claim, wait, lease, retry, alternate action, target search, shorter point, or later replay.',
+    'The explicit command may give up plugin-owned Auto-Guard for only that exact same-thread action boundary.',
+    'Routine results stay chat-silent and are available through `/seiton debug`'
+) 'Current explicit dash immediate, own-Guard, no-state, and no-target README contract'
 Assert-Literals $normalizedPrivacy @(
-    '## Explicit manual NIN Panic Shukuchi macros',
-    '`/panicshu` and the default-off `/seitonbw` sister are command-only, user-authored macro actions.',
+    '## Explicit manual Panic Shukuchi and camera-back dash macros',
+    '`/panicshu` and the default-off `/seitonbw` command are command-only, user-authored macro actions.',
     'They have no automatic, pressure, enemy, status, or held-key trigger',
     '`/panicshu` computes only the terrain point 19.5 yalms along the local character''s current facing.',
-    '`/seitonbw` computes the same distance in the normal gameplay camera''s screen-back direction',
-    'One invocation then makes at most one native location-action call in the same command callback.',
-    'stores no pending intent and has no lease, timer, framework wait, expiry, scheduler/Purify claim, Guard or crowd-control gate, or cast/queue/animation-lock gate',
-    'native recast-group/cooldown/resource boundary and reaches the location call only when that boundary is positively ready',
-    'intentionally allowed from own Guard so Shukuchi may break it',
-    'anything other than exact Shukuchi `29513` still blocks the attempt',
+    '`/seitonbw` resolves screen-back from the normal gameplay camera.',
+    'One invocation makes at most one matching native location or standard-action call in the same command callback.',
+    'It stores no pending intent and has no lease, timer, framework wait, expiry, scheduler/Purify claim, retry, target search, or alternate action.',
+    'The exact command may intentionally give up plugin-owned Auto-Guard for only its matching same-thread native boundary.',
     'later macro press is a new explicit user command',
     'does not recompute after movement or turning, search a path, move inward, choose an alternate action, or use a shorter fallback point',
     'neither reads nor changes the mouse/ground-target cursor or any hard, soft, Focus, or mouseover target',
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
-    'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
+    'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
     'Configuration schema 44 is current'
-) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
+) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
     'Fixed the v0.27 reactive held-key regression without widening any event deadline',
@@ -11326,4 +11445,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.39.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 44 and the exact 537-test Core registry. Backward Panic Shukuchi remains one immediate command-only camera-back location call with no rotation, target mutation, queue, or retry. RDM fresh-Guard engage freezes one first-second Corps-a-corps actor and only hard-targets it after exact client acceptance. The larger always-visible Wolves' Den rotation deck uses seven local game-artwork IDs, a fixed 0.65-second reorder animation, and fail-closed per-map local W/L with no networking or raw persisted identity. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.39.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 44 and the exact 540-test Core registry. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. RDM fresh-Guard engage remains frozen to one first-second Corps-a-corps actor. The larger always-visible Wolves' Den rotation deck uses seven local game-artwork IDs, fixed 0.65-second reorder animation, enlarged text, and fail-closed per-map local W/L with no networking or raw persisted identity. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
