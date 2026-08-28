@@ -43,6 +43,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly HeldCastCancellationService heldCastCancellation;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly AstrologianHarmonicOrbisProbe astrologianHarmonicOrbis;
+    private readonly RedMageGuardEngageProbe redMageGuardEngage;
     private readonly DefensiveUtilityProbe defensiveUtility;
     private readonly SmartRecuperateProbe smartRecuperate;
     private readonly EmergencyTeleportProbe emergencyTeleport;
@@ -129,6 +130,13 @@ internal sealed class PersonalStatusService : IDisposable
             clientState,
             objectTable,
             pressureTracker,
+            nearAssist,
+            log);
+        redMageGuardEngage = new RedMageGuardEngageProbe(
+            clientState,
+            dutyState,
+            objectTable,
+            targetManager,
             nearAssist,
             log);
         defensiveUtility = new DefensiveUtilityProbe(
@@ -269,6 +277,10 @@ internal sealed class PersonalStatusService : IDisposable
         astrologianHarmonicOrbis.Snapshot;
     internal bool AstrologianHarmonicOrbisMetadataVerified =>
         astrologianHarmonicOrbisMetadataVerified;
+    internal RedMageGuardEngageProbeSnapshot RedMageGuardEngageDiagnostics =>
+        redMageGuardEngage.Snapshot;
+    internal bool RedMageGuardEngageMetadataVerified =>
+        metadata.RedMageGuardEngageVerified;
     internal EmergencyTeleportProbeSnapshot EmergencyTeleportDiagnostics =>
         emergencyTeleport.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
@@ -406,6 +418,7 @@ internal sealed class PersonalStatusService : IDisposable
             localMpWarningState = LocalMpWarningState.Initial;
             var purify = emergencyPurify.FailClosed(now);
             astrologianHarmonicOrbis.FailClosed();
+            redMageGuardEngage.FailClosed();
             defensiveUtility.FailClosed(now, exception);
             smartRecuperate.FailClosed();
             emergencyTeleport.FailClosed();
@@ -454,6 +467,7 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInput.Reset();
             emergencyPurify.Reset();
             astrologianHarmonicOrbis.Reset();
+            redMageGuardEngage.Reset();
             defensiveUtility.Reset();
             smartRecuperate.Reset();
             emergencyTeleport.Reset();
@@ -690,6 +704,10 @@ internal sealed class PersonalStatusService : IDisposable
                                                             configuration.EnableAstrologianHarmonicOrbisOnHeldKey &&
                                                             isSupportedPvPContext &&
                                                             isAstrologian;
+        var redMageGuardEngageConfigurationEnabled = configuration.Enabled &&
+                                                      configuration.EnableRedMageGuardEngageOnHeldKey &&
+                                                      isSupportedPvPContext &&
+                                                      isRedMage;
 
         // Keep the shared physical-key observer enabled from stable opt-in gates,
         // not from the current action opportunity. Guard suppresses every direct
@@ -789,6 +807,9 @@ internal sealed class PersonalStatusService : IDisposable
         var astrologianHarmonicOrbisHeldInputEnabled =
             astrologianHarmonicOrbisConfigurationEnabled &&
             astrologianHarmonicOrbisMetadataVerified;
+        var redMageGuardEngageHeldInputEnabled =
+            redMageGuardEngageConfigurationEnabled &&
+            metadata.RedMageGuardEngageVerified;
         var ninjaGuardShukuchiHeldInputEnabled =
             ninjaGuardShukuchiConfigurationEnabled &&
             metadata.PanicShukuchiVerified &&
@@ -830,9 +851,10 @@ internal sealed class PersonalStatusService : IDisposable
                                             ninjaSeitonHeldInputEnabled ||
                                             viperSerpentTailHeldInputEnabled ||
                                             gunbreakerContinuationHeldInputEnabled ||
-                                            darkKnightShadowbringerHeldInputEnabled ||
-                                            monkHeldComboInputEnabled ||
-                                            astrologianHarmonicOrbisHeldInputEnabled;
+                                             darkKnightShadowbringerHeldInputEnabled ||
+                                             monkHeldComboInputEnabled ||
+                                             astrologianHarmonicOrbisHeldInputEnabled ||
+                                             redMageGuardEngageHeldInputEnabled;
         var emergencyInputFrame = emergencyInput.Observe(
             !hardReset &&
             alive &&
@@ -854,9 +876,10 @@ internal sealed class PersonalStatusService : IDisposable
               scholarCriticalStrategyHeldInputEnabled ||
               emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
-             pressureEscapeSprintHeldInputEnabled ||
-             darkKnightPlungeHeldInputEnabled ||
-             astrologianHarmonicOrbisHeldInputEnabled),
+              pressureEscapeSprintHeldInputEnabled ||
+              darkKnightPlungeHeldInputEnabled ||
+              astrologianHarmonicOrbisHeldInputEnabled ||
+              redMageGuardEngageHeldInputEnabled),
             purifyHeldInputEnabled,
             defensiveUtilityHeldInputEnabled,
             paladinGuardianHeldInputEnabled,
@@ -873,9 +896,10 @@ internal sealed class PersonalStatusService : IDisposable
             gunbreakerContinuationHeldEnabled: gunbreakerContinuationHeldInputEnabled,
             darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled,
             monkHeldComboEnabled: monkHeldComboInputEnabled,
-            samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
-            samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled,
-            astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled);
+             samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
+             samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled,
+             astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled,
+             redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -909,8 +933,30 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset);
         var astrologianClaimedPriority = astrologianOrbis.InputClaimed;
+        // RDM's fresh-Guard engage is directly below Purify and AST. It freezes
+        // one exact enemy and spends only Corps-a-corps; the accepted actor is
+        // hard-targeted once without an automatic melee follow-up.
+        now = Environment.TickCount64;
+        var redMageGuard = redMageGuardEngage.Observe(
+            localPlayer,
+            context,
+            configuration.EnableWolvesDenTesting,
+            redMageGuardEngageConfigurationEnabled,
+            metadata.RedMageGuardEngageVerified,
+            metadata.WolvesDenStrikingDummyVerified,
+            configuration.RedMageGuardEngageMinimumHpPercent,
+            configuration.RedMageGuardEngageMinimumMpPercent,
+            guardActive,
+            purifyClaimedPriority ||
+            astrologianClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset);
+        var redMageGuardEngageClaimedPriority = astrologianClaimedPriority ||
+                                                redMageGuard.InputClaimed;
         // SAM's exact post-protection sequence is a job helper directly after
-        // AST. Counter-CC runs before Zantetsuken so an accepted Soten can
+        // RDM. Counter-CC runs before Zantetsuken so an accepted Soten can
         // reserve its bounded Mineuchi arrival window without another SAM
         // action inserting animation lock.
         now = Environment.TickCount64;
@@ -922,10 +968,10 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ReactiveCcAfterEnemyGuard,
             configuration.ReactiveCcOnHeldKey,
             dispatchAllowed:
-                !guardActive &&
-                !purifyClaimedPriority &&
-                !astrologianClaimedPriority &&
-                !emergencyInputFrame.IsConsumed,
+                 !guardActive &&
+                 !purifyClaimedPriority &&
+                 !redMageGuardEngageClaimedPriority &&
+                 !emergencyInputFrame.IsConsumed,
             configuration.ReactiveCcSamuraiSotenMaximumRangeYalms,
             emergencyInputFrame,
             now,
@@ -938,18 +984,19 @@ internal sealed class PersonalStatusService : IDisposable
                 enabled: true,
                 allowHeldGameplayKey: true,
                 dispatchAllowed:
-                    !guardActive &&
-                    !purifyClaimedPriority &&
-                    !astrologianClaimedPriority &&
-                    !samuraiCounter.InputClaimed &&
+                     !guardActive &&
+                     !purifyClaimedPriority &&
+                     !redMageGuardEngageClaimedPriority &&
+                     !samuraiCounter.InputClaimed &&
                     !emergencyInputFrame.IsConsumed,
                 emergencyInputFrame,
                 now,
                 hardReset)
             : samuraiReactive.ResetZantetsukenLane();
-        // This cumulative scheduler gate carries AST and SAM ownership into
-        // every lower helper without coupling either job probe to the other.
-        var samuraiClaimedPriority = astrologianClaimedPriority || samurai.InputClaimed;
+        // This cumulative scheduler gate carries AST, RDM, and SAM ownership
+        // into every lower helper without coupling their probes.
+        var samuraiClaimedPriority = redMageGuardEngageClaimedPriority ||
+                                     samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
         // Purify is absolute. AST, SAM, then Auto-Seiton are the next
@@ -1378,6 +1425,9 @@ internal sealed class PersonalStatusService : IDisposable
                 astrologianOrbis.InputClaimed,
                 astrologianOrbis.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                redMageGuard.InputClaimed,
+                redMageGuard.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 samurai.InputClaimed,
                 samurai.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -1802,6 +1852,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyInput.Reset();
         emergencyPurify.Reset();
         astrologianHarmonicOrbis.Reset();
+        redMageGuardEngage.Reset();
         defensiveUtility.Reset();
         smartRecuperate.Reset();
         emergencyTeleport.Reset();

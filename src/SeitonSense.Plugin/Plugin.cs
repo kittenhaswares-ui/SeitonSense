@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.38.0.0";
+    private const string CurrentReleaseVersion = "0.39.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -48,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
     private readonly IntegratedInputRuntime integratedInput;
     private readonly BufferLearningWindow bufferLearningWindow;
+    private readonly CrystallineConflictMapStatisticsService crystallineConflictMapStatistics;
     private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
     private readonly PanicShukuchiService panicShukuchi;
@@ -71,6 +72,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool farHelpCommandRegistered;
     private readonly bool farHelpAliasRegistered;
     private readonly bool panicShukuchiCommandRegistered;
+    private readonly bool backwardPanicShukuchiCommandRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -78,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
         ICommandManager commandManager,
         IChatGui chatGui,
         IClientState clientState,
+        IPlayerState playerState,
         IObjectTable objectTable,
         IFramework framework,
         IDutyState dutyState,
@@ -327,11 +330,22 @@ public sealed class Plugin : IDalamudPlugin
         bufferLearningWindow = new BufferLearningWindow(
             configuration,
             integratedInput.ActionBuffer);
+        crystallineConflictMapStatistics = new CrystallineConflictMapStatisticsService(
+            pluginInterface,
+            clientState,
+            playerState,
+            framework,
+            interop,
+            log,
+            () => configuration.Enabled &&
+                  configuration.EnableLocalCrystallineConflictMapStatisticsCapture);
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
             configuration,
             clientState,
+            playerState,
             gameGui,
-            textureProvider);
+            textureProvider,
+            crystallineConflictMapStatistics);
         autoSeitonToggle = new AutoSeitonToggleWindow(
             objectTable,
             textureProvider,
@@ -359,9 +373,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback. Continuous safe HP/pressure can open one later fallback generation; Dark Arts still wins and ignores those sliders. The master option remains off by default.",
-                "Preserve Blackblood remains on by default and no longer deadlocks when a confirmed or ambiguous request's whole short status lifecycle falls between samples. Exact CC uses frozen Smart Action targeting; Wolves' Den uses exact <t> with test-only zero pressure.",
-                "The expanded Wolves' Den rotation panel now shows seven local FFXIV duty-artwork cards from current to next, reordering over 0.65 seconds with no download or network request. Configuration schema 43 is current; live validation remains separate.",
+                "New default-off /seitonbw: one immediate NIN Shukuchi exactly 19.5 yalms in the normal camera's screen-back direction. It rotates nothing, changes no target, and has no pending state, fallback, or retry.",
+                "New default-off RDM fresh-Guard engage: held consent may use Corps-a-corps during the first second of one newly observed enemy Guard when exact Riposte readiness and your configurable HP/MP limits agree. It freezes one actor and never performs the melee follow-up.",
+                "The Wolves' Den rotation panel is now one larger always-visible seven-card deck with fail-closed local per-character W/L for future exact public CC results. Local capture has its own default-on toggle and safe clear control. It stores no names or raw Content IDs and makes no network request. Configuration schema 44 is current; live validation remains separate.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -381,7 +395,8 @@ public sealed class Plugin : IDalamudPlugin
             isolationAwareness,
             pressureCounter,
             bufferLearningWindow.ResetWindowPosition,
-            wolvesDenRotationWindow.ResetWindowPosition);
+            wolvesDenRotationWindow.ResetWindowPosition,
+            crystallineConflictMapStatistics.TryReset);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(bufferLearningWindow);
         windowSystem.AddWindow(wolvesDenRotationWindow);
@@ -564,6 +579,22 @@ public sealed class Plugin : IDalamudPlugin
                 "[Seiton Sense] /panicshu is owned by another plugin. Disable the conflict and reload before using Panic Shukuchi.");
         }
 
+        backwardPanicShukuchiCommandRegistered = commandManager.AddHandler(
+            PanicShukuchiService.BackwardCameraCommand,
+            new CommandInfo(OnBackwardPanicShukuchiCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "Default-off NIN-only sister command: immediately try one PvP Shukuchi exactly 19.5 yalms " +
+                    "in the normal gameplay camera's screen-back direction, without rotating camera/character or changing target.",
+            });
+        if (!backwardPanicShukuchiCommandRegistered)
+        {
+            log.Warning("/seitonbw is already owned by another plugin; backward Panic Shukuchi remains unavailable.");
+            chatGui.PrintError(
+                "[Seiton Sense] /seitonbw is owned by another plugin. Disable the conflict and reload before using backward Panic Shukuchi.");
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -614,9 +645,12 @@ public sealed class Plugin : IDalamudPlugin
         if (farHelpAliasRegistered) commandManager.RemoveHandler(FarHelpAliasCommand);
         if (panicShukuchiCommandRegistered)
             commandManager.RemoveHandler(PanicShukuchiService.Command);
+        if (backwardPanicShukuchiCommandRegistered)
+            commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        crystallineConflictMapStatistics.Dispose();
         combatLimitBreakRuntime.Dispose();
         integratedInput.Dispose();
         personalStatus.Dispose();
@@ -757,6 +791,7 @@ public sealed class Plugin : IDalamudPlugin
                 var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
                 var recuperate = personalStatus.SmartRecuperateDiagnostics;
                 var astrologianOrbis = personalStatus.AstrologianHarmonicOrbisDiagnostics;
+                var redMageGuard = personalStatus.RedMageGuardEngageDiagnostics;
                 var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
                 var pressureEscape = personalStatus.PressureEscapeDiagnostics;
                 var guardianCommunication = personalStatus.GuardianCommunicationDiagnostics;
@@ -890,6 +925,21 @@ public sealed class Plugin : IDalamudPlugin
                     $"count-base={astrologianOrbis.BaseAttemptCount}/{astrologianOrbis.BaseAcceptedCount}," +
                     $"count-double={astrologianOrbis.FollowUpAttemptCount}/" +
                     $"{astrologianOrbis.FollowUpAcceptedCount},last={astrologianOrbis.LastEvent}]");
+                chatGui.Print(
+                    $"[Seiton Sense] rdm-guard[meta={personalStatus.RedMageGuardEngageMetadataVerified}," +
+                    $"reason={redMageGuard.Reason},context={redMageGuard.Context},action/combo=" +
+                    $"{redMageGuard.ResolvedActionId}/{redMageGuard.ResolvedComboCarrierActionId},ready=" +
+                    $"{redMageGuard.CorpsReady}/{redMageGuard.MeleeStarterReady},candidates=" +
+                    $"{redMageGuard.CandidateCount},S={redMageGuard.EnemySlot},target=" +
+                    $"{redMageGuard.TargetGameObjectId:X}/{redMageGuard.TargetEntityId:X},guard=" +
+                    $"{redMageGuard.GuardRemainingMilliseconds}ms/episode={redMageGuard.GuardEpisodeToken}," +
+                    $"lease={redMageGuard.LeaseRemainingMilliseconds}ms,key={redMageGuard.HeldGameplayKey}," +
+                    $"claim={redMageGuard.InputClaimed},attempt={redMageGuard.UseActionAttempted}/" +
+                    $"{redMageGuard.UseActionAccepted},hard-target={redMageGuard.HardTargetConfirmed},count=" +
+                    $"{redMageGuard.AttemptCount}/{redMageGuard.AcceptedCount}/" +
+                    $"{redMageGuard.TargetConfirmedCount}/{redMageGuard.RejectedCount}/" +
+                    $"{redMageGuard.UnknownCount},resolution={redMageGuard.CandidateResolution}," +
+                    $"last={redMageGuard.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] rescue[phase={rescue.Phase},decision={rescue.Decision}," +
                     $"cancel={rescue.CancelReason},trigger={rescue.InputTrigger},candidates={rescue.CandidateCount}," +
@@ -1175,6 +1225,7 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print($"[Seiton Sense] auto-low-mp-focus[{autoLowMpFocusTarget.Diagnostics.ToChatLine()}]");
                 chatGui.Print(
                     $"[Seiton Sense] panic-shukuchi[cmd={panicShukuchiCommandRegistered}," +
+                    $"bw-cmd={backwardPanicShukuchiCommandRegistered}," +
                     $"{panic.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
@@ -1223,6 +1274,8 @@ public sealed class Plugin : IDalamudPlugin
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
+            "/seitonbw is its default-off Macro Helpers sister and makes the same one immediate attempt exactly " +
+            "19.5 yalms behind the current normal gameplay camera, without rotating it or changing target. " +
             "/autoseiton [on|off|toggle] controls whether held-key NIN Auto-Seiton is available. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
@@ -1366,6 +1419,18 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Panic Shukuchi command failed closed.");
+        }
+    }
+
+    private void OnBackwardPanicShukuchiCommand(string _, string arguments)
+    {
+        try
+        {
+            panicShukuchi.ExecuteBackwardCamera(arguments);
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense backward Panic Shukuchi command failed closed.");
         }
     }
 

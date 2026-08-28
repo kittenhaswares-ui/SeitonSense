@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 43;
+    public int Version { get; set; } = 44;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -60,6 +60,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
     public bool EnableScholarCriticalStrategyOnHeldKey { get; set; }
     public bool EnableAstrologianHarmonicOrbisOnHeldKey { get; set; }
+    public bool EnableRedMageGuardEngageOnHeldKey { get; set; }
+    public int RedMageGuardEngageMinimumHpPercent { get; set; } =
+        RedMageGuardEngageRules.DefaultMinimumHpPercent;
+    public int RedMageGuardEngageMinimumMpPercent { get; set; } =
+        RedMageGuardEngageRules.DefaultMinimumMpPercent;
     // Schema-25 compatibility only. Runtime and UI use the Eukrasia-triggered option.
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
@@ -84,9 +89,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowBufferLearningWindow { get; set; } = true;
     public bool BufferLearningWindowLocked { get; set; }
     public bool ShowWolvesDenRotationPanel { get; set; } = true;
+    public bool EnableLocalCrystallineConflictMapStatisticsCapture { get; set; } = true;
     public bool WolvesDenRotationPanelLocked { get; set; }
     public bool WolvesDenRotationPanelShowBackground { get; set; } = true;
-    public bool WolvesDenRotationPanelExpanded { get; set; }
     public float WolvesDenRotationPanelScale { get; set; } = 1f;
     public float WolvesDenRotationPanelBackgroundOpacity { get; set; } = 0.88f;
     public int WolvesDenRotationOffsetSlots { get; set; }
@@ -261,6 +266,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSmartTabTargeting { get; set; }
     public bool EnableSmartActionMacro { get; set; }
     public bool EnableNearAssistMacro { get; set; }
+    public bool EnableBackwardPanicShukuchiCommand { get; set; } = false;
     public float NearAssistMaxAllyDistance { get; set; } = 25f;
     public bool NearAssistPreferDamageRoles { get; set; } = true;
     public bool NearAssistPreferTeamPressure { get; set; }
@@ -296,7 +302,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 43)
+        if (Version >= 44)
         {
             if (repaired) Save();
             return;
@@ -735,7 +741,6 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ShowWolvesDenRotationPanel = true;
             WolvesDenRotationPanelLocked = false;
             WolvesDenRotationPanelShowBackground = true;
-            WolvesDenRotationPanelExpanded = false;
             WolvesDenRotationPanelScale = 1f;
             WolvesDenRotationPanelBackgroundOpacity = 0.88f;
             WolvesDenRotationOffsetSlots = 0;
@@ -756,7 +761,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
             DarkKnightShadowbringerPreserveBlackblood = true;
         }
 
-        Version = 43;
+        if (Version < 44)
+        {
+            // This hostile movement/targeting helper is a new explicit opt-in.
+            // Existing installations must never inherit it from another held lane.
+            EnableRedMageGuardEngageOnHeldKey = false;
+            RedMageGuardEngageMinimumHpPercent =
+                RedMageGuardEngageRules.DefaultMinimumHpPercent;
+            RedMageGuardEngageMinimumMpPercent =
+                RedMageGuardEngageRules.DefaultMinimumMpPercent;
+            EnableBackwardPanicShukuchiCommand = false;
+            EnableLocalCrystallineConflictMapStatisticsCapture = true;
+        }
+
+        Version = 44;
         ClampSettings();
         Save();
     }
@@ -765,7 +783,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 43;
+        Version = 44;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -780,6 +798,11 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableNinjaGuardShukuchiOnHeldGameplayKey = false;
         EnableScholarCriticalStrategyOnHeldKey = false;
         EnableAstrologianHarmonicOrbisOnHeldKey = false;
+        EnableRedMageGuardEngageOnHeldKey = false;
+        RedMageGuardEngageMinimumHpPercent =
+            RedMageGuardEngageRules.DefaultMinimumHpPercent;
+        RedMageGuardEngageMinimumMpPercent =
+            RedMageGuardEngageRules.DefaultMinimumMpPercent;
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
@@ -803,9 +826,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowBufferLearningWindow = true;
         BufferLearningWindowLocked = false;
         ShowWolvesDenRotationPanel = true;
+        EnableLocalCrystallineConflictMapStatisticsCapture = true;
         WolvesDenRotationPanelLocked = false;
         WolvesDenRotationPanelShowBackground = true;
-        WolvesDenRotationPanelExpanded = false;
         WolvesDenRotationPanelScale = 1f;
         WolvesDenRotationPanelBackgroundOpacity = 0.88f;
         WolvesDenRotationOffsetSlots = 0;
@@ -938,6 +961,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSmartTabTargeting = false;
         EnableSmartActionMacro = false;
         EnableNearAssistMacro = false;
+        EnableBackwardPanicShukuchiCommand = false;
         NearAssistMaxAllyDistance = 25f;
         NearAssistPreferDamageRoles = true;
         NearAssistPreferTeamPressure = false;
@@ -1192,6 +1216,30 @@ public sealed class PluginConfiguration : IPluginConfiguration
         if (emergencyTeleportMpThreshold != EmergencyTeleportMpThreshold)
         {
             EmergencyTeleportMpThreshold = emergencyTeleportMpThreshold;
+            changed = true;
+        }
+
+        var redMageGuardEngageMinimumHpPercent = Math.Clamp(
+            RedMageGuardEngageMinimumHpPercent,
+            RedMageGuardEngageRules.MinimumConfigurablePercent,
+            RedMageGuardEngageRules.MaximumConfigurablePercent);
+        if (redMageGuardEngageMinimumHpPercent !=
+            RedMageGuardEngageMinimumHpPercent)
+        {
+            RedMageGuardEngageMinimumHpPercent =
+                redMageGuardEngageMinimumHpPercent;
+            changed = true;
+        }
+
+        var redMageGuardEngageMinimumMpPercent = Math.Clamp(
+            RedMageGuardEngageMinimumMpPercent,
+            RedMageGuardEngageRules.MinimumConfigurablePercent,
+            RedMageGuardEngageRules.MaximumConfigurablePercent);
+        if (redMageGuardEngageMinimumMpPercent !=
+            RedMageGuardEngageMinimumMpPercent)
+        {
+            RedMageGuardEngageMinimumMpPercent =
+                redMageGuardEngageMinimumMpPercent;
             changed = true;
         }
 

@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.38.0.0",
-    "Changelog": "Auto Shadowbringer now shares a fixed 1.8-second cadence across Dark Arts and the HP-cost fallback. Continuous safe HP/pressure opens one later fallback generation; Dark Arts still wins and ignores those sliders. Preserve Blackblood remains on by default, blocks both paths while exact status 3033 is present, and no longer deadlocks when a confirmed or ambiguous request's complete short status lifecycle falls between samples; ambiguous calls still require the frozen key to be released. Exact CC uses frozen held Smart Action targeting without a visible target change. Wolves' Den uses only exact <t> duel/dummy targeting and test-only zero pressure while retaining HP, range, line-of-sight, cadence, and Blackblood gates. The expanded rotation panel shows seven local FFXIV duty-artwork cards with a 0.65-second reorder animation and no network request. Configuration schema 43 is current; live current-patch action and visual validation remains separate.",
+    "AssemblyVersion": "0.39.0.0",
+    "Changelog": "Added the default-off /seitonbw NIN macro command: one immediate, fail-closed Shukuchi exactly 19.5 yalms in the normal gameplay camera's screen-back direction, with no rotation, target change, pending state, fallback, or retry. Added a default-off RDM held helper that may use Corps-a-corps during the first second of one freshly observed enemy Guard when exact Riposte readiness and configurable own HP/MP thresholds agree; the frozen accepted actor is hard-targeted once, with no automatic melee follow-up. The Wolves' Den rotation panel is now one larger always-visible seven-card deck with fail-closed local per-character W/L for future exact public CC results. No names or raw Content IDs are stored and no network request is made. Configuration schema 44 is current; live current-patch action, camera, result-packet, and visual validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787933190"
+    "LastUpdate": "1787942702"
   }
 ]

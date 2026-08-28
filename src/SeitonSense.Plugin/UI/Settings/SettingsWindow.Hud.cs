@@ -170,6 +170,36 @@ internal sealed partial class SettingsWindow
             configuration.ShowWolvesDenRotationPanel,
             value => configuration.ShowWolvesDenRotationPanel = value);
         changed |= Checkbox(
+            "Record local per-map CC W/L",
+            configuration.EnableLocalCrystallineConflictMapStatisticsCapture,
+            value => configuration.EnableLocalCrystallineConflictMapStatisticsCapture = value);
+        ImGui.SameLine();
+        if (ImGui.Button("Clear all characters' saved local W/L"))
+        {
+            crystallineConflictMapStatisticsResetSucceeded =
+                resetCrystallineConflictMapStatistics();
+            crystallineConflictMapStatisticsResetFeedback =
+                crystallineConflictMapStatisticsResetSucceeded
+                    ? "All saved local CC map W/L was cleared."
+                    : "Could not clear local CC map W/L; the existing file was left unchanged.";
+            crystallineConflictMapStatisticsResetFeedbackUntil =
+                Environment.TickCount64 + 6_000;
+        }
+        if (!string.IsNullOrEmpty(crystallineConflictMapStatisticsResetFeedback) &&
+            Environment.TickCount64 <= crystallineConflictMapStatisticsResetFeedbackUntil)
+        {
+            ImGui.TextColored(
+                crystallineConflictMapStatisticsResetSucceeded
+                    ? new System.Numerics.Vector4(0.4f, 0.9f, 0.62f, 1f)
+                    : new System.Numerics.Vector4(1f, 0.45f, 0.42f, 1f),
+                crystallineConflictMapStatisticsResetFeedback);
+        }
+        else if (!string.IsNullOrEmpty(crystallineConflictMapStatisticsResetFeedback))
+        {
+            crystallineConflictMapStatisticsResetFeedback = string.Empty;
+            crystallineConflictMapStatisticsResetFeedbackUntil = 0;
+        }
+        changed |= Checkbox(
             "Lock rotation panel",
             configuration.WolvesDenRotationPanelLocked,
             value => configuration.WolvesDenRotationPanelLocked = value);
@@ -178,10 +208,6 @@ internal sealed partial class SettingsWindow
             "Show background##WolvesDenRotation",
             configuration.WolvesDenRotationPanelShowBackground,
             value => configuration.WolvesDenRotationPanelShowBackground = value);
-        changed |= Checkbox(
-            "Keep map order and calibration expanded",
-            configuration.WolvesDenRotationPanelExpanded,
-            value => configuration.WolvesDenRotationPanelExpanded = value);
         changed |= Slider(
             "Rotation panel scale",
             configuration.WolvesDenRotationPanelScale,
@@ -201,9 +227,11 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Local/offline schedule: official Patch 7.5 order and hourly interval with a locally adjustable community-reference phase.");
         ImGui.TextDisabled(
-            "The panel fails closed outside exact territory 250 and never uploads queue or player data.");
+            "Panel visibility and local W/L capture are independent. Capture accepts only exact public-CC post-match results and never uploads data.");
         ImGui.TextDisabled(
-            "Click the current map in the panel to reveal saved < / > phase calibration if the live map ever differs.");
+            "The large seven-card deck stays visible, reorders itself each hour, and keeps saved < / > phase calibration available.");
+        ImGui.TextDisabled(
+            "Per-map W/L counts only future, exact local public-CC results; ambiguous or unavailable results stay NO DATA.");
         return changed;
     }
 

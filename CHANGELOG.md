@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.39.0.0
+
+- Added the default-off `/seitonbw` NIN macro command. It reuses Panic
+  Shukuchi's immediate fail-closed safety/action boundary but computes one exact
+  19.5-yalm terrain point in the current normal gameplay camera's screen-back
+  direction. Standard first- and third-person modes are handled explicitly;
+  unavailable, non-finite, event/cutscene, spectator, aiming, and lock-on camera
+  state refuses the command. It rotates neither camera nor character, changes no
+  target, and has no queue, pending state, fallback, or retry.
+- Added a default-off RDM held-key fresh-Guard engage. One exact enemy Guard
+  absent-to-present edge can authorize Corps-a-corps `29699` only during that
+  Guard's first second, while exact Riposte `41488` starter readiness and the
+  configurable inclusive own HP/MP thresholds (80% / 50% by default) agree. The
+  exact actor, episode, action, context, and physical key stay frozen; only a
+  client-accepted Corps-a-corps may hard-target that actor once, and no melee
+  follow-up, alternate, or rerank is generated. Wolves' Den testing uses only
+  the exact current target.
+- Replaced the redundant Current/Next summary and expansion switch in the
+  Wolves' Den rotation panel with one larger, always-visible seven-card deck.
+  Added fail-closed local per-character W/L beside every map card for future
+  exact public CC results. Ambiguous/custom/duplicate results record nothing;
+  the atomic local file stores salted HMAC identifiers and bounded hashed
+  deduplication entries, never names or raw Content IDs, and no network request
+  is made. Configuration schema is `44`; current-patch camera, action,
+  result-packet, and visual behavior remain separate live-validation boundaries.
+
 ## 0.38.0.0
 
 - Added a shared 1.8-second cadence to both held Auto Shadowbringer paths. A

@@ -38,6 +38,7 @@ internal sealed record PvPMetadataValidation(
     bool GunbreakerContinuationVerified,
     bool DarkKnightShadowbringerVerified,
     bool DarkKnightBlackbloodVerified,
+    bool RedMageGuardEngageVerified,
     bool RedMageResolutionVerified,
     bool RedMageViceOfThornsVerified,
     bool BlackMageFrostStarVerified,
@@ -49,7 +50,7 @@ internal sealed record PvPMetadataValidation(
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false, false,
-        false,
+        false, false,
         NinjaShukuchiHiddenStatusCatalog.Empty,
         SmartActionGuardBypassCatalog.Empty);
 
@@ -1009,6 +1010,90 @@ internal static class PvPMetadataGuard
                        StringComparison.Ordinal);
         });
 
+        var redMageGuardEngageVerified = ValidateFeature("Red Mage Guard engage", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(RedMageGuardEngageRules.CorpsACorpsActionId, out var corps) ||
+                !descriptions.TryGetRow(RedMageGuardEngageRules.CorpsACorpsActionId, out var corpsTransient) ||
+                !actions.TryGetRow(RedMageGuardEngageRules.MeleeComboCarrierActionId, out var riposte) ||
+                !descriptions.TryGetRow(RedMageGuardEngageRules.MeleeComboCarrierActionId, out var riposteTransient) ||
+                !actions.TryGetRow(RedMageGuardEngageRules.EnchantedZwerchhauActionId, out var zwerchhau) ||
+                !actions.TryGetRow(RedMageGuardEngageRules.EnchantedRedoublementActionId, out var redoublement) ||
+                !actions.TryGetRow(RedMageGuardEngageRules.ScorchActionId, out var scorch))
+            {
+                return false;
+            }
+
+            var corpsDescription = corpsTransient.Description.ToString();
+            var riposteDescription = riposteTransient.Description.ToString();
+            return guardVerified &&
+                   smartActionProtectionStatusesVerified &&
+                   string.Equals(corps.Name.ToString(), "Corps-a-corps", StringComparison.Ordinal) &&
+                   corps.Icon == RedMageGuardEngageRules.CorpsACorpsIconId &&
+                   corps.IsPvP &&
+                   corps.IsPlayerAction &&
+                   corps.ClassJob.IsValid &&
+                   corps.ClassJob.RowId == RedMageGuardEngageRules.RedMageJobId &&
+                   corps.ClassJobCategory.IsValid &&
+                   corps.ClassJobCategory.RowId == RedMageGuardEngageRules.RedMageClassJobCategoryId &&
+                   corps.ActionCategory.IsValid &&
+                   corps.ActionCategory.RowId == 4 &&
+                   corps.Range == RedMageGuardEngageRules.CorpsACorpsMaximumRangeYalms &&
+                   corps.EffectRange == 0 &&
+                   corps.Cast100ms == 0 &&
+                   corps.Recast100ms == 160 &&
+                   corps.CooldownGroup == 4 &&
+                   corps.AdditionalCooldownGroup == 71 &&
+                   corps.MaxCharges == 2 &&
+                   !corps.CanTargetSelf &&
+                   !corps.CanTargetParty &&
+                   !corps.CanTargetAlliance &&
+                   corps.CanTargetHostile &&
+                   !corps.CanTargetAlly &&
+                   !corps.TargetArea &&
+                   corps.RequiresLineOfSight &&
+                   corps.NeedToFaceTarget &&
+                   corps.PreservesCombo &&
+                   corps.AffectsPosition &&
+                   corpsDescription.Contains("Rushes target", StringComparison.Ordinal) &&
+                   corpsDescription.Contains("Maximum Charges: 2", StringComparison.Ordinal) &&
+                   corpsDescription.Contains("Cannot be executed while bound.", StringComparison.Ordinal) &&
+                   string.Equals(riposte.Name.ToString(), "Enchanted Riposte", StringComparison.Ordinal) &&
+                   riposte.Icon == RedMageGuardEngageRules.MeleeComboCarrierIconId &&
+                   riposte.IsPvP &&
+                   riposte.IsPlayerAction &&
+                   riposte.ClassJob.IsValid &&
+                   riposte.ClassJob.RowId == RedMageGuardEngageRules.RedMageJobId &&
+                   riposte.Range == 5 &&
+                   riposte.EffectRange == 0 &&
+                   riposte.Cast100ms == 0 &&
+                   riposte.Recast100ms == 160 &&
+                   riposte.CooldownGroup == 9 &&
+                   riposte.AdditionalCooldownGroup == 58 &&
+                   riposte.CanTargetHostile &&
+                   !riposte.TargetArea &&
+                   riposte.RequiresLineOfSight &&
+                   riposteDescription.Contains(
+                       SmartActionGuardBypassRules.ExactEnglishDescriptionSentence,
+                       StringComparison.Ordinal) &&
+                   riposteDescription.Contains(
+                       "Action changes to Enchanted Zwerchhau upon execution.",
+                       StringComparison.Ordinal) &&
+                   string.Equals(zwerchhau.Name.ToString(), "Enchanted Zwerchhau", StringComparison.Ordinal) &&
+                   zwerchhau.IsPvP &&
+                   zwerchhau.ClassJob.IsValid &&
+                   zwerchhau.ClassJob.RowId == RedMageGuardEngageRules.RedMageJobId &&
+                   string.Equals(redoublement.Name.ToString(), "Enchanted Redoublement", StringComparison.Ordinal) &&
+                   redoublement.IsPvP &&
+                   redoublement.ClassJob.IsValid &&
+                   redoublement.ClassJob.RowId == RedMageGuardEngageRules.RedMageJobId &&
+                   string.Equals(scorch.Name.ToString(), "Scorch", StringComparison.Ordinal) &&
+                   scorch.IsPvP &&
+                   scorch.ClassJob.IsValid &&
+                   scorch.ClassJob.RowId == RedMageGuardEngageRules.RedMageJobId;
+        });
+
         var ninjaShukuchiHiddenStatuses = NinjaShukuchiHiddenStatusCatalog.Empty;
         _ = ValidateFeature("Ninja Shukuchi Hidden statuses", log, () =>
         {
@@ -1506,6 +1591,7 @@ internal static class PvPMetadataGuard
             gunbreakerContinuationVerified,
             darkKnightShadowbringerVerified,
             darkKnightBlackbloodVerified,
+            redMageGuardEngageVerified,
             redMageResolutionVerified,
             redMageViceOfThornsVerified,
             blackMageFrostStarVerified,
@@ -1527,7 +1613,7 @@ internal static class PvPMetadataGuard
             "{EmergencyTeleportSage}/{EmergencyTeleportViper}, SmartKardia={SmartKardia}, " +
             "AutoLowMpFocusProbe={AutoLowMpFocusProbe}, DarkKnightPlunge={DarkKnightPlunge}, " +
             "GunbreakerContinuation={GunbreakerContinuation}, DarkKnightShadowbringer={DarkKnightShadowbringer}, " +
-            "DarkKnightBlackblood={DarkKnightBlackblood}, " +
+            "DarkKnightBlackblood={DarkKnightBlackblood}, RedMageGuardEngage={RedMageGuardEngage}, " +
             "RedMageResolution={RedMageResolution}, RedMageViceOfThorns={RedMageViceOfThorns}, " +
             "BlackMageFrostStar={BlackMageFrostStar}, MonkHeldCombo={MonkHeldCombo}, " +
             "SmartActionGuardBypassActions={SmartActionGuardBypassActions}.",
@@ -1562,6 +1648,7 @@ internal static class PvPMetadataGuard
             validation.GunbreakerContinuationVerified,
             validation.DarkKnightShadowbringerVerified,
             validation.DarkKnightBlackbloodVerified,
+            validation.RedMageGuardEngageVerified,
             validation.RedMageResolutionVerified,
             validation.RedMageViceOfThornsVerified,
             validation.BlackMageFrostStarVerified,

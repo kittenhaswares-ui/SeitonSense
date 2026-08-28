@@ -168,9 +168,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private static IntegratedBufferedReplayScope? integratedBufferedReplayScope;
 
     [ThreadStatic]
-    private static int explicitAutoGuardBreakBypassDepth;
-
-    [ThreadStatic]
     private static PredictiveCcBrakeBypassScope? predictiveCcBrakeBypassScope;
 
     [ThreadStatic]
@@ -220,6 +217,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private LocalGuardActionAttempt? latestLocalGuardActionAttempt;
     private long localGuardActionAttemptGeneration;
     private AutoGuardProtectionState autoGuardProtectionState = AutoGuardProtectionState.Initial;
+    private ExplicitAutoGuardBreakScope? explicitAutoGuardBreakScope;
     private long autoGuardProtectionArmedCount;
     private long autoGuardProtectionBlockedActionCount;
     private long autoGuardProtectionReleasedCount;
@@ -1069,15 +1067,35 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     /// <summary>
-    /// Preserves the documented /panicshu contract: this explicit command may
-    /// deliberately break even an automatically owned Guard. The scope stays
-    /// separate from the generic redirect bypass so no other location action
-    /// inherits the override.
+    /// Preserves the documented /panicshu and /seitonbw contract: either
+    /// explicit command may deliberately break even an automatically owned
+    /// Guard. The scope stays separate from the generic redirect bypass so no
+    /// other location action inherits the override.
     /// </summary>
-    internal IDisposable EnterExplicitAutoGuardBreak()
+    internal IDisposable EnterExplicitAutoGuardBreak(uint expectedActionId)
     {
-        explicitAutoGuardBreakBypassDepth++;
-        return new ExplicitAutoGuardBreakScope();
+        if (expectedActionId != PanicShukuchiRules.ActionId)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expectedActionId),
+                expectedActionId,
+                "Only exact PvP Shukuchi may explicitly break Auto-Guard ownership.");
+        }
+
+        var scope = new ExplicitAutoGuardBreakScope(
+            this,
+            expectedActionId,
+            Environment.CurrentManagedThreadId);
+        if (Interlocked.CompareExchange(
+                ref explicitAutoGuardBreakScope,
+                scope,
+                comparand: null) is not null)
+        {
+            throw new InvalidOperationException(
+                "An explicit Auto-Guard-break scope is already active.");
+        }
+
+        return scope;
     }
 
     internal NearAssistArmResult ArmSmartActionTarget()
@@ -1291,6 +1309,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     internal void Reset()
     {
+        RevokeExplicitAutoGuardBreak();
         ClearToken("Reset");
         ClearSmartKardiaTrigger();
         ClearAutoGuardProtection("Reset");
@@ -1303,6 +1322,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (started) framework.Update -= OnFrameworkUpdate;
         started = false;
         integratedInputRuntime = null;
+        RevokeExplicitAutoGuardBreak();
         ClearToken("Disposed");
         ClearSmartKardiaTrigger();
         lock (guardAttemptGate)
@@ -2099,12 +2119,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint extraParam,
         byte a7)
     {
-        if (explicitAutoGuardBreakBypassDepth > 0)
+        if (TryConsumeExplicitAutoGuardBreak(actionType, actionId))
         {
             // Spending the explicit command gives up ownership before the native
-            // call, even if Shukuchi is then rejected. A same-frame action must
-            // not remain trapped behind Guard the user deliberately chose to exit.
-            ClearAutoGuardProtection("Released: explicit /panicshu override");
+            // call, even if Shukuchi is then rejected. The scope is consumed and
+            // removed before Original, so no reentrant location action can inherit
+            // this one exact Shukuchi exception.
+            ClearAutoGuardProtection("Released: explicit Panic Shukuchi command override");
         }
         else if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
         {
@@ -2471,6 +2492,44 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             // An uncertain local Guard view must never enable a target rewrite.
             return true;
         }
+    }
+
+    private bool TryConsumeExplicitAutoGuardBreak(
+        ActionType actionType,
+        uint actionId)
+    {
+        var scope = Volatile.Read(ref explicitAutoGuardBreakScope);
+        if (scope is null ||
+            !ReferenceEquals(scope.Owner, this) ||
+            scope.ManagedThreadId != Environment.CurrentManagedThreadId ||
+            scope.ExpectedActionId != PanicShukuchiRules.ActionId ||
+            actionType != ActionType.Action ||
+            actionId != scope.ExpectedActionId ||
+            !scope.TryConsume())
+        {
+            return false;
+        }
+
+        return ReferenceEquals(
+            Interlocked.CompareExchange(
+                ref explicitAutoGuardBreakScope,
+                value: null,
+                comparand: scope),
+            scope);
+    }
+
+    private void ReleaseExplicitAutoGuardBreak(ExplicitAutoGuardBreakScope scope) =>
+        Interlocked.CompareExchange(
+            ref explicitAutoGuardBreakScope,
+            value: null,
+            comparand: scope);
+
+    private void RevokeExplicitAutoGuardBreak()
+    {
+        var scope = Interlocked.Exchange(
+            ref explicitAutoGuardBreakScope,
+            value: null);
+        scope?.Revoke();
     }
 
     private bool TryResolveExactHeldSmartActionTargetIdentity(
@@ -4651,16 +4710,28 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             : null;
     }
 
-    private sealed class ExplicitAutoGuardBreakScope : IDisposable
+    private sealed class ExplicitAutoGuardBreakScope(
+        NearAssistRedirector owner,
+        uint expectedActionId,
+        int managedThreadId) : IDisposable
     {
-        private int disposed;
+        private int consumedOrDisposed;
+
+        internal NearAssistRedirector Owner { get; } = owner;
+        internal uint ExpectedActionId { get; } = expectedActionId;
+        internal int ManagedThreadId { get; } = managedThreadId;
+
+        internal bool TryConsume() =>
+            Interlocked.CompareExchange(ref consumedOrDisposed, 1, 0) == 0;
+
+        internal void Revoke() =>
+            Interlocked.Exchange(ref consumedOrDisposed, 1);
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
-            explicitAutoGuardBreakBypassDepth = Math.Max(
-                0,
-                explicitAutoGuardBreakBypassDepth - 1);
+            if (Interlocked.CompareExchange(ref consumedOrDisposed, 1, 0) != 0)
+                return;
+            Owner.ReleaseExplicitAutoGuardBreak(this);
         }
     }
 

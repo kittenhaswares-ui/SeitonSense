@@ -18,6 +18,10 @@ internal sealed partial class SettingsWindow : Window
     private readonly PressureCounterWindow pressureCounter;
     private readonly Action resetBufferLearningWindowPosition;
     private readonly Action resetWolvesDenRotationWindowPosition;
+    private readonly Func<bool> resetCrystallineConflictMapStatistics;
+    private string crystallineConflictMapStatisticsResetFeedback = string.Empty;
+    private bool crystallineConflictMapStatisticsResetSucceeded;
+    private long crystallineConflictMapStatisticsResetFeedbackUntil;
     private SettingsPage selectedPage = SettingsPage.Start;
 
     public SettingsWindow(
@@ -29,7 +33,8 @@ internal sealed partial class SettingsWindow : Window
         IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter,
         Action? resetBufferLearningWindowPosition = null,
-        Action? resetWolvesDenRotationWindowPosition = null)
+        Action? resetWolvesDenRotationWindowPosition = null,
+        Func<bool>? resetCrystallineConflictMapStatistics = null)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
@@ -43,6 +48,8 @@ internal sealed partial class SettingsWindow : Window
             resetBufferLearningWindowPosition ?? (() => { });
         this.resetWolvesDenRotationWindowPosition =
             resetWolvesDenRotationWindowPosition ?? (() => { });
+        this.resetCrystallineConflictMapStatistics =
+            resetCrystallineConflictMapStatistics ?? (() => false);
         Size = new Vector2(880f, 760f);
         SizeCondition = ImGuiCond.FirstUseEver;
     }
@@ -97,6 +104,8 @@ internal sealed partial class SettingsWindow : Window
 
     public override void OnClose()
     {
+        crystallineConflictMapStatisticsResetFeedback = string.Empty;
+        crystallineConflictMapStatisticsResetFeedbackUntil = 0;
         overlay.PreviewEnabled = false;
         overlay.CcProtectionPreviewEnabled = false;
         overlay.ResourceAuraPreviewEnabled = false;

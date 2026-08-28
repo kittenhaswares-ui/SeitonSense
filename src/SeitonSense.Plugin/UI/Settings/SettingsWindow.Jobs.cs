@@ -13,8 +13,8 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after Purify and SAM follows AST; " +
+            "in deterministic urgency order: AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after Purify, then RDM and SAM; " +
             "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Astrologian — Harmonischer Orbis", ImGuiTreeNodeFlags.DefaultOpen))
@@ -43,6 +43,51 @@ internal sealed partial class SettingsWindow
                 "clean client rejection may retry only the same frozen action/target; ambiguity, drift, expiry, or " +
                 "release ends the sequence without an alternate. The global held-helper cast-cancel test can cancel " +
                 "your current cast only for an otherwise-ready frozen Orbis intent.");
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.Separator();
+
+        if (ImGui.CollapsingHeader("Red Mage — fresh Guard engage", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= Checkbox(
+                "Corps-a-corps into a freshly started enemy Guard on held key (includes WASD)",
+                configuration.EnableRedMageGuardEngageOnHeldKey,
+                value => configuration.EnableRedMageGuardEngageOnHeldKey = value);
+            changed |= SliderInt(
+                "Minimum own HP for Guard engage",
+                configuration.RedMageGuardEngageMinimumHpPercent,
+                RedMageGuardEngageRules.MinimumConfigurablePercent,
+                RedMageGuardEngageRules.MaximumConfigurablePercent,
+                value => configuration.RedMageGuardEngageMinimumHpPercent = value,
+                "%d%%");
+            changed |= SliderInt(
+                "Minimum own MP for Guard engage",
+                configuration.RedMageGuardEngageMinimumMpPercent,
+                RedMageGuardEngageRules.MinimumConfigurablePercent,
+                RedMageGuardEngageRules.MaximumConfigurablePercent,
+                value => configuration.RedMageGuardEngageMinimumMpPercent = value,
+                "%d%%");
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+            ImGui.TextDisabled(
+                "Default off and PvP Red Mage only. While any eligible gameplay key remains held, Corps-a-corps " +
+                "(29699) can engage one exact enemy whose Guard has just begun. The helper requires the unspent " +
+                "melee-combo starter Riposte (41488) exactly; later Zwerchhau/Redoublement forms are deliberately " +
+                "not treated as a ready starter. Own HP and MP thresholds are inclusive and default to 80% / 50%. " +
+                "Your own Guard, death, untargetability, Bind, or other reviewed target protection blocks it.");
+            ImGui.TextDisabled(
+                "Only an exact absent-to-active Guard edge opens one episode. The client-reported Guard remaining " +
+                "time must be above 3.0 and no more than 4.25 seconds, and the bounded lease can never survive past " +
+                "the first one second of that Guard. A target first seen already guarded is considered pre-existing, " +
+                "not fresh. Missing unrelated CC enemy slots do not block independently exact S1-S5 targets; duplicate " +
+                "or ambiguous identities fail closed. Wolves' Den testing uses only your exact current target.");
+            ImGui.TextDisabled(
+                "The selected actor, action, context, Guard episode, and physical key are frozen. Corps-a-corps uses " +
+                "its exact native 25-yalm range, line of sight, readiness, and target status with no target redirect. " +
+                "Only after the client accepts Corps-a-corps is that same revalidated actor hard-targeted once. There " +
+                "is no automatic melee follow-up, fallback target, or rerank. A clean client rejection may retry only " +
+                "inside the same one-second Guard window; ambiguity ends the episode. The optional global cast-cancel " +
+                "test cannot extend that window.");
             ImGui.PopTextWrapPos();
         }
 

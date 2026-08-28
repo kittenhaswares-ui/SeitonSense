@@ -6,6 +6,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
+using SeitonSense.Plugin.Services;
 
 namespace SeitonSense.Plugin.UI;
 
@@ -26,8 +27,10 @@ internal sealed class WolvesDenRotationWindow : Window
 
     private readonly PluginConfiguration configuration;
     private readonly IClientState clientState;
+    private readonly IPlayerState playerState;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
+    private readonly CrystallineConflictMapStatisticsService mapStatistics;
     private bool resetPosition;
     private CrystallineConflictArena? displayedCurrentArena;
     private CrystallineConflictArena animationFromArena;
@@ -36,14 +39,18 @@ internal sealed class WolvesDenRotationWindow : Window
     internal WolvesDenRotationWindow(
         PluginConfiguration configuration,
         IClientState clientState,
+        IPlayerState playerState,
         IGameGui gameGui,
-        ITextureProvider textureProvider)
+        ITextureProvider textureProvider,
+        CrystallineConflictMapStatisticsService mapStatistics)
         : base("CC Rotation###SeitonSenseWolvesDenRotation")
     {
         this.configuration = configuration;
         this.clientState = clientState;
+        this.playerState = playerState;
         this.gameGui = gameGui;
         this.textureProvider = textureProvider;
+        this.mapStatistics = mapStatistics;
 
         IsOpen = true;
         RespectCloseHotkey = false;
@@ -90,7 +97,7 @@ internal sealed class WolvesDenRotationWindow : Window
         var scale = Math.Clamp(configuration.WolvesDenRotationPanelScale, 0.75f, 1.75f);
         var globalScale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
         var uiScale = scale * globalScale;
-        var width = 320f * uiScale;
+        var width = 520f * uiScale;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         ImGui.SetWindowFontScale(scale);
@@ -114,42 +121,16 @@ internal sealed class WolvesDenRotationWindow : Window
         }
 
         UpdateRotationAnimation(snapshot.CurrentArena);
-
-        var currentName = CrystallineConflictRotationRules.GetDisplayName(snapshot.CurrentArena);
-        var countdown = CrystallineConflictRotationRules.FormatCountdown(snapshot.RemainingSeconds);
-        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.07f, 0.10f, 0.16f, 0.98f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.10f, 0.18f, 0.27f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.08f, 0.14f, 0.22f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(0.36f, 0.88f, 1f, 0.92f));
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1.5f * uiScale);
-        var toggleExpanded = ImGui.Button(
-            $"CURRENT  ·  {currentName}\n{countdown} remaining##SeitonSenseRotationCurrent",
-            new Vector2(width, 48f * uiScale));
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor(4);
-
-        if (toggleExpanded)
-        {
-            configuration.WolvesDenRotationPanelExpanded =
-                !configuration.WolvesDenRotationPanelExpanded;
-            configuration.Save();
-        }
-
-        var elapsedFraction = Math.Clamp(
-            1f - (snapshot.RemainingSeconds / (float)CrystallineConflictRotationRules.RotationSeconds),
-            0f,
-            1f);
-        ImGui.ProgressBar(elapsedFraction, new Vector2(width, 8f * uiScale), string.Empty);
-        ImGui.TextUnformatted(
-            $"NEXT  ·  {CrystallineConflictRotationRules.GetDisplayName(snapshot.NextArena)}");
-
-        if (configuration.WolvesDenRotationPanelExpanded)
-            DrawExpandedRotation(snapshot, width, uiScale);
+        DrawRotationPanel(snapshot, width, uiScale);
 
         if (!ImGui.IsWindowHovered()) return;
         ImGui.BeginTooltip();
         ImGui.TextUnformatted("Local Patch 7.5 hourly map schedule");
-        ImGui.TextUnformatted("Click the current map to show the full card deck and calibration controls.");
+        ImGui.TextUnformatted("The seven cards reorder automatically when the hourly map changes.");
+        ImGui.TextUnformatted(
+            mapStatistics.CaptureAvailable && mapStatistics.StorageAvailable
+                ? "W/L counts only future, exact local public-CC result packets."
+                : "New W/L capture is unavailable; no result is guessed or counted.");
         ImGui.TextUnformatted(configuration.WolvesDenRotationPanelLocked
             ? "Position locked; the panel controls remain clickable."
             : "Drag the panel to move it.");
@@ -169,13 +150,11 @@ internal sealed class WolvesDenRotationWindow : Window
         configuration.Save();
     }
 
-    private void DrawExpandedRotation(
+    private void DrawRotationPanel(
         CrystallineConflictRotationSnapshot snapshot,
         float width,
         float uiScale)
     {
-        ImGui.Separator();
-        ImGui.TextDisabled("Full rotation  ·  local game artwork");
         DrawRotationCardDeck(snapshot, width, uiScale);
 
         ImGui.Separator();
@@ -233,8 +212,8 @@ internal sealed class WolvesDenRotationWindow : Window
         float uiScale)
     {
         const int cardCount = CrystallineConflictRotationRules.ArenaCount;
-        var cardHeight = 48f * uiScale;
-        var cardGap = 5f * uiScale;
+        var cardHeight = 66f * uiScale;
+        var cardGap = 6f * uiScale;
         var cardStride = cardHeight + cardGap;
         var stackHeight = (cardHeight * cardCount) + (cardGap * (cardCount - 1));
         var origin = ImGui.GetCursorScreenPos();
@@ -263,7 +242,15 @@ internal sealed class WolvesDenRotationWindow : Window
                 : targetSlot;
             var minimum = origin + new Vector2(0f, animatedSlot * cardStride);
             var maximum = minimum + new Vector2(width, cardHeight);
-            DrawRotationCard(draw, arena, targetSlot, snapshot.RemainingSeconds, minimum, maximum, uiScale);
+            DrawRotationCard(
+                draw,
+                arena,
+                targetSlot,
+                snapshot.RemainingSeconds,
+                playerState.ContentId,
+                minimum,
+                maximum,
+                uiScale);
         }
 
         draw.PopClipRect();
@@ -275,6 +262,7 @@ internal sealed class WolvesDenRotationWindow : Window
         CrystallineConflictArena arena,
         int targetSlot,
         int remainingSeconds,
+        ulong localContentId,
         Vector2 minimum,
         Vector2 maximum,
         float uiScale)
@@ -296,10 +284,10 @@ internal sealed class WolvesDenRotationWindow : Window
             rounding);
         draw.AddRectFilled(minimum, maximum, Pack(background), rounding);
 
-        var artworkPadding = 4f * uiScale;
+        var artworkPadding = 5f * uiScale;
         var artworkMinimum = minimum + new Vector2(artworkPadding, artworkPadding);
         var artworkMaximum = new Vector2(
-            minimum.X + (128f * uiScale),
+            minimum.X + (210f * uiScale),
             maximum.Y - artworkPadding);
         if (!TryDrawArenaArtwork(draw, arena, artworkMinimum, artworkMaximum, current ? 1f : 0.78f))
         {
@@ -318,12 +306,12 @@ internal sealed class WolvesDenRotationWindow : Window
             Pack(new Vector4(0.01f, 0.02f, 0.04f, current ? 0.08f : 0.20f)),
             3f * uiScale);
 
-        var textLeft = artworkMaximum.X + (9f * uiScale);
-        var namePosition = new Vector2(textLeft, minimum.Y + (8f * uiScale));
-        var sequencePosition = new Vector2(textLeft, minimum.Y + (28f * uiScale));
+        var textLeft = artworkMaximum.X + (10f * uiScale);
+        var namePosition = new Vector2(textLeft, minimum.Y + (10f * uiScale));
+        var sequencePosition = new Vector2(textLeft, minimum.Y + (40f * uiScale));
         var font = ImGui.GetFont();
-        var nameFontSize = Math.Max(10f, 11.5f * uiScale);
-        var sequenceFontSize = Math.Max(9f, 9.5f * uiScale);
+        var nameFontSize = Math.Max(11f, 12.5f * uiScale);
+        var sequenceFontSize = Math.Max(9.5f, 10.5f * uiScale);
         draw.AddText(
             font,
             nameFontSize,
@@ -345,6 +333,37 @@ internal sealed class WolvesDenRotationWindow : Window
                 1 => "NEXT  ·  +1H",
                 _ => $"+{targetSlot}H",
             });
+
+        var hasStatistics = mapStatistics.TryGetStatistics(
+            localContentId,
+            arena,
+            out var statistics);
+        var recordText = hasStatistics
+            ? CrystallineConflictMapStatisticsRules.FormatRecord(statistics)
+            : "NO DATA";
+        var rateText = hasStatistics
+            ? CrystallineConflictMapStatisticsRules.FormatWinRate(statistics)
+            : string.Empty;
+        var statisticsLeft = maximum.X - (104f * uiScale);
+        draw.AddText(
+            font,
+            sequenceFontSize,
+            new Vector2(statisticsLeft, minimum.Y + (10f * uiScale)),
+            Pack(hasStatistics
+                ? new Vector4(0.84f, 0.94f, 0.98f, 1f)
+                : new Vector4(0.48f, 0.54f, 0.62f, 1f)),
+            recordText);
+        if (!string.IsNullOrEmpty(rateText))
+        {
+            draw.AddText(
+                font,
+                sequenceFontSize,
+                new Vector2(statisticsLeft, minimum.Y + (40f * uiScale)),
+                Pack(current
+                    ? new Vector4(0.36f, 0.88f, 1f, 1f)
+                    : new Vector4(0.55f, 0.68f, 0.76f, 1f)),
+                rateText);
+        }
 
         draw.AddRect(
             minimum,

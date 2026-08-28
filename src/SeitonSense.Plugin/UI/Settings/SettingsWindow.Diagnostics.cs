@@ -23,6 +23,7 @@ internal sealed partial class SettingsWindow
         var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
         var astrologianOrbis = personalStatus.AstrologianHarmonicOrbisDiagnostics;
+        var redMageGuard = personalStatus.RedMageGuardEngageDiagnostics;
         var emergencyTeleport = personalStatus.EmergencyTeleportDiagnostics;
         var rescue = personalStatus.AllyRescueDiagnostics;
         var miracle = personalStatus.MiracleInterceptDiagnostics;
@@ -152,6 +153,21 @@ internal sealed partial class SettingsWindow
             $"{astrologianOrbis.BaseAttemptCount}/{astrologianOrbis.BaseAcceptedCount}, double=" +
             $"{astrologianOrbis.FollowUpAttemptCount}/{astrologianOrbis.FollowUpAcceptedCount}, " +
             $"last={astrologianOrbis.LastEvent}");
+        ImGui.TextWrapped(
+            $"RDM fresh-Guard engage: metadata={personalStatus.RedMageGuardEngageMetadataVerified}, " +
+            $"{redMageGuard.Reason}, context={redMageGuard.Context}, " +
+            $"action/combo={redMageGuard.ResolvedActionId}/{redMageGuard.ResolvedComboCarrierActionId}, " +
+            $"ready={redMageGuard.CorpsReady}/{redMageGuard.MeleeStarterReady}, candidates=" +
+            $"{redMageGuard.CandidateCount}, S={redMageGuard.EnemySlot}, target=" +
+            $"{redMageGuard.TargetGameObjectId:X}/{redMageGuard.TargetEntityId:X}, Guard=" +
+            $"{redMageGuard.GuardRemainingMilliseconds} ms/episode={redMageGuard.GuardEpisodeToken}, " +
+            $"lease={redMageGuard.LeaseRemainingMilliseconds} ms, key={redMageGuard.HeldGameplayKey}, " +
+            $"claim={redMageGuard.InputClaimed}, attempt={redMageGuard.UseActionAttempted}/" +
+            $"{redMageGuard.UseActionAccepted}, hard-target={redMageGuard.HardTargetConfirmed}, " +
+            $"count attempt/accepted/target/rejected/unknown={redMageGuard.AttemptCount}/" +
+            $"{redMageGuard.AcceptedCount}/{redMageGuard.TargetConfirmedCount}/" +
+            $"{redMageGuard.RejectedCount}/{redMageGuard.UnknownCount}, resolution=" +
+            $"{redMageGuard.CandidateResolution}, last={redMageGuard.LastEvent}");
         ImGui.TextWrapped(
             $"Emergency Teleport: {emergencyTeleport.Decision}/{emergencyTeleport.Reason}, " +
             $"danger={emergencyTeleport.Danger}, action={emergencyTeleport.ResolvedActionId}, " +
@@ -343,9 +359,9 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > AST held Near Help > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "The current request order is Purify > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
             "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; AST runs directly after Purify and SAM follows AST, " +
+            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; AST runs directly after Purify, then RDM and SAM, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof, uses the shared Smart Action target policy in CC, and never visibly " +

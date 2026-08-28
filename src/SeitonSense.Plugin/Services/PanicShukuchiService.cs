@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -11,9 +12,12 @@ namespace SeitonSense.Plugin.Services;
 internal readonly record struct PanicShukuchiDiagnostics(
     bool Enabled,
     bool MetadataVerified,
+    bool BackwardCommandEnabled,
     SupportedPvPContext LastContext,
     PanicShukuchiPoint LastOrigin,
     PanicShukuchiPoint LastDestination,
+    string LastCommand,
+    BackwardPanicShukuchiCameraObservation LastCamera,
     uint LastAdjustedActionId,
     long CommandCount,
     long AttemptCount,
@@ -23,26 +27,40 @@ internal readonly record struct PanicShukuchiDiagnostics(
     string LastEvent)
 {
     internal string ToChatLine() =>
-        $"mode=immediate,enabled={Enabled},meta={MetadataVerified},context={LastContext},origin=" +
+        $"mode=immediate,enabled={Enabled},bw-enabled={BackwardCommandEnabled},meta={MetadataVerified}," +
+        $"context={LastContext},command={LastCommand},origin=" +
         $"{LastOrigin.X:0.00}/{LastOrigin.Y:0.00}/{LastOrigin.Z:0.00},destination=" +
         $"{LastDestination.X:0.00}/{LastDestination.Y:0.00}/{LastDestination.Z:0.00}," +
+        $"camera={LastCamera.CameraManagerAvailable}/{LastCamera.NormalCameraAvailable}/" +
+        $"{LastCamera.ActiveCameraMatchesNormal}/index-{LastCamera.ActiveCameraIndex}/" +
+        $"mode-{LastCamera.ControlMode}/zoom-{LastCamera.ZoomMode}/" +
+        $"event-{LastCamera.EventCameraAutoControl}/yaw-{LastCamera.DirectionRadians:0.000}," +
         $"adjusted={LastAdjustedActionId}," +
         $"count={CommandCount}/{AttemptCount}/{AcceptedCount}/{RejectedCount}/{RefusedCount}," +
         $"last={LastEvent}";
 }
 
 /// <summary>
-/// Executes only an explicit /panicshu command. Every invocation computes one
-/// exact 19.5-yalm forward ground point and immediately makes at most one native
-/// UseActionLocation call. It deliberately has no scheduler, Guard/CC gate,
-/// Purify priority, cast/queue/animation wait, or pending state,
+/// Executes the explicit /panicshu command and its default-off /seitonbw sister.
+/// Every invocation computes one exact 19.5-yalm ground point and immediately
+/// makes at most one native UseActionLocation call. /panicshu keeps character
+/// facing; /seitonbw reads only the normal gameplay camera and uses its exact
+/// camera-relative screen-back direction. The shared path deliberately has no scheduler,
+/// Guard/CC gate, Purify priority, cast/queue/animation wait, or pending state,
 /// retry, shorter-point fallback, cursor movement, or target mutation.
 /// A positively ready native cooldown is required before the call so an active
 /// recast cannot start a client-predicted animation which later rolls back.
 /// </summary>
 internal sealed class PanicShukuchiService
 {
+    private enum DestinationMode
+    {
+        CharacterFacingForward,
+        CameraFacingBackward,
+    }
+
     internal const string Command = "/panicshu";
+    internal const string BackwardCameraCommand = "/seitonbw";
 
     private const ulong DefaultTargetSentinel = 0xE0000000UL;
     private const float GroundProbeStartAboveYalms = 5f;
@@ -65,6 +83,8 @@ internal sealed class PanicShukuchiService
     private SupportedPvPContext lastContext;
     private PanicShukuchiPoint lastOrigin;
     private PanicShukuchiPoint lastDestination;
+    private string lastCommand;
+    private BackwardPanicShukuchiCameraObservation lastCamera;
     private uint lastAdjustedActionId;
     private string lastEvent;
 
@@ -84,6 +104,7 @@ internal sealed class PanicShukuchiService
         this.nearAssist = nearAssist;
         this.log = log;
         metadataVerified = metadata.PanicShukuchiVerified;
+        lastCommand = "none";
         lastEvent = metadataVerified
             ? "Ready for immediate explicit /panicshu"
             : "Metadata mismatch; disabled";
@@ -98,9 +119,12 @@ internal sealed class PanicShukuchiService
                 return new PanicShukuchiDiagnostics(
                     configuration.Enabled,
                     metadataVerified,
+                    configuration.EnableBackwardPanicShukuchiCommand,
                     lastContext,
                     lastOrigin,
                     lastDestination,
+                    lastCommand,
+                    lastCamera,
                     lastAdjustedActionId,
                     commandCount,
                     attemptCount,
@@ -112,13 +136,34 @@ internal sealed class PanicShukuchiService
         }
     }
 
-    internal unsafe void Execute(string arguments)
+    internal void Execute(string arguments) =>
+        ExecuteImmediate(arguments, DestinationMode.CharacterFacingForward);
+
+    internal void ExecuteBackwardCamera(string arguments) =>
+        ExecuteImmediate(arguments, DestinationMode.CameraFacingBackward);
+
+    private unsafe void ExecuteImmediate(string arguments, DestinationMode mode)
     {
-        lock (diagnosticsGate) commandCount++;
+        var command = mode == DestinationMode.CameraFacingBackward
+            ? BackwardCameraCommand
+            : Command;
+        lock (diagnosticsGate)
+        {
+            commandCount++;
+            lastCommand = command;
+            lastCamera = default;
+        }
 
         if (!string.IsNullOrWhiteSpace(arguments))
         {
-            RecordRefused("Arguments rejected; use /panicshu without arguments");
+            RecordRefused($"Arguments rejected; use {command} without arguments");
+            return;
+        }
+
+        if (mode == DestinationMode.CameraFacingBackward &&
+            !configuration.EnableBackwardPanicShukuchiCommand)
+        {
+            RecordRefused("/seitonbw is disabled in Macro Helpers");
             return;
         }
 
@@ -175,19 +220,71 @@ internal sealed class PanicShukuchiService
 
             var origin = default(PanicShukuchiPoint);
             var candidate = default(PanicShukuchiCandidate);
+            var cameraObservation = default(BackwardPanicShukuchiCameraObservation);
             if (localValid)
             {
                 var position = local!.Position;
                 origin = new PanicShukuchiPoint(position.X, position.Y, position.Z);
-                if (PanicShukuchiRules.TryCreateForwardProbe(
+                var directionRotation = default(float);
+                var groundProbe = default(PanicShukuchiPoint);
+                bool probeCreated;
+                if (mode == DestinationMode.CharacterFacingForward)
+                {
+                    directionRotation = local.Rotation;
+                    probeCreated = PanicShukuchiRules.TryCreateForwardProbe(
                         origin,
-                        local.Rotation,
-                        out var forwardProbe))
+                        directionRotation,
+                        out groundProbe);
+                }
+                else
+                {
+                    var cameraManager = CameraManager.Instance();
+                    Camera* normalCamera = cameraManager != null
+                        ? cameraManager->Camera
+                        : null;
+                    var activeCameraIndex = cameraManager != null
+                        ? cameraManager->ActiveCameraIndex
+                        : -1;
+                    Camera* activeCamera = null;
+                    if (cameraManager != null &&
+                        normalCamera != null &&
+                        activeCameraIndex ==
+                        BackwardPanicShukuchiRules.NormalGameplayCameraIndex)
+                    {
+                        activeCamera = cameraManager->GetActiveCamera();
+                    }
+
+                    cameraObservation = new BackwardPanicShukuchiCameraObservation(
+                        CameraManagerAvailable: cameraManager != null,
+                        NormalCameraAvailable: normalCamera != null,
+                        ActiveCameraMatchesNormal:
+                            normalCamera != null && activeCamera == normalCamera,
+                        ActiveCameraIndex: activeCameraIndex,
+                        ControlMode: normalCamera != null
+                            ? (int)normalCamera->ControlMode
+                            : -1,
+                        ZoomMode: normalCamera != null
+                            ? (int)normalCamera->ZoomMode
+                            : -1,
+                        EventCameraAutoControl:
+                            normalCamera != null && normalCamera->IsEventCameraAutoControl,
+                        DirectionRadians: normalCamera != null
+                            ? normalCamera->DirH
+                            : float.NaN);
+                    probeCreated =
+                        BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(
+                            origin,
+                            cameraObservation,
+                            out directionRotation,
+                            out groundProbe);
+                }
+
+                if (probeCreated)
                 {
                     var rayOrigin = new Vector3(
-                        forwardProbe.X,
-                        forwardProbe.Y + GroundProbeStartAboveYalms,
-                        forwardProbe.Z);
+                        groundProbe.X,
+                        groundProbe.Y + GroundProbeStartAboveYalms,
+                        groundProbe.Z);
                     if (BGCollisionModule.RaycastMaterialFilter(
                             rayOrigin,
                             -Vector3.UnitY,
@@ -200,7 +297,7 @@ internal sealed class PanicShukuchiService
                         var hit = groundHit.Point;
                         candidate = new PanicShukuchiCandidate(
                             origin,
-                            local.Rotation,
+                            directionRotation,
                             new PanicShukuchiGroundHit(
                                 true,
                                 new PanicShukuchiPoint(hit.X, hit.Y, hit.Z)));
@@ -224,12 +321,22 @@ internal sealed class PanicShukuchiService
                 lastContext = context;
                 lastOrigin = origin;
                 lastDestination = candidate.GroundHit.Position;
+                lastCamera = cameraObservation;
                 lastAdjustedActionId = adjustedActionId;
             }
 
             if (!decision.ShouldAttempt || decision.Intent is not { } intent)
             {
-                RecordRefused($"Immediate command refused: {decision.Reason}");
+                RecordRefused(mode == DestinationMode.CameraFacingBackward
+                    ? $"Immediate /seitonbw command refused: {decision.Reason}"
+                    : $"Immediate command refused: {decision.Reason}");
+                return;
+            }
+
+            if (mode == DestinationMode.CameraFacingBackward &&
+                !configuration.EnableBackwardPanicShukuchiCommand)
+            {
+                RecordRefused("/seitonbw was disabled before its native boundary");
                 return;
             }
 
@@ -244,7 +351,8 @@ internal sealed class PanicShukuchiService
             bool accepted;
             try
             {
-                using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak();
+                using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(
+                    PanicShukuchiRules.ActionId);
                 accepted = actionManager->UseActionLocation(
                     ActionType.Action,
                     PanicShukuchiRules.ActionId,
@@ -258,10 +366,21 @@ internal sealed class PanicShukuchiService
                 lock (diagnosticsGate)
                 {
                     rejectedCount++;
-                    lastEvent = "Immediate native Shukuchi threw; command ended";
+                    lastEvent = mode == DestinationMode.CameraFacingBackward
+                        ? "Immediate /seitonbw native Shukuchi threw; command ended"
+                        : "Immediate native Shukuchi threw; command ended";
                 }
 
-                log.Error(exception, "Seiton Sense immediate Panic Shukuchi native call failed.");
+                if (mode == DestinationMode.CameraFacingBackward)
+                {
+                    log.Error(
+                        exception,
+                        "Seiton Sense immediate /seitonbw Panic Shukuchi native call failed.");
+                }
+                else
+                {
+                    log.Error(exception, "Seiton Sense immediate Panic Shukuchi native call failed.");
+                }
                 return;
             }
 
@@ -270,12 +389,16 @@ internal sealed class PanicShukuchiService
                 if (accepted)
                 {
                     acceptedCount++;
-                    lastEvent = "Immediate native Shukuchi accepted";
+                    lastEvent = mode == DestinationMode.CameraFacingBackward
+                        ? "Immediate /seitonbw native Shukuchi accepted"
+                        : "Immediate native Shukuchi accepted";
                 }
                 else
                 {
                     rejectedCount++;
-                    lastEvent = "Immediate native Shukuchi rejected";
+                    lastEvent = mode == DestinationMode.CameraFacingBackward
+                        ? "Immediate /seitonbw native Shukuchi rejected"
+                        : "Immediate native Shukuchi rejected";
                 }
             }
         }
@@ -284,10 +407,21 @@ internal sealed class PanicShukuchiService
             lock (diagnosticsGate)
             {
                 refusedCount++;
-                lastEvent = "Immediate command validation failed closed";
+                lastEvent = mode == DestinationMode.CameraFacingBackward
+                    ? "Immediate /seitonbw validation failed closed"
+                    : "Immediate command validation failed closed";
             }
 
-            log.Error(exception, "Seiton Sense immediate Panic Shukuchi command failed closed.");
+            if (mode == DestinationMode.CameraFacingBackward)
+            {
+                log.Error(
+                    exception,
+                    "Seiton Sense immediate /seitonbw Panic Shukuchi command failed closed.");
+            }
+            else
+            {
+                log.Error(exception, "Seiton Sense immediate Panic Shukuchi command failed closed.");
+            }
         }
     }
 
