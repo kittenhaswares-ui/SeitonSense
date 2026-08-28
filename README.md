@@ -2,12 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.36.0.1 moves the default-off Viper
-held Serpentiner-Geist follow-ups onto the existing Smart Action target policy
-in Crystalline Conflict, including its protection-safe ranking and exact `<t>`
-fallback, without a visible target change. It also adds an immediate enemy DRG
-`Sky High` airborne warning with the LB icon, live confirmed countdown, and a
-one-shot selectable sound. It retains v0.36.0.0's AST held `/nearhelp` heal,
+assistance, and target highlights. Version 0.37.0.0 adds a movable, clickable
+Wolves' Den Crystalline Conflict rotation panel with the current arena,
+countdown, next arena, full order, and local phase calibration. It also adds a
+read-only PvP range helper around the local player: an inner 5-yalm melee ring
+and an outer ring for the current job's furthest reviewed hostile non-LB action,
+including hostile gap closers. It retains v0.36.0.1's protection-safe Viper
+Smart Action targeting and exact enemy DRG `Sky High` warning, v0.36.0.0's AST held `/nearhelp` heal,
 v0.35.0.3's exact Guard-ignoring Smart Action
 support, v0.35.0.2's Panic Shukuchi repair and Ninja Hidden protection, plus
 v0.35.0.1's native Turbo/Latest Input path, exact Viper Wolves' Den targeting,
@@ -41,6 +42,21 @@ and Super Focus Glow into one configurable custom-repository plugin.
 
 ## Highlights
 
+- **Local CC rotation panel:** while in Wolves' Den Pier, a movable and lockable
+  panel shows the current Patch 7.5 arena, the live time remaining, and the next
+  arena. Clicking the current map expands the complete seven-map order and saved
+  `<` / `>` phase calibration. The order and one-hour interval come from the
+  official Patch 7.5 notes; the bundled default phase follows the public
+  community calendar reference and can be corrected locally. The panel never
+  queries a queue, player roster, service, or network endpoint.
+- **PvP range helper:** two flat world-space rings follow the local player in PvP
+  and Wolves' Den. The inner ring marks nominal 5-yalm melee reach; the outer
+  ring marks the current combat job's furthest reviewed hostile non-LB action,
+  including hostile gap closers. All 21 PvP-enabled jobs are covered, with
+  configurable visibility, labels, colors, opacity, width, and foreground
+  placement. The guide is geometric only: it does not claim line of sight,
+  cooldown readiness, terrain reach, or target-hitbox overlap, and it never
+  changes targeting or action dispatch.
 - **Sharp pressure counter:** an integrated HOWMANY-style counter shows how many
   enemies are currently pressuring you. It combines verified hard targets, cast
   targets, a bounded recent-harmful-action window, and the early MCH limit-break
@@ -1604,8 +1620,10 @@ Kardia, and the Viper Serpentiner-Geist helper are under
 Job Tools. Reset Defaults clears previews and restores every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 41 is current. It adds the default-off AST held Near Help
-option without enabling it for upgrades, fresh installs, or Reset Defaults.
+Configuration schema 42 is current. It adds the visible-by-default local Wolves'
+Den rotation panel and PvP range helper without changing any targeting or action
+setting. Schema 41 adds the default-off AST held Near Help option without
+enabling it for upgrades, fresh installs, or Reset Defaults.
 Schema 40 integrates the generic one-shot smart action buffer and opt-in native
 standard-keyboard-hotbar Turbo directly into
 Seiton Sense. The buffer defaults to 1,000 ms, is adjustable from 100-1,500 ms,
@@ -1955,8 +1973,9 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 517-test Core registry and source checks pin
-configuration schema 41, the default-off AST held Near Help sequence, the
+For the current source, the exact 520-test Core registry and source checks pin
+configuration schema 42, the deterministic local CC rotation, the complete
+fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
 generic smart buffer and default-off native Turbo,
 the default-off PvP latency-response/coordination path,
 ranged Smart Tab, Wolves' Den Smart Recuperate testing,

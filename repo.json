@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
-    "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
+    "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.36.0.1",
-    "Changelog": "Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in exact Crystalline Conflict, with the exact current target only as a fully validated last fallback and no visible target change. The chosen action, actor, context, key, carrier generation, and native identities freeze; later target or protection drift spends that exact exposure instead of reranking. Wolves' Den remains exact <t>. Enemy DRG Sky High 29497 now raises an immediate top-center airborne LB warning with icon and one-shot selectable sound; only live exact caster status 3180 extends its countdown, never Sky Shatter impact or gauge inference. Existing warning controls are reused. Configuration schema 41 is current; all 517 Core tests pass; live current-patch validation remains separate.",
+    "AssemblyVersion": "0.37.0.0",
+    "Changelog": "Added a movable, clickable Wolves' Den CC rotation panel with current arena, live countdown, next arena, full seven-map order, and saved local phase calibration. Added read-only PvP range rings around the local player: an inner 5-yalm melee guide and an outer per-job furthest reviewed hostile non-LB reach, including hostile gap closers, for all 21 PvP-enabled jobs. Labels, colors, opacity, line width, and foreground placement are configurable. The overlays scan no player list, make no target or action changes, perform no terrain raycasts, and make no network requests. Configuration schema 42 is current; all 520 Core tests pass; live current-patch visual and phase validation remains separate.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -25,6 +25,8 @@
       "astrologian",
       "smart-target",
       "limit-break",
+      "range",
+      "rotation",
       "targeting",
       "survival",
       "utility"
@@ -34,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787911669"
+    "LastUpdate": "1787917802"
   }
 ]

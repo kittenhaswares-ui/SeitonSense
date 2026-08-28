@@ -28,6 +28,9 @@ var tests = new (string Name, Action Run)[]
     ("smart buffer compatibility blocks unreadable MOAction ownership", SmartActionBufferCompatibilitySelfTests.UnreadableMOActionOwnershipFailsClosed),
     ("smart buffer compatibility quarantines one clean frame", SmartActionBufferCompatibilitySelfTests.QuarantineConsumesExactlyOneCleanFrame),
     ("smart buffer compatibility detects profile signature drift", SmartActionBufferCompatibilitySelfTests.InitialSignatureIsBaselineAndLaterDriftIsDetected),
+    ("PvP range helper has every reviewed PvP-enabled job", PvpRangeHelperSelfTests.EveryPvpEnabledJobHasAnExactReviewedEnvelope),
+    ("PvP range helper unknown jobs fail closed", PvpRangeHelperSelfTests.UnknownJobsAndInvalidHitboxesFailClosed),
+    ("PvP range helper radii start at the local hitbox edge", PvpRangeHelperSelfTests.WorldRadiiStartAtTheLocalHitboxEdge),
     ("smart action buffer window defaults and bounds are exact", SmartActionBufferSelfTests.WindowDefaultsAndBoundsAreExact),
     ("smart action buffer arms only eligible transient failures", SmartActionBufferSelfTests.OnlyEligibleTransientFailuresArm),
     ("smart action buffer freezes action and target identity", SmartActionBufferSelfTests.FrozenIdentityNeverRetargetsOrSubstitutes),
@@ -575,6 +578,97 @@ static void KnownCcTerritoriesAreComplete()
     True(publicTerritories.All(PvPMatchRules.IsPublicCrystallineConflictTerritory), "public territories");
     True(publicTerritories.Concat(customTerritories).All(PvPMatchRules.IsKnownCrystallineConflictTerritory), "all CC territories");
     False(customTerritories.Any(PvPMatchRules.IsPublicCrystallineConflictTerritory), "custom not public");
+
+    const long reference = CrystallineConflictRotationRules.Patch75ReferenceUnixSeconds;
+    Equal(1_777_381_200L, reference, "bundled reference is 2026-04-28 13:00 UTC");
+    var publishedRotation = new[]
+    {
+        CrystallineConflictArena.ThePalaistra,
+        CrystallineConflictArena.TheVolcanicHeart,
+        CrystallineConflictArena.TheBaysideBattleground,
+        CrystallineConflictArena.CloudNine,
+        CrystallineConflictArena.TheClockworkCastletown,
+        CrystallineConflictArena.ArcheiaHarmonias,
+        CrystallineConflictArena.TheRedSands,
+    };
+    for (var index = 0; index < publishedRotation.Length; index++)
+        Equal(publishedRotation[index], CrystallineConflictRotationRules.GetArena(index),
+            $"published rotation slot {index}");
+    Equal("Archeia Harmonias",
+        CrystallineConflictRotationRules.GetDisplayName(CrystallineConflictArena.ArcheiaHarmonias),
+        "Archeia display name");
+    True(
+        CrystallineConflictRotationRules.TryResolve(
+            true,
+            false,
+            PvPMatchRules.WolvesDenPierTerritoryId,
+            reference,
+            out var first),
+        "rotation reference resolves in exact Wolves' Den context");
+    Equal(CrystallineConflictArena.ThePalaistra, first.CurrentArena, "reference current map");
+    Equal(CrystallineConflictArena.TheVolcanicHeart, first.NextArena, "reference next map");
+    Equal(3600, first.RemainingSeconds, "reference full hour");
+
+    True(
+        CrystallineConflictRotationRules.TryResolve(
+            true,
+            false,
+            PvPMatchRules.WolvesDenPierTerritoryId,
+            reference + 3599,
+            out var lastSecond),
+        "last second resolves");
+    Equal(CrystallineConflictArena.ThePalaistra, lastSecond.CurrentArena, "last second current map");
+    Equal(1, lastSecond.RemainingSeconds, "last second countdown");
+
+    True(
+        CrystallineConflictRotationRules.TryResolve(
+            true,
+            false,
+            PvPMatchRules.WolvesDenPierTerritoryId,
+            reference + 3600,
+            out var second),
+        "exact next boundary resolves");
+    Equal(CrystallineConflictArena.TheVolcanicHeart, second.CurrentArena, "next boundary current map");
+    Equal(CrystallineConflictArena.TheBaysideBattleground, second.NextArena, "next boundary next map");
+    Equal(3600, second.RemainingSeconds, "next boundary full hour");
+
+    True(
+        CrystallineConflictRotationRules.TryResolve(
+            true,
+            false,
+            PvPMatchRules.WolvesDenPierTerritoryId,
+            reference + (CrystallineConflictRotationRules.ArenaCount * 3600L),
+            out var fullCycle),
+        "full cycle resolves");
+    Equal(CrystallineConflictArena.ThePalaistra, fullCycle.CurrentArena, "full cycle returns to first map");
+
+    True(
+        CrystallineConflictRotationRules.TryResolve(
+            true,
+            false,
+            PvPMatchRules.WolvesDenPierTerritoryId,
+            reference,
+            out var corrected,
+            phaseOffsetSlots: -1),
+        "negative calibration normalizes");
+    Equal(CrystallineConflictArena.TheRedSands, corrected.CurrentArena, "calibrated previous map");
+    Equal(6, corrected.EffectiveOffsetSlots, "calibrated offset normalization");
+
+    False(
+        CrystallineConflictRotationRules.TryResolve(true, false, 249, reference, out _),
+        "rotation rejects wrong territory");
+    False(
+        CrystallineConflictRotationRules.TryResolve(false, false, 250, reference, out _),
+        "rotation rejects non-PvP state");
+    False(
+        CrystallineConflictRotationRules.TryResolve(true, true, 250, reference, out _),
+        "rotation rejects PvP excluding Wolves' Den");
+    False(
+        CrystallineConflictRotationRules.TryResolve(true, false, 250, reference - 1, out _),
+        "rotation rejects time before bundled reference");
+    Equal("60:00", CrystallineConflictRotationRules.FormatCountdown(3600), "full countdown format");
+    Equal("00:01", CrystallineConflictRotationRules.FormatCountdown(1), "last second format");
+    Equal("00:00", CrystallineConflictRotationRules.FormatCountdown(-1), "countdown clamps low");
 }
 
 static void CcMatchingIsFailClosed()

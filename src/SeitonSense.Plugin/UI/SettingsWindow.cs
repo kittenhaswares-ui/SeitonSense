@@ -17,6 +17,7 @@ internal sealed partial class SettingsWindow : Window
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
     private readonly Action resetBufferLearningWindowPosition;
+    private readonly Action resetWolvesDenRotationWindowPosition;
     private SettingsPage selectedPage = SettingsPage.Start;
 
     public SettingsWindow(
@@ -27,7 +28,8 @@ internal sealed partial class SettingsWindow : Window
         TargetPressureTracker pressureTracker,
         IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter,
-        Action? resetBufferLearningWindowPosition = null)
+        Action? resetBufferLearningWindowPosition = null,
+        Action? resetWolvesDenRotationWindowPosition = null)
         : base("Seiton Sense###SeitonSenseSettings")
     {
         this.configuration = configuration;
@@ -39,6 +41,8 @@ internal sealed partial class SettingsWindow : Window
         this.pressureCounter = pressureCounter;
         this.resetBufferLearningWindowPosition =
             resetBufferLearningWindowPosition ?? (() => { });
+        this.resetWolvesDenRotationWindowPosition =
+            resetWolvesDenRotationWindowPosition ?? (() => { });
         Size = new Vector2(880f, 760f);
         SizeCondition = ImGuiCond.FirstUseEver;
     }

@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.36.0.1";
+    private const string CurrentReleaseVersion = "0.37.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -48,10 +48,12 @@ public sealed class Plugin : IDalamudPlugin
     private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
     private readonly IntegratedInputRuntime integratedInput;
     private readonly BufferLearningWindow bufferLearningWindow;
+    private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
     private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
+    private readonly LocalReachRingRenderer localReachRings;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly LimitBreakNotificationRenderer limitBreakNotifications;
@@ -271,6 +273,12 @@ public sealed class Plugin : IDalamudPlugin
             objectTable,
             gameGui,
             log);
+        localReachRings = new LocalReachRingRenderer(
+            configuration,
+            pluginInterface,
+            clientState,
+            objectTable,
+            gameGui);
         targetHighlights = new TargetHighlightRenderer(
             configuration,
             pluginInterface,
@@ -319,6 +327,10 @@ public sealed class Plugin : IDalamudPlugin
         bufferLearningWindow = new BufferLearningWindow(
             configuration,
             integratedInput.ActionBuffer);
+        wolvesDenRotationWindow = new WolvesDenRotationWindow(
+            configuration,
+            clientState,
+            gameGui);
         autoSeitonToggle = new AutoSeitonToggleWindow(
             objectTable,
             textureProvider,
@@ -346,9 +358,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in Crystalline Conflict. Your exact current target remains only the fully validated last fallback; no visible target changes.",
-                "The chosen Viper action, actor, context, key, and carrier exposure stay frozen. If that actor dies, becomes protected, or leaves range/line of sight, the exposure ends instead of reranking. Wolves' Den remains exact <t>.",
-                "Enemy DRG Sky High now raises an immediate top-center airborne LB warning with its icon and one-shot sound; only the live Sky High status extends the countdown. Configuration schema 41 remains current; all 517 Core tests pass.",
+                "A movable, clickable Wolves' Den panel now shows the current Crystalline Conflict arena, live countdown, and next arena. Click the current map for the complete order and a saved local phase correction.",
+                "A new PvP range helper draws a 5-yalm melee ring and this job's furthest reviewed hostile non-LB reach around you. All PvP-enabled jobs are covered; labels, colors, opacity, line width, and foreground placement are configurable.",
+                "Both overlays are read-only and local: no target or action changes, player scans, terrain raycasts, queue tracking, or network requests. Configuration schema 42 is current; all 520 Core tests pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -367,9 +379,11 @@ public sealed class Plugin : IDalamudPlugin
             pressureTracker,
             isolationAwareness,
             pressureCounter,
-            bufferLearningWindow.ResetWindowPosition);
+            bufferLearningWindow.ResetWindowPosition,
+            wolvesDenRotationWindow.ResetWindowPosition);
         windowSystem.AddWindow(pressureCounter);
         windowSystem.AddWindow(bufferLearningWindow);
+        windowSystem.AddWindow(wolvesDenRotationWindow);
         windowSystem.AddWindow(autoSeitonToggle);
         windowSystem.AddWindow(whatsNew);
         windowSystem.AddWindow(settingsWindow);
@@ -621,6 +635,7 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         windowSystem.Draw();
+        localReachRings.Draw();
         targetHighlights.Draw();
         overlay.Draw();
         limitBreakNotifications.Draw();

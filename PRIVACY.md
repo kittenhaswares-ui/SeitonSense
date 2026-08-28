@@ -1511,9 +1511,21 @@ per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
 
-Configuration schema 41 is current. It adds the default-off Astrologian held
-Near Help option without enabling it for upgrades, fresh installs, or Reset
-Defaults. Schema 40 adds the local generic one-shot smart action-buffer settings,
+The Wolves' Den rotation panel reads only local UTC time and the current PvP /
+territory flags. It calculates the published arena order entirely in memory and
+stores only its display preferences and an optional whole-map phase correction.
+It does not inspect or upload queue registrations, player identities, ratings,
+statistics, or roster data and makes no network request.
+
+The PvP range helper reads only the local player's current job, position, and
+hitbox radius plus the game's world-to-screen projection. It draws two fixed
+sampled rings and does not scan other actors, retain movement history, raycast
+terrain, change a target, or issue/suppress an action.
+
+Configuration schema 42 is current. It adds the local rotation-panel and range-
+helper appearance settings without changing any action or targeting opt-in.
+Schema 41 adds the default-off Astrologian held Near Help option without enabling
+it for upgrades, fresh installs, or Reset Defaults. Schema 40 adds the local generic one-shot smart action-buffer settings,
 movable learning-window settings, and default-off native
 standard-keyboard-hotbar Turbo settings. The buffer is available in PvE, PvP,
 and Wolves' Den without uploading input, action, target, position, or timing

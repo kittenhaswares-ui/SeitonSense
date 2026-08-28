@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.37.0.0
+
+- Added a movable, clickable Wolves' Den Pier panel for the Patch 7.5
+  Crystalline Conflict arena rotation. It displays the current map, live
+  countdown, and next map; clicking the current map expands the complete
+  seven-map order and persistent local `<` / `>` phase calibration. The official
+  order and interval are paired with a bundled public-community phase reference,
+  not mislabeled as an official epoch. It runs offline, only in exact territory
+  `250`, and has lock, scale, background, and reset-position controls.
+- Added a read-only PvP world-range helper around the local player. The inner
+  ring marks nominal 5-yalm melee reach; the outer ring uses the current job's
+  furthest reviewed hostile non-LB reach, including hostile gap closers. All 21
+  PvP-enabled jobs fail closed through one exact catalog. Labels, colors,
+  opacity, line width, and background/foreground placement are configurable.
+- Both overlays are visual-only: they do not scan a player list, select a target,
+  issue or suppress an action, inspect queue registrations, raycast terrain, or
+  make a network request. The renderer performs a fixed 96 world projections per
+  frame at most and breaks behind-camera/discontinuous segments. Configuration
+  schema is `42`; the warning-free Release build and all `520` Core tests pass.
+  Live current-patch visual placement and map-phase confirmation remain separate
+  in-game validation boundaries.
+
 ## 0.36.0.1
 
 - Changed the default-off Viper held Serpentiner-Geist follow-ups in exact

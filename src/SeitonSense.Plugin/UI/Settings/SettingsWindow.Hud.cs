@@ -11,6 +11,14 @@ internal sealed partial class SettingsWindow
         ImGui.TextWrapped(
             "Read-only pressure, resource, and protection cues. These controls never select a target or issue an action.");
 
+        if (ImGui.CollapsingHeader("Wolves' Den CC map rotation", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawWolvesDenRotationControls();
+
+        ImGui.Separator();
+        if (ImGui.CollapsingHeader("PvP range helper", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawPvpRangeHelperControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("Pressure counter and pressure nameplates", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPressureControls();
 
@@ -99,6 +107,103 @@ internal sealed partial class SettingsWindow
                 "%.2f");
         }
 
+        return changed;
+    }
+
+    private bool DrawPvpRangeHelperControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Show range rings around yourself",
+            configuration.ShowPvpRangeHelper,
+            value => configuration.ShowPvpRangeHelper = value);
+        changed |= Checkbox(
+            "Draw above plugin windows##PvpRangeHelper",
+            configuration.PvpRangeHelperDrawInForeground,
+            value => configuration.PvpRangeHelperDrawInForeground = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Show range labels##PvpRangeHelper",
+            configuration.PvpRangeHelperShowLabels,
+            value => configuration.PvpRangeHelperShowLabels = value);
+        changed |= Slider(
+            "Range-ring opacity",
+            configuration.PvpRangeHelperOpacity,
+            0.08f,
+            1f,
+            value => configuration.PvpRangeHelperOpacity = value,
+            "%.2f");
+        changed |= Slider(
+            "Range-ring line width",
+            configuration.PvpRangeHelperLineWidth,
+            0.75f,
+            6f,
+            value => configuration.PvpRangeHelperLineWidth = value,
+            "%.2f px");
+
+        var meleeColor = configuration.PvpRangeHelperMeleeColor;
+        if (ImGui.ColorEdit4("Melee-ring color", ref meleeColor))
+        {
+            configuration.PvpRangeHelperMeleeColor = meleeColor;
+            changed = true;
+        }
+
+        var maximumColor = configuration.PvpRangeHelperMaximumColor;
+        if (ImGui.ColorEdit4("Maximum-range color", ref maximumColor))
+        {
+            configuration.PvpRangeHelperMaximumColor = maximumColor;
+            changed = true;
+        }
+
+        ImGui.TextDisabled(
+            "PvP and Wolves' Den only: inner ring = 5y melee; outer ring = this job's furthest reviewed hostile non-LB action, including gap closers.");
+        ImGui.TextDisabled(
+            "The flat visual guide does not claim line of sight, cooldown readiness, terrain reach, or target hitbox overlap and never changes a target or action.");
+        return changed;
+    }
+
+    private bool DrawWolvesDenRotationControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Show local CC rotation panel in Wolves' Den",
+            configuration.ShowWolvesDenRotationPanel,
+            value => configuration.ShowWolvesDenRotationPanel = value);
+        changed |= Checkbox(
+            "Lock rotation panel",
+            configuration.WolvesDenRotationPanelLocked,
+            value => configuration.WolvesDenRotationPanelLocked = value);
+        ImGui.SameLine();
+        changed |= Checkbox(
+            "Show background##WolvesDenRotation",
+            configuration.WolvesDenRotationPanelShowBackground,
+            value => configuration.WolvesDenRotationPanelShowBackground = value);
+        changed |= Checkbox(
+            "Keep map order and calibration expanded",
+            configuration.WolvesDenRotationPanelExpanded,
+            value => configuration.WolvesDenRotationPanelExpanded = value);
+        changed |= Slider(
+            "Rotation panel scale",
+            configuration.WolvesDenRotationPanelScale,
+            0.75f,
+            1.75f,
+            value => configuration.WolvesDenRotationPanelScale = value,
+            "%.2f x");
+        changed |= Slider(
+            "Rotation panel background opacity",
+            configuration.WolvesDenRotationPanelBackgroundOpacity,
+            0f,
+            1f,
+            value => configuration.WolvesDenRotationPanelBackgroundOpacity = value,
+            "%.2f");
+        if (ImGui.Button("Reset rotation panel position"))
+            resetWolvesDenRotationWindowPosition();
+        ImGui.TextDisabled(
+            "Local/offline schedule: official Patch 7.5 order and hourly interval with a locally adjustable community-reference phase.");
+        ImGui.TextDisabled(
+            "The panel fails closed outside exact territory 250 and never uploads queue or player data.");
+        ImGui.TextDisabled(
+            "Click the current map in the panel to reveal saved < / > phase calibration if the live map ever differs.");
         return changed;
     }
 

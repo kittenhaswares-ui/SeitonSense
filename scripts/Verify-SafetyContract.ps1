@@ -231,6 +231,11 @@ $ccImmunityBrakeMetadataGuardPath = Join-Path $pluginServicesRoot 'CcImmunityBra
 $ccImmunityBrakeTargetRulesPath = Join-Path $coreRoot 'CcImmunityBrakeTargetRules.cs'
 $wolvesDenResolverPath = Join-Path $pluginServicesRoot 'WolvesDenOpponentResolver.cs'
 $targetHighlightPath = Join-Path $pluginUiRoot 'TargetHighlightRenderer.cs'
+$localReachRingRendererPath = Join-Path $pluginUiRoot 'LocalReachRingRenderer.cs'
+$wolvesDenRotationWindowPath = Join-Path $pluginUiRoot 'WolvesDenRotationWindow.cs'
+$pvpRangeHelperRulesPath = Join-Path $coreRoot 'PvpRangeHelperRules.cs'
+$pvpRangeHelperSelfTestsPath = Join-Path $coreSelfTestRoot 'PvpRangeHelperSelfTests.cs'
+$crystallineConflictRotationRulesPath = Join-Path $coreRoot 'CrystallineConflictRotationRules.cs'
 $pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
 $settingsPartsRoot = Join-Path $pluginUiRoot 'Settings'
 $settingsSourceFiles = @()
@@ -679,8 +684,8 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
     throw 'The generic buffer must freeze the final post-redirect target at the sole Original boundary, retain every resolver/local/instance identity, and cancel rather than retarget or substitute.'
 }
 
-# Pin all schema-41 buffer/repeat/compatibility suites and the exact current
-# 517-test registry.
+# Pin all schema-42 buffer/repeat/compatibility suites and the exact current
+# 520-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -700,11 +705,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 476 -or
+if ($staticIntegratedTestCount -ne 479 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 517 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 520 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -712,8 +717,85 @@ if ($staticIntegratedTestCount -ne 476 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 41 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 517-test combined Core registry.'
+    throw 'Schema 42 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 520-test combined Core registry.'
 }
+
+# Pin the two schema-42 read-only overlays. Neither surface may gain a player
+# scan, action path, target mutation, terrain raycast, or network dependency.
+$pvpRangeHelperRules = Read-RequiredSource $pvpRangeHelperRulesPath 'PvP range-helper rules'
+$pvpRangeHelperRenderer = Read-RequiredSource $localReachRingRendererPath 'Local PvP range-ring renderer'
+$pvpRangeHelperSelfTests = Read-RequiredSource $pvpRangeHelperSelfTestsPath 'PvP range-helper self-tests'
+$crystallineConflictRotationRules = Read-RequiredSource $crystallineConflictRotationRulesPath 'Crystalline Conflict rotation rules'
+$wolvesDenRotationWindow = Read-RequiredSource $wolvesDenRotationWindowPath 'Wolves Den rotation window'
+Assert-Literals $pvpRangeHelperRules @(
+    'public const float MeleeRangeYalms = 5f;',
+    'including hostile gap closers.',
+    'Ground-targeted actions and Limit Breaks do',
+    '38 => 25f, // DNC',
+    'public static bool TryGetWorldRadii(',
+    'meleeWorldRadius = localHitboxRadius + profile.MeleeRangeYalms;',
+    'maximumWorldRadius = localHitboxRadius + profile.MaximumActionRangeYalms;'
+) 'All-job fail-closed PvP range catalog'
+if ([regex]::Matches($pvpRangeHelperRules, '(?m)^\s*\d+\s*=>\s*(?:20|25)f,\s*//').Count -ne 21 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bPvpRangeHelperSelfTests\.\w+').Count -ne 3 -or
+    [regex]::Matches($pvpRangeHelperSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 3) {
+    throw 'The PvP range helper must retain one reviewed 20/25-yalm envelope for every PvP-enabled job, DNC Starfall at 25 yalms, and all three fail-closed tests.'
+}
+Assert-Literals $pvpRangeHelperRenderer @(
+    'private const int SegmentCount = 48;',
+    'var local = objectTable.LocalPlayer;',
+    'PvpRangeHelperRules.TryGetWorldRadii(',
+    'gameGui.WorldToScreen(worldPoint, out points[index], out var visibleInViewport);',
+    'inFront.Clear();',
+    'draw.PushClipRect(Vector2.Zero, viewport, true);',
+    'configuration.PvpRangeHelperDrawInForeground',
+    'configuration.PvpRangeHelperShowLabels'
+) 'Fixed-cost local-only PvP range renderer'
+if ([regex]::Matches($pvpRangeHelperRenderer, '\bDrawRing\s*\(').Count -ne 3 -or
+    [regex]::Matches($pvpRangeHelperRenderer, '\bobjectTable\.LocalPlayer\b').Count -ne 1 -or
+    $pvpRangeHelperRenderer -match '\b(foreach|Raycast|UseAction|TargetManager|HttpClient|WebRequest)\b') {
+    throw 'The range helper must draw exactly two fixed 48-segment rings from one O(1) local-player lookup with no scan, action, target, raycast, or network path.'
+}
+Assert-Literals $crystallineConflictRotationRules @(
+    'Patch75ReferenceUnixSeconds = 1_777_381_200;',
+    'public const int RotationSeconds = 60 * 60;',
+    'public const int ArenaCount = 7;',
+    'CrystallineConflictArena.ThePalaistra,',
+    'CrystallineConflictArena.TheVolcanicHeart,',
+    'CrystallineConflictArena.TheBaysideBattleground,',
+    'CrystallineConflictArena.CloudNine,',
+    'CrystallineConflictArena.TheClockworkCastletown,',
+    'CrystallineConflictArena.ArcheiaHarmonias,',
+    'CrystallineConflictArena.TheRedSands,',
+    'isPvP &&',
+    '!isPvPExcludingWolvesDen &&',
+    'territoryId == PvPMatchRules.WolvesDenPierTerritoryId;'
+) 'Exact local Patch-7.5 CC rotation'
+Assert-Literals $wolvesDenRotationWindow @(
+    'DateTimeOffset.UtcNow.ToUnixTimeSeconds();',
+    'configuration.WolvesDenRotationOffsetSlots',
+    'CURRENT  ·',
+    'Default reference phase',
+    'Reset to default phase',
+    'configuration.WolvesDenRotationPanelExpanded =',
+    'configuration.Save();',
+    'Visible only in Wolves'' Den Pier (territory 250).'
+) 'Clickable, local-only Wolves Den rotation panel'
+if ($wolvesDenRotationWindow -match '\b(HttpClient|WebRequest|Socket|TargetManager|UseAction|ObjectTable)\b') {
+    throw 'The Wolves Den rotation panel may read only local time/context/configuration and must have no network, actor-scan, target, or action surface.'
+}
+Assert-Literals $pluginSource @(
+    'localReachRings = new LocalReachRingRenderer(',
+    'localReachRings.Draw();',
+    'wolvesDenRotationWindow = new WolvesDenRotationWindow(',
+    'windowSystem.AddWindow(wolvesDenRotationWindow);'
+) 'Schema-42 overlay wiring'
+Assert-Literals $settingsWindow @(
+    'Wolves'' Den CC map rotation',
+    'PvP range helper',
+    'Show range rings around yourself',
+    'Show local CC rotation panel in Wolves'' Den'
+) 'Schema-42 overlay settings'
 $monkRouteResolverSource = Read-RequiredSource $monkHeldComboProbePath 'Monk native PvP combo-route resolver'
 $normalizedMonkRouteResolverSource = $monkRouteResolverSource -replace '\s+', ' '
 $personalStatusScannerWiring = Read-RequiredSource $personalStatusPath 'Monk native resolver scanner wiring'
@@ -1064,8 +1146,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 41;') {
-    throw 'Schema 41 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 42;') {
+    throw 'Schema 42 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -3639,8 +3721,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 476) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 476-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 479) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 479-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4339,8 +4421,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 41;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 41 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 42;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 42 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -8763,6 +8845,7 @@ $settingsBindingExemptions = @(
     'CombatFramesSelfScreenY',
     'CombatFramesScale',
     'CombatFramesBackgroundOpacity',
+    'WolvesDenRotationOffsetSlots',
     'CcBrakeJobs',
     'CcBrakeActions',
     'ReactiveCcImpactCalibrationRevision',
@@ -9140,24 +9223,25 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.36.0.1</Version>',
-    '<AssemblyVersion>0.36.0.1</AssemblyVersion>',
-    '<FileVersion>0.36.0.1</FileVersion>'
-) 'v0.36.0.1 project version'
+    '<Version>0.37.0.0</Version>',
+    '<AssemblyVersion>0.37.0.0</AssemblyVersion>',
+    '<FileVersion>0.37.0.0</FileVersion>'
+) 'v0.37.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.36.0.1";',
-    'Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in Crystalline Conflict.',
-    'Your exact current target remains only the fully validated last fallback; no visible target changes.',
-    'The chosen Viper action, actor, context, key, and carrier exposure stay frozen.',
-    'the exposure ends instead of reranking. Wolves'' Den remains exact <t>.',
-    'Enemy DRG Sky High now raises an immediate top-center airborne LB warning with its icon and one-shot sound;',
-    'only the live Sky High status extends the countdown.',
-    'Configuration schema 41 remains current; all 517 Core tests pass.'
-) 'v0.36.0.1 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.37.0.0";',
+    'A movable, clickable Wolves'' Den panel now shows the current Crystalline Conflict arena, live countdown, and next arena.',
+    'Click the current map for the complete order and a saved local phase correction.',
+    'A new PvP range helper draws a 5-yalm melee ring and this job''s furthest reviewed hostile non-LB reach around you.',
+    'All PvP-enabled jobs are covered; labels, colors, opacity, line width, and foreground placement are configurable.',
+    'Both overlays are read-only and local: no target or action changes, player scans, terrain raycasts, queue tracking, or network requests.',
+    'Configuration schema 42 is current; all 520 Core tests pass.'
+) 'v0.37.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
     'LB notifications',
+    'PvP range rings',
+    'Wolves'' Den CC rotation panel',
     'Smart Tab',
     'Emergency Teleport',
     'assist macros',
@@ -9172,23 +9256,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.36.0.1 plugin manifest metadata'
+) 'v0.37.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.36.0.1"',
-    'Viper held Serpentiner-Geist follow-ups now use the existing protection-safe Smart Action target ranking in exact Crystalline Conflict',
-    'the exact current target only as a fully validated last fallback and no visible target change.',
-    'carrier generation, and native identities freeze; later target or protection drift spends that exact exposure instead of reranking.',
-    'Wolves'' Den remains exact <t>.',
-    'Enemy DRG Sky High 29497 now raises an immediate top-center airborne LB warning with icon and one-shot selectable sound;',
-    'only live exact caster status 3180 extends its countdown, never Sky Shatter impact or gauge inference.',
-    'Existing warning controls are reused.',
-    'Configuration schema 41 is current; all 517 Core tests pass;',
-    'live current-patch validation remains separate.',
+    '"AssemblyVersion": "0.37.0.0"',
+    'Added a movable, clickable Wolves'' Den CC rotation panel with current arena, live countdown, next arena, full seven-map order, and saved local phase calibration.',
+    'Added read-only PvP range rings around the local player:',
+    'furthest reviewed hostile non-LB reach, including hostile gap closers, for all 21 PvP-enabled jobs.',
+    'The overlays scan no player list, make no target or action changes, perform no terrain raycasts, and make no network requests.',
+    'Configuration schema 42 is current; all 520 Core tests pass;',
+    'live current-patch visual and phase validation remains separate.',
     '"IsHide": false'
-) 'v0.36.0.1 custom-repository metadata'
+) 'v0.37.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9220,7 +9301,12 @@ Assert-Literals $normalizedPrivacy @(
     'For buffer-only compatibility, Seiton reads Dalamud''s in-memory installed-plugin list, the audited ReAction action-mutation settings, and MOAction''s published retargeted-action IPC list.',
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
-    'Configuration schema 41 is current.',
+    'The Wolves'' Den rotation panel reads only local UTC time and the current PvP / territory flags.',
+    'stores only its display preferences and an optional whole-map phase correction.',
+    'It does not inspect or upload queue registrations, player identities, ratings, statistics, or roster data and makes no network request.',
+    'The PvP range helper reads only the local player''s current job, position, and hitbox radius plus the game''s world-to-screen projection.',
+    'does not scan other actors, retain movement history, raycast terrain, change a target, or issue/suppress an action.',
+    'Configuration schema 42 is current.',
     'canonical `S1`-`S5` candidates, HP ratio, fresh optional team pressure, trusted Guard/MP evidence, positions, complete protection geometry, chosen/fallback actor',
     'Drift ends and spends that carrier exposure; the same held episode cannot rerank.',
     '## MCH and DRG limit-break danger warnings',
@@ -9230,11 +9316,17 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.36.0.1 Smart Tab, VPR/DRG, AST, and integrated-input disclosure'
+) 'v0.37.0.0 local-overlay plus retained Smart Tab, VPR/DRG, AST, and integrated-input disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.36.0.1 moves the default-off Viper held Serpentiner-Geist follow-ups onto the existing Smart Action target policy in Crystalline Conflict',
-    'including its protection-safe ranking and exact `<t>` fallback, without a visible target change.',
-    'immediate enemy DRG `Sky High` airborne warning with the LB icon, live confirmed countdown, and a one-shot selectable sound.',
+    'Version 0.37.0.0 adds a movable, clickable Wolves'' Den Crystalline Conflict rotation panel with the current arena, countdown, next arena, full order, and local phase calibration.',
+    'an inner 5-yalm melee ring and an outer ring for the current job''s furthest reviewed hostile non-LB action, including hostile gap closers.',
+    '**Local CC rotation panel:** while in Wolves'' Den Pier, a movable and lockable panel shows the current Patch 7.5 arena',
+    'The order and one-hour interval come from the official Patch 7.5 notes;',
+    'the bundled default phase follows the public community calendar reference and can be corrected locally.',
+    'The panel never queries a queue, player roster, service, or network endpoint.',
+    '**PvP range helper:** two flat world-space rings follow the local player in PvP and Wolves'' Den.',
+    'All 21 PvP-enabled jobs are covered',
+    'it does not claim line of sight, cooldown readiness, terrain reach, or target-hitbox overlap',
     'A fully protection-safe current hard target is only the last fallback.',
     'later drift ends that carrier exposure instead of reranking.',
     'a countdown continues only from its live mapped caster status and clears with that exact episode.',
@@ -9268,8 +9360,8 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 41 is current',
-    'For the current source, the exact 517-test Core registry and source checks pin',
+    'Configuration schema 42 is current',
+    'For the current source, the exact 520-test Core registry and source checks pin',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9280,19 +9372,19 @@ Assert-Literals $normalizedReadme @(
     'constructs fifteen reviewed request shapes across sixteen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.36.0.1 current README release and safety contract'
+) 'v0.37.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
-    '## 0.36.0.1',
-    'Changed the default-off Viper held Serpentiner-Geist follow-ups in exact Crystalline Conflict from current-target-only dispatch to the existing Smart Action target policy.',
-    'the exact current target retained only as a last fallback after the identical full protection/range/line-of-sight validation.',
-    'Later death, ambiguity, protection, range, or line-of-sight drift cancels and spends that exact carrier exposure;',
-    'the same hold cannot rerank or jump to an alternate enemy.',
-    'exact `Sky High` activation `29497`',
-    'Only the live exact caster status `3180` may extend the warning with a countdown;',
-    '`3181`, landing damage, gauge estimates, and ambiguous actors do not.',
-    'configuration schema remains `41`.',
-    'all `517` Core tests pass.'
-) 'v0.36.0.1 VPR Smart Target and exact DRG airborne release notes'
+    '## 0.37.0.0',
+    'Added a movable, clickable Wolves'' Den Pier panel for the Patch 7.5 Crystalline Conflict arena rotation.',
+    'complete seven-map order and persistent local `<` / `>` phase calibration.',
+    'only in exact territory `250`',
+    'Added a read-only PvP world-range helper around the local player.',
+    'All 21 PvP-enabled jobs fail closed through one exact catalog.',
+    'they do not scan a player list, select a target, issue or suppress an action, inspect queue registrations, raycast terrain, or make a network request.',
+    'fixed 96 world projections per frame at most',
+    'Configuration schema is `42`;',
+    'all `520` Core tests pass.'
+) 'v0.37.0.0 local rotation and PvP range-helper release notes'
 Assert-Literals $normalizedChangelog @(
     '## 0.35.0.3',
     'Fixed `/smartaction` for PvP attacks that explicitly ignore Guard.',
@@ -9410,7 +9502,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 41 is current.'
+    'Configuration schema 42 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -9541,7 +9633,7 @@ Assert-Literals $normalizedPrivacy @(
     'last origin/destination coordinates, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction, slope, wall, and invalid-endpoint tests in the Wolves'' Den remain a live-validation boundary',
-    'Configuration schema 41 is current'
+    'Configuration schema 42 is current'
 ) 'v0.29.0.0 Panic Shukuchi retained transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -9647,7 +9739,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 41 is current',
+    'Configuration schema 42 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -10015,7 +10107,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 41 is current',
+    'Configuration schema 42 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -10095,7 +10187,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 41 is current'
+    'Configuration schema 42 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -10166,7 +10258,7 @@ $configurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConf
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 41',
+    'public int Version { get; set; } = 42',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -10308,7 +10400,12 @@ Assert-Literals $configuration @(
     'EnableEmergencyTeleportOnHeldKey = false;',
     'if (Version < 41)',
     'EnableAstrologianHarmonicOrbisOnHeldKey = false;',
-    'Version = 41',
+    'if (Version < 42)',
+    'ShowWolvesDenRotationPanel = true;',
+    'ShowPvpRangeHelper = true;',
+    'PvpRangeHelperDrawInForeground = false;',
+    'PvpRangeHelperShowLabels = true;',
+    'Version = 42',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -10335,7 +10432,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-41 default-off AST held Near Help plus integrated buffer/Turbo, retained latency coordination, Emergency/Scholar/VPR/GNB/DRK/MNK/SAM helpers, Smart Tab/Smart Action split, historical LB/MP defaults, and legacy Combat Frames compatibility fields'
+) 'Schema-42 read-only rotation/range overlays plus retained default-off helpers, buffer/Turbo, Smart Tab/Smart Action, and legacy compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -10419,8 +10516,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*41\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 41\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;.*?ReactiveCcRedMageResolution = false;.*?ReactiveCcSamuraiSotenMineuchi = false;.*?ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?ReactiveCcImpactCalibrationRevision = ReactiveCounterCcImpactTimingRules\.CalibrationRevision;.*?ReactiveCcImpactCalibrationSamples = \[\];.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?PvpLatencyResponseWindowMilliseconds = HeldActionRetryRules\.DefaultLatencyResponseWindowMilliseconds;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?SmartActionBufferWindowMilliseconds = SmartActionBufferWindowRules\.DefaultMilliseconds;.*?ShowBufferLearningWindow = true;.*?BufferLearningWindowLocked = false;.*?EnableNativeHotbarTurbo = false;.*?TurboInitialDelayMilliseconds = DefaultTurboInitialDelayMilliseconds;.*?TurboRepeatIntervalMilliseconds = DefaultTurboRepeatIntervalMilliseconds;.*?TurboOutsideCombat = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?Version = 41;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*42\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 42\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcPaladinInterveneMaximumRangeYalms = 20f;.*?ReactiveCcRedMageResolution = false;.*?ReactiveCcSamuraiSotenMineuchi = false;.*?ReactiveCcSamuraiSotenMaximumRangeYalms = 20f;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?ReactiveCcImpactCalibrationRevision = ReactiveCounterCcImpactTimingRules\.CalibrationRevision;.*?ReactiveCcImpactCalibrationSamples = \[\];.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?PvpLatencyResponseWindowMilliseconds = HeldActionRetryRules\.DefaultLatencyResponseWindowMilliseconds;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?SmartActionBufferWindowMilliseconds = SmartActionBufferWindowRules\.DefaultMilliseconds;.*?ShowBufferLearningWindow = true;.*?BufferLearningWindowLocked = false;.*?EnableNativeHotbarTurbo = false;.*?TurboInitialDelayMilliseconds = DefaultTurboInitialDelayMilliseconds;.*?TurboRepeatIntervalMilliseconds = DefaultTurboRepeatIntervalMilliseconds;.*?TurboOutsideCombat = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?PvpRangeHelperDrawInForeground = false;.*?PvpRangeHelperShowLabels = true;.*?Version = 42;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableEmergencyTeleportOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -10435,7 +10532,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*41\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableSamuraiZantetsukenOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 41 must preserve every earlier explicit opt-in/migration, keep schema-40 behavior intact, and initialize the AST held Near Help helper off consistently for upgrades, fresh installs, and Reset Defaults.'
+    throw 'Schema 42 must preserve every earlier explicit opt-in/migration, keep schema-40 behavior intact, initialize AST held Near Help off, and initialize the read-only rotation/range overlays consistently.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -10582,4 +10679,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.36.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 41 and the exact 517-test Core registry. Viper's default-off held Serpentiner-Geist helper uses the existing complete protection-safe Smart Action rank in exact CC, admits the current hard target only as an equally validated last fallback, freezes one exact action/actor/key/carrier exposure, and spends that exposure on drift instead of reranking; Wolves' Den remains exact current target. The enemy DRG airborne warning admits only a fresh exact job-22 Sky High 29497 episode, extends only from live caster status 3180, rejects status 3181/landing/gauge inference, draws no interactive surface, and keys its optional sound to one exact episode. The default-off AST held Near Help helper uses the inclusive 60% /nearhelp selection, freezes one exact actor/key/charge epoch, promotes only a client-accepted base heal to an exact same-target later-frame Double Cast repeat, and rechecks active or propagating own Guard at both the final action hook and immediate cast-cancel boundary. The generic one-shot buffer is available in PvE/PvP/Den with a 100-1500-ms window; native standard-keyboard-hotbar Turbo remains opt-in with a separate outside-combat test option. The opt-in PvP latency helper extends only clean-false retries in CC/Wolves' Den. Smart Action replaces only the incoming harmful action target ID with one protection-safe frozen canonical Smart Target and rechecks it before the sole native call; exact resolved PvP actions whose English metadata explicitly ignores Guard bypass only Guard, never Chiten, Covered, or PLD/DRK LB invulnerability. Smart Tab requires metadata-verified native range/line-of-sight admission, advances through a stateless current-target-anchored ranked cycle, and revalidates one frozen actor before its sole setter/readback. Nineteen held-option enable edges share physical-input ownership. Cast cancellation constructs fifteen reviewed request shapes across sixteen ordered selection slots. Runtime priority is Purify > AST same-target heal chain > SAM > NIN Seiton > VPR > GNB > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Dark Arts > DRK Hiebsprung > DRK safe fallback > held Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. Emergency Teleport terminally commits one exact target-specific action before consuming the shared frame and has no retry, fallback, or target-change path."
+Write-Host "Seiton Sense v0.37.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 42 and the exact 520-test Core registry. The Wolves' Den CC clock is a local seven-map/60-minute calculation with exact territory gating and saved display-only phase correction. The PvP range helper uses one O(1) local-player lookup and two fixed 48-segment rings for the exact 21-PvP-job catalog, with no player scan, target/action mutation, terrain raycast, or network path. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, and emergency safety contracts remain pinned."

@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 41;
+    public int Version { get; set; } = 42;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -83,6 +83,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
         SmartActionBufferWindowRules.DefaultMilliseconds;
     public bool ShowBufferLearningWindow { get; set; } = true;
     public bool BufferLearningWindowLocked { get; set; }
+    public bool ShowWolvesDenRotationPanel { get; set; } = true;
+    public bool WolvesDenRotationPanelLocked { get; set; }
+    public bool WolvesDenRotationPanelShowBackground { get; set; } = true;
+    public bool WolvesDenRotationPanelExpanded { get; set; }
+    public float WolvesDenRotationPanelScale { get; set; } = 1f;
+    public float WolvesDenRotationPanelBackgroundOpacity { get; set; } = 0.88f;
+    public int WolvesDenRotationOffsetSlots { get; set; }
+    public bool ShowPvpRangeHelper { get; set; } = true;
+    public bool PvpRangeHelperDrawInForeground { get; set; }
+    public bool PvpRangeHelperShowLabels { get; set; } = true;
+    public float PvpRangeHelperOpacity { get; set; } = 0.72f;
+    public float PvpRangeHelperLineWidth { get; set; } = 2.2f;
+    public Vector4 PvpRangeHelperMeleeColor { get; set; } = new(0.1f, 0.95f, 1f, 1f);
+    public Vector4 PvpRangeHelperMaximumColor { get; set; } = new(1f, 0.62f, 0.08f, 1f);
     public bool EnableNativeHotbarTurbo { get; set; }
     public int TurboInitialDelayMilliseconds { get; set; } =
         DefaultTurboInitialDelayMilliseconds;
@@ -281,7 +295,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 41)
+        if (Version >= 42)
         {
             if (repaired) Save();
             return;
@@ -712,7 +726,28 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableAstrologianHarmonicOrbisOnHeldKey = false;
         }
 
-        Version = 41;
+        if (Version < 42)
+        {
+            // Both additions are read-only PvP overlays. Upgrading users receive
+            // the requested visible defaults without changing targeting or action
+            // behavior; every appearance option remains independently adjustable.
+            ShowWolvesDenRotationPanel = true;
+            WolvesDenRotationPanelLocked = false;
+            WolvesDenRotationPanelShowBackground = true;
+            WolvesDenRotationPanelExpanded = false;
+            WolvesDenRotationPanelScale = 1f;
+            WolvesDenRotationPanelBackgroundOpacity = 0.88f;
+            WolvesDenRotationOffsetSlots = 0;
+            ShowPvpRangeHelper = true;
+            PvpRangeHelperDrawInForeground = false;
+            PvpRangeHelperShowLabels = true;
+            PvpRangeHelperOpacity = 0.72f;
+            PvpRangeHelperLineWidth = 2.2f;
+            PvpRangeHelperMeleeColor = new Vector4(0.1f, 0.95f, 1f, 1f);
+            PvpRangeHelperMaximumColor = new Vector4(1f, 0.62f, 0.08f, 1f);
+        }
+
+        Version = 42;
         ClampSettings();
         Save();
     }
@@ -721,7 +756,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 41;
+        Version = 42;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -758,6 +793,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
             SmartActionBufferWindowRules.DefaultMilliseconds;
         ShowBufferLearningWindow = true;
         BufferLearningWindowLocked = false;
+        ShowWolvesDenRotationPanel = true;
+        WolvesDenRotationPanelLocked = false;
+        WolvesDenRotationPanelShowBackground = true;
+        WolvesDenRotationPanelExpanded = false;
+        WolvesDenRotationPanelScale = 1f;
+        WolvesDenRotationPanelBackgroundOpacity = 0.88f;
+        WolvesDenRotationOffsetSlots = 0;
+        ShowPvpRangeHelper = true;
+        PvpRangeHelperDrawInForeground = false;
+        PvpRangeHelperShowLabels = true;
+        PvpRangeHelperOpacity = 0.72f;
+        PvpRangeHelperLineWidth = 2.2f;
+        PvpRangeHelperMeleeColor = new Vector4(0.1f, 0.95f, 1f, 1f);
+        PvpRangeHelperMaximumColor = new Vector4(1f, 0.62f, 0.08f, 1f);
         EnableNativeHotbarTurbo = false;
         TurboInitialDelayMilliseconds =
             DefaultTurboInitialDelayMilliseconds;
@@ -1038,6 +1087,39 @@ public sealed class PluginConfiguration : IPluginConfiguration
         changed |= Clamp(PressureIconSpacing, 0f, 16f, 4f, value => PressureIconSpacing = value);
         changed |= Clamp(PressureBackgroundOpacity, 0f, 1f, 0.62f, value => PressureBackgroundOpacity = value);
         changed |= Clamp(PressureWindowSeconds, 0.5f, 8f, 3f, value => PressureWindowSeconds = value);
+        changed |= Clamp(
+            WolvesDenRotationPanelScale,
+            0.75f,
+            1.75f,
+            1f,
+            value => WolvesDenRotationPanelScale = value);
+        changed |= Clamp(
+            WolvesDenRotationPanelBackgroundOpacity,
+            0f,
+            1f,
+            0.88f,
+            value => WolvesDenRotationPanelBackgroundOpacity = value);
+        var rotationOffsetSlots = Math.Clamp(
+            WolvesDenRotationOffsetSlots,
+            -(CrystallineConflictRotationRules.ArenaCount / 2),
+            CrystallineConflictRotationRules.ArenaCount / 2);
+        if (rotationOffsetSlots != WolvesDenRotationOffsetSlots)
+        {
+            WolvesDenRotationOffsetSlots = rotationOffsetSlots;
+            changed = true;
+        }
+        changed |= Clamp(
+            PvpRangeHelperOpacity,
+            0.08f,
+            1f,
+            0.72f,
+            value => PvpRangeHelperOpacity = value);
+        changed |= Clamp(
+            PvpRangeHelperLineWidth,
+            0.75f,
+            6f,
+            2.2f,
+            value => PvpRangeHelperLineWidth = value);
         changed |= Clamp(PersonalWarningBackgroundOpacity, 0f, 1f, 0.92f, value => PersonalWarningBackgroundOpacity = value);
         changed |= Clamp(IsolationWarningScale, 0.75f, 1.75f, 1f, value => IsolationWarningScale = value);
         changed |= Clamp(MarksmanSpiteWarningScale, 1f, 2f, 1.45f, value => MarksmanSpiteWarningScale = value);
