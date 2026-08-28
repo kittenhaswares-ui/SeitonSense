@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
@@ -14,6 +15,8 @@ internal readonly record struct PanicShukuchiDiagnostics(
     bool Enabled,
     bool MetadataVerified,
     bool BackwardCommandEnabled,
+    bool DirectionalRotationHookAvailable,
+    bool LastDirectionalCompatibilityPassed,
     SupportedPvPContext LastContext,
     PanicShukuchiPoint LastOrigin,
     PanicShukuchiPoint LastDestination,
@@ -29,6 +32,8 @@ internal readonly record struct PanicShukuchiDiagnostics(
 {
     internal string ToChatLine() =>
         $"mode=immediate,enabled={Enabled},bw-enabled={BackwardCommandEnabled},meta={MetadataVerified}," +
+        $"bw-hook={DirectionalRotationHookAvailable}," +
+        $"bw-compat={LastDirectionalCompatibilityPassed}," +
         $"context={LastContext},command={LastCommand},origin=" +
         $"{LastOrigin.X:0.00}/{LastOrigin.Y:0.00}/{LastOrigin.Z:0.00},destination=" +
         $"{LastDestination.X:0.00}/{LastDestination.Y:0.00}/{LastDestination.Z:0.00}," +
@@ -52,8 +57,31 @@ internal readonly record struct PanicShukuchiDiagnostics(
 /// search, or alternate action. Exact current metadata, base-action identity,
 /// charge/resource state, and an immediately clean native boundary are required.
 /// </summary>
-internal sealed class PanicShukuchiService
+internal sealed unsafe class PanicShukuchiService : IDisposable
 {
+    private sealed class DirectionalRotationOverrideScope : IDisposable
+    {
+        private PanicShukuchiService? owner;
+
+        internal DirectionalRotationOverrideScope(
+            PanicShukuchiService owner,
+            BackwardDashRotationOverrideLease lease)
+        {
+            this.owner = owner;
+            Lease = lease;
+        }
+
+        internal BackwardDashRotationOverrideLease Lease { get; }
+
+        public void Dispose()
+        {
+            var currentOwner = Interlocked.Exchange(ref owner, null);
+            currentOwner?.ReleaseDirectionalRotationOverride(this);
+        }
+
+        internal void Retire() => Interlocked.Exchange(ref owner, null);
+    }
+
     private enum DestinationMode
     {
         CharacterFacingForward,
@@ -73,7 +101,9 @@ internal sealed class PanicShukuchiService
     private readonly IObjectTable objectTable;
     private readonly IDutyState dutyState;
     private readonly NearAssistRedirector nearAssist;
+    private readonly IntegratedActionBufferRuntime actionBuffer;
     private readonly IPluginLog log;
+    private readonly Hook<GameObject.Delegates.SetRotation>? setRotationHook;
     private readonly bool panicShukuchiMetadataVerified;
     private readonly BackwardDashMetadataCatalog backwardDashMetadata;
 
@@ -89,7 +119,11 @@ internal sealed class PanicShukuchiService
     private BackwardPanicShukuchiCameraObservation lastCamera;
     private uint lastAdjustedActionId;
     private bool lastMetadataVerified;
+    private bool lastDirectionalCompatibilityPassed;
     private string lastEvent;
+    private DirectionalRotationOverrideScope? directionalRotationOverride;
+    private bool started;
+    private bool disposed;
 
     internal PanicShukuchiService(
         PluginConfiguration configuration,
@@ -97,6 +131,8 @@ internal sealed class PanicShukuchiService
         IObjectTable objectTable,
         IDutyState dutyState,
         NearAssistRedirector nearAssist,
+        IntegratedInputRuntime integratedInput,
+        IGameInteropProvider interop,
         IPluginLog log,
         PvPMetadataValidation metadata)
     {
@@ -105,6 +141,7 @@ internal sealed class PanicShukuchiService
         this.objectTable = objectTable;
         this.dutyState = dutyState;
         this.nearAssist = nearAssist;
+        actionBuffer = integratedInput.ActionBuffer;
         this.log = log;
         panicShukuchiMetadataVerified = metadata.PanicShukuchiVerified;
         backwardDashMetadata = metadata.BackwardDashActions;
@@ -113,6 +150,19 @@ internal sealed class PanicShukuchiService
         lastEvent = panicShukuchiMetadataVerified
             ? "Ready for immediate explicit /panicshu"
             : "Metadata mismatch; disabled";
+
+        try
+        {
+            setRotationHook = interop.HookFromAddress<GameObject.Delegates.SetRotation>(
+                GameObject.MemberFunctionPointers.SetRotation,
+                SetRotationDetour);
+        }
+        catch (Exception exception)
+        {
+            log.Error(
+                exception,
+                "Seiton Sense directional /seitonbw rotation hook is unavailable; non-NIN mappings remain off.");
+        }
     }
 
     internal PanicShukuchiDiagnostics Diagnostics
@@ -125,6 +175,8 @@ internal sealed class PanicShukuchiService
                     configuration.Enabled,
                     lastMetadataVerified,
                     configuration.EnableBackwardPanicShukuchiCommand,
+                    setRotationHook?.IsEnabled == true,
+                    lastDirectionalCompatibilityPassed,
                     lastContext,
                     lastOrigin,
                     lastDestination,
@@ -409,6 +461,31 @@ internal sealed class PanicShukuchiService
         }
     }
 
+    internal void Start()
+    {
+        if (started || disposed) return;
+        started = true;
+    }
+
+    private bool EnsureDirectionalRotationHookEnabled()
+    {
+        if (!started || disposed || setRotationHook is null) return false;
+        if (setRotationHook.IsEnabled) return true;
+
+        try
+        {
+            setRotationHook.Enable();
+            return setRotationHook.IsEnabled;
+        }
+        catch (Exception exception)
+        {
+            log.Warning(
+                exception,
+                "Seiton Sense directional /seitonbw rotation hook could not be enabled; this attempt failed closed.");
+            return false;
+        }
+    }
+
     private unsafe void ExecuteBackwardDirectional(string arguments)
     {
         lock (diagnosticsGate)
@@ -417,6 +494,7 @@ internal sealed class PanicShukuchiService
             lastCommand = BackwardCameraCommand;
             lastCamera = default;
             lastMetadataVerified = false;
+            lastDirectionalCompatibilityPassed = false;
         }
 
         if (!string.IsNullOrWhiteSpace(arguments))
@@ -434,6 +512,12 @@ internal sealed class PanicShukuchiService
         if (!configuration.EnableBackwardPanicShukuchiCommand)
         {
             RecordRefused("/seitonbw is disabled in Macro Helpers");
+            return;
+        }
+
+        if (!EnsureDirectionalRotationHookEnabled())
+        {
+            RecordRefused("Directional rotation hook unavailable; non-NIN /seitonbw failed closed");
             return;
         }
 
@@ -604,13 +688,31 @@ internal sealed class PanicShukuchiService
                 return;
             }
 
-            lock (diagnosticsGate) attemptCount++;
+            if (!actionBuffer.CanDispatchExactExternalAction(
+                    profile.ActionId,
+                    adjustedActionId,
+                    out var compatibilityReason))
+            {
+                TryRestoreHeading(nativeLocal, originalHeading);
+                facingWritten = false;
+                RecordRefused($"/seitonbw foreign action ownership blocked: {compatibilityReason}");
+                return;
+            }
+
+            lock (diagnosticsGate) lastDirectionalCompatibilityPassed = true;
+
             bool accepted;
             try
             {
+                using var rotationOverride = EnterDirectionalRotationOverride(
+                    nativeLocal,
+                    local.EntityId,
+                    profile.ActionId,
+                    desiredActorHeading);
                 using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(
                     profile.ActionId,
                     ExplicitAutoGuardBreakBoundary.StandardAction);
+                lock (diagnosticsGate) attemptCount++;
                 nativeBoundaryEntered = true;
                 accepted = nearAssist.RunWithoutRedirect(() =>
                     actionManager->UseAction(
@@ -623,6 +725,23 @@ internal sealed class PanicShukuchiService
             }
             catch (Exception exception)
             {
+                if (!nativeBoundaryEntered)
+                {
+                    TryRestoreHeading(nativeLocal, originalHeading);
+                    facingWritten = false;
+                    lock (diagnosticsGate)
+                    {
+                        refusedCount++;
+                        lastEvent = $"Immediate /seitonbw {profile.Name} rotation boundary failed closed";
+                    }
+
+                    log.Error(
+                        exception,
+                        "Seiton Sense immediate /seitonbw {ActionName} rotation boundary failed closed.",
+                        profile.Name);
+                    return;
+                }
+
                 lock (diagnosticsGate)
                 {
                     rejectedCount++;
@@ -689,6 +808,63 @@ internal sealed class PanicShukuchiService
                 "Seiton Sense immediate directional /seitonbw command failed closed.");
         }
     }
+
+    private void SetRotationDetour(GameObject* actor, float requestedHeading)
+    {
+        var effectiveHeading = requestedHeading;
+        var scope = Volatile.Read(ref directionalRotationOverride);
+        if (actor != null &&
+            scope is not null &&
+            BackwardDashRules.ShouldOverrideRotation(
+                scope.Lease,
+                Environment.CurrentManagedThreadId,
+                (ulong)(nuint)actor,
+                actor->EntityId))
+        {
+            effectiveHeading = scope.Lease.DesiredActorHeading;
+        }
+
+        setRotationHook!.Original(actor, effectiveHeading);
+    }
+
+    private IDisposable EnterDirectionalRotationOverride(
+        GameObject* local,
+        uint localEntityId,
+        uint actionId,
+        float desiredActorHeading)
+    {
+        if (!started || disposed || setRotationHook?.IsEnabled != true || local == null)
+            throw new InvalidOperationException("Directional rotation hook is unavailable.");
+
+        var lease = new BackwardDashRotationOverrideLease(
+            Environment.CurrentManagedThreadId,
+            actionId,
+            (ulong)(nuint)local,
+            localEntityId,
+            desiredActorHeading);
+        if (!lease.IsValid)
+            throw new InvalidOperationException("Directional rotation identity is invalid.");
+
+        var scope = new DirectionalRotationOverrideScope(this, lease);
+        if (Interlocked.CompareExchange(
+                ref directionalRotationOverride,
+                scope,
+                comparand: null) is not null)
+        {
+            scope.Retire();
+            throw new InvalidOperationException(
+                "A directional rotation override is already active.");
+        }
+
+        return scope;
+    }
+
+    private void ReleaseDirectionalRotationOverride(
+        DirectionalRotationOverrideScope scope) =>
+        Interlocked.CompareExchange(
+            ref directionalRotationOverride,
+            null,
+            scope);
 
     private static unsafe BackwardPanicShukuchiCameraObservation
         CaptureBackwardCameraObservation()
@@ -772,4 +948,13 @@ internal sealed class PanicShukuchiService
         local.IsValid() &&
         local.GameObjectId is not 0 and not DefaultTargetSentinel and not ulong.MaxValue &&
         local.EntityId is not 0 and not (uint)DefaultTargetSentinel and not uint.MaxValue;
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        started = false;
+        Interlocked.Exchange(ref directionalRotationOverride, null)?.Retire();
+        setRotationHook?.Dispose();
+    }
 }

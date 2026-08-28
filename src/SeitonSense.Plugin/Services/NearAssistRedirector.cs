@@ -678,7 +678,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     /// to this scope, and an action/target mismatch fails closed.
     /// </summary>
     internal bool RunAstrologianHarmonicOrbisWithoutRedirect(
-        uint actionId,
+        uint rawActionId,
+        uint expectedAdjustedActionId,
         TargetPressureActorIdentity localPlayer,
         ulong targetGameObjectId,
         Func<bool> action)
@@ -688,7 +689,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             !useActionHook.IsEnabled ||
             astrologianOwnGuardVetoScope is not null ||
             AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
-                actionId,
+                rawActionId,
+                expectedAdjustedActionId,
+                expectedAdjustedActionId,
                 localPlayer,
                 localPlayer,
                 targetGameObjectId,
@@ -700,7 +703,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         astrologianOwnGuardVetoScope = new AstrologianOwnGuardVetoScope(
             this,
-            actionId,
+            rawActionId,
+            expectedAdjustedActionId,
             localPlayer,
             targetGameObjectId);
         try
@@ -1939,6 +1943,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         if (ShouldVetoAstrologianOwnGuardAtFinalBoundary(
+                thisPtr,
                 actionType,
                 actionId,
                 forwardedTargetId,
@@ -3560,6 +3565,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     private bool ShouldVetoAstrologianOwnGuardAtFinalBoundary(
+        ActionManager* actionManager,
         ActionType actionType,
         uint actionId,
         ulong forwardedTargetId,
@@ -3577,12 +3583,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             : default;
         var ownGuardActiveOrPropagating =
             IsExactLocalGuardActiveOrPropagating(scope.LocalPlayer);
+        var currentAdjustedActionId = actionManager == null
+            ? 0
+            : actionManager->GetAdjustedActionId(actionId);
         return actionType != ActionType.Action ||
                mode != ActionManager.UseActionMode.None ||
-               actionId != scope.ActionId ||
+               actionId != scope.RawActionId ||
                AstrologianHarmonicOrbisRules
                    .ShouldVetoNativeBoundaryForOwnGuard(
                        actionId,
+                       scope.ExpectedAdjustedActionId,
+                       currentAdjustedActionId,
                        scope.LocalPlayer,
                        currentLocalPlayer,
                        scope.TargetGameObjectId,
@@ -4777,12 +4788,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private sealed class AstrologianOwnGuardVetoScope(
         NearAssistRedirector owner,
-        uint actionId,
+        uint rawActionId,
+        uint expectedAdjustedActionId,
         TargetPressureActorIdentity localPlayer,
         ulong targetGameObjectId)
     {
         internal NearAssistRedirector Owner { get; } = owner;
-        internal uint ActionId { get; } = actionId;
+        internal uint RawActionId { get; } = rawActionId;
+        internal uint ExpectedAdjustedActionId { get; } =
+            expectedAdjustedActionId;
         internal TargetPressureActorIdentity LocalPlayer { get; } = localPlayer;
         internal ulong TargetGameObjectId { get; } = targetGameObjectId;
         internal bool Consumed { get; set; }

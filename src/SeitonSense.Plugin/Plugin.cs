@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.39.0.1";
+    private const string CurrentReleaseVersion = "0.39.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -267,6 +267,8 @@ public sealed class Plugin : IDalamudPlugin
             objectTable,
             dutyState,
             nearAssist,
+            integratedInput,
+            interop,
             log,
             metadata);
         namePlateAnchors = new NamePlateAnchorTracker(namePlateGui, gameGui, log);
@@ -373,9 +375,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "/seitonbw now uses the matching camera-back self dash on NIN, AST, DNC, DRG, RPR, and PCT. It changes no target, never moves the camera, makes one immediate attempt, and remains default-off.",
-                "The Wolves' Den rotation deck is substantially larger and more readable: wider cards, taller artwork, 17-pixel map names, and larger countdown and W/L text at 1.0x.",
-                "RDM fresh-Guard engage and local per-map W/L remain unchanged. Configuration schema 44 is current; current-patch dash direction and the new visual sizing still require in-game confirmation.",
+                "AST held Harmonischer Orbis works again. If Zweifachzauber was ready first, the accepted Orbis reserves exactly one repeat for the same ally.",
+                "/seitonbw now preserves screen-back facing through ReAction's camera-relative dash rewrite. ReAction action/target rewrites still fail closed.",
+                "The CC rotation panel starts with one large current-map card. Use SHOW NEXT 6 MAPS to expand the full animated deck; W/L remains beside each map.",
+                "Configuration schema 44 is unchanged. Current-client AST acceptance, dash direction, ReAction coexistence, and final visuals still need in-game confirmation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -624,6 +627,7 @@ public sealed class Plugin : IDalamudPlugin
         nearAssist.Start();
         personalStatus.Start();
         integratedInput.Start();
+        panicShukuchi.Start();
         combatLimitBreakRuntime.Start();
     }
 
@@ -656,6 +660,7 @@ public sealed class Plugin : IDalamudPlugin
         personalStatus.Dispose();
         criticalUtilityCoordination.Dispose();
         smartTabTargeting.Dispose();
+        panicShukuchi.Dispose();
         nearAssist.Dispose();
         isolationAwareness.Dispose();
         autoLowMpFocusTarget.Dispose();
@@ -909,7 +914,7 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print(
                     $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +
                     $"phase={astrologianOrbis.Phase},decision={astrologianOrbis.Decision}," +
-                    $"action/adjusted={astrologianOrbis.ResolvedActionId}/" +
+                    $"expected/observed-carrier={astrologianOrbis.ResolvedActionId}/" +
                     $"{astrologianOrbis.AdjustedDoubleCastActionId},candidates=" +
                     $"{astrologianOrbis.CandidateCount},P={astrologianOrbis.PartySlot},target=" +
                     $"{astrologianOrbis.TargetGameObjectId:X}/{astrologianOrbis.TargetEntityId:X}," +

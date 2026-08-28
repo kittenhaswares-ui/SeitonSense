@@ -86,6 +86,39 @@ internal static class BackwardDashSelfTests
         False(
             BackwardDashRules.IsReviewedDirectionalAction(41_507),
             "AST transformed Retrograde is not a reviewed dispatch action");
+
+        var lease = new BackwardDashRotationOverrideLease(
+            OwnerLaneId: 41,
+            ActionId: 29_430,
+            LocalActorAddress: 0x1234,
+            LocalEntityId: 0x5678,
+            DesiredActorHeading: -MathF.PI / 2f);
+        True(
+            BackwardDashRules.ShouldOverrideRotation(lease, 41, 0x1234, 0x5678),
+            "exact same-lane local actor write is owned by the frozen dash");
+        False(
+            BackwardDashRules.ShouldOverrideRotation(lease, 42, 0x1234, 0x5678),
+            "a different execution lane cannot inherit the override");
+        False(
+            BackwardDashRules.ShouldOverrideRotation(lease, 41, 0x1235, 0x5678),
+            "a different actor address cannot inherit the override");
+        False(
+            BackwardDashRules.ShouldOverrideRotation(lease, 41, 0x1234, 0x5679),
+            "a different actor entity cannot inherit the override");
+        False(
+            BackwardDashRules.ShouldOverrideRotation(
+                lease with { ActionId = 41_507 },
+                41,
+                0x1234,
+                0x5678),
+            "an unreviewed action cannot own a rotation override");
+        False(
+            BackwardDashRules.ShouldOverrideRotation(
+                lease with { DesiredActorHeading = float.NaN },
+                41,
+                0x1234,
+                0x5678),
+            "a non-finite frozen heading cannot own an override");
     }
 
     private static void True(bool value, string message)

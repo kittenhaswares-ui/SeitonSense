@@ -137,7 +137,7 @@ internal sealed partial class SettingsWindow
             $"last={recuperate.LastEvent}");
         ImGui.TextWrapped(
             $"AST held Near Help: metadata={personalStatus.AstrologianHarmonicOrbisMetadataVerified}, " +
-            $"state={astrologianOrbis.Phase}/{astrologianOrbis.Decision}, action/adjusted=" +
+            $"state={astrologianOrbis.Phase}/{astrologianOrbis.Decision}, expected/observed-carrier=" +
             $"{astrologianOrbis.ResolvedActionId}/{astrologianOrbis.AdjustedDoubleCastActionId}, " +
             $"candidates={astrologianOrbis.CandidateCount}, P={astrologianOrbis.PartySlot}, target=" +
             $"{astrologianOrbis.TargetGameObjectId:X}/{astrologianOrbis.TargetEntityId:X}, HP=" +

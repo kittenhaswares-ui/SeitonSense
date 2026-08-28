@@ -155,8 +155,9 @@ following data already available in the local FFXIV client:
   clean cast/queue/animation boundary; `/panicshu` additionally reads the exact
   19.5-yalm terrain collision point, while `/seitonbw` reads the normal gameplay
   camera's control/zoom mode, event-camera flag, and finite horizontal direction.
-  `/seitonbw` may write only local character facing immediately before one
-  reviewed self-dash; it never writes camera or target state;
+  `/seitonbw` may write only local character facing immediately before and during
+  one reviewed self-dash boundary, including replacing a later same-thread local
+  facing rewrite; it never writes camera or target state;
 - when held DRK Shadowbringer is enabled, the exact local DRK identity, held-key
   ownership, HP, Dark Arts, exact Blackblood status-row presence, incoming
   pressure, own Guard/cast/queue/animation state, native Shadowbringer readiness,
@@ -628,8 +629,9 @@ available there without reading or selecting an enemy or striking dummy.
 One selected player, context, local identity, and key generation are frozen for
 Harmonischer Orbis / Aspected Benefic `29243`. The plugin also records whether
 Double Cast was already locally available before that Orbis. Only a
-client-accepted Orbis may reserve the exact adjusted Orbis repeat `29247`, and
-that later request revalidates the same actor without applying the 60% boundary
+client-accepted Orbis may reserve the repeat: the plugin invokes raw Double Cast
+carrier `29245` only while it resolves exactly to adjusted Orbis `29247`. That
+later request revalidates the same actor without applying the 60% boundary
 again. It never reranks after the first heal, changes a visible target, uses a
 different Double Cast form, or substitutes another player. Exact action,
 identity, readiness, range, and retry state exist only in memory for the active
@@ -699,7 +701,11 @@ character's current facing. `/seitonbw` resolves screen-back from the normal
 gameplay camera. NIN uses the exact 19.5-yalm terrain point; AST Epicycle `41506`,
 DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell's Ingress `29550`, and
 PCT Smudge `39210` set only local character facing immediately before their one
-native self-action. The camera and targets are never written. Unavailable or
+native self-action. The camera and targets are never written. The local-facing
+hook remains inactive until the first enabled non-NIN invocation. Immediately
+before the exact action boundary, the shared audited ReAction/MOAction check
+refuses action/target mutation or action ownership; a camera-relative-only
+ReAction profile remains allowed. Unavailable or
 non-finite data and event/cutscene, spectator, aiming, or lock-on camera modes
 refuse the command. One invocation makes at most one matching native location
 or standard-action call in the same command callback. It stores no pending
@@ -1571,9 +1577,9 @@ them to draw frames, change targets, or publish mouseover actors.
 
 The Wolves' Den rotation panel calculates the published arena order from local
 UTC time, the current PvP / territory flags, and an optional saved whole-map
-phase correction. Its always-visible deck requests seven reviewed duty-artwork
-icons from the local game installation; it does not download, copy, or upload
-those images.
+phase correction. Its compact current card and optional expanded deck request
+the same seven reviewed duty-artwork icons from the local game installation; it
+does not download, copy, or upload those images.
 
 When both Seiton Sense and the separate local W/L capture option are enabled,
 the plugin may confirm future public Crystalline Conflict outcomes independently

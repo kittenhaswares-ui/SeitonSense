@@ -37,6 +37,27 @@ public readonly record struct ReviewedBackwardDashProfile(
 }
 
 /// <summary>
+/// Frozen identity for the synchronous actor-facing boundary of one explicit
+/// directional /seitonbw command. The runtime supplies its current execution
+/// lane and exact local actor identity; this value-only contract decides
+/// whether a later facing write still belongs to that one command.
+/// </summary>
+public readonly record struct BackwardDashRotationOverrideLease(
+    int OwnerLaneId,
+    uint ActionId,
+    ulong LocalActorAddress,
+    uint LocalEntityId,
+    float DesiredActorHeading)
+{
+    public bool IsValid =>
+        OwnerLaneId > 0 &&
+        BackwardDashRules.IsReviewedDirectionalAction(ActionId) &&
+        LocalActorAddress != 0 &&
+        LocalEntityId != 0 &&
+        float.IsFinite(DesiredActorHeading);
+}
+
+/// <summary>
 /// Closed catalog and heading policy for the non-ground-target branches of
 /// /seitonbw. These are the only current PvP self-actions whose movement is
 /// defined by actor facing. Target hops, hostile-target backsteps, stored-origin
@@ -171,6 +192,16 @@ public static class BackwardDashRules
         var delta = NormalizeRadians(left - right);
         return MathF.Abs(delta) <= MaximumHeadingReadbackErrorRadians;
     }
+
+    public static bool ShouldOverrideRotation(
+        BackwardDashRotationOverrideLease lease,
+        int currentLaneId,
+        ulong actorAddress,
+        uint actorEntityId) =>
+        lease.IsValid &&
+        currentLaneId == lease.OwnerLaneId &&
+        actorAddress == lease.LocalActorAddress &&
+        actorEntityId == lease.LocalEntityId;
 
     private static float NormalizeRadians(float radians)
     {

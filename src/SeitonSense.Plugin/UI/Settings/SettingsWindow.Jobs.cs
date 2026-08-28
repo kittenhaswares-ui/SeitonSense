@@ -33,8 +33,9 @@ internal sealed partial class SettingsWindow
             ImGui.TextDisabled(
                 "The helper freezes one exact player and uses Harmonischer Orbis / Aspected Benefic (29243). If and " +
                 "only if Zweifacher Zauber was already locally available before that Orbis, a client-accepted Orbis " +
-                "reserves the next clear scheduler frame for the exact adjusted Orbis repeat (29247) on the same " +
-                "player. The heal may raise the player above 60%; that does not rerank or cancel the planned repeat. " +
+                "reserves the next clear scheduler frame for the same player. It invokes the raw Double Cast carrier " +
+                "(29245) only while that carrier resolves exactly to the adjusted Orbis repeat (29247). The heal may " +
+                "raise the player above 60%; that does not rerank or cancel the planned repeat. " +
                 "If Double Cast was not ready, the sequence deliberately ends after Orbis.");
             ImGui.TextDisabled(
                 "Purify remains absolute priority. Your own Guard suppresses the full sequence and cannot be " +

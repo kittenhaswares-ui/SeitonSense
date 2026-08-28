@@ -194,7 +194,11 @@ internal sealed partial class SettingsWindow
                 "Crystalline Conflict is supported directly; Wolves' Den still requires the Start-page testing option. " +
                 "The command may deliberately break your own Guard and makes at most one immediate native request. NIN " +
                 "keeps its exact 19.5-yalm ground point; the other jobs briefly align only character facing so their native " +
-                "forward/backward dash travels screen-back. It has no queue, pending lease, retry, fallback, or later replay.");
+                "forward/backward dash travels screen-back. During that one request, the frozen facing also wins over a " +
+                "later camera-relative dash rewrite from another plugin. That local-facing boundary activates only on " +
+                "your first enabled non-NIN command. ReAction camera-relative-only is allowed; ReAction action/target " +
+                "rewrites or MOAction ownership of the dash fail closed. " +
+                "It has no queue, pending lease, retry, fallback, or later replay.");
             ImGui.PopTextWrapPos();
         }
 

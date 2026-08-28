@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.39.0.2
+
+- Fixed the default-off AST held Near Help helper being permanently disabled by
+  its own metadata gate. Harmonischer Orbis / Aspected Benefic `29243` now
+  validates as the player action, while the internal adjusted repeat `29247`
+  correctly validates as a non-player row. If a raw Double Cast `29245` charge
+  was free before an accepted Orbis, the helper waits at least one framework
+  frame, proves `29245 -> 29247`, and invokes raw `29245` on the same frozen
+  ally. It never dispatches internal row `29247` directly or adopts another
+  Double Cast form.
+- Fixed non-NIN `/seitonbw` going forward when ReAction's camera-relative dash
+  option rewrote character facing during the same native action call. A lazy,
+  same-thread local-actor boundary preserves the frozen screen-back heading
+  only for that one reviewed dash and never writes camera or target state. The
+  existing audited compatibility check admits camera-relative-only ReAction but
+  refuses ReAction Auto Target/Action Stacks or MOAction ownership before the
+  exact action call.
+- Restored the compact Wolves' Den rotation view: one large current-map card is
+  visible by default, with a full-width control to expand or hide the next six
+  maps. The current card slides automatically at hourly rollover; the expanded
+  seven-card deck retains its reorder animation, enlarged text, artwork, and
+  per-character W/L display.
+- Retained configuration schema `44`. The warning-free Release build, all `541`
+  Core tests, safety contract, package parity, and release verification pass.
+  Current-client AST acceptance, ReAction coexistence, dash direction, and final
+  in-game visual behavior remain separate live-validation boundaries.
+
 ## 0.39.0.1
 
 - Expanded the default-off `/seitonbw` macro from NIN Shukuchi to the closed
@@ -130,8 +157,9 @@
   without changing the visible target. It supports exact Crystalline Conflict
   and the existing opt-in Wolves' Den test context.
 - If Double Cast `29245` was already locally available before a client-accepted
-  Orbis, the same frozen ally may receive the exact adjusted Orbis repeat
-  `29247` on a later scheduler frame. The follow-up never reranks after the first
+  Orbis, the same frozen ally may receive the repeat on a later scheduler frame.
+  The helper invokes raw carrier `29245` only while it resolves exactly to
+  adjusted Orbis `29247`. The follow-up never reranks after the first
   heal, adopts another Double Cast form, changes targets, or shares an action
   frame with the base heal.
 - Purify remains absolute scheduler and cast-cancel priority. The AST sequence

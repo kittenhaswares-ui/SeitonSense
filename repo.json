@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.39.0.1",
-    "Changelog": "Expanded the default-off /seitonbw camera-back macro to the reviewed PvP self dashes on NIN, AST, DNC, DRG, RPR, and PCT. It makes one immediate exact job action, changes no target, never moves the camera, and has no wait, queue, retry, transformed-action fallback, or alternate target/action. The Wolves' Den CC rotation deck is now 610 pixels wide with 84-pixel cards, 17-pixel map names, and larger countdown and W/L text at 1.0x. Configuration schema 44 is unchanged; current-client dash direction/acceptance and final visual sizing remain live validation.",
+    "AssemblyVersion": "0.39.0.2",
+    "Changelog": "Fixed AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up: the raw Double Cast carrier is used only while it resolves exactly to Orbis. Fixed non-NIN /seitonbw direction with ReAction camera-relative dashes through a one-call frozen-facing boundary; mutating ReAction/MOAction profiles still fail closed. The Wolves' Den rotation panel now starts with one animated current-map card and can expand the next six maps. Configuration schema 44 is unchanged; all 541 Core tests and release gates pass, while current-client behavior remains live validation.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1787945849"
+    "LastUpdate": "1787950924"
   }
 ]

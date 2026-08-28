@@ -19,6 +19,7 @@ var tests = new (string Name, Action Run)[]
     ("integrated input reservation is independent of external IPC opt-in", CriticalUtilityCoordinationSelfTests.IntegratedReservationIgnoresExternalPublicationToggle),
     ("action timing uses the next charge boundary", ActionChargeTimingSelfTests.NextChargeBoundaryUsesPerChargeRecast),
     ("AST Harmonic Orbis IDs and Near Help threshold are exact", AstrologianHarmonicOrbisSelfTests.ExactIdsAndNearHelpThresholdArePinned),
+    ("AST Harmonic Orbis metadata and raw-adjusted dispatch are exact", AstrologianHarmonicOrbisSelfTests.MetadataAndDispatchContractAreExact),
     ("AST Harmonic Orbis base charges use distinct epochs", AstrologianHarmonicOrbisSelfTests.BaseChargeEpochRequiresDistinctObservedCount),
     ("AST Harmonic Orbis follow-up is accepted-only and later-frame", AstrologianHarmonicOrbisSelfTests.FollowUpRequiresAcceptedOrbisAndLaterFrame),
     ("AST Harmonic Orbis freezes Double Cast and target semantics", AstrologianHarmonicOrbisSelfTests.DoubleCastSnapshotAndSelectionThresholdAreOneShot),

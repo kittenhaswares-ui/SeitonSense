@@ -366,13 +366,15 @@ if ($unexpectedUnsafe.Count -gt 0) {
 # and world-cycle boundary. The
 # MCH/pressure capture owns the read-only ActionEffect receive hook and forwards
 # value-only activation/damage records to the bounded Combat LB buffer. The map
-# statistics service owns one separately pinned post-match result hook.
+# statistics service owns one separately pinned post-match result hook. Explicit
+# directional /seitonbw owns one same-lane local-facing preservation hook.
 # Plugin.cs only constructor-injects interop and the signature scanner.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
     $_.Path -notin @(
         $pluginPath,
         $nearAssistPath,
+        $panicShukuchiServicePath,
         $machinistLimitBreakCapturePath,
         $smartTabTargetingServicePath,
         $integratedHotbarInputSourcePath,
@@ -381,7 +383,7 @@ $unexpectedInterop = @($interopMatches | Where-Object {
 })
 if ($unexpectedInterop.Count -gt 0) {
     $locations = $unexpectedInterop | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Only Near Assist/Smart Action, Smart Tab, integrated standard-hotbar input, and the reviewed read-only combat/post-match captures may own native hooks: $($locations -join ', ')"
+    throw "Only Near Assist/Smart Action, explicit directional /seitonbw, Smart Tab, integrated standard-hotbar input, and the reviewed read-only combat/post-match captures may own native hooks: $($locations -join ', ')"
 }
 $pluginSource = Read-RequiredSource $pluginPath 'Plugin entry point'
 if ([regex]::Matches($pluginSource, '\bIGameInteropProvider\b').Count -ne 1 -or
@@ -716,7 +718,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 540-test registry.
+# 541-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -736,11 +738,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 499 -or
+if ($staticIntegratedTestCount -ne 500 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 540 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 541 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -748,7 +750,7 @@ if ($staticIntegratedTestCount -ne 499 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 44 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 540-test combined Core registry.'
+    throw 'Schema 44 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 541-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -2001,13 +2003,16 @@ Assert-Literals $backwardDashRules @(
     '39_210,',
     '"Smudge"',
     'MaximumImmediateAnimationLockSeconds = 0.05f',
+    'public readonly record struct BackwardDashRotationOverrideLease(',
+    'public static bool ShouldOverrideRotation(',
     'public static bool TryResolveActorFacing(',
     'screenBackHeadingRadians + MathF.PI',
     'public static bool IsReviewedDirectionalAction(uint actionId)'
 ) 'Closed five-job directional /seitonbw catalog and heading policy'
 if ([regex]::Matches($backwardDashRules, 'new\(').Count -ne 5 -or
     $backwardDashRules -match '\b(?:UseAction|UseActionLocation|ActionManager|GameObject|IPlayerCharacter|CameraManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $normalizedBackwardDashRules -match '\b(?:29_399|29_700|29_551|41_507|29_513)\b') {
+    $normalizedBackwardDashRules -match '\b(?:29_399|29_700|29_551|41_507|29_513)\b' -or
+    $normalizedBackwardDashRules -notmatch 'public readonly record struct BackwardDashRotationOverrideLease\( int OwnerLaneId, uint ActionId, ulong LocalActorAddress, uint LocalEntityId, float DesiredActorHeading\).*?OwnerLaneId > 0 && BackwardDashRules\.IsReviewedDirectionalAction\(ActionId\) && LocalActorAddress != 0 && LocalEntityId != 0 && float\.IsFinite\(DesiredActorHeading\).*?public static bool ShouldOverrideRotation\( BackwardDashRotationOverrideLease lease, int currentLaneId, ulong actorAddress, uint actorEntityId\) => lease\.IsValid && currentLaneId == lease\.OwnerLaneId && actorAddress == lease\.LocalActorAddress && actorEntityId == lease\.LocalEntityId;') {
     throw 'Directional /seitonbw Core rules must remain a pure closed five-self-dash catalog, excluding hostile-target backsteps, stored returns, and NIN location dispatch.'
 }
 
@@ -2056,6 +2061,14 @@ Assert-Literals $panicShukuchiService @(
     'using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(',
     'actionManager->UseActionLocation(',
     'nativeLocal->SetRotation(desiredActorHeading);',
+    'Hook<GameObject.Delegates.SetRotation>',
+    'GameObject.MemberFunctionPointers.SetRotation',
+    'SetRotationDetour',
+    'BackwardDashRotationOverrideLease',
+    'Environment.CurrentManagedThreadId',
+    'EnterDirectionalRotationOverride(',
+    'EnsureDirectionalRotationHookEnabled()',
+    'actionBuffer.CanDispatchExactExternalAction(',
     'BackwardDashRules.TryResolveActorFacing(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'ExplicitAutoGuardBreakBoundary.StandardAction',
@@ -2088,12 +2101,21 @@ if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -n
     [regex]::Matches($panicShukuchiService, '\bGetActiveCamera\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bTryCreateBackwardCameraProbe\s*\(').Count -ne 2 -or
     [regex]::Matches($panicShukuchiService, '->SetRotation\s*\(').Count -ne 2 -or
-    $panicShukuchiService -match '(?-i:\b(?:IFramework|IKeyState|VirtualKey|TargetPressureTracker|Hook<|HookFromAddress|IGameInteropProvider|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction|OnFrameworkUpdate|PanicShukuchiPending|MaximumPendingMilliseconds)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
+    [regex]::Matches($panicShukuchiService, '\bHookFromAddress<GameObject\.Delegates\.SetRotation>\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiService, '\bShouldOverrideRotation\s*\(').Count -ne 1 -or
+    $panicShukuchiService -match '(?-i:\b(?:IFramework|IKeyState|VirtualKey|TargetPressureTracker|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction|OnFrameworkUpdate|PanicShukuchiPending|MaximumPendingMilliseconds)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
     $panicShukuchiService -match '\b(?:Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $panicShukuchiService -match '\b(?:IChatGui|chatGui|PrintError)\b' -or
     $panicShukuchiService -match '->(?:DirH|DirV|ControlMode|ZoomMode|IsEventCameraAutoControl|ActiveCameraIndex)\s*=(?!=|>)' -or
     $panicShukuchiService -match '\b(?:for|foreach|while|do)\s*\(') {
     throw 'The two explicit dash paths must remain chat-silent, loop-free, immediate one-call commands with no scheduler, input injection, target mutation, retry, or fallback search.'
+}
+if ($normalizedPanicShukuchiService -notmatch 'private void SetRotationDetour\(GameObject\* actor, float requestedHeading\).*?var scope = Volatile\.Read\(ref directionalRotationOverride\);.*?BackwardDashRules\.ShouldOverrideRotation\( scope\.Lease, Environment\.CurrentManagedThreadId, \(ulong\)\(nuint\)actor, actor->EntityId\).*?effectiveHeading = scope\.Lease\.DesiredActorHeading;.*?setRotationHook!\.Original\(actor, effectiveHeading\);' -or
+    $normalizedPanicShukuchiService -notmatch 'internal void Start\(\) \{ if \(started \|\| disposed\) return; started = true; \}.*?private bool EnsureDirectionalRotationHookEnabled\(\).*?if \(!started \|\| disposed \|\| setRotationHook is null\) return false;.*?if \(setRotationHook\.IsEnabled\) return true;.*?setRotationHook\.Enable\(\);.*?return setRotationHook\.IsEnabled;' -or
+    $normalizedPanicShukuchiService -notmatch 'actionBuffer\.CanDispatchExactExternalAction\( profile\.ActionId, adjustedActionId, out var compatibilityReason\).*?RecordRefused\(\$"/seitonbw foreign action ownership blocked: \{compatibilityReason\}"\);.*?EnterDirectionalRotationOverride\(' -or
+    $normalizedPanicShukuchiService -notmatch 'private IDisposable EnterDirectionalRotationOverride\( GameObject\* local, uint localEntityId, uint actionId, float desiredActorHeading\).*?setRotationHook\?\.IsEnabled != true.*?new BackwardDashRotationOverrideLease\( Environment\.CurrentManagedThreadId, actionId, \(ulong\)\(nuint\)local, localEntityId, desiredActorHeading\).*?Interlocked\.CompareExchange\( ref directionalRotationOverride, scope, comparand: null\) is not null.*?return scope;' -or
+    $normalizedPanicShukuchiService -notmatch 'public void Dispose\(\).*?Interlocked\.Exchange\(ref directionalRotationOverride, null\)\?\.Retire\(\); setRotationHook\?\.Dispose\(\);') {
+    throw 'Directional /seitonbw must own one exact same-lane local-actor rotation override only for its synchronous native action boundary, so later camera-relative hooks cannot rewrite it.'
 }
 if ([regex]::Matches($panicImmediate, '\bUseActionLocation\s*\(').Count -ne 1 -or
     [regex]::Matches($panicImmediate, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
@@ -2102,7 +2124,7 @@ if ([regex]::Matches($panicImmediate, '\bUseActionLocation\s*\(').Count -ne 1 -o
 }
 if ([regex]::Matches($backwardDirectional, '(?<!Location)\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($backwardDirectional, '\bUseActionLocation\s*\(').Count -ne 0 -or
-    $normalizedBackwardDirectional -notmatch 'TryGetDirectionalProfile\(localJobId, out var profile\).*?backwardDashMetadata\.Contains\(profile\.ActionId\).*?TryCreateBackwardCameraProbe\(.*?TryResolveActorFacing\(.*?GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
+    $normalizedBackwardDirectional -notmatch 'TryGetDirectionalProfile\(localJobId, out var profile\).*?backwardDashMetadata\.Contains\(profile\.ActionId\).*?TryCreateBackwardCameraProbe\(.*?TryResolveActorFacing\(.*?GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?EnterDirectionalRotationOverride\( nativeLocal, local\.EntityId, profile\.ActionId, desiredActorHeading\);.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
     throw 'Directional /seitonbw must freeze one reviewed base action, positively verify readiness/charge/camera/facing, make one exact self-action call, and restore facing only on a proven clean rejection.'
 }
 $panicDecisionIndex = $panicShukuchiService.IndexOf(
@@ -2182,6 +2204,8 @@ Assert-Literals $pluginSource @(
     'private readonly PanicShukuchiService panicShukuchi',
     'private readonly bool backwardPanicShukuchiCommandRegistered',
     'panicShukuchi = new PanicShukuchiService(',
+    'panicShukuchi.Start()',
+    'panicShukuchi.Dispose()',
     'new CommandInfo(OnPanicShukuchiCommand)',
     'new CommandInfo(OnBackwardPanicShukuchiCommand)',
     'panicShukuchi.Execute(arguments)',
@@ -2193,16 +2217,17 @@ Assert-Literals $pluginSource @(
     '/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT.',
     '/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead'
 ) 'Two command-only immediate explicit dash entry points'
-if ($normalizedPanicShukuchiPlugin -notmatch 'panicShukuchi = new PanicShukuchiService\( configuration, clientState, objectTable, dutyState, nearAssist, log, metadata\);.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?backwardPanicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.BackwardCameraCommand, new CommandInfo\(OnBackwardPanicShukuchiCommand\).*?AllowedInMacros = true' -or
+if ($normalizedPanicShukuchiPlugin -notmatch 'panicShukuchi = new PanicShukuchiService\( configuration, clientState, objectTable, dutyState, nearAssist, integratedInput, interop, log, metadata\);.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?backwardPanicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.BackwardCameraCommand, new CommandInfo\(OnBackwardPanicShukuchiCommand\).*?AllowedInMacros = true.*?integratedInput\.Start\(\); panicShukuchi\.Start\(\);.*?panicShukuchi\.Dispose\(\); nearAssist\.Dispose\(\);' -or
     [regex]::Matches($pluginSource, '\bnew\s+PanicShukuchiService\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.Command').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.BackwardCameraCommand').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.Execute\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.ExecuteBackwardCamera\s*\(').Count -ne 1 -or
-    $pluginSource -match '\bpanicShukuchi\.(?:Arm|Start|Dispose)\s*\(' -or
+    [regex]::Matches($pluginSource, '\bpanicShukuchi\.Start\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bpanicShukuchi\.Dispose\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bOnPanicShukuchiCommand\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bOnBackwardPanicShukuchiCommand\s*\(').Count -ne 1) {
-    throw 'Exactly one macro-allowed /panicshu and one /seitonbw handler may synchronously execute their immediate explicit path, with no scheduler lifecycle or automatic source.'
+    throw 'Exactly one macro-allowed /panicshu and one /seitonbw handler may synchronously execute their immediate explicit path; only the directional rotation hook may have a Plugin-owned lifecycle.'
 }
 $panicServiceTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bPanicShukuchiService\b')
 if (@($panicServiceTypeReferences | Where-Object {
@@ -2277,7 +2302,10 @@ foreach ($method in $backwardDashTestMethods) {
 }
 if ([regex]::Matches($backwardDashSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 3 -or
     [regex]::Matches($panicShukuchiProgram, '\bBackwardDashSelfTests\.\w+').Count -ne 3 -or
-    $backwardDashSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|GameObject|CameraManager|TargetManager)\b') {
+    $backwardDashSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|GameObject|CameraManager|TargetManager)\b' -or
+    $backwardDashSelfTests -notmatch 'BackwardDashRules\.ShouldOverrideRotation\(lease, 41, 0x1234, 0x5678\)' -or
+    $backwardDashSelfTests -notmatch 'lease with \{ ActionId = 41_507 \}' -or
+    $backwardDashSelfTests -notmatch 'lease with \{ DesiredActorHeading = float\.NaN \}') {
     throw 'All three pure directional backward-dash catalog/heading tests and their exact Core registry entries must remain pinned.'
 }
 
@@ -4090,8 +4118,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 499) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 499-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 500) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 500-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4293,9 +4321,10 @@ if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3 -o
 
 # The default-off AST held helper owns one exact Near-Help-derived target and
 # one observed Harmonic Orbis charge epoch. Only a client-accepted base heal may
-# promote the exact same target to the exact adjusted Double Cast form on a
-# later framework frame. Own Guard suppresses scheduling, cast cancellation,
-# and the final native boundary.
+# promote the exact same target on a later framework frame. The helper invokes
+# the raw Double Cast carrier only while it resolves to the exact adjusted form.
+# Own Guard suppresses scheduling, cast cancellation, and the final native
+# boundary.
 $astrologianHarmonicOrbisRules = Read-RequiredSource $astrologianHarmonicOrbisRulesPath 'AST Harmonic Orbis rules'
 $normalizedAstrologianHarmonicOrbisRules = $astrologianHarmonicOrbisRules -replace '\s+', ' '
 $astrologianHarmonicOrbisProbe = Read-RequiredSource $astrologianHarmonicOrbisProbePath 'AST Harmonic Orbis runtime probe'
@@ -4313,6 +4342,13 @@ Assert-Literals $astrologianHarmonicOrbisRules @(
     'public const uint DoubleCastHarmonicOrbisActionId = 29_247;',
     'public const uint MaximumHarmonicOrbisCharges = 2;',
     'public const int MaximumTargetHealthPercent = 60;',
+    'public readonly record struct AstrologianHarmonicOrbisDispatchAction(',
+    'new(HarmonicOrbisActionId, HarmonicOrbisActionId);',
+    'new(DoubleCastCarrierActionId, DoubleCastHarmonicOrbisActionId);',
+    'public static bool IsExactDispatchPair(',
+    'public static bool HasExpectedPlayerActionFlag(',
+    'DoubleCastHarmonicOrbisActionId => !isPlayerAction,',
+    'public static bool IsDoubleCastAvailableBeforeBase(',
     'NearHelpSelectionRules.SelectBestAtOrBelowHealthPercent(',
     'NearHelpSelectionRules.IsAtOrBelowHealthPercent(',
     'if (orbisOutcome != ClientActionAttemptOutcome.ClientAccepted)',
@@ -4322,7 +4358,7 @@ Assert-Literals $astrologianHarmonicOrbisRules @(
     'if (!targetStillEligible)',
     'if (resolvedDoubleCastActionId == DoubleCastCarrierActionId)',
     'if (resolvedDoubleCastActionId != DoubleCastHarmonicOrbisActionId)',
-    'DoubleCastHarmonicOrbisActionId,',
+    'DoubleCastDispatchAction,',
     'intent.Target);',
     'public static bool ShouldVetoNativeBoundaryForOwnGuard(',
     'TargetPressureActorIdentity frozenLocalPlayer,',
@@ -4341,7 +4377,8 @@ Assert-Literals $nearHelpSelectionRulesForAstrologian @(
 ) 'Shared threshold-aware Near Help selection and inclusive health edge'
 if ($normalizedAstrologianHarmonicOrbisRules -notmatch 'if \(!chargeCountKnown \|\| currentCharges > MaximumHarmonicOrbisCharges\).*?ChargeCountKnown = false.*?previous\.LastObservedCharges == currentCharges.*?return previous with \{ ChargeCountKnown = true \};.*?if \(previous\.ChargeCountKnown && previous\.LastObservedCharges == currentCharges\).*?return previous;.*?currentCharges > 0.*?NextEpochToken\(previous\.CurrentEpochToken\)' -or
     $normalizedAstrologianHarmonicOrbisRules -notmatch 'TrySpendBaseChargeEpoch\(.*?if \(!state\.HasAvailableEpoch \|\| expectedEpochToken == 0 \|\| expectedEpochToken != state\.CurrentEpochToken\).*?SpentEpochToken = expectedEpochToken' -or
-    $normalizedAstrologianHarmonicOrbisRules -notmatch 'ShouldVetoNativeBoundaryForOwnGuard\(.*?actionId is not \(HarmonicOrbisActionId or DoubleCastHarmonicOrbisActionId\).*?!frozenLocalPlayer\.IsValid.*?currentLocalPlayer != frozenLocalPlayer.*?!IsNetworkGameObjectId\(frozenTargetGameObjectId\).*?forwardedTargetGameObjectId != frozenTargetGameObjectId.*?return true;.*?return ownGuardActiveOrPropagating;') {
+    $normalizedAstrologianHarmonicOrbisRules -notmatch 'IsExactDispatchPair\(.*?rawActionId == HarmonicOrbisActionId.*?expectedAdjustedActionId == HarmonicOrbisActionId.*?rawActionId == DoubleCastCarrierActionId.*?expectedAdjustedActionId == DoubleCastHarmonicOrbisActionId' -or
+    $normalizedAstrologianHarmonicOrbisRules -notmatch 'ShouldVetoNativeBoundaryForOwnGuard\(.*?!IsExactDispatchPair\(rawActionId, expectedAdjustedActionId\).*?currentAdjustedActionId != expectedAdjustedActionId.*?!frozenLocalPlayer\.IsValid.*?currentLocalPlayer != frozenLocalPlayer.*?!IsNetworkGameObjectId\(frozenTargetGameObjectId\).*?forwardedTargetGameObjectId != frozenTargetGameObjectId.*?return true;.*?return ownGuardActiveOrPropagating;') {
     throw 'AST Harmonic Orbis must require a distinct observed available base-charge epoch, spend only that exact frozen nonzero epoch after acceptance, and fail closed at its final action/local/target/Guard boundary.'
 }
 Assert-Literals $astrologianHarmonicOrbisProbe @(
@@ -4358,13 +4395,15 @@ Assert-Literals $astrologianHarmonicOrbisProbe @(
     'AstrologianHarmonicOrbisRules.SelectBestTarget(',
     'requireHealthThreshold: actionId == BaseActionId',
     'TrySnapshotDoubleCastAvailability(',
+    'AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(',
+    'AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(',
     'AstrologianHarmonicOrbisRules.TryCreateIntent(',
     'AstrologianHarmonicOrbisRules.TrySpendBaseChargeEpoch(',
     'AstrologianHarmonicOrbisRules.EvaluateFollowUp(',
     'HeldActionRetryRules.RetainsSchedulerFrame(',
     'HeldActionRetryRules.CanAttemptFrozenIntent(',
     'HeldActionRetryRules.Complete(',
-    'ClientActionAttemptBoundary.Capture(',
+    'CaptureDispatchBoundary(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'nearAssist.RunAstrologianHarmonicOrbisWithoutRedirect(',
     'HeldCastCancellationHelperKind.AstrologianHarmonicOrbis,',
@@ -4373,9 +4412,11 @@ Assert-Literals $astrologianHarmonicOrbisProbe @(
 ) 'AST metadata, exact context/target/action retry, cast-cancel, and Guard-suppression runtime'
 if ([regex]::Matches($astrologianHarmonicOrbisProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($astrologianHarmonicOrbisProbe, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 1 -or
+    [regex]::Matches($astrologianHarmonicOrbisProbe, '\bCheckActionResources\s*\(').Count -ne 1 -or
     $normalizedAstrologianHarmonicOrbisProbe -notmatch 'var guardSuppressed = actionHelpersSuppressedByGuard \|\|.*?IsCurrentlySuppressedByGuard\(exactLocal, nowMilliseconds\)\);.*?var featureGateReady =.*?!guardSuppressed.*?if \(featureGateReady && frozenIntent is \{ IsValid: true \} bufferedIntent.*?BuildCastCancellationRequest\(' -or
-    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'TryDispatchOnce\(.*?IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\).*?return ClientActionAttemptOutcome\.NotInvoked;.*?nearAssist\.RunAstrologianHarmonicOrbisWithoutRedirect\( actionId, intent\.LocalPlayer, intent\.Target\.GameObjectId, \(\) => actionManager->UseAction\( ActionType\.Action, actionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\)' -or
-    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'outcome == ClientActionAttemptOutcome\.ClientAccepted && actionId == BaseActionId.*?TrySpendBaseChargeEpoch\(.*?EvaluateFollowUp\(.*?phase = AstrologianHarmonicOrbisProbePhase\.AwaitingDoubleCast' -or
+    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'TrySnapshotDoubleCastAvailability\(.*?GetAdjustedActionId\( DoubleCastCarrierActionId\).*?GetCurrentCharges\( DoubleCastCarrierActionId\).*?IsDoubleCastAvailableBeforeBase\( adjustedActionId, actionManager->IsActionOffCooldown\( ActionType\.Action, DoubleCastCarrierActionId\), currentCharges\);' -or
+    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'TryDispatchOnce\(.*?IsCurrentlySuppressedByGuard\(currentLocal, Environment\.TickCount64\).*?return ClientActionAttemptOutcome\.NotInvoked;.*?GetActionStatus\( ActionType\.Action, expectedAdjustedActionId, intent\.Target\.GameObjectId.*?CaptureDispatchBoundary\(actionManager, dispatchAction\).*?nearAssist\.RunAstrologianHarmonicOrbisWithoutRedirect\( dispatchAction\.RawActionId, expectedAdjustedActionId, intent\.LocalPlayer, intent\.Target\.GameObjectId, \(\) => actionManager->UseAction\( ActionType\.Action, dispatchAction\.RawActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)\)' -or
+    $normalizedAstrologianHarmonicOrbisProbe -notmatch 'outcome == ClientActionAttemptOutcome\.ClientAccepted && dispatchAction == AstrologianHarmonicOrbisRules\.BaseDispatchAction.*?TrySpendBaseChargeEpoch\(.*?EvaluateFollowUp\(.*?phase = AstrologianHarmonicOrbisProbePhase\.AwaitingDoubleCast' -or
     $astrologianHarmonicOrbisProbe -match '\b(?:IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'AST held healing must own one exact direct-GOID UseAction and one cast-cancel request shape, remain suppressed by live/propagated own Guard through final dispatch, promote only an accepted base, and never hook, retarget, rerank, or substitute.'
 }
@@ -4386,10 +4427,10 @@ Assert-Literals $nearAssistRedirectorForAstrologian @(
     'AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(',
     'AST own Guard became active or began propagating at the final native boundary'
 ) 'AST scoped redirect bypass and final hook-boundary Guard veto'
-if ($normalizedNearAssistRedirectorForAstrologian -notmatch 'RunAstrologianHarmonicOrbisWithoutRedirect\(.*?astrologianOwnGuardVetoScope is not null \|\| AstrologianHarmonicOrbisRules\.ShouldVetoNativeBoundaryForOwnGuard\(.*?ownGuardActiveOrPropagating: false\).*?return false;.*?astrologianOwnGuardVetoScope = new AstrologianOwnGuardVetoScope\( this, actionId, localPlayer, targetGameObjectId\);.*?return RunWithoutRedirect\(action\);.*?finally \{ astrologianOwnGuardVetoScope = null; \}' -or
-    $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\( actionType, actionId, forwardedTargetId, mode\).*?return false;.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+if ($normalizedNearAssistRedirectorForAstrologian -notmatch 'RunAstrologianHarmonicOrbisWithoutRedirect\(.*?rawActionId.*?expectedAdjustedActionId.*?astrologianOwnGuardVetoScope is not null \|\| AstrologianHarmonicOrbisRules\.ShouldVetoNativeBoundaryForOwnGuard\( rawActionId, expectedAdjustedActionId, expectedAdjustedActionId.*?ownGuardActiveOrPropagating: false\).*?return false;.*?astrologianOwnGuardVetoScope = new AstrologianOwnGuardVetoScope\( this, rawActionId, expectedAdjustedActionId, localPlayer, targetGameObjectId\);.*?return RunWithoutRedirect\(action\);.*?finally \{ astrologianOwnGuardVetoScope = null; \}' -or
+    $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\( thisPtr, actionType, actionId, forwardedTargetId, mode\).*?return false;.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistRedirectorForAstrologian -notmatch 'IsExactLocalGuardActiveOrPropagating\(.*?if \(!expectedLocalPlayer\.IsValid \|\| !IsLivePlayer\(local\) \|\| GetNativeObject\(local!\) == null\).*?return true;.*?if \(currentLocalPlayer != expectedLocalPlayer\) return true;.*?if \(DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return true;.*?TryGetRecentExactLocalGuardAttempt\(.*?DefensiveUtilityRules\.GuardPropagationLatchMilliseconds.*?catch.*?return true;' -or
-    $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\(.*?scope\.Owner != this \|\| scope\.Consumed.*?scope\.Consumed = true;.*?IsExactLocalGuardActiveOrPropagating\(scope\.LocalPlayer\).*?actionType != ActionType\.Action.*?mode != ActionManager\.UseActionMode\.None.*?actionId != scope\.ActionId.*?ShouldVetoNativeBoundaryForOwnGuard\( actionId, scope\.LocalPlayer, currentLocalPlayer, scope\.TargetGameObjectId, forwardedTargetId, ownGuardActiveOrPropagating\);') {
+    $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\(.*?scope\.Owner != this \|\| scope\.Consumed.*?scope\.Consumed = true;.*?IsExactLocalGuardActiveOrPropagating\(scope\.LocalPlayer\).*?currentAdjustedActionId = actionManager == null \? 0 : actionManager->GetAdjustedActionId\(actionId\).*?actionType != ActionType\.Action.*?mode != ActionManager\.UseActionMode\.None.*?actionId != scope\.RawActionId.*?ShouldVetoNativeBoundaryForOwnGuard\( actionId, scope\.ExpectedAdjustedActionId, currentAdjustedActionId, scope\.LocalPlayer, currentLocalPlayer, scope\.TargetGameObjectId, forwardedTargetId, ownGuardActiveOrPropagating\);') {
     throw 'AST must cross a one-call redirect-bypass scope whose final central hook boundary freshly revalidates exact action mode, action, local actor, target, live Guard, and Guard propagation before Original; uncertainty must veto.'
 }
 Assert-Literals $heldCastCancellationForAstrologian @(
@@ -4405,6 +4446,7 @@ if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellatio
 }
 $astrologianHarmonicOrbisTestMethods = @(
     'ExactIdsAndNearHelpThresholdArePinned',
+    'MetadataAndDispatchContractAreExact',
     'BaseChargeEpochRequiresDistinctObservedCount',
     'FollowUpRequiresAcceptedOrbisAndLaterFrame',
     'DoubleCastSnapshotAndSelectionThresholdAreOneShot',
@@ -4414,9 +4456,9 @@ foreach ($method in $astrologianHarmonicOrbisTestMethods) {
     Assert-Literals $astrologianHarmonicOrbisSelfTests @("internal static void $method()") "AST Harmonic Orbis self-test $method"
     Assert-Literals $integratedCoreTestProgram @("AstrologianHarmonicOrbisSelfTests.$method") "AST Harmonic Orbis registration $method"
 }
-if ([regex]::Matches($astrologianHarmonicOrbisSelfTests, '(?m)^\s*internal static void \w+\(\)').Count -ne 5 -or
-    [regex]::Matches($integratedCoreTestProgram, '\bAstrologianHarmonicOrbisSelfTests\.\w+').Count -ne 5) {
-    throw 'All five exact-ID/threshold, charge-epoch, accepted-later-frame, frozen-Double-Cast, and final-Guard-veto AST tests must remain registered exactly once.'
+if ([regex]::Matches($astrologianHarmonicOrbisSelfTests, '(?m)^\s*internal static void \w+\(\)').Count -ne 6 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bAstrologianHarmonicOrbisSelfTests\.\w+').Count -ne 6) {
+    throw 'All six exact-ID/threshold, metadata/dispatch, charge-epoch, accepted-later-frame, frozen-Double-Cast, and final-Guard-veto AST tests must remain registered exactly once.'
 }
 
 $emergencyInputCoordinator = Read-RequiredSource $emergencyInputCoordinatorPath 'Shared emergency-action input coordinator'
@@ -4993,7 +5035,11 @@ $heldNativeRetryProbePaths = @(
 )
 foreach ($path in $heldNativeRetryProbePaths) {
     $heldProbe = Read-RequiredSource $path "Held native action probe $path"
-    if ($heldProbe -notmatch '\bClientActionAttemptBoundary\.Capture\s*\(' -or
+    $usesExactBoundaryCapture =
+        $heldProbe -match '\bClientActionAttemptBoundary\.Capture\s*\(' -or
+        ($path -eq $astrologianHarmonicOrbisProbePath -and
+         $heldProbe -match '\bCaptureDispatchBoundary\s*\(')
+    if (-not $usesExactBoundaryCapture -or
         $heldProbe -notmatch '\bClientActionAttemptBoundaryRules\.Classify\s*\(' -or
         $heldProbe -notmatch '\bUseAction\s*\(' -or
         $heldProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|AlternateAction|AlternateTarget|FallbackAction|FallbackTarget)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)') {
@@ -9313,8 +9359,9 @@ Assert-Literals $settingsWindow @(
     'No hard, soft, focus, or mouseover target is changed.',
     'Harmonischer Orbis / Aspected Benefic (29243)',
     'Zweifacher Zauber was already locally available before that Orbis',
-    'exact adjusted Orbis repeat (29247)',
-    'The heal may raise the player above 60%; that does not rerank or cancel the planned repeat.',
+    'raw Double Cast carrier',
+    '(29245) only while that carrier resolves exactly to the adjusted Orbis repeat (29247)',
+    'raise the player above 60%; that does not rerank or cancel the planned repeat.',
     'If Double Cast was not ready, the sequence deliberately ends after Orbis.',
     'Purify remains absolute priority. Your own Guard suppresses the full sequence',
     'cancelled by this helper or its optional cast-cancel path.',
@@ -9742,19 +9789,21 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.39.0.1</Version>',
-    '<AssemblyVersion>0.39.0.1</AssemblyVersion>',
-    '<FileVersion>0.39.0.1</FileVersion>'
-) 'v0.39.0.1 project version'
+    '<Version>0.39.0.2</Version>',
+    '<AssemblyVersion>0.39.0.2</AssemblyVersion>',
+    '<FileVersion>0.39.0.2</FileVersion>'
+) 'v0.39.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.39.0.1";',
-    '/seitonbw now uses the matching camera-back self dash on NIN, AST, DNC, DRG, RPR, and PCT.',
-    'It changes no target, never moves the camera, makes one immediate attempt, and remains default-off.',
-    'The Wolves'' Den rotation deck is substantially larger and more readable:',
-    'wider cards, taller artwork, 17-pixel map names, and larger countdown and W/L text at 1.0x.',
-    'RDM fresh-Guard engage and local per-map W/L remain unchanged.',
-    'Configuration schema 44 is current; current-patch dash direction and the new visual sizing still require in-game confirmation.'
-) 'v0.39.0.1 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.39.0.2";',
+    'AST held Harmonischer Orbis works again.',
+    'the accepted Orbis reserves exactly one repeat for the same ally.',
+    '/seitonbw now preserves screen-back facing through ReAction''s camera-relative dash rewrite.',
+    'ReAction action/target rewrites still fail closed.',
+    'The CC rotation panel starts with one large current-map card.',
+    'Use SHOW NEXT 6 MAPS to expand the full animated deck;',
+    'Configuration schema 44 is unchanged.',
+    'Current-client AST acceptance, dash direction, ReAction coexistence, and final visuals still need in-game confirmation.'
+) 'v0.39.0.2 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9775,19 +9824,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.39.0.1 plugin manifest metadata'
+) 'v0.39.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.39.0.1"',
-    'Expanded the default-off /seitonbw camera-back macro to the reviewed PvP self dashes on NIN, AST, DNC, DRG, RPR, and PCT.',
-    'It makes one immediate exact job action, changes no target, never moves the camera',
-    'has no wait, queue, retry, transformed-action fallback, or alternate target/action.',
-    '610 pixels wide with 84-pixel cards, 17-pixel map names, and larger countdown and W/L text at 1.0x.',
-    'Configuration schema 44 is unchanged; current-client dash direction/acceptance and final visual sizing remain live validation.',
+    '"AssemblyVersion": "0.39.0.2"',
+    'Fixed AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up:',
+    'the raw Double Cast carrier is used only while it resolves exactly to Orbis.',
+    'Fixed non-NIN /seitonbw direction with ReAction camera-relative dashes through a one-call frozen-facing boundary;',
+    'mutating ReAction/MOAction profiles still fail closed.',
+    'starts with one animated current-map card and can expand the next six maps.',
+    'Configuration schema 44 is unchanged; all 541 Core tests and release gates pass',
     '"IsHide": false'
-) 'v0.39.0.1 custom-repository metadata'
+) 'v0.39.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9821,7 +9871,7 @@ Assert-Literals $normalizedPrivacy @(
     'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
     'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
     'The Wolves'' Den rotation panel calculates the published arena order from local UTC time, the current PvP / territory flags, and an optional saved whole-map phase correction.',
-    'Its always-visible deck requests seven reviewed duty-artwork icons from the local game installation;',
+    'Its compact current card and optional expanded deck request the same seven reviewed duty-artwork icons from the local game installation;',
     'Confirmation requires result `1` or `2`, duration from 10 through 1,800 seconds, one known public-CC territory, exactly ten unique nonzero Content IDs, known jobs, five players on each valid team, and exactly one match for the local nonzero Content ID.',
     'There is no character-name fallback.',
     'Confirmed totals are saved locally in `cc-map-stats.json`.',
@@ -9850,15 +9900,19 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.39.0.1 directional dash, RDM, local-card, and retained safety/privacy disclosure'
+) 'v0.39.0.2 directional dash, AST, compact local-card, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.39.0.1 expands the default-off `/seitonbw` camera-back macro from NIN to the reviewed self dashes on AST, DNC, DRG, RPR, and PCT',
-    'Its Wolves'' Den rotation panel now uses substantially larger cards and typography at 1.0x.',
+    'Version 0.39.0.2 repairs AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up',
+    'keeps non-NIN `/seitonbw` screen-back movement authoritative through ReAction''s camera-relative dash rewrite',
+    'restores a compact one-card CC rotation view with an expandable six-map deck.',
+    'Version 0.39.0.1 expanded the default-off `/seitonbw` camera-back macro from NIN to the reviewed self dashes on AST, DNC, DRG, RPR, and PCT',
     'Version 0.39.0.0 added the default-off RDM held helper for one exact Corps-a-corps into the first second of a freshly observed enemy Guard',
     'Each card can show exact local, per-character W/L for future public CC matches or `NO DATA`;',
     'It retains v0.38.0.0''s shared Auto Shadowbringer cadence, default-on **Preserve Blackblood** gate, frozen exact-CC held Smart Action target policy',
     'The inner ring marks nominal 5-yalm melee reach; the outer ring marks the current combat job''s furthest reviewed hostile non-LB action, including hostile gap closers.',
-    '**Local CC rotation panel:** while in Wolves'' Den Pier, one larger movable and lockable seven-card deck always shows the Patch 7.5 current-to-next order',
+    '**Local CC rotation panel:** while in Wolves'' Den Pier, one larger movable and lockable current-map card shows the Patch 7.5 map',
+    'A full-width control expands or hides the next six maps.',
+    'At rollover the compact card slides to the new map; the expanded seven-card deck reorders over 0.65 seconds.',
     'Only future public CC post-match results with one exact unique local Content ID, ten unique participants, valid teams, duration, result, and known territory are counted;',
     'The local file stores only salted HMAC keys, per-map totals, and bounded hashed deduplication records—never names or raw Content IDs.',
     'The panel downloads no artwork and uses no network endpoint.',
@@ -9907,7 +9961,7 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 44 is current',
-    'For the current source, the exact 540-test Core registry and source checks pin configuration schema 44',
+    'For the current source, the exact 541-test Core registry and source checks pin configuration schema 44',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9918,8 +9972,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.39.0.1 current README release and safety contract'
+) 'v0.39.0.2 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.39.0.2',
+    'Fixed the default-off AST held Near Help helper being permanently disabled by its own metadata gate.',
+    'If a raw Double Cast `29245` charge was free before an accepted Orbis',
+    'proves `29245 -> 29247`, and invokes raw `29245` on the same frozen ally.',
+    'Fixed non-NIN `/seitonbw` going forward when ReAction''s camera-relative dash option rewrote character facing',
+    'Restored the compact Wolves'' Den rotation view:',
+    'one large current-map card is visible by default, with a full-width control to expand or hide the next six maps.',
+    'The warning-free Release build, all `541` Core tests, safety contract, package parity, and release verification pass.',
     '## 0.39.0.1',
     'Expanded the default-off `/seitonbw` macro from NIN Shukuchi to the closed current PvP self-dash catalog:',
     'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210`.',
@@ -9953,7 +10015,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.39.0.1 release notes and retained v0.39.0.0/v0.38.0.0 history'
+) 'v0.39.0.2 release notes and retained v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -11445,4 +11507,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.39.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 44 and the exact 540-test Core registry. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. RDM fresh-Guard engage remains frozen to one first-second Corps-a-corps actor. The larger always-visible Wolves' Den rotation deck uses seven local game-artwork IDs, fixed 0.65-second reorder animation, enlarged text, and fail-closed per-map local W/L with no networking or raw persisted identity. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.39.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 44 and the exact 541-test Core registry. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

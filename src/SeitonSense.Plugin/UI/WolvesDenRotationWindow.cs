@@ -32,6 +32,7 @@ internal sealed class WolvesDenRotationWindow : Window
     private readonly ITextureProvider textureProvider;
     private readonly CrystallineConflictMapStatisticsService mapStatistics;
     private bool resetPosition;
+    private bool showRemainingMaps;
     private CrystallineConflictArena? displayedCurrentArena;
     private CrystallineConflictArena animationFromArena;
     private double animationStartedAt;
@@ -126,7 +127,8 @@ internal sealed class WolvesDenRotationWindow : Window
         if (!ImGui.IsWindowHovered()) return;
         ImGui.BeginTooltip();
         ImGui.TextUnformatted("Local Patch 7.5 hourly map schedule");
-        ImGui.TextUnformatted("The seven cards reorder automatically when the hourly map changes.");
+        ImGui.TextUnformatted(
+            "The current card changes automatically; when expanded, all seven cards reorder at the hourly rollover.");
         ImGui.TextUnformatted(
             mapStatistics.CaptureAvailable && mapStatistics.StorageAvailable
                 ? "W/L counts only future, exact local public-CC result packets."
@@ -155,7 +157,13 @@ internal sealed class WolvesDenRotationWindow : Window
         float width,
         float uiScale)
     {
-        DrawRotationCardDeck(snapshot, width, uiScale);
+        DrawRotationCardDeck(snapshot, width, uiScale, showRemainingMaps);
+
+        var toggleLabel = showRemainingMaps
+            ? "HIDE NEXT 6 MAPS  [-]##SeitonSenseRotationDeckToggle"
+            : "SHOW NEXT 6 MAPS  [+]##SeitonSenseRotationDeckToggle";
+        if (ImGui.Button(toggleLabel, new Vector2(width, 34f * uiScale)))
+            showRemainingMaps = !showRemainingMaps;
 
         ImGui.Separator();
         ImGui.TextDisabled("Local phase calibration");
@@ -209,9 +217,12 @@ internal sealed class WolvesDenRotationWindow : Window
     private void DrawRotationCardDeck(
         CrystallineConflictRotationSnapshot snapshot,
         float width,
-        float uiScale)
+        float uiScale,
+        bool showFullRotation)
     {
-        const int cardCount = CrystallineConflictRotationRules.ArenaCount;
+        var cardCount = showFullRotation
+            ? CrystallineConflictRotationRules.ArenaCount
+            : 1;
         var cardHeight = 84f * uiScale;
         var cardGap = 7f * uiScale;
         var cardStride = cardHeight + cardGap;
@@ -222,35 +233,64 @@ internal sealed class WolvesDenRotationWindow : Window
                     CrystallineConflictRotationPresentationRules.CardReorderSeconds),
             0f,
             1f);
-        var animationActive =
+        var rolloverActive =
             animationFromArena != snapshot.CurrentArena &&
             animationProgress < 1f;
         var draw = ImGui.GetWindowDrawList();
 
         draw.PushClipRect(origin, origin + new Vector2(width, stackHeight), true);
-        for (var targetSlot = 0; targetSlot < cardCount; targetSlot++)
+        if (!showFullRotation && rolloverActive)
         {
-            var arena = CrystallineConflictRotationPresentationRules.GetArenaAtForwardSlot(
-                snapshot.CurrentArena,
-                targetSlot);
-            var animatedSlot = animationActive
-                ? CrystallineConflictRotationPresentationRules.ResolveAnimatedCardSlot(
-                    animationFromArena,
-                    snapshot.CurrentArena,
-                    arena,
-                    animationProgress)
-                : targetSlot;
-            var minimum = origin + new Vector2(0f, animatedSlot * cardStride);
-            var maximum = minimum + new Vector2(width, cardHeight);
+            var easedProgress =
+                animationProgress * animationProgress * (3f - (2f * animationProgress));
+            var outgoingMinimum = origin - new Vector2(0f, cardHeight * easedProgress);
+            var incomingMinimum = origin + new Vector2(0f, cardHeight * (1f - easedProgress));
             DrawRotationCard(
                 draw,
-                arena,
-                targetSlot,
+                animationFromArena,
+                0,
                 snapshot.RemainingSeconds,
                 playerState.ContentId,
-                minimum,
-                maximum,
+                outgoingMinimum,
+                outgoingMinimum + new Vector2(width, cardHeight),
+                uiScale,
+                rolloverOutgoing: true);
+            DrawRotationCard(
+                draw,
+                snapshot.CurrentArena,
+                0,
+                snapshot.RemainingSeconds,
+                playerState.ContentId,
+                incomingMinimum,
+                incomingMinimum + new Vector2(width, cardHeight),
                 uiScale);
+        }
+        else
+        {
+            for (var targetSlot = 0; targetSlot < cardCount; targetSlot++)
+            {
+                var arena = CrystallineConflictRotationPresentationRules.GetArenaAtForwardSlot(
+                    snapshot.CurrentArena,
+                    targetSlot);
+                var animatedSlot = showFullRotation && rolloverActive
+                    ? CrystallineConflictRotationPresentationRules.ResolveAnimatedCardSlot(
+                        animationFromArena,
+                        snapshot.CurrentArena,
+                        arena,
+                        animationProgress)
+                    : targetSlot;
+                var minimum = origin + new Vector2(0f, animatedSlot * cardStride);
+                var maximum = minimum + new Vector2(width, cardHeight);
+                DrawRotationCard(
+                    draw,
+                    arena,
+                    targetSlot,
+                    snapshot.RemainingSeconds,
+                    playerState.ContentId,
+                    minimum,
+                    maximum,
+                    uiScale);
+            }
         }
 
         draw.PopClipRect();
@@ -265,7 +305,8 @@ internal sealed class WolvesDenRotationWindow : Window
         ulong localContentId,
         Vector2 minimum,
         Vector2 maximum,
-        float uiScale)
+        float uiScale,
+        bool rolloverOutgoing = false)
     {
         var current = targetSlot == 0;
         var rounding = 5f * uiScale;
@@ -327,12 +368,14 @@ internal sealed class WolvesDenRotationWindow : Window
             Pack(current
                 ? new Vector4(0.36f, 0.88f, 1f, 1f)
                 : new Vector4(0.55f, 0.61f, 0.70f, 1f)),
-            targetSlot switch
-            {
-                0 => $"NOW  ·  {CrystallineConflictRotationRules.FormatCountdown(remainingSeconds)}",
-                1 => "NEXT  ·  +1H",
-                _ => $"+{targetSlot}H",
-            });
+            rolloverOutgoing
+                ? "PREVIOUS  ·  ROLLOVER"
+                : targetSlot switch
+                {
+                    0 => $"NOW  ·  {CrystallineConflictRotationRules.FormatCountdown(remainingSeconds)}",
+                    1 => "NEXT  ·  +1H",
+                    _ => $"+{targetSlot}H",
+                });
 
         var hasStatistics = mapStatistics.TryGetStatistics(
             localContentId,

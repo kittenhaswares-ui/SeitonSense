@@ -183,6 +183,21 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         }
     }
 
+    /// <summary>
+    /// Reuses the audited foreign-action ownership boundary for an immediate,
+    /// exact action call that is not part of the generic buffer. Camera-only
+    /// ReAction profiles remain admissible; action/target mutation does not.
+    /// </summary>
+    internal bool CanDispatchExactExternalAction(
+        uint requestedActionId,
+        uint resolvedActionId,
+        out string reason) =>
+        compatibility.CanMutateAction(
+            requestedActionId,
+            resolvedActionId,
+            IntegratedActionBufferCompatibilityCheck.Dispatch,
+            out reason);
+
     internal IntegratedActionBufferDiagnostics Diagnostics
     {
         get

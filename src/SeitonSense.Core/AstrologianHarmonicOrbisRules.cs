@@ -62,16 +62,25 @@ public enum AstrologianHarmonicOrbisFollowUpReason : byte
     WrongAdjustedAction,
 }
 
+public readonly record struct AstrologianHarmonicOrbisDispatchAction(
+    uint RawActionId,
+    uint ExpectedAdjustedActionId)
+{
+    public bool IsValid =>
+        AstrologianHarmonicOrbisRules.IsExactDispatchPair(
+            RawActionId,
+            ExpectedAdjustedActionId);
+}
+
 public readonly record struct AstrologianHarmonicOrbisFollowUpDecision(
     AstrologianHarmonicOrbisFollowUpKind Kind,
     AstrologianHarmonicOrbisFollowUpReason Reason,
-    uint ActionId = 0,
+    AstrologianHarmonicOrbisDispatchAction Action = default,
     TargetPressureActorIdentity Target = default)
 {
     public bool ShouldDispatch =>
         Kind == AstrologianHarmonicOrbisFollowUpKind.Dispatch &&
-        ActionId ==
-            AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId &&
+        Action == AstrologianHarmonicOrbisRules.DoubleCastDispatchAction &&
         Target.IsValid;
 }
 
@@ -91,6 +100,38 @@ public static class AstrologianHarmonicOrbisRules
     public const uint MaximumHarmonicOrbisCharges = 2;
     public const int MaximumTargetHealthPercent = 60;
 
+    public static AstrologianHarmonicOrbisDispatchAction BaseDispatchAction =>
+        new(HarmonicOrbisActionId, HarmonicOrbisActionId);
+
+    public static AstrologianHarmonicOrbisDispatchAction DoubleCastDispatchAction =>
+        new(DoubleCastCarrierActionId, DoubleCastHarmonicOrbisActionId);
+
+    public static bool IsExactDispatchPair(
+        uint rawActionId,
+        uint expectedAdjustedActionId) =>
+        (rawActionId == HarmonicOrbisActionId &&
+         expectedAdjustedActionId == HarmonicOrbisActionId) ||
+        (rawActionId == DoubleCastCarrierActionId &&
+         expectedAdjustedActionId == DoubleCastHarmonicOrbisActionId);
+
+    public static bool HasExpectedPlayerActionFlag(
+        uint actionId,
+        bool isPlayerAction) => actionId switch
+        {
+            HarmonicOrbisActionId => isPlayerAction,
+            DoubleCastCarrierActionId => isPlayerAction,
+            DoubleCastHarmonicOrbisActionId => !isPlayerAction,
+            _ => false,
+        };
+
+    public static bool IsDoubleCastAvailableBeforeBase(
+        uint adjustedCarrierActionId,
+        bool carrierOffCooldown,
+        uint currentCharges) =>
+        adjustedCarrierActionId == DoubleCastCarrierActionId &&
+        carrierOffCooldown &&
+        currentCharges is > 0 and <= MaximumHarmonicOrbisCharges;
+
     /// <summary>
     /// Final fail-closed policy for the helper-owned native hook boundary. The
     /// scope is valid only for one authored AST action, one unchanged target,
@@ -98,15 +139,17 @@ public static class AstrologianHarmonicOrbisRules
     /// propagating own Guard always vetoes the native action.
     /// </summary>
     public static bool ShouldVetoNativeBoundaryForOwnGuard(
-        uint actionId,
+        uint rawActionId,
+        uint expectedAdjustedActionId,
+        uint currentAdjustedActionId,
         TargetPressureActorIdentity frozenLocalPlayer,
         TargetPressureActorIdentity currentLocalPlayer,
         ulong frozenTargetGameObjectId,
         ulong forwardedTargetGameObjectId,
         bool ownGuardActiveOrPropagating)
     {
-        if (actionId is not (HarmonicOrbisActionId or
-                DoubleCastHarmonicOrbisActionId) ||
+        if (!IsExactDispatchPair(rawActionId, expectedAdjustedActionId) ||
+            currentAdjustedActionId != expectedAdjustedActionId ||
             !frozenLocalPlayer.IsValid ||
             currentLocalPlayer != frozenLocalPlayer ||
             !IsNetworkGameObjectId(frozenTargetGameObjectId) ||
@@ -268,7 +311,7 @@ public static class AstrologianHarmonicOrbisRules
         return new AstrologianHarmonicOrbisFollowUpDecision(
             AstrologianHarmonicOrbisFollowUpKind.Dispatch,
             AstrologianHarmonicOrbisFollowUpReason.None,
-            DoubleCastHarmonicOrbisActionId,
+            DoubleCastDispatchAction,
             intent.Target);
     }
 

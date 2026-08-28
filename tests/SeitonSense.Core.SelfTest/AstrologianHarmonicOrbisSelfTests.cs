@@ -41,6 +41,77 @@ internal static class AstrologianHarmonicOrbisSelfTests
             "AST filters above-60 target before the exact Near Help ranking");
     }
 
+    internal static void MetadataAndDispatchContractAreExact()
+    {
+        True(AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                isPlayerAction: true),
+            "base row is a player action");
+        True(AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                isPlayerAction: true),
+            "Double Cast carrier row is a player action");
+        True(AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                isPlayerAction: false),
+            "adjusted follow-up row is not a player action");
+        False(AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                isPlayerAction: true),
+            "adjusted follow-up cannot masquerade as a player action");
+
+        var baseDispatch = AstrologianHarmonicOrbisRules.BaseDispatchAction;
+        Equal(AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+            baseDispatch.RawActionId, "base raw action");
+        Equal(AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+            baseDispatch.ExpectedAdjustedActionId, "base adjusted action");
+        True(baseDispatch.IsValid, "base dispatch pair");
+
+        var followUpDispatch =
+            AstrologianHarmonicOrbisRules.DoubleCastDispatchAction;
+        Equal(AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+            followUpDispatch.RawActionId, "follow-up raw carrier");
+        Equal(AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+            followUpDispatch.ExpectedAdjustedActionId,
+            "follow-up adjusted action");
+        True(followUpDispatch.IsValid, "follow-up dispatch pair");
+        False(new AstrologianHarmonicOrbisDispatchAction(
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId)
+            .IsValid, "adjusted row is never a raw dispatch action");
+
+        True(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "one exact carrier charge proves pre-base availability");
+        True(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                carrierOffCooldown: true,
+                currentCharges: 2),
+            "two exact carrier charges prove pre-base availability");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                carrierOffCooldown: true,
+                currentCharges: 1),
+            "already-adjusted carrier cannot be snapshotted before base");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                carrierOffCooldown: false,
+                currentCharges: 1),
+            "cooldown must be proven ready");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                carrierOffCooldown: true,
+                currentCharges: 0),
+            "zero charges fail closed");
+        False(AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                carrierOffCooldown: true,
+                currentCharges: 3),
+            "out-of-contract charge count fails closed");
+    }
+
     internal static void BaseChargeEpochRequiresDistinctObservedCount()
     {
         var first = AstrologianHarmonicOrbisRules.ObserveBaseChargeEpoch(
@@ -167,8 +238,11 @@ internal static class AstrologianHarmonicOrbisSelfTests
                 AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId);
         True(accepted.ShouldDispatch, "adjusted Double Cast dispatches later");
         Equal(intent.Target, accepted.Target, "same frozen target is retained");
+        Equal(AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+            accepted.Action.RawActionId, "raw Double Cast carrier is retained");
         Equal(AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
-            accepted.ActionId, "exact adjusted action is retained");
+            accepted.Action.ExpectedAdjustedActionId,
+            "exact adjusted follow-up is retained");
     }
 
     internal static void DoubleCastSnapshotAndSelectionThresholdAreOneShot()
@@ -258,6 +332,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
         const ulong target = 20_002;
         False(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
                 AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
                 local,
                 local,
                 target,
@@ -265,6 +341,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
                 ownGuardActiveOrPropagating: false),
             "exact base action may cross the clear-Guard native boundary");
         False(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 local,
                 local,
@@ -274,6 +352,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
             "exact follow-up may cross the clear-Guard native boundary");
         True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
                 AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
                 local,
                 local,
                 target,
@@ -281,6 +361,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
                 ownGuardActiveOrPropagating: true),
             "active or propagating own Guard vetoes the base action");
         True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 local,
                 local,
@@ -290,6 +372,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
             "active or propagating own Guard vetoes the follow-up");
         True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
                 AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
                 local,
                 new TargetPressureActorIdentity(10_099, 1_099),
                 target,
@@ -297,6 +381,8 @@ internal static class AstrologianHarmonicOrbisSelfTests
                 ownGuardActiveOrPropagating: false),
             "local actor drift fails closed");
         True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
                 AstrologianHarmonicOrbisRules.HarmonicOrbisActionId,
                 local,
                 local,
@@ -306,12 +392,24 @@ internal static class AstrologianHarmonicOrbisSelfTests
             "target drift fails closed");
         True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
                 29_248,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
                 local,
                 local,
                 target,
                 target,
                 ownGuardActiveOrPropagating: false),
             "unrelated adjusted action cannot inherit the AST scope");
+        True(AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastHarmonicOrbisActionId,
+                AstrologianHarmonicOrbisRules.DoubleCastCarrierActionId,
+                local,
+                local,
+                target,
+                target,
+                ownGuardActiveOrPropagating: false),
+            "carrier adjustment drift fails closed at the native boundary");
     }
 
     private static AstrologianHarmonicOrbisFollowUpDecision Evaluate(

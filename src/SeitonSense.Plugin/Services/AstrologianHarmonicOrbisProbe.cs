@@ -217,7 +217,9 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                     "Double Cast",
                     StringComparison.Ordinal) ||
                 !carrier.IsPvP ||
-                !carrier.IsPlayerAction ||
+                !AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+                    carrier.RowId,
+                    carrier.IsPlayerAction) ||
                 !carrier.ClassJob.IsValid ||
                 carrier.ClassJob.RowId != AstrologianJobId ||
                 carrier.Cast100ms != 0 ||
@@ -396,8 +398,10 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                     exactLocal!,
                     frozenIntent.Value,
                     phase == AstrologianHarmonicOrbisProbePhase.BaseBuffered
-                        ? BaseActionId
-                        : DoubleCastFollowUpActionId,
+                        ? AstrologianHarmonicOrbisRules.BaseDispatchAction
+                            .ExpectedAdjustedActionId
+                        : AstrologianHarmonicOrbisRules.DoubleCastDispatchAction
+                            .ExpectedAdjustedActionId,
                     requireHealthThreshold:
                         phase == AstrologianHarmonicOrbisProbePhase.BaseBuffered);
 
@@ -447,7 +451,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                         observedCandidate = ResolveFrozenCandidate(
                             exactLocal!,
                             transitionIntent,
-                            followUpDecision.ActionId,
+                            followUpDecision.Action.ExpectedAdjustedActionId,
                             requireHealthThreshold: false);
                         lastEvent = "Exact Double Cast Orbis follow-up exposed";
                         break;
@@ -478,7 +482,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             baseChargeEpoch.HasAvailableEpoch &&
             TryReadActionState(
                 exactLocal!,
-                BaseActionId,
+                AstrologianHarmonicOrbisRules.BaseDispatchAction,
                 out resolvedActionId,
                 out actionLocallyReady,
                 out nativeBoundaryReady,
@@ -532,9 +536,11 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
             phase is AstrologianHarmonicOrbisProbePhase.BaseBuffered or
                 AstrologianHarmonicOrbisProbePhase.FollowUpBuffered)
         {
-            var actionId = phase == AstrologianHarmonicOrbisProbePhase.BaseBuffered
-                ? BaseActionId
-                : DoubleCastFollowUpActionId;
+            var dispatchAction = phase ==
+                AstrologianHarmonicOrbisProbePhase.BaseBuffered
+                ? AstrologianHarmonicOrbisRules.BaseDispatchAction
+                : AstrologianHarmonicOrbisRules.DoubleCastDispatchAction;
+            var actionId = dispatchAction.ExpectedAdjustedActionId;
             resolvedActionId = actionId;
             if (nowMilliseconds > phaseExpiresAtMilliseconds)
             {
@@ -551,7 +557,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                     requireHealthThreshold: actionId == BaseActionId);
                 var actionStateReadable = TryReadActionState(
                     exactLocal!,
-                    actionId,
+                    dispatchAction,
                     out var finalResolvedActionId,
                     out actionLocallyReady,
                     out nativeBoundaryReady,
@@ -635,7 +641,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                                 exactLocal!,
                                 bufferedIntent,
                                 exactCandidate,
-                                actionId,
+                                dispatchAction,
                                 out attempted);
                             accepted = nativeOutcome ==
                                 ClientActionAttemptOutcome.ClientAccepted;
@@ -644,7 +650,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
                                 nativeOutcome);
                             CompleteAttempt(
                                 bufferedIntent,
-                                actionId,
+                                dispatchAction,
                                 nativeOutcome,
                                 nowMilliseconds);
                             lastEvent = attemptDescription;
@@ -965,10 +971,14 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         IPlayerCharacter localPlayer,
         FrozenIntent intent,
         RuntimeCandidate candidate,
-        uint actionId,
+        AstrologianHarmonicOrbisDispatchAction dispatchAction,
         out bool attempted)
     {
         attempted = false;
+        if (!dispatchAction.IsValid)
+            return ClientActionAttemptOutcome.NotInvoked;
+
+        var expectedAdjustedActionId = dispatchAction.ExpectedAdjustedActionId;
         var currentLocal = ResolveExactLocalPlayer(localPlayer, out var localIdentity);
         if (currentLocal is null ||
             localIdentity != intent.LocalPlayer ||
@@ -980,8 +990,8 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         var exactCandidate = ResolveFrozenCandidate(
             currentLocal,
             intent,
-            actionId,
-            requireHealthThreshold: actionId == BaseActionId);
+            expectedAdjustedActionId,
+            requireHealthThreshold: expectedAdjustedActionId == BaseActionId);
         if (exactCandidate is null ||
             exactCandidate.Value.Identity != candidate.Identity ||
             exactCandidate.Value.Address != candidate.Address)
@@ -993,12 +1003,12 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         if (actionManager == null ||
             !TryReadActionState(
                 currentLocal,
-                actionId,
+                dispatchAction,
                 out var resolvedActionId,
                 out var actionLocallyReady,
                 out var nativeBoundaryReady,
                 out _) ||
-            resolvedActionId != actionId ||
+            resolvedActionId != expectedAdjustedActionId ||
             !actionLocallyReady ||
             !nativeBoundaryReady)
         {
@@ -1007,36 +1017,40 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
 
         var targetStatus = actionManager->GetActionStatus(
             ActionType.Action,
-            actionId,
+            expectedAdjustedActionId,
             intent.Target.GameObjectId,
             checkRecastActive: true,
             checkCastingActive: true);
-        var before = ClientActionAttemptBoundary.Capture(actionManager, actionId);
-        if (!before.IsExactActionReady(actionId) || targetStatus != 0)
+        var before = CaptureDispatchBoundary(actionManager, dispatchAction);
+        if (!before.IsExactActionReady(expectedAdjustedActionId) ||
+            targetStatus != 0)
+        {
             return ClientActionAttemptOutcome.SoftUnavailable;
+        }
 
         attempted = true;
         var accepted = nearAssist.RunAstrologianHarmonicOrbisWithoutRedirect(
-            actionId,
+            dispatchAction.RawActionId,
+            expectedAdjustedActionId,
             intent.LocalPlayer,
             intent.Target.GameObjectId,
             () => actionManager->UseAction(
                 ActionType.Action,
-                actionId,
+                dispatchAction.RawActionId,
                 intent.Target.GameObjectId,
                 0,
                 ActionManager.UseActionMode.None,
                 0));
         return ClientActionAttemptBoundaryRules.Classify(
             accepted,
-            actionId,
+            expectedAdjustedActionId,
             before,
-            ClientActionAttemptBoundary.Capture(actionManager, actionId));
+            CaptureDispatchBoundary(actionManager, dispatchAction));
     }
 
     private void CompleteAttempt(
         FrozenIntent intent,
-        uint actionId,
+        AstrologianHarmonicOrbisDispatchAction dispatchAction,
         ClientActionAttemptOutcome outcome,
         long nowMilliseconds)
     {
@@ -1049,7 +1063,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         }
 
         if (outcome == ClientActionAttemptOutcome.ClientAccepted &&
-            actionId == BaseActionId)
+            dispatchAction == AstrologianHarmonicOrbisRules.BaseDispatchAction)
         {
             if (!sequenceIntent.IsValid ||
                 !AstrologianHarmonicOrbisRules.TrySpendBaseChargeEpoch(
@@ -1091,7 +1105,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         }
 
         if (outcome == ClientActionAttemptOutcome.ClientAccepted &&
-            actionId == DoubleCastFollowUpActionId)
+            dispatchAction == AstrologianHarmonicOrbisRules.DoubleCastDispatchAction)
         {
             ClearEpisode();
             return;
@@ -1141,7 +1155,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
 
     private static bool TryReadActionState(
         IPlayerCharacter localPlayer,
-        uint actionId,
+        AstrologianHarmonicOrbisDispatchAction dispatchAction,
         out uint resolvedActionId,
         out bool actionLocallyReady,
         out bool nativeBoundaryReady,
@@ -1154,7 +1168,7 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         if (!localPlayer.ClassJob.IsValid ||
             localPlayer.ClassJob.RowId != AstrologianJobId ||
             GetNativeObject(localPlayer) == null ||
-            actionId is not (BaseActionId or DoubleCastFollowUpActionId))
+            !dispatchAction.IsValid)
         {
             return false;
         }
@@ -1163,19 +1177,18 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         if (actionManager == null) return false;
         adjustedDoubleCastActionId = actionManager->GetAdjustedActionId(
             DoubleCastCarrierActionId);
-        var adjustedActionId = actionManager->GetAdjustedActionId(actionId);
-        var exactFamilyResolution = actionId == BaseActionId
-            ? adjustedActionId == BaseActionId
-            : adjustedActionId == DoubleCastFollowUpActionId &&
-              adjustedDoubleCastActionId == DoubleCastFollowUpActionId;
-        if (!exactFamilyResolution) return true;
+        var adjustedActionId = actionManager->GetAdjustedActionId(
+            dispatchAction.RawActionId);
+        if (adjustedActionId != dispatchAction.ExpectedAdjustedActionId)
+            return true;
 
-        resolvedActionId = actionId;
-        var fingerprint = ClientActionAttemptBoundary.Capture(
+        resolvedActionId = dispatchAction.ExpectedAdjustedActionId;
+        var fingerprint = CaptureDispatchBoundary(
             actionManager,
-            actionId);
+            dispatchAction);
         actionLocallyReady = fingerprint.Captured &&
-                             fingerprint.AdjustedActionId == actionId &&
+                             fingerprint.AdjustedActionId ==
+                                 dispatchAction.ExpectedAdjustedActionId &&
                              fingerprint.IsActionOffCooldown &&
                              fingerprint.ResourceStatus == 0;
         nativeBoundaryReady = actionLocallyReady &&
@@ -1197,19 +1210,48 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
         if (actionManager == null) return false;
         adjustedActionId = actionManager->GetAdjustedActionId(
             DoubleCastCarrierActionId);
-        if (!actionManager->IsActionOffCooldown(
-                ActionType.Action,
-                DoubleCastCarrierActionId) ||
-            actionManager->CheckActionResources(
-                ActionType.Action,
-                DoubleCastCarrierActionId) != 0)
-        {
-            return false;
-        }
-
         currentCharges = actionManager->GetCurrentCharges(
             DoubleCastCarrierActionId);
-        return currentCharges is > 0 and <= MaximumObservedDoubleCastCharges;
+        return AstrologianHarmonicOrbisRules.IsDoubleCastAvailableBeforeBase(
+            adjustedActionId,
+            actionManager->IsActionOffCooldown(
+                ActionType.Action,
+                DoubleCastCarrierActionId),
+            currentCharges);
+    }
+
+    /// <summary>
+    /// Captures queue evidence from the raw authored action while proving
+    /// cooldown and resources against the exact adjusted action which will
+    /// reach the server. Double Cast must be invoked as raw 29245 after it
+    /// resolves to the non-player adjusted row 29247.
+    /// </summary>
+    private static ClientActionAttemptFingerprint CaptureDispatchBoundary(
+        ActionManager* actionManager,
+        AstrologianHarmonicOrbisDispatchAction dispatchAction)
+    {
+        if (actionManager == null || !dispatchAction.IsValid)
+            return default;
+
+        return new ClientActionAttemptFingerprint(
+            Captured: true,
+            actionManager->ActionQueued,
+            (uint)actionManager->QueuedActionType,
+            actionManager->QueuedActionId,
+            (ulong)actionManager->QueuedTargetId,
+            actionManager->QueuedExtraParam,
+            (uint)actionManager->QueueType,
+            actionManager->QueuedComboRouteId,
+            actionManager->LastUsedActionSequence,
+            actionManager->AnimationLock,
+            actionManager->CastActionId,
+            actionManager->GetAdjustedActionId(dispatchAction.RawActionId),
+            actionManager->IsActionOffCooldown(
+                ActionType.Action,
+                dispatchAction.ExpectedAdjustedActionId),
+            actionManager->CheckActionResources(
+                ActionType.Action,
+                dispatchAction.ExpectedAdjustedActionId));
     }
 
     private static bool TryReadBaseChargeCount(
@@ -1303,7 +1345,9 @@ internal sealed unsafe class AstrologianHarmonicOrbisProbe
     private static bool IsExpectedFriendlyAction(GameAction action) =>
         (action.RowId is BaseActionId or DoubleCastFollowUpActionId) &&
         action.IsPvP &&
-        action.IsPlayerAction &&
+        AstrologianHarmonicOrbisRules.HasExpectedPlayerActionFlag(
+            action.RowId,
+            action.IsPlayerAction) &&
         action.ClassJob.IsValid &&
         action.ClassJob.RowId == AstrologianJobId &&
         action.Cast100ms == 0 &&

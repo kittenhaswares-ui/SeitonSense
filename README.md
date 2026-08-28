@@ -2,11 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.39.0.1 expands the default-off
-`/seitonbw` camera-back macro from NIN to the reviewed self dashes on AST, DNC,
-DRG, RPR, and PCT, while keeping one immediate attempt, no target change, and no
-camera movement. Its Wolves' Den rotation panel now uses substantially larger
-cards and typography at 1.0x. Version 0.39.0.0 added the default-off RDM held
+assistance, and target highlights. Version 0.39.0.2 repairs AST held Harmonischer
+Orbis and its same-target Zweifachzauber follow-up, keeps non-NIN `/seitonbw`
+screen-back movement authoritative through ReAction's camera-relative dash
+rewrite, and restores a compact one-card CC rotation view with an expandable
+six-map deck. Version 0.39.0.1 expanded the default-off `/seitonbw` camera-back
+macro from NIN to the reviewed self dashes on AST, DNC, DRG, RPR, and PCT and
+enlarged the rotation cards and typography. Version 0.39.0.0 added the default-off RDM held
 helper for one exact Corps-a-corps into the first second of a freshly observed
 enemy Guard and changed the rotation panel to one always-visible seven-card
 current-to-next deck using local FFXIV duty artwork and a 0.65-second reorder
@@ -53,10 +55,11 @@ and Super Focus Glow into one configurable custom-repository plugin.
 ## Highlights
 
 - **Local CC rotation panel:** while in Wolves' Den Pier, one larger movable and
-  lockable seven-card deck always shows the Patch 7.5 current-to-next order,
-  live countdown, local FFXIV duty artwork, and saved `<` / `>` phase
-  calibration. When the map changes, the cards reorder over 0.65 seconds. Each
-  card shows this exact local character's confirmed W/L and win rate, or
+  lockable current-map card shows the Patch 7.5 map, live countdown, local FFXIV
+  duty artwork, saved `<` / `>` phase calibration, and this exact local
+  character's W/L. A full-width control expands or hides the next six maps.
+  At rollover the compact card slides to the new map; the expanded seven-card
+  deck reorders over 0.65 seconds. Every visible card shows confirmed W/L and win rate, or
   `NO DATA`. Only future public CC post-match results with one exact unique local
   Content ID, ten unique participants, valid teams, duration, result, and known
   territory are counted; custom matches, Wolves' Den, ambiguous payloads, and
@@ -220,8 +223,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   applies the same exact friendly ranking continuously while a gameplay key is
   held, restricted to self/party players at 60% HP or lower. It uses Harmonischer
   Orbis / Aspected Benefic `29243` without changing the visible target. If Double
-  Cast was already available before that accepted heal, the helper reserves its
-  exact adjusted repeat `29247` for the same frozen player; otherwise it ends
+  Cast was already available before that accepted heal, the helper invokes raw
+  carrier `29245` only while it resolves exactly to repeat `29247` for the same
+  frozen player; otherwise it ends
   after Orbis. The follow-up never reranks when the first heal raises HP.
   Your own active or still-propagating Guard suppresses the entire sequence and
   is rechecked at the final action/cast-cancel boundaries, so neither the base
@@ -1552,8 +1556,15 @@ RPR Hell's Ingress `29550`, and PCT Smudge `39210`.
 19.5-yalm ground point toward screen-back. On the other five jobs it sets only
 local character facing immediately before the reviewed native self-action:
 forward dashes face screen-back, while Elusive Jump faces the opposite way so
-its native backstep still travels screen-back. The camera never moves and no
-hard, soft, Focus, or mouseover target is read, changed, or substituted. An
+its native backstep still travels screen-back. A synchronous same-thread local-
+facing boundary keeps that frozen direction from being replaced by a later
+camera-relative dash hook during the single request. The camera never moves and
+no hard, soft, Focus, or mouseover target is read, changed, or substituted. An
+inactive command installs no active facing detour: the boundary is enabled only
+on the first opted-in non-NIN `/seitonbw` attempt. The existing audited
+ReAction/MOAction ownership check also runs immediately before that exact call;
+camera-relative rotation alone is allowed, while Auto Target, Action Stacks, or
+MOAction ownership of either action ID refuses the attempt. An
 accepted or acceptance-ambiguous directional request keeps the authored facing
 so an immediate restore cannot race movement startup; normal movement input can
 then update facing. A proven clean client rejection restores the prior facing.
@@ -2059,7 +2070,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 540-test Core registry and source checks pin
+For the current source, the exact 541-test Core registry and source checks pin
 configuration schema 44, the deterministic local CC rotation and fail-closed
 per-character map W/L capture, the complete
 fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
