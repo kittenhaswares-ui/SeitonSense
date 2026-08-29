@@ -27,6 +27,7 @@ public enum EmergencyPurifyInputTrigger
     None = 0,
     FreshKeyPress = 1,
     HeldKeyAtStatusEntry = 2,
+    AutomaticStatus = 3,
 }
 
 public enum EmergencyPurifyBufferCancelReason
@@ -47,6 +48,7 @@ public enum EmergencyPurifyBufferCancelReason
     ExactKeyReleased = 13,
     NativeRetryLimitReached = 14,
     NativeAcceptanceUnknown = 15,
+    TriggerModeDisabled = 16,
 }
 
 public readonly record struct EmergencyPurifyBufferState(
@@ -95,7 +97,8 @@ public readonly record struct EmergencyPurifyBufferObservation(
     long BufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds,
     int FreshKeyCode = 0,
     int HeldKeyCode = 0,
-    bool FrozenKeyStillDown = true);
+    bool FrozenKeyStillDown = true,
+    bool AutomaticStatusTriggerEnabled = false);
 
 public readonly record struct EmergencyPurifyBufferDecision(
     EmergencyPurifyBufferState NextState,
@@ -106,11 +109,12 @@ public readonly record struct EmergencyPurifyBufferDecision(
     public bool ShouldDispatch => Kind == EmergencyPurifyBufferDecisionKind.Dispatch;
 
     /// <summary>
-    /// Claims only the current shared-helper frame. The physical key generation
-    /// deliberately remains eligible while it is still held.
+    /// Claims only physical-input Purify frames. Automatic status-driven
+    /// Purify deliberately leaves the shared physical generation untouched.
     /// </summary>
     public bool ShouldClaimInputFrame =>
-        InputTrigger != EmergencyPurifyInputTrigger.None &&
+        (InputTrigger is EmergencyPurifyInputTrigger.FreshKeyPress or
+            EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry) &&
         Kind is EmergencyPurifyBufferDecisionKind.Armed or EmergencyPurifyBufferDecisionKind.Dispatch;
 
     // Compatibility name retained for existing callers. This no longer means
@@ -225,9 +229,20 @@ public static class EmergencyPurifyBufferRules
         if (current.Phase == EmergencyPurifyBufferPhase.SpentUntilStatusGone)
             return NoDecision(current);
 
+        if (IsAutomaticStatusTrigger(current.FrozenInputTrigger) &&
+            !observation.AutomaticStatusTriggerEnabled)
+        {
+            return CancelAndWaitIfPresent(
+                status,
+                observation.NowMilliseconds,
+                EmergencyPurifyBufferCancelReason.TriggerModeDisabled);
+        }
+
         if (current.Phase == EmergencyPurifyBufferPhase.Buffered)
         {
-            if (current.FrozenKeyCode <= 0 || !observation.FrozenKeyStillDown)
+            if (!HasValidFrozenTrigger(current) ||
+                (RequiresPhysicalKey(current.FrozenInputTrigger) &&
+                 !observation.FrozenKeyStillDown))
             {
                 return Cancelled(
                     WaitingForFreshKey(status.Value, observation.NowMilliseconds),
@@ -254,6 +269,15 @@ public static class EmergencyPurifyBufferRules
             return Dispatch(current);
         }
 
+        if (observation.AutomaticStatusTriggerEnabled)
+        {
+            return ArmOrDispatch(
+                current,
+                observation,
+                EmergencyPurifyInputTrigger.AutomaticStatus,
+                keyCode: 0);
+        }
+
         if (!observation.FreshKeyPressed || observation.FreshKeyCode <= 0)
             return NoDecision(current);
 
@@ -271,7 +295,7 @@ public static class EmergencyPurifyBufferRules
     {
         if (current.Phase != EmergencyPurifyBufferPhase.Buffered ||
             current.StatusInstance is not { IsValid: true } ||
-            current.FrozenKeyCode <= 0 ||
+            !HasValidFrozenTrigger(current) ||
             nowMilliseconds < 0 ||
             (current.LastObservedAtMilliseconds >= 0 &&
              nowMilliseconds < current.LastObservedAtMilliseconds))
@@ -371,21 +395,28 @@ public static class EmergencyPurifyBufferRules
         Math.Clamp(requestedMilliseconds, MinimumBufferMilliseconds, MaximumBufferMilliseconds);
 
     /// <summary>
-    /// Keeps Purify above every lower held helper while the exact frozen CC and
-    /// exact consent key both remain present. This intentionally remains true
-    /// after client acceptance, without permitting a second Purify call.
+    /// Keeps an actionable Purify intent above every lower helper while the
+    /// exact frozen CC and its consent source remain present. A terminal
+    /// accepted/rejected episode deliberately releases scheduler priority;
+    /// the status identity remains latched only to prevent a duplicate Purify.
+    /// Automatic status consent requires no physical key and therefore never
+    /// consumes the shared key generation.
     /// </summary>
     public static bool ClaimsSchedulerPriority(
         EmergencyPurifyBufferState state,
         PurifyCcStatusInstance? observedStatus,
         bool exactStatusCurrentlyObserved,
         bool exactFrozenKeyStillDown) =>
-        state.Phase != EmergencyPurifyBufferPhase.WaitingForStatus &&
+        state.Phase == EmergencyPurifyBufferPhase.Buffered &&
         state.StatusInstance is { IsValid: true } frozenStatus &&
         observedStatus == frozenStatus &&
         exactStatusCurrentlyObserved &&
-        state.FrozenKeyCode > 0 &&
-        exactFrozenKeyStillDown;
+        HasValidFrozenTrigger(state) &&
+        (!RequiresPhysicalKey(state.FrozenInputTrigger) ||
+         exactFrozenKeyStillDown);
+
+    public static bool IsAutomaticStatusTrigger(EmergencyPurifyInputTrigger trigger) =>
+        trigger == EmergencyPurifyInputTrigger.AutomaticStatus;
 
     private static EmergencyPurifyBufferCancelReason GetGateFailure(
         EmergencyPurifyBufferObservation observation)
@@ -423,7 +454,12 @@ public static class EmergencyPurifyBufferRules
         EmergencyPurifyInputTrigger inputTrigger,
         int keyCode)
     {
-        if (keyCode <= 0) return NoDecision(current);
+        var automatic = IsAutomaticStatusTrigger(inputTrigger);
+        if ((automatic && keyCode != 0) ||
+            (!automatic && keyCode <= 0))
+        {
+            return NoDecision(current);
+        }
 
         var buffered = current with
         {
@@ -448,6 +484,9 @@ public static class EmergencyPurifyBufferRules
         out int keyCode)
     {
         keyCode = 0;
+        if (observation.AutomaticStatusTriggerEnabled)
+            return EmergencyPurifyInputTrigger.AutomaticStatus;
+
         if (observation.AllowHeldKeyAtStatusEntry &&
             observation.HeldKeyEligible &&
             observation.HeldKeyCode > 0)
@@ -532,5 +571,16 @@ public static class EmergencyPurifyBufferRules
 
     private static int SaturatingIncrement(int value) =>
         value == int.MaxValue ? int.MaxValue : value + 1;
+
+    private static bool HasValidFrozenTrigger(EmergencyPurifyBufferState state) =>
+        IsAutomaticStatusTrigger(state.FrozenInputTrigger)
+            ? state.FrozenKeyCode == 0
+            : (state.FrozenInputTrigger is EmergencyPurifyInputTrigger.FreshKeyPress or
+                  EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry) &&
+              state.FrozenKeyCode > 0;
+
+    private static bool RequiresPhysicalKey(EmergencyPurifyInputTrigger trigger) =>
+        trigger is EmergencyPurifyInputTrigger.FreshKeyPress or
+            EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry;
 
 }

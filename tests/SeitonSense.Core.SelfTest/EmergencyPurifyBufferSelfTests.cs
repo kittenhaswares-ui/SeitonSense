@@ -6,6 +6,159 @@ internal static class EmergencyPurifyBufferSelfTests
     private static readonly PurifyCcStatusInstance StatusA = new(1343, 1);
     private static readonly PurifyCcStatusInstance StatusB = new(4325, 2);
 
+    public static void AutomaticStatusArmsAndDispatchesWithoutAPhysicalKey()
+    {
+        var armed = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            locallyReady: false,
+            now: 1_000,
+            automaticStatusTriggerEnabled: true);
+        Equal(EmergencyPurifyBufferDecisionKind.Armed, armed.Kind, "automatic status arms");
+        Equal(EmergencyPurifyInputTrigger.AutomaticStatus, armed.InputTrigger, "automatic trigger");
+        Equal(0, armed.NextState.FrozenKeyCode, "automatic intent has no physical key");
+        False(armed.ShouldClaimInputFrame, "automatic intent does not claim a physical key frame");
+        False(armed.ShouldConsumeInputGeneration, "automatic intent does not consume a key generation");
+        True(
+            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
+                armed.NextState,
+                StatusA,
+                exactStatusCurrentlyObserved: true,
+                exactFrozenKeyStillDown: false),
+            "automatic intent still claims scheduler priority");
+
+        var dispatched = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_001,
+            frozenKeyStillDown: false,
+            automaticStatusTriggerEnabled: true);
+        True(dispatched.ShouldDispatch, "automatic intent dispatches on first ready frame");
+        Equal(EmergencyPurifyInputTrigger.AutomaticStatus, dispatched.InputTrigger, "dispatch trigger");
+        Equal(0, dispatched.NextState.FrozenKeyCode, "dispatch remains keyless");
+        False(dispatched.ShouldClaimInputFrame, "keyless dispatch does not claim a physical key frame");
+    }
+
+    public static void DisablingAutomaticModeCancelsTheKeylessIntent()
+    {
+        var armed = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            locallyReady: false,
+            now: 1_000,
+            automaticStatusTriggerEnabled: true);
+
+        var disabled = Observe(
+            armed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_001,
+            frozenKeyStillDown: false,
+            automaticStatusTriggerEnabled: false);
+        Equal(EmergencyPurifyBufferDecisionKind.Cancelled, disabled.Kind, "mode disable cancels");
+        Equal(
+            EmergencyPurifyBufferCancelReason.TriggerModeDisabled,
+            disabled.CancelReason,
+            "mode disable reason");
+        Equal(EmergencyPurifyBufferPhase.WaitingForFreshKey, disabled.NextState.Phase, "status remains observed");
+        False(disabled.ShouldDispatch, "disabled automatic intent cannot dispatch");
+        False(
+            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
+                disabled.NextState,
+                StatusA,
+                exactStatusCurrentlyObserved: true,
+                exactFrozenKeyStillDown: false),
+            "cancelled keyless intent releases scheduler priority");
+
+        var stillDisabled = Observe(
+            disabled.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_002,
+            automaticStatusTriggerEnabled: false);
+        False(stillDisabled.ShouldDispatch, "same status cannot revive disabled automatic intent");
+    }
+
+    public static void AutomaticStatusIsOneShotButAReplacementIsANewEpisode()
+    {
+        var first = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            locallyReady: true,
+            now: 1_000,
+            automaticStatusTriggerEnabled: true);
+        True(first.ShouldDispatch, "first automatic status dispatches");
+        var accepted = Complete(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+
+        var suppressed = EmergencyPurifyBufferRules.Observe(
+            accepted.NextState,
+            ValidObservation(StatusA, 1_001) with
+            {
+                ConfigurationEnabled = false,
+                AutomaticStatusTriggerEnabled = true,
+                PurifyLocallyReady = true,
+            });
+        False(suppressed.ShouldDispatch, "temporary automatic suppression cannot duplicate acceptance");
+        Equal(
+            EmergencyPurifyBufferPhase.SpentUntilStatusGone,
+            suppressed.NextState.Phase,
+            "temporary suppression preserves the terminal exact-status latch");
+
+        var duplicate = Observe(
+            suppressed.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_002,
+            automaticStatusTriggerEnabled: true);
+        False(duplicate.ShouldDispatch, "restoring automatic mode cannot duplicate the lingering status");
+        Equal(EmergencyPurifyBufferPhase.SpentUntilStatusGone, duplicate.NextState.Phase, "same status stays spent");
+
+        var goneWhileSuppressed = EmergencyPurifyBufferRules.Observe(
+            accepted.NextState,
+            ValidObservation(null, 1_003) with
+            {
+                ConfigurationEnabled = false,
+                AutomaticStatusTriggerEnabled = true,
+            });
+        Equal(
+            EmergencyPurifyBufferState.Initial,
+            goneWhileSuppressed.NextState,
+            "real status absence still clears a suppressed terminal episode");
+
+        var disabledWithFreshKey = Observe(
+            duplicate.NextState,
+            StatusA,
+            freshKey: true,
+            locallyReady: true,
+            now: 1_004,
+            automaticStatusTriggerEnabled: false);
+        False(disabledWithFreshKey.ShouldDispatch, "mode change cannot revive the spent status");
+        Equal(
+            EmergencyPurifyBufferPhase.SpentUntilStatusGone,
+            disabledWithFreshKey.NextState.Phase,
+            "terminal identity survives automatic mode disable");
+
+        var replacement = Observe(
+            disabledWithFreshKey.NextState,
+            StatusB,
+            heldKeyEligible: true,
+            allowHeldKey: true,
+            locallyReady: true,
+            now: 1_005,
+            automaticStatusTriggerEnabled: false);
+        True(replacement.ShouldDispatch, "replacement status may take held consent on its entry frame");
+        Equal(StatusB, replacement.NextState.StatusInstance!.Value, "replacement identity frozen");
+        Equal(HeldKey, replacement.NextState.FrozenKeyCode, "replacement freezes the live held key");
+        Equal(
+            EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry,
+            replacement.InputTrigger,
+            "replacement resolves the currently enabled trigger lane");
+    }
+
     public static void SameFrameFreshKeyCanDispatch()
     {
         var decision = Observe(
@@ -250,13 +403,13 @@ internal static class EmergencyPurifyBufferSelfTests
             locallyReady: true,
             now: 1_000);
         var accepted = Complete(first.NextState, ClientActionAttemptOutcome.ClientAccepted, 1_000);
-        True(
+        False(
             EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
                 accepted.NextState,
                 StatusA,
                 exactStatusCurrentlyObserved: true,
                 exactFrozenKeyStillDown: true),
-            "accepted-but-lingering exact CC still owns priority");
+            "accepted-but-lingering exact CC releases lower helpers");
         var stillPresent = Observe(
             accepted.NextState,
             StatusA,
@@ -265,13 +418,13 @@ internal static class EmergencyPurifyBufferSelfTests
             locallyReady: true,
             now: 1_100);
         False(stillPresent.ShouldDispatch, "same status stays spent");
-        True(
+        False(
             EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
                 stillPresent.NextState,
                 StatusA,
                 exactStatusCurrentlyObserved: true,
                 exactFrozenKeyStillDown: true),
-            "lingering status blocks Recup without a second Purify");
+            "terminal duplicate latch does not claim scheduler priority");
         var gone = Observe(stillPresent.NextState, null, now: 1_101);
         Equal(EmergencyPurifyBufferState.Initial, gone.NextState, "absence resets lifecycle");
         False(
@@ -492,7 +645,8 @@ internal static class EmergencyPurifyBufferSelfTests
         long now = 0,
         bool hardReset = false,
         long bufferMilliseconds = EmergencyPurifyBufferRules.DefaultBufferMilliseconds,
-        bool? frozenKeyStillDown = null) =>
+        bool? frozenKeyStillDown = null,
+        bool automaticStatusTriggerEnabled = false) =>
         EmergencyPurifyBufferRules.Observe(
             state,
             ValidObservation(status, now) with
@@ -507,6 +661,7 @@ internal static class EmergencyPurifyBufferSelfTests
                 HeldKeyCode = heldKeyEligible ? HeldKey : 0,
                 FrozenKeyStillDown = frozenKeyStillDown ??
                     state.Phase == EmergencyPurifyBufferPhase.Buffered,
+                AutomaticStatusTriggerEnabled = automaticStatusTriggerEnabled,
             });
 
     private static EmergencyPurifyBufferObservation ValidObservation(

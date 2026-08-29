@@ -112,7 +112,8 @@ following data already available in the local FFXIV client:
   optional team pressure, native 20-yalm reachability, the frozen actor, latest
   revalidated location, client action result, and exact hard-target readback;
 - when Smart Recuperate is enabled, the exact local identity, life/targetable
-  state, current/maximum HP and MP, held-key generation, own Guard state,
+  state, current/maximum HP and MP, optional legacy held-key generation, trigger
+  mode, own Guard state,
   current exact CC or explicitly enabled Wolves' Den context, and exact PvP
   Recuperate `29711` metadata/readiness needed for one frozen self/context intent
   and its bounded native calls;
@@ -822,22 +823,36 @@ intent and native request result, plus request/fault counts in memory; none is
 persisted or uploaded. The separate
 explicit-`false` helper-action retry remains at least 50 ms apart. It uses eight
 calls by default or the exact intent's frozen opt-in PvP latency-response budget.
+Automatic Purify is a keyless exception to the generic cast-cancel toggle only
+for exact action `29056` and one exact enabled status/self episode. Automatic
+Recuperate never requests cast cancellation.
 
 ## Experimental Purify helper
 
-If the experimental helper is explicitly enabled, the plugin reads current
-local key-down states in a supported PvP context. This baseline distinguishes
-physical press/hold generations when an individually enabled Stun, Heavy, Bind,
-Silence, Deep Freeze, or Miracle of Nature status appears. The separate
-held-key option is off by default.
+The automatic and legacy physical-key modes are separate persisted opt-ins and
+are disabled by default. In a supported PvP context, both inspect only an
+actually present, individually enabled Stun, Heavy, Bind, Silence, Deep Freeze,
+or Miracle of Nature status. Automatic mode freezes that exact self/status
+instance without reading a gameplay-key generation. Legacy mode reads current
+local key-down state and distinguishes fresh/held generations; its held-key
+option remains separately disabled by default.
+
+If both modes are enabled for the same debuff, automatic consent owns that
+status episode. Any physical generation observed because the user also enabled
+legacy input remains untouched; it is neither substituted into nor retired by
+the automatic intent.
 
 The plugin does not log or persist key text/history, swallow or replay the
-original key, change targets, or transmit input. While the exact enabled CC
-remains active, Purify has absolute scheduler priority and may retain the exact
-held-key lease for its common bounded pre-acceptance retry. A client-accepted or
-ambiguous call is terminal for that CC episode. ReAction Turbo's logical repeats
-do not create physical consent. Other plugins can still alter the downstream
-call if configured to rewrite Purify or its target.
+original key, change targets, or transmit input. Automatic observation does not
+retire a physical held-key generation. While the exact enabled CC remains active,
+a structurally ready Purify has absolute scheduler priority and may retain its
+exact status/keyless or legacy held-key lease for bounded pre-acceptance retry;
+cooldown/resource shortage yields the frame. Automatic mode may request native
+cast cancellation once per observed cast epoch, then waits for a later clear
+frame before revalidation and Purify. A client-accepted or ambiguous call is
+terminal for that CC episode. ReAction Turbo's logical repeats do not create
+physical consent. Other plugins can still alter the downstream call if
+configured to rewrite Purify or its target.
 
 ## Experimental Ally Rescue helper
 
@@ -944,17 +959,21 @@ The same hold may authorize this distinct later episode. Known unavailable
 states wait; the common explicit-false retry remains exact and bounded, with no
 alternate action or replay.
 
-## Experimental Smart Recuperate held-key helper
+## Experimental Smart Recuperate helper
 
-This independent persisted option is disabled by default and can run only in
-exact Crystalline Conflict or in Wolves' Den while the separate testing option
-is enabled. It reads the exact local identity, life/targetable state,
-current/maximum HP and MP, held gameplay-key generation, own Guard state,
-current supported context, and verified PvP Recuperate `29711` metadata/readiness.
+The automatic and held-key options are independent persisted opt-ins, disabled
+by default, and can run only in exact Crystalline Conflict or in Wolves' Den
+while the separate testing option is enabled. They share one intent/cooldown
+state machine and read the exact local identity, life/targetable state,
+current/maximum HP and MP, trigger mode, optional held gameplay-key generation,
+own Guard state, current supported context, and verified PvP Recuperate `29711`
+metadata/readiness.
 Exactly 16,000 or more missing HP and at least 2,000 observed MP are required.
 
 If MP or native readiness is not yet eligible, or a higher-priority/Guard state
 temporarily blocks it, the frozen intent waits without spending a native call.
+Automatic mode does not request cast cancellation; it waits for casting to end
+and rechecks HP/MP before any call.
 Dropping below the missing-HP threshold cancels that intent and permits a later
 distinct health event on the same hold. Once eligible, identity, context, life,
 targetability, Guard, metadata/readiness, HP, MP, and the same frozen supported
@@ -964,8 +983,8 @@ clean explicit rejection may use the common bounded retry. Acceptance ends that
 epoch; a later one needs
 an observed cooldown unavailable-to-ready transition. Retry exhaustion or an
 ambiguous/invalid exact outcome latches this helper until the frozen key is
-released. No selected target is read or changed and no other action is
-substituted.
+released, or until the automatic HP opportunity clears. No selected target is
+read or changed and no other action is substituted.
 The transient observations and aggregate diagnostics are not stored or uploaded.
 
 ## Experimental Emergency Teleport held-key helper
@@ -1544,10 +1563,10 @@ opt-ins and sound selection, the separate Smart Tab and Smart Action opt-ins,
 the shared Near Assist/Near Help/Far Help opt-in, Near Assist search/preferences,
 the Near Help incoming-pressure preference,
 target-highlight settings, the separate Auto Low-MP Focus Target opt-in, the
-Purify opt-in/held-key/per-debuff controls, the Ally Rescue master/held-key
+  Purify automatic/legacy-held/per-debuff controls, the Ally Rescue master/held-key
 opt-ins, the separate Bard Paean pressure-redirect
 opt-in, isolation warning/scale, the reactive Purify-to-Guard master/held-key/
-trigger opt-ins, the separate held Smart Recuperate and Emergency Teleport opt-ins
+trigger opt-ins, the separate automatic/held Smart Recuperate and Emergency Teleport opt-ins
 plus the six local Emergency thresholds, the independent PLD
   Guardian master/held-key and Quick Chat/Bind-pair opt-ins, WHM/BRD/NIN/PLD/RDM/
   BLM/SAM reactive counter-CC master/held-key/post-Purify/post-Guard/per-startup-
@@ -1610,10 +1629,12 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 44 is current. It keeps the RDM fresh-Guard engage and
-`/seitonbw` command off for every upgrade while initializing the RDM 80% HP /
-50% MP defaults, and explicitly initializes local CC map W/L capture to on for
-fresh, upgraded, and Reset Defaults configurations. Schema 43 keeps the Auto Shadowbringer master off and adds its
+Configuration schema 45 is current. It adds separate automatic Purify and
+Recuperate settings and initializes both off for every upgrade and Reset Defaults.
+Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every
+upgrade while initializing the RDM 80% HP / 50% MP defaults, and explicitly
+initializes local CC map W/L capture to on for fresh, upgraded, and Reset Defaults
+configurations. Schema 43 keeps the Auto Shadowbringer master off and adds its
 default-on nested Blackblood-preservation option plus local rotation card
 presentation. Schema 42 adds the local rotation-panel and range-helper
 appearance settings without changing any action or targeting opt-in.

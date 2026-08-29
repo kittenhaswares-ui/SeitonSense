@@ -257,6 +257,50 @@ internal static class HeldCastCancellationSelfTests
         True(exactMaximum.ShouldInvokeNative, "maximum lock is inclusive");
     }
 
+    internal static void OnlyExactAutomaticPurifyMayBeKeyless()
+    {
+        var automaticPurify = Request() with
+        {
+            HelperKind = HeldCastCancellationHelperKind.Purify,
+            HelperActionId = HeldCastCancellationRules.AutomaticPurifyActionId,
+            FrozenKeyCode = 0,
+        };
+        True(automaticPurify.IsAutomaticPurify, "exact action 29056 is automatic Purify");
+        False(automaticPurify.RequiresFrozenKey, "automatic Purify requires no physical key");
+        True(automaticPurify.IsValid, "exact automatic Purify request is valid");
+
+        var automaticDecision = HeldCastCancellationRules.Observe(
+            HeldCastCancellationState.Initial,
+            ReadyObservation() with
+            {
+                Request = automaticPurify,
+                ResolvedHelperActionId = HeldCastCancellationRules.AutomaticPurifyActionId,
+                FrozenKeyStillDown = true,
+            });
+        True(automaticDecision.ShouldInvokeNative, "exact keyless Purify reaches cast cancellation");
+
+        var wrongAction = automaticPurify with
+        {
+            HelperActionId = HeldCastCancellationRules.AutomaticPurifyActionId + 1,
+        };
+        False(wrongAction.IsAutomaticPurify, "wrong action is not automatic Purify");
+        True(wrongAction.RequiresFrozenKey, "wrong action restores physical-key requirement");
+        False(wrongAction.IsValid, "wrong keyless action is invalid");
+
+        var nonPurify = automaticPurify with
+        {
+            HelperKind = HeldCastCancellationHelperKind.SmartRecuperate,
+        };
+        False(nonPurify.IsAutomaticPurify, "non-Purify helper is not automatic Purify");
+        True(nonPurify.RequiresFrozenKey, "non-Purify helper requires a physical key");
+        False(nonPurify.IsValid, "non-Purify keyless request is invalid");
+
+        var physicalPurify = automaticPurify with { FrozenKeyCode = FrozenKeyCode };
+        False(physicalPurify.IsAutomaticPurify, "physical Purify remains the held path");
+        True(physicalPurify.RequiresFrozenKey, "physical Purify keeps its exact key lease");
+        True(physicalPurify.IsValid, "physical Purify request remains valid");
+    }
+
     internal static void TerminalRequestSurvivesLaterGateChanges()
     {
         var requested = HeldCastCancellationRules.Observe(

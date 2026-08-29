@@ -1049,13 +1049,26 @@ internal sealed partial class OverlayRenderer
             return "INCOMING  •  GUARD NOW";
         if (status.AlertKind != PersonalDebuffAlertKind.CleanseUrgent)
             return $"DANGER  •  {countdown}";
-        if (!configuration.ExperimentalPurifyOnNextKey)
+        if (!configuration.ExperimentalPurifyOnNextKey &&
+            !configuration.EnableAutomaticPurify)
             return $"PURIFY!  •  {countdown}";
 
         var matchesTracked = purify.StatusInstance is { } tracked &&
                              tracked.StatusId == status.StatusId &&
                              tracked.InstanceToken == status.InstanceToken;
         if (!matchesTracked) return $"PURIFY!  •  {countdown}";
+
+        if (purify.InputTrigger == EmergencyPurifyInputTrigger.AutomaticStatus)
+        {
+            return purify.Phase switch
+            {
+                EmergencyPurifyBufferPhase.Buffered =>
+                    $"AUTO PURIFY ARMED  •  {countdown}",
+                EmergencyPurifyBufferPhase.SpentUntilStatusGone =>
+                    $"PURIFY ATTEMPTED  •  {countdown}",
+                _ => $"AUTO PURIFY  •  {countdown}",
+            };
+        }
 
         return purify.Phase switch
         {

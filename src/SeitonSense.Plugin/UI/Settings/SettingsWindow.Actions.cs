@@ -229,11 +229,15 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Enable held-key Purify for enabled removable CC",
+            "Automatically Purify enabled removable CC (no key required)",
+            configuration.EnableAutomaticPurify,
+            value => configuration.EnableAutomaticPurify = value);
+        changed |= Checkbox(
+            "Enable legacy fresh/held-key Purify consent",
             configuration.ExperimentalPurifyOnNextKey,
             value => configuration.ExperimentalPurifyOnNextKey = value);
         changed |= Checkbox(
-            "Also allow a key that was already held when the debuff appeared (includes WASD)",
+            "Legacy mode: allow a key already held when the debuff appeared (includes WASD)",
             configuration.PurifyOnHeldGameplayKey,
             value => configuration.PurifyOnHeldGameplayKey = value);
         ImGui.TextUnformatted("Trigger separately for:");
@@ -255,14 +259,17 @@ internal sealed partial class SettingsWindow
             value => configuration.PurifyOnMiracleOfNature = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only the exact enabled debuff types can trigger this. By default, the helper accepts a fresh physical " +
-            "gameplay-key press after the debuff appears. Enable the separate held-key option if a key pressed before " +
-            "the debuff should remain continuous consent. " +
-            "ReAction Turbo pulses do not create new physical presses. The original key is not swallowed. Seiton Sense " +
-            "keeps Purify at absolute priority while the exact enabled CC remains active. Cooldown, resource, cast, " +
-            "queue, and animation-lock blocks wait without spending an attempt. Only an explicit client rejection may " +
-            "retry the same frozen self intent after 50 ms, at most eight native calls total; acceptance or ambiguity " +
-            "ends that CC episode. Disable " +
+            "Only the exact enabled debuff types can trigger this. Automatic mode freezes the real live CC instance and " +
+            "exact self, then gives ready Purify absolute priority without consuming a physical hold generation. It can " +
+            "cancel one current cast and sends Purify only on a later clear-cast frame. Cooldown or resource " +
+            "unavailability does not starve lower helpers; queue and animation-lock waits retain priority without " +
+            "spending an attempt. Guard, text input, Resilience, and NIN Shukuchi Hidden suppress it. The legacy mode " +
+            "still accepts a fresh physical key after CC, optionally including a key already held at status entry. " +
+            "If both modes are enabled for the same debuff, automatic consent wins that status episode and leaves the " +
+            "physical key generation untouched. " +
+            "Only an explicit client rejection may retry the same frozen self intent after 50 ms. The default is eight " +
+            "native calls; the separate PvP latency-response option can freeze its extended budget for that exact CC " +
+            "episode. Acceptance or ambiguity ends it. Disable " +
             "rules in other plugins that rewrite Purify or its target while testing.");
         ImGui.PopTextWrapPos();
         return changed;
@@ -327,17 +334,23 @@ internal sealed partial class SettingsWindow
 
     private bool DrawSmartRecuperateControls()
     {
-        var changed = Checkbox(
+        var changed = false;
+        changed |= Checkbox(
+            "Automatically use Recuperate at 16,000+ missing HP (no key required)",
+            configuration.EnableAutomaticRecuperate,
+            value => configuration.EnableAutomaticRecuperate = value);
+        changed |= Checkbox(
             "Use Recuperate from a held gameplay key at 16,000+ missing HP",
             configuration.EnableSmartRecuperateOnHeldKey,
             value => configuration.EnableSmartRecuperateOnHeldKey = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Default off. Available in exact Crystalline Conflict and, only with the separate Wolves' Den testing " +
-            "toggle, in Wolves' Den for controlled testing. Like held-key Purify, this listens to the shared " +
-            "continuous physical gameplay-key consent, including WASD. At exactly 16,000 or more missing HP and at least " +
-            "2,000 observed MP, it may request one self-targeted PvP Recuperate (29711). If MP or the native action " +
-            "is not ready, it waits without blocking a currently usable lower-priority helper.");
+            "toggle, in Wolves' Den for controlled testing. Automatic mode wins when both options are enabled and uses " +
+            "no physical-key generation. Held mode listens to the shared continuous gameplay-key consent, including " +
+            "WASD. At exactly 16,000 or more missing HP and at least 2,000 observed MP, the selected mode may request one " +
+            "self-targeted PvP Recuperate (29711). Automatic Recuperate never cancels your current cast; it waits for a " +
+            "clear native boundary. If MP or the action is not ready, it does not block a usable lower-priority helper.");
         ImGui.TextDisabled(
             "Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before " +
             "Emergency Teleport, generic Guard, and pressure Sprint, while " +
@@ -345,8 +358,9 @@ internal sealed partial class SettingsWindow
             "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms, up " +
             "to eight calls total. Temporary readiness/MP, higher-priority, and Guard states wait without spending " +
             "a call; dropping below the HP threshold cancels the current intent. Acceptance ends that epoch, and a " +
-            "later one requires an observed cooldown unavailable-to-ready transition. Retry exhaustion or an " +
-            "ambiguous/invalid exact outcome latches only this helper until the frozen key is released.");
+            "later one requires an observed cooldown unavailable-to-ready transition. NIN Shukuchi Hidden suppresses " +
+            "both modes. Retry exhaustion or an ambiguous outcome remains latched until automatic danger ends or the " +
+            "held mode's frozen key is released.");
         ImGui.PopTextWrapPos();
         return changed;
     }

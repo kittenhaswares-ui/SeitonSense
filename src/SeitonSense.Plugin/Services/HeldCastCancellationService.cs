@@ -1,8 +1,10 @@
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -92,10 +94,17 @@ internal sealed unsafe class HeldCastCancellationService
             localPlayer,
             out var currentLocalIdentity);
         var requestValid = request is { IsValid: true };
+        var automaticPurifyRequest =
+            request is { IsValid: true, IsAutomaticPurify: true };
+        var textInputActive = automaticPurifyRequest
+            ? !TryGetTextInputState(out var currentTextInputActive) ||
+              currentTextInputActive
+            : inputFrame.Snapshot.IsTextInputActive;
         var frozenKeyStillDown = requestValid &&
-                                 IsExactVirtualKey(request!.Value.FrozenKeyCode) &&
-                                 inputFrame.IsGameplayKeyPhysicallyDown(
-                                     (VirtualKey)request.Value.FrozenKeyCode);
+                                 (automaticPurifyRequest ||
+                                  (IsExactVirtualKey(request!.Value.FrozenKeyCode) &&
+                                   inputFrame.IsGameplayKeyPhysicallyDown(
+                                       (VirtualKey)request.Value.FrozenKeyCode)));
 
         var boundary = requestValid && actionManager != null
             ? ClientActionAttemptBoundary.Capture(
@@ -106,10 +115,11 @@ internal sealed unsafe class HeldCastCancellationService
             HardReset: hardReset,
             FeatureEnabled: featureEnabled,
             SupportedContext: supportedContext,
-            TextInputActive: inputFrame.Snapshot.IsTextInputActive,
+            TextInputActive: textInputActive,
             GuardActive: guardActive,
             PrioritizedInputClaimed:
-                prioritizedInputClaimed && inputFrame.IsConsumed,
+                prioritizedInputClaimed &&
+                (inputFrame.IsConsumed || request?.IsAutomaticPurify == true),
             IntentOtherwiseReady: intentOtherwiseReady,
             Request: request,
             FrozenKeyStillDown: frozenKeyStillDown,
@@ -181,6 +191,27 @@ internal sealed unsafe class HeldCastCancellationService
             Describe(decision, nativeStatus));
         Volatile.Write(ref snapshot, result);
         return result;
+    }
+
+    private static bool TryGetTextInputState(out bool active)
+    {
+        try
+        {
+            var atkModule = RaptureAtkModule.Instance();
+            if (atkModule == null)
+            {
+                active = true;
+                return false;
+            }
+
+            active = atkModule->IsTextInputActive() || ImGui.GetIO().WantTextInput;
+            return true;
+        }
+        catch
+        {
+            active = true;
+            return false;
+        }
     }
 
     private static bool TryGetCurrentLocalIdentity(

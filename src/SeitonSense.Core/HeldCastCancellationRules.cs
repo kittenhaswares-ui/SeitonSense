@@ -40,12 +40,19 @@ public readonly record struct HeldCastCancellationRequest(
     int FrozenKeyCode,
     ulong IntentEpochToken)
 {
+    public bool IsAutomaticPurify =>
+        HelperKind == HeldCastCancellationHelperKind.Purify &&
+        HelperActionId == HeldCastCancellationRules.AutomaticPurifyActionId &&
+        FrozenKeyCode == 0;
+
+    public bool RequiresFrozenKey => !IsAutomaticPurify;
+
     public bool IsValid =>
         HelperKind != HeldCastCancellationHelperKind.None &&
         HelperActionId != 0 &&
         LocalPlayer.IsValid &&
         Target.IsValid &&
-        FrozenKeyCode > 0 &&
+        (IsAutomaticPurify || FrozenKeyCode > 0) &&
         IntentEpochToken != 0;
 }
 
@@ -136,6 +143,7 @@ public readonly record struct HeldCastCancellationDecision(
 
 public static class HeldCastCancellationRules
 {
+    public const uint AutomaticPurifyActionId = 29_056;
     public const float MaximumCancellationAnimationLockSeconds = 0.050f;
 
     public static HeldCastCancellationDecision Observe(

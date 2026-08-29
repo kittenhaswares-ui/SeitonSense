@@ -1,8 +1,15 @@
 namespace SeitonSense.Core;
 
+public enum SmartRecuperateTriggerKind : byte
+{
+    None = 0,
+    HeldGameplayKey = 1,
+    Automatic = 2,
+}
+
 /// <summary>
-/// One exact self-only Recuperate episode. The action, local actor, physical
-/// key, and health event are frozen once and are never substituted by a retry.
+/// One exact self-only Recuperate episode. The action, local actor, consent
+/// source, and health event are frozen once and are never substituted by a retry.
 /// </summary>
 public readonly record struct SmartRecuperateIntent(
     uint ActionId,
@@ -11,13 +18,20 @@ public readonly record struct SmartRecuperateIntent(
     int FrozenKeyCode,
     uint TriggerCurrentHp,
     uint TriggerMaximumHp,
-    ulong HealthEventToken)
+    ulong HealthEventToken,
+    SmartRecuperateTriggerKind TriggerKind =
+        SmartRecuperateTriggerKind.HeldGameplayKey)
 {
+    public bool IsAutomatic =>
+        TriggerKind == SmartRecuperateTriggerKind.Automatic;
+
     public bool IsValid =>
         ActionId == SmartRecuperateRules.ActionId &&
         LocalPlayer.IsValid &&
         Context is SupportedPvPContext.CrystallineConflict or SupportedPvPContext.WolvesDen &&
-        FrozenKeyCode > 0 &&
+        ((IsAutomatic && FrozenKeyCode == 0) ||
+         (TriggerKind == SmartRecuperateTriggerKind.HeldGameplayKey &&
+          FrozenKeyCode > 0)) &&
         HealthEventToken != 0 &&
         SmartRecuperateRules.HasMinimumMissingHp(
             TriggerCurrentHp,
@@ -30,6 +44,9 @@ public enum SmartRecuperatePhase : byte
     Buffered = 1,
     WaitingForAcceptedCooldownUnavailable = 2,
     WaitingForAcceptedCooldownReady = 3,
+    // Held intents remain spent until the exact key is released. Automatic
+    // intents remain spent until their low-HP opportunity has ended. Keeping
+    // both consent kinds in one terminal phase prevents parallel retry lanes.
     SpentUntilKeyRelease = 4,
 }
 
@@ -73,7 +90,9 @@ public readonly record struct SmartRecuperateObservation(
     bool FrozenKeyStillDown = true,
     bool NativeBoundaryReady = true,
     bool ActionCooldownReady = true,
-    long NowMilliseconds = 0);
+    long NowMilliseconds = 0,
+    bool HeldModeEnabled = true,
+    bool AutomaticModeEnabled = false);
 
 public enum SmartRecuperateDecisionKind
 {
@@ -113,6 +132,7 @@ public enum SmartRecuperateDecisionReason
     WaitingForAcceptedCooldownReady = 25,
     ClockMovedBackwards = 26,
     ContextChanged = 27,
+    TriggerModeDisabled = 28,
 }
 
 public readonly record struct SmartRecuperateDecision(
@@ -142,11 +162,12 @@ public readonly record struct SmartRecuperateNativeAttemptDecision(
     bool SoftWait = false);
 
 /// <summary>
-/// Stateful policy for held Smart Recuperate. A proven client false is retried
-/// at the shared 50 ms cadence up to eight total native calls. Known local
-/// unavailability spends no retry budget. A successful request cannot repeat
-/// on the same hold until its accepted cooldown has first been observed
-/// unavailable and then ready again.
+/// Stateful policy shared by held and automatic Smart Recuperate. A proven
+/// client false is retried at the shared 50 ms cadence. Automatic consent is
+/// capped at the legacy eight-call budget even when the held latency-response
+/// policy is extended. Known local unavailability spends no retry budget. A
+/// successful request cannot repeat until its accepted cooldown has first been
+/// observed unavailable and then ready again.
 /// </summary>
 public static class SmartRecuperateRules
 {
@@ -176,6 +197,13 @@ public static class SmartRecuperateRules
                 SmartRecuperateDecisionReason.ClockMovedBackwards);
         }
 
+        if (previous.Phase is
+            SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable or
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady)
+        {
+            return ObserveAcceptedCooldown(previous, observation);
+        }
+
         var permanentFailure = GetPermanentGateFailure(observation);
         if (permanentFailure != SmartRecuperateDecisionReason.None)
             return None(
@@ -184,10 +212,52 @@ public static class SmartRecuperateRules
 
         if (previous.Phase == SmartRecuperatePhase.SpentUntilKeyRelease)
         {
-            if (previous.Intent is { IsValid: true } spentIntent &&
-                observation.FrozenKeyStillDown &&
-                spentIntent.FrozenKeyCode > 0)
+            if (previous.Intent is { IsValid: true } spentIntent)
             {
+                if (spentIntent.IsAutomatic)
+                {
+                    if (!observation.AutomaticModeEnabled)
+                    {
+                        return None(
+                            Waiting(
+                                previous.NextHealthEventToken,
+                                observation.NowMilliseconds),
+                            SmartRecuperateDecisionReason.TriggerModeDisabled);
+                    }
+
+                    if (!HasValidHealth(
+                            observation.CurrentHp,
+                            observation.MaximumHp))
+                    {
+                        return None(
+                            Stamp(previous, observation.NowMilliseconds),
+                            SmartRecuperateDecisionReason.HealthTelemetryInvalid);
+                    }
+
+                    if (!HasMinimumMissingHp(
+                            observation.CurrentHp,
+                            observation.MaximumHp))
+                    {
+                        return None(
+                            Waiting(
+                                previous.NextHealthEventToken,
+                                observation.NowMilliseconds),
+                            SmartRecuperateDecisionReason.MissingHealthBelowThreshold);
+                    }
+                }
+                else if (!observation.HeldModeEnabled ||
+                         !observation.FrozenKeyStillDown ||
+                         spentIntent.FrozenKeyCode <= 0)
+                {
+                    return None(
+                        Waiting(
+                            previous.NextHealthEventToken,
+                            observation.NowMilliseconds),
+                        !observation.HeldModeEnabled
+                            ? SmartRecuperateDecisionReason.TriggerModeDisabled
+                            : SmartRecuperateDecisionReason.ExactKeyReleased);
+                }
+
                 return None(
                     Stamp(previous, observation.NowMilliseconds),
                     previous.LastNativeOutcome ==
@@ -198,14 +268,7 @@ public static class SmartRecuperateRules
 
             return None(
                 Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
-                SmartRecuperateDecisionReason.ExactKeyReleased);
-        }
-
-        if (previous.Phase is
-            SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable or
-            SmartRecuperatePhase.WaitingForAcceptedCooldownReady)
-        {
-            return ObserveAcceptedCooldown(previous, observation);
+                SmartRecuperateDecisionReason.NativeAcceptanceUnknown);
         }
 
         if (previous.Phase == SmartRecuperatePhase.Buffered)
@@ -332,9 +395,14 @@ public static class SmartRecuperateRules
         uint currentMp,
         uint maximumMp,
         int currentHeldKeyCode,
-        bool frozenKeyStillDown) =>
+        bool frozenKeyStillDown,
+        bool heldModeEnabled = true,
+        bool automaticModeEnabled = false) =>
         intent.IsValid &&
         configurationEnabled &&
+        (intent.IsAutomatic
+            ? automaticModeEnabled
+            : heldModeEnabled) &&
         currentContext == intent.Context &&
         currentLocalPlayer == intent.LocalPlayer &&
         isLocalPlayerAlive &&
@@ -344,8 +412,9 @@ public static class SmartRecuperateRules
         !higherPriorityClaimed &&
         resolvedActionId == intent.ActionId &&
         actionLocallyReady &&
-        currentHeldKeyCode == intent.FrozenKeyCode &&
-        frozenKeyStillDown &&
+        (intent.IsAutomatic ||
+         (currentHeldKeyCode == intent.FrozenKeyCode &&
+          frozenKeyStillDown)) &&
         maximumHp == intent.TriggerMaximumHp &&
         HasMinimumMissingHp(currentHp, maximumHp) &&
         HasMinimumMp(currentMp, maximumMp);
@@ -367,7 +436,15 @@ public static class SmartRecuperateRules
                 SmartRecuperateDecisionReason.ContextChanged);
         }
 
-        if (!observation.FrozenKeyStillDown)
+        if ((intent.Value.IsAutomatic && !observation.AutomaticModeEnabled) ||
+            (!intent.Value.IsAutomatic && !observation.HeldModeEnabled))
+        {
+            return None(
+                Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
+                SmartRecuperateDecisionReason.TriggerModeDisabled);
+        }
+
+        if (!intent.Value.IsAutomatic && !observation.FrozenKeyStillDown)
         {
             return None(
                 Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
@@ -453,27 +530,17 @@ public static class SmartRecuperateRules
                 SmartRecuperateDecisionReason.ContextChanged);
         }
 
-        if (!observation.FrozenKeyStillDown)
+        // This is a passive anti-duplicate latch. Temporary configuration,
+        // input, Guard, priority, resource, health, and key changes must not
+        // hide the accepted cooldown's unavailable edge. An unreadable or
+        // changed action identity therefore waits instead of spending the
+        // latch or guessing that the cooldown became unavailable.
+        if (observation.ResolvedActionId != intent.Value.ActionId)
         {
             return None(
-                Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
-                SmartRecuperateDecisionReason.ExactKeyReleased);
-        }
-
-        if (observation.HigherPriorityClaimed)
-            return None(
                 Stamp(previous, observation.NowMilliseconds),
-                SmartRecuperateDecisionReason.HigherPriorityClaimed);
-        if (observation.ActionHelpersSuppressedByGuard)
-            return None(
-                Stamp(previous, observation.NowMilliseconds),
-                SmartRecuperateDecisionReason.GuardSuppressed);
-        if (observation.ResolvedActionId != intent.Value.ActionId)
-            return Spent(
-                previous,
-                observation.NowMilliseconds,
-                ClientActionAttemptOutcome.NotInvoked,
                 SmartRecuperateDecisionReason.ResolvedActionInvalid);
+        }
 
         if (previous.Phase ==
             SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable)
@@ -500,19 +567,43 @@ public static class SmartRecuperateRules
                 SmartRecuperateDecisionReason.WaitingForAcceptedCooldownReady);
         }
 
-        return TryCreateIntent(
-            previous,
-            observation with
-            {
-                HeldGameplayKeyEligible = true,
-                HeldGameplayKeyCode = intent.Value.FrozenKeyCode,
-            });
+        if (!intent.Value.IsAutomatic &&
+            !observation.AutomaticModeEnabled &&
+            !observation.FrozenKeyStillDown)
+        {
+            return None(
+                Waiting(previous.NextHealthEventToken, observation.NowMilliseconds),
+                SmartRecuperateDecisionReason.ExactKeyReleased);
+        }
+
+        // A completed cooldown is a new action opportunity, not permission to
+        // resurrect the key generation that authorized the accepted action.
+        // Continuous holds remain eligible through the input coordinator;
+        // disabled/re-enabled or otherwise retired generations must wait for
+        // an actual new key edge.
+        return TryCreateIntent(previous, observation);
     }
 
     private static SmartRecuperateDecision TryCreateIntent(
         SmartRecuperateState previous,
         SmartRecuperateObservation observation)
     {
+        var permanentFailure = GetPermanentGateFailure(observation);
+        if (permanentFailure != SmartRecuperateDecisionReason.None)
+        {
+            var preserveAcceptedReady = previous.Phase ==
+                SmartRecuperatePhase.WaitingForAcceptedCooldownReady;
+            return None(
+                preserveAcceptedReady
+                    ? Stamp(previous, observation.NowMilliseconds)
+                    : Waiting(
+                        previous.NextHealthEventToken == 0
+                            ? 1
+                            : previous.NextHealthEventToken,
+                        observation.NowMilliseconds),
+                permanentFailure);
+        }
+
         var failure = GetDispatchGateFailure(observation);
         if (failure != SmartRecuperateDecisionReason.None)
         {
@@ -536,10 +627,15 @@ public static class SmartRecuperateRules
             observation.ResolvedActionId,
             observation.LocalPlayer,
             observation.Context,
-            observation.HeldGameplayKeyCode,
+            observation.AutomaticModeEnabled
+                ? 0
+                : observation.HeldGameplayKeyCode,
             observation.CurrentHp,
             observation.MaximumHp,
-            token);
+            token,
+            observation.AutomaticModeEnabled
+                ? SmartRecuperateTriggerKind.Automatic
+                : SmartRecuperateTriggerKind.HeldGameplayKey);
         if (!intent.IsValid)
             return Cancelled(
                 SmartRecuperateState.Initial,
@@ -548,7 +644,7 @@ public static class SmartRecuperateRules
         var buffered = new SmartRecuperateState(
             SmartRecuperatePhase.Buffered,
             intent,
-            HeldActionRetryState.Initial,
+            InitialRetryFor(intent),
             IncrementToken(token),
             observation.NowMilliseconds,
             ClientActionAttemptOutcome.None);
@@ -575,7 +671,13 @@ public static class SmartRecuperateRules
             return SmartRecuperateDecisionReason.LocalPlayerUntargetable;
         if (!observation.MetadataVerified)
             return SmartRecuperateDecisionReason.MetadataUnverified;
-        if (!observation.InputProbeSucceeded)
+        if (!observation.HeldModeEnabled &&
+            !observation.AutomaticModeEnabled)
+        {
+            return SmartRecuperateDecisionReason.ConfigurationDisabled;
+        }
+        if (!observation.AutomaticModeEnabled &&
+            !observation.InputProbeSucceeded)
             return SmartRecuperateDecisionReason.InputProbeUnavailable;
         if (observation.IsTextInputActive)
             return SmartRecuperateDecisionReason.TextInputActive;
@@ -589,8 +691,9 @@ public static class SmartRecuperateRules
             return SmartRecuperateDecisionReason.HigherPriorityClaimed;
         if (observation.ActionHelpersSuppressedByGuard)
             return SmartRecuperateDecisionReason.GuardSuppressed;
-        if (!observation.HeldGameplayKeyEligible ||
-            observation.HeldGameplayKeyCode <= 0)
+        if (!observation.AutomaticModeEnabled &&
+            (!observation.HeldGameplayKeyEligible ||
+             observation.HeldGameplayKeyCode <= 0))
             return SmartRecuperateDecisionReason.NoHeldGameplayKey;
         if (observation.ResolvedActionId != ActionId)
             return SmartRecuperateDecisionReason.ResolvedActionInvalid;
@@ -651,6 +754,15 @@ public static class SmartRecuperateRules
         SmartRecuperateState state,
         long nowMilliseconds) =>
         state with { LastObservedAtMilliseconds = nowMilliseconds };
+
+    private static HeldActionRetryState InitialRetryFor(
+        SmartRecuperateIntent intent) =>
+        intent.IsAutomatic
+            ? new HeldActionRetryState(
+                NativeAttemptCount: 0,
+                NextNativeAttemptAtMilliseconds: -1,
+                NativeAttemptLimit: HeldActionRetryRules.MaximumNativeAttempts)
+            : HeldActionRetryState.Initial;
 
     private static SmartRecuperateDecision Dispatch(
         SmartRecuperateState state,

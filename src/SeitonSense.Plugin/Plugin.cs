@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.39.0.2";
+    private const string CurrentReleaseVersion = "0.40.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -375,10 +375,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "AST held Harmonischer Orbis works again. If Zweifachzauber was ready first, the accepted Orbis reserves exactly one repeat for the same ally.",
-                "/seitonbw now preserves screen-back facing through ReAction's camera-relative dash rewrite. ReAction action/target rewrites still fail closed.",
-                "The CC rotation panel starts with one large current-map card. Use SHOW NEXT 6 MAPS to expand the full animated deck; W/L remains beside each map.",
-                "Configuration schema 44 is unchanged. Current-client AST acceptance, dash direction, ReAction coexistence, and final visuals still need in-game confirmation.",
+                "New default-off Auto Purify reacts to the exact enabled CC status without needing a fresh or held gameplay key.",
+                "Auto Purify can cancel one current cast when that is the sole remaining block, then rechecks and sends Purify only on a later clear frame.",
+                "New default-off Auto Recuperate uses the existing 16,000 missing HP / 2,000 MP boundary without a key. It waits for casts instead of cancelling them.",
+                "Both automatic helpers preserve Guard and NIN Shukuchi stealth safety. Legacy held modes remain separate; current-client acceptance still needs in-game confirmation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -979,7 +979,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"{autoGuardProtection.ReleasedCount},last={autoGuardProtection.LastEvent}]");
                 chatGui.Print(
                     $"[Seiton Sense] smart-recuperate[decision={recuperate.Decision}," +
-                    $"reason={recuperate.Reason},action={recuperate.ResolvedActionId}," +
+                    $"reason={recuperate.Reason},mode={recuperate.TriggerKind}," +
+                    $"action={recuperate.ResolvedActionId}," +
                     $"hp={recuperate.CurrentHp}/{recuperate.MaximumHp},missing={recuperate.MissingHp}," +
                     $"mp={recuperate.CurrentMp}/{recuperate.MaximumMp},ready={recuperate.LocallyReady}," +
                     $"guard={recuperate.GuardSuppressed},held={recuperate.HeldGameplayKey}," +

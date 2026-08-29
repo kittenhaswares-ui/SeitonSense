@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.40.0.0
+
+- Added a separate default-off **Automatic Purify** mode. An individually
+  enabled, actually present Stun, Heavy, Bind, Silence, Deep Freeze, or Miracle
+  of Nature can now freeze one exact self/status episode and request Purify
+  `29056` without a fresh or held gameplay key. Ready Purify keeps absolute
+  scheduler priority; cooldown/resource shortage does not starve lower helpers.
+  If a cast is the sole remaining block, Auto Purify may request one native cast
+  cancellation for that cast epoch independently of the generic held-helper
+  cancel toggle, then revalidates and sends Purify only on a later clear frame.
+- Added a separate default-off **Automatic Recuperate** mode alongside the
+  unchanged held-key helper. At the existing inclusive 16,000-missing-HP and
+  2,000-MP boundary it freezes the same exact self/context intent without a key.
+  It deliberately does not cancel casts: it waits, rechecks HP/MP and every
+  safety gate, and shares the existing accepted-cooldown latch so automatic and
+  held modes cannot duplicate one Recuperate `29711` episode.
+- Both automatic paths remain blocked by own Guard and its propagation latch,
+  text input, invalid metadata/context/identity, and NIN Shukuchi Hidden. The NIN
+  automatic gate fails closed if job or Hidden metadata is uncertain. Legacy
+  physical-key Purify and Smart Recuperate remain available as independent
+  opt-ins. When both consent modes are enabled for one opportunity, automatic
+  consent wins deterministically and never retires the held-key generation.
+- Configuration schema is `45`. Source build, all `549` Core tests, safety, package parity,
+  and release verification are automated; current-client status timing, native
+  cast cancellation, and final in-game action acceptance remain live-validation
+  boundaries.
+
 ## 0.39.0.2
 
 - Fixed the default-off AST held Near Help helper being permanently disabled by

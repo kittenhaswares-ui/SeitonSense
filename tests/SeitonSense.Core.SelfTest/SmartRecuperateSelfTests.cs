@@ -22,6 +22,10 @@ internal static class SmartRecuperateSelfTests
         Equal(LocalPlayer, intent.LocalPlayer, "frozen self");
         Equal(SupportedPvPContext.CrystallineConflict, intent.Context, "frozen context");
         Equal(HeldKey, intent.FrozenKeyCode, "frozen exact key");
+        Equal(
+            SmartRecuperateTriggerKind.HeldGameplayKey,
+            intent.TriggerKind,
+            "legacy held trigger");
         Equal(84_000u, intent.TriggerCurrentHp, "frozen HP event");
         Equal(100_000u, intent.TriggerMaximumHp, "frozen max HP");
         Equal(1UL, intent.HealthEventToken, "first event token");
@@ -228,7 +232,7 @@ internal static class SmartRecuperateSelfTests
             });
         Dispatch(second, "same hold may authorize the distinct ready cooldown epoch");
         Equal(2UL, second.Intent!.Value.HealthEventToken, "distinct event token");
-        Equal(HeldKey, second.Intent.Value.FrozenKeyCode, "repeat retains original exact hold key");
+        Equal(66, second.Intent.Value.FrozenKeyCode, "new cooldown epoch freezes the current eligible key");
     }
 
     public static void PurifyPriorityNeverGetsStarved()
@@ -248,6 +252,387 @@ internal static class SmartRecuperateSelfTests
         False(blocked.ShouldDispatch, "active Purify prevents Recup native work");
         False(blocked.InputClaimed, "Recup never steals Purify's frame");
         Equal(rejected.NextState.Intent!.Value, blocked.NextState.Intent!.Value, "exact Recup intent retained");
+    }
+
+    public static void AutomaticModeFreezesOneKeylessIntent()
+    {
+        var automatic = Observe(AutomaticObservation());
+        Dispatch(automatic, "automatic keyless opportunity");
+        var intent = automatic.Intent ??
+                     throw new InvalidOperationException("missing automatic intent");
+        Equal(
+            SmartRecuperateTriggerKind.Automatic,
+            intent.TriggerKind,
+            "automatic trigger frozen");
+        Equal(0, intent.FrozenKeyCode, "automatic intent freezes no key");
+        Equal(LocalPlayer, intent.LocalPlayer, "automatic intent remains self-only");
+        Equal(1UL, intent.HealthEventToken, "automatic first event token");
+        Equal(
+            HeldActionRetryRules.MaximumNativeAttempts,
+            automatic.NextState.Retry.NativeAttemptLimit,
+            "automatic retry cap frozen at intent creation");
+        True(
+            CanUse(
+                intent,
+                currentHeldKeyCode: 0,
+                frozenKeyStillDown: false,
+                heldModeEnabled: false,
+                automaticModeEnabled: true),
+            "automatic final gate requires no physical key");
+        False(
+            CanUse(
+                intent,
+                currentHeldKeyCode: 0,
+                frozenKeyStillDown: false,
+                heldModeEnabled: true,
+                automaticModeEnabled: false),
+            "automatic intent cannot be substituted by held consent");
+
+        var bothModes = Observe(AutomaticObservation() with
+        {
+            HeldModeEnabled = true,
+            HeldGameplayKeyEligible = true,
+            HeldGameplayKeyCode = HeldKey,
+        });
+        Dispatch(bothModes, "automatic mode deterministically wins");
+        Equal(
+            SmartRecuperateTriggerKind.Automatic,
+            bothModes.Intent!.Value.TriggerKind,
+            "one shared state selects automatic consent");
+        Equal(0, bothModes.Intent.Value.FrozenKeyCode, "held key is not captured by automatic mode");
+
+        Dispatch(
+            Observe(AutomaticObservation() with
+            {
+                Context = SupportedPvPContext.WolvesDen,
+            }),
+            "automatic mode accepts the explicit Wolves' Den test context");
+        Gate(
+            AutomaticObservation() with { Context = SupportedPvPContext.None },
+            SmartRecuperateDecisionReason.OutsideSupportedPvPContext);
+
+        var insufficientMp = Observe(AutomaticObservation() with { CurrentMp = 1_999 });
+        None(
+            insufficientMp,
+            SmartRecuperateDecisionReason.InsufficientMp,
+            "automatic mode keeps the exact MP gate");
+        False(insufficientMp.InputClaimed, "automatic MP wait leaves the frame free");
+        var actionUnavailable = Observe(AutomaticObservation() with
+        {
+            ActionLocallyReady = false,
+            ActionCooldownReady = false,
+        });
+        None(
+            actionUnavailable,
+            SmartRecuperateDecisionReason.ActionNotReady,
+            "automatic mode keeps exact local readiness");
+        False(actionUnavailable.InputClaimed, "automatic action wait leaves the frame free");
+        var purifyPriority = Observe(AutomaticObservation() with
+        {
+            HigherPriorityClaimed = true,
+        });
+        None(
+            purifyPriority,
+            SmartRecuperateDecisionReason.HigherPriorityClaimed,
+            "automatic mode remains below Purify");
+        False(purifyPriority.InputClaimed, "automatic mode never steals Purify's frame");
+        False(
+            CanUse(
+                intent,
+                actionHelpersSuppressedByGuard: true,
+                currentHeldKeyCode: 0,
+                frozenKeyStillDown: false,
+                heldModeEnabled: false,
+                automaticModeEnabled: true),
+            "automatic final gate preserves own Guard");
+    }
+
+    public static void AutomaticTerminalNeedsANewHpOpportunity()
+    {
+        var first = Observe(AutomaticObservation());
+        var terminal = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.AcceptanceUnknown,
+            1_000);
+        Equal(
+            SmartRecuperatePhase.SpentUntilKeyRelease,
+            terminal.NextState.Phase,
+            "automatic ambiguity enters the shared terminal phase");
+
+        var sameOpportunity = SmartRecuperateRules.Observe(
+            terminal.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_001 });
+        None(
+            sameOpportunity,
+            SmartRecuperateDecisionReason.NativeAcceptanceUnknown,
+            "same low-HP opportunity cannot rearm automatic Recuperate");
+        Equal(
+            SmartRecuperatePhase.SpentUntilKeyRelease,
+            sameOpportunity.NextState.Phase,
+            "same automatic opportunity remains terminal");
+
+        var unreadableHealth = SmartRecuperateRules.Observe(
+            sameOpportunity.NextState,
+            AutomaticObservation() with
+            {
+                CurrentHp = 0,
+                NowMilliseconds = 1_002,
+            });
+        None(
+            unreadableHealth,
+            SmartRecuperateDecisionReason.HealthTelemetryInvalid,
+            "invalid telemetry cannot manufacture a new HP opportunity");
+        Equal(
+            SmartRecuperatePhase.SpentUntilKeyRelease,
+            unreadableHealth.NextState.Phase,
+            "invalid telemetry preserves terminal latch");
+
+        var thresholdCleared = SmartRecuperateRules.Observe(
+            unreadableHealth.NextState,
+            AutomaticObservation() with
+            {
+                CurrentHp = 84_001,
+                NowMilliseconds = 1_003,
+            });
+        None(
+            thresholdCleared,
+            SmartRecuperateDecisionReason.MissingHealthBelowThreshold,
+            "HP recovery clears the automatic terminal opportunity");
+        Equal(
+            SmartRecuperatePhase.Waiting,
+            thresholdCleared.NextState.Phase,
+            "automatic lane waits for a later HP opportunity");
+
+        var nextOpportunity = SmartRecuperateRules.Observe(
+            thresholdCleared.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_004 });
+        Dispatch(nextOpportunity, "later low-HP opportunity may rearm");
+        Equal(2UL, nextOpportunity.Intent!.Value.HealthEventToken, "new HP opportunity gets a new token");
+    }
+
+    public static void AutomaticFalseRetriesIgnoreHeldLatencyExpansion()
+    {
+        HeldActionRetryRules.ConfigureLatencyResponsePolicy(true, 1_500);
+        try
+        {
+            True(
+                HeldActionRetryRules.CurrentMaximumNativeAttempts >
+                HeldActionRetryRules.MaximumNativeAttempts,
+                "test precondition: held retry policy is expanded");
+            var decision = Observe(AutomaticObservation());
+            var state = decision.NextState;
+            Equal(
+                HeldActionRetryRules.MaximumNativeAttempts,
+                state.Retry.NativeAttemptLimit,
+                "automatic intent freezes the legacy retry cap");
+
+            var held = Observe(Observation());
+            var heldRejected = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+                held.NextState,
+                ClientActionAttemptOutcome.ClientRejected,
+                1_000);
+            Equal(
+                HeldActionRetryRules.CurrentMaximumNativeAttempts,
+                heldRejected.NextState.Retry.NativeAttemptLimit,
+                "legacy held mode still inherits the configured expanded retry window");
+
+            for (var attempt = 1;
+                 attempt <= HeldActionRetryRules.MaximumNativeAttempts;
+                 attempt++)
+            {
+                var now = 1_000L +
+                          ((attempt - 1) *
+                           HeldActionRetryRules.NativeRetryThrottleMilliseconds);
+                var completion = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+                    state,
+                    ClientActionAttemptOutcome.ClientRejected,
+                    now);
+                state = completion.NextState;
+                if (attempt < HeldActionRetryRules.MaximumNativeAttempts)
+                {
+                    True(completion.RetryScheduled, $"automatic retry {attempt} scheduled");
+                    decision = SmartRecuperateRules.Observe(
+                        state,
+                        AutomaticObservation() with
+                        {
+                            NowMilliseconds = now +
+                                HeldActionRetryRules.NativeRetryThrottleMilliseconds,
+                        });
+                    Dispatch(decision, $"automatic retry {attempt} released");
+                    state = decision.NextState;
+                }
+                else
+                {
+                    True(completion.Terminal, "eighth automatic clean false is terminal");
+                    Equal(
+                        SmartRecuperatePhase.SpentUntilKeyRelease,
+                        state.Phase,
+                        "automatic retry exhaustion latches the HP opportunity");
+                }
+            }
+
+            var noNinthBatch = SmartRecuperateRules.Observe(
+                state,
+                AutomaticObservation() with { NowMilliseconds = 1_500 });
+            None(
+                noNinthBatch,
+                SmartRecuperateDecisionReason.NativeRetryLimitReached,
+                "same automatic HP opportunity cannot start a ninth call");
+        }
+        finally
+        {
+            HeldActionRetryRules.ConfigureLatencyResponsePolicy(false, 0);
+        }
+    }
+
+    public static void AcceptedCooldownLatchIsPassiveUntilTheRealEpochEnds()
+    {
+        var first = Observe(AutomaticObservation());
+        var accepted = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+
+        var unavailableWhileSuppressed = SmartRecuperateRules.Observe(
+            accepted.NextState,
+            AutomaticObservation() with
+            {
+                ConfigurationEnabled = false,
+                HeldModeEnabled = false,
+                AutomaticModeEnabled = false,
+                InputProbeSucceeded = false,
+                IsTextInputActive = true,
+                FrozenKeyStillDown = false,
+                ActionHelpersSuppressedByGuard = true,
+                HigherPriorityClaimed = true,
+                ActionLocallyReady = false,
+                ActionCooldownReady = false,
+                NowMilliseconds = 1_001,
+            });
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            unavailableWhileSuppressed.NextState.Phase,
+            "temporary gates cannot hide the accepted cooldown unavailable edge");
+        False(unavailableWhileSuppressed.InputClaimed, "passive cooldown observation claims no frame");
+
+        var readyButGuarded = SmartRecuperateRules.Observe(
+            unavailableWhileSuppressed.NextState,
+            AutomaticObservation() with
+            {
+                ActionHelpersSuppressedByGuard = true,
+                HigherPriorityClaimed = true,
+                NowMilliseconds = 1_002,
+            });
+        None(
+            readyButGuarded,
+            SmartRecuperateDecisionReason.HigherPriorityClaimed,
+            "ready epoch waits behind Purify before Guard");
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            readyButGuarded.NextState.Phase,
+            "priority and Guard cannot discard the completed cooldown latch");
+
+        var second = SmartRecuperateRules.Observe(
+            readyButGuarded.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_003 });
+        Dispatch(second, "next automatic action starts only after the real cooldown epoch");
+        Equal(2UL, second.Intent!.Value.HealthEventToken, "accepted cooldown creates one later event");
+
+        var heldFirst = Observe(Observation());
+        var heldAccepted = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            heldFirst.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            2_000);
+        var heldUnavailableAfterRelease = SmartRecuperateRules.Observe(
+            heldAccepted.NextState,
+            Observation() with
+            {
+                FrozenKeyStillDown = false,
+                ActionLocallyReady = false,
+                ActionCooldownReady = false,
+                NowMilliseconds = 2_001,
+            });
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            heldUnavailableAfterRelease.NextState.Phase,
+            "held key release cannot hide the accepted cooldown edge");
+        var heldReadyAfterRelease = SmartRecuperateRules.Observe(
+            heldUnavailableAfterRelease.NextState,
+            Observation() with
+            {
+                FrozenKeyStillDown = false,
+                NowMilliseconds = 2_002,
+            });
+        None(
+            heldReadyAfterRelease,
+            SmartRecuperateDecisionReason.ExactKeyReleased,
+            "legacy held consent still ends after the cooldown epoch is safe");
+        Equal(SmartRecuperatePhase.Waiting, heldReadyAfterRelease.NextState.Phase, "held lane reset");
+
+        var staleFirst = Observe(Observation());
+        var staleAccepted = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            staleFirst.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            3_000);
+        var staleUnavailable = SmartRecuperateRules.Observe(
+            staleAccepted.NextState,
+            Observation() with
+            {
+                HeldModeEnabled = false,
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = true,
+                ActionLocallyReady = false,
+                ActionCooldownReady = false,
+                NowMilliseconds = 3_001,
+            });
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            staleUnavailable.NextState.Phase,
+            "disabled held lane still observes the real cooldown edge");
+
+        var staleReadyAfterReenable = SmartRecuperateRules.Observe(
+            staleUnavailable.NextState,
+            Observation() with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = true,
+                NowMilliseconds = 3_002,
+            });
+        None(
+            staleReadyAfterReenable,
+            SmartRecuperateDecisionReason.NoHeldGameplayKey,
+            "re-enabling cannot resurrect the pre-disable key generation");
+        Equal(
+            SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+            staleReadyAfterReenable.NextState.Phase,
+            "ready cooldown remains available for genuine new consent");
+
+        var staleReleased = SmartRecuperateRules.Observe(
+            staleReadyAfterReenable.NextState,
+            Observation() with
+            {
+                HeldGameplayKeyEligible = false,
+                HeldGameplayKeyCode = 0,
+                FrozenKeyStillDown = false,
+                NowMilliseconds = 3_003,
+            });
+        None(
+            staleReleased,
+            SmartRecuperateDecisionReason.ExactKeyReleased,
+            "release retires the stale accepted hold");
+        Equal(SmartRecuperatePhase.Waiting, staleReleased.NextState.Phase, "release resets the lane");
+
+        var freshAfterRelease = SmartRecuperateRules.Observe(
+            staleReleased.NextState,
+            Observation() with
+            {
+                HeldGameplayKeyCode = 66,
+                NowMilliseconds = 3_004,
+            });
+        Dispatch(freshAfterRelease, "a genuinely eligible new generation may dispatch");
+        Equal(66, freshAfterRelease.Intent!.Value.FrozenKeyCode, "new generation identity frozen");
     }
 
     private static SmartRecuperateIntent Intent() => new(
@@ -283,6 +668,17 @@ internal static class SmartRecuperateSelfTests
         ActionCooldownReady: true,
         NowMilliseconds: 1_000);
 
+    private static SmartRecuperateObservation AutomaticObservation() =>
+        Observation() with
+        {
+            InputProbeSucceeded = false,
+            HeldGameplayKeyEligible = false,
+            HeldGameplayKeyCode = 0,
+            FrozenKeyStillDown = false,
+            HeldModeEnabled = false,
+            AutomaticModeEnabled = true,
+        };
+
     private static SmartRecuperateDecision Observe(SmartRecuperateObservation observation) =>
         SmartRecuperateRules.Observe(SmartRecuperateState.Initial, observation);
 
@@ -303,7 +699,9 @@ internal static class SmartRecuperateSelfTests
         uint currentMp = 2_000,
         uint maximumMp = 10_000,
         int currentHeldKeyCode = HeldKey,
-        bool frozenKeyStillDown = true) =>
+        bool frozenKeyStillDown = true,
+        bool heldModeEnabled = true,
+        bool automaticModeEnabled = false) =>
         SmartRecuperateRules.CanUseFrozenIntent(
             intent,
             configurationEnabled,
@@ -321,7 +719,9 @@ internal static class SmartRecuperateSelfTests
             currentMp,
             maximumMp,
             currentHeldKeyCode,
-            frozenKeyStillDown);
+            frozenKeyStillDown,
+            heldModeEnabled,
+            automaticModeEnabled);
 
     private static void Gate(
         SmartRecuperateObservation observation,

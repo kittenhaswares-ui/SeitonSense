@@ -1,8 +1,10 @@
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -54,6 +56,8 @@ internal sealed record EmergencyPurifyProbeSnapshot(
 internal sealed class EmergencyPurifyProbe
 {
     private readonly IPluginLog log;
+    private readonly Func<TargetPressureActorIdentity, bool>
+        finalOwnGuardActiveOrPropagating;
     private EmergencyPurifyBufferState state = EmergencyPurifyBufferState.Initial;
     private long totalNativeAttempts;
     private long totalClientRejected;
@@ -64,9 +68,16 @@ internal sealed class EmergencyPurifyProbe
     private long nextErrorLogAt;
     private string lastEvent = "Waiting";
 
-    internal EmergencyPurifyProbe(IPluginLog log)
+    internal EmergencyPurifyProbe(
+        IPluginLog log,
+        Func<TargetPressureActorIdentity, bool>
+            finalOwnGuardActiveOrPropagating)
     {
         this.log = log;
+        this.finalOwnGuardActiveOrPropagating =
+            finalOwnGuardActiveOrPropagating ??
+            throw new ArgumentNullException(
+                nameof(finalOwnGuardActiveOrPropagating));
     }
 
     internal PurifyCcStatusInstance? TrackedStatusInstance => state.StatusInstance;
@@ -75,6 +86,7 @@ internal sealed class EmergencyPurifyProbe
         IPlayerCharacter? localPlayer,
         bool isSupportedPvPContext,
         bool configurationEnabled,
+        bool automaticStatusTriggerEnabled,
         bool allowHeldKeyAtStatusEntry,
         PurifyCcStatusInstance? statusInstance,
         bool statusCurrentlyObserved,
@@ -85,14 +97,26 @@ internal sealed class EmergencyPurifyProbe
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         bool hardReset = false)
     {
-        var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
-            localPlayer,
-            ninjaShukuchiHiddenStatuses);
+        var stealthSuppressed = automaticStatusTriggerEnabled
+            ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                localPlayer,
+                ninjaShukuchiHiddenStatuses)
+            : NinjaShukuchiStealthGate.IsActive(
+                localPlayer,
+                ninjaShukuchiHiddenStatuses);
         var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
-        var effectiveHardReset = hardReset || stealthSuppressed;
+        // Hidden is a temporary dispatch blocker, not a lifecycle reset. In
+        // particular, it must not erase a terminal exact-status latch and let
+        // the same still-present CC episode auto-Purify twice after stealth.
+        var effectiveHardReset = hardReset;
         var alive = IsAlive(localPlayer);
         var localPlayerIdentityValid = alive && HasValidLocalPlayer(localPlayer!);
         var input = inputFrame.Snapshot;
+        var textInputActive = input.IsTextInputActive;
+        if (automaticStatusTriggerEnabled)
+        {
+            if (!TryGetTextInputState(out textInputActive)) textInputActive = true;
+        }
         var frozenKeyStillDown = state.FrozenKeyCode > 0 &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(
                                      (VirtualKey)state.FrozenKeyCode);
@@ -110,7 +134,7 @@ internal sealed class EmergencyPurifyProbe
                            localPlayerIdentityValid &&
                            statusCurrentlyObserved &&
                            !resilienceActive &&
-                           !input.IsTextInputActive &&
+                           !textInputActive &&
                            actionStateReadable &&
                            actionStructurallyReady &&
                            globalQueueReady;
@@ -123,22 +147,31 @@ internal sealed class EmergencyPurifyProbe
                 alive,
                 localPlayerIdentityValid,
                 resilienceActive,
-                input.IsTextInputActive,
+                textInputActive,
                 statusInstance,
-                statusCurrentlyObserved &&
-                input.ProbeSucceeded &&
-                inputFrame.FreshGameplayKeyPressed,
-                statusCurrentlyObserved &&
-                input.ProbeSucceeded &&
-                inputFrame.HeldGameplayKeyEligible,
-                allowHeldKeyAtStatusEntry,
+                FreshKeyPressed: !automaticStatusTriggerEnabled &&
+                                 statusCurrentlyObserved &&
+                                 input.ProbeSucceeded &&
+                                 inputFrame.FreshGameplayKeyPressed,
+                HeldKeyEligible: !automaticStatusTriggerEnabled &&
+                                 statusCurrentlyObserved &&
+                                 input.ProbeSucceeded &&
+                                 inputFrame.HeldGameplayKeyEligible,
+                AllowHeldKeyAtStatusEntry:
+                    !automaticStatusTriggerEnabled &&
+                    allowHeldKeyAtStatusEntry,
                 locallyReady,
                 nowMilliseconds,
                 effectiveHardReset,
                 bufferMilliseconds,
-                (int)input.FreshGameplayKey,
-                (int)input.HeldGameplayKey,
-                frozenKeyStillDown));
+                FreshKeyCode: automaticStatusTriggerEnabled
+                    ? 0
+                    : (int)input.FreshGameplayKey,
+                HeldKeyCode: automaticStatusTriggerEnabled
+                    ? 0
+                    : (int)input.HeldGameplayKey,
+                frozenKeyStillDown,
+                AutomaticStatusTriggerEnabled: automaticStatusTriggerEnabled));
 
         state = decision.NextState;
         // An active, exact removable self-CC owns scheduler priority even while
@@ -147,17 +180,25 @@ internal sealed class EmergencyPurifyProbe
         var exactConsentStillDown = state.FrozenKeyCode > 0 &&
                                     inputFrame.IsGameplayKeyPhysicallyDown(
                                         (VirtualKey)state.FrozenKeyCode);
+        var automaticStatusIntent =
+            EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(
+                state.FrozenInputTrigger);
+        var schedulerOpportunityAvailable = !automaticStatusIntent ||
+                                            (actionStateReadable &&
+                                             actionStructurallyReady);
         var inputClaimed = effectiveConfigurationEnabled &&
                            isSupportedPvPContext &&
                            localPlayerIdentityValid &&
+                           schedulerOpportunityAvailable &&
                            EmergencyPurifyBufferRules.ClaimsSchedulerPriority(
                                state,
                                statusInstance,
                                statusCurrentlyObserved,
                                exactConsentStillDown) &&
                            !resilienceActive &&
-                           !input.IsTextInputActive;
-        if (decision.ShouldClaimInputFrame)
+                           !textInputActive;
+        if (decision.ShouldClaimInputFrame ||
+            (automaticStatusIntent && inputClaimed))
             inputFrame.Consume();
 
         var castCancellationRequest = BuildCastCancellationRequest(
@@ -167,7 +208,7 @@ internal sealed class EmergencyPurifyProbe
             statusInstance,
             statusCurrentlyObserved,
             resilienceActive,
-            input.IsTextInputActive,
+            textInputActive,
             inputClaimed,
             actionStateReadable && actionStructurallyReady,
             state,
@@ -192,8 +233,9 @@ internal sealed class EmergencyPurifyProbe
                     statusInstance,
                     statusCurrentlyObserved,
                     resilienceActive,
-                    input.IsTextInputActive,
+                    textInputActive,
                     inputFrame,
+                    state.FrozenInputTrigger,
                     frozenKeyCode,
                     ninjaShukuchiHiddenStatuses,
                     out attempted);
@@ -243,7 +285,7 @@ internal sealed class EmergencyPurifyProbe
                     : decision.Kind.ToString();
         }
 
-        // -1 means status/key bounded rather than timer bounded.
+        // -1 means exact-status bounded rather than timer bounded.
         var remaining = state.Phase == EmergencyPurifyBufferPhase.Buffered
             ? -1
             : 0;
@@ -334,7 +376,7 @@ internal sealed class EmergencyPurifyProbe
         localPlayer.CurrentHp > 0 &&
         localPlayer.MaxHp >= localPlayer.CurrentHp;
 
-    private static unsafe ClientActionAttemptOutcome TryUsePurify(
+    private unsafe ClientActionAttemptOutcome TryUsePurify(
         IPlayerCharacter localPlayer,
         bool configurationEnabled,
         bool isSupportedPvPContext,
@@ -344,11 +386,15 @@ internal sealed class EmergencyPurifyProbe
         bool resilienceActive,
         bool textInputActive,
         EmergencyActionInputFrame inputFrame,
+        EmergencyPurifyInputTrigger expectedInputTrigger,
         int expectedKeyCode,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
         out bool attempted)
     {
         attempted = false;
+        var automaticStatusTrigger =
+            EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(
+                expectedInputTrigger);
         if (!configurationEnabled ||
             !isSupportedPvPContext ||
             expectedStatus is not { IsValid: true } ||
@@ -357,11 +403,17 @@ internal sealed class EmergencyPurifyProbe
             resilienceActive ||
             textInputActive ||
             !HasValidLocalPlayer(localPlayer) ||
-            NinjaShukuchiStealthGate.IsActive(
-                localPlayer,
-                ninjaShukuchiHiddenStatuses) ||
-            expectedKeyCode <= 0 ||
-            !inputFrame.IsGameplayKeyPhysicallyDown((VirtualKey)expectedKeyCode))
+            (automaticStatusTrigger
+                ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)
+                : NinjaShukuchiStealthGate.IsActive(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)) ||
+            (!automaticStatusTrigger &&
+             (expectedKeyCode <= 0 ||
+              !inputFrame.IsGameplayKeyPhysicallyDown(
+                  (VirtualKey)expectedKeyCode))))
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -385,6 +437,22 @@ internal sealed class EmergencyPurifyProbe
             return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
+        var exactLocal = new TargetPressureActorIdentity(
+            localPlayer.GameObjectId,
+            localPlayer.EntityId);
+        if (!exactLocal.IsValid ||
+            finalOwnGuardActiveOrPropagating(exactLocal))
+        {
+            return ClientActionAttemptOutcome.NotInvoked;
+        }
+
+        var finalTextInputActive = automaticStatusTrigger
+            ? !TryGetTextInputState(out var currentTextInputActive) ||
+              currentTextInputActive
+            : textInputActive;
+        if (finalTextInputActive)
+            return ClientActionAttemptOutcome.NotInvoked;
+
         var boundaryBefore = ClientActionAttemptBoundary.Capture(
             actionManager,
             EnemyCombatConstants.PurifyActionId);
@@ -403,6 +471,27 @@ internal sealed class EmergencyPurifyProbe
             ClientActionAttemptBoundary.Capture(
                 actionManager,
                 EnemyCombatConstants.PurifyActionId));
+    }
+
+    private static unsafe bool TryGetTextInputState(out bool active)
+    {
+        try
+        {
+            var atkModule = RaptureAtkModule.Instance();
+            if (atkModule == null)
+            {
+                active = true;
+                return false;
+            }
+
+            active = atkModule->IsTextInputActive() || ImGui.GetIO().WantTextInput;
+            return true;
+        }
+        catch
+        {
+            active = true;
+            return false;
+        }
     }
 
     private static unsafe bool TryGetPurifyActionState(
@@ -458,6 +547,12 @@ internal sealed class EmergencyPurifyProbe
         EmergencyActionInputFrame inputFrame,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses)
     {
+        var automaticStatusTrigger =
+            EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(
+                currentState.FrozenInputTrigger);
+        var physicalConsentValid = currentState.FrozenKeyCode > 0 &&
+                                   inputFrame.IsGameplayKeyPhysicallyDown(
+                                       (VirtualKey)currentState.FrozenKeyCode);
         if (!configurationEnabled ||
             !isSupportedPvPContext ||
             resilienceActive ||
@@ -468,14 +563,16 @@ internal sealed class EmergencyPurifyProbe
             currentState.StatusInstance is not { IsValid: true } frozenStatus ||
             currentStatus != frozenStatus ||
             !statusCurrentlyObserved ||
-            currentState.FrozenKeyCode <= 0 ||
-            !inputFrame.IsGameplayKeyPhysicallyDown(
-                (VirtualKey)currentState.FrozenKeyCode) ||
+            (!automaticStatusTrigger && !physicalConsentValid) ||
             localPlayer is null ||
             !HasValidLocalPlayer(localPlayer) ||
-            NinjaShukuchiStealthGate.IsActive(
-                localPlayer,
-                ninjaShukuchiHiddenStatuses) ||
+            (automaticStatusTrigger
+                ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)
+                : NinjaShukuchiStealthGate.IsActive(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)) ||
             !HasCastCancellationBoundary(localPlayer))
         {
             return null;

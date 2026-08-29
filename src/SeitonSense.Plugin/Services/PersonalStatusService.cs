@@ -125,7 +125,9 @@ internal sealed class PersonalStatusService : IDisposable
         heldCastCancellation = new HeldCastCancellationService(
             log,
             nearAssist.IsExactLocalGuardActiveOrPropagating);
-        emergencyPurify = new EmergencyPurifyProbe(log);
+        emergencyPurify = new EmergencyPurifyProbe(
+            log,
+            nearAssist.IsExactLocalGuardActiveOrPropagating);
         astrologianHarmonicOrbis = new AstrologianHarmonicOrbisProbe(
             clientState,
             objectTable,
@@ -583,6 +585,8 @@ internal sealed class PersonalStatusService : IDisposable
                                   (anyWarningEnabled ||
                                    (configuration.ExperimentalPurifyOnNextKey &&
                                     anyPurifyAutomationEnabled) ||
+                                   (configuration.EnableAutomaticPurify &&
+                                    anyPurifyAutomationEnabled) ||
                                    defensiveUtilitiesConfigurationEnabled);
         var observed = shouldScanStatuses
             ? ScanExactStatuses(localPlayer, now)
@@ -624,11 +628,19 @@ internal sealed class PersonalStatusService : IDisposable
                              !hardReset;
         var statuses = BuildAlertSnapshots(observed, now, warningsActive, hardReset);
 
-        var regularPurifyConfigurationEnabled = configuration.Enabled &&
-                                                configuration.ExperimentalPurifyOnNextKey &&
-                                                anyPurifyAutomationEnabled &&
-                                                metadata.PurifyVerified &&
-                                                !guardActive;
+        var heldPurifyConfigurationEnabled = configuration.Enabled &&
+                                             configuration.ExperimentalPurifyOnNextKey &&
+                                             anyPurifyAutomationEnabled &&
+                                             metadata.PurifyVerified &&
+                                             !guardActive;
+        var automaticPurifyConfigurationEnabled = configuration.Enabled &&
+                                                  configuration.EnableAutomaticPurify &&
+                                                  anyPurifyAutomationEnabled &&
+                                                  metadata.PurifyVerified &&
+                                                  !guardActive;
+        var regularPurifyConfigurationEnabled =
+            heldPurifyConfigurationEnabled ||
+            automaticPurifyConfigurationEnabled;
         var pressureStunPurifyConfigurationEnabled = defensiveUtilitiesConfigurationEnabled &&
                                                       configuration.GuardOnStunPressure &&
                                                       highPressureStunObserved &&
@@ -642,8 +654,15 @@ internal sealed class PersonalStatusService : IDisposable
             out var purifyStatusCurrentlyObserved);
         var purifyConfigurationEnabled = regularPurifyConfigurationEnabled ||
                                          pressureStunPurifyConfigurationEnabled;
+        var purifyPhysicalInputObservationEnabled =
+            heldPurifyConfigurationEnabled ||
+            pressureStunPurifyConfigurationEnabled;
+        var selectedPurifyStatusIsAutomatic =
+            automaticPurifyConfigurationEnabled &&
+            purifyStatus is { IsValid: true } selectedAutomaticStatus &&
+            IsPurifyAutomationEnabled(selectedAutomaticStatus.StatusId);
         var allowPurifyHeldGameplayKey =
-            (regularPurifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey) ||
+            (heldPurifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey) ||
             (pressureStunPurifyConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey);
         var allyRescueConfigurationEnabled = configuration.Enabled &&
                                              configuration.ExperimentalAllyRescueOnNextKey &&
@@ -715,12 +734,15 @@ internal sealed class PersonalStatusService : IDisposable
         // valid before Guard and is still physically down when Guard ends.
         var purifyHeldInputEnabled = configuration.Enabled &&
                                      metadata.PurifyVerified &&
-                                     ((configuration.ExperimentalPurifyOnNextKey &&
+                                     (((configuration.ExperimentalPurifyOnNextKey &&
                                        anyPurifyAutomationEnabled &&
-                                       configuration.PurifyOnHeldGameplayKey) ||
+                                       configuration.PurifyOnHeldGameplayKey) &&
+                                       !configuration.EnableAutomaticPurify) ||
                                       (configuration.EnableDefensiveUtilities &&
                                        configuration.GuardOnStunPressure &&
                                        configuration.DefensiveUtilitiesOnHeldKey &&
+                                       !(configuration.EnableAutomaticPurify &&
+                                         configuration.PurifyOnStun) &&
                                        isCrystallineConflict));
         var defensiveUtilityHeldInputEnabled = defensiveUtilitiesConfigurationEnabled &&
                                                 configuration.DefensiveUtilitiesOnHeldKey &&
@@ -733,6 +755,11 @@ internal sealed class PersonalStatusService : IDisposable
                                                configuration.EnableSmartRecuperateOnHeldKey &&
                                                isSupportedPvPContext &&
                                                metadata.RecuperateVerified;
+        var smartRecuperateAutomaticConfigurationEnabled =
+            configuration.Enabled &&
+            configuration.EnableAutomaticRecuperate &&
+            isSupportedPvPContext &&
+            metadata.RecuperateVerified;
         var allyRescueHeldInputEnabled = configuration.Enabled &&
                                          configuration.ExperimentalAllyRescueOnNextKey &&
                                          configuration.AllyRescueOnHeldGameplayKey &&
@@ -860,7 +887,7 @@ internal sealed class PersonalStatusService : IDisposable
             alive &&
             isSupportedPvPContext &&
             (anyPersistentHeldInputEnabled ||
-             purifyConfigurationEnabled ||
+             purifyPhysicalInputObservationEnabled ||
              defensiveUtilitiesConfigurationEnabled ||
              paladinGuardianConfigurationEnabled ||
              allyRescueConfigurationEnabled ||
@@ -873,8 +900,8 @@ internal sealed class PersonalStatusService : IDisposable
              gunbreakerContinuationHeldInputEnabled ||
              darkKnightShadowbringerHeldInputEnabled ||
               monkHeldComboInputEnabled ||
-              scholarCriticalStrategyHeldInputEnabled ||
-              emergencyTeleportHeldInputEnabled ||
+             scholarCriticalStrategyHeldInputEnabled ||
+             emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
               pressureEscapeSprintHeldInputEnabled ||
               darkKnightPlungeHeldInputEnabled ||
@@ -904,6 +931,7 @@ internal sealed class PersonalStatusService : IDisposable
             localPlayer,
             isSupportedPvPContext,
             purifyConfigurationEnabled,
+            selectedPurifyStatusIsAutomatic,
             allowPurifyHeldGameplayKey,
             purifyStatus,
             purifyStatusCurrentlyObserved,
@@ -1305,7 +1333,8 @@ internal sealed class PersonalStatusService : IDisposable
         var recuperate = smartRecuperate.Observe(
             localPlayer,
             context,
-            configuration.Enabled && configuration.EnableSmartRecuperateOnHeldKey,
+            smartRecuperateHeldInputEnabled,
+            smartRecuperateAutomaticConfigurationEnabled,
             metadata.RecuperateVerified,
             guardActive,
             hasPurifyRemovableCrowdControl ||
@@ -1476,7 +1505,8 @@ internal sealed class PersonalStatusService : IDisposable
         heldCastCancellation.Observe(
             localPlayer,
             configuration.Enabled &&
-            configuration.AllowHeldHelpersToCancelOwnCast,
+            (configuration.AllowHeldHelpersToCancelOwnCast ||
+             castCancellationRequest?.IsAutomaticPurify == true),
             isSupportedPvPContext,
             guardActive,
             prioritizedInputClaimed: castCancellationRequest is { IsValid: true },

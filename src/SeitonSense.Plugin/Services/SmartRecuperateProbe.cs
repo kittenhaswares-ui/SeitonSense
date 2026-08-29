@@ -1,8 +1,10 @@
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 
@@ -32,6 +34,7 @@ internal sealed record SmartRecuperateProbeSnapshot(
     internal int FrozenKeyCode { get; init; }
     internal int NativeAttemptCount { get; init; }
     internal ClientActionAttemptOutcome LastNativeOutcome { get; init; }
+    internal SmartRecuperateTriggerKind TriggerKind { get; init; }
     internal long RejectedCount { get; init; }
     internal long UnknownCount { get; init; }
     internal long SoftWaitCount { get; init; }
@@ -58,9 +61,9 @@ internal sealed record SmartRecuperateProbeSnapshot(
 }
 
 /// <summary>
-/// Runs the exact self-only held Recuperate policy. The same physical hold may
-/// authorize a later distinct accepted cooldown epoch, but never substitutes
-/// another action, actor, key, or health event for a frozen retry.
+/// Runs the exact self-only held or automatic Recuperate policy. Automatic mode
+/// wins when both modes are enabled; neither mode may substitute another action,
+/// actor, consent source, or health event for a frozen retry.
 /// </summary>
 internal sealed unsafe class SmartRecuperateProbe
 {
@@ -102,7 +105,8 @@ internal sealed unsafe class SmartRecuperateProbe
     internal SmartRecuperateProbeSnapshot Observe(
         IPlayerCharacter? localPlayer,
         SupportedPvPContext context,
-        bool configurationEnabled,
+        bool heldModeEnabled,
+        bool automaticModeEnabled,
         bool metadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
@@ -114,8 +118,28 @@ internal sealed unsafe class SmartRecuperateProbe
         var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
             localPlayer,
             ninjaShukuchiHiddenStatuses);
-        var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;
-        var effectiveHardReset = hardReset || stealthSuppressed || nowMilliseconds < 0;
+        var automaticStealthSuppressed =
+            NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                localPlayer,
+                ninjaShukuchiHiddenStatuses);
+        // Hidden pauses the selected recovery lane; it must never erase an
+        // accepted-cooldown or terminal duplicate-safety latch. Keep the user's
+        // trigger mode visible to the shared state machine and represent stealth
+        // as a temporary dispatch blocker instead of a lifecycle reset.
+        var effectiveHeldModeEnabled = heldModeEnabled;
+        var effectiveAutomaticModeEnabled = automaticModeEnabled;
+        var effectiveConfigurationEnabled =
+            effectiveHeldModeEnabled || effectiveAutomaticModeEnabled;
+        var frozenModeSuppressed = state.Intent switch
+        {
+            { IsAutomatic: true } => automaticStealthSuppressed,
+            { IsAutomatic: false } => stealthSuppressed,
+            _ when automaticModeEnabled => automaticStealthSuppressed,
+            _ => heldModeEnabled && stealthSuppressed,
+        };
+        var recoverySuppressedByGuardOrStealth =
+            actionHelpersSuppressedByGuard || frozenModeSuppressed;
+        var effectiveHardReset = hardReset || nowMilliseconds < 0;
         var localIdentityValid = TryGetExactIdentity(localPlayer, out var localIdentity);
         var localAlive = localIdentityValid && IsAlive(localPlayer);
         var localTargetable = localIdentityValid && localPlayer!.IsTargetable;
@@ -136,7 +160,15 @@ internal sealed unsafe class SmartRecuperateProbe
         var actionReady = actionStateReadable && cooldownReady && resourcesReady;
 
         var input = inputFrame.Snapshot;
-        var frozenKeyStillDown = state.Intent is { IsValid: true } frozen &&
+        var inputProbeSucceeded = input.ProbeSucceeded;
+        var textInputActive = input.IsTextInputActive;
+        if (effectiveAutomaticModeEnabled)
+        {
+            inputProbeSucceeded = TryGetTextInputState(out textInputActive);
+            if (!inputProbeSucceeded) textInputActive = true;
+        }
+        var frozenKeyStillDown = state.Intent is
+                                 { IsValid: true, IsAutomatic: false } frozen &&
                                  inputFrame.IsGameplayKeyPhysicallyDown(
                                      (VirtualKey)frozen.FrozenKeyCode);
         var decision = SmartRecuperateRules.Observe(
@@ -148,10 +180,11 @@ internal sealed unsafe class SmartRecuperateProbe
                 IsLocalPlayerAlive: localAlive,
                 IsLocalPlayerTargetable: localTargetable,
                 MetadataVerified: metadataVerified,
-                ActionHelpersSuppressedByGuard: actionHelpersSuppressedByGuard,
+                ActionHelpersSuppressedByGuard:
+                    recoverySuppressedByGuardOrStealth,
                 HigherPriorityClaimed: higherPriorityClaimed,
-                InputProbeSucceeded: input.ProbeSucceeded,
-                IsTextInputActive: input.IsTextInputActive,
+                InputProbeSucceeded: inputProbeSucceeded,
+                IsTextInputActive: textInputActive,
                 HeldGameplayKeyEligible: inputFrame.HeldGameplayKeyEligible,
                 ResolvedActionId: resolvedActionId,
                 ActionLocallyReady: actionReady,
@@ -164,7 +197,9 @@ internal sealed unsafe class SmartRecuperateProbe
                 FrozenKeyStillDown: frozenKeyStillDown,
                 NativeBoundaryReady: nativeBoundaryReady,
                 ActionCooldownReady: actionStateReadable && cooldownReady,
-                NowMilliseconds: nowMilliseconds));
+                NowMilliseconds: nowMilliseconds,
+                HeldModeEnabled: effectiveHeldModeEnabled,
+                AutomaticModeEnabled: effectiveAutomaticModeEnabled));
         state = decision.NextState;
 
         var inputClaimed = decision.ShouldConsumeInputGeneration;
@@ -174,8 +209,10 @@ internal sealed unsafe class SmartRecuperateProbe
             localPlayer,
             localIdentity,
             effectiveConfigurationEnabled,
+            effectiveHeldModeEnabled,
+            effectiveAutomaticModeEnabled,
             metadataVerified,
-            actionHelpersSuppressedByGuard,
+            recoverySuppressedByGuardOrStealth,
             higherPriorityClaimed,
             resolvedActionId,
             actionStateReadable && cooldownReady && resourcesReady,
@@ -199,6 +236,8 @@ internal sealed unsafe class SmartRecuperateProbe
                     intent,
                     localPlayer!.Address,
                     effectiveConfigurationEnabled,
+                    effectiveHeldModeEnabled,
+                    effectiveAutomaticModeEnabled,
                     metadataVerified,
                     higherPriorityClaimed,
                     inputFrame,
@@ -243,7 +282,7 @@ internal sealed unsafe class SmartRecuperateProbe
             currentMp,
             maximumMp,
             actionReady && nativeBoundaryReady,
-            actionHelpersSuppressedByGuard,
+            recoverySuppressedByGuardOrStealth,
             input.HeldGameplayKey,
             inputClaimed,
             attempted,
@@ -259,6 +298,8 @@ internal sealed unsafe class SmartRecuperateProbe
             LastNativeOutcome = nativeOutcome != ClientActionAttemptOutcome.None
                 ? nativeOutcome
                 : state.LastNativeOutcome,
+            TriggerKind = state.Intent?.TriggerKind ??
+                          SmartRecuperateTriggerKind.None,
             RejectedCount = Interlocked.Read(ref rejectedCount),
             UnknownCount = Interlocked.Read(ref unknownCount),
             SoftWaitCount = Interlocked.Read(ref softWaitCount),
@@ -306,6 +347,8 @@ internal sealed unsafe class SmartRecuperateProbe
         SmartRecuperateIntent intent,
         nint expectedLocalAddress,
         bool configurationEnabled,
+        bool heldModeEnabled,
+        bool automaticModeEnabled,
         bool metadataVerified,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -315,9 +358,13 @@ internal sealed unsafe class SmartRecuperateProbe
         attempted = false;
         var currentLocal = ResolveExactLocalPlayer(intent.LocalPlayer, expectedLocalAddress);
         if (currentLocal is null ||
-            NinjaShukuchiStealthGate.IsActive(
-                currentLocal,
-                ninjaShukuchiHiddenStatuses))
+            (intent.IsAutomatic
+                ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                    currentLocal,
+                    ninjaShukuchiHiddenStatuses)
+                : NinjaShukuchiStealthGate.IsActive(
+                    currentLocal,
+                    ninjaShukuchiHiddenStatuses)))
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -334,9 +381,15 @@ internal sealed unsafe class SmartRecuperateProbe
         var currentIdentity = new TargetPressureActorIdentity(
             currentLocal.GameObjectId,
             currentLocal.EntityId);
-        var frozenKeyStillDown = inputFrame.IsGameplayKeyPhysicallyDown(
-            (VirtualKey)intent.FrozenKeyCode);
+        var frozenKeyStillDown = intent.IsAutomatic ||
+                                 inputFrame.IsGameplayKeyPhysicallyDown(
+                                     (VirtualKey)intent.FrozenKeyCode);
+        var textInputActive = intent.IsAutomatic
+            ? !TryGetTextInputState(out var currentTextInputActive) ||
+              currentTextInputActive
+            : inputFrame.Snapshot.IsTextInputActive;
         if (!actionStateReadable ||
+            textInputActive ||
             !SmartRecuperateRules.CanUseFrozenIntent(
                 intent,
                 configurationEnabled,
@@ -353,8 +406,10 @@ internal sealed unsafe class SmartRecuperateProbe
                 currentLocal.MaxHp,
                 currentLocal.CurrentMp,
                 currentLocal.MaxMp,
-                intent.FrozenKeyCode,
-                frozenKeyStillDown))
+                intent.IsAutomatic ? 0 : intent.FrozenKeyCode,
+                frozenKeyStillDown,
+                heldModeEnabled,
+                automaticModeEnabled))
         {
             return ClientActionAttemptOutcome.NotInvoked;
         }
@@ -387,6 +442,8 @@ internal sealed unsafe class SmartRecuperateProbe
         IPlayerCharacter? localPlayer,
         TargetPressureActorIdentity localIdentity,
         bool configurationEnabled,
+        bool heldModeEnabled,
+        bool automaticModeEnabled,
         bool metadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
@@ -405,6 +462,7 @@ internal sealed unsafe class SmartRecuperateProbe
             !actionStructurallyReady ||
             currentState.Phase != SmartRecuperatePhase.Buffered ||
             currentState.Intent is not { IsValid: true } intent ||
+            intent.IsAutomatic ||
             localPlayer is null ||
             NinjaShukuchiStealthGate.IsActive(
                 localPlayer,
@@ -430,7 +488,9 @@ internal sealed unsafe class SmartRecuperateProbe
                 maximumMp,
                 intent.FrozenKeyCode,
                 inputFrame.IsGameplayKeyPhysicallyDown(
-                    (VirtualKey)intent.FrozenKeyCode)))
+                    (VirtualKey)intent.FrozenKeyCode),
+                heldModeEnabled,
+                automaticModeEnabled))
         {
             return null;
         }
@@ -442,6 +502,27 @@ internal sealed unsafe class SmartRecuperateProbe
             intent.LocalPlayer,
             intent.FrozenKeyCode,
             intent.HealthEventToken);
+    }
+
+    private static unsafe bool TryGetTextInputState(out bool active)
+    {
+        try
+        {
+            var atkModule = RaptureAtkModule.Instance();
+            if (atkModule == null)
+            {
+                active = true;
+                return false;
+            }
+
+            active = atkModule->IsTextInputActive() || ImGui.GetIO().WantTextInput;
+            return true;
+        }
+        catch
+        {
+            active = true;
+            return false;
+        }
     }
 
     private static bool HasCastCancellationBoundary(IPlayerCharacter localPlayer)

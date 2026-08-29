@@ -124,7 +124,7 @@ internal sealed partial class SettingsWindow
             $"last={autoGuardProtection.LastEvent}");
         ImGui.TextWrapped(
             $"Smart Recuperate: {recuperate.Phase}/{recuperate.Decision}/{recuperate.Reason}, " +
-            $"action={recuperate.ResolvedActionId}, " +
+            $"mode={recuperate.TriggerKind}, action={recuperate.ResolvedActionId}, " +
             $"HP={recuperate.CurrentHp}/{recuperate.MaximumHp}, missing={recuperate.MissingHp}, " +
             $"MP={recuperate.CurrentMp}/{recuperate.MaximumMp}, ready/guard=" +
             $"{recuperate.LocallyReady}/{recuperate.GuardSuppressed}, key={recuperate.HeldGameplayKey}, " +

@@ -2,11 +2,14 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.39.0.2 repairs AST held Harmonischer
-Orbis and its same-target Zweifachzauber follow-up, keeps non-NIN `/seitonbw`
-screen-back movement authoritative through ReAction's camera-relative dash
-rewrite, and restores a compact one-card CC rotation view with an expandable
-six-map deck. Version 0.39.0.1 expanded the default-off `/seitonbw` camera-back
+assistance, and target highlights. Version 0.40.0.0 adds separate default-off
+automatic Purify and Recuperate modes that need no gameplay key while preserving
+the legacy held helpers, exact Guard/NIN Hidden safety, and shared one-episode
+anti-duplicate state. Version 0.39.0.2 repairs AST held Harmonischer Orbis and its
+same-target Zweifachzauber follow-up, keeps non-NIN `/seitonbw` screen-back
+movement authoritative through ReAction's camera-relative dash rewrite, and
+restores a compact one-card CC rotation view with an expandable six-map deck.
+Version 0.39.0.1 expanded the default-off `/seitonbw` camera-back
 macro from NIN to the reviewed self dashes on AST, DNC, DRG, RPR, and PCT and
 enlarged the rotation cards and typography. Version 0.39.0.0 added the default-off RDM held
 helper for one exact Corps-a-corps into the first second of a freshly observed
@@ -190,11 +193,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
   complete exact five-player pressure view. Trusted direct pressure of at least
   two ranks first, with exact self as the sole no-pressure fallback. It makes at
   most one direct-target Kardia attempt without switching the selected target.
-- **Experimental Smart Recuperate helper:** a separate default-off held-key
-  option can use exact self Recuperate `29711` when at least 16,000
+- **Experimental Smart Recuperate helper:** separate default-off automatic and
+  held-key options can use exact self Recuperate `29711` when at least 16,000
   HP is missing and at least 2,000 MP is available. The thresholds are inclusive;
   cooldown, MP, cast, queue, or animation-lock shortage waits without consuming
-  the held consent. An explicit client rejection may retry only the same exact
+  held consent. The automatic path does not cancel a cast. An explicit client
+  rejection may retry only the same exact
   self epoch; acceptance is terminal and is never redirected or replayed. It
   runs in exact CC and, only with the separate test option, Wolves' Den; the
   supported context is frozen so an attempt cannot drift between them.
@@ -828,23 +832,30 @@ threat or DRG airborne episode. These warnings never press Guard or another
 action.
 
 Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature receive urgent
-Purify warnings. The experimental **Self-Purify physical-key helper** is disabled
-by default. Each debuff type has its own automation toggle, and a separate
-default-off option allows an already-held gameplay key such as WASD to remain
-continuous consent when the enabled debuff appears.
+Purify warnings. The experimental **automatic Self-Purify** and legacy physical-
+key modes are separate, disabled-by-default options. Each debuff type has its own
+automation toggle. Automatic mode reacts to the actually present exact status
+without a gameplay key; the legacy mode accepts a fresh key and can optionally
+allow an already-held gameplay key such as WASD at status entry. If both modes
+are enabled for the same debuff, automatic consent deterministically owns that
+status episode; it neither consumes nor retires the observed physical generation.
 
-The original key is never swallowed, delayed, or replayed. Purify has absolute
-priority while the exact enabled CC is active. Known cooldown, resource, cast,
-queue, or animation-lock blocks wait without spending an attempt. Only an
-explicit client rejection may retry the same frozen self intent after 50 ms.
+The original key is never swallowed, delayed, or replayed, and automatic mode
+does not retire its generation. Ready Purify has absolute priority while the
+exact enabled CC is active. Cooldown/resource shortage does not starve lower
+helpers; cast, queue, or animation-lock blocks wait without spending an attempt.
+If casting is the sole remaining block, automatic Purify can request one native
+cast cancellation for that cast epoch and dispatch only on a later clear frame.
+Only an explicit client rejection may retry the same frozen self intent after 50 ms.
 The default remains eight native calls; the separate default-off PvP latency-
 response option can freeze a 100-1500 ms clean-false budget for that exact CC
 episode. Acceptance or ambiguity ends it.
 ReAction Turbo repeat pulses do not create physical consent.
 
-The separate **Smart Recuperate on held gameplay key** experiment is disabled by
-default and runs only in exact Crystalline Conflict or in Wolves' Den while the
-separate testing option is enabled. It freezes PvP Recuperate `29711`, the exact
+The separate **automatic Smart Recuperate** and **Smart Recuperate on held
+gameplay key** experiments are disabled by default and run only in exact
+Crystalline Conflict or in Wolves' Den while the separate testing option is
+enabled. They share one state machine and freeze PvP Recuperate `29711`, the exact
 local player, and the current supported context. A CC/Den/context transition
 cancels that intent instead of carrying it into different content; Frontline and
 Rival Wings remain excluded. The local player must be alive and targetable, the
@@ -852,16 +863,18 @@ action and metadata must be exact and locally ready, at least 16,000 HP must be
 missing, and at least the exact 2,000-MP cost must be available. Both boundaries
 are inclusive: exactly 16,000 missing HP and exactly 2,000 MP are eligible.
 
-Held consent may wait while Recuperate is not ready or MP is below 2,000, so the
-same hold can become eligible after the cooldown or an MP tick without starving
-a currently usable lower-priority helper. Once all gates pass, the exact self
+Held consent or an automatic opportunity may wait while Recuperate is not ready
+or MP is below 2,000, without starving a currently usable lower-priority helper.
+Automatic mode never cancels the current cast; it waits for a clear frame and
+rechecks whether healing is still required. Once all gates pass, the exact self
 intent is revalidated before every possible call. Only an explicit client
 rejection may retry that epoch under the common bound. Temporary readiness/MP,
 higher-priority, and Guard states wait without spending a call; dropping below
 the HP threshold cancels the current intent. Acceptance ends that epoch, and a
 later one requires an observed cooldown unavailable-to-ready transition. Retry
 exhaustion or an ambiguous/invalid exact outcome latches only this helper until
-the frozen key is released. The helper never changes a target, buffers MP,
+the held key is released, or for automatic mode until the HP opportunity clears.
+The helper never changes a target, buffers MP,
 substitutes another action or actor, or replays input, and client acceptance is
 not a healing-effect claim.
 
@@ -1635,7 +1648,7 @@ focus module to avoid drawing both over the same actor.
 | Enemy LB nameplate icons plus self/ally LB notifications | Yes | No | No |
 | Local 4,000/2,000-MP warning sounds | Yes | Yes, when test mode is enabled | No |
 | Optional BRD/WHM Ally Rescue | Yes | No | No |
-| Optional held Smart Recuperate | Yes | Yes, when test mode is enabled | No |
+| Optional automatic/held Smart Recuperate | Yes | Yes, when test mode is enabled | No |
 | Optional held Emergency Teleport (MNK/BLM/SGE/VPR) | Yes | Yes, when test mode is enabled | No |
 | Optional reactive defensive utilities | Yes | No | No |
 | Optional PLD Guardian job tool | Yes | No | No |
@@ -1687,11 +1700,12 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 44 is current. It adds the default-off RDM fresh-Guard
-engage with 80% HP / 50% MP defaults and the separate default-off `/seitonbw`
-macro option without enabling either action path for an upgrade. It also
-initializes the separate local CC map W/L capture toggle to on for fresh,
-upgraded, and Reset Defaults configurations. Schema 43 adds
+Configuration schema 45 is current. It adds separate default-off automatic
+Purify and Recuperate options without changing either legacy held opt-in for an
+upgrade. Schema 44 adds the default-off RDM fresh-Guard engage with 80% HP / 50%
+MP defaults and the separate default-off `/seitonbw` macro option, and initializes
+the local CC map W/L capture toggle to on for fresh, upgraded, and Reset Defaults
+configurations. Schema 43 adds
 the default-on Blackblood-
 preservation sub-option without enabling the default-off Auto Shadowbringer
 master, and expands the local rotation panel with seven local-artwork cards.
@@ -1955,13 +1969,22 @@ Its legacy default is eight attempts; the separate default-off PvP latency-
 response option freezes the selected extended budget per exact intent, and
 acceptance or ambiguity remains terminal.
 
-The separate default-off Smart Recuperate helper may freeze an exact self
-Recuperate `29711` epoch when missing HP is at least 16,000 and MP is at least
-2,000. It runs in exact CC or explicitly enabled Wolves' Den testing and freezes
-that supported context with the intent. Readiness or insufficient MP waits
-without starving a currently usable lower helper. Only an explicit client
-rejection may use the common bounded same-intent retry; acceptance, ambiguity,
-or context drift is terminal with no target change, alternate, or replay.
+Automatic Purify is the one narrowly scoped keyless exception: its own explicit
+opt-in may request the same once-per-cast-epoch native cancellation independently
+of that generic held-helper toggle, but only for exact Purify `29056`, the same
+still-present enabled CC instance, and an otherwise structurally ready self
+intent. Automatic Recuperate is deliberately excluded and always waits for the
+current cast to end before rechecking its complete health/safety boundary.
+
+The separate default-off automatic and held Smart Recuperate modes may freeze one
+shared exact self Recuperate `29711` epoch when missing HP is at least 16,000 and
+MP is at least 2,000. They run in exact CC or explicitly enabled Wolves' Den
+testing and freeze that supported context with the intent. Automatic wins if
+both modes are enabled; it needs no gameplay key and does not retire the held
+generation. Readiness, casting, or insufficient MP waits without starving a
+currently usable lower helper. Only an explicit client rejection may use the
+common bounded same-intent retry; acceptance, ambiguity, or context drift is
+terminal with no target change, alternate, or replay.
 
 The separate default-off Ninja helper is Ninja's earliest held job helper after
 Purify; Viper's Serpentiner-Geist helper occupies the equivalent job-exclusive
@@ -2070,8 +2093,9 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 541-test Core registry and source checks pin
-configuration schema 44, the deterministic local CC rotation and fail-closed
+For the current source, the exact 549-test Core registry and source checks pin
+configuration schema 45, automatic/keyless and legacy held Purify/Recuperate
+intent boundaries, the deterministic local CC rotation and fail-closed
 per-character map W/L capture, the complete
 fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
 generic smart buffer and default-off native Turbo,

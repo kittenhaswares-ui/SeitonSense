@@ -718,7 +718,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 541-test registry.
+# 549-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -738,11 +738,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 500 -or
+if ($staticIntegratedTestCount -ne 508 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 541 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 549 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -750,7 +750,7 @@ if ($staticIntegratedTestCount -ne 500 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 44 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 541-test combined Core registry.'
+    throw 'Schema 45 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 549-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1306,8 +1306,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 44;') {
-    throw 'Schema 44 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 45;') {
+    throw 'Schema 45 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -3058,22 +3058,33 @@ if (($smartKardiaRules + $smartKardiaProbe + $smartKardiaMetadata) -match '\b(?:
     throw 'Production Smart Kardia paths must never accept PvE Kardia, Kardion, or Eukrasia rows 2604/2605/2606.'
 }
 
-# Smart Recuperate is the shared held-key self-heal. It soft-waits without
-# spending native budget, retries only a proven clean false, and after accepted
-# use requires a real unavailable-to-ready cooldown epoch before the same hold
-# may authorize a distinct health event.
+# Smart Recuperate is one shared self-heal state machine with separate held and
+# keyless automatic consent. Automatic wins when both are enabled, freezes key
+# zero, never requests cast cancellation, and cannot start or retire the shared
+# physical-held observer. Both paths retain one exact self/context/action/health
+# intent and frame-local scheduler ownership only.
 $smartRecuperateRules = Read-RequiredSource $smartRecuperateRulesPath 'Smart Recuperate rules'
 $normalizedSmartRecuperateRules = $smartRecuperateRules -replace '\s+', ' '
 $smartRecuperateProbe = Read-RequiredSource $smartRecuperateProbePath 'Smart Recuperate runtime probe'
 $normalizedSmartRecuperateProbe = $smartRecuperateProbe -replace '\s+', ' '
 $smartRecuperateSelfTests = Read-RequiredSource $smartRecuperateSelfTestsPath 'Smart Recuperate self-tests'
+$automaticRecoveryPersonalStatus = Read-RequiredSource $personalStatusPath 'Automatic self-recovery scheduler integration'
+$normalizedAutomaticRecoveryPersonalStatus = $automaticRecoveryPersonalStatus -replace '\s+', ' '
 Assert-Literals $smartRecuperateRules @(
     'public readonly record struct SmartRecuperateIntent(',
+    'public enum SmartRecuperateTriggerKind : byte',
+    'HeldGameplayKey = 1,',
+    'Automatic = 2,',
+    'public bool IsAutomatic =>',
+    'TriggerKind == SmartRecuperateTriggerKind.Automatic;',
+    '((IsAutomatic && FrozenKeyCode == 0) ||',
     'SupportedPvPContext Context,',
     'public readonly record struct SmartRecuperateState(',
     'public readonly record struct SmartRecuperateObservation(',
     'HeldActionRetryState Retry,',
     'public bool ShouldConsumeInputGeneration => InputClaimed;',
+    'bool HeldModeEnabled = true,',
+    'bool AutomaticModeEnabled = false);',
     'public const uint ActionId = 29_711;',
     'public const uint MinimumMissingHp = 16_000;',
     'public const uint MpCost = 2_000;',
@@ -3087,8 +3098,13 @@ Assert-Literals $smartRecuperateRules @(
     'SmartRecuperateDecisionReason.MissingHealthBelowThreshold',
     'SmartRecuperateDecisionReason.InsufficientMp',
     'SmartRecuperateDecisionReason.ContextChanged',
+    'SmartRecuperateDecisionReason.TriggerModeDisabled',
+    'observation.AutomaticModeEnabled',
+    '? SmartRecuperateTriggerKind.Automatic',
+    ': SmartRecuperateTriggerKind.HeldGameplayKey',
+    '? 0',
     'public static bool CanUseFrozenIntent('
-) 'Exact inclusive, context-frozen, and retryable Smart Recuperate policy'
+) 'Exact held/automatic identities, inclusive thresholds, frozen context, and retryable Smart Recuperate policy'
 if ([regex]::Matches($smartRecuperateRules, '\bSmartRecuperateDecisionReason\.ContextChanged\b').Count -ne 2 -or
     $normalizedSmartRecuperateRules -notmatch 'private static SmartRecuperateDecision ObserveBuffered\(.*?if \(observation\.Context != intent\.Value\.Context\).*?SmartRecuperateDecisionReason\.ContextChanged' -or
     $normalizedSmartRecuperateRules -notmatch 'private static SmartRecuperateDecision ObserveAcceptedCooldown\(.*?if \(observation\.Context != intent\.Value\.Context\).*?SmartRecuperateDecisionReason\.ContextChanged' -or
@@ -3102,15 +3118,19 @@ $smartRecuperateTestMethods = @(
     'FrozenIntentRequiresEveryTerminalGate',
     'CleanFalseRetriesAreBounded',
     'SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat',
-    'PurifyPriorityNeverGetsStarved'
+    'PurifyPriorityNeverGetsStarved',
+    'AutomaticModeFreezesOneKeylessIntent',
+    'AutomaticTerminalNeedsANewHpOpportunity',
+    'AutomaticFalseRetriesIgnoreHeldLatencyExpansion',
+    'AcceptedCooldownLatchIsPassiveUntilTheRealEpochEnds'
 )
 foreach ($method in $smartRecuperateTestMethods) {
     Assert-Literals $smartRecuperateSelfTests @("public static void $method()") "Smart Recuperate self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("SmartRecuperateSelfTests.$method") "Smart Recuperate test registration $method"
 }
-if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 7 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 7) {
-    throw 'All seven Smart Recuperate threshold, frozen-intent, retry, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
+if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 11) {
+    throw 'All eleven held/automatic Smart Recuperate identity, threshold, retry, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
 }
 Assert-Literals $smartRecuperateSelfTests @(
     'Equal(SupportedPvPContext.CrystallineConflict, intent.Context, "frozen context");',
@@ -3125,6 +3145,12 @@ Assert-Literals $smartRecuperateSelfTests @(
 Assert-Literals $smartRecuperateProbe @(
     'var inputClaimed = decision.ShouldConsumeInputGeneration;',
     'if (inputClaimed) inputFrame.Consume();',
+    'bool heldModeEnabled,',
+    'bool automaticModeEnabled,',
+    'HeldModeEnabled: effectiveHeldModeEnabled,',
+    'AutomaticModeEnabled: effectiveAutomaticModeEnabled',
+    'intent.IsAutomatic ? 0 : intent.FrozenKeyCode,',
+    'intent.IsAutomatic ||',
     'TryUseRecuperate(',
     'SmartRecuperateRules.Observe(',
     'SmartRecuperateRules.ApplyNativeAttemptOutcome(',
@@ -3142,23 +3168,49 @@ Assert-Literals $smartRecuperateProbe @(
 ) 'Shared-policy Smart Recuperate runtime'
 Assert-Literals $smartRecuperateProbe @(
     'var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(',
-    'var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;',
-    'var effectiveHardReset = hardReset || stealthSuppressed || nowMilliseconds < 0;',
+    'NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(',
+    'var effectiveHeldModeEnabled = heldModeEnabled;',
+    'var effectiveAutomaticModeEnabled = automaticModeEnabled;',
+    'var frozenModeSuppressed = state.Intent switch',
+    '{ IsAutomatic: true } => automaticStealthSuppressed,',
+    '{ IsAutomatic: false } => stealthSuppressed,',
+    '_ when automaticModeEnabled => automaticStealthSuppressed,',
+    '_ => heldModeEnabled && stealthSuppressed,',
+    'var recoverySuppressedByGuardOrStealth =',
+    'actionHelpersSuppressedByGuard || frozenModeSuppressed;',
+    'var effectiveHardReset = hardReset || nowMilliseconds < 0;',
+    'intent.IsAutomatic',
+    '? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(',
     'NinjaShukuchiStealthGate.IsActive('
-) 'Ninja Hidden blocks automatic Recuperate scheduling, cast cancellation, and native dispatch'
-if ([regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.IsActive\s*\(').Count -ne 3) {
-    throw 'Automatic Recuperate must check Ninja Hidden at observation, cast-cancel, and final native boundaries.'
+) 'Ninja Hidden blocks both Recuperate modes without erasing duplicate-safety latches, while automatic mode additionally fails closed on unverifiable NIN metadata'
+if ([regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.IsActive\s*\(').Count -ne 3 -or
+    [regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.ShouldSuppressAutomaticRecovery\s*\(').Count -ne 2) {
+    throw 'Recuperate must check exact Hidden at observation, held cast-cancel, and final held dispatch, plus the fail-closed automatic NIN gate at observation and final automatic dispatch.'
 }
 if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
+    $normalizedSmartRecuperateProbe -notmatch 'private HeldCastCancellationRequest\? BuildCastCancellationRequest\(.*?currentState\.Intent is not \{ IsValid: true \} intent \|\| intent\.IsAutomatic \|\|.*?return null;.*?return new HeldCastCancellationRequest\(' -or
+    $normalizedSmartRecuperateProbe -notmatch 'if \(effectiveAutomaticModeEnabled\).*?inputProbeSucceeded = TryGetTextInputState\(out textInputActive\);.*?if \(!inputProbeSucceeded\) textInputActive = true;' -or
+    $normalizedSmartRecuperateProbe -notmatch 'var textInputActive = intent\.IsAutomatic \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive;' -or
     $normalizedSmartRecuperateRules -notmatch 'Context is SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen' -or
-    $normalizedSmartRecuperateRules -notmatch 'intent\.IsValid && configurationEnabled && currentContext == intent\.Context' -or
+    $normalizedSmartRecuperateRules -notmatch 'intent\.IsValid && configurationEnabled && \(intent\.IsAutomatic \? automaticModeEnabled : heldModeEnabled\) && currentContext == intent\.Context' -or
+    $normalizedSmartRecuperateRules -notmatch 'observation\.AutomaticModeEnabled \? 0 : observation\.HeldGameplayKeyCode.*?observation\.AutomaticModeEnabled \? SmartRecuperateTriggerKind\.Automatic : SmartRecuperateTriggerKind\.HeldGameplayKey' -or
     $normalizedSmartRecuperateProbe -notmatch 'PvPMatchRules\.ResolveSupportedContext\( clientState\.IsPvP, clientState\.IsPvPExcludingDen, includeWolvesDenTesting: configuration\.EnableWolvesDenTesting,' -or
     [regex]::Matches($smartRecuperateProbe, '\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -lt 2 -or
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
     $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueueAction|PendingDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Smart Recuperate must claim only dispatchable frames and issue one exact frozen self-GOID boundary using shared classification, with no retarget, alternate, or replay.'
+    throw 'Smart Recuperate must freeze distinct held/automatic identities, give automatic consent key zero, reject automatic cast-cancel, fail closed on text input, claim only its current scheduler frame, and issue one exact frozen self-GOID boundary with no retarget, alternate, or replay.'
+}
+$physicalObserverIntegration = [regex]::Match(
+    $normalizedAutomaticRecoveryPersonalStatus,
+    'var anyPersistentHeldInputEnabled = (?<Body>.*?)var purify = emergencyPurify\.Observe\(')
+if (-not $physicalObserverIntegration.Success -or
+    $physicalObserverIntegration.Groups['Body'].Value -match 'smartRecuperateAutomaticConfigurationEnabled|automaticPurifyConfigurationEnabled|EnableAutomatic(?:Purify|Recuperate)' -or
+    $normalizedAutomaticRecoveryPersonalStatus -notmatch 'var purifyPhysicalInputObservationEnabled = heldPurifyConfigurationEnabled \|\| pressureStunPurifyConfigurationEnabled;' -or
+    $normalizedAutomaticRecoveryPersonalStatus -notmatch 'var smartRecuperateHeldInputEnabled = configuration\.Enabled && configuration\.EnableSmartRecuperateOnHeldKey.*?var smartRecuperateAutomaticConfigurationEnabled = configuration\.Enabled && configuration\.EnableAutomaticRecuperate' -or
+    $normalizedAutomaticRecoveryPersonalStatus -notmatch 'emergencyInput\.Observe\(.*?purifyPhysicalInputObservationEnabled.*?smartRecuperateHeldInputEnabled.*?purifyHeldInputEnabled,.*?smartRecuperateHeldInputEnabled,') {
+    throw 'Automatic Purify/Recuperate alone must not start, prime, or retire the shared physical held-key observer; only their separate physical/held modes may participate in that lifecycle.'
 }
 
 # VPR Serpent's Tail is a separate default-off physical-hold helper. It polls
@@ -4118,8 +4170,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 500) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 500-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 508) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 508-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4265,6 +4317,9 @@ Assert-Literals $mchMarkerRules @(
 ) 'Exact MCH LB early-marker rules'
 
 $purifyProbe = Read-RequiredSource $purifyProbePath 'Emergency Purify probe'
+$purifyBufferRulesForAutomatic = Read-RequiredSource $emergencyPurifyBufferRulesPath 'Emergency Purify automatic buffer rules'
+$normalizedPurifyBufferRulesForAutomatic = $purifyBufferRulesForAutomatic -replace '\s+', ' '
+$emergencyPurifyBufferSelfTests = Read-RequiredSource (Join-Path $coreSelfTestRoot 'EmergencyPurifyBufferSelfTests.cs') 'Emergency Purify buffer self-tests'
 $ninjaShukuchiStealthGate = Read-RequiredSource $ninjaShukuchiStealthGatePath 'Ninja Shukuchi stealth gate'
 $useActionCalls = [regex]::Matches($purifyProbe, '\bUseAction\s*\(')
 if ($useActionCalls.Count -ne 1) {
@@ -4294,6 +4349,39 @@ Assert-Literals $purifyProbe @(
     'Purify client-rejected; exact intent retained for bounded retry',
     'InputClaimed = inputClaimed'
 ) 'Emergency Purify shared retry boundary and absolute scheduler claim'
+Assert-Literals $purifyBufferRulesForAutomatic @(
+    'AutomaticStatus = 3,',
+    'TriggerModeDisabled = 16,',
+    'bool AutomaticStatusTriggerEnabled = false);',
+    'EmergencyPurifyInputTrigger.AutomaticStatus,',
+    'keyCode: 0);',
+    'public static bool IsAutomaticStatusTrigger(',
+    'trigger == EmergencyPurifyInputTrigger.AutomaticStatus;',
+    'IsAutomaticStatusTrigger(state.FrozenInputTrigger)',
+    '? state.FrozenKeyCode == 0',
+    'RequiresPhysicalKey(state.FrozenInputTrigger)',
+    'ShouldClaimInputFrame =>',
+    'EmergencyPurifyInputTrigger.HeldKeyAtStatusEntry) &&'
+) 'Automatic Purify keyless identity and physical-input-independent frame claim'
+if ($normalizedPurifyBufferRulesForAutomatic -notmatch 'public bool ShouldClaimInputFrame => \(InputTrigger is EmergencyPurifyInputTrigger\.FreshKeyPress or EmergencyPurifyInputTrigger\.HeldKeyAtStatusEntry\) && Kind is EmergencyPurifyBufferDecisionKind\.Armed or EmergencyPurifyBufferDecisionKind\.Dispatch;' -or
+    $normalizedPurifyBufferRulesForAutomatic -notmatch 'if \(observation\.AutomaticStatusTriggerEnabled\).*?EmergencyPurifyInputTrigger\.AutomaticStatus, keyCode: 0' -or
+    $normalizedPurifyBufferRulesForAutomatic -notmatch 'state\.Phase == EmergencyPurifyBufferPhase\.Buffered && state\.StatusInstance is \{ IsValid: true \} frozenStatus.*?HasValidFrozenTrigger\(state\) && \(!RequiresPhysicalKey\(state\.FrozenInputTrigger\) \|\| exactFrozenKeyStillDown\)' -or
+    $normalizedPurifyBufferRulesForAutomatic -notmatch 'if \(previous\.StatusInstance != status\).*?replacementTrigger = ResolveStatusEntryTrigger\(observation, out var keyCode\).*?var current = previous with \{ LastObservedAtMilliseconds = observation\.NowMilliseconds \}; if \(current\.Phase == EmergencyPurifyBufferPhase\.SpentUntilStatusGone\) return NoDecision\(current\); if \(IsAutomaticStatusTrigger\(current\.FrozenInputTrigger\) && !observation\.AutomaticStatusTriggerEnabled\)') {
+    throw 'Automatic Purify must freeze trigger AutomaticStatus with key zero, claim scheduler priority only while Buffered, handle replacement/terminal identity before mode-disable cancellation, and never claim a physical-input generation.'
+}
+$automaticPurifyTestMethods = @(
+    'AutomaticStatusArmsAndDispatchesWithoutAPhysicalKey',
+    'DisablingAutomaticModeCancelsTheKeylessIntent',
+    'AutomaticStatusIsOneShotButAReplacementIsANewEpisode'
+)
+foreach ($method in $automaticPurifyTestMethods) {
+    Assert-Literals $emergencyPurifyBufferSelfTests @("public static void $method()") "Automatic Purify self-test $method"
+    Assert-Literals $integratedCoreTestProgram @("EmergencyPurifyBufferSelfTests.$method") "Automatic Purify test registration $method"
+}
+if ([regex]::Matches($emergencyPurifyBufferSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 16 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bEmergencyPurifyBufferSelfTests\.\w+').Count -ne 16) {
+    throw 'All sixteen Purify buffer tests, including the three automatic keyless/status-episode regressions, must remain registered exactly once.'
+}
 Assert-Literals $ninjaShukuchiStealthGate @(
     'internal sealed class NinjaShukuchiHiddenStatusCatalog',
     '.Where(statusId => statusId != 0)',
@@ -4303,20 +4391,32 @@ Assert-Literals $ninjaShukuchiStealthGate @(
     'localPlayer.ClassJob.RowId != EnemyCombatConstants.NinjaJobId',
     'verifiedHiddenStatuses.Contains(status.StatusId)'
 ) 'Language-independent metadata-ID catalog for Ninja Shukuchi Hidden'
+$normalizedNinjaShukuchiStealthGate = $ninjaShukuchiStealthGate -replace '\s+', ' '
+if ($normalizedNinjaShukuchiStealthGate -notmatch 'internal static bool ShouldSuppressAutomaticRecovery\( IPlayerCharacter\? localPlayer, NinjaShukuchiHiddenStatusCatalog\? verifiedHiddenStatuses\).*?if \(localPlayer is null\) return false; if \(!localPlayer\.ClassJob\.IsValid\) return true; if \(localPlayer\.ClassJob\.RowId != EnemyCombatConstants\.NinjaJobId\) return false;.*?if \(verifiedHiddenStatuses is not \{ IsVerified: true \}\) return true; return IsActive\(localPlayer, verifiedHiddenStatuses\);') {
+    throw 'Automatic self-recovery must fail closed for an invalid local job row and for NIN when the exact Hidden metadata catalog is unavailable; verified non-NIN jobs remain unaffected.'
+}
 Assert-Literals $purifyProbe @(
-    'var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(',
+    'var stealthSuppressed = automaticStatusTriggerEnabled',
+    '? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(',
+    ': NinjaShukuchiStealthGate.IsActive(',
     'var effectiveConfigurationEnabled = configurationEnabled && !stealthSuppressed;',
-    'var effectiveHardReset = hardReset || stealthSuppressed;',
+    'var effectiveHardReset = hardReset;',
+    'var automaticStatusIntent =',
+    'EmergencyPurifyBufferRules.IsAutomaticStatusTrigger(',
+    'if (decision.ShouldClaimInputFrame ||',
+    '(automaticStatusIntent && inputClaimed))',
     'NinjaShukuchiStealthGate.IsActive('
-) 'Ninja Hidden blocks automatic Purify scheduling, cast cancellation, and native dispatch'
-if ([regex]::Matches($purifyProbe, '\bNinjaShukuchiStealthGate\.IsActive\s*\(').Count -ne 3) {
-    throw 'Automatic Purify must check Ninja Hidden at observation, cast-cancel, and final native boundaries.'
+) 'Ninja Hidden and fail-closed automatic recovery gate block Purify scheduling, cast cancellation, and native dispatch'
+if ([regex]::Matches($purifyProbe, '\bNinjaShukuchiStealthGate\.IsActive\s*\(').Count -ne 3 -or
+    [regex]::Matches($purifyProbe, '\bNinjaShukuchiStealthGate\.ShouldSuppressAutomaticRecovery\s*\(').Count -ne 3) {
+    throw 'Purify must check exact Hidden for physical consent and the fail-closed automatic NIN gate at observation, cast-cancel, and final native boundaries.'
 }
 if ([regex]::Matches($purifyProbe, '\bstatusCurrentlyObserved\b').Count -lt 3 -or
     [regex]::Matches($purifyProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 3 -or
     [regex]::Matches($purifyProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
+    $normalizedPurifyProbe -notmatch 'if \(decision\.ShouldClaimInputFrame \|\| \(automaticStatusIntent && inputClaimed\)\) inputFrame\.Consume\(\);' -or
     $purifyProbe -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|QueueAction|AlternateAction|AlternateTarget)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Emergency Purify must freeze the exact current CC/self intent, classify one direct self-GOID action boundary, capture one separate cast-cancel readiness boundary, and never hook, retarget, or select an alternate.'
+    throw 'Emergency Purify must freeze the exact current CC/self/consent intent, use only frame-local scheduler consumption for keyless automatic status consent, classify one direct self-GOID action boundary, capture one separate cast-cancel readiness boundary, and never hook, retarget, or select an alternate.'
 }
 
 # The default-off AST held helper owns one exact Near-Help-derived target and
@@ -4638,9 +4738,9 @@ Assert-Literals $coreSelfTestProgramForGuardian @(
 ) 'Held-before-fresh helper regression registrations'
 
 # One central coordinator may request the game's native cast cancellation for
-# only the highest-priority otherwise-ready exact physical-hold intent. The
-# native boundary returns void, so the state machine records a request rather
-# than success and rearms only after both cast signals are clear.
+# only the highest-priority otherwise-ready exact intent. The sole keyless shape
+# is exact automatic self-Purify 29056; every other producer retains its frozen
+# physical key. The void native boundary rearms only after both cast signals clear.
 $heldCastCancellationRules = Read-RequiredSource $heldCastCancellationRulesPath 'Held cast cancellation rules'
 $normalizedHeldCastCancellationRules = $heldCastCancellationRules -replace '\s+', ' '
 $heldCastCancellationService = Read-RequiredSource $heldCastCancellationServicePath 'Held cast cancellation native service'
@@ -4668,16 +4768,23 @@ Assert-Literals $heldCastCancellationRules @(
     'TargetPressureActorIdentity Target,',
     'int FrozenKeyCode,',
     'ulong IntentEpochToken)',
+    'public bool IsAutomaticPurify =>',
+    'HelperKind == HeldCastCancellationHelperKind.Purify &&',
+    'HelperActionId == HeldCastCancellationRules.AutomaticPurifyActionId &&',
+    'FrozenKeyCode == 0;',
+    'public bool RequiresFrozenKey => !IsAutomaticPurify;',
+    'public const uint AutomaticPurifyActionId = 29_056;',
     'LocalPlayer.IsValid',
     'Target.IsValid',
-    'FrozenKeyCode > 0',
+    '(IsAutomaticPurify || FrozenKeyCode > 0)',
     'IntentEpochToken != 0',
     'public const float MaximumCancellationAnimationLockSeconds = 0.050f;',
     'HeldCastCancellationDecisionReason.CastSignalChangedWithoutClear',
     'HeldCastCancellationDecisionReason.LocalPlayerChanged',
     'next = next with { CancellationRequested = true };'
-) 'Exact fourteen-kind cast cancellation request and once-per-cast state'
+) 'Exact fourteen-kind cast cancellation request, keyless-only automatic Purify exception, and once-per-cast state'
 if ($normalizedHeldCastCancellationRules -notmatch 'var anyCastSignal = observation\.LocalPlayerIsCasting \|\| observation\.CastActionId != 0; if \(!anyCastSignal\).*?CastEpochActive = false, CancellationRequested = false, CastSignalMismatch = false, ObservedCastActionId = 0, ObservedLocalPlayer = default, LocalPlayerIdentityMismatch = false,' -or
+    $normalizedHeldCastCancellationRules -notmatch 'public bool IsAutomaticPurify => HelperKind == HeldCastCancellationHelperKind\.Purify && HelperActionId == HeldCastCancellationRules\.AutomaticPurifyActionId && FrozenKeyCode == 0; public bool RequiresFrozenKey => !IsAutomaticPurify; public bool IsValid =>.*?\(IsAutomaticPurify \|\| FrozenKeyCode > 0\)' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(state\.ObservedCastActionId != 0 && observation\.CastActionId != 0 && state\.ObservedCastActionId != observation\.CastActionId\).*?CastSignalMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(next\.ObservedLocalPlayer != observation\.CurrentLocalPlayer\).*?LocalPlayerIdentityMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'if \(next\.CancellationRequested\) return Waiting\(next, HeldCastCancellationDecisionReason\.AlreadyRequested\);.*?if \(next\.CastSignalMismatch\).*?CastSignalChangedWithoutClear.*?if \(next\.LocalPlayerIdentityMismatch\).*?LocalPlayerChanged' -or
@@ -4693,7 +4800,13 @@ Assert-Literals $heldCastCancellationService @(
     'HeldCastCancellationNativeStatus LastNativeStatus,',
     'private HeldCastCancellationRequest? lastRequestedIntent;',
     'private HeldCastCancellationNativeStatus lastNativeStatus;',
-    'prioritizedInputClaimed && inputFrame.IsConsumed',
+    'var automaticPurifyRequest =',
+    'request is { IsValid: true, IsAutomaticPurify: true };',
+    'automaticPurifyRequest ||',
+    'var textInputActive = automaticPurifyRequest',
+    '? !TryGetTextInputState(out var currentTextInputActive) ||',
+    'prioritizedInputClaimed &&',
+    '(inputFrame.IsConsumed || request?.IsAutomaticPurify == true)',
     'inputFrame.IsGameplayKeyPhysicallyDown(',
     'ClientActionAttemptBoundary.Capture(',
     'ResolvedHelperActionId: boundary.AdjustedActionId',
@@ -4715,7 +4828,9 @@ Assert-Literals $heldCastCancellationService @(
     'localPlayer.CurrentHp > 0 &&',
     'localPlayer.MaxHp >= localPlayer.CurrentHp;'
 ) 'Central void native cast-cancel boundary and truthful persistent diagnostics'
-if ($normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
+if ($normalizedHeldCastCancellationService -notmatch 'var automaticPurifyRequest = request is \{ IsValid: true, IsAutomaticPurify: true \}; var textInputActive = automaticPurifyRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticPurifyRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
+    $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticPurify == true\)' -or
+    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
     $normalizedHeldCastCancellationService -notmatch 'new HeldCastCancellationSnapshot\( decision\.Kind, decision\.Reason, decision\.NextState\.LastCastEpochToken, request, lastRequestedIntent, observation\.CastActionId, nativeStatus, lastNativeStatus, nativeRequestCount, nativeFaultCount,' -or
     $heldCastCancellationService -match '\b(UseAction|UseActionLocation|SendInput|keybd_event|mouse_event|ExecuteCommand|QueueAction|ClearActionQueue|Jump|MovePlayer)\s*\(|VirtualKey\.(?:ESCAPE|SPACE|W|A|S|D)\b|->(?:CastActionId|AnimationLock|ActionQueued|QueuedActionId|QueuedTargetId)\s*=(?!=|>)') {
     throw 'The cast-cancel service must latch before exactly one void Hotbar request, keep current versus last-request diagnostics separate, and never use/inject an action, Escape, movement, jump, queue write, or cast-field mutation.'
@@ -4740,15 +4855,16 @@ $heldCastCancellationTestMethods = @(
     'OnlyConsistentClearRearmsAndSignalDriftFailsClosed',
     'EveryCentralSafetyGateFailsClosed',
     'RequestIdentityAndLockBoundaryAreExact',
+    'OnlyExactAutomaticPurifyMayBeKeyless',
     'TerminalRequestSurvivesLaterGateChanges'
 )
 foreach ($method in $heldCastCancellationTestMethods) {
     Assert-Literals $heldCastCancellationSelfTests @("internal static void $method()") "Held cast cancellation self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("HeldCastCancellationSelfTests.$method") "Held cast cancellation test registration $method"
 }
-if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 7) {
-    throw 'All seven canonical-order, once-per-cast, dual-clear, drift-quarantine, exact-boundary, and central-gate cast-cancellation tests must remain registered exactly once.'
+if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 8) {
+    throw 'All eight canonical-order, once-per-cast, dual-clear, drift-quarantine, exact keyless-Purify boundary, and central-gate cast-cancellation tests must remain registered exactly once.'
 }
 
 $castRequestProducers = @(
@@ -4835,8 +4951,26 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 44;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 44 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 45;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 45 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+}
+
+# Schema 45 introduces two genuinely automatic self-actions. Both are plain
+# default false, explicitly disabled for every pre-45 upgrade, and reset off.
+Assert-Literals $castConfiguration @(
+    'public bool EnableAutomaticPurify { get; set; }',
+    'public bool EnableAutomaticRecuperate { get; set; }',
+    'if (Version < 45)',
+    'EnableAutomaticPurify = false;',
+    'EnableAutomaticRecuperate = false;',
+    'Version = 45;'
+) 'Schema-45 default-off automatic Purify and Recuperate configuration'
+if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
+    [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
+    [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \} Version = 45;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 45;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 45 must keep automatic Purify and automatic Recuperate off for fresh, migrated, and reset configurations without changing their separate held options.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -9670,7 +9804,8 @@ Assert-Literals $personalStatus @(
     'CanTriggerPurifyBuffer',
     'new EmergencyActionInputCoordinator(',
     'criticalUtilityCoordination.ClaimCurrentFrame',
-    'new EmergencyPurifyProbe(log)',
+    'new EmergencyPurifyProbe(',
+    'nearAssist.IsExactLocalGuardActiveOrPropagating);',
     'new DefensiveUtilityProbe(',
     'new AllyRescueProbe(',
     'emergencyPurify.Observe',
@@ -9680,6 +9815,7 @@ Assert-Literals $personalStatus @(
     'allyRescue.Observe',
     'shouldScanStatuses',
     'configuration.ExperimentalPurifyOnNextKey',
+    'configuration.EnableAutomaticPurify',
     'configuration.PurifyOnStun',
     'configuration.PurifyOnHeavy',
     'configuration.PurifyOnBind',
@@ -9687,6 +9823,7 @@ Assert-Literals $personalStatus @(
     'configuration.PurifyOnDeepFreeze',
     'configuration.PurifyOnMiracleOfNature',
     'configuration.PurifyOnHeldGameplayKey',
+    'configuration.EnableAutomaticRecuperate',
     'configuration.ExperimentalAllyRescueOnNextKey',
     'configuration.AllyRescueOnHeldGameplayKey',
     'IsPurifyAutomationEnabled',
@@ -9789,21 +9926,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.39.0.2</Version>',
-    '<AssemblyVersion>0.39.0.2</AssemblyVersion>',
-    '<FileVersion>0.39.0.2</FileVersion>'
-) 'v0.39.0.2 project version'
+    '<Version>0.40.0.0</Version>',
+    '<AssemblyVersion>0.40.0.0</AssemblyVersion>',
+    '<FileVersion>0.40.0.0</FileVersion>'
+) 'v0.40.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.39.0.2";',
-    'AST held Harmonischer Orbis works again.',
-    'the accepted Orbis reserves exactly one repeat for the same ally.',
-    '/seitonbw now preserves screen-back facing through ReAction''s camera-relative dash rewrite.',
-    'ReAction action/target rewrites still fail closed.',
-    'The CC rotation panel starts with one large current-map card.',
-    'Use SHOW NEXT 6 MAPS to expand the full animated deck;',
-    'Configuration schema 44 is unchanged.',
-    'Current-client AST acceptance, dash direction, ReAction coexistence, and final visuals still need in-game confirmation.'
-) 'v0.39.0.2 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.40.0.0";',
+    'New default-off Auto Purify reacts to the exact enabled CC status without needing a fresh or held gameplay key.',
+    'Auto Purify can cancel one current cast when that is the sole remaining block, then rechecks and sends Purify only on a later clear frame.',
+    'New default-off Auto Recuperate uses the existing 16,000 missing HP / 2,000 MP boundary without a key. It waits for casts instead of cancelling them.',
+    'Both automatic helpers preserve Guard and NIN Shukuchi stealth safety. Legacy held modes remain separate; current-client acceptance still needs in-game confirmation.'
+) 'v0.40.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9824,20 +9957,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.39.0.2 plugin manifest metadata'
+) 'v0.40.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.39.0.2"',
-    'Fixed AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up:',
-    'the raw Double Cast carrier is used only while it resolves exactly to Orbis.',
-    'Fixed non-NIN /seitonbw direction with ReAction camera-relative dashes through a one-call frozen-facing boundary;',
-    'mutating ReAction/MOAction profiles still fail closed.',
-    'starts with one animated current-map card and can expand the next six maps.',
-    'Configuration schema 44 is unchanged; all 541 Core tests and release gates pass',
+    '"AssemblyVersion": "0.40.0.0"',
+    'Added separate default-off Auto Purify and Auto Recuperate modes.',
+    'Auto Purify reacts to an exact enabled live CC without a gameplay key and may cancel one current cast before revalidating on a later clear frame.',
+    'Auto Recuperate uses the existing 16,000-missing-HP / 2,000-MP boundary without a key but never cancels casts.',
+    'Both preserve Guard and NIN Hidden safety, share bounded one-episode latches with their legacy held modes, and do not retire the physical hold generation.',
+    'Configuration schema 45; all 549 Core tests and release gates pass',
     '"IsHide": false'
-) 'v0.39.0.2 custom-repository metadata'
+) 'v0.40.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -9885,8 +10017,12 @@ Assert-Literals $normalizedPrivacy @(
     'The dedicated exact command scope releases ownership only for the matching NIN location action or reviewed directional standard action',
     'The PvP range helper reads only the local player''s current job, position, and hitbox radius plus the game''s world-to-screen projection.',
     'does not scan other actors, retain movement history, raycast terrain, change a target, or issue/suppress an action.',
-    'Configuration schema 44 is current.',
-    'It keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
+    'Automatic Purify is a keyless exception to the generic cast-cancel toggle only for exact action `29056` and one exact enabled status/self episode.',
+    'Automatic Recuperate never requests cast cancellation.',
+    'Automatic observation does not retire a physical held-key generation.',
+    'Configuration schema 45 is current.',
+    'It adds separate automatic Purify and Recuperate settings and initializes both off for every upgrade and Reset Defaults.',
+    'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
     'exact Blackblood status-row presence',
     'its own opt-in reuses the complete Smart Action ranking and protection snapshot without changing a visible target.',
     'local last automatic-boundary time needed for the 1.8-second cadence',
@@ -9900,8 +10036,9 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.39.0.2 directional dash, AST, compact local-card, and retained safety/privacy disclosure'
+) 'v0.40.0.0 automatic self-actions and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.40.0.0 adds separate default-off automatic Purify and Recuperate modes that need no gameplay key while preserving the legacy held helpers, exact Guard/NIN Hidden safety, and shared one-episode anti-duplicate state.',
     'Version 0.39.0.2 repairs AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up',
     'keeps non-NIN `/seitonbw` screen-back movement authoritative through ReAction''s camera-relative dash rewrite',
     'restores a compact one-card CC rotation view with an expandable six-map deck.',
@@ -9931,6 +10068,13 @@ Assert-Literals $normalizedReadme @(
     'Wolves'' Den stays on the exact current `<t>` duel opponent or striking dummy, assumes unavailable CC pressure as zero for testing',
     'a countdown continues only from its live mapped caster status and clears with that exact episode.',
     'Your own active or still-propagating Guard suppresses the entire sequence and is rechecked at the final action/cast-cancel boundaries',
+    'Automatic mode reacts to the actually present exact status without a gameplay key;',
+    'automatic mode does not retire its generation.',
+    'automatic Purify can request one native cast cancellation for that cast epoch and dispatch only on a later clear frame.',
+    'Automatic mode never cancels the current cast; it waits for a clear frame and rechecks whether healing is still required.',
+    'Automatic Purify is the one narrowly scoped keyless exception:',
+    'Automatic Recuperate is deliberately excluded and always waits for the current cast to end before rechecking its complete health/safety boundary.',
+    'Automatic wins if both modes are enabled; it needs no gameplay key and does not retire the held generation.',
     'v0.35.0.3''s exact Guard-ignoring Smart Action support',
     'v0.35.0.2''s Panic Shukuchi repair and Ninja Hidden protection',
     'v0.35.0.1''s native Turbo/Latest Input path, exact Viper Wolves'' Den targeting, and removal of the nonfunctional Scholar spread workflow.',
@@ -9960,8 +10104,8 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 44 is current',
-    'For the current source, the exact 541-test Core registry and source checks pin configuration schema 44',
+    'Configuration schema 45 is current',
+    'For the current source, the exact 549-test Core registry and source checks pin configuration schema 45',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -9972,16 +10116,18 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.39.0.2 current README release and safety contract'
+) 'v0.40.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.40.0.0',
+    'Added a separate default-off **Automatic Purify** mode.',
+    'request Purify `29056` without a fresh or held gameplay key.',
+    'Auto Purify may request one native cast cancellation for that cast epoch independently of the generic held-helper cancel toggle',
+    'Added a separate default-off **Automatic Recuperate** mode alongside the unchanged held-key helper.',
+    'It deliberately does not cancel casts: it waits, rechecks HP/MP and every safety gate',
+    'The NIN automatic gate fails closed if job or Hidden metadata is uncertain.',
+    'automatic consent wins deterministically and never retires the held-key generation.',
+    'Configuration schema is `45`. Source build, all `549` Core tests, safety, package parity, and release verification are automated;',
     '## 0.39.0.2',
-    'Fixed the default-off AST held Near Help helper being permanently disabled by its own metadata gate.',
-    'If a raw Double Cast `29245` charge was free before an accepted Orbis',
-    'proves `29245 -> 29247`, and invokes raw `29245` on the same frozen ally.',
-    'Fixed non-NIN `/seitonbw` going forward when ReAction''s camera-relative dash option rewrote character facing',
-    'Restored the compact Wolves'' Den rotation view:',
-    'one large current-map card is visible by default, with a full-width control to expand or hide the next six maps.',
-    'The warning-free Release build, all `541` Core tests, safety contract, package parity, and release verification pass.',
     '## 0.39.0.1',
     'Expanded the default-off `/seitonbw` macro from NIN Shukuchi to the closed current PvP self-dash catalog:',
     'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210`.',
@@ -10015,7 +10161,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.39.0.2 release notes and retained v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.40.0.0 release notes and retained v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -10142,7 +10288,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 44 is current.'
+    'Configuration schema 45 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -10271,7 +10417,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 44 is current'
+    'Configuration schema 45 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -10377,7 +10523,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 44 is current',
+    'Configuration schema 45 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
@@ -10401,8 +10547,9 @@ Assert-Literals $normalizedReadme @(
     'clean rejection uses only the shared bounded retry',
     '**Experimental Sage Smart Kardia helper:** a separate default-off option arms only after the existing Eukrasia call is forwarded unchanged and accepted by the client',
     'Inside that two-second opportunity it requires causal Eukrasia charge/status evidence, an animation-lock-clear Kardia boundary, and a fresh, complete exact five-player pressure view',
-    '**Experimental Smart Recuperate helper:** a separate default-off held-key option can use exact self Recuperate `29711` when at least 16,000 HP is missing and at least 2,000 MP is available',
-    'cooldown, MP, cast, queue, or animation-lock shortage waits without consuming the held consent',
+    'The separate **automatic Smart Recuperate** and **Smart Recuperate on held gameplay key** experiments are disabled by default',
+    'at least 16,000 HP must be missing, and at least the exact 2,000-MP cost must be available.',
+    'cooldown, MP, cast, queue, or animation-lock shortage waits without consuming held consent',
     'An explicit client rejection may retry only the same exact self epoch',
     '**Experimental Paladin Guardian job tool:** an independent default-off held-key option can attempt Guardian on one exact reachable ally',
     'large fixed red `FOCUSED xN` card at the top center',
@@ -10745,7 +10892,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 44 is current',
+    'Configuration schema 45 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -10825,7 +10972,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 44 is current'
+    'Configuration schema 45 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -10895,7 +11042,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 44',
+    'public int Version { get; set; } = 45',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -11053,7 +11200,10 @@ Assert-Literals $configuration @(
     'RedMageGuardEngageRules.DefaultMinimumMpPercent;',
     'public bool EnableLocalCrystallineConflictMapStatisticsCapture { get; set; } = true;',
     'EnableLocalCrystallineConflictMapStatisticsCapture = true;',
-    'Version = 44',
+    'if (Version < 45)',
+    'EnableAutomaticPurify = false;',
+    'EnableAutomaticRecuperate = false;',
+    'Version = 45',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -11080,7 +11230,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-44 default-off RDM Guard engage plus Blackblood preservation, read-only rotation/range overlays, and retained legacy compatibility fields'
+) 'Schema-45 default-off automatic Purify/Recuperate plus retained RDM Guard engage, Blackblood preservation, read-only rotation/range overlays, and legacy compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -11164,8 +11314,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*44\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 44\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?Version = 44;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*45\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 45\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?Version = 45;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -11182,7 +11332,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*44\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableLocalCrystallineConflictMapStatisticsCapture\s*=\s*true\s*;').Count -ne 2 -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 44 must preserve every earlier explicit opt-in/migration, add the default-off RDM Guard engage helper, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
+    throw 'Schema 45 must preserve every earlier explicit opt-in/migration, add default-off automatic Purify and Recuperate, retain the default-off RDM Guard engage helper, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -11507,4 +11657,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.39.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 44 and the exact 541-test Core registry. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.40.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 45 and the exact 549-test Core registry. Default-off automatic Purify and Recuperate own separate keyless trigger identities: only exact automatic Purify may request cast cancellation, while automatic Recuperate cannot; both retain frame-local claims and fail closed for NIN Hidden uncertainty. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

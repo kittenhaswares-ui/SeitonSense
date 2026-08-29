@@ -44,6 +44,21 @@ internal sealed class NinjaShukuchiHiddenStatusCatalog
 /// </summary>
 internal static class NinjaShukuchiStealthGate
 {
+    internal static bool ShouldSuppressAutomaticRecovery(
+        IPlayerCharacter? localPlayer,
+        NinjaShukuchiHiddenStatusCatalog? verifiedHiddenStatuses)
+    {
+        if (localPlayer is null) return false;
+        if (!localPlayer.ClassJob.IsValid) return true;
+        if (localPlayer.ClassJob.RowId != EnemyCombatConstants.NinjaJobId)
+            return false;
+
+        // Automatic recovery may break Hidden without any physical consent.
+        // If the current Hidden rows could not be verified, fail closed for NIN.
+        if (verifiedHiddenStatuses is not { IsVerified: true }) return true;
+        return IsActive(localPlayer, verifiedHiddenStatuses);
+    }
+
     internal static bool IsActive(
         IPlayerCharacter? localPlayer,
         NinjaShukuchiHiddenStatusCatalog? verifiedHiddenStatuses)

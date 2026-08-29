@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 44;
+    public int Version { get; set; } = 45;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -69,6 +69,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableSageKardiaOnHeldKey { get; set; }
     public bool EnableSageKardiaAfterEukrasia { get; set; }
     public bool EnableSmartRecuperateOnHeldKey { get; set; }
+    public bool EnableAutomaticRecuperate { get; set; }
     public bool EnableEmergencyTeleportOnHeldKey { get; set; }
     public int EmergencyTeleportHpPercent { get; set; } = 50;
     public int EmergencyTeleportMpThreshold { get; set; } = 4000;
@@ -150,6 +151,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ExperimentalPurifyOnNextKey { get; set; }
     public int ExperimentalPurifyBufferMilliseconds { get; set; } = 750;
     public bool PurifyOnHeldGameplayKey { get; set; }
+    public bool EnableAutomaticPurify { get; set; }
     public bool PurifyOnStun { get; set; } = true;
     public bool PurifyOnHeavy { get; set; } = true;
     public bool PurifyOnBind { get; set; } = true;
@@ -302,7 +304,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 44)
+        if (Version >= 45)
         {
             if (repaired) Save();
             return;
@@ -774,7 +776,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableLocalCrystallineConflictMapStatisticsCapture = true;
         }
 
-        Version = 44;
+        if (Version < 45)
+        {
+            // Both automatic self-actions can issue without a physical key.
+            // Existing installations must opt in explicitly after updating.
+            EnableAutomaticPurify = false;
+            EnableAutomaticRecuperate = false;
+        }
+
+        Version = 45;
         ClampSettings();
         Save();
     }
@@ -783,7 +793,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 44;
+        Version = 45;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -806,6 +816,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableSageKardiaOnHeldKey = false;
         EnableSageKardiaAfterEukrasia = false;
         EnableSmartRecuperateOnHeldKey = false;
+        EnableAutomaticRecuperate = false;
         EnableEmergencyTeleportOnHeldKey = false;
         EmergencyTeleportHpPercent = 50;
         EmergencyTeleportMpThreshold = 4000;
@@ -887,6 +898,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ExperimentalPurifyOnNextKey = false;
         ExperimentalPurifyBufferMilliseconds = 750;
         PurifyOnHeldGameplayKey = false;
+        EnableAutomaticPurify = false;
         PurifyOnStun = true;
         PurifyOnHeavy = true;
         PurifyOnBind = true;
