@@ -2,8 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.2 fixes the observed instant-
-leave race where the exact result intent armed and a transient `BetweenAreas`
+assistance, and target highlights. Version 0.42.0.3 fixes an Auto Recuperate
+reliability latch: an accepted heal can no longer wait forever when the client
+does not expose, or the framework misses, the brief cooldown-unavailable frame.
+The exact verified 1.0-second recast remains an anti-duplicate floor; after it
+elapses, current positive readiness may open the next fully revalidated heal
+episode. Version 0.42.0.2 fixes the observed instant-leave race where the exact
+result intent armed and a transient `BetweenAreas`
 frame cancelled it one millisecond later. The intent now waits through that
 ambiguous frame and can leave when the same public-CC identity is stable and
 native-ready. It also repairs distinct current metadata for held SAM Soten,
@@ -941,8 +946,11 @@ clear-cast frame. Once all gates pass, the exact self intent is revalidated befo
 every possible call. Only an explicit client
 rejection may retry that epoch under the common bound. Temporary readiness/MP,
 higher-priority, and Guard states wait without spending a call; dropping below
-the HP threshold cancels the current intent. Acceptance ends that epoch, and a
-later one requires an observed cooldown unavailable-to-ready transition. Retry
+the HP threshold cancels the current intent. Acceptance starts the exact
+metadata-verified 1.0-second recast floor. A sampled cooldown-unavailable edge
+is retained when present, but after that floor current positive readiness may
+rearm even if the brief negative frame was missed, so one accepted heal cannot
+latch recovery forever. Retry
 exhaustion or an ambiguous/invalid exact outcome latches only this helper until
 the held key is released, or for automatic mode until the HP opportunity clears.
 The helper never changes a target, buffers MP,
@@ -2216,7 +2224,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 573-test Core registry and source checks pin
+For the current source, the exact 574-test Core registry and source checks pin
 configuration schema 48, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,

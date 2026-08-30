@@ -1055,9 +1055,11 @@ distinct health event on the same hold. Once eligible, identity, context, life,
 targetability, Guard, metadata/readiness, HP, MP, and the same frozen supported
 context are finally revalidated before each possible self-targeted native call.
 A CC/Den/context transition cancels rather than transferring the intent. Only a
-clean explicit rejection may use the common bounded retry. Acceptance ends that
-epoch; a later one needs
-an observed cooldown unavailable-to-ready transition. Retry exhaustion or an
+clean explicit rejection may use the common bounded retry. Acceptance starts an
+exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is
+retained when visible, but after that floor current positive readiness may rearm
+without requiring the brief negative frame, preventing an indefinite latch.
+Retry exhaustion or an
 ambiguous/invalid exact outcome latches this helper until the frozen key is
 released, or until the automatic HP opportunity clears. No selected target is
 read or changed and no other action is substituted.

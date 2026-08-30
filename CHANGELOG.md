@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.42.0.3
+
+- Fixed Auto Recuperate becoming permanently stuck after an accepted heal when
+  `IsActionOffCooldown(29711)` did not expose, or the framework missed, its brief
+  false frame. The accepted action time is now frozen independently and current
+  positive readiness may open the next heal episode after Recuperate's exact
+  verified 1.0-second recast, even without that negative edge.
+- Preserved anti-duplicate and safety behavior: no second request is possible
+  before the full recast, an actually unavailable action continues waiting, and
+  HP, MP, Purify priority, Guard, NIN Hidden, cast, queue, native resources,
+  identity, and PvP context are revalidated before every request.
+- Configuration schema remains `48`. Source build, all `574` Core tests, safety,
+  package parity, and release verification are automated. Final native action
+  acceptance and repeated healing remain live-current-client validation
+  boundaries.
+
 ## 0.42.0.2
 
 - Fixed the observed instant-leave result-boundary race. The failed match armed

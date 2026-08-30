@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.42.0.2",
-    "Changelog": "Fixed the result-boundary race where Instant Leave armed and was cancelled one millisecond later by a transient BetweenAreas frame. The exact one-shot intent now waits through that frame and can leave when the same public-CC context is stable and native-ready; expiry, identity/context drift, and the one-request limit remain strict. Fixed SAM Soten, Mineuchi, and Zantetsuken being disabled by one incorrect shared metadata tuple, and stopped a pre-native Zantetsuken cancellation from consuming the still-held key. Smart Action now ranks and freezes a protection-safe target for the reviewed Ogi Namikiri and Tendo Setsugekka casts; all other casts retain the visible-target anti-spin path and Kaeshi follow-ups remain ordinary instant actions. Configuration schema 48; all 573 Core tests and release gates pass. Live current-client validation remains pending.",
+    "AssemblyVersion": "0.42.0.3",
+    "Changelog": "Fixed Auto Recuperate becoming permanently stuck after one accepted heal when the client's brief cooldown-unavailable frame was missed. The exact accepted time is now frozen independently: no second request can occur before Recuperate's verified 1.0-second recast, but current positive readiness may safely open the next fully revalidated heal episode afterward without requiring the missing negative frame. HP, MP, Purify priority, Guard, NIN Hidden, cast, queue, resource, identity, and PvP-context gates remain exact. Configuration schema 48; all 574 Core tests and release gates pass. Live current-client validation remains pending.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788099881"
+    "LastUpdate": "1788101557"
   }
 ]

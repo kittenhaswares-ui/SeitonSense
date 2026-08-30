@@ -648,7 +648,7 @@ internal static class PvPMetadataGuard
                    recuperate.Range == 0 &&
                    recuperate.EffectRange == 0 &&
                    recuperate.Cast100ms == 0 &&
-                   recuperate.Recast100ms == 10 &&
+                   recuperate.Recast100ms == SmartRecuperateRules.RecastHundredMilliseconds &&
                    recuperate.PrimaryCostType == 51 &&
                    recuperate.PrimaryCostValue == EnemyCombatConstants.RecuperateMpCost &&
                    recuperate.SecondaryCostType == 0 &&

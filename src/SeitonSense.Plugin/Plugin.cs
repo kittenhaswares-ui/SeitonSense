@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.2";
+    private const string CurrentReleaseVersion = "0.42.0.3";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -404,10 +404,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Instant Leave now keeps its exact one-shot intent through the brief BetweenAreas frame seen on the result boundary, then leaves as soon as the same public-CC context is stable and native-ready.",
-                "SAM held Soten, Mineuchi, and Zantetsuken now use their exact current action metadata. A cancelled pre-native Zantetsuken freeze no longer consumes the still-held key.",
-                "Smart Action now smart-targets and freezes Ogi Namikiri and Tendo Setsugekka. Every other cast keeps the visible-target anti-spin path; Kaeshi follow-ups remain ordinary instant actions.",
-                "Ogi and Tendo keep full Chiten, Guard, Cover, and LB protection checks. All 573 Core tests and release gates pass.",
+                "Auto Recuperate can no longer become permanently stuck after one accepted heal when the client's brief cooldown-unavailable frame is missed.",
+                "A second heal remains blocked for Recuperate's exact verified 1.0-second recast, then may rearm from current positive readiness without requiring the missing frame.",
+                "HP, MP, Purify priority, Guard, Hidden, cast, queue, resource, identity, and PvP-context checks still run before every native request.",
+                "Configuration schema remains 48. All 574 Core tests and release gates pass; live current-client confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

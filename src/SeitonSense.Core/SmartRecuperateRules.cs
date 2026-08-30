@@ -56,7 +56,8 @@ public readonly record struct SmartRecuperateState(
     HeldActionRetryState Retry,
     ulong NextHealthEventToken,
     long LastObservedAtMilliseconds,
-    ClientActionAttemptOutcome LastNativeOutcome)
+    ClientActionAttemptOutcome LastNativeOutcome,
+    long AcceptedAtMilliseconds)
 {
     public static SmartRecuperateState Initial => new(
         SmartRecuperatePhase.Waiting,
@@ -64,7 +65,8 @@ public readonly record struct SmartRecuperateState(
         HeldActionRetryState.Initial,
         1,
         -1,
-        ClientActionAttemptOutcome.None);
+        ClientActionAttemptOutcome.None,
+        -1);
 }
 
 public readonly record struct SmartRecuperateObservation(
@@ -166,14 +168,18 @@ public readonly record struct SmartRecuperateNativeAttemptDecision(
 /// client false is retried at the shared 50 ms cadence. Automatic consent
 /// freezes the currently configured latency-response budget when its exact
 /// health episode is created. Known local unavailability spends no retry budget. A
-/// successful request cannot repeat until its accepted cooldown has first been
-/// observed unavailable and then ready again.
+/// successful request cannot repeat before the verified one-second action
+/// recast has elapsed and the action is locally ready again. A sampled
+/// cooldown-unavailable edge remains useful evidence but is not required,
+/// because a single missed framework frame must never latch recovery forever.
 /// </summary>
 public static class SmartRecuperateRules
 {
     public const uint ActionId = 29_711;
     public const uint MinimumMissingHp = 16_000;
     public const uint MpCost = 2_000;
+    public const ushort RecastHundredMilliseconds = 10;
+    public const long RecastMilliseconds = RecastHundredMilliseconds * 100L;
 
     /// <summary>
     /// Higher-priority recovery yields only to exact live Guard. A provisional
@@ -321,6 +327,7 @@ public static class SmartRecuperateRules
                     Phase = SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable,
                     Retry = HeldActionRetryState.Initial,
                     LastNativeOutcome = outcome,
+                    AcceptedAtMilliseconds = nowMilliseconds,
                 }, nowMilliseconds),
                 SmartRecuperateDecisionReason.None,
                 false,
@@ -539,9 +546,8 @@ public static class SmartRecuperateRules
 
         // This is a passive anti-duplicate latch. Temporary configuration,
         // input, Guard, priority, resource, health, and key changes must not
-        // hide the accepted cooldown's unavailable edge. An unreadable or
-        // changed action identity therefore waits instead of spending the
-        // latch or guessing that the cooldown became unavailable.
+        // discard an already accepted action epoch. An unreadable or changed
+        // action identity therefore waits instead of spending the latch.
         if (observation.ResolvedActionId != intent.Value.ActionId)
         {
             return None(
@@ -549,30 +555,50 @@ public static class SmartRecuperateRules
                 SmartRecuperateDecisionReason.ResolvedActionInvalid);
         }
 
-        if (previous.Phase ==
-            SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable)
+        if (previous.AcceptedAtMilliseconds < 0 ||
+            observation.NowMilliseconds < previous.AcceptedAtMilliseconds)
         {
-            if (observation.ActionCooldownReady)
-            {
-                return None(
-                    Stamp(previous, observation.NowMilliseconds),
-                    SmartRecuperateDecisionReason.WaitingForAcceptedCooldownUnavailable);
-            }
+            return Cancelled(
+                SmartRecuperateState.Initial,
+                SmartRecuperateDecisionReason.ClockMovedBackwards);
+        }
 
+        var cooldownUnavailableObserved =
+            previous.Phase == SmartRecuperatePhase.WaitingForAcceptedCooldownReady ||
+            !observation.ActionCooldownReady;
+        var tracked = Stamp(previous with
+        {
+            Phase = cooldownUnavailableObserved
+                ? SmartRecuperatePhase.WaitingForAcceptedCooldownReady
+                : SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable,
+        }, observation.NowMilliseconds);
+        var verifiedRecastElapsed =
+            observation.NowMilliseconds - previous.AcceptedAtMilliseconds >=
+            RecastMilliseconds;
+        if (!verifiedRecastElapsed)
+        {
             return None(
-                Stamp(previous with
-                {
-                    Phase = SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
-                }, observation.NowMilliseconds),
-                SmartRecuperateDecisionReason.WaitingForAcceptedCooldownReady);
+                tracked,
+                cooldownUnavailableObserved
+                    ? SmartRecuperateDecisionReason.WaitingForAcceptedCooldownReady
+                    : SmartRecuperateDecisionReason.WaitingForAcceptedCooldownUnavailable);
         }
 
         if (!observation.ActionCooldownReady)
         {
             return None(
-                Stamp(previous, observation.NowMilliseconds),
+                tracked,
                 SmartRecuperateDecisionReason.WaitingForAcceptedCooldownReady);
         }
+
+        // IsActionOffCooldown may never expose its brief false edge for this
+        // one-second PvP action. Once the verified recast has elapsed, current
+        // positive readiness is sufficient. Normal HP, MP, Guard, Purify,
+        // cast, queue, and resource gates are still revalidated below.
+        var ready = tracked with
+        {
+            Phase = SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
+        };
 
         if (!intent.Value.IsAutomatic &&
             !observation.AutomaticModeEnabled &&
@@ -588,7 +614,7 @@ public static class SmartRecuperateRules
         // Continuous holds remain eligible through the input coordinator;
         // disabled/re-enabled or otherwise retired generations must wait for
         // an actual new key edge.
-        return TryCreateIntent(previous, observation);
+        return TryCreateIntent(ready, observation);
     }
 
     private static SmartRecuperateDecision TryCreateIntent(
@@ -654,7 +680,8 @@ public static class SmartRecuperateRules
             InitialRetryFor(intent),
             IncrementToken(token),
             observation.NowMilliseconds,
-            ClientActionAttemptOutcome.None);
+            ClientActionAttemptOutcome.None,
+            -1);
         return observation.NativeBoundaryReady
             ? Dispatch(buffered, intent)
             : Armed(buffered, SmartRecuperateDecisionReason.NativeBoundaryUnavailable);
@@ -726,6 +753,7 @@ public static class SmartRecuperateRules
                 Phase = SmartRecuperatePhase.SpentUntilKeyRelease,
                 Retry = HeldActionRetryState.Initial,
                 LastNativeOutcome = ClientActionAttemptOutcome.AcceptanceUnknown,
+                AcceptedAtMilliseconds = -1,
             }, Math.Max(0, nowMilliseconds)),
             SmartRecuperateDecisionReason.NativeAcceptanceUnknown,
             false,
@@ -743,6 +771,7 @@ public static class SmartRecuperateRules
                 Phase = SmartRecuperatePhase.SpentUntilKeyRelease,
                 Retry = HeldActionRetryState.Initial,
                 LastNativeOutcome = outcome,
+                AcceptedAtMilliseconds = -1,
             }, nowMilliseconds),
             reason);
 
@@ -755,7 +784,8 @@ public static class SmartRecuperateRules
             HeldActionRetryState.Initial,
             nextToken == 0 ? 1 : nextToken,
             nowMilliseconds,
-            ClientActionAttemptOutcome.None);
+            ClientActionAttemptOutcome.None,
+            -1);
 
     private static SmartRecuperateState Stamp(
         SmartRecuperateState state,

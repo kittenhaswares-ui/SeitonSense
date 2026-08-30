@@ -734,7 +734,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 573-test registry.
+# 574-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -754,11 +754,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 532 -or
+if ($staticIntegratedTestCount -ne 533 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 573 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 574 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -766,7 +766,7 @@ if ($staticIntegratedTestCount -ne 532 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 573-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 574-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -3309,6 +3309,10 @@ Assert-Literals $smartRecuperateRules @(
     'public const uint ActionId = 29_711;',
     'public const uint MinimumMissingHp = 16_000;',
     'public const uint MpCost = 2_000;',
+    'public const ushort RecastHundredMilliseconds = 10;',
+    'public const long RecastMilliseconds = RecastHundredMilliseconds * 100L;',
+    'long AcceptedAtMilliseconds)',
+    'AcceptedAtMilliseconds = nowMilliseconds,',
     'public static bool ShouldSuppressForOwnGuard(bool exactGuardActive)',
     '(ulong)maximumHp - currentHp >= MinimumMissingHp;',
     'currentMp >= MpCost;',
@@ -3342,6 +3346,7 @@ $smartRecuperateTestMethods = @(
     'FrozenIntentRequiresEveryTerminalGate',
     'CleanFalseRetriesAreBounded',
     'SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat',
+    'AcceptedCooldownMissedUnavailableEdgeFallsBackAtVerifiedRecast',
     'PurifyPriorityNeverGetsStarved',
     'AutomaticModeFreezesOneKeylessIntent',
     'AutomaticPreNativeSoftWaitRetainsHealthEpisodeAndRetriesNextFrame',
@@ -3353,9 +3358,9 @@ foreach ($method in $smartRecuperateTestMethods) {
     Assert-Literals $smartRecuperateSelfTests @("public static void $method()") "Smart Recuperate self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("SmartRecuperateSelfTests.$method") "Smart Recuperate test registration $method"
 }
-if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 12 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 12) {
-    throw 'All twelve held/automatic Smart Recuperate identity, threshold, retry, pre-native soft-wait, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
+if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 13 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 13) {
+    throw 'All thirteen held/automatic Smart Recuperate identity, threshold, retry, pre-native soft-wait, cooldown-epoch, missed-edge recovery, and Purify-priority tests must remain registered exactly once.'
 }
 Assert-Literals $smartRecuperateSelfTests @(
     'SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: false)',
@@ -3395,7 +3400,7 @@ Assert-Literals $smartRecuperateProbe @(
     'ClientActionAttemptBoundary.Capture(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'intent.LocalPlayer.GameObjectId,',
-    'Recuperate client-accepted; awaiting cooldown epoch',
+    'Recuperate client-accepted; awaiting verified 1.0 s recast',
     'Recuperate client-rejected; exact intent retained for bounded retry',
     'Recuperate waiting without spending retry budget'
 ) 'Shared-policy Smart Recuperate runtime'
@@ -3876,7 +3881,7 @@ Assert-Literals $smartKardiaMetadata @(
     'recuperate.ActionCategory.RowId == 4',
     'recuperate.Range == 0',
     'recuperate.EffectRange == 0',
-    'recuperate.Recast100ms == 10',
+    'recuperate.Recast100ms == SmartRecuperateRules.RecastHundredMilliseconds',
     'recuperate.PrimaryCostType == 51',
     'recuperate.PrimaryCostValue == EnemyCombatConstants.RecuperateMpCost',
     'recuperate.CooldownGroup == 29',
@@ -4433,8 +4438,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 532) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 532-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 533) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 533-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -10532,17 +10537,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.2</Version>',
-    '<AssemblyVersion>0.42.0.2</AssemblyVersion>',
-    '<FileVersion>0.42.0.2</FileVersion>'
-) 'v0.42.0.2 project version'
+    '<Version>0.42.0.3</Version>',
+    '<AssemblyVersion>0.42.0.3</AssemblyVersion>',
+    '<FileVersion>0.42.0.3</FileVersion>'
+) 'v0.42.0.3 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.2";',
-    'Instant Leave now keeps its exact one-shot intent through the brief BetweenAreas frame seen on the result boundary, then leaves as soon as the same public-CC context is stable and native-ready.',
-    'SAM held Soten, Mineuchi, and Zantetsuken now use their exact current action metadata. A cancelled pre-native Zantetsuken freeze no longer consumes the still-held key.',
-    'Smart Action now smart-targets and freezes Ogi Namikiri and Tendo Setsugekka. Every other cast keeps the visible-target anti-spin path; Kaeshi follow-ups remain ordinary instant actions.',
-    'Ogi and Tendo keep full Chiten, Guard, Cover, and LB protection checks. All 573 Core tests and release gates pass.'
-) 'v0.42.0.2 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.3";',
+    'Auto Recuperate can no longer become permanently stuck after one accepted heal when the client''s brief cooldown-unavailable frame is missed.',
+    'A second heal remains blocked for Recuperate''s exact verified 1.0-second recast, then may rearm from current positive readiness without requiring the missing frame.',
+    'HP, MP, Purify priority, Guard, Hidden, cast, queue, resource, identity, and PvP-context checks still run before every native request.',
+    'Configuration schema remains 48. All 574 Core tests and release gates pass; live current-client confirmation remains pending.'
+) 'v0.42.0.3 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10563,20 +10568,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.2 plugin manifest metadata'
+) 'v0.42.0.3 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.2"',
-    'Fixed the result-boundary race where Instant Leave armed and was cancelled one millisecond later by a transient BetweenAreas frame.',
-    'Fixed SAM Soten, Mineuchi, and Zantetsuken being disabled by one incorrect shared metadata tuple',
-    'Smart Action now ranks and freezes a protection-safe target for the reviewed Ogi Namikiri and Tendo Setsugekka casts;',
-    'all other casts retain the visible-target anti-spin path and Kaeshi follow-ups remain ordinary instant actions.',
-    'Configuration schema 48; all 573 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.42.0.3"',
+    'Fixed Auto Recuperate becoming permanently stuck after one accepted heal when the client''s brief cooldown-unavailable frame was missed.',
+    'no second request can occur before Recuperate''s verified 1.0-second recast',
+    'current positive readiness may safely open the next fully revalidated heal episode afterward without requiring the missing negative frame.',
+    'HP, MP, Purify priority, Guard, NIN Hidden, cast, queue, resource, identity, and PvP-context gates remain exact.',
+    'Configuration schema 48; all 574 Core tests and release gates pass.',
     'Live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.2 custom-repository metadata'
+) 'v0.42.0.3 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10644,6 +10649,7 @@ Assert-Literals $normalizedPrivacy @(
     'The relevant keyless Purify `29056` or Recuperate `29711` intent must already be otherwise ready.',
     'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
+    'Acceptance starts an exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is retained when visible, but after that floor current positive readiness may rearm without requiring the brief negative frame, preventing an indefinite latch.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave setting without changing local W/L capture or any action-helper opt-in.',
     'while retaining the separate automatic basic-shot cast-cancel permission as default-off for every upgrade and Reset Defaults',
     'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
@@ -10677,9 +10683,11 @@ Assert-Literals $normalizedPrivacy @(
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.42.0.2 instant-leave lifecycle, SAM cast targeting, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
+) 'v0.42.0.3 recovery, instant-leave lifecycle, SAM cast targeting, warning, experimental-LB, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.2 fixes the observed instant- leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
+    'Version 0.42.0.3 fixes an Auto Recuperate reliability latch: an accepted heal can no longer wait forever when the client does not expose, or the framework misses, the brief cooldown-unavailable frame.',
+    'The exact verified 1.0-second recast remains an anti-duplicate floor; after it elapses, current positive readiness may open the next fully revalidated heal episode.',
+    'Version 0.42.0.2 fixes the observed instant-leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
     'It also repairs distinct current metadata for held SAM Soten, Mineuchi, and Zantetsuken, and makes the reviewed Ogi Namikiri and Tendo Setsugekka casts use Smart Action''s ranked, frozen target.',
     'Every other cast keeps v0.42.0.1''s visible-target anti-spin behavior; instant actions retain smart targeting.',
     '**Optional instant public-CC exit:** after one complete public 5v5 result with the exact local Content ID is confirmed',
@@ -10731,6 +10739,7 @@ Assert-Literals $normalizedReadme @(
     'Automatic Purify does not inherit the generic held-helper cast-cancel toggle.',
     'Only the separate default-off automatic permission may request one cancellation, and only for exact metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 / Blast Charge `29402`',
     'Automatic Recuperate normally waits for casting to end. Only the same separate default-off automatic permission described above may cancel an exact verified BRD Powerful Shot or MCH Blast Charge;',
+    'Acceptance starts the exact metadata-verified 1.0-second recast floor. A sampled cooldown-unavailable edge is retained when present, but after that floor current positive readiness may rearm even if the brief negative frame was missed, so one accepted heal cannot latch recovery forever.',
     'Automatic Purify and Automatic Recuperate never inherit the generic held-helper cast-cancel toggle.',
     'Their sole cancellation route is the separate schema-46 default-off permission.',
     'Cross-job pairs, missing or drifted metadata, changed cast signals, instant transformations such as MCH Blazing Shot `41468`, and every other uncertainty wait for a natural cast end.',
@@ -10772,7 +10781,7 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
-    'For the current source, the exact 573-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
+    'For the current source, the exact 574-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -10784,8 +10793,13 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.2 current README release and safety contract'
+) 'v0.42.0.3 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.3',
+    'Fixed Auto Recuperate becoming permanently stuck after an accepted heal when `IsActionOffCooldown(29711)` did not expose, or the framework missed, its brief false frame.',
+    'The accepted action time is now frozen independently and current positive readiness may open the next heal episode after Recuperate''s exact verified 1.0-second recast, even without that negative edge.',
+    'no second request is possible before the full recast, an actually unavailable action continues waiting',
+    'Configuration schema remains `48`. Source build, all `574` Core tests, safety, package parity, and release verification are automated.',
     '## 0.42.0.2',
     'Fixed the observed instant-leave result-boundary race.',
     'That flag now keeps the same one-shot intent waiting; it can request leave once the same public-CC territory and local identity are stable again.',
@@ -10886,7 +10900,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.2 release notes and retained v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.3 release notes and retained v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12395,4 +12409,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 573-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, preserves its one-shot intent through transient result-boundary BetweenAreas telemetry, and still reserves exactly one non-forced native request inside a thirty-second frozen context. SAM Soten, Mineuchi, and Zantetsuken pin their distinct current metadata; only a real Zantetsuken native attempt spends the held generation. Metadata-verified Ogi Namikiri and Tendo Setsugekka may retain Smart Action's frozen ranked target, while every other cast, Near Assist, and Near Help retain the visible-target anti-spin path. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.3 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 574-test Core registry. Auto Recuperate freezes the accepted timestamp, enforces its metadata-verified one-second recast, and may rearm from current positive readiness after that floor without requiring a sampled cooldown-unavailable frame. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, and PvP-context gate remains exact. Default-off instant public-CC leave retains its one-shot result intent and single non-forced native request. SAM Soten, Mineuchi, Zantetsuken, Ogi Namikiri, and Tendo Setsugekka retain their exact current metadata and frozen-target safety. Exact Chiten and SMN warnings remain bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

@@ -11,6 +11,8 @@ internal static class SmartRecuperateSelfTests
         Equal(29_711u, SmartRecuperateRules.ActionId, "PvP Recuperate action");
         Equal(16_000u, SmartRecuperateRules.MinimumMissingHp, "missing HP threshold");
         Equal(2_000u, SmartRecuperateRules.MpCost, "exact MP cost");
+        Equal((ushort)10, SmartRecuperateRules.RecastHundredMilliseconds, "verified recast row");
+        Equal(1_000L, SmartRecuperateRules.RecastMilliseconds, "accepted recast latch");
         False(
             SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: false),
             "a provisional Guard request without exact status cannot suppress Recuperate");
@@ -222,23 +224,75 @@ internal static class SmartRecuperateSelfTests
             {
                 ActionLocallyReady = false,
                 ActionCooldownReady = false,
-                NowMilliseconds = 1_003,
+                NowMilliseconds = 1_500,
             });
         Equal(
             SmartRecuperatePhase.WaitingForAcceptedCooldownReady,
             unavailable.NextState.Phase,
             "accepted cooldown unavailable edge observed");
 
-        var second = SmartRecuperateRules.Observe(
+        var readyBeforeRecast = SmartRecuperateRules.Observe(
             unavailable.NextState,
             Observation() with
             {
                 HeldGameplayKeyCode = 66,
-                NowMilliseconds = 1_004,
+                NowMilliseconds = 2_000,
+            });
+        False(readyBeforeRecast.ShouldDispatch, "observed cooldown cannot bypass exact recast");
+
+        var second = SmartRecuperateRules.Observe(
+            readyBeforeRecast.NextState,
+            Observation() with
+            {
+                HeldGameplayKeyCode = 66,
+                NowMilliseconds = 2_001,
             });
         Dispatch(second, "same hold may authorize the distinct ready cooldown epoch");
         Equal(2UL, second.Intent!.Value.HealthEventToken, "distinct event token");
         Equal(66, second.Intent.Value.FrozenKeyCode, "new cooldown epoch freezes the current eligible key");
+    }
+
+    public static void AcceptedCooldownMissedUnavailableEdgeFallsBackAtVerifiedRecast()
+    {
+        var first = Observe(AutomaticObservation());
+        var accepted = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            first.NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            1_000);
+        Equal(1_000L, accepted.NextState.AcceptedAtMilliseconds, "acceptance time frozen separately");
+
+        var propagation = SmartRecuperateRules.Observe(
+            accepted.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_001 });
+        None(
+            propagation,
+            SmartRecuperateDecisionReason.WaitingForAcceptedCooldownUnavailable,
+            "ready propagation frame cannot duplicate acceptance");
+        False(propagation.InputClaimed, "passive recast wait leaves lower helpers free");
+
+        var lastEarlyFrame = SmartRecuperateRules.Observe(
+            propagation.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_999 });
+        None(
+            lastEarlyFrame,
+            SmartRecuperateDecisionReason.WaitingForAcceptedCooldownUnavailable,
+            "999 ms remains inside verified recast");
+
+        var recovered = SmartRecuperateRules.Observe(
+            lastEarlyFrame.NextState,
+            AutomaticObservation() with { NowMilliseconds = 2_000 });
+        Dispatch(recovered, "current readiness rearms at exact recast without a false edge");
+        Equal(2UL, recovered.Intent!.Value.HealthEventToken, "fallback creates one new health event");
+        Equal(-1L, recovered.NextState.AcceptedAtMilliseconds, "new intent clears accepted timestamp");
+
+        var acceptedNearClockEnd = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            Observe(AutomaticObservation() with { NowMilliseconds = long.MaxValue }).NextState,
+            ClientActionAttemptOutcome.ClientAccepted,
+            long.MaxValue);
+        var clockEnd = SmartRecuperateRules.Observe(
+            acceptedNearClockEnd.NextState,
+            AutomaticObservation() with { NowMilliseconds = long.MaxValue });
+        False(clockEnd.ShouldDispatch, "accepted recast cannot overflow into immediate eligibility");
     }
 
     public static void PurifyPriorityNeverGetsStarved()
@@ -556,7 +610,7 @@ internal static class SmartRecuperateSelfTests
             {
                 ActionHelpersSuppressedByGuard = true,
                 HigherPriorityClaimed = true,
-                NowMilliseconds = 1_002,
+                NowMilliseconds = 2_000,
             });
         None(
             readyButGuarded,
@@ -569,7 +623,7 @@ internal static class SmartRecuperateSelfTests
 
         var second = SmartRecuperateRules.Observe(
             readyButGuarded.NextState,
-            AutomaticObservation() with { NowMilliseconds = 1_003 });
+            AutomaticObservation() with { NowMilliseconds = 2_001 });
         Dispatch(second, "next automatic action starts only after the real cooldown epoch");
         Equal(2UL, second.Intent!.Value.HealthEventToken, "accepted cooldown creates one later event");
 
@@ -596,7 +650,7 @@ internal static class SmartRecuperateSelfTests
             Observation() with
             {
                 FrozenKeyStillDown = false,
-                NowMilliseconds = 2_002,
+                NowMilliseconds = 3_000,
             });
         None(
             heldReadyAfterRelease,
@@ -633,7 +687,7 @@ internal static class SmartRecuperateSelfTests
                 HeldGameplayKeyEligible = false,
                 HeldGameplayKeyCode = 0,
                 FrozenKeyStillDown = true,
-                NowMilliseconds = 3_002,
+                NowMilliseconds = 4_000,
             });
         None(
             staleReadyAfterReenable,
@@ -651,7 +705,7 @@ internal static class SmartRecuperateSelfTests
                 HeldGameplayKeyEligible = false,
                 HeldGameplayKeyCode = 0,
                 FrozenKeyStillDown = false,
-                NowMilliseconds = 3_003,
+                NowMilliseconds = 4_001,
             });
         None(
             staleReleased,
@@ -664,7 +718,7 @@ internal static class SmartRecuperateSelfTests
             Observation() with
             {
                 HeldGameplayKeyCode = 66,
-                NowMilliseconds = 3_004,
+                NowMilliseconds = 4_002,
             });
         Dispatch(freshAfterRelease, "a genuinely eligible new generation may dispatch");
         Equal(66, freshAfterRelease.Intent!.Value.FrozenKeyCode, "new generation identity frozen");

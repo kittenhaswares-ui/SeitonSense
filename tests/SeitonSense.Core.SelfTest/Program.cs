@@ -126,6 +126,7 @@ var tests = new (string Name, Action Run)[]
     ("Smart Recuperate frozen intent is exact", SmartRecuperateSelfTests.FrozenIntentRequiresEveryTerminalGate),
     ("Smart Recuperate clean false retries are bounded", SmartRecuperateSelfTests.CleanFalseRetriesAreBounded),
     ("Smart Recuperate repeats only after an accepted cooldown epoch", SmartRecuperateSelfTests.SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat),
+    ("Smart Recuperate recovers when the cooldown false edge is missed", SmartRecuperateSelfTests.AcceptedCooldownMissedUnavailableEdgeFallsBackAtVerifiedRecast),
     ("Smart Recuperate never starves Purify", SmartRecuperateSelfTests.PurifyPriorityNeverGetsStarved),
     ("automatic Recuperate freezes one keyless intent", SmartRecuperateSelfTests.AutomaticModeFreezesOneKeylessIntent),
     ("automatic Recuperate retains pre-native soft waits", SmartRecuperateSelfTests.AutomaticPreNativeSoftWaitRetainsHealthEpisodeAndRetriesNextFrame),

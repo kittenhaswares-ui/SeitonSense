@@ -371,8 +371,9 @@ internal sealed partial class SettingsWindow
             "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms up " +
             "to the budget frozen from the current PvP latency-response setting (eight calls by default). Pre-native " +
             "validation drift and temporary readiness/MP, higher-priority, or Guard states wait without spending " +
-            "a call; dropping below the HP threshold cancels the current intent. Acceptance ends that epoch, and a " +
-            "later one requires an observed cooldown unavailable-to-ready transition. NIN Shukuchi Hidden suppresses " +
+            "a call; dropping below the HP threshold cancels the current intent. Acceptance starts an exact verified " +
+            "1.0-second anti-duplicate recast; after it elapses, current positive readiness may rearm even if the brief " +
+            "cooldown-unavailable frame was missed. NIN Shukuchi Hidden suppresses " +
             "both modes. Retry exhaustion or an ambiguous outcome remains latched until automatic danger ends or the " +
             "held mode's frozen key is released.");
         ImGui.PopTextWrapPos();

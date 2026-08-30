@@ -698,7 +698,7 @@ internal sealed unsafe class SmartRecuperateProbe
         outcome switch
         {
             ClientActionAttemptOutcome.ClientAccepted =>
-                "Recuperate client-accepted; awaiting cooldown epoch",
+                "Recuperate client-accepted; awaiting verified 1.0 s recast",
             ClientActionAttemptOutcome.ClientRejected when completion.RetryScheduled =>
                 "Recuperate client-rejected; exact intent retained for bounded retry",
             ClientActionAttemptOutcome.ClientRejected =>
