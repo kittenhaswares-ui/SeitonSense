@@ -190,8 +190,12 @@ internal sealed unsafe class HeldCastCancellationService
                     nativeStatus = HeldCastCancellationNativeStatus.NativeBoundaryUnavailable;
                     nativeFaultCount++;
                 }
-                else if (finalOwnGuardActiveOrPropagating(
-                             request!.Value.LocalPlayer))
+                else if (request!.Value.HelperKind is
+                             HeldCastCancellationHelperKind.Purify or
+                             HeldCastCancellationHelperKind.SmartRecuperate
+                         ? DefensiveUtilityProbe.HasActiveGuard(localPlayer)
+                         : finalOwnGuardActiveOrPropagating(
+                             request.Value.LocalPlayer))
                 {
                     nativeStatus =
                         HeldCastCancellationNativeStatus.BlockedByOwnGuard;

@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.41.0.0
+
+- Automatic Purify and Recuperate now retain their exact frozen episode through
+  temporary native unavailability instead of retiring after one unlucky frame.
+  Their bounded retry/wait path rechecks the original status, HP/MP, context,
+  readiness, queue, cast, and safety gates before every request; Purify keeps
+  first priority and Recuperate follows without starving the remaining helpers.
+- The default-off high-pressure Stun Auto-Guard path is now keyless. It waits
+  for the exact Purify/Resilience transition, freezes one two-second lease, and
+  allows one readiness-proven retry inside that original lease. A client return
+  is provisional: the card, sound, action suppression, and two-second Guard-
+  reuse protection arm only after exact live Guard `3054`/`3673` confirmation.
+  Clean rejection retracts the provisional generation, so it cannot create a
+  phantom Guard, block manual Guard, or suppress higher-priority recovery.
+- Added exact enemy danger warnings for SAM Chiten status `1240` and SMN
+  Bahamut/Phoenix LB action/icon/status pairs. Chiten receives a large
+  nameplate emblem/countdown and `DO NOT HIT THE SAMURAI` card; both warning
+  families reuse the bounded danger lane and one-shot built-in sound.
+- Added experimental opponent LB-ready bars above the pressure display. This
+  read-only option is **off by default** pending current-client layout testing;
+  when enabled it publishes only a complete stable `S1`-`S5` native GaugeBar
+  set that matches the same-frame local gauge scale, and hides all bars on any
+  identity, hierarchy, stability, freshness, or scale uncertainty.
+- Configuration schema is `47`. Source build, all `562` Core tests, safety,
+  package parity, and release verification are automated. Current-client action
+  acceptance, exact timing, warning placement/sound, and the experimental
+  opponent-gauge layout remain live in-game validation boundaries.
+
 ## 0.40.0.2
 
 - Fixed the intermittent ranged **Smart Action** no-op where `/smartaction`

@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 46;
+    public int Version { get; set; } = 47;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -129,6 +129,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool WarnWildfire { get; set; } = true;
     public bool WarnDeathWarrant { get; set; } = true;
     public bool WarnMarksmanSpite { get; set; } = true;
+    public bool WarnSummonerLimitBreak { get; set; } = true;
+    public bool WarnEnemyChiten { get; set; } = true;
     public bool WarnPurifiableCrowdControl { get; set; } = true;
     public float PersonalWarningScreenX { get; set; } = 0.5f;
     public float PersonalWarningScreenY { get; set; } = 0.34f;
@@ -280,6 +282,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PressureShowBackground { get; set; } = true;
     public bool PressureShowJobIcons { get; set; } = true;
     public bool PressureShowEnemySlots { get; set; } = true;
+    public bool ShowOpponentLimitBreakBars { get; set; }
     public bool PressureUseThreatColors { get; set; } = true;
     public bool PressureIncludeWolvesDen { get; set; }
     public float PressureNumberPixelSize { get; set; } = 80f;
@@ -305,7 +308,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 46)
+        if (Version >= 47)
         {
             if (repaired) Save();
             return;
@@ -793,7 +796,17 @@ public sealed class PluginConfiguration : IPluginConfiguration
             AllowAutomaticRecoveryToCancelBasicShotCasts = false;
         }
 
-        Version = 46;
+        if (Version < 47)
+        {
+            // Status/action warnings are read-only and safe opt-out additions.
+            // The native GaugeBar observer remains experimental until its
+            // current-client node semantics are confirmed live.
+            WarnSummonerLimitBreak = true;
+            WarnEnemyChiten = true;
+            ShowOpponentLimitBreakBars = false;
+        }
+
+        Version = 47;
         ClampSettings();
         Save();
     }
@@ -802,7 +815,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 46;
+        Version = 47;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -885,6 +898,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         WarnWildfire = true;
         WarnDeathWarrant = true;
         WarnMarksmanSpite = true;
+        WarnSummonerLimitBreak = true;
+        WarnEnemyChiten = true;
         WarnPurifiableCrowdControl = true;
         PersonalWarningScreenX = 0.5f;
         PersonalWarningScreenY = 0.34f;
@@ -994,6 +1009,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PressureShowBackground = true;
         PressureShowJobIcons = true;
         PressureShowEnemySlots = true;
+        ShowOpponentLimitBreakBars = false;
         PressureUseThreatColors = true;
         PressureIncludeWolvesDen = false;
         PressureNumberPixelSize = 80f;

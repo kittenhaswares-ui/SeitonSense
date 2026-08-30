@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.40.0.2",
-    "Changelog": "Fixed intermittent ranged Smart Action no-op behavior. Arming no longer requires a live S1 carrier or selected target; exact S1-S5 selection happens when the harmful action arrives. Direct single-target attacks no longer require unrelated hostile object-table completeness, while exact target protection, native range/line of sight, frozen-target revalidation, and complete target-circle/unknown-AoE geometry remain fail-closed. Configuration schema 46; all 553 Core tests and release gates pass. Current-client action acceptance, especially dead S1 with no selected target, remains live validation.",
+    "AssemblyVersion": "0.41.0.0",
+    "Changelog": "Automatic Purify and Recuperate now retain exact episodes through temporary native blocks and use bounded revalidated retries. High-pressure Stun Auto-Guard is keyless, permits one readiness-proven retry, and arms its card, sound, and input protection only after exact live Guard confirmation, preventing phantom manual-Guard blocking. Added exact SAM Chiten and SMN Bahamut/Phoenix danger warnings. Experimental opponent LB-ready bars are available above the pressure display but remain off by default pending live layout validation. Configuration schema 47; all 562 Core tests and release gates pass. Current-client action timing, warning presentation, and opponent-gauge layout remain live validation.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788069432"
+    "LastUpdate": "1788075843"
   }
 ]

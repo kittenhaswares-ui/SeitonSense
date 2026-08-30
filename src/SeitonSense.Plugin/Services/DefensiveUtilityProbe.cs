@@ -28,6 +28,14 @@ internal readonly record struct AcceptedAutoGuardianEpisode(
         PartySlot is >= 1 and <= 8;
 }
 
+internal readonly record struct GuardUseAttemptResult(
+    ClientActionAttemptOutcome Outcome,
+    long GenerationBeforeCall)
+{
+    internal static GuardUseAttemptResult NotInvoked =>
+        new(ClientActionAttemptOutcome.NotInvoked, -1);
+}
+
 internal sealed record DefensiveUtilityProbeSnapshot(
     bool Active,
     DefensiveUtilityActionKind Action,
@@ -118,10 +126,11 @@ internal sealed class DefensiveUtilityProbe
     private GuardPropagationState guardPropagationState = GuardPropagationState.Initial;
     private GuardianTriggerPopup? guardianPopup;
     private AutoGuardTriggerPopup? autoGuardPopup;
+    private AutoGuardConfirmationState autoGuardConfirmationState =
+        AutoGuardConfirmationState.Initial;
     private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;
     private FrozenGuardRetry? frozenGuardRetry;
     private FrozenGuardianRetry? frozenGuardianRetry;
-    private VirtualKey terminalGuardKey = VirtualKey.NO_KEY;
     private VirtualKey terminalGuardianKey = VirtualKey.NO_KEY;
     private long frozenIntentEpochToken;
     private long guardianEpisodeToken;
@@ -166,10 +175,10 @@ internal sealed class DefensiveUtilityProbe
     }
 
     /// <summary>
-    /// Generic defensive pass. This owns only the verified post-Purify Guard
-    /// follow-up. A same-frame prioritized Guardian pass can be supplied so
-    /// the public diagnostic snapshot still represents both passes after the
-    /// scheduler runs Guardian before generic defense.
+    /// Generic defensive pass. This owns only the verified, keyless
+    /// high-pressure Stun Purify -> confirmed Resilience -> Guard follow-up. A
+    /// client-true Guard return remains provisional until exact live Guard is
+    /// visible; only that confirmation may arm protection and presentation.
     /// </summary>
     internal unsafe DefensiveUtilityProbeSnapshot ObserveGuard(
         IPlayerCharacter? localPlayer,
@@ -195,8 +204,6 @@ internal sealed class DefensiveUtilityProbe
         else if (!guardConfigurationEnabled || !isCrystallineConflict)
             ResetGuardOpportunityRuntime();
 
-        ReleaseTerminalKeyWhenUp(inputFrame, ref terminalGuardKey);
-
         var localIdentityValid = HasValidLocalPlayer(localPlayer);
         var highPressure = DefensiveUtilityRules.IsHighPressure(
             pressureKnown,
@@ -216,10 +223,11 @@ internal sealed class DefensiveUtilityProbe
         var freshKey = inputFrame.FreshGameplayKeyPressed
             ? input.FreshGameplayKey
             : VirtualKey.NO_KEY;
+        // Retain physical-key fields for shared diagnostics only. The generic
+        // Auto-Guard path no longer consumes either one as consent.
         var heldKey = allowHeldGameplayKey && inputFrame.HeldGameplayKeyEligible
             ? input.HeldGameplayKey
             : VirtualKey.NO_KEY;
-        var inputEligible = freshKey != VirtualKey.NO_KEY || heldKey != VirtualKey.NO_KEY;
         var action = DefensiveUtilityActionKind.None;
         var trigger = DefensiveUtilityTrigger.None;
         var inputClaimed = false;
@@ -227,6 +235,7 @@ internal sealed class DefensiveUtilityProbe
         var attempted = false;
         var accepted = false;
         var autoGuardProtectionArmed = false;
+        var autoGuardConfirmed = false;
         var targetGameObjectId = 0UL;
         var targetEntityId = 0U;
         var lastEvent = DescribeWaitingState(
@@ -241,29 +250,112 @@ internal sealed class DefensiveUtilityProbe
         var canDispatch = guardConfigurationEnabled &&
                           isCrystallineConflict &&
                           localIdentityValid &&
-                          input.ProbeSucceeded &&
-                          !input.IsTextInputActive &&
-                          inputEligible &&
                           !guardActive &&
                           !higherPriorityClaimed;
-        var selectedKey = heldKey != VirtualKey.NO_KEY ? heldKey : freshKey;
         var guardActionSpecificallyReady = guardMetadataVerified &&
                                            nearAssist.CanProtectAutomaticGuard &&
                                            IsActionSpecificallyReady(
                                                EnemyCombatConstants.GuardActionId);
-        if (frozenGuardRetry is { } frozenGuard)
+        var currentIdentity = localIdentityValid
+            ? new TargetPressureActorIdentity(
+                localPlayer!.GameObjectId,
+                localPlayer.EntityId)
+            : default;
+
+        if (autoGuardConfirmationState.IsPending)
         {
             action = DefensiveUtilityActionKind.Guard;
             trigger = DefensiveUtilityTrigger.PostPurifyHighPressureStun;
-            var currentIdentity = localIdentityValid
-                ? new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId)
-                : default;
+            var exactGuardActive = HasActiveGuard(localPlayer);
+            var retryReadiness = higherPriorityClaimed || inputFrame.IsConsumed
+                ? AutoGuardRetryReadiness.NativeBoundaryBusy
+                : ObserveGuardRetryReadiness(localPlayer);
+            var confirmation = AutoGuardConfirmationRules.Observe(
+                autoGuardConfirmationState,
+                new AutoGuardConfirmationObservation(
+                    guardConfigurationEnabled && isCrystallineConflict,
+                    nearAssist.CurrentTerritoryId,
+                    currentIdentity,
+                    localIdentityValid,
+                    exactGuardActive,
+                    retryReadiness,
+                    nowMilliseconds,
+                    hardReset));
+
+            if (confirmation.Confirmed)
+            {
+                autoGuardProtectionArmed = nearAssist.TryArmConfirmedAutoGuardProtection(
+                    localPlayer!.GameObjectId,
+                    localPlayer.EntityId,
+                    autoGuardConfirmationState.GenerationBeforeCall);
+                autoGuardConfirmed = autoGuardProtectionArmed;
+                lastEvent = autoGuardProtectionArmed
+                    ? "Exact automatic Guard status confirmed and protected"
+                    : "Exact Guard appeared without matching automatic ownership";
+                autoGuardConfirmationState = AutoGuardConfirmationState.Initial;
+                frozenGuardRetry = null;
+                awaitingPostPurifyConfirmation = false;
+                postPurifyGuardExpiresAt = -1;
+            }
+            else if (confirmation.ShouldRetry &&
+                     !higherPriorityClaimed &&
+                     !inputFrame.IsConsumed)
+            {
+                inputClaimed = true;
+                inputFrame.Consume();
+                var retryResult = TryUseGuardOnce(localPlayer!);
+                attempted = retryResult.Outcome is not
+                    (ClientActionAttemptOutcome.NotInvoked or
+                     ClientActionAttemptOutcome.SoftUnavailable);
+                accepted = retryResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                if (accepted)
+                {
+                    autoGuardConfirmationState = AutoGuardConfirmationRules.ArmProvisional(
+                        retryResult.GenerationBeforeCall,
+                        nearAssist.CurrentTerritoryId,
+                        currentIdentity,
+                        Math.Max(nowMilliseconds, Environment.TickCount64),
+                        autoGuardConfirmationState.OpportunityExpiresAtMilliseconds,
+                        confirmationRetrySpent: true);
+                    lastEvent = "Guard confirmation retry accepted provisionally; waiting for exact status";
+                }
+                else if (AutoGuardConfirmationRules.ShouldRetainUnspentRetry(
+                             retryResult.Outcome))
+                {
+                    // No native boundary was crossed. Keep the original
+                    // confirmation lease and its unspent single retry so one
+                    // queue/animation-lock race cannot lose Auto-Guard.
+                    autoGuardConfirmationState = confirmation.NextState;
+                    lastEvent = "Guard confirmation retry waiting for native boundary";
+                }
+                else
+                {
+                    autoGuardConfirmationState = AutoGuardConfirmationState.Initial;
+                    awaitingPostPurifyConfirmation = false;
+                    postPurifyGuardExpiresAt = -1;
+                    lastEvent = $"Guard confirmation retry retired ({retryResult.Outcome})";
+                }
+            }
+            else
+            {
+                autoGuardConfirmationState = confirmation.NextState;
+                lastEvent = confirmation.NextState.IsPending
+                    ? $"Provisional Guard waiting ({confirmation.Reason})"
+                    : $"Provisional Guard retired ({confirmation.Reason})";
+                if (!confirmation.NextState.IsPending)
+                {
+                    awaitingPostPurifyConfirmation = false;
+                    postPurifyGuardExpiresAt = -1;
+                }
+            }
+        }
+        else if (frozenGuardRetry is { } frozenGuard)
+        {
+            action = DefensiveUtilityActionKind.Guard;
+            trigger = DefensiveUtilityTrigger.PostPurifyHighPressureStun;
             var exactRetryContext = guardConfigurationEnabled &&
                                     isCrystallineConflict &&
                                     currentIdentity == frozenGuard.LocalPlayer &&
-                                    input.ProbeSucceeded &&
-                                    !input.IsTextInputActive &&
-                                    inputFrame.IsGameplayKeyPhysicallyDown(frozenGuard.HeldKey) &&
                                     !HasActiveGuard(localPlayer) &&
                                     frozenGuard.ExpiresAtMilliseconds == postPurifyGuardExpiresAt &&
                                     nowMilliseconds < frozenGuard.ExpiresAtMilliseconds;
@@ -272,7 +364,7 @@ internal sealed class DefensiveUtilityProbe
                 frozenGuardRetry = null;
                 awaitingPostPurifyConfirmation = false;
                 postPurifyGuardExpiresAt = -1;
-                lastEvent = "Frozen post-Purify Guard retry cancelled by exact context/key drift";
+                lastEvent = "Frozen post-Purify Guard retry cancelled by exact context drift";
             }
             else if (!higherPriorityClaimed &&
                      !inputFrame.IsConsumed &&
@@ -287,13 +379,7 @@ internal sealed class DefensiveUtilityProbe
                 if (!IsNativeBoundaryNearQueueable(localPlayer!))
                 {
                     frozenGuardRetry = frozenGuard;
-                    castCancellationRequest = CreateGuardCastCancellationRequest(
-                        localPlayer!,
-                        frozenGuard,
-                        guardActionSpecificallyReady);
-                    lastEvent = castCancellationRequest is not null
-                        ? "Frozen post-Purify Guard waiting for active cast cancellation"
-                        : "Frozen post-Purify Guard waiting for global native boundary";
+                    lastEvent = "Frozen post-Purify Guard waiting for global native boundary";
                 }
                 else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
                              frozenGuard.Retry,
@@ -303,30 +389,22 @@ internal sealed class DefensiveUtilityProbe
                 }
                 else
                 {
-                    var outcome = TryUseGuardOnce(
-                        localPlayer!,
-                        out attempted,
-                        out autoGuardProtectionArmed);
-                    accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
-                    CompleteGuardAttempt(frozenGuard, outcome, nowMilliseconds);
-                    if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
-                    {
-                        castCancellationRequest = CreateGuardCastCancellationRequest(
-                            localPlayer!,
-                            frozenGuard,
-                            guardActionSpecificallyReady);
-                    }
+                    var attemptResult = TryUseGuardOnce(localPlayer!);
+                    attempted = attemptResult.Outcome is not
+                        (ClientActionAttemptOutcome.NotInvoked or
+                         ClientActionAttemptOutcome.SoftUnavailable);
+                    accepted = attemptResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                    CompleteGuardAttempt(frozenGuard, attemptResult, nowMilliseconds);
 
                     lastEvent = DescribeAttempt(
                         "Guard retry",
                         frozenGuard.Retry.NativeAttemptCount + 1,
                         frozenGuard.Retry,
-                        outcome);
+                        attemptResult.Outcome);
                 }
             }
         }
-        else if (terminalGuardKey == VirtualKey.NO_KEY &&
-            canDispatch &&
+        else if (canDispatch &&
             DefensiveUtilityRules.CanDispatchPostPurifyGuard(
                 awaitingPostPurifyConfirmation,
                 resilienceActive,
@@ -342,44 +420,31 @@ internal sealed class DefensiveUtilityProbe
             var frozen = new FrozenGuardRetry(
                 new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId),
                 postPurifyGuardExpiresAt,
-                selectedKey,
-                NextFrozenIntentEpochToken(),
                 HeldActionRetryState.Initial);
             if (!IsNativeBoundaryNearQueueable(localPlayer!))
             {
                 frozenGuardRetry = frozen;
-                castCancellationRequest = CreateGuardCastCancellationRequest(
-                    localPlayer!,
-                    frozen,
-                    guardActionSpecificallyReady);
-                lastEvent = castCancellationRequest is not null
-                    ? "Frozen post-Purify Guard waiting for active cast cancellation"
-                    : "Frozen post-Purify Guard waiting for global native boundary";
+                lastEvent = "Frozen post-Purify Guard waiting for global native boundary";
             }
             else
             {
-                var outcome = TryUseGuardOnce(
-                    localPlayer!,
-                    out attempted,
-                    out autoGuardProtectionArmed);
-                accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
-                CompleteGuardAttempt(frozen, outcome, nowMilliseconds);
-                if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
-                {
-                    castCancellationRequest = CreateGuardCastCancellationRequest(
-                        localPlayer!,
-                        frozen,
-                        guardActionSpecificallyReady);
-                }
+                var attemptResult = TryUseGuardOnce(localPlayer!);
+                attempted = attemptResult.Outcome is not
+                    (ClientActionAttemptOutcome.NotInvoked or
+                     ClientActionAttemptOutcome.SoftUnavailable);
+                accepted = attemptResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                CompleteGuardAttempt(frozen, attemptResult, nowMilliseconds);
 
-                lastEvent = DescribeAttempt("Guard initial", 1, frozen.Retry, outcome);
+                lastEvent = accepted
+                    ? "Guard initial accepted provisionally; waiting for exact status"
+                    : DescribeAttempt("Guard initial", 1, frozen.Retry, attemptResult.Outcome);
             }
         }
 
         if (attempted) Interlocked.Increment(ref attemptCount);
         if (accepted) Interlocked.Increment(ref acceptedCount);
 
-        var autoGuardToken = accepted &&
+        var autoGuardToken = autoGuardConfirmed &&
                              autoGuardProtectionArmed &&
                              action == DefensiveUtilityActionKind.Guard
             ? NextAutoGuardNotificationToken()
@@ -388,8 +453,7 @@ internal sealed class DefensiveUtilityProbe
             autoGuardPopup,
             guardConfigurationEnabled && isCrystallineConflict && localIdentityValid,
             action,
-            attempted,
-            accepted && autoGuardProtectionArmed,
+            autoGuardConfirmed && autoGuardProtectionArmed,
             autoGuardToken,
             nowMilliseconds,
             hardReset);
@@ -887,10 +951,8 @@ internal sealed class DefensiveUtilityProbe
 
     internal DefensiveUtilityProbeSnapshot FailClosed(long nowMilliseconds, Exception? exception = null)
     {
-        var failedGuardKey = frozenGuardRetry?.HeldKey ?? terminalGuardKey;
         var failedGuardianKey = frozenGuardianRetry?.HeldKey ?? terminalGuardianKey;
         ResetOpportunityRuntime();
-        terminalGuardKey = failedGuardKey;
         terminalGuardianKey = failedGuardianKey;
         if (exception is not null) LogAttemptFailure(exception, nowMilliseconds);
         var guardSuppression = ObserveGuardSuppression(
@@ -1020,19 +1082,15 @@ internal sealed class DefensiveUtilityProbe
         return candidates;
     }
 
-    private unsafe ClientActionAttemptOutcome TryUseGuardOnce(
-        IPlayerCharacter localPlayer,
-        out bool attempted,
-        out bool protectionArmed)
+    private unsafe GuardUseAttemptResult TryUseGuardOnce(
+        IPlayerCharacter localPlayer)
     {
-        attempted = false;
-        protectionArmed = false;
         if (!guardMetadataVerified ||
             !nearAssist.CanProtectAutomaticGuard ||
             !HasValidLocalPlayer(localPlayer) ||
             HasActiveGuard(localPlayer))
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            return GuardUseAttemptResult.NotInvoked;
         }
 
         var actionManager = ActionManager.Instance();
@@ -1040,7 +1098,7 @@ internal sealed class DefensiveUtilityProbe
             actionManager->GetAdjustedActionId(EnemyCombatConstants.GuardActionId) !=
             EnemyCombatConstants.GuardActionId)
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            return GuardUseAttemptResult.NotInvoked;
         }
 
         if (!ClientActionAttemptBoundary.IsExactActionReady(
@@ -1048,14 +1106,15 @@ internal sealed class DefensiveUtilityProbe
                 EnemyCombatConstants.GuardActionId) ||
             !IsNativeBoundaryNearQueueable(localPlayer, actionManager))
         {
-            return ClientActionAttemptOutcome.SoftUnavailable;
+            return new GuardUseAttemptResult(
+                ClientActionAttemptOutcome.SoftUnavailable,
+                -1);
         }
 
         var generationBeforeCall = nearAssist.CaptureLocalGuardAttemptGeneration();
         var boundaryBefore = ClientActionAttemptBoundary.Capture(
             actionManager,
             EnemyCombatConstants.GuardActionId);
-        attempted = true;
         try
         {
             var accepted = nearAssist.RunWithoutRedirect(() =>
@@ -1083,16 +1142,6 @@ internal sealed class DefensiveUtilityProbe
 
             if (outcome == ClientActionAttemptOutcome.ClientAccepted)
             {
-                protectionArmed = nearAssist.TryArmAcceptedAutoGuardProtection(
-                    localPlayer.GameObjectId,
-                    localPlayer.EntityId,
-                    generationBeforeCall);
-                if (!protectionArmed)
-                {
-                    log.Warning(
-                        "Seiton Sense accepted automatic Guard but could not prove exact protection ownership.");
-                }
-
                 var acceptedAt = Environment.TickCount64;
                 ObserveGuardSuppression(
                     exactGuardActive: false,
@@ -1100,13 +1149,42 @@ internal sealed class DefensiveUtilityProbe
                     nowMilliseconds: acceptedAt);
             }
 
-            return outcome;
+            return new GuardUseAttemptResult(outcome, generationBeforeCall);
         }
         catch (Exception exception)
         {
             LogAttemptFailure(exception, Environment.TickCount64);
-            return ClientActionAttemptOutcome.AcceptanceUnknown;
+            return new GuardUseAttemptResult(
+                ClientActionAttemptOutcome.AcceptanceUnknown,
+                generationBeforeCall);
         }
+    }
+
+    private static unsafe AutoGuardRetryReadiness ObserveGuardRetryReadiness(
+        IPlayerCharacter? localPlayer)
+    {
+        if (!HasValidLocalPlayer(localPlayer) || HasActiveGuard(localPlayer))
+            return AutoGuardRetryReadiness.Unknown;
+
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null) return AutoGuardRetryReadiness.Unknown;
+
+        var readiness = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.GuardActionId);
+        if (!readiness.Captured ||
+            readiness.AdjustedActionId != EnemyCombatConstants.GuardActionId ||
+            readiness.ResourceStatus != 0)
+        {
+            return AutoGuardRetryReadiness.Unknown;
+        }
+
+        if (!readiness.IsActionOffCooldown)
+            return AutoGuardRetryReadiness.CooldownUnavailable;
+
+        return readiness.IsExactActionReady(EnemyCombatConstants.GuardActionId)
+            ? AutoGuardRetryReadiness.Ready
+            : AutoGuardRetryReadiness.NativeBoundaryBusy;
     }
 
     private unsafe ClientActionAttemptOutcome TryUseGuardianOnce(
@@ -1283,24 +1361,6 @@ internal sealed class DefensiveUtilityProbe
                actionManager->AnimationLock >= 0f &&
                actionManager->AnimationLock <=
                HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
-    }
-
-    private static HeldCastCancellationRequest? CreateGuardCastCancellationRequest(
-        IPlayerCharacter localPlayer,
-        FrozenGuardRetry frozen,
-        bool actionSpecificallyReady)
-    {
-        if (!actionSpecificallyReady || !IsCastCancellationBoundaryReady(localPlayer))
-            return null;
-
-        var request = new HeldCastCancellationRequest(
-            HeldCastCancellationHelperKind.Guard,
-            EnemyCombatConstants.GuardActionId,
-            frozen.LocalPlayer,
-            frozen.LocalPlayer,
-            (int)frozen.HeldKey,
-            frozen.IntentEpochToken);
-        return request.IsValid ? request : null;
     }
 
     private static HeldCastCancellationRequest? CreateGuardianCastCancellationRequest(
@@ -1497,7 +1557,7 @@ internal sealed class DefensiveUtilityProbe
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
         frozenGuardRetry = null;
-        terminalGuardKey = VirtualKey.NO_KEY;
+        autoGuardConfirmationState = AutoGuardConfirmationState.Initial;
     }
 
     private long NextAutoGuardNotificationToken()
@@ -1518,13 +1578,30 @@ internal sealed class DefensiveUtilityProbe
 
     private void CompleteGuardAttempt(
         FrozenGuardRetry frozen,
-        ClientActionAttemptOutcome outcome,
+        GuardUseAttemptResult result,
         long nowMilliseconds)
     {
+        if (result.Outcome == ClientActionAttemptOutcome.ClientAccepted)
+        {
+            frozenGuardRetry = null;
+            autoGuardConfirmationState = AutoGuardConfirmationRules.ArmProvisional(
+                result.GenerationBeforeCall,
+                nearAssist.CurrentTerritoryId,
+                frozen.LocalPlayer,
+                Math.Max(nowMilliseconds, Environment.TickCount64),
+                frozen.ExpiresAtMilliseconds,
+                confirmationRetrySpent: false);
+            if (autoGuardConfirmationState.IsPending) return;
+
+            awaitingPostPurifyConfirmation = false;
+            postPurifyGuardExpiresAt = -1;
+            return;
+        }
+
         var completion = HeldActionRetryRules.Complete(
             frozen.Retry,
             Math.Max(0, nowMilliseconds),
-            outcome);
+            result.Outcome);
         if (completion.RetryScheduled ||
             completion.Disposition == HeldActionRetryDisposition.SoftWait)
         {
@@ -1533,8 +1610,6 @@ internal sealed class DefensiveUtilityProbe
         }
 
         frozenGuardRetry = null;
-        if (HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(completion.Disposition))
-            terminalGuardKey = frozen.HeldKey;
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
     }
@@ -1668,8 +1743,6 @@ internal sealed class DefensiveUtilityProbe
     private readonly record struct FrozenGuardRetry(
         TargetPressureActorIdentity LocalPlayer,
         long ExpiresAtMilliseconds,
-        VirtualKey HeldKey,
-        ulong IntentEpochToken,
         HeldActionRetryState Retry);
 
     private readonly record struct FrozenGuardianRetry(

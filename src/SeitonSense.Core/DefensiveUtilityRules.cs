@@ -256,9 +256,8 @@ public static class DefensiveUtilityRules
         AutoGuardTriggerPopup? previous,
         bool runtimeEnabled,
         DefensiveUtilityActionKind action,
-        bool useActionAttempted,
-        bool useActionAccepted,
-        long acceptedAttemptToken,
+        bool exactActivationConfirmed,
+        long confirmedAttemptToken,
         long nowMilliseconds,
         bool hardReset = false)
     {
@@ -268,18 +267,17 @@ public static class DefensiveUtilityRules
             ? visible
             : (AutoGuardTriggerPopup?)null;
         if (action != DefensiveUtilityActionKind.Guard ||
-            !useActionAttempted ||
-            !useActionAccepted ||
-            acceptedAttemptToken <= 0)
+            !exactActivationConfirmed ||
+            confirmedAttemptToken <= 0)
         {
             return current;
         }
 
-        if (current is { } existing && existing.Token == acceptedAttemptToken)
+        if (current is { } existing && existing.Token == confirmedAttemptToken)
             return existing;
 
         var next = new AutoGuardTriggerPopup(
-            acceptedAttemptToken,
+            confirmedAttemptToken,
             nowMilliseconds,
             SaturatingAdd(nowMilliseconds, AutoGuardTriggerPopupDurationMilliseconds));
         return next.IsValid ? next : current;

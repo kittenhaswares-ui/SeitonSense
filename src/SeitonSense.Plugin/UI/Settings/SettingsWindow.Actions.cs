@@ -14,9 +14,9 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
-            "DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk. " +
-            "The job-specific physical-hold helpers use this deterministic order. AST runs directly after Purify and SAM follows AST; " +
+            "Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
+            "DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk. " +
+            "The job-specific physical-hold helpers use this deterministic order. Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, and SAM follows AST; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
             "frame. Kardia and Monk retain their separate event-driven origins.");
@@ -229,7 +229,7 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
             "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Purify, the job-specific second tier, Smart Recuperate, Emergency Teleport, and generic Guard keep priority. Known " +
+            "Purify, Smart Recuperate, automatic Guard, the job-specific tier, and Emergency Teleport keep priority. Known " +
             "unavailability waits for free; only an explicit client rejection may retry the same exact Sprint " +
             "episode. Any later manual action ends FFXIV's native PvP Sprint.");
         return changed;
@@ -291,22 +291,18 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Enable the high-pressure Purify → Guard follow-up",
+            "Enable automatic high-pressure Purify → Guard",
             configuration.EnableDefensiveUtilities,
             value => configuration.EnableDefensiveUtilities = value);
-        changed |= Checkbox(
-            "A held gameplay key supplies continuous scheduler consent (includes WASD)",
-            configuration.DefensiveUtilitiesOnHeldKey,
-            value => configuration.DefensiveUtilitiesOnHeldKey = value);
         ImGui.TextColored(
             configuration.EnableDefensiveUtilities
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableDefensiveUtilities
-                ? "ON — the exact reactive Guard chain may claim one scheduler frame in CC."
+                ? "ON — the exact reactive chain runs automatically in CC; no held key is required."
                 : "OFF — this group adds no pressure-triggered Purify or later Guard request.");
         changed |= Checkbox(
-            "At 3+ incoming enemies and Stun: Purify, then Guard as a later exact episode",
+            "At exact 3+ incoming enemies and Stun: auto-Purify, then auto-Guard after Resilience",
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
         changed |= Checkbox(
@@ -314,7 +310,7 @@ internal sealed partial class SettingsWindow
             configuration.ShowAutoGuardActivationNotification,
             value => configuration.ShowAutoGuardActivationNotification = value);
         changed |= Checkbox(
-            "Play a small sound when Auto-Guard is accepted and protected",
+            "Play a small sound when Auto-Guard is confirmed and protected",
             configuration.PlayAutoGuardActivationSound,
             value => configuration.PlayAutoGuardActivationSound = value);
         changed |= SliderInt(
@@ -329,13 +325,15 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Crystalline Conflict only and disabled by default. If high-pressure Stun triggers Purify, Guard is " +
-            "allowed only after live Resilience confirms the cleanse and the removable CC is gone. The same held " +
-            "key may authorize that later distinct Guard episode; client acceptance of Purify remains terminal for " +
-            "the Purify episode. The former speculative 50%-HP " +
+            "allowed only after live Resilience confirms the cleanse and the removable CC is gone. Both requests " +
+            "are keyless; enabled per-status Purify rules still apply. Client acceptance of Purify remains terminal " +
+            "for the Purify episode. The former speculative 50%-HP " +
             "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
-            "every Seiton Sense action-request helper is blocked so none can cancel it. A client-accepted automatic " +
-            "Guard also owns a native input shield: ordinary Action/PvPAction presses are ignored through the exact " +
-            "live Guard status. A second Guard press is also ignored for the first two seconds, then becomes the " +
+            "every Seiton Sense action-request helper is blocked so none can cancel it. A client-true Guard request " +
+            "is provisional: it creates no card, sound, or native input shield until exact live Guard is visible. " +
+            "If status confirmation times out while Guard is still exactly ready, one bounded retry is allowed " +
+            "inside the original lease. Once confirmed, ordinary Action/PvPAction presses are ignored through the " +
+            "exact live Guard status. A second Guard press is also ignored for two seconds from confirmation, then becomes the " +
             "deliberate release path again. Manual Guard is never owned, the explicit /panicshu emergency-location " +
             "command remains an intentional override, and stale " +
             "ownership expires after six seconds. Auto-Guard waits instead of dispatching if the protection hook is " +
@@ -366,11 +364,13 @@ internal sealed partial class SettingsWindow
             "or MCH Blast Charge, then revalidates and acts on a later frame. If MP or the action is not ready, it does " +
             "not block a usable lower-priority helper.");
         ImGui.TextDisabled(
-            "Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before " +
-            "Emergency Teleport, generic Guard, and pressure Sprint, while " +
-            "active Guard and its short propagation latch block Recuperate so the helper cannot cancel Guard. The " +
-            "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms, up " +
-            "to eight calls total. Temporary readiness/MP, higher-priority, and Guard states wait without spending " +
+            "Only Purify keeps priority over Smart Recuperate. Its current-frame claim is propagated first to " +
+            "automatic Guard, then every later job helper, Emergency Teleport, and pressure Sprint. Exact active " +
+            "Guard blocks Recuperate; the provisional propagation latch is kept only for later helpers, so a rejected " +
+            "Guard request cannot suppress higher-priority recovery. The " +
+            "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms up " +
+            "to the budget frozen from the current PvP latency-response setting (eight calls by default). Pre-native " +
+            "validation drift and temporary readiness/MP, higher-priority, or Guard states wait without spending " +
             "a call; dropping below the HP threshold cancels the current intent. Acceptance ends that epoch, and a " +
             "later one requires an observed cooldown unavailable-to-ready transition. NIN Shukuchi Hidden suppresses " +
             "both modes. Retry exhaustion or an ambiguous outcome remains latched until automatic danger ends or the " +

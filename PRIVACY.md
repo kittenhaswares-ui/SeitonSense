@@ -236,9 +236,16 @@ placement remains a live-validation boundary.
 
 ## Limit Break nameplates and notifications
 
-The fixed Combat Frames runtime, remote-gauge calibration, clickable rows, and
-native-mouseover publication are retired. No replacement surface draws player
-frames, guesses a remote gauge, or changes a target. The optional enemy LB cue
+The fixed Combat Frames runtime, remote-gauge calibration/estimation, clickable
+rows, and native-mouseover publication are retired. No replacement surface draws
+player frames, guesses a gauge, or changes a target. One experimental public-CC
+strip is off by default pending live layout validation. When enabled, it reads
+direct current/min/max values from the five native enemy GaugeBar components
+above the pressure display. It publishes only after exact S1-S5 actor/name/row joins,
+stable before/after captures, and a same-frame proof against the local native
+LimitBreakController. Any missing, duplicate, stale, unstable, or mismatched value
+hides all five bars. It never estimates recharge, stores native pointers/names, or
+writes a UI node. The optional enemy LB cue
 runs only in exact Crystalline Conflict and only for a fresh, unique canonical
 `S1`-`S5` enemy with a visible native nameplate anchor. A reviewed activation may
 draw an icon above that nameplate. A numeric countdown is shown only while a
@@ -255,7 +262,10 @@ When the existing LB danger warning is enabled, an exact enemy DRG `Sky High`
 activation may also draw a top-center airborne card immediately. Its continuation
 uses only the fresh exact enemy episode and live mapped caster-status duration;
 loss of actor, episode, context, metadata, or status clears it without estimation.
-One selectable built-in FFXIV sound may play once for that exact episode.
+An exact enemy SMN Bahamut/Phoenix action/icon/status pair may use the same bounded
+danger lane. An exact enemy SAM Chiten status episode may draw a large nameplate
+emblem/countdown and `DO NOT HIT` danger card. One selectable built-in FFXIV sound
+may play once for each exact episode.
 Activation evidence, names, actor identities, durations, damage events, card
 state, and nameplate bounds remain bounded in memory and are not logged,
 persisted, transmitted, or uploaded.
@@ -398,7 +408,7 @@ remain in memory only and are cleared with feature/context/player lifetime.
 Nothing is persisted or uploaded. The current-patch setter, HUD/`<f>` result,
 and native range probe remain live A/B boundaries.
 
-## MCH and DRG limit-break danger warnings
+## MCH, DRG, SMN, and Chiten danger warnings
 
 When the warning is enabled, the same local observer verifies action ID `29415`,
 the exact early target-marker shape, the hostile MCH caster identity, and that
@@ -411,6 +421,17 @@ roster. That episode can warn immediately from the activation; continued
 airborne timing requires the exact caster's live `Sky High` status `3180`.
 It does not infer an LB from gauge state, movement, disappearance, `Sky Shatter`
 status `3181`, or the later landing damage actions `29498`/`29499`.
+
+For SMN, only enemy job `27` with the exact Bahamut action/icon/status pair
+`29673`/`9681`/`3228` or Phoenix pair `29678`/`9683`/`3229` is admitted. The
+activation can create a brief warning immediately; a duration is shown only from
+the paired live status on that exact caster and episode. Cross-pairs and inferred
+summons fail closed.
+
+For SAM Chiten, the existing 50-ms exact hostile roster scan accepts only verified
+SAM job `34` with live status `1240`. One bounded in-memory episode token prevents
+repeat sounds/cards, and missing status, identity, context, or metadata clears the
+warning after its short grace without inference.
 
 The optional alert sound calls one selectable built-in FFXIV UI sound after a
 verified warning. No audio file is downloaded, recorded, or transmitted. The
@@ -1269,18 +1290,20 @@ own Guard with one immediate request. The bounded reactive observer may keep an 
 startup, Purify, or Guard reservation in memory, but it cannot dispatch that
 reservation through own Guard.
 
-In addition, only an exact client-accepted Guard request produced by the plugin's
-automatic Guard helper can arm temporary cancellation ownership. Auto-Guard does
-not dispatch unless both central `UseAction` and `UseActionLocation` hooks are
-enabled. Before any macro token can be consumed, those boundaries block only a
-metadata-resolved PvP `Action`/`PvPAction` that can cancel Guard; the location
-boundary also covers deferred and ground-location calls. The first 1.5 seconds bridge
-native acceptance to a full exact live Guard-status observation; after that
-observation, protection follows the status until it ends. An explicit second
-Guard press is blocked for the first two seconds after automatic acceptance. At
-the exact two-second boundary it is allowed again and atomically releases
-ownership whether its incoming or resolved ID is Guard. Manual Guard is observed
-but never owned. The dedicated exact command scope releases ownership only for
+In addition, only a matching exact live Guard status following a hook-observed
+automatic Guard request can arm temporary cancellation ownership. Auto-Guard
+does not dispatch unless both central `UseAction` and `UseActionLocation` hooks
+are enabled. Their exact request observation and a client `true` return remain
+provisional and block no action. If the status has not appeared after 1.5 seconds,
+one retry may cross the native boundary only while exact readiness is proven and
+the original two-second post-Purify lease remains alive; a clean rejection
+retracts that generation. Once confirmed, the boundaries block only a metadata-
+resolved PvP `Action`/`PvPAction` that can cancel Guard; the location boundary
+also covers deferred and ground-location calls. Protection follows the exact
+status until it ends. An explicit second Guard press is blocked for the first
+two seconds after confirmation. At the exact two-second boundary it is allowed
+again and atomically releases ownership whether its incoming or resolved ID is
+Guard. Manual Guard is observed but never owned. The dedicated exact command scope releases ownership only for
 the matching NIN location action or reviewed directional standard action, even
 if the native request rejects it.
 Disabled/runtime or context, territory, player,
@@ -1588,7 +1611,8 @@ server execution or damage.
 
 Only local configuration is saved through Dalamud. This includes display and
 layout options, pressure window/appearance and context toggles, warning opacity,
-MCH/DRG danger-warning size/sound selection, the high-pressure warning/native-sound/Sprint
+MCH/DRG/SMN/Chiten danger-warning size/sound selection, opponent-LB strip visibility,
+the high-pressure warning/native-sound/Sprint
 opt-ins and sound selection, the separate Smart Tab and Smart Action opt-ins,
 the shared Near Assist/Near Help/Far Help opt-in, Near Assist search/preferences,
 the Near Help incoming-pressure preference,
@@ -1659,8 +1683,10 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 46 is current. It adds the separate automatic basic-shot
-cast-cancel permission and initializes it off for every upgrade and Reset
+Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten
+danger warnings and separate experimental opponent LB bars that remain off by
+default pending live layout validation, while retaining the separate automatic
+basic-shot cast-cancel permission as default-off for every upgrade and Reset
 Defaults without changing either automatic helper opt-in or the independent
 generic held-helper toggle. Schema 45 added separate automatic Purify and
 Recuperate settings and initialized both off for every upgrade and Reset Defaults.

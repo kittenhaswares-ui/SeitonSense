@@ -122,6 +122,19 @@ internal readonly record struct LocalGuardActionAttempt(
     long ObservedAtMilliseconds,
     long Generation);
 
+internal readonly record struct LocalGuardActionBoundaryObservation(
+    ulong LocalGameObjectId,
+    uint LocalEntityId,
+    long GenerationBeforeCall,
+    ClientActionAttemptFingerprint BoundaryBefore)
+{
+    internal bool IsObserved =>
+        LocalGameObjectId != 0 &&
+        LocalEntityId != 0 &&
+        GenerationBeforeCall >= 0 &&
+        BoundaryBefore.Captured;
+}
+
 internal readonly record struct AutoGuardProtectionDiagnostics(
     bool HookAvailable,
     bool Armed,
@@ -458,6 +471,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         lock (guardAttemptGate) return localGuardActionAttemptGeneration;
     }
 
+    internal uint CurrentTerritoryId => clientState.TerritoryType;
+
     internal bool CanProtectAutomaticGuard =>
         !disposed &&
         started &&
@@ -472,14 +487,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             {
                 var now = Environment.TickCount64;
                 var state = autoGuardProtectionState;
-                var deadline = !state.IsArmed
-                    ? -1
-                    : state.ExactGuardObserved
-                        ? state.MaximumExpiresAtMilliseconds
-                        : Math.Min(
-                            state.MaximumExpiresAtMilliseconds,
-                            state.AcceptedAtMilliseconds +
-                            AutoGuardProtectionRules.StatusPropagationMilliseconds);
+                var deadline = state.IsArmed
+                    ? state.MaximumExpiresAtMilliseconds
+                    : -1;
                 return new AutoGuardProtectionDiagnostics(
                     CanProtectAutomaticGuard,
                     state.IsArmed && deadline > now,
@@ -1023,11 +1033,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     /// <summary>
-    /// Arms cancellation protection only when the immediately preceding hook
-    /// observation is the exact Guard call which the automatic helper has just
-    /// proven client-accepted. Manual Guard and ambiguous acceptance never own it.
+    /// Arms cancellation protection only after the exact local Guard status is
+    /// live and belongs to the matching hook-observed automatic request. A
+    /// provisional client-true return cannot own input or user feedback.
     /// </summary>
-    internal bool TryArmAcceptedAutoGuardProtection(
+    internal bool TryArmConfirmedAutoGuardProtection(
         ulong localGameObjectId,
         uint localEntityId,
         long generationBeforeCall)
@@ -1036,8 +1046,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var currentLocal = new TargetPressureActorIdentity(localGameObjectId, localEntityId);
         lock (guardAttemptGate)
         {
+            var liveLocal = objectTable.LocalPlayer;
+            var exactGuardActive = IsLivePlayer(liveLocal) &&
+                                   liveLocal!.GameObjectId == localGameObjectId &&
+                                   liveLocal.EntityId == localEntityId &&
+                                   HasActiveGuardStatus(liveLocal);
             if (latestLocalGuardActionAttempt is not { } attempt ||
-                !AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+                !AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
                     attempt.Generation,
                     generationBeforeCall,
                     attempt.TerritoryId,
@@ -1047,18 +1062,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                         attempt.LocalEntityId),
                     currentLocal,
                     attempt.ObservedAtMilliseconds,
-                    now))
+                    now,
+                    exactGuardActive))
             {
                 autoGuardProtectionLastEvent =
-                    "Accepted automatic Guard had no exact hook-owned attempt";
+                    "Automatic Guard confirmation did not match the exact hook-owned attempt";
                 return false;
             }
 
-            var armed = AutoGuardProtectionRules.Arm(
+            var armed = AutoGuardProtectionRules.ArmConfirmed(
                 attempt.Generation,
                 attempt.TerritoryId,
                 currentLocal,
-                now);
+                now,
+                exactGuardActive);
             if (!armed.IsArmed)
             {
                 autoGuardProtectionLastEvent = "Automatic Guard ownership failed closed";
@@ -1068,7 +1085,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             autoGuardProtectionState = armed;
             autoGuardProtectionArmedCount++;
             autoGuardProtectionLastEvent =
-                $"Protected accepted automatic Guard generation {attempt.Generation}";
+                $"Protected confirmed automatic Guard generation {attempt.Generation}";
             return true;
         }
     }
@@ -1844,8 +1861,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             helperTokenConsumed,
             targetSuppressedByRedirect,
             out var smartKardiaPreflight);
-        ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId);
-
         // Recheck the exact Smart Action replacement/fallback after every other
         // preflight, immediately before Original. This minimizes the client-side
         // window for Chiten, Guard, Cover, or an LB protection to appear.
@@ -1932,6 +1947,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
+        // Observe Guard only after every redirect, brake, replay, and final
+        // helper veto has passed. Capture the exact native boundary so a clean
+        // client rejection can retract only the just-created generation.
+        var localGuardBoundary = ObserveExactLocalGuardActivationAttempt(
+            thisPtr,
+            actionType,
+            actionId);
+
         bool clientAccepted;
         try
         {
@@ -1951,6 +1974,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 integratedAttempt,
                 "Native action boundary threw; buffer observation retired");
             throw;
+        }
+
+        if (localGuardBoundary.IsObserved)
+        {
+            var guardOutcome = ClientActionAttemptBoundaryRules.Classify(
+                clientAccepted,
+                EnemyCombatConstants.GuardActionId,
+                localGuardBoundary.BoundaryBefore,
+                ClientActionAttemptBoundary.Capture(
+                    thisPtr,
+                    EnemyCombatConstants.GuardActionId));
+            if (guardOutcome == ClientActionAttemptOutcome.ClientRejected)
+            {
+                TryRetractClientRejectedLocalGuardAttempt(
+                    localGuardBoundary.LocalGameObjectId,
+                    localGuardBoundary.LocalEntityId,
+                    localGuardBoundary.GenerationBeforeCall);
+            }
         }
 
         if (integratedAttempt.Eligible && integratedRuntime is not null)
@@ -2335,7 +2376,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return evidence.IsValid;
     }
 
-    private void ObserveExactLocalGuardActivationAttempt(
+    private LocalGuardActionBoundaryObservation ObserveExactLocalGuardActivationAttempt(
         ActionManager* actionManager,
         ActionType actionType,
         uint actionId)
@@ -2345,12 +2386,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             if (ResolveActionId(actionManager, actionType, actionId) !=
                 EnemyCombatConstants.GuardActionId)
             {
-                return;
+                return default;
             }
 
             var local = objectTable.LocalPlayer;
             if (!IsLivePlayer(local) || DefensiveUtilityProbe.HasActiveGuard(local))
-                return;
+                return default;
+
+            var boundaryBefore = ClientActionAttemptBoundary.Capture(
+                actionManager,
+                EnemyCombatConstants.GuardActionId);
+            if (!boundaryBefore.Captured) return default;
 
             var attempt = new LocalGuardActionAttempt(
                 clientState.TerritoryType,
@@ -2360,6 +2406,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 0);
             lock (guardAttemptGate)
             {
+                var generationBeforeCall = localGuardActionAttemptGeneration;
                 localGuardActionAttemptGeneration =
                     localGuardActionAttemptGeneration == long.MaxValue
                         ? 1
@@ -2368,11 +2415,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 {
                     Generation = localGuardActionAttemptGeneration,
                 };
+                return new LocalGuardActionBoundaryObservation(
+                    local.GameObjectId,
+                    local.EntityId,
+                    generationBeforeCall,
+                    boundaryBefore);
             }
         }
         catch
         {
             // Observation must never alter or suppress the incoming Guard call.
+            return default;
         }
     }
 
@@ -3549,6 +3602,36 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             // This dependency owns a native safety boundary. Uncertain current
             // local identity or Guard telemetry must veto the helper action.
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Exact-status-only Guard gate for Purify/Recuperate, which outrank a
+    /// merely provisional Guard request. Identity uncertainty still fails
+    /// closed; a hook observation alone is intentionally not enough.
+    /// </summary>
+    internal bool IsExactLocalGuardActive(
+        TargetPressureActorIdentity expectedLocalPlayer)
+    {
+        try
+        {
+            var local = objectTable.LocalPlayer;
+            if (!expectedLocalPlayer.IsValid ||
+                !IsLivePlayer(local) ||
+                GetNativeObject(local!) == null)
+            {
+                return true;
+            }
+
+            var currentLocalPlayer = new TargetPressureActorIdentity(
+                local!.GameObjectId,
+                local.EntityId);
+            return currentLocalPlayer != expectedLocalPlayer ||
+                   DefensiveUtilityProbe.HasActiveGuard(local);
+        }
+        catch
+        {
             return true;
         }
     }

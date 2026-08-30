@@ -1424,6 +1424,7 @@ internal sealed partial class OverlayRenderer
         DrawStackedNameplateEmblems(
             anchor,
             activeProtections,
+            enemy?.ChitenWarning,
             limitBreak,
             limitBreakSnapshotPublishedAtMilliseconds,
             now);

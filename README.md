@@ -2,8 +2,18 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.40.0.2 fixes intermittent ranged
-Smart Action no-ops by making the 750-ms arm target-independent and deferring
+assistance, and target highlights. Version 0.41.0.0 makes automatic Purify and
+Recuperate retain their exact episode through temporary native blocks and retry
+only inside the original bounded window after every safety recheck. High-
+pressure Stun Auto-Guard is now keyless and confirmed-only: one readiness-proven
+retry may occur inside its original lease, while the card, sound, action
+suppression, and two-second Guard-reuse protection begin only after the exact
+live Guard status appears. Rejected requests therefore cannot create phantom
+protection or block manual Guard. The release also adds exact SAM Chiten and SMN
+Bahamut/Phoenix danger warnings plus an experimental opponent LB-ready strip
+that is off by default pending current-client layout validation. Version
+0.40.0.2 fixed intermittent ranged Smart Action no-ops by making the 750-ms arm
+target-independent and deferring
 exact enemy selection until the harmful action arrives. Direct single-target
 actions no longer require an unrelated complete hostile object-table snapshot;
 exact target protection, native range/line of sight, and frozen-target
@@ -50,8 +60,9 @@ audited ReAction/MOAction conflicts disable only that buffer opportunity. It
 retains v0.34.0.4's Chiten, Covered, Paladin-LB, Dark-Knight-LB, and
 target-circle safety, with Guard bypassed only by exact Guard-ignoring actions,
 plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
-fixes. Accepted Auto-Guard can show a card/sound and protects
-an accidental second Guard press for two seconds. `/panicshu` now reaches its one location call
+fixes. Confirmed Auto-Guard can show a card/sound and protects an accidental
+second Guard press for two seconds; provisional or rejected requests do not arm
+either effect. `/panicshu` now reaches its one location call
 only after exact native Shukuchi recast and resource readiness. It retains
 Emergency Teleport plus v0.31's ranged Smart Tab, direct Viper carrier handling,
 and explicit Wolves' Den testing additions. `/smarttab`
@@ -149,9 +160,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   redirects, or retries it. A strict complete-party fallback can certify an
   exact public-CC `<e1>`-`<e5>` enemy when FFXIV omits its `Hostile` flag.
 - **Personal warnings:** Wildfire, Death Warrant, supported Purify-removable CC,
-  Marksman's Spite, and an enemy DRG entering `Sky High` receive stable warnings.
+  Marksman's Spite, an enemy DRG entering `Sky High`, exact SMN Bahamut/Phoenix
+  LB activations, and an enemy SAM's exact Chiten episode receive stable warnings.
   The LB danger card is larger by default and can play one selectable built-in
-  FFXIV sound once per verified MCH threat or DRG airborne episode.
+  FFXIV sound once per verified danger episode.
   Warning-card background opacity is independent from its icon, text, and
   border, so the fill can be fully transparent without hiding the warning.
 - **Urgent isolation warning:** in exact Crystalline Conflict, a large gently
@@ -167,11 +179,16 @@ and Super Focus Glow into one configurable custom-repository plugin.
   draw an icon above the exact actor's fresh native nameplate, with a countdown
   only when live status duration is confirmed and a bounded flash otherwise.
   Enemy DRG `Sky High` additionally raises an immediate top-center airborne
-  danger card and one-shot sound, then follows only the confirmed live phase.
+  danger card and one-shot sound, exact SMN Bahamut/Phoenix activations use the
+  same bounded danger lane, and Chiten adds a large SAM nameplate emblem with a
+  confirmed countdown plus `DO NOT HIT` card.
   Your own activation uses a separate top-center `LB ACTIVATED!` lane, while
   direct attributable ally LB damage uses at most three left-side cards. The
-  retired frame renderer, calibrated remote gauges, row clicks, and native
-  mouseover publication no longer have a runtime path.
+  retired frame renderer, calibrated/estimated gauges, row clicks, and native
+  mouseover publication no longer have a runtime path. A separate experimental,
+  default-off CC-only strip above the pressure display reads direct current/max
+  GaugeBar values only after a stable exact S1-S5 join and same-frame local-
+  controller proof; its current-client layout still needs live validation.
 - **Ninja Seiton decisions:** persistent job-icon cards, `S1`-`S5`, preparation
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
@@ -314,14 +331,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
   preserves vanilla; drift after one exact redirect is frozen suppresses only
   that call. It never initiates an action or selects an alternate.
 - **Experimental reactive defensive utilities:** the default-off CC helper can
-  use continuous held consent for a high-pressure Stun Purify and a distinct
-  later Guard episode after positive Resilience. It does not
-  pre-Guard from HP/pressure prediction. Active own Guard blocks all plugin
-  action helpers. Only an exact client-accepted plugin Auto-Guard arms the
-  additional cancellation shield: it bridges 1.5 seconds to the exact live
-  Guard status and then follows that status. A second Guard press is protected
-  for the first two seconds, then becomes the deliberate release path again;
-  bounded fail-open release paths prevent stale ownership.
+  keylessly reserve a high-pressure Stun chain through exact Purify and positive
+  Resilience, then request Guard after the CC is gone. It does not pre-Guard
+  from HP/pressure prediction. One readiness-proven confirmation retry may occur
+  only inside the original two-second lease. A native return remains provisional:
+  only the matching exact live Guard status arms the card, sound, cancellation
+  shield, and two-second Guard-reuse protection. Clean rejection retracts the
+  generation, so it cannot block manual Guard or higher-priority recovery.
 - **Experimental Paladin Guardian job tool:** an independent default-off held-key
   option can attempt Guardian on one exact reachable ally. The original critical
   boundary remains unconditional at 20% HP; a fresh exact current hard/cast-
@@ -489,7 +505,7 @@ own recovery hysteresis. A direct drop through both thresholds consumes both
 edges but plays only the more urgent 2,000-MP cue. Context, identity, death, or
 untrusted telemetry resets continuity rather than inventing a crossing.
 
-The fixed Combat Frames runtime, its six rows, calibrated remote gauges,
+The fixed Combat Frames runtime, its six rows, calibrated/estimated remote gauges,
 click-target path, and native mouseover publication are retired. The useful LB
 evidence is now split into narrow, non-interactive surfaces:
 
@@ -499,6 +515,14 @@ evidence is now split into narrow, non-interactive surfaces:
   or unconfirmed activations use the catalog-bounded brief flash;
 - an exact enemy DRG `Sky High` episode also draws an immediate top-center
   airborne danger card and plays at most one configured built-in sound;
+- exact enemy SMN Bahamut/Phoenix activations and exact SAM Chiten episodes use
+  the same bounded danger lane; Chiten also gets a large nameplate emblem and
+  countdown while its exact status remains live;
+- an experimental, default-off CC-only strip above the pressure counter shows direct native
+  S1-S5 GaugeBar current/max values. It publishes only a complete stable row/name/
+  slot join cross-checked against the same-frame local LimitBreakController;
+  confirmed-full bars pulse lightly and any uncertainty hides the whole strip;
+  the current-client row layout remains a live validation boundary;
 - the local player's activation appears in a separate top-center
   `LB ACTIVATED!` banner; and
 - direct attributable ally LB damage appears in at most three left-side
@@ -509,7 +533,8 @@ only a direct ActionEffect event with an exact ally caster, enemy target,
 reviewed LB action, nonzero event/episode token, and decoded positive damage; it
 never infers damage from HP deltas. Names are resolved only for current display,
 never persisted or uploaded. These cues do not accept clicks, set a hard/soft/
-Focus target, publish `<mo>`, calibrate a remote gauge, or edit/hide native UI.
+Focus target, publish `<mo>`, calibrate or estimate a remote gauge, or edit/hide
+native UI.
 
 The exact, metadata-validated protection catalog in v0.6 is:
 
@@ -781,13 +806,13 @@ been observed not ready and then ready again. A KO reset or natural 12-second
 recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
-target, with no visible target change, alternate, rerank, or replay. The current
-order is **Purify > AST same-target heal chain > SAM staged counter-CC /
-Zantetsuken > NIN Seiton > VPR
+  target, with no visible target change, alternate, rerank, or replay. The current
+  order is **Purify > Smart Recuperate > automatic Guard > AST same-target heal
+  chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR
 Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD
-Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
-Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart
-Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia
+  Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
+  Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo >
+  Emergency Teleport > pressure Sprint > event Kardia
 > event Monk**.
 
 ## Sage Smart Kardia after accepted Eukrasia
@@ -841,9 +866,11 @@ exact early target-marker event to show the larger `MCH LIMIT BREAK ON YOU`
 card before the later damage event. An exact enemy DRG `Sky High` activation
 starts a matching airborne LB warning immediately; a countdown continues only
 from its live mapped caster status and clears with that exact episode. The
-optional sound uses FFXIV's built-in effects and plays once per verified MCH
-threat or DRG airborne episode. These warnings never press Guard or another
-action.
+same lane admits only the exact enemy SMN Bahamut/Phoenix action/icon/status pair.
+An exact enemy SAM Chiten status episode draws `DO NOT HIT`, a large nameplate
+emblem, and its live countdown. The optional sound uses FFXIV's built-in effects
+and is consumed once per verified episode. These warnings never press Guard or
+another action.
 
 Stun, Heavy, Bind, Silence, Deep Freeze, and Miracle of Nature receive urgent
 Purify warnings. The experimental **automatic Self-Purify** and legacy physical-
@@ -1123,16 +1150,19 @@ accepted-Eukrasia Kardia, and Monk Earth's Reply. The explicit manual
 immediate reviewed dash request is intentionally allowed to break own Guard.
 The bounded reactive observer may retain an already eligible enemy
 startup/Purify/Guard reservation, but it cannot dispatch it through own Guard.
-Only an exact plugin Auto-Guard request classified `ClientAccepted` can also arm
-central cancellation ownership. Auto-Guard does not dispatch unless both central
-`UseAction` and `UseActionLocation` hooks are enabled. Before any macro token is
-consumed, those boundaries block a metadata-resolved PvP `Action`/`PvPAction`
-that can cancel Guard, including deferred or ground-location requests, for up to
-1.5 seconds while waiting for the exact live Guard status; after that status
-appears, protection follows it until the first exact absence. An incoming or
-resolved second Guard press is also blocked during the first two seconds from
-automatic acceptance. At the exact two-second boundary it again passes as the
-deliberate release path and atomically drops ownership. A manual Guard never arms it.
+Only a matching exact live Guard status can arm central cancellation ownership.
+Auto-Guard does not dispatch unless both central `UseAction` and
+`UseActionLocation` hooks are enabled. Their exact request observation and a
+client `true` return remain provisional and block no action. If the status has
+not appeared after 1.5 seconds, one retry may cross the native boundary only
+when Guard readiness is proven and the original two-second post-Purify lease is
+still alive; a clean rejection retracts the generation. After exact status
+confirmation, the boundaries block metadata-resolved PvP `Action`/`PvPAction`
+calls that can cancel Guard, including deferred or ground-location requests,
+until the first exact status absence or hard cap. An incoming or resolved second
+Guard press is also blocked during the first two seconds from confirmation. At
+the exact two-second boundary it again passes as the deliberate release path and
+atomically drops ownership. A manual Guard never arms it.
 The dedicated exact command scope releases this ownership only for the matching
 NIN location boundary or reviewed directional self-dash boundary, even if the
 native action rejects it. Unsupported or unknown actions,
@@ -1244,15 +1274,15 @@ generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
-The current request order is **Purify > AST same-target heal chain > SAM staged
-counter-CC / Zantetsuken > NIN
+The current request order is **Purify > Smart Recuperate > automatic Guard > AST
+same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN
 Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally
 Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
 Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) >
-Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure
+Monk combo > Emergency Teleport > pressure
 Sprint > event Kardia > event Monk**. The job-specific physical-hold helpers use
-that deterministic order; AST runs directly after Purify, and reactive counter-CC
-remains before ally cleanse.
+that deterministic order; recovery and automatic Guard run before the job helpers,
+and reactive counter-CC remains before ally cleanse.
 Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
 freezes one exact-target intent;
@@ -1726,7 +1756,9 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 46 is current. It adds the separate default-off automatic
+Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten
+danger warnings and separate experimental opponent LB bars that remain off by
+default pending live layout validation, while retaining the separate default-off automatic
 basic-shot cast-cancel permission without changing either automatic helper opt-in
 or the independent generic held-helper cast-cancel toggle for an upgrade. Schema
 45 added separate default-off automatic Purify and Recuperate options without
@@ -1902,7 +1934,10 @@ visible in-game side effect through FFXIV. Transient observations and the exact
 one-shot action boundary are documented in [PRIVACY.md](PRIVACY.md).
 
 Display-only features such as the resource aura and LB cues never target, press
-actions, accept clicks, calibrate a remote gauge, or mutate native UI. The retired
+actions, accept clicks, calibrate/estimate a remote gauge, or mutate native UI.
+The experimental opponent-LB strip is off by default pending live layout
+validation and retains only fresh current/max values after exact stable native-
+row and local-controller proof when enabled. The retired
 Combat Frames have no click, hard-target, or native `<mo>` runtime path. Auto
 Low-MP Focus is a separate explicit setter. Held DRK Shadowbringer is a default-
 off participant in the shared physical-input scheduler and is bounded as
@@ -1927,28 +1962,31 @@ armed, already incoming macro action. Smart Tab is separate: while enabled it
 may replace only an owned native forward world-target cycle with one exact hard-
 target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-action helpers use this current request priority: **Purify > AST same-target
-heal chain > SAM staged counter-
+action helpers use this current request priority: **Purify > Smart Recuperate >
+automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-
 CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation >
 reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
 Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK
-Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency
-Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**. The
+Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint
+> event Kardia > event Monk**. The
 job-specific physical-hold helpers use that deterministic urgency order;
 reactive counter-CC still leads ally cleanse. Kardia requires its
 separate accepted-Eukrasia trigger and does not originate from the physical key;
 Monk is an automatic follow-up.
 The same continuous hold can authorize later distinct exact held episodes; a
 post-Purify reactive Guard no longer requires release/repress. There is no HP/
-pressure pre-Guard. While your own Guard is
-active, all scheduled/automatic Seiton action-request helpers are blocked; the
+pressure pre-Guard. While your own Guard is active, all scheduled/automatic
+Seiton action-request helpers are blocked; the
 explicit manual `/panicshu` and enabled `/seitonbw` commands are the sole
-exceptions. The same scheduler gate applies for
-the bounded propagation interval after an exact client-accepted plugin
-Auto-Guard; the central `UseAction` and `UseActionLocation` hooks then follow the
-exact live Guard status, block a second Guard press during its first two seconds,
-restore deliberate Guard reuse afterward, and fail open on drift or their six-
-second cap. Auto-Guard cannot dispatch if either protection hook is unavailable;
+exceptions. During the provisional observation interval after an exact plugin
+Auto-Guard request, the short latch still blocks lower helpers, but Purify and
+Recuperate yield only to exact live Guard so a failed request cannot suppress
+higher-priority recovery. The central `UseAction` and `UseActionLocation` hooks
+arm cancellation ownership
+only after the matching exact live Guard status, block a second Guard press
+during the first two seconds from that confirmation, restore deliberate Guard
+reuse afterward, and fail open on clean rejection, drift, or their six-second
+cap. Auto-Guard cannot dispatch if either protection hook is unavailable;
 the dedicated exact command scope releases ownership only for the matching NIN
 location request or reviewed directional self-action request.
 Manual Guard never creates this ownership. Ally Rescue labels a
@@ -2130,8 +2168,8 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 553-test Core registry and source checks pin
-configuration schema 46, the independent default-off automatic basic-shot
+For the current source, the exact 562-test Core registry and source checks pin
+configuration schema 47, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
 automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
 deterministic local CC rotation and fail-closed
@@ -2169,12 +2207,12 @@ source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
 enabled-Den testing remains required.
 
-Current scheduler verification uses **Purify > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC /
+Current scheduler verification uses **Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC /
 Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
-(safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic
-Guard > pressure Sprint > event Kardia > event Monk**. Twenty physical-hold
+(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia
+> event Monk**. Twenty physical-hold
 option enable edges share the scheduler input. Held-action cast cancellation
 constructs sixteen reviewed request shapes across seventeen ordered selection
 slots and explicitly excludes Viper, GNB, and held Monk combo.

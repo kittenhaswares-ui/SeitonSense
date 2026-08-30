@@ -415,15 +415,17 @@ internal sealed class EmergencyPurifyProbe
               !inputFrame.IsGameplayKeyPhysicallyDown(
                   (VirtualKey)expectedKeyCode))))
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            // No native UseAction boundary was crossed. Keep the exact CC
+            // episode alive so the next framework frame can fully revalidate it.
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return ClientActionAttemptOutcome.NotInvoked;
+        if (actionManager == null) return ClientActionAttemptOutcome.SoftUnavailable;
         if (actionManager->GetAdjustedActionId(EnemyCombatConstants.PurifyActionId) !=
             EnemyCombatConstants.PurifyActionId)
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
         if (!ClientActionAttemptBoundary.IsExactActionReady(
                 actionManager,
@@ -443,7 +445,7 @@ internal sealed class EmergencyPurifyProbe
         if (!exactLocal.IsValid ||
             finalOwnGuardActiveOrPropagating(exactLocal))
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
         var finalTextInputActive = automaticStatusTrigger
@@ -451,7 +453,7 @@ internal sealed class EmergencyPurifyProbe
               currentTextInputActive
             : textInputActive;
         if (finalTextInputActive)
-            return ClientActionAttemptOutcome.NotInvoked;
+            return ClientActionAttemptOutcome.SoftUnavailable;
 
         var boundaryBefore = ClientActionAttemptBoundary.Capture(
             actionManager,

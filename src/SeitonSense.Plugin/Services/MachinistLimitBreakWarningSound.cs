@@ -9,7 +9,8 @@ internal sealed class MachinistLimitBreakWarningSound
     private const long PreviewCooldownMilliseconds = 350;
 
     private readonly IPluginLog log;
-    private ulong lastThreatToken;
+    private readonly HashSet<ulong> consumedThreatTokens = [];
+    private readonly Queue<ulong> consumedThreatTokenOrder = [];
     private long nextThreatSoundAt;
     private long nextPreviewSoundAt;
 
@@ -20,11 +21,17 @@ internal sealed class MachinistLimitBreakWarningSound
 
     internal bool TryPlayThreat(ulong threatToken, int soundId, long nowMilliseconds)
     {
-        if (threatToken == 0 || threatToken == lastThreatToken || nowMilliseconds < nextThreatSoundAt)
-            return false;
+        if (threatToken == 0 || !consumedThreatTokens.Add(threatToken)) return false;
+
+        consumedThreatTokenOrder.Enqueue(threatToken);
+        while (consumedThreatTokenOrder.Count > 64)
+            consumedThreatTokens.Remove(consumedThreatTokenOrder.Dequeue());
+
+        // Consume before the shared cooldown check. Simultaneous warnings make
+        // one cue now instead of queuing a stale sound for a later frame.
+        if (nowMilliseconds < nextThreatSoundAt) return false;
 
         // Consume before the native call. A failed/throwing sound request is not retried.
-        lastThreatToken = threatToken;
         nextThreatSoundAt = SaturatingAdd(nowMilliseconds, ThreatCooldownMilliseconds);
         return TryPlay(soundId);
     }
@@ -38,7 +45,8 @@ internal sealed class MachinistLimitBreakWarningSound
 
     internal void Reset()
     {
-        lastThreatToken = 0;
+        consumedThreatTokens.Clear();
+        consumedThreatTokenOrder.Clear();
         nextThreatSoundAt = 0;
     }
 

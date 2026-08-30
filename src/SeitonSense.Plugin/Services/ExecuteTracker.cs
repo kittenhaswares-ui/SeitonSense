@@ -19,6 +19,7 @@ internal sealed class ExecuteTracker : IDisposable
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
+    private readonly SamuraiReactiveMetadataValidation samuraiReactiveMetadata;
     private readonly Dictionary<uint, EnemyRuntimeState> runtimeStates = [];
     private EnemyHudSnapshot[] enemies = [];
     private SeitonPopupSnapshot[] popups = [];
@@ -28,6 +29,7 @@ internal sealed class ExecuteTracker : IDisposable
     private uint activeTerritory;
     private SupportedPvPContext activeContext;
     private uint activeWolvesDenOpponentEntityId;
+    private ulong nextChitenEpisodeToken;
     private bool started;
     private bool disposed;
 
@@ -39,7 +41,8 @@ internal sealed class ExecuteTracker : IDisposable
         IPartyList partyList,
         IPluginLog log,
         PluginConfiguration configuration,
-        PvPMetadataValidation metadata)
+        PvPMetadataValidation metadata,
+        SamuraiReactiveMetadataValidation samuraiReactiveMetadata)
     {
         this.clientState = clientState;
         this.objectTable = objectTable;
@@ -49,6 +52,7 @@ internal sealed class ExecuteTracker : IDisposable
         this.log = log;
         this.configuration = configuration;
         this.metadata = metadata;
+        this.samuraiReactiveMetadata = samuraiReactiveMetadata;
         diagnostics = TrackerDiagnostics.Inactive(clientState.TerritoryType, metadata);
     }
 
@@ -246,11 +250,16 @@ internal sealed class ExecuteTracker : IDisposable
             }
 
             var alive = !player.IsDead && player.CurrentHp > 0;
+            var playerJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
             if (!alive)
             {
                 state.WasDead = true;
                 state.SeitonCue = PersistentSeitonCueState.Initial;
                 state.SeitonPulseStartedAtMilliseconds = -1;
+                state.Chiten = ChitenEpisodeState.Initial;
+                state.ChitenGameObjectId = 0;
+                state.ChitenEntityId = 0;
+                state.ChitenJobId = 0;
                 activePopups.RemoveAll(popup => popup.GameObjectId == player.GameObjectId);
                 continue;
             }
@@ -265,6 +274,10 @@ internal sealed class ExecuteTracker : IDisposable
                 state.TrustedMpJobId = 0;
                 state.SeitonCue = PersistentSeitonCueState.Initial;
                 state.SeitonPulseStartedAtMilliseconds = -1;
+                state.Chiten = ChitenEpisodeState.Initial;
+                state.ChitenGameObjectId = 0;
+                state.ChitenEntityId = 0;
+                state.ChitenJobId = 0;
             }
 
             if (!player.IsTargetable || !ExecuteThreshold.HasValidHp(player.CurrentHp, player.MaxHp)) continue;
@@ -282,7 +295,6 @@ internal sealed class ExecuteTracker : IDisposable
 
             var plausibleMp = player.MaxMp > 0 && player.CurrentMp <= player.MaxMp;
             var trustedMp = plausibleMp && (player.CurrentMp > 0 || state.LowMp.HasTrustedSample);
-            var playerJobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
             var exactMpIdentityPreviouslyTrusted =
                 state.TrustedMpGameObjectId == player.GameObjectId &&
                 state.TrustedMpEntityId == player.EntityId &&
@@ -365,6 +377,45 @@ internal sealed class ExecuteTracker : IDisposable
                 ? GuardCooldownRules.RemainingMilliseconds(state.Guard, now) / 1000f
                 : 0f;
             var lowMp = metadata.RecuperateVerified && LowMpRules.ShouldShowCrossedIcon(state.LowMp);
+            var chitenIdentityStable =
+                state.ChitenGameObjectId == player.GameObjectId &&
+                state.ChitenEntityId == player.EntityId &&
+                state.ChitenJobId == playerJobId;
+            if (!chitenIdentityStable)
+                state.Chiten = ChitenEpisodeState.Initial;
+            state.ChitenGameObjectId = player.GameObjectId;
+            state.ChitenEntityId = player.EntityId;
+            state.ChitenJobId = playerJobId;
+
+            var chitenRemaining = 0L;
+            var hasChiten = samuraiReactiveMetadata.ChitenVerified &&
+                            playerJobId == ChitenWarningRules.SamuraiJobId &&
+                            TryGetChitenRemainingMilliseconds(player, out chitenRemaining);
+            var chitenEntryToken = hasChiten && !state.Chiten.Active
+                ? NextChitenEpisodeToken()
+                : 0;
+            state.Chiten = ChitenWarningRules.ObserveEpisode(
+                state.Chiten,
+                hasChiten,
+                hasChiten ? chitenRemaining : 0,
+                now,
+                chitenEntryToken,
+                hardReset: !samuraiReactiveMetadata.ChitenVerified ||
+                           playerJobId != ChitenWarningRules.SamuraiJobId);
+            ChitenWarningObservation? chitenWarning = state.Chiten.Active &&
+                                                        state.Chiten.ExpiresAtMilliseconds > now
+                ? new ChitenWarningObservation(
+                    new TargetPressureActorIdentity(player.GameObjectId, player.EntityId),
+                    true,
+                    slot,
+                    playerJobId,
+                    ChitenWarningRules.ChitenStatusId,
+                    ChitenWarningRules.ChitenIconId,
+                    state.Chiten.ActivatedAtMilliseconds,
+                    state.Chiten.ExpiresAtMilliseconds,
+                    now,
+                    state.Chiten.EpisodeToken)
+                : null;
             if (guardUnavailable) guardUnavailableSlots++;
             if (lowMp) lowMpSlots++;
 
@@ -384,6 +435,7 @@ internal sealed class ExecuteTracker : IDisposable
                 player.MaxMp)
             {
                 HasTrustedMp = rankingTrustedMp,
+                ChitenWarning = chitenWarning,
             });
         }
 
@@ -444,6 +496,42 @@ internal sealed class ExecuteTracker : IDisposable
         return true;
     }
 
+    private static bool TryGetChitenRemainingMilliseconds(
+        IPlayerCharacter player,
+        out long remainingMilliseconds)
+    {
+        var bestRemaining = 0f;
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId != ChitenWarningRules.ChitenStatusId ||
+                !float.IsFinite(status.RemainingTime) ||
+                status.RemainingTime <= 0f)
+            {
+                continue;
+            }
+
+            bestRemaining = Math.Max(bestRemaining, status.RemainingTime);
+        }
+
+        var milliseconds = (long)Math.Ceiling(bestRemaining * 1000d);
+        if (milliseconds is <= 0 or > ChitenWarningRules.MaximumDurationMilliseconds)
+        {
+            remainingMilliseconds = 0;
+            return false;
+        }
+
+        remainingMilliseconds = milliseconds;
+        return true;
+    }
+
+    private ulong NextChitenEpisodeToken()
+    {
+        nextChitenEpisodeToken = nextChitenEpisodeToken == ulong.MaxValue
+            ? 1
+            : nextChitenEpisodeToken + 1;
+        return nextChitenEpisodeToken;
+    }
+
     private void ResetRuntime()
     {
         runtimeStates.Clear();
@@ -464,5 +552,9 @@ internal sealed class ExecuteTracker : IDisposable
         public ulong TrustedMpGameObjectId { get; set; }
         public uint TrustedMpEntityId { get; set; }
         public uint TrustedMpJobId { get; set; }
+        public ChitenEpisodeState Chiten { get; set; } = ChitenEpisodeState.Initial;
+        public ulong ChitenGameObjectId { get; set; }
+        public uint ChitenEntityId { get; set; }
+        public uint ChitenJobId { get; set; }
     }
 }

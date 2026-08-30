@@ -187,6 +187,7 @@ $samuraiReactiveSelfTestsPath = Join-Path $coreSelfTestRoot 'SamuraiReactiveSelf
 $defensiveUtilityRulesPath = Join-Path $coreRoot 'DefensiveUtilityRules.cs'
 $defensiveUtilitySelfTestsPath = Join-Path $coreSelfTestRoot 'DefensiveUtilitySelfTests.cs'
 $autoGuardProtectionRulesPath = Join-Path $coreRoot 'AutoGuardProtectionRules.cs'
+$autoGuardConfirmationRulesPath = Join-Path $coreRoot 'AutoGuardConfirmationRules.cs'
 $pressureEscapeRulesPath = Join-Path $coreRoot 'PressureEscapeRules.cs'
 $pressureEscapeSelfTestsPath = Join-Path $coreSelfTestRoot 'PressureEscapeSelfTests.cs'
 $ninjaSeitonDispatchRulesPath = Join-Path $coreRoot 'NinjaSeitonDispatchRules.cs'
@@ -226,6 +227,11 @@ $combatLimitBreakNameplateRulesPath = Join-Path $coreRoot 'CombatLimitBreakNamep
 $combatLimitBreakNameplateSelfTestsPath = Join-Path $coreSelfTestRoot 'CombatLimitBreakNameplateSelfTests.cs'
 $combatLimitBreakNotificationRulesPath = Join-Path $coreRoot 'CombatLimitBreakNotificationRules.cs'
 $combatLimitBreakNotificationSelfTestsPath = Join-Path $coreSelfTestRoot 'CombatLimitBreakNotificationSelfTests.cs'
+$chitenWarningRulesPath = Join-Path $coreRoot 'ChitenWarningRules.cs'
+$chitenWarningSelfTestsPath = Join-Path $coreSelfTestRoot 'ChitenWarningSelfTests.cs'
+$opponentLimitBreakGaugeRulesPath = Join-Path $coreRoot 'OpponentLimitBreakGaugeRules.cs'
+$opponentLimitBreakGaugeSelfTestsPath = Join-Path $coreSelfTestRoot 'OpponentLimitBreakGaugeSelfTests.cs'
+$opponentLimitBreakGaugeServicePath = Join-Path $pluginServicesRoot 'OpponentLimitBreakGaugeService.cs'
 $localMpWarningRulesPath = Join-Path $coreRoot 'LocalMpWarningRules.cs'
 $localMpWarningSelfTestsPath = Join-Path $coreSelfTestRoot 'LocalMpWarningSelfTests.cs'
 $smartTargetSelectionRulesPath = Join-Path $coreRoot 'SmartTargetSelectionRules.cs'
@@ -351,7 +357,8 @@ $allowedUnsafe = @(
     $integratedHotbarInputSourcePath,
     $integratedInputRuntimePath,
     $crystallineConflictMapStatisticsServicePath,
-    $crystallineConflictMapResultPacketPath
+    $crystallineConflictMapResultPacketPath,
+    $opponentLimitBreakGaugeServicePath
 )
 
 $unsafeMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bunsafe\b')
@@ -720,7 +727,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 553-test registry.
+# 562-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -740,11 +747,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 512 -or
+if ($staticIntegratedTestCount -ne 521 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 553 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 562 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -752,7 +759,7 @@ if ($staticIntegratedTestCount -ne 512 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 46 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 553-test combined Core registry.'
+    throw 'Schema 47 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 562-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1308,8 +1315,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 46;') {
-    throw 'Schema 46 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 47;') {
+    throw 'Schema 47 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -1526,7 +1533,7 @@ if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = 
     $normalizedSmartActionRuntime -notmatch 'if \(!rewritten\) \{ forwardedTargetId = InvalidCarrierTargetId; targetSuppressedByRedirect = true; suppressingSmartTargetCall = true; \}.*?if \(suppressingSmartTargetCall\) return false;.*?InspectSmartActionSafetyLease' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
-    $normalizedSmartActionRuntime -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?clientAccepted = useActionHook!\.Original\(' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?clientAccepted = useActionHook!\.Original\(' -or
     $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId;.*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe.*?if \(safe\) canonicalTargetId = target\.Player\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \} if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
     $normalizedSmartActionRuntime -notmatch 'if \(Environment\.TickCount64 >= candidate\.ExpiresAtMilliseconds\).*?armedSmartTarget = null;.*?ownershipChanged = false;.*?Expired before exact Smart Action claim.*?return false;' -or
@@ -3115,12 +3122,15 @@ Assert-Literals $smartRecuperateRules @(
     'public const uint ActionId = 29_711;',
     'public const uint MinimumMissingHp = 16_000;',
     'public const uint MpCost = 2_000;',
+    'public static bool ShouldSuppressForOwnGuard(bool exactGuardActive)',
     '(ulong)maximumHp - currentHp >= MinimumMissingHp;',
     'currentMp >= MpCost;',
     'SmartRecuperatePhase.WaitingForAcceptedCooldownUnavailable',
     'SmartRecuperatePhase.WaitingForAcceptedCooldownReady',
     'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'CanAttemptFrozenRetryBudget(',
     'HeldActionRetryRules.Complete(',
+    'HeldActionRetryRules.CurrentMaximumNativeAttempts',
     'public static SmartRecuperateNativeAttemptDecision ApplyNativeAttemptOutcome(',
     'SmartRecuperateDecisionReason.MissingHealthBelowThreshold',
     'SmartRecuperateDecisionReason.InsufficientMp',
@@ -3147,19 +3157,24 @@ $smartRecuperateTestMethods = @(
     'SoftUnavailableIsFreeAndAcceptedCooldownDefinesRepeat',
     'PurifyPriorityNeverGetsStarved',
     'AutomaticModeFreezesOneKeylessIntent',
+    'AutomaticPreNativeSoftWaitRetainsHealthEpisodeAndRetriesNextFrame',
     'AutomaticTerminalNeedsANewHpOpportunity',
-    'AutomaticFalseRetriesIgnoreHeldLatencyExpansion',
+    'AutomaticFalseRetriesUseFrozenLatencyExpansion',
     'AcceptedCooldownLatchIsPassiveUntilTheRealEpochEnds'
 )
 foreach ($method in $smartRecuperateTestMethods) {
     Assert-Literals $smartRecuperateSelfTests @("public static void $method()") "Smart Recuperate self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("SmartRecuperateSelfTests.$method") "Smart Recuperate test registration $method"
 }
-if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 11 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 11) {
-    throw 'All eleven held/automatic Smart Recuperate identity, threshold, retry, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
+if ([regex]::Matches($smartRecuperateSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 12 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bSmartRecuperateSelfTests\.\w+').Count -ne 12) {
+    throw 'All twelve held/automatic Smart Recuperate identity, threshold, retry, pre-native soft-wait, cooldown-epoch, and Purify-priority tests must remain registered exactly once.'
 }
 Assert-Literals $smartRecuperateSelfTests @(
+    'SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: false)',
+    'a provisional Guard request without exact status cannot suppress Recuperate',
+    'SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: true)',
+    'exact live Guard still suppresses Recuperate',
     'Equal(SupportedPvPContext.CrystallineConflict, intent.Context, "frozen context");',
     'Observe(Observation() with { Context = SupportedPvPContext.WolvesDen })',
     '"explicit Wolves'' Den test context"',
@@ -3184,6 +3199,8 @@ Assert-Literals $smartRecuperateProbe @(
     'SmartRecuperateRules.Observe(',
     'SmartRecuperateRules.ApplyNativeAttemptOutcome(',
     'SmartRecuperateRules.CanUseFrozenIntent(',
+    'SmartRecuperateRules.ShouldSuppressForOwnGuard(',
+    'nearAssist.IsExactLocalGuardActive(intent.LocalPlayer)',
     'Context: context,',
     'ResolveCurrentContext()',
     'includeWolvesDenTesting: configuration.EnableWolvesDenTesting',
@@ -3240,18 +3257,29 @@ if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.Shou
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -lt 2 -or
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
+    $smartRecuperateProbe -match '\bTryGetRecentExactLocalGuardAttempt\s*\(' -or
     $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueueAction|PendingDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Smart Recuperate must freeze distinct held/automatic identities, give automatic consent key zero, limit its optional cast-cancel to the exact verified BRD/MCH shot, fail closed on text input, claim only its current scheduler frame, and issue one exact frozen self-GOID boundary with no retarget, alternate, or replay.'
+    throw 'Smart Recuperate must freeze distinct held/automatic identities, give automatic consent key zero, yield only to exact live Guard (never the provisional request latch), limit its optional cast-cancel to the exact verified BRD/MCH shot, fail closed on text input, claim only its current scheduler frame, and issue one exact frozen self-GOID boundary with no retarget, alternate, or replay.'
+}
+$tryUseRecuperate = [regex]::Match(
+    $normalizedSmartRecuperateProbe,
+    'private ClientActionAttemptOutcome TryUseRecuperate\((?<Body>.*?)(?=private HeldCastCancellationRequest\? BuildCastCancellationRequest\()')
+if (-not $tryUseRecuperate.Success -or
+    $tryUseRecuperate.Groups['Body'].Value -match 'return ClientActionAttemptOutcome\.NotInvoked;' -or
+    [regex]::Matches(
+        $tryUseRecuperate.Groups['Body'].Value,
+        'return ClientActionAttemptOutcome\.SoftUnavailable;').Count -ne 4) {
+    throw 'Smart Recuperate pre-native validation must retain the exact health episode as one of four budget-free SoftUnavailable waits; only a crossed native boundary may spend or terminate it.'
 }
 $physicalObserverIntegration = [regex]::Match(
     $normalizedAutomaticRecoveryPersonalStatus,
     'var anyPersistentHeldInputEnabled = (?<Body>.*?)var purify = emergencyPurify\.Observe\(')
 if (-not $physicalObserverIntegration.Success -or
     $physicalObserverIntegration.Groups['Body'].Value -match 'smartRecuperateAutomaticConfigurationEnabled|automaticPurifyConfigurationEnabled|EnableAutomatic(?:Purify|Recuperate)' -or
-    $normalizedAutomaticRecoveryPersonalStatus -notmatch 'var purifyPhysicalInputObservationEnabled = heldPurifyConfigurationEnabled \|\| pressureStunPurifyConfigurationEnabled;' -or
+    $normalizedAutomaticRecoveryPersonalStatus -notmatch 'var purifyPhysicalInputObservationEnabled = heldPurifyConfigurationEnabled;' -or
     $normalizedAutomaticRecoveryPersonalStatus -notmatch 'var smartRecuperateHeldInputEnabled = configuration\.Enabled && configuration\.EnableSmartRecuperateOnHeldKey.*?var smartRecuperateAutomaticConfigurationEnabled = configuration\.Enabled && configuration\.EnableAutomaticRecuperate' -or
     $normalizedAutomaticRecoveryPersonalStatus -notmatch 'emergencyInput\.Observe\(.*?purifyPhysicalInputObservationEnabled.*?smartRecuperateHeldInputEnabled.*?purifyHeldInputEnabled,.*?smartRecuperateHeldInputEnabled,') {
-    throw 'Automatic Purify/Recuperate alone must not start, prime, or retire the shared physical held-key observer; only their separate physical/held modes may participate in that lifecycle.'
+    throw 'Automatic Purify/Recuperate and the keyless high-pressure Stun chain must not start, prime, or retire the shared physical held-key observer; only their separate physical/held modes may participate in that lifecycle.'
 }
 
 # VPR Serpent's Tail is a separate default-off physical-hold helper. It polls
@@ -3700,8 +3728,13 @@ Assert-Literals $warningSound @(
     'ThreatCooldownMilliseconds = 2_000',
     'PreviewCooldownMilliseconds = 350',
     'threatToken == 0',
-    'threatToken == lastThreatToken',
-    'lastThreatToken = threatToken',
+    'private readonly HashSet<ulong> consumedThreatTokens = [];',
+    'private readonly Queue<ulong> consumedThreatTokenOrder = [];',
+    '!consumedThreatTokens.Add(threatToken)',
+    'consumedThreatTokenOrder.Enqueue(threatToken)',
+    'while (consumedThreatTokenOrder.Count > 64)',
+    'consumedThreatTokens.Remove(consumedThreatTokenOrder.Dequeue())',
+    'if (nowMilliseconds < nextThreatSoundAt) return false',
     'nextThreatSoundAt = SaturatingAdd(nowMilliseconds, ThreatCooldownMilliseconds)',
     'soundId is < 1 or > 16',
     'UIGlobals.PlayChatSoundEffect((uint)soundId)',
@@ -3710,11 +3743,13 @@ Assert-Literals $warningSound @(
 if ([regex]::Matches($warningSound, '\bUIGlobals\.PlayChatSoundEffect\s*\(').Count -ne 1) {
     throw 'The shared FFXIV warning-sound service must contain exactly one client-owned PlayChatSoundEffect call.'
 }
-$consumeThreatToken = [regex]::Match($warningSound, '\blastThreatToken\s*=\s*threatToken\s*;')
+$consumeThreatToken = [regex]::Match($warningSound, '\bconsumedThreatTokens\.Add\s*\(\s*threatToken\s*\)')
+$consumeThreatCooldown = [regex]::Match($warningSound, '\bif\s*\(\s*nowMilliseconds\s*<\s*nextThreatSoundAt\s*\)\s*return\s+false\s*;')
 $playThreatSound = [regex]::Match($warningSound, '\breturn\s+TryPlay\s*\(\s*soundId\s*\)\s*;')
-if (-not $consumeThreatToken.Success -or -not $playThreatSound.Success -or
-    $consumeThreatToken.Index -gt $playThreatSound.Index) {
-    throw 'MCH threat sound must consume its one-shot token before the native sound request.'
+if (-not $consumeThreatToken.Success -or -not $consumeThreatCooldown.Success -or -not $playThreatSound.Success -or
+    $consumeThreatToken.Index -gt $consumeThreatCooldown.Index -or
+    $consumeThreatCooldown.Index -gt $playThreatSound.Index) {
+    throw 'Shared danger audio must consume each bounded one-shot token before the shared cooldown and native sound request.'
 }
 if ($warningSound -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event)\b') {
     throw 'Shared FFXIV warning audio must never initiate actions or mutate input/targets.'
@@ -4211,8 +4246,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 512) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 512-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 521) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 521-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4412,6 +4447,7 @@ if ($normalizedPurifyBufferRulesForAutomatic -notmatch 'public bool ShouldClaimI
 }
 $automaticPurifyTestMethods = @(
     'AutomaticStatusArmsAndDispatchesWithoutAPhysicalKey',
+    'AutomaticPreNativeSoftWaitRetainsExactStatusAndRetriesNextFrame',
     'DisablingAutomaticModeCancelsTheKeylessIntent',
     'AutomaticStatusIsOneShotButAReplacementIsANewEpisode'
 )
@@ -4419,9 +4455,19 @@ foreach ($method in $automaticPurifyTestMethods) {
     Assert-Literals $emergencyPurifyBufferSelfTests @("public static void $method()") "Automatic Purify self-test $method"
     Assert-Literals $integratedCoreTestProgram @("EmergencyPurifyBufferSelfTests.$method") "Automatic Purify test registration $method"
 }
-if ([regex]::Matches($emergencyPurifyBufferSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 16 -or
-    [regex]::Matches($integratedCoreTestProgram, '\bEmergencyPurifyBufferSelfTests\.\w+').Count -ne 16) {
-    throw 'All sixteen Purify buffer tests, including the three automatic keyless/status-episode regressions, must remain registered exactly once.'
+if ([regex]::Matches($emergencyPurifyBufferSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 17 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bEmergencyPurifyBufferSelfTests\.\w+').Count -ne 17) {
+    throw 'All seventeen Purify buffer tests, including the four automatic keyless/status-episode/pre-native-wait regressions, must remain registered exactly once.'
+}
+$tryUsePurify = [regex]::Match(
+    $normalizedPurifyProbe,
+    'private unsafe ClientActionAttemptOutcome TryUsePurify\((?<Body>.*?)(?=private static unsafe bool TryGetTextInputState\()')
+if (-not $tryUsePurify.Success -or
+    $tryUsePurify.Groups['Body'].Value -match 'return ClientActionAttemptOutcome\.NotInvoked;' -or
+    [regex]::Matches(
+        $tryUsePurify.Groups['Body'].Value,
+        'return ClientActionAttemptOutcome\.SoftUnavailable;').Count -ne 6) {
+    throw 'Emergency Purify pre-native validation must retain the exact CC episode as one of six budget-free SoftUnavailable waits; only a crossed native boundary may spend or terminate it.'
 }
 Assert-Literals $ninjaShukuchiStealthGate @(
     'internal sealed class NinjaShukuchiHiddenStatusCatalog',
@@ -4565,12 +4611,14 @@ Assert-Literals $nearAssistRedirectorForAstrologian @(
     'internal bool RunAstrologianHarmonicOrbisWithoutRedirect(',
     'private bool ShouldVetoAstrologianOwnGuardAtFinalBoundary(',
     'internal bool IsExactLocalGuardActiveOrPropagating(',
+    'internal bool IsExactLocalGuardActive(',
     'AstrologianHarmonicOrbisRules.ShouldVetoNativeBoundaryForOwnGuard(',
     'AST own Guard became active or began propagating at the final native boundary'
 ) 'AST scoped redirect bypass and final hook-boundary Guard veto'
 if ($normalizedNearAssistRedirectorForAstrologian -notmatch 'RunAstrologianHarmonicOrbisWithoutRedirect\(.*?rawActionId.*?expectedAdjustedActionId.*?astrologianOwnGuardVetoScope is not null \|\| AstrologianHarmonicOrbisRules\.ShouldVetoNativeBoundaryForOwnGuard\( rawActionId, expectedAdjustedActionId, expectedAdjustedActionId.*?ownGuardActiveOrPropagating: false\).*?return false;.*?astrologianOwnGuardVetoScope = new AstrologianOwnGuardVetoScope\( this, rawActionId, expectedAdjustedActionId, localPlayer, targetGameObjectId\);.*?return RunWithoutRedirect\(action\);.*?finally \{ astrologianOwnGuardVetoScope = null; \}' -or
     $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\( thisPtr, actionType, actionId, forwardedTargetId, mode\).*?return false;.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistRedirectorForAstrologian -notmatch 'IsExactLocalGuardActiveOrPropagating\(.*?if \(!expectedLocalPlayer\.IsValid \|\| !IsLivePlayer\(local\) \|\| GetNativeObject\(local!\) == null\).*?return true;.*?if \(currentLocalPlayer != expectedLocalPlayer\) return true;.*?if \(DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return true;.*?TryGetRecentExactLocalGuardAttempt\(.*?DefensiveUtilityRules\.GuardPropagationLatchMilliseconds.*?catch.*?return true;' -or
+    $normalizedNearAssistRedirectorForAstrologian -notmatch 'IsExactLocalGuardActive\(.*?if \(!expectedLocalPlayer\.IsValid \|\| !IsLivePlayer\(local\) \|\| GetNativeObject\(local!\) == null\).*?return true;.*?return currentLocalPlayer != expectedLocalPlayer \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\);.*?catch.*?return true;' -or
     $normalizedNearAssistRedirectorForAstrologian -notmatch 'ShouldVetoAstrologianOwnGuardAtFinalBoundary\(.*?scope\.Owner != this \|\| scope\.Consumed.*?scope\.Consumed = true;.*?IsExactLocalGuardActiveOrPropagating\(scope\.LocalPlayer\).*?currentAdjustedActionId = actionManager == null \? 0 : actionManager->GetAdjustedActionId\(actionId\).*?actionType != ActionType\.Action.*?mode != ActionManager\.UseActionMode\.None.*?actionId != scope\.RawActionId.*?ShouldVetoNativeBoundaryForOwnGuard\( actionId, scope\.ExpectedAdjustedActionId, currentAdjustedActionId, scope\.LocalPlayer, currentLocalPlayer, scope\.TargetGameObjectId, forwardedTargetId, ownGuardActiveOrPropagating\);') {
     throw 'AST must cross a one-call redirect-bypass scope whose final central hook boundary freshly revalidates exact action mode, action, local actor, target, live Guard, and Guard propagation before Original; uncertainty must veto.'
 }
@@ -4578,12 +4626,15 @@ Assert-Literals $heldCastCancellationForAstrologian @(
     'BlockedByOwnGuard = 4',
     'Func<TargetPressureActorIdentity, bool>',
     'finalOwnGuardActiveOrPropagating',
+    'HeldCastCancellationHelperKind.Purify or',
+    'HeldCastCancellationHelperKind.SmartRecuperate',
+    'DefensiveUtilityProbe.HasActiveGuard(localPlayer)',
     'Native cast cancellation vetoed by a fresh exact own-Guard check'
-) 'Fresh exact own-Guard veto immediately before held cast cancellation'
+) 'Recovery-priority exact Guard and lower-helper propagated-Guard veto immediately before held cast cancellation'
 if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating, AutomaticRecoveryShotCastMetadataValidation automaticRecoveryShotCastMetadata\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
-    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?if \(finalOwnGuardActiveOrPropagating\( request!\.Value\.LocalPlayer\)\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
+    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating\( request\.Value\.LocalPlayer\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
     [regex]::Matches($heldCastCancellationForAstrologian, '\bCancelCast\s*\(').Count -ne 1) {
-    throw 'Held cast cancellation must inject one fail-closed exact-own-Guard dependency and call the sole native CancelCast boundary only after its fresh veto passes.'
+    throw 'Held cast cancellation must give Purify/Recuperate priority over a provisional Guard latch, retain propagated-Guard protection for lower helpers, and call the sole native CancelCast boundary only after its fresh veto passes.'
 }
 $astrologianHarmonicOrbisTestMethods = @(
     'ExactIdsAndNearHelpThresholdArePinned',
@@ -4762,15 +4813,15 @@ $miracleRulesForLease = Read-RequiredSource $miracleInterceptRulesPath 'Reactive
 $normalizedPurifyBufferRulesForLease = $purifyBufferRulesForLease -replace '\s+', ' '
 $normalizedAllyRescueBufferRulesForLease = $allyRescueBufferRulesForLease -replace '\s+', ' '
 $normalizedMiracleRulesForLease = $miracleRulesForLease -replace '\s+', ' '
-$defensiveUtilityForLease = Read-RequiredSource $defensiveUtilityProbePath 'Guard and Guardian held-before-fresh runtime'
+$defensiveUtilityForLease = Read-RequiredSource $defensiveUtilityProbePath 'Guardian held-before-fresh runtime'
 $miracleProbeForLease = Read-RequiredSource $miracleInterceptProbePath 'Reactive CC held-before-fresh runtime'
 $normalizedMiracleProbeForLease = $miracleProbeForLease -replace '\s+', ' '
 if ($normalizedPurifyBufferRulesForLease -notmatch 'if \(observation\.AllowHeldKeyAtStatusEntry && observation\.HeldKeyEligible && observation\.HeldKeyCode > 0\).*?return EmergencyPurifyInputTrigger\.HeldKeyAtStatusEntry;.*?if \(observation\.FreshKeyPressed && observation\.FreshKeyCode > 0\).*?return EmergencyPurifyInputTrigger\.FreshKeyPress;' -or
     $normalizedAllyRescueBufferRulesForLease -notmatch 'if \(observation\.AllowHeldKeyAtCandidateEntry && observation\.HeldKeyEligible && observation\.HeldGameplayKeyToken > 0\) return AllyRescueInputTrigger\.HeldKeyAtCandidateEntry; if \(observation\.FreshKeyPressed && observation\.FreshGameplayKeyToken > 0\) return AllyRescueInputTrigger\.FreshKeyPress;' -or
     $normalizedMiracleRulesForLease -notmatch 'if \(observation\.HeldKeyEligible\) return MiracleInterceptInputTrigger\.HeldPhysicalKey; if \(observation\.FreshKeyPressed\) return MiracleInterceptInputTrigger\.FreshKeyPress;' -or
-    [regex]::Matches($defensiveUtilityForLease, 'var selectedKey = heldKey != VirtualKey\.NO_KEY \? heldKey : freshKey;').Count -ne 2 -or
+    [regex]::Matches($defensiveUtilityForLease, 'var selectedKey = heldKey != VirtualKey\.NO_KEY \? heldKey : freshKey;').Count -ne 1 -or
     $normalizedMiracleProbeForLease -notmatch 'private int ResolveEpisodeGameplayKeyToken\( bool allowHeldGameplayKey, EmergencyActionInputFrame inputFrame\).*?if \(!input\.ProbeSucceeded \|\| input\.IsTextInputActive\) return 0;.*?if \(allowHeldGameplayKey && TryGetLatchedProtectionEndKey\(out var latchedKey\) && inputFrame\.IsGameplayKeyGenerationEligible\(latchedKey\)\).*?var candidate = allowHeldGameplayKey && input\.HeldGameplayKeyEligible \? input\.HeldGameplayKey : input\.FreshGameplayKeyPressed \? input\.FreshGameplayKey : VirtualKey\.NO_KEY;.*?IsExactVirtualKey\(candidate\) && inputFrame\.IsGameplayKeyGenerationEligible\(candidate\)') {
-    throw 'Purify, Ally Rescue, reactive CC, Guard, and Guardian must evaluate their stable held lease before any coincident fresh-key fallback.'
+    throw 'Purify, Ally Rescue, reactive CC, and held Guardian must evaluate their stable held lease before any coincident fresh-key fallback; keyless Auto-Guard has no key-selection lane.'
 }
 Assert-Literals $coreSelfTestProgramForGuardian @(
     'EmergencyPurifyBufferSelfTests.StableHoldWinsWhenFreshAndHeldCoincide',
@@ -4914,7 +4965,7 @@ Assert-Literals $heldCastCancellationService @(
 ) 'Central void native cast-cancel boundary, exact automatic final recheck, and truthful diagnostics'
 if ($normalizedHeldCastCancellationService -notmatch 'var automaticRecoveryRequest = request is \{ IsValid: true, IsAutomaticRecovery: true \}; var textInputActive = automaticRecoveryRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticRecoveryRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
     $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticRecovery == true\)' -or
-    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else if \(finalOwnGuardActiveOrPropagating.*?BlockedByOwnGuard.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
+    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else if \(request!\.Value\.HelperKind is HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \? DefensiveUtilityProbe\.HasActiveGuard\(localPlayer\) : finalOwnGuardActiveOrPropagating.*?BlockedByOwnGuard.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
     $normalizedHeldCastCancellationService -notmatch 'private bool AutomaticRecoveryCastBoundaryStillValid\(.*?if \(!request\.IsAutomaticRecovery\) return true;.*?automaticRecoveryBasicShotCancellationEnabled && localPlayer\.IsCasting && automaticRecoveryShotCastMetadata\.IsVerified\( localJobId, castActionId\) && AutomaticRecoveryShotCastRules \.IsExactAllowedPairWithAdjustedIdentity\( localJobId, castActionId, adjustedCastActionId\);' -or
     $normalizedHeldCastCancellationService -notmatch 'new HeldCastCancellationSnapshot\( decision\.Kind, decision\.Reason, decision\.NextState\.LastCastEpochToken, request, lastRequestedIntent, observation\.CastActionId, observation\.AdjustedCastActionId, observation\.CurrentLocalJobId, automaticRecoveryBasicShotCancellationEnabled, automaticRecoveryBasicShotMetadataVerified, nativeStatus, lastNativeStatus, nativeRequestCount, nativeFaultCount,' -or
     $heldCastCancellationService -match '\b(UseAction|UseActionLocation|SendInput|keybd_event|mouse_event|ExecuteCommand|QueueAction|ClearActionQueue|Jump|MovePlayer)\s*\(|VirtualKey\.(?:ESCAPE|SPACE|W|A|S|D)\b|->(?:CastActionId|AnimationLock|ActionQueued|QueuedActionId|QueuedTargetId)\s*=(?!=|>)') {
@@ -4968,15 +5019,14 @@ $castRequestProducers = @(
     [pscustomobject]@{ Path = $darkKnightPlungeProbePath; Kind = 'DarkKnightPlunge'; Count = 1 },
     [pscustomobject]@{ Path = $smartRecuperateProbePath; Kind = 'SmartRecuperate'; Count = 1 },
     [pscustomobject]@{ Path = $emergencyTeleportProbePath; Kind = 'EmergencyTeleport'; Count = 1 },
-    [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guard'; Count = 1 },
     [pscustomobject]@{ Path = $pressureEscapeSprintProbePath; Kind = 'PressureEscapeSprint'; Count = 1 }
 )
 $castRequestProducerPaths = @($castRequestProducers.Path | Sort-Object -Unique)
 $allCastRequestProducerSource = (($castRequestProducerPaths | ForEach-Object {
     Read-RequiredSource $_ "Held cast cancellation request producer $_"
 }) + (Read-RequiredSource $personalStatusPath 'DRK Shadowbringer cast cancellation adapter')) -join "`n"
-if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 16) {
-    throw 'Production runtime must construct exactly sixteen reviewed cast-cancellation request shapes; VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
+if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 15) {
+    throw 'Production runtime must construct exactly fifteen reviewed cast-cancellation request shapes; keyless Auto-Guard, VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
 }
 foreach ($producer in $castRequestProducers) {
     $producerSource = Read-RequiredSource $producer.Path "Cast-cancellation producer $($producer.Kind)"
@@ -5004,9 +5054,9 @@ $castSelection = [regex]::Match(
 if (-not $castSelection.Success -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 15 -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedDarkKnightShadowbringerCastCancellationRequest\(').Count -ne 2 -or
-    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
+    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
     $castSelection.Groups['Body'].Value -match '\b(viper|gunbreaker|kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > AST Orbis > RDM Guard engage > SAM > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Recuperate > Emergency Teleport > Guard > Sprint order, excluding VPR, GNB, Kardia, and Monk.'
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Recuperate > keyless Guard (null by design) > AST Orbis > RDM Guard engage > SAM > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Emergency Teleport > Sprint order, excluding VPR, GNB, Kardia, and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -5041,8 +5091,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 46 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 47 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 # Schema 45 introduces two genuinely automatic self-actions. Both are plain
@@ -5053,27 +5103,27 @@ Assert-Literals $castConfiguration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 46;'
+    'Version = 47;'
 ) 'Schema-45 default-off automatic Purify and Recuperate configuration'
 if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 46;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
-    throw 'Schema 46 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 47;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 47 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
 }
 
 Assert-Literals $castConfiguration @(
     'public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }',
     'if (Version < 46)',
     'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
-    'Version = 46;'
+    'Version = 47;'
 ) 'Schema-46 separate default-off automatic recovery basic-shot cast-cancel permission'
 if ($castConfiguration -match '(?m)^\s*public bool AllowAutomaticRecoveryToCancelBasicShotCasts \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowAutomaticRecoveryToCancelBasicShotCasts\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \} Version = 46;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
-    throw 'Schema 46 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 47;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
+    throw 'Schema 47 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -5329,7 +5379,9 @@ $monkEarthReplyObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Obse
 $darkKnightPlungeObserve = [regex]::Match($personalStatus, '\bdarkKnightPlunge\.Observe\s*\(')
 if (-not $purifyObserve.Success -or -not $astrologianOrbisObserve.Success -or -not $guardObserve.Success -or -not $smartRecuperateObserve.Success -or -not $emergencyTeleportObserve.Success -or -not $guardianObserve.Success -or -not $guardianCommunicationObserve.Success -or -not $pressureEscapeObserve.Success -or -not $rescueObserve.Success -or
     -not $miracleObserve.Success -or -not $smartKardiaObserve.Success -or -not $ninjaSeitonObserve.Success -or -not $viperSerpentTailObserve.Success -or -not $ninjaGuardShukuchiObserve.Success -or -not $scholarCriticalStrategyObserve.Success -or -not $monkEarthReplyObserve.Success -or -not $darkKnightPlungeObserve.Success -or
-    $purifyObserve.Index -gt $astrologianOrbisObserve.Index -or
+    $purifyObserve.Index -gt $smartRecuperateObserve.Index -or
+    $smartRecuperateObserve.Index -gt $guardObserve.Index -or
+    $guardObserve.Index -gt $astrologianOrbisObserve.Index -or
     $astrologianOrbisObserve.Index -gt $ninjaSeitonObserve.Index -or
     $ninjaSeitonObserve.Index -gt $viperSerpentTailObserve.Index -or
     $viperSerpentTailObserve.Index -gt $miracleObserve.Index -or
@@ -5339,17 +5391,16 @@ if (-not $purifyObserve.Success -or -not $astrologianOrbisObserve.Success -or -n
     $guardianCommunicationObserve.Index -gt $ninjaGuardShukuchiObserve.Index -or
     $ninjaGuardShukuchiObserve.Index -gt $scholarCriticalStrategyObserve.Index -or
     $scholarCriticalStrategyObserve.Index -gt $darkKnightPlungeObserve.Index -or
-    $darkKnightPlungeObserve.Index -gt $smartRecuperateObserve.Index -or
-    $smartRecuperateObserve.Index -gt $emergencyTeleportObserve.Index -or
-    $emergencyTeleportObserve.Index -gt $guardObserve.Index -or
-    $guardObserve.Index -gt $pressureEscapeObserve.Index -or
+    $darkKnightPlungeObserve.Index -gt $emergencyTeleportObserve.Index -or
+    $emergencyTeleportObserve.Index -gt $pressureEscapeObserve.Index -or
     $pressureEscapeObserve.Index -gt $smartKardiaObserve.Index -or
     $smartKardiaObserve.Index -gt $monkEarthReplyObserve.Index -or
     [regex]::Matches($personalStatus, '\bemergencyInputFrame\b').Count -lt 7) {
-    throw 'Personal status coordination must process Purify, AST Harmonic Orbis, NIN Seiton, VPR Serpent Tail, reactive CC, Ally Rescue, Guardian, same-frame Guardian communication, Guard-Shukuchi, SCH Critical, DRK Plunge, Smart Recuperate, Emergency Teleport, generic Guard, pressure Sprint, event Kardia, then event Monk in exact order.'
+    throw 'Personal status coordination must process Purify, Smart Recuperate, keyless Auto-Guard, AST Harmonic Orbis, NIN Seiton, VPR Serpent Tail, reactive CC, Ally Rescue, Guardian, same-frame Guardian communication, Guard-Shukuchi, SCH Critical, DRK Plunge, Emergency Teleport, pressure Sprint, event Kardia, then event Monk in exact order.'
 }
-if ($normalizedPersonalStatus -notmatch 'var recuperate = smartRecuperate\.Observe\(.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var teleport = emergencyTeleport\.Observe\(.*?smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var emergencyTeleportClaimedPriority = teleport\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(') {
-    throw 'Emergency Teleport must remain directly after Smart Recuperate in the shared lane.'
+if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var immediateRecoveryClaimedPriority = purifyClaimedPriority \|\| smartRecuperateClaimedPriority;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed;.*?var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority \|\| defensiveUtilityClaimedPriority;.*?var astrologianOrbis = astrologianHarmonicOrbis\.Observe\(' -or
+    [regex]::Matches($personalStatus, '\bsmartRecuperate\.Observe\s*\(').Count -ne 1) {
+    throw 'The one shared held/automatic Recuperate state machine must run exactly once, directly after Purify, and publish one cumulative recovery claim before every job helper.'
 }
 Assert-Literals $personalStatus @(
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId;',
@@ -5405,7 +5456,7 @@ Assert-Literals $personalStatus @(
     'resilienceActive',
     'guardActive',
     'miracleInterceptConfigurationEnabled,',
-    '!purifyClaimedPriority &&',
+    '!immediateDefenseClaimedPriority &&',
     '!miracle.InputClaimed &&',
     'metadata.AllyRescueStatusesVerified',
     'metadata.MiracleOfNatureActionVerified',
@@ -5474,7 +5525,7 @@ Assert-Literals $personalStatus @(
 ) 'Exact shared priority from self-Purify through AST and the job-specific DRK Plunge tier'
 Assert-Literals $personalStatus @(
     'var purifyHeldInputEnabled = configuration.Enabled &&',
-    'var defensiveUtilityHeldInputEnabled = defensiveUtilitiesConfigurationEnabled &&',
+    'const bool defensiveUtilityHeldInputEnabled = false;',
     'var paladinGuardianHeldInputEnabled = paladinGuardianConfigurationEnabled &&',
     'var smartRecuperateHeldInputEnabled = configuration.Enabled &&',
     'var emergencyTeleportHeldInputEnabled = configuration.Enabled &&',
@@ -5504,7 +5555,7 @@ Assert-Literals $personalStatus @(
     'samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled',
     'astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled',
     'redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled'
- ) 'Guard-independent persistent physical held-input observation gates for all twenty shared helpers'
+ ) 'Guard-independent persistent physical held-input observation gates for nineteen held helpers plus the explicit keyless Auto-Guard compatibility slot'
 $requiredReactiveCcGateFragments = @(
     'miracleIntercept = new MiracleInterceptProbe( objectTable, nearAssist.VerifiedCcBrakeActionIds, nearAssist.VerifiedCcBrakeStatusIds, executeTracker, pressureTracker, nearAssist, machinistLimitBreakCapture, log, metadata, configuration);',
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId; var isRedMage = localJobId == ReactiveCounterCcProfileRules.RedMageJobId; var isBlackMage = localJobId == ReactiveCounterCcProfileRules.BlackMageJobId;',
@@ -5530,6 +5581,7 @@ if (-not $persistentHeldGateBlock.Success -or
 }
 Assert-Literals $personalStatus @(
     'var purifyClaimedPriority = purify.InputClaimed;',
+    'var immediateRecoveryClaimedPriority = purifyClaimedPriority ||',
     'var astrologianClaimedPriority = astrologianOrbis.InputClaimed;',
     'var redMageGuardEngageClaimedPriority = astrologianClaimedPriority ||',
     'hasPurifyRemovableCrowdControl ||',
@@ -5541,10 +5593,10 @@ Assert-Literals $personalStatus @(
     'shadowbringer.InputClaimed ||',
     'monkCombo.InputClaimed;',
     'var smartRecuperateClaimedPriority = recuperate.InputClaimed;',
+    'var defensiveUtilityClaimedPriority = guardDefense.InputClaimed;',
+    'var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority ||',
     'var emergencyTeleportClaimedPriority = teleport.InputClaimed;',
     'miracle.InputClaimed ||',
-    'var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||',
-    'guardianClaimedPriority;',
     'var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;',
     'configuration.EnableNinjaSeitonOnHeldGameplayKey',
     'configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey',
@@ -5567,11 +5619,11 @@ Assert-Literals $personalStatus @(
     'scholar.InputClaimed ||',
     'emergencyInputFrame.IsConsumed'
 ) 'Frame-local absolute priority claims across every held helper'
-if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var astrologianOrbis = astrologianHarmonicOrbis\.Observe\(.*?guardActive, purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame,.*?var astrologianClaimedPriority = astrologianOrbis\.InputClaimed;.*?var redMageGuard = redMageGuardEngage\.Observe\(.*?guardActive, purifyClaimedPriority \|\| astrologianClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame,.*?var redMageGuardEngageClaimedPriority = astrologianClaimedPriority \|\| redMageGuard\.InputClaimed;.*?var samuraiCounter = samuraiReactive\.ObserveCounterCc\(.*?dispatchAllowed: !guardActive && !purifyClaimedPriority && !redMageGuardEngageClaimedPriority && !emergencyInputFrame\.IsConsumed,.*?var samurai = samuraiZantetsukenConfigurationEnabled \? samuraiReactive\.ObserveZantetsuken\(.*?dispatchAllowed: !guardActive && !purifyClaimedPriority && !redMageGuardEngageClaimedPriority && !samuraiCounter\.InputClaimed && !emergencyInputFrame\.IsConsumed,.*?var samuraiClaimedPriority = redMageGuardEngageClaimedPriority \|\| samurai\.InputClaimed;.*?var ninja = ninjaSeiton\.Observe\(.*?purifyClaimedPriority \|\| samuraiClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var viper = viperSerpentTail\.Observe\(.*?purifyClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var gunbreaker = gunbreakerContinuation\.Observe\(.*?purifyClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
-    $normalizedPersonalStatus -notmatch 'var miracle = miracleIntercept\.Observe\(.*?!purifyClaimedPriority && !samuraiClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !gunbreaker\.InputClaimed && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !purifyClaimedPriority && !samuraiClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !gunbreaker\.InputClaimed && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?purifyClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| gunbreaker\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: true\)' -or
-    $normalizedPersonalStatus -notmatch 'var guardShukuchi = ninjaGuardShukuchi\.Observe\(.*?samuraiClaimedPriority.*?gunbreaker\.InputClaimed.*?allyRescueClaimedPriority.*?guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?samuraiClaimedPriority.*?gunbreaker\.InputClaimed.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var shadowbringerPre = darkKnightShadowbringer\.ObservePriorityDarkArts\(.*?scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?shadowbringerPre\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var shadowbringer = shadowbringerPre;.*?ObserveDeferredSafeFallback\(.*?shadowbringerPre\.InputClaimed \|\| plunge\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var monkCombo = monkHeldCombo\.Observe\(.*?shadowbringer\.InputClaimed \|\| plunge\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
-    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| gunbreaker\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed \|\| shadowbringer\.InputClaimed \|\| monkCombo\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var teleport = emergencyTeleport\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var emergencyTeleportClaimedPriority = teleport\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyTeleportClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?prioritizedGuardianPass: defense\).*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyTeleportClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
-    throw 'The runtime must propagate frame-local priority exactly as Purify > AST Harmonic Orbis > RDM Guard engage > SAM > NIN Seiton > VPR > GNB > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Monk > Recuperate > Emergency Teleport > Guard > Sprint, while active removable CC still absolutely blocks Recuperate.'
+if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.InputClaimed;.*?var recuperate = smartRecuperate\.Observe\(.*?hasPurifyRemovableCrowdControl \|\| purifyClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var smartRecuperateClaimedPriority = recuperate\.InputClaimed;.*?var immediateRecoveryClaimedPriority = purifyClaimedPriority \|\| smartRecuperateClaimedPriority;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?allowHeldGameplayKey: false,.*?immediateRecoveryClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame,.*?prioritizedGuardianPass: null\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed;.*?var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority \|\| defensiveUtilityClaimedPriority;.*?var astrologianOrbis = astrologianHarmonicOrbis\.Observe\(.*?guardActive, immediateDefenseClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame,.*?var astrologianClaimedPriority = astrologianOrbis\.InputClaimed;.*?var redMageGuard = redMageGuardEngage\.Observe\(.*?guardActive, immediateDefenseClaimedPriority \|\| astrologianClaimedPriority \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame,.*?var redMageGuardEngageClaimedPriority = astrologianClaimedPriority \|\| redMageGuard\.InputClaimed;.*?var samuraiCounter = samuraiReactive\.ObserveCounterCc\(.*?dispatchAllowed: !guardActive && !immediateDefenseClaimedPriority && !redMageGuardEngageClaimedPriority && !emergencyInputFrame\.IsConsumed,.*?var samurai = samuraiZantetsukenConfigurationEnabled \? samuraiReactive\.ObserveZantetsuken\(.*?dispatchAllowed: !guardActive && !immediateDefenseClaimedPriority && !redMageGuardEngageClaimedPriority && !samuraiCounter\.InputClaimed && !emergencyInputFrame\.IsConsumed,.*?var samuraiClaimedPriority = redMageGuardEngageClaimedPriority \|\| samurai\.InputClaimed;.*?var ninja = ninjaSeiton\.Observe\(.*?immediateDefenseClaimedPriority \|\| samuraiClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var viper = viperSerpentTail\.Observe\(.*?immediateDefenseClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var gunbreaker = gunbreakerContinuation\.Observe\(.*?immediateDefenseClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var miracle = miracleIntercept\.Observe\(.*?!immediateDefenseClaimedPriority && !samuraiClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !gunbreaker\.InputClaimed && !emergencyInputFrame\.IsConsumed.*?var rescue = allyRescue\.Observe\(.*?dispatchAllowed: !immediateDefenseClaimedPriority && !samuraiClaimedPriority && !ninja\.InputClaimed && !viper\.InputClaimed && !gunbreaker\.InputClaimed && !miracle\.InputClaimed && !emergencyInputFrame\.IsConsumed\);.*?var allyRescueClaimedPriority = rescue\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?immediateDefenseClaimedPriority \|\| samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| gunbreaker\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| emergencyInputFrame\.IsConsumed, emergencyInputFrame.*?beginsFrame: false\)' -or
+    $normalizedPersonalStatus -notmatch 'var guardShukuchi = ninjaGuardShukuchi\.Observe\(.*?immediateDefenseClaimedPriority.*?samuraiClaimedPriority.*?gunbreaker\.InputClaimed.*?allyRescueClaimedPriority.*?guardianClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var scholar = scholarCriticalStrategy\.Observe\(.*?immediateDefenseClaimedPriority.*?samuraiClaimedPriority.*?gunbreaker\.InputClaimed.*?guardShukuchi\.InputClaimed \|\| ninja\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var shadowbringerPre = darkKnightShadowbringer\.ObservePriorityDarkArts\(.*?immediateDefenseClaimedPriority.*?scholar\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var plunge = darkKnightPlunge\.Observe\(.*?immediateDefenseClaimedPriority.*?shadowbringerPre\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var shadowbringer = shadowbringerPre;.*?ObserveDeferredSafeFallback\(.*?immediateDefenseClaimedPriority.*?shadowbringerPre\.InputClaimed \|\| plunge\.InputClaimed \|\| emergencyInputFrame\.IsConsumed.*?var monkCombo = monkHeldCombo\.Observe\(.*?immediateDefenseClaimedPriority.*?shadowbringer\.InputClaimed \|\| plunge\.InputClaimed \|\| emergencyInputFrame\.IsConsumed' -or
+    $normalizedPersonalStatus -notmatch 'var jobSpecificHeldClaimedPriority = samuraiClaimedPriority \|\| ninja\.InputClaimed \|\| viper\.InputClaimed \|\| gunbreaker\.InputClaimed \|\| allyRescueClaimedPriority \|\| miracle\.InputClaimed \|\| guardianClaimedPriority \|\| guardShukuchi\.InputClaimed \|\| scholar\.InputClaimed \|\| plunge\.InputClaimed \|\| shadowbringer\.InputClaimed \|\| monkCombo\.InputClaimed;.*?var teleport = emergencyTeleport\.Observe\(.*?immediateDefenseClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyInputFrame\.IsConsumed.*?var emergencyTeleportClaimedPriority = teleport\.InputClaimed;.*?var pressureEscape = pressureEscapeSprint\.Observe\(.*?immediateDefenseClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyTeleportClaimedPriority \|\| defensiveUtilityClaimedPriority, emergencyInputFrame') {
+    throw 'The runtime must propagate frame-local priority exactly as Purify > Recuperate > confirmed-resilience Auto-Guard > AST Harmonic Orbis > RDM Guard engage > SAM > NIN Seiton > VPR > GNB > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Monk > Emergency Teleport > Sprint, while active removable CC still absolutely blocks Recuperate.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaGuardShukuchiConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaGuardShukuchiOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
     $normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
@@ -5590,8 +5642,8 @@ if ($normalizedPersonalStatus -notmatch 'var guardActive = DefensiveUtilityProbe
     throw 'Exact live or identity-and-territory-bound propagated Guard must be computed independently of the defensive-utility master before every direct-action probe.'
 }
 if ([regex]::Matches($personalStatus, '\bguardianCommunication\.Observe\s*\(').Count -ne 1 -or
-    $normalizedPersonalStatus -notmatch 'var defense = defensiveUtility\.ObserveGuardian\(.*?beginsFrame: true\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\);.*?var guardianClaimedPriority = defense\.InputClaimed;.*?var guardDefense = defensiveUtility\.ObserveGuard\(.*?prioritizedGuardianPass: defense\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed \|\| guardianClaimedPriority;') {
-    throw 'Guardian must begin from a clean frame, publish its exact accepted episode to communication independently, and only then be aggregated with the later generic Guard pass.'
+    $normalizedPersonalStatus -notmatch 'var guardDefense = defensiveUtility\.ObserveGuard\(.*?prioritizedGuardianPass: null\);.*?var defensiveUtilityClaimedPriority = guardDefense\.InputClaimed;.*?var defense = defensiveUtility\.ObserveGuardian\(.*?beginsFrame: false\);.*?guardianCommunication\.Observe\( localPlayer, context, defense\.LastAcceptedGuardianEpisode, now, hardReset\);.*?var guardianClaimedPriority = defense\.InputClaimed;') {
+    throw 'Generic Auto-Guard must publish first after recovery; later Guardian must merge that current-frame snapshot without overwriting its confirmation popup, then publish its own accepted episode independently.'
 }
 if (($personalStatus -replace '(?s)//.*?\r?\n', '') -match '\bconfiguration\.PreGuardOnLowHpPressure\b|\bEnableSageKardiaOnHeldKey\b') {
     throw 'Legacy pre-Guard and held-Kardia configuration fields may not be read by the PersonalStatus runtime.'
@@ -5602,10 +5654,9 @@ if ([regex]::Matches($pluginSource, '\bnew ReviewedPvpCommandDispatcher\s*\(').C
     throw 'Plugin startup must create one shared reviewed dispatcher and inject that same instance into Team Attack-1 and Guardian communication.'
 }
 
-# Defensive helpers share the same physical input generation. Purify owns a
-# pressured Stun first; reactive Guard may follow only on a later generation
-# after positive Resilience. Speculative low-HP pre-Guard is removed. PLD
-# Guardian is a separate later pass with its own Job Tools master.
+# The exact 3+ pressure Stun chain is keyless: Purify owns recovery first and
+# Guard may follow only after positive live Resilience. PLD Guardian remains a
+# separate held Job Tools pass and merges the already-published Guard frame.
 $defensiveUtilityRules = Read-RequiredSource $defensiveUtilityRulesPath 'Defensive utility rules'
 $normalizedDefensiveUtilityRules = $defensiveUtilityRules -replace '\s+', ' '
 $defensiveUtility = Read-RequiredSource $defensiveUtilityProbePath 'Defensive utility runtime'
@@ -5719,7 +5770,6 @@ Assert-Literals $defensiveUtility @(
     '!hasPurifyRemovableCrowdControl',
     'private FrozenGuardRetry? frozenGuardRetry;',
     'private FrozenGuardianRetry? frozenGuardianRetry;',
-    'private VirtualKey terminalGuardKey = VirtualKey.NO_KEY;',
     'private VirtualKey terminalGuardianKey = VirtualKey.NO_KEY;',
     'HeldActionRetryRules.RetainsSchedulerFrame(',
     'HeldActionRetryRules.CanAttemptFrozenIntent(',
@@ -5745,10 +5795,12 @@ Assert-Literals $defensiveUtility @(
     'if (outcome == ClientActionAttemptOutcome.ClientRejected)',
     'TryRetractClientRejectedLocalGuardAttempt(',
     'if (outcome == ClientActionAttemptOutcome.ClientAccepted)',
-    'TryArmAcceptedAutoGuardProtection(',
-    'accepted automatic Guard but could not prove exact protection ownership.',
+    'AutoGuardConfirmationRules.ArmProvisional(',
+    'AutoGuardConfirmationRules.ShouldRetainUnspentRetry(',
+    'TryArmConfirmedAutoGuardProtection(',
+    'Exact automatic Guard status confirmed and protected',
     'ObserveGuardSuppression('
-) 'Shared retry exact Guard and Guardian runtime'
+) 'Keyless confirmation-first Guard and held Guardian runtime'
 if ($normalizedDefensiveUtility -notmatch 'var prior = beginsFrame \? CreateFrameSnapshotBase\(guardActive\) : Snapshot;' -or
     $normalizedDefensiveUtility -notmatch 'private DefensiveUtilityProbeSnapshot CreateFrameSnapshotBase\(bool guardActive\) => DefensiveUtilityProbeSnapshot\.Initial with \{ Active = false, GuardActive = guardActive,.*?LastEvent = "Frame initialized", \};' -or
     $normalizedDefensiveUtility -notmatch 'var guardResult = new DefensiveUtilityProbeSnapshot\(.*?var result = prioritizedGuardianPass is \{ \} guardianPass \? MergePrioritizedGuardianPass\(guardResult, guardianPass\) : guardResult;' -or
@@ -5786,35 +5838,37 @@ Assert-Literals $coreSelfTestProgramForGuardian @(
     'DefensiveUtilitySelfTests.GuardianProactiveRiskRequiresExactHighPressure',
     'DefensiveUtilitySelfTests.GuardianPressurePublicationFreshnessIsBounded'
 ) 'Independent Guardian/Guard aggregation test registration'
-if ([regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 4 -or
+if ([regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundary\.Capture\s*\(').Count -ne 5 -or
     [regex]::Matches($defensiveUtility, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 2 -or
     [regex]::Matches($defensiveUtility, '\bHeldActionRetryRules\.Complete\s*\(').Count -ne 2 -or
     [regex]::Matches($defensiveUtility, '\bHeldActionRetryRules\.RetainsSchedulerFrame\s*\(').Count -ne 2 -or
-    $normalizedDefensiveUtility -notmatch 'var generationBeforeCall = nearAssist\.CaptureLocalGuardAttemptGeneration\(\);.*?var outcome = ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\) \{ nearAssist\.TryRetractClientRejectedLocalGuardAttempt\( localPlayer\.GameObjectId, localPlayer\.EntityId, generationBeforeCall\); \}.*?if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\) \{ protectionArmed = nearAssist\.TryArmAcceptedAutoGuardProtection\( localPlayer\.GameObjectId, localPlayer\.EntityId, generationBeforeCall\); if \(!protectionArmed\).*?log\.Warning\(.*?var acceptedAt = Environment\.TickCount64; ObserveGuardSuppression\(' -or
+    $normalizedDefensiveUtility -notmatch 'var generationBeforeCall = nearAssist\.CaptureLocalGuardAttemptGeneration\(\);.*?var outcome = ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\) \{ nearAssist\.TryRetractClientRejectedLocalGuardAttempt\( localPlayer\.GameObjectId, localPlayer\.EntityId, generationBeforeCall\); \}.*?if \(outcome == ClientActionAttemptOutcome\.ClientAccepted\) \{ var acceptedAt = Environment\.TickCount64; ObserveGuardSuppression\(.*?return new GuardUseAttemptResult\(outcome, generationBeforeCall\);' -or
     $normalizedDefensiveUtility -match 'AcceptanceUnknown.*?TryRetractClientRejectedLocalGuardAttempt') {
-    throw 'Guard and Guardian must use the shared classifier; only a proven clean client false rolls back the exact Guard generation, while accepted Auto-Guard must attempt exact cancellation ownership before propagation.'
+    throw 'Guard and Guardian must use the shared classifier; only a proven clean client false rolls back the exact Guard generation, while client-true Auto-Guard remains provisional until exact status confirmation.'
 }
 $autoGuardProtectionRules = Read-RequiredSource $autoGuardProtectionRulesPath 'Auto-Guard cancellation protection rules'
 $normalizedAutoGuardProtectionRules = $autoGuardProtectionRules -replace '\s+', ' '
 Assert-Literals $autoGuardProtectionRules @(
-    'StatusPropagationMilliseconds = 1_500',
     'GuardReuseProtectionMilliseconds = 2_000',
     'MaximumOwnedDurationMilliseconds = 6_000',
+    'CanArmFromConfirmedAttempt(',
+    'bool exactGuardActive)',
+    'ArmConfirmed(',
+    'long ConfirmedAtMilliseconds',
     'generationBeforeCall == long.MaxValue',
     'latestGuardAttemptGeneration == expectedGeneration',
     'AutoGuardProtectionDecisionReason.ExplicitGuardReuse',
     'AutoGuardProtectionDecisionReason.GuardReuseProtected',
     'AutoGuardProtectionDecisionReason.GuardEnded',
-    'AutoGuardProtectionDecisionReason.PropagationExpired',
     'AutoGuardProtectionDecisionReason.MaximumDurationReached'
-) 'Exact accepted-attempt Auto-Guard ownership and bounded fail-open lifecycle'
+) 'Exact confirmed-attempt Auto-Guard ownership and bounded fail-open lifecycle'
 if ($autoGuardProtectionRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
-    $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.AcceptedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?var exactGuardObserved = previous\.ExactGuardObserved \|\| observation\.ExactGuardActive;.*?if \(previous\.ExactGuardObserved && !observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\).*?var reuseProtectionEndsAt = SaturatingAdd\( previous\.AcceptedAtMilliseconds, GuardReuseProtectionMilliseconds\);.*?if \(observation\.NowMilliseconds < reuseProtectionEndsAt\).*?ShouldBlockAction: true.*?AutoGuardProtectionDecisionReason\.GuardReuseProtected.*?AutoGuardProtectionDecisionReason\.ExplicitGuardReuse.*?StatusPropagationMilliseconds.*?observation\.ActionCanCancelGuard') {
-    throw 'Auto-Guard Core must remain pure, release on reset/clock/runtime/context/player/status/timeout boundaries, protect Guard reuse for exactly two seconds, then restore explicit reuse, bridge status propagation for 1.5 seconds, and block only a classified cancelling action.'
+    $normalizedAutoGuardProtectionRules -notmatch 'if \(!previous\.IsArmed\).*?if \(observation\.HardReset\).*?if \(observation\.NowMilliseconds < 0 \|\| observation\.NowMilliseconds < previous\.ConfirmedAtMilliseconds\).*?if \(!observation\.RuntimeEnabled\).*?if \(observation\.TerritoryId != previous\.TerritoryId\).*?if \(!observation\.LocalPlayerLive\).*?if \(observation\.LocalPlayer != previous\.LocalPlayer\).*?if \(observation\.NowMilliseconds >= previous\.MaximumExpiresAtMilliseconds\).*?if \(!observation\.ExactGuardActive\).*?if \(observation\.IsExplicitGuardReuse\).*?var reuseProtectionEndsAt = SaturatingAdd\( previous\.ConfirmedAtMilliseconds, GuardReuseProtectionMilliseconds\);.*?if \(observation\.NowMilliseconds < reuseProtectionEndsAt\).*?ShouldBlockAction: true.*?AutoGuardProtectionDecisionReason\.GuardReuseProtected.*?AutoGuardProtectionDecisionReason\.ExplicitGuardReuse.*?observation\.ActionCanCancelGuard') {
+    throw 'Auto-Guard Core must remain pure, arm only after exact Guard, release on reset/clock/runtime/context/player/status/timeout boundaries, protect Guard reuse for exactly two seconds, then restore explicit reuse, and block only a classified cancelling action.'
 }
 $autoGuardProtectionTestMethods = @(
-    'AutoGuardProtectionOwnershipRequiresTheExactAcceptedAttempt',
-    'AutoGuardProtectionBridgesPropagationAndFollowsTheExactStatus',
+    'AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt',
+    'AutoGuardProtectionStartsOnlyAfterExactStatus',
     'AutoGuardProtectionHasExplicitAndBoundedReleasePaths',
     'AutoGuardProtectionContextDriftAlwaysFailsOpen'
 )
@@ -5822,6 +5876,39 @@ foreach ($method in $autoGuardProtectionTestMethods) {
     Assert-Literals $defensiveUtilitySelfTests @("public static void $method()") "Auto-Guard self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("DefensiveUtilitySelfTests.$method") "Auto-Guard registration $method"
 }
+$autoGuardConfirmationRules = Read-RequiredSource $autoGuardConfirmationRulesPath 'Auto-Guard provisional confirmation rules'
+$normalizedAutoGuardConfirmationRules = $autoGuardConfirmationRules -replace '\s+', ' '
+Assert-Literals $autoGuardConfirmationRules @(
+    'StatusConfirmationMilliseconds = 1_500',
+    'ShouldRetainUnspentRetry(',
+    'outcome == ClientActionAttemptOutcome.SoftUnavailable',
+    'ArmProvisional(',
+    'if (observation.ExactGuardActive)',
+    'if (previous.ConfirmationRetrySpent)',
+    'AutoGuardRetryReadiness.Ready',
+    'ShouldRetry: true',
+    'AutoGuardRetryReadiness.NativeBoundaryBusy',
+    'AutoGuardRetryReadiness.CooldownUnavailable',
+    'AutoGuardConfirmationReason.ReadinessUnknown'
+) 'Bounded status-first Auto-Guard confirmation and one exact retry'
+if ($autoGuardConfirmationRules -match '\b(?:UseAction|UseActionLocation|ActionManager|IPlayerCharacter|HookFromAddress|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $normalizedAutoGuardConfirmationRules -notmatch 'ShouldRetainUnspentRetry\( ClientActionAttemptOutcome outcome\) => outcome == ClientActionAttemptOutcome\.SoftUnavailable;' -or
+    $normalizedAutoGuardConfirmationRules -notmatch 'if \(observation\.ExactGuardActive\).*?Confirmed: true.*?if \(observation\.NowMilliseconds >= previous\.OpportunityExpiresAtMilliseconds\).*?if \(observation\.NowMilliseconds < previous\.ConfirmationDeadlineMilliseconds\).*?if \(previous\.ConfirmationRetrySpent\).*?AutoGuardRetryReadiness\.Ready.*?ShouldRetry: true.*?AutoGuardRetryReadiness\.NativeBoundaryBusy.*?AutoGuardRetryReadiness\.CooldownUnavailable') {
+    throw 'Auto-Guard confirmation must stay pure, prefer exact live status, retain the original lease, and allow at most one readiness-proven retry after its bounded wait.'
+}
+foreach ($method in @(
+    'AutoGuardConfirmationIsStatusFirstAndRetriesOnlyOnce',
+    'AutoGuardConfirmationFailsClosedOnReadinessOrContextDrift')) {
+    Assert-Literals $defensiveUtilitySelfTests @("public static void $method()") "Auto-Guard confirmation self-test $method"
+    Assert-Literals $coreSelfTestProgramForGuardian @("DefensiveUtilitySelfTests.$method") "Auto-Guard confirmation registration $method"
+}
+Assert-Literals $defensiveUtilitySelfTests @(
+    'AutoGuardConfirmationRules.ShouldRetainUnspentRetry(',
+    'ClientActionAttemptOutcome.SoftUnavailable',
+    'ClientActionAttemptOutcome.ClientRejected',
+    'a pre-native retry race retains the unspent retry',
+    'a crossed clean-false boundary spends the retry'
+) 'Auto-Guard confirmation retry-spend regression coverage'
 $nearAssistAutoGuard = Read-RequiredSource $nearAssistPath 'Auto-Guard central native boundaries'
 $normalizedNearAssistAutoGuard = $nearAssistAutoGuard -replace '\s+', ' '
 Assert-Literals $nearAssistAutoGuard @(
@@ -5852,7 +5939,7 @@ Assert-Literals $nearAssistAutoGuard @(
     'ClearAutoGuardProtection("Released: explicit camera-back dash command override")'
 ) 'Dual-hook automatic Guard cancellation protector'
 if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = guardMetadataVerified && nearAssist\.CanProtectAutomaticGuard && IsActionSpecificallyReady' -or
-    $normalizedDefensiveUtility -notmatch 'private unsafe ClientActionAttemptOutcome TryUseGuardOnce\(.*?if \(!guardMetadataVerified \|\| !nearAssist\.CanProtectAutomaticGuard') {
+    $normalizedDefensiveUtility -notmatch 'private unsafe GuardUseAttemptResult TryUseGuardOnce\(.*?if \(!guardMetadataVerified \|\| !nearAssist\.CanProtectAutomaticGuard') {
     throw 'Automatic Guard must fail closed before dispatch unless both central protection hooks are enabled.'
 }
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
@@ -5866,22 +5953,22 @@ if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticG
 $runWithoutRedirectRegion = [regex]::Match(
     $normalizedNearAssistAutoGuard,
     'internal T RunWithoutRedirect<T>\(.*?internal IDisposable EnterExplicitAutoGuardBreak\(')
-if ([regex]::Matches(($nearAssistAutoGuard + $defensiveUtility), '\bTryArmAcceptedAutoGuardProtection\s*\(').Count -ne 2 -or
+if ([regex]::Matches(($nearAssistAutoGuard + $defensiveUtility), '\bTryArmConfirmedAutoGuardProtection\s*\(').Count -ne 2 -or
     $nearAssistAutoGuard -match '\bexplicitAutoGuardBreakBypassDepth\b' -or
     $normalizedNearAssistAutoGuard -notmatch 'internal IDisposable EnterExplicitAutoGuardBreak\( uint expectedActionId, ExplicitAutoGuardBreakBoundary boundary = ExplicitAutoGuardBreakBoundary\.LocationAction\).*?var exactLocationShukuchi = boundary == ExplicitAutoGuardBreakBoundary\.LocationAction && expectedActionId == PanicShukuchiRules\.ActionId; var exactDirectionalDash = boundary == ExplicitAutoGuardBreakBoundary\.StandardAction && BackwardDashRules\.IsReviewedDirectionalAction\(expectedActionId\); if \(!exactLocationShukuchi && !exactDirectionalDash\).*?throw new ArgumentOutOfRangeException\(.*?var scope = new ExplicitAutoGuardBreakScope\( this, expectedActionId, boundary, Environment\.CurrentManagedThreadId\);.*?Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, scope, comparand: null\) is not null.*?throw new InvalidOperationException\(.*?return scope;' -or
     $normalizedNearAssistAutoGuard -notmatch 'private sealed class ExplicitAutoGuardBreakScope\( NearAssistRedirector owner, uint expectedActionId, ExplicitAutoGuardBreakBoundary boundary, int managedThreadId\) : IDisposable.*?internal NearAssistRedirector Owner \{ get; \} = owner;.*?internal uint ExpectedActionId \{ get; \} = expectedActionId;.*?internal ExplicitAutoGuardBreakBoundary Boundary \{ get; \} = boundary;.*?internal int ManagedThreadId \{ get; \} = managedThreadId;.*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) == 0;.*?internal void Revoke\(\) => Interlocked\.Exchange\(ref consumedOrDisposed, 1\);.*?public void Dispose\(\).*?Interlocked\.CompareExchange\(ref consumedOrDisposed, 1, 0\) != 0.*?Owner\.ReleaseExplicitAutoGuardBreak\(this\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'internal void Reset\(\).*?RevokeExplicitAutoGuardBreak\(\);.*?public void Dispose\(\).*?RevokeExplicitAutoGuardBreak\(\);' -or
     !$runWithoutRedirectRegion.Success -or
     $runWithoutRedirectRegion.Value -match '\b(?:explicitAutoGuardBreakScope|TryConsumeExplicitAutoGuardBreak)\b') {
-    throw 'Only the exact accepted automatic Guard call may arm ownership, and only one same-thread exact reviewed location or directional dash boundary may release it outside the protector.'
+    throw 'Only an exact status-confirmed automatic Guard call may arm ownership, and only one same-thread exact reviewed location or directional dash boundary may release it outside the protector.'
 }
 if ($normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)' -or
     $normalizedDefensiveUtility -notmatch 'actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.GuardianActionId, ally\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
     throw 'Defensive native calls must be exact Action 29054 to self and exact Action 29066 to the revalidated ally.'
 }
-if ($normalizedDefensiveUtility -notmatch 'var canDispatch = guardConfigurationEnabled && isCrystallineConflict && localIdentityValid && input\.ProbeSucceeded && !input\.IsTextInputActive && inputEligible && !guardActive && !higherPriorityClaimed;' -or
+if ($normalizedDefensiveUtility -notmatch 'var canDispatch = guardConfigurationEnabled && isCrystallineConflict && localIdentityValid && !guardActive && !higherPriorityClaimed;' -or
     $normalizedDefensiveUtility -notmatch 'var canDispatch = guardianConfigurationEnabled && isCrystallineConflict && localIdentityValid && input\.ProbeSucceeded && !input\.IsTextInputActive && inputEligible && !guardActive && !higherPriorityClaimed;') {
-    throw 'Reactive Guard and independent PLD Guardian must each retain their own config gate while both honor the effective live-or-propagated Guard suppression and shared priority.'
+    throw 'Keyless reactive Guard and held PLD Guardian must each retain their own config gate while both honor the effective live-or-propagated Guard suppression and shared priority.'
 }
 if ($defensiveUtility -match '(?-i:\b(RetryAction|RetryDispatch|QueueAction)\b)|(?-i:\bTargetManager\b)|\bITargetManager\b|\bSetTarget\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=(?!=|>)|\bstatus\.Address\b') {
     throw 'Defensive utilities must never own a custom action queue, mutate a target, or depend on status-slot addresses.'
@@ -7138,7 +7225,7 @@ Assert-Literals $metadataGuard @(
 $monkObserve = [regex]::Match($personalStatus, '\bmonkEarthReply\.Observe\s*\(')
 if (-not $monkObserve.Success -or $monkObserve.Index -lt $smartKardiaObserve.Index -or
     $normalizedPersonalStatus -notmatch 'var isSupportedPvPContext = context != SupportedPvPContext\.None' -or
-    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, purifyClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| smartRecuperateClaimedPriority \|\| emergencyTeleportClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
+    $normalizedPersonalStatus -notmatch 'var monk = monkEarthReply\.Observe\( localPlayer, isSupportedPvPContext, configuration\.Enabled && configuration\.EnableMonkEarthReplyHelper && isMonk && !guardActive, metadata\.MonkEarthReplyVerified, configuration\.MonkEarthReplyOnLowHp, configuration\.MonkEarthReplyBeforeExpiry, configuration\.MonkEarthReplyHpPercent, configuration\.MonkEarthReplyExpirySeconds, immediateDefenseClaimedPriority \|\| jobSpecificHeldClaimedPriority \|\| emergencyTeleportClaimedPriority \|\| defensiveUtilityClaimedPriority \|\| pressureEscapeClaimedPriority \|\| kardia\.UseActionAttempted \|\| emergencyInputFrame\.IsConsumed') {
     throw 'Event Monk Earth Reply must remain last after event Kardia, require exact Monk plus no Guard, and yield whenever any earlier helper claimed or attempted.'
 }
 
@@ -7555,7 +7642,7 @@ Assert-Literals $nearAssist @(
     'HookFromAddress<ActionManager.Delegates.UseAction>',
     'ActionManager.MemberFunctionPointers.UseAction',
     'TryGetRecentExactLocalGuardAttempt(',
-    'ObserveExactLocalGuardActivationAttempt(thisPtr, actionType, actionId)',
+    'var localGuardBoundary = ObserveExactLocalGuardActivationAttempt(',
     'ResolveActionId(actionManager, actionType, actionId) !=',
     'EnemyCombatConstants.GuardActionId',
     'new LocalGuardActionAttempt(',
@@ -7667,7 +7754,7 @@ $useActionDetour = $useActionDetourMatch.Value
 $normalizedUseActionDetour = $useActionDetour -replace '\s+', ' '
 $guardAttemptObserverMatch = [regex]::Match(
     $nearAssist,
-    '(?s)private void ObserveExactLocalGuardActivationAttempt\(.*?\r?\n    \}\r?\n\r?\n    private bool TryBlockOwnedAutoGuardCancellation')
+    '(?s)private LocalGuardActionBoundaryObservation ObserveExactLocalGuardActivationAttempt\(.*?\r?\n    \}\r?\n\r?\n    private bool TryBlockOwnedAutoGuardCancellation')
 $guardStateObserverMatch = [regex]::Match(
     $nearAssist,
     '(?s)private bool IsLocalGuardActiveOrPropagating\(.*?\r?\n    \}\r?\n\r?\n    private ulong TryResolveRedirect')
@@ -7676,8 +7763,8 @@ if (-not $guardAttemptObserverMatch.Success) {
 }
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
-if ($normalizedUseActionDetour -notmatch 'ObserveExactLocalGuardActivationAttempt\(thisPtr, actionType, actionId\);.*?bool clientAccepted; try \{ clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); \} catch \{ integratedRuntime\?\.ActionBuffer\.AbandonExactStandardHotbarRoot\( integratedAttempt, "Native action boundary threw; buffer observation retired"\); throw; \}.*?CompleteExactStandardHotbarRoot\( thisPtr, integratedAttempt, clientAccepted\);.*?if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\) \{ ClearSmartActionSafetyLease\(\); \} smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); if \(clientAccepted && hasSmartKardiaPreflight\) ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
-    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \};' -or
+if ($normalizedUseActionDetour -notmatch 'var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\); bool clientAccepted; try \{ clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); \} catch \{ integratedRuntime\?\.ActionBuffer\.AbandonExactStandardHotbarRoot\( integratedAttempt, "Native action boundary threw; buffer observation retired"\); throw; \} if \(localGuardBoundary\.IsObserved\) \{ var guardOutcome = ClientActionAttemptBoundaryRules\.Classify\( clientAccepted, EnemyCombatConstants\.GuardActionId, localGuardBoundary\.BoundaryBefore, ClientActionAttemptBoundary\.Capture\( thisPtr, EnemyCombatConstants\.GuardActionId\)\); if \(guardOutcome == ClientActionAttemptOutcome\.ClientRejected\) \{ TryRetractClientRejectedLocalGuardAttempt\( localGuardBoundary\.LocalGameObjectId, localGuardBoundary\.LocalEntityId, localGuardBoundary\.GenerationBeforeCall\); \} \}.*?CompleteExactStandardHotbarRoot\( thisPtr, integratedAttempt, clientAccepted\);.*?if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\) \{ ClearSmartActionSafetyLease\(\); \} smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); if \(clientAccepted && hasSmartKardiaPreflight\) ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
+    $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return default; var boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, EnemyCombatConstants\.GuardActionId\); if \(!boundaryBefore\.Captured\) return default; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?var generationBeforeCall = localGuardActionAttemptGeneration; localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \}; return new LocalGuardActionBoundaryObservation\( local\.GameObjectId, local\.EntityId, generationBeforeCall, boundaryBefore\);' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
 }
@@ -9129,6 +9216,70 @@ foreach ($relativePath in $retiredCombatFrameRuntimeRelativePaths) {
     }
 }
 
+# The optional opponent-LB strip is a narrow observer, not a replacement for
+# the retired Combat Frames runtime. It may read only direct native GaugeBar
+# values after exact row identity/stability checks and a same-frame local
+# LimitBreakController proof. Any uncertainty must hide the complete strip.
+$opponentLimitBreakGaugeRules = Read-RequiredSource $opponentLimitBreakGaugeRulesPath 'Opponent LB direct-value rules'
+$opponentLimitBreakGaugeSelfTests = Read-RequiredSource $opponentLimitBreakGaugeSelfTestsPath 'Opponent LB direct-value self-tests'
+$opponentLimitBreakGaugeService = Read-RequiredSource $opponentLimitBreakGaugeServicePath 'Opponent LB native observer'
+$normalizedOpponentLimitBreakGaugeService = $opponentLimitBreakGaugeService -replace '\s+', ' '
+Assert-Literals $opponentLimitBreakGaugeRules @(
+    'public const int FirstEnemySlot = 1;',
+    'public const int LastEnemySlot = 5;',
+    'public const int EnemyCount = 5;',
+    'public const long MaximumSnapshotAgeMilliseconds = 250;',
+    'currentValue == MaximumValue',
+    'MatchesLocalController(',
+    'MatchesNativeScale(',
+    'var quantizationTolerance = controllerMaximum + gaugeRange;',
+    'values.Count != EnemyCount',
+    'value.EnemySlot != index + FirstEnemySlot',
+    'ReadyPulseAlpha(',
+    'if (!ready || reducedMotion || nowMilliseconds < 0) return 1f;'
+) 'Direct opponent-LB values, exact S1-S5 completeness, local proof, and bounded presentation'
+Assert-Literals $opponentLimitBreakGaugeService @(
+    'private const long UpdateIntervalMilliseconds = 50;',
+    'private const string AllyAddonName = "PvPMKSPartyList1";',
+    'private const string EnemyAddonName = "PvPMKSPartyList3";',
+    'clientState.IsPvPExcludingDen',
+    'tracker.IsCrystallineConflict',
+    'tracker.ResolvedSlots == OpponentLimitBreakGaugeRules.EnemyCount',
+    'TryCaptureController(out var controllerBefore)',
+    'TryCaptureController(out var controllerAfter) || controllerBefore != controllerAfter',
+    'GetComponentByNodeId(FirstRowNodeId + (uint)(slot - 1))',
+    'row->GetTextNodeById(21)',
+    'string.Equals(name->GetText().ToString(), player.Name.TextValue, StringComparison.Ordinal)',
+    'row->GetComponentById(GaugeComponentId)',
+    'component->GetComponentType() != ComponentType.GaugeBar',
+    'gauge->MinValue',
+    'gauge->MaxValue',
+    'gauge->Values[0].ValueInt',
+    'first[slot - 1] != second[slot - 1]',
+    'LimitBreakController.Instance()',
+    'OpponentLimitBreakGaugeRules.MatchesLocalController(',
+    'OpponentLimitBreakGaugeRules.MatchesNativeScale(',
+    'OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(enemies)',
+    'PublishInactive('
+) 'Stable exact native GaugeBar capture with same-frame local-controller proof'
+if ($normalizedOpponentLimitBreakGaugeService -notmatch 'if \(!enabledProvider\(\)\).*?PublishInactive\(OpponentLimitBreakGaugeFailure\.Disabled\); return;' -or
+    $normalizedOpponentLimitBreakGaugeService -notmatch 'var localMatches = allyRows\.Where\(row => row\.Actor == localIdentity\)\.ToArray\(\); if \(localMatches\.Length != 1 \|\| !OpponentLimitBreakGaugeRules\.MatchesLocalController' -or
+    $normalizedOpponentLimitBreakGaugeService -notmatch 'if \(!OpponentLimitBreakGaugeRules\.IsCompleteExactEnemySet\(enemies\)\).*?PublishInactive\(OpponentLimitBreakGaugeFailure\.Identity\); return;' -or
+    $opponentLimitBreakGaugeService -match '->\w+\s*=(?!=)' -or
+    $opponentLimitBreakGaugeService -match '\b(?:UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget|SetRawValue|FireCallback|SendEvent|SetPosition|SetScale|SetAlpha|SetGauge|ToggleVisibility|GaugeChargeSeconds|EstimatedRecharge|ElapsedCharge|CombatFrameLimitGaugeCalibrator)\b') {
+    throw 'Opponent LB bars must remain a direct, stable, read-only, exact-row observer; actions, targets, native writes, geometry calibration, and recharge estimates are forbidden.'
+}
+Assert-Literals $opponentLimitBreakGaugeSelfTests @(
+    'DirectValuesAndLocalProofFailClosed',
+    'CompleteSetFreshnessAndPulseAreBounded',
+    'MatchesNativeScale(0, 10_000, 0, 10_000)',
+    'MatchesNativeScale(0, 10_000, 0, 1_000)',
+    'MatchesLocalController(0, 75, 100, 7_500, 10_000)',
+    'OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(duplicate)',
+    'OpponentLimitBreakGaugeRules.IsFresh(now - 251, now)',
+    'OpponentLimitBreakGaugeRules.ReadyPulseAlpha(true, now, true)'
+) 'Opponent-LB exact-value, completeness, freshness, and reduced-motion coverage'
+
 
 # Combat LB telemetry reuses the existing sole ActionEffect hook. Catalog,
 # captures, metadata, runtime episodes, live-status duration evidence, read-only
@@ -9407,7 +9558,7 @@ Assert-Literals ($overlayRendererLimitBreaks + $limitBreakNotificationRenderer) 
     'CombatLimitBreakNameplateRules.TryBuildVerticalStack(',
     'CombatLimitBreakNotificationRules.TryBuildSelfPlan(',
     'CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(',
-    'CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(',
+    'CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangles(',
     'CombatLimitBreakNotificationRules.TryBuildDamagePlan(',
     'CombatLimitBreakNotificationRules.MaximumVisibleDamageCards',
     'LB ACTIVATED!',
@@ -9452,9 +9603,9 @@ Assert-Literals $limitBreakNotificationRenderer @(
     'bool PlayEnemyDangerWarningSound,',
     'int EnemyDangerWarningSoundId,',
     'float EnemyDangerWarningScale,',
-    'TryResolveDragoonWarning(snapshot, now, out var dragoon)',
+    'TryResolveDragoonWarning(snapshot, nowMilliseconds, out var dragoon)',
     'dragoonWarningSound.TryPlayThreat(',
-    'dragoon.EpisodeToken,',
+    'ComposeDangerSoundToken(notification.Kind, notification.EpisodeToken),',
     'options.EnemyDangerWarningSoundId,',
     'state.Side == CombatLimitBreakRosterSide.Enemy',
     'state.ActivationActionId,',
@@ -9465,22 +9616,24 @@ Assert-Literals $limitBreakNotificationRenderer @(
     'state.EpisodeToken <= selectedState.EpisodeToken',
     'DRG LIMIT BREAK!',
     'IN THE AIR  •  SKY SHATTER INCOMING'
-) 'DRG airborne card, newest exact episode selection, and one episode-token sound'
+) 'Enemy danger cards, newest exact episode selection, and per-kind episode-token sounds'
 $normalizedLimitBreakNotificationRenderer = $limitBreakNotificationRenderer -replace '\s+', ' '
-if ($normalizedLimitBreakNotificationRenderer -notmatch 'if \(options\.ShowEnemyDangerWarnings && TryResolveDragoonWarning\(snapshot, now, out var dragoon\)\).*?dangerBannerDrawn = true; dangerBannerRectangle = dangerRectangle;.*?if \(options\.ShowSelfActivation && TryResolveSelfNotification\(snapshot, now, out var self\)\).*?var selfRectangleReady = dangerBannerDrawn \? CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangleBelow\(.*?dangerBannerRectangle, out var bannerRectangle\) : CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangle\(') {
-    throw 'The DRG danger banner and self-activation banner must render independently in the same frame, with the self banner moved below an already-drawn danger banner.'
+if ($normalizedLimitBreakNotificationRenderer -notmatch 'var dangerNotifications = ResolveDangerNotifications\(snapshot, options, now\); if \(dangerNotifications\.Count > 0\).*?TryBuildEnemyDangerBannerRectangles\(.*?dangerNotifications\.Count, out var dangerRectangles\).*?for \(var index = 0; index < dangerRectangles\.Length; index\+\+\).*?dangerBannerDrawn = true; dangerBannerRectangle = dangerRectangles\[\^1\];.*?if \(options\.ShowSelfActivation && TryResolveSelfNotification\(snapshot, now, out var self\)\).*?var selfRectangleReady = dangerBannerDrawn \? CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangleBelow\(.*?dangerBannerRectangle, out var bannerRectangle\) : CombatLimitBreakNotificationRules\.TryBuildSelfBannerRectangle\(') {
+    throw 'The bounded enemy-danger stack and self-activation banner must render independently in the same frame, with the self banner moved below the last admitted danger card.'
 }
 Assert-Literals $pluginSource @(
     'cast-cancel[held-enabled=',
     'auto-basic-shot-enabled=',
     'job/cast/adjusted={castCancellation.LocalJobId}/',
     'basic-shot-metadata=',
-    'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite)),',
+    '(configuration.WarnMarksmanSpite || configuration.WarnSummonerLimitBreak))),',
     'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite,',
+    'configuration.ShowPersonalWarnings && configuration.WarnSummonerLimitBreak,',
+    'configuration.ShowPersonalWarnings && configuration.WarnEnemyChiten,',
     'configuration.MchLimitBreakSoundEnabled,',
     'configuration.MchLimitBreakSoundId,',
     'configuration.MarksmanSpiteWarningScale,'
-) 'Existing LB danger settings wire both MCH and exact DRG warning runtime/card/sound'
+) 'LB danger settings wire exact DRG, SMN, Chiten, and MCH warning runtime/card/sound'
 if (($overlayRendererLimitBreaks + $limitBreakNotificationRenderer) -match
     '\b(?:UseAction|UseActionLocation|ITargetManager|TargetManager|SetTarget)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)') {
     throw 'Replacement LB renderers must remain non-interactive and target-mutation free.'
@@ -9598,10 +9751,14 @@ Assert-Literals $settingsWindow @(
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON still requires',
     'a currently held gameplay key; it never creates no-input automatic actions.',
-    'After Purify, the physical-hold helpers share the second priority tier',
-    'AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian >',
-    'DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk.',
+    'Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian >',
+    'DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk.',
     'job-specific physical-hold helpers use this deterministic order.',
+    'Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, and SAM follows AST;',
+    'Only Purify keeps priority over Smart Recuperate.',
+    'automatic Guard, then every later job helper, Emergency Teleport, and pressure Sprint',
+    'budget frozen from the current PvP latency-response setting (eight calls by default).',
+    'validation drift and temporary readiness/MP',
     'Harmonischer Orbis + optional Zweifacher Zauber on held key (includes WASD)',
     'configuration.EnableAstrologianHarmonicOrbisOnHeldKey',
     'Default off and PvP Astrologian only.',
@@ -9648,6 +9805,7 @@ $settingsBindingExemptions = @(
     'EnableSageKardiaOnHeldKey',
     'EnableNinjaSeitonOnFreshGameplayKey',
     'PreGuardOnLowHpPressure',
+    'DefensiveUtilitiesOnHeldKey',
     'LastSeenReleaseNotesVersion',
     'ShowCombatFrames',
     'CombatFramesEnableInteraction',
@@ -9922,7 +10080,8 @@ Assert-Literals $personalStatus @(
     'new EmergencyActionInputCoordinator(',
     'criticalUtilityCoordination.ClaimCurrentFrame',
     'new EmergencyPurifyProbe(',
-    'nearAssist.IsExactLocalGuardActiveOrPropagating);',
+    'nearAssist.IsExactLocalGuardActive);',
+    'var exactGuardActive = guardActive;',
     'new DefensiveUtilityProbe(',
     'new AllyRescueProbe(',
     'emergencyPurify.Observe',
@@ -9953,18 +10112,23 @@ Assert-Literals $personalStatus @(
     'PvPMatchRules.ResolveSupportedContext',
     'configuration.EnableWolvesDenTesting'
 ) 'Personal status service'
+if ($normalizedPersonalStatus -notmatch 'heldPurifyConfigurationEnabled =.*?!exactGuardActive;.*?automaticPurifyConfigurationEnabled =.*?!exactGuardActive;.*?pressureStunPurifyConfigurationEnabled =.*?!exactGuardActive;' -or
+    $normalizedPersonalStatus -notmatch 'smartRecuperate\.Observe\(.*?exactGuardActive,.*?hasPurifyRemovableCrowdControl' -or
+    $normalizedPersonalStatus -notmatch 'castCancellationRequest is \{ HelperKind: HeldCastCancellationHelperKind\.Purify or HeldCastCancellationHelperKind\.SmartRecuperate \} \? exactGuardActive : guardActive') {
+    throw 'Purify and Recuperate must ignore only the provisional Guard propagation latch while retaining exact live-Guard suppression; lower held helpers must still observe the propagated Guard veto.'
+}
 if ([regex]::Matches($personalStatus, '\bmetadata\.NinjaShukuchiHiddenStatuses\b').Count -ne 2) {
     throw 'The metadata-verified Ninja Hidden catalog must be injected exactly once into Auto-Purify and once into Auto-Recuperate.'
 }
 Assert-Literals $settingsWindow @(
     'Show MCH-on-you and airborne DRG LB warnings',
-    'Play a sound for verified MCH / airborne DRG LB warnings',
-    'The MCH alert requires its exact early marker on you.',
-    'The DRG alert starts from exact enemy Sky High',
-    'activation while airborne and never waits for impact.',
-    'Both require the personal-warning master and this',
-    'toggle. Sound is one-shot per verified threat; neither alert presses Guard or another action.'
-) 'Shared MCH / exact airborne-DRG warning settings copy'
+    'Show enemy Summoner Bahamut / Phoenix LB warning',
+    'Show enemy Samurai Chiten warning and nameplate icon',
+    'Play a sound for verified enemy danger warnings',
+    'MCH requires its exact early marker on you; DRG, SMN, and Chiten require exact activation/status evidence.',
+    'Chiten also draws its verified timer above the Samurai''s native nameplate. Sound is one-shot per episode;',
+    'none of these warnings presses Guard or another action.'
+) 'Shared MCH, DRG, SMN, and Chiten warning settings copy'
 if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
     throw 'Self warnings and self-Purify must not depend on resolving an enemy HUD actor.'
 }
@@ -10043,17 +10207,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.40.0.2</Version>',
-    '<AssemblyVersion>0.40.0.2</AssemblyVersion>',
-    '<FileVersion>0.40.0.2</FileVersion>'
-) 'v0.40.0.2 project version'
+    '<Version>0.41.0.0</Version>',
+    '<AssemblyVersion>0.41.0.0</AssemblyVersion>',
+    '<FileVersion>0.41.0.0</FileVersion>'
+) 'v0.41.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.40.0.2";',
-    'Smart Action now arms without requiring a live S1 enemy or a selected target; the best exact S1-S5 target is chosen only when the harmful action arrives.',
-    'Direct attacks no longer fail because an unrelated enemy briefly disagrees between the S-slot and object-table views. The chosen enemy still needs exact protection, native range, and line-of-sight proof.',
-    'Target-circle and unknown AoE attacks retain the complete hostile snapshot so Chiten, Guard, Cover, and LB protection cannot be clipped nearby.',
-    'All 553 Core tests and release gates pass. Current-client action acceptance, especially dead S1 with no selected target, remains an in-game validation boundary.'
-) 'v0.40.0.2 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.41.0.0";',
+    'Auto Purify and Auto Recuperate no longer give up after one briefly blocked frame. They recheck and retry only inside their original safety window.',
+    'High-pressure Stun Auto-Guard is now keyless. Its popup, sound, and press protection start only after Guard is truly active; one safe retry is allowed, and rejection cannot block manual Guard.',
+    'New exact enemy warnings cover SAM Chiten and SMN Bahamut/Phoenix LB. Chiten also appears above the Samurai nameplate with its confirmed countdown.',
+    'Experimental opponent LB-ready bars are available above the pressure display but stay off by default pending live layout validation. All 562 Core tests and release gates pass.'
+) 'v0.41.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10074,19 +10238,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.40.0.2 plugin manifest metadata'
+) 'v0.41.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.40.0.2"',
-    'Fixed intermittent ranged Smart Action no-op behavior.',
-    'Arming no longer requires a live S1 carrier or selected target;',
-    'Direct single-target attacks no longer require unrelated hostile object-table completeness',
-    'complete target-circle/unknown-AoE geometry remain fail-closed.',
-    'Configuration schema 46; all 553 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.41.0.0"',
+    'Automatic Purify and Recuperate now retain exact episodes through temporary native blocks',
+    'High-pressure Stun Auto-Guard is keyless, permits one readiness-proven retry',
+    'arms its card, sound, and input protection only after exact live Guard confirmation',
+    'Added exact SAM Chiten and SMN Bahamut/Phoenix danger warnings.',
+    'Experimental opponent LB-ready bars are available above the pressure display but remain off by default pending live layout validation.',
+    'Configuration schema 47; all 562 Core tests and release gates pass.',
     '"IsHide": false'
-) 'v0.40.0.2 custom-repository metadata'
+) 'v0.41.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10142,8 +10307,8 @@ Assert-Literals $normalizedPrivacy @(
     'The relevant keyless Purify `29056` or Recuperate `29711` intent must already be otherwise ready.',
     'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
-    'Configuration schema 46 is current.',
-    'It adds the separate automatic basic-shot cast-cancel permission and initializes it off for every upgrade and Reset Defaults',
+    'Configuration schema 47 is current.',
+    'while retaining the separate automatic basic-shot cast-cancel permission as default-off for every upgrade and Reset Defaults',
     'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
     'exact Blackblood status-row presence',
     'its own opt-in reuses the complete Smart Action ranking and protection snapshot without changing a visible target.',
@@ -10151,10 +10316,17 @@ Assert-Literals $normalizedPrivacy @(
     'Wolves'' Den retains only the exact current `<t>` duel/dummy target and treats unavailable CC pressure telemetry as zero',
     'canonical `S1`-`S5` candidates, HP ratio, fresh optional team pressure, trusted Guard/MP evidence, positions, complete protection geometry, chosen/fallback actor',
     'Drift ends and spends that carrier exposure; the same held episode cannot rerank.',
-    '## MCH and DRG limit-break danger warnings',
+    '## MCH, DRG, SMN, and Chiten danger warnings',
     'exact `Sky High` activation `29497`',
     'continued airborne timing requires the exact caster''s live `Sky High` status `3180`.',
     'It does not infer an LB from gauge state, movement, disappearance, `Sky Shatter` status `3181`, or the later landing damage actions `29498`/`29499`.',
+    'One experimental public-CC strip is off by default pending live layout validation.',
+    'Any missing, duplicate, stale, unstable, or mismatched value hides all five bars.',
+    'An exact enemy SMN Bahamut/Phoenix action/icon/status pair may use the same bounded danger lane.',
+    'An exact enemy SAM Chiten status episode may draw a large nameplate emblem/countdown and `DO NOT HIT` danger card.',
+    'Their exact request observation and a client `true` return remain provisional and block no action.',
+    'one retry may cross the native boundary only while exact readiness is proven and the original two-second post-Purify lease remains alive;',
+    'Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten danger warnings and separate experimental opponent LB bars that remain off by default pending live layout validation',
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
@@ -10162,9 +10334,13 @@ Assert-Literals $normalizedPrivacy @(
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.40.0.2 Smart Action reliability and retained safety/privacy disclosure'
+) 'v0.41.0.0 recovery, warning, experimental-LB, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.40.0.2 fixes intermittent ranged Smart Action no-ops by making the 750-ms arm target-independent and deferring exact enemy selection until the harmful action arrives.',
+    'Version 0.41.0.0 makes automatic Purify and Recuperate retain their exact episode through temporary native blocks and retry only inside the original bounded window after every safety recheck.',
+    'one readiness-proven retry may occur inside its original lease, while the card, sound, action suppression, and two-second Guard-reuse protection begin only after the exact live Guard status appears.',
+    'Rejected requests therefore cannot create phantom protection or block manual Guard.',
+    'exact SAM Chiten and SMN Bahamut/Phoenix danger warnings plus an experimental opponent LB-ready strip that is off by default pending current-client layout validation.',
+    'Version 0.40.0.2 fixed intermittent ranged Smart Action no-ops by making the 750-ms arm target-independent and deferring exact enemy selection until the harmful action arrives.',
     'Direct single-target actions no longer require an unrelated complete hostile object-table snapshot; exact target protection, native range/line of sight, and frozen-target revalidation remain mandatory, while target-circle and unknown AoE geometry stay complete and fail-closed.',
     'Version 0.40.0.1 added one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.',
     'It admits only metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 / Blast Charge `29402` when the live job, cast, and adjusted identity all remain exact;',
@@ -10218,7 +10394,7 @@ Assert-Literals $normalizedReadme @(
     'Smart Action protection is rebuilt directly before a sole delayed replay, while audited ReAction/MOAction conflicts disable only that buffer opportunity.',
     'retains v0.34.0.4''s Chiten, Covered, Paladin-LB, Dark-Knight-LB, and target-circle safety, with Guard bypassed only by exact Guard-ignoring actions',
     'v0.34.0.3''s Smart Tab line-of-sight and ranked-cycle fixes.',
-    'Accepted Auto-Guard can show a card/sound and protects an accidental second Guard press for two seconds.',
+    'Confirmed Auto-Guard can show a card/sound and protects an accidental second Guard press for two seconds; provisional or rejected requests do not arm either effect.',
     '`/panicshu` now reaches its one location call only after exact native Shukuchi recast and resource readiness.',
     'It retains Emergency Teleport plus v0.31''s ranged Smart Tab',
     'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
@@ -10227,7 +10403,8 @@ Assert-Literals $normalizedReadme @(
     'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
     'local 4,000/2,000-MP sounds',
     'version-acknowledged What''s New window',
-    '**Purify > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
+    '**Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk**',
+    'During the provisional observation interval after an exact plugin Auto-Guard request, the short latch still blocks lower helpers, but Purify and Recuperate yield only to exact live Guard so a failed request cannot suppress higher-priority recovery.',
     'original critical boundary remains unconditional at 20% HP',
     'target count of at least three enemies may trigger the same frozen rescue earlier, at 35% HP or lower',
     'both central `UseAction` and `UseActionLocation` hooks are enabled',
@@ -10237,8 +10414,8 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 46 is current',
-    'For the current source, the exact 553-test Core registry and source checks pin configuration schema 46',
+    'Configuration schema 47 is current',
+    'For the current source, the exact 562-test Core registry and source checks pin configuration schema 47',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -10250,8 +10427,15 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.40.0.2 current README release and safety contract'
+) 'v0.41.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.41.0.0',
+    'Automatic Purify and Recuperate now retain their exact frozen episode through temporary native unavailability instead of retiring after one unlucky frame.',
+    'The default-off high-pressure Stun Auto-Guard path is now keyless.',
+    'the card, sound, action suppression, and two-second Guard- reuse protection arm only after exact live Guard `3054`/`3673` confirmation.',
+    'Added exact enemy danger warnings for SAM Chiten status `1240` and SMN Bahamut/Phoenix LB action/icon/status pairs.',
+    'Added experimental opponent LB-ready bars above the pressure display. This read-only option is **off by default** pending current-client layout testing;',
+    'Configuration schema is `47`. Source build, all `562` Core tests, safety, package parity, and release verification are automated.',
     '## 0.40.0.2',
     'Fixed the intermittent ranged **Smart Action** no-op where `/smartaction` refused to arm unless the live `S1` actor was already usable.',
     'Arming is now target-independent: it freezes only local identity, territory, and the existing 750-ms lifetime.',
@@ -10311,7 +10495,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.40.0.2 release notes and retained v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.41.0.0 release notes and retained v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -10438,7 +10622,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 46 is current.'
+    'Configuration schema 47 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -10567,7 +10751,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 46 is current'
+    'Configuration schema 47 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -10673,7 +10857,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 46 is current',
+    'Configuration schema 47 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'generic held-action cast-cancellation test',
     'schema-46 automatic basic-shot permission remain explicitly off for fresh, reset, and migrated configurations'
@@ -11043,7 +11227,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 46 is current',
+    'Configuration schema 47 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -11123,7 +11307,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 46 is current'
+    'Configuration schema 47 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -11193,7 +11377,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 46',
+    'public int Version { get; set; } = 47',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -11356,7 +11540,11 @@ Assert-Literals $configuration @(
     'EnableAutomaticRecuperate = false;',
     'if (Version < 46)',
     'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
-    'Version = 46',
+    'if (Version < 47)',
+    'WarnSummonerLimitBreak = true;',
+    'WarnEnemyChiten = true;',
+    'ShowOpponentLimitBreakBars = false;',
+    'Version = 47',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -11383,7 +11571,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-46 automatic recovery cast-cancel opt-in plus retained automatic Purify/Recuperate, RDM Guard engage, Blackblood preservation, read-only rotation/range overlays, and legacy compatibility fields'
+) 'Schema-47 default-on read-only warnings/LB bars plus retained automatic recovery, RDM Guard engage, Blackblood preservation, rotation/range overlays, and compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -11467,8 +11655,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*46\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 46\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?Version = 46;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*47\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 47\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 47\).*?WarnSummonerLimitBreak = true;.*?WarnEnemyChiten = true;.*?ShowOpponentLimitBreakBars = false;.*?Version = 47;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -11484,8 +11672,9 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*46\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableSamuraiZantetsukenOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableLocalCrystallineConflictMapStatisticsCapture\s*=\s*true\s*;').Count -ne 2 -or
+    [regex]::Matches($configuration, '\bShowOpponentLimitBreakBars\s*=\s*false\s*;').Count -ne 2 -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 46 must preserve every earlier explicit opt-in/migration, add default-off automatic Purify and Recuperate, add the separate default-off automatic BRD/MCH basic-shot cast-cancel permission, retain the default-off RDM Guard engage helper, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
+    throw 'Schema 47 must preserve every earlier opt-in/migration, add default-on read-only SMN/Chiten warnings, keep the unconfirmed opponent-LB observer experimental/default-off, retain default-off automatic recovery/cast-cancel and RDM Guard engage, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -11810,4 +11999,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.40.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 46 and the exact 553-test Core registry. Smart Action arming is target-independent and cannot scan S1, carrier identity, or a selected target. Direct single-target actions may skip unrelated hostile object-table completeness only after exact S-slot/status collection; target-circle, unsupported-AoE, and unknown shapes retain the complete hostile geometry comparison. The selected actor still requires exact protection, native range/line of sight, and frozen-target revalidation before one original action call, with no generated dispatch, rerank, retry, or visible target write. Automatic Purify and Recuperate remain separate default-off keyless trigger identities and share one independent default-off cast-cancel permission. AST held Near Help, /seitonbw, the Wolves' Den rotation panel, and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.41.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 47 and the exact 562-test Core registry. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Keyless high-pressure Stun Auto-Guard remains provisional until exact status confirmation, permits one bounded readiness-proven retry, and cannot arm input protection or block manual Guard from a rejected request. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. Smart Action and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

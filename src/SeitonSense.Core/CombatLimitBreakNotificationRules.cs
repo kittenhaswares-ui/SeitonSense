@@ -36,6 +36,28 @@ public readonly record struct DragoonLimitBreakWarningPlan(
     long RemainingMilliseconds,
     ulong EpisodeToken);
 
+public readonly record struct SummonerLimitBreakWarningObservation(
+    TargetPressureActorIdentity Actor,
+    bool IsEnemy,
+    int EnemySlot,
+    uint JobId,
+    uint ActivationActionId,
+    uint IconId,
+    CombatLimitBreakPresentationKind Presentation,
+    bool DurationConfirmed,
+    uint EvidenceStatusId,
+    long ActivatedAtMilliseconds,
+    long ExpiresAtMilliseconds,
+    long SnapshotPublishedAtMilliseconds,
+    ulong EpisodeToken);
+
+public readonly record struct SummonerLimitBreakWarningPlan(
+    uint IconId,
+    string SummonName,
+    bool ShowCountdown,
+    long RemainingMilliseconds,
+    ulong EpisodeToken);
+
 public readonly record struct CombatLimitBreakDamageNotificationObservation(
     TargetPressureActorIdentity Caster,
     int CasterPartySlot,
@@ -85,9 +107,18 @@ public static class CombatLimitBreakNotificationRules
     public const uint DragoonSkyHighIconId = 9_652;
     public const uint DragoonSkyHighStatusId = 3_180;
     public const long MaximumDragoonAirborneEpisodeMilliseconds = 5_000;
+    public const uint SummonerJobId = 27;
+    public const uint SummonBahamutActionId = 29_673;
+    public const uint SummonPhoenixActionId = 29_678;
+    public const uint SummonBahamutIconId = 9_681;
+    public const uint SummonPhoenixIconId = 9_683;
+    public const uint DreadwyrmTranceStatusId = 3_228;
+    public const uint FirebirdTranceStatusId = 3_229;
+    public const long MaximumSummonerEpisodeMilliseconds = 30_000;
     public const long MaximumSnapshotAgeMilliseconds = 500;
     public const long AllyDamageLifetimeMilliseconds = 3_000;
     public const int MaximumVisibleDamageCards = 3;
+    public const int MaximumVisibleDangerBanners = 3;
     public const int SelfSlot = 0;
     public const int FirstPartySlot = 1;
     public const int LastPartySlot = 5;
@@ -192,6 +223,61 @@ public static class CombatLimitBreakNotificationRules
         return true;
     }
 
+    /// <summary>
+    /// Admits only exact enemy Summon Bahamut/Phoenix activation pairs. The
+    /// activation produces an immediate bounded flash; a timer requires the
+    /// matching live trance status from the same runtime episode.
+    /// </summary>
+    public static bool TryBuildSummonerWarningPlan(
+        in SummonerLimitBreakWarningObservation observation,
+        long nowMilliseconds,
+        out SummonerLimitBreakWarningPlan plan)
+    {
+        plan = default;
+        if (!observation.Actor.IsValid ||
+            !observation.IsEnemy ||
+            observation.EnemySlot is < FirstEnemySlot or > LastEnemySlot ||
+            observation.JobId != SummonerJobId ||
+            observation.Presentation != CombatLimitBreakPresentationKind.Duration ||
+            observation.ActivatedAtMilliseconds < 0 ||
+            observation.ActivatedAtMilliseconds > nowMilliseconds ||
+            observation.ExpiresAtMilliseconds <= nowMilliseconds ||
+            observation.EpisodeToken == 0 ||
+            !IsFresh(observation.SnapshotPublishedAtMilliseconds, nowMilliseconds))
+        {
+            return false;
+        }
+
+        var bahamut = observation.ActivationActionId == SummonBahamutActionId &&
+                      observation.IconId == SummonBahamutIconId;
+        var phoenix = observation.ActivationActionId == SummonPhoenixActionId &&
+                      observation.IconId == SummonPhoenixIconId;
+        if (!bahamut && !phoenix) return false;
+
+        var lifetime = observation.ExpiresAtMilliseconds - observation.ActivatedAtMilliseconds;
+        if (observation.DurationConfirmed)
+        {
+            var exactStatus = bahamut
+                ? observation.EvidenceStatusId == DreadwyrmTranceStatusId
+                : observation.EvidenceStatusId == FirebirdTranceStatusId;
+            if (!exactStatus || lifetime is <= 0 or > MaximumSummonerEpisodeMilliseconds)
+                return false;
+        }
+        else if (observation.EvidenceStatusId != 0 ||
+                 lifetime is <= 0 or > CombatLimitBreakCatalog.InstantFlashMilliseconds)
+        {
+            return false;
+        }
+
+        plan = new SummonerLimitBreakWarningPlan(
+            observation.IconId,
+            bahamut ? "BAHAMUT SUMMONED" : "PHOENIX SUMMONED",
+            observation.DurationConfirmed,
+            observation.ExpiresAtMilliseconds - nowMilliseconds,
+            observation.EpisodeToken);
+        return true;
+    }
+
     public static bool TryBuildDamagePlan(
         in CombatLimitBreakDamageNotificationObservation observation,
         long nowMilliseconds,
@@ -281,6 +367,45 @@ public static class CombatLimitBreakNotificationRules
             uiScale,
             EnemyDangerBannerTopOffset,
             out rectangle);
+
+    public static bool TryBuildEnemyDangerBannerRectangles(
+        float workLeft,
+        float workTop,
+        float workWidth,
+        float workHeight,
+        float uiScale,
+        int bannerCount,
+        out LimitBreakNotificationRectangle[] rectangles)
+    {
+        rectangles = [];
+        if (bannerCount is < 1 or > MaximumVisibleDangerBanners ||
+            !TryBuildEnemyDangerBannerRectangle(
+                workLeft,
+                workTop,
+                workWidth,
+                workHeight,
+                uiScale,
+                out var first))
+        {
+            return false;
+        }
+
+        var gap = 8f * uiScale;
+        var height = first.Height;
+        var safeBandBottom = workTop + (workHeight * 0.45f);
+        var result = new List<LimitBreakNotificationRectangle>(bannerCount);
+        for (var index = 0; index < bannerCount; index++)
+        {
+            var top = first.Top + (index * (height + gap));
+            var rectangle = first with { Top = top, Bottom = top + height };
+            if (!rectangle.IsValid || rectangle.Bottom > safeBandBottom + 0.001f)
+                break;
+            result.Add(rectangle);
+        }
+
+        rectangles = result.ToArray();
+        return rectangles.Length > 0;
+    }
 
     public static bool TryBuildSelfBannerRectangleBelow(
         float workLeft,

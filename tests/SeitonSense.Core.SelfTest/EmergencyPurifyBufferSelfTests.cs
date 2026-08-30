@@ -40,6 +40,38 @@ internal static class EmergencyPurifyBufferSelfTests
         False(dispatched.ShouldClaimInputFrame, "keyless dispatch does not claim a physical key frame");
     }
 
+    public static void AutomaticPreNativeSoftWaitRetainsExactStatusAndRetriesNextFrame()
+    {
+        var dispatched = Observe(
+            EmergencyPurifyBufferState.Initial,
+            StatusA,
+            locallyReady: true,
+            now: 1_000,
+            automaticStatusTriggerEnabled: true);
+        True(dispatched.ShouldDispatch, "automatic status reaches the first attempt boundary");
+
+        var soft = Complete(
+            dispatched.NextState,
+            ClientActionAttemptOutcome.SoftUnavailable,
+            1_000);
+        True(soft.SoftWait, "pre-native drift is a soft wait");
+        False(soft.Terminal, "pre-native drift is not terminal");
+        Equal(EmergencyPurifyBufferPhase.Buffered, soft.NextState.Phase, "exact CC episode remains buffered");
+        Equal(StatusA, soft.NextState.StatusInstance!.Value, "exact CC identity is retained");
+        Equal(EmergencyPurifyInputTrigger.AutomaticStatus, soft.NextState.FrozenInputTrigger, "automatic consent is retained");
+        Equal(0, soft.NextState.NativeAttemptCount, "pre-native wait spends no native call");
+
+        var retry = Observe(
+            soft.NextState,
+            StatusA,
+            locallyReady: true,
+            now: 1_001,
+            frozenKeyStillDown: false,
+            automaticStatusTriggerEnabled: true);
+        True(retry.ShouldDispatch, "same automatic CC episode retries on the next ready frame");
+        Equal(EmergencyPurifyInputTrigger.AutomaticStatus, retry.InputTrigger, "retry remains keyless automatic consent");
+    }
+
     public static void DisablingAutomaticModeCancelsTheKeylessIntent()
     {
         var armed = Observe(

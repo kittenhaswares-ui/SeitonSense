@@ -370,12 +370,13 @@ internal sealed unsafe class SmartRecuperateProbe
                     currentLocal,
                     ninjaShukuchiHiddenStatuses)))
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            // No native UseAction boundary was crossed. Keep the exact health
+            // episode alive so the next framework frame can fully revalidate it.
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
-        var guardSuppressed = IsCurrentlySuppressedByGuard(
-            currentLocal,
-            Environment.TickCount64);
+        var guardSuppressed = SmartRecuperateRules.ShouldSuppressForOwnGuard(
+            nearAssist.IsExactLocalGuardActive(intent.LocalPlayer));
         var actionStateReadable = TryGetActionState(
             currentLocal,
             out var resolvedActionId,
@@ -415,11 +416,11 @@ internal sealed unsafe class SmartRecuperateProbe
                 heldModeEnabled,
                 automaticModeEnabled))
         {
-            return ClientActionAttemptOutcome.NotInvoked;
+            return ClientActionAttemptOutcome.SoftUnavailable;
         }
 
         var actionManager = ActionManager.Instance();
-        if (actionManager == null) return ClientActionAttemptOutcome.NotInvoked;
+        if (actionManager == null) return ClientActionAttemptOutcome.SoftUnavailable;
         if (!cooldownReady || !resourcesReady || !nativeBoundaryReady)
             return ClientActionAttemptOutcome.SoftUnavailable;
 
@@ -634,20 +635,6 @@ internal sealed unsafe class SmartRecuperateProbe
                    conditionValid ? condition.Value.ContentUICategory.RowId : 0,
                    conditionValid && condition.Value.CrystallineConflictCasualRoulette,
                    conditionValid && condition.Value.CrystallineConflictRankedRoulette);
-    }
-
-    private bool IsCurrentlySuppressedByGuard(
-        IPlayerCharacter localPlayer,
-        long nowMilliseconds)
-    {
-        if (DefensiveUtilityProbe.HasActiveGuard(localPlayer)) return true;
-        return nearAssist.TryGetRecentExactLocalGuardAttempt(
-            clientState.TerritoryType,
-            localPlayer.GameObjectId,
-            localPlayer.EntityId,
-            nowMilliseconds,
-            DefensiveUtilityRules.GuardPropagationLatchMilliseconds,
-            out _);
     }
 
     private static bool TryGetActionState(

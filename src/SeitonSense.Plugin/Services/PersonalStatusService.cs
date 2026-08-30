@@ -132,7 +132,7 @@ internal sealed class PersonalStatusService : IDisposable
             automaticRecoveryShotCastMetadata);
         emergencyPurify = new EmergencyPurifyProbe(
             log,
-            nearAssist.IsExactLocalGuardActiveOrPropagating);
+            nearAssist.IsExactLocalGuardActive);
         astrologianHarmonicOrbis = new AstrologianHarmonicOrbisProbe(
             clientState,
             objectTable,
@@ -637,12 +637,12 @@ internal sealed class PersonalStatusService : IDisposable
                                              configuration.ExperimentalPurifyOnNextKey &&
                                              anyPurifyAutomationEnabled &&
                                              metadata.PurifyVerified &&
-                                             !guardActive;
+                                             !exactGuardActive;
         var automaticPurifyConfigurationEnabled = configuration.Enabled &&
                                                   configuration.EnableAutomaticPurify &&
                                                   anyPurifyAutomationEnabled &&
                                                   metadata.PurifyVerified &&
-                                                  !guardActive;
+                                                  !exactGuardActive;
         var regularPurifyConfigurationEnabled =
             heldPurifyConfigurationEnabled ||
             automaticPurifyConfigurationEnabled;
@@ -650,7 +650,7 @@ internal sealed class PersonalStatusService : IDisposable
                                                       configuration.GuardOnStunPressure &&
                                                       highPressureStunObserved &&
                                                       metadata.PurifyVerified &&
-                                                      !guardActive;
+                                                      !exactGuardActive;
         var purifyStatus = SelectPurifyStatus(
             observed,
             now,
@@ -660,15 +660,14 @@ internal sealed class PersonalStatusService : IDisposable
         var purifyConfigurationEnabled = regularPurifyConfigurationEnabled ||
                                          pressureStunPurifyConfigurationEnabled;
         var purifyPhysicalInputObservationEnabled =
-            heldPurifyConfigurationEnabled ||
-            pressureStunPurifyConfigurationEnabled;
+            heldPurifyConfigurationEnabled;
         var selectedPurifyStatusIsAutomatic =
-            automaticPurifyConfigurationEnabled &&
+            (automaticPurifyConfigurationEnabled ||
+             pressureStunPurifyConfigurationEnabled) &&
             purifyStatus is { IsValid: true } selectedAutomaticStatus &&
             IsPurifyAutomationEnabled(selectedAutomaticStatus.StatusId);
         var allowPurifyHeldGameplayKey =
-            (heldPurifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey) ||
-            (pressureStunPurifyConfigurationEnabled && configuration.DefensiveUtilitiesOnHeldKey);
+            heldPurifyConfigurationEnabled && configuration.PurifyOnHeldGameplayKey;
         var allyRescueConfigurationEnabled = configuration.Enabled &&
                                              configuration.ExperimentalAllyRescueOnNextKey &&
                                              metadata.AllyRescueStatusesVerified &&
@@ -739,19 +738,13 @@ internal sealed class PersonalStatusService : IDisposable
         // valid before Guard and is still physically down when Guard ends.
         var purifyHeldInputEnabled = configuration.Enabled &&
                                      metadata.PurifyVerified &&
-                                     (((configuration.ExperimentalPurifyOnNextKey &&
-                                       anyPurifyAutomationEnabled &&
-                                       configuration.PurifyOnHeldGameplayKey) &&
-                                       !configuration.EnableAutomaticPurify) ||
-                                      (configuration.EnableDefensiveUtilities &&
-                                       configuration.GuardOnStunPressure &&
-                                       configuration.DefensiveUtilitiesOnHeldKey &&
-                                       !(configuration.EnableAutomaticPurify &&
-                                         configuration.PurifyOnStun) &&
-                                       isCrystallineConflict));
-        var defensiveUtilityHeldInputEnabled = defensiveUtilitiesConfigurationEnabled &&
-                                                configuration.DefensiveUtilitiesOnHeldKey &&
-                                                metadata.GuardVerified;
+                                     configuration.ExperimentalPurifyOnNextKey &&
+                                     anyPurifyAutomationEnabled &&
+                                     configuration.PurifyOnHeldGameplayKey &&
+                                     !configuration.EnableAutomaticPurify;
+        // The exact 3+ pressure Stun -> Purify -> Guard chain is automatic;
+        // this compatibility slot no longer observes or requires a held key.
+        const bool defensiveUtilityHeldInputEnabled = false;
         var paladinGuardianHeldInputEnabled = paladinGuardianConfigurationEnabled &&
                                               configuration.PaladinGuardianOnHeldKey &&
                                               metadata.GuardVerified &&
@@ -950,7 +943,60 @@ internal sealed class PersonalStatusService : IDisposable
         // actionable or waiting at the global native boundary. It no longer
         // consumes that physical hold through release.
         var purifyClaimedPriority = purify.InputClaimed;
-        // AST's held Near Help lane is immediately below Purify. It freezes one
+        var automaticRecoveryBasicShotMetadataVerified =
+            AutomaticRecoveryShotCastRules.TryGetRawActionId(
+                localJobId,
+                out var automaticRecoveryRawShotActionId) &&
+            automaticRecoveryShotCastMetadata.IsVerified(
+                localJobId,
+                automaticRecoveryRawShotActionId);
+        now = Environment.TickCount64;
+        var recuperate = smartRecuperate.Observe(
+            localPlayer,
+            context,
+            smartRecuperateHeldInputEnabled,
+            smartRecuperateAutomaticConfigurationEnabled,
+            metadata.RecuperateVerified,
+            configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
+            automaticRecoveryBasicShotMetadataVerified,
+            exactGuardActive,
+            hasPurifyRemovableCrowdControl ||
+            purifyClaimedPriority ||
+            emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            metadata.NinjaShukuchiHiddenStatuses,
+            hardReset);
+        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
+        var immediateRecoveryClaimedPriority = purifyClaimedPriority ||
+                                               smartRecuperateClaimedPriority;
+        // Generic Auto-Guard is the first non-recovery action. Its exact
+        // post-Purify lease therefore gets the first legal native frame after
+        // Purify and Recuperate, before any job helper or emergency movement.
+        now = Environment.TickCount64;
+        var guardDefense = defensiveUtility.ObserveGuard(
+            localPlayer,
+            isCrystallineConflict,
+            defensiveUtilitiesConfigurationEnabled,
+            allowHeldGameplayKey: false,
+            configuration.GuardOnStunPressure,
+            pressureKnown,
+            incomingEnemyCount,
+            highPressureStunObserved,
+            purify.UseActionAttempted,
+            resilienceActive,
+            hasPurifyRemovableCrowdControl,
+            guardActive,
+            immediateRecoveryClaimedPriority || emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset,
+            prioritizedGuardianPass: null);
+        var defensiveUtilityClaimedPriority = guardDefense.InputClaimed;
+        var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority ||
+                                              defensiveUtilityClaimedPriority;
+        ObserveAutoGuardFeedback(guardDefense.AutoGuardPopup);
+        // AST's held Near Help lane is immediately below self recovery. It freezes one
         // exact <=60% party member and may reserve only its accepted base
         // Orbis' exact same-target Double Cast form for a later framework frame.
         now = Environment.TickCount64;
@@ -961,12 +1007,12 @@ internal sealed class PersonalStatusService : IDisposable
             astrologianHarmonicOrbisMetadataVerified,
             configuration.NearHelpPreferIncomingPressure,
             guardActive,
-            purifyClaimedPriority || emergencyInputFrame.IsConsumed,
+            immediateDefenseClaimedPriority || emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
             hardReset);
         var astrologianClaimedPriority = astrologianOrbis.InputClaimed;
-        // RDM's fresh-Guard engage is directly below Purify and AST. It freezes
+        // RDM's fresh-Guard engage is directly below self recovery and AST. It freezes
         // one exact enemy and spends only Corps-a-corps; the accepted actor is
         // hard-targeted once without an automatic melee follow-up.
         now = Environment.TickCount64;
@@ -980,7 +1026,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.RedMageGuardEngageMinimumHpPercent,
             configuration.RedMageGuardEngageMinimumMpPercent,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             astrologianClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
@@ -1002,7 +1048,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ReactiveCcOnHeldKey,
             dispatchAllowed:
                  !guardActive &&
-                 !purifyClaimedPriority &&
+                 !immediateDefenseClaimedPriority &&
                  !redMageGuardEngageClaimedPriority &&
                  !emergencyInputFrame.IsConsumed,
             configuration.ReactiveCcSamuraiSotenMaximumRangeYalms,
@@ -1018,7 +1064,7 @@ internal sealed class PersonalStatusService : IDisposable
                 allowHeldGameplayKey: true,
                 dispatchAllowed:
                      !guardActive &&
-                     !purifyClaimedPriority &&
+                     !immediateDefenseClaimedPriority &&
                      !redMageGuardEngageClaimedPriority &&
                      !samuraiCounter.InputClaimed &&
                     !emergencyInputFrame.IsConsumed,
@@ -1032,7 +1078,7 @@ internal sealed class PersonalStatusService : IDisposable
                                      samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
-        // Purify is absolute. AST, SAM, then Auto-Seiton are the next
+        // Purify is absolute, Recuperate is second. AST, SAM, then Auto-Seiton are the next
         // action-level priorities;
         // once it claims this frame, every later held helper observes that
         // claim and stays armed for a later free frame.
@@ -1043,7 +1089,7 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaSeitonConfigurationEnabled,
             metadata.SeitonVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
@@ -1057,7 +1103,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.ViperSerpentTailVerified,
             metadata.WolvesDenStrikingDummyVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             ninja.InputClaimed ||
             emergencyInputFrame.IsConsumed,
@@ -1071,7 +1117,7 @@ internal sealed class PersonalStatusService : IDisposable
             gunbreakerContinuationConfigurationEnabled,
             metadata.GunbreakerContinuationVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             ninja.InputClaimed ||
             viper.InputClaimed ||
@@ -1092,7 +1138,7 @@ internal sealed class PersonalStatusService : IDisposable
             miracleInterceptConfigurationEnabled,
             configuration.ReactiveCcOnHeldKey,
             !guardActive &&
-            !purifyClaimedPriority &&
+            !immediateDefenseClaimedPriority &&
             !samuraiClaimedPriority &&
             !ninja.InputClaimed &&
             !viper.InputClaimed &&
@@ -1137,7 +1183,7 @@ internal sealed class PersonalStatusService : IDisposable
             AllyRescueBufferRules.DefaultBufferMilliseconds,
             hardReset,
             dispatchAllowed:
-                !purifyClaimedPriority &&
+                !immediateDefenseClaimedPriority &&
                 !samuraiClaimedPriority &&
                 !ninja.InputClaimed &&
                 !viper.InputClaimed &&
@@ -1151,7 +1197,7 @@ internal sealed class PersonalStatusService : IDisposable
             paladinGuardianConfigurationEnabled,
             configuration.PaladinGuardianOnHeldKey,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             ninja.InputClaimed ||
             viper.InputClaimed ||
@@ -1161,8 +1207,8 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
-            hardReset,
-            beginsFrame: true);
+            hardReset: false,
+            beginsFrame: false);
         // Guardian may return client-accepted a millisecond after this frame's
         // original timestamp. Refresh before handing the exact episode to the
         // same-frame communication consumer so it is never misclassified as a
@@ -1182,7 +1228,7 @@ internal sealed class PersonalStatusService : IDisposable
             ninjaGuardShukuchiConfigurationEnabled,
             metadata.PanicShukuchiVerified && metadata.GuardVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             ninja.InputClaimed ||
             viper.InputClaimed ||
@@ -1200,7 +1246,7 @@ internal sealed class PersonalStatusService : IDisposable
             scholarCriticalStrategyConfigurationEnabled,
             metadata.ScholarCriticalStrategyVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             viper.InputClaimed ||
             gunbreaker.InputClaimed ||
@@ -1225,7 +1271,7 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.DarkKnightShadowbringerMinimumHpPercent,
             configuration.DarkKnightShadowbringerPressureLimitExclusive,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             viper.InputClaimed ||
             gunbreaker.InputClaimed ||
@@ -1246,7 +1292,7 @@ internal sealed class PersonalStatusService : IDisposable
             darkKnightPlungeConfigurationEnabled,
             metadata.DarkKnightPlungeVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             viper.InputClaimed ||
             gunbreaker.InputClaimed ||
@@ -1279,7 +1325,7 @@ internal sealed class PersonalStatusService : IDisposable
                 configuration.DarkKnightShadowbringerMinimumHpPercent,
                 configuration.DarkKnightShadowbringerPressureLimitExclusive,
                 guardActive,
-                purifyClaimedPriority ||
+                immediateDefenseClaimedPriority ||
                 samuraiClaimedPriority ||
                 viper.InputClaimed ||
                 gunbreaker.InputClaimed ||
@@ -1305,7 +1351,7 @@ internal sealed class PersonalStatusService : IDisposable
             metadata.MonkHeldComboVerified,
             metadata.WolvesDenStrikingDummyVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
             viper.InputClaimed ||
             gunbreaker.InputClaimed ||
@@ -1335,31 +1381,6 @@ internal sealed class PersonalStatusService : IDisposable
                                              plunge.InputClaimed ||
                                              shadowbringer.InputClaimed ||
                                              monkCombo.InputClaimed;
-        var automaticRecoveryBasicShotMetadataVerified =
-            AutomaticRecoveryShotCastRules.TryGetRawActionId(
-                localJobId,
-                out var automaticRecoveryRawShotActionId) &&
-            automaticRecoveryShotCastMetadata.IsVerified(
-                localJobId,
-                automaticRecoveryRawShotActionId);
-        var recuperate = smartRecuperate.Observe(
-            localPlayer,
-            context,
-            smartRecuperateHeldInputEnabled,
-            smartRecuperateAutomaticConfigurationEnabled,
-            metadata.RecuperateVerified,
-            configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
-            automaticRecoveryBasicShotMetadataVerified,
-            guardActive,
-            hasPurifyRemovableCrowdControl ||
-            purifyClaimedPriority ||
-            jobSpecificHeldClaimedPriority ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            metadata.NinjaShukuchiHiddenStatuses,
-            hardReset);
-        var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         now = Environment.TickCount64;
         var teleport = emergencyTeleport.Observe(
             localPlayer,
@@ -1367,39 +1388,13 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyTeleportHeldInputEnabled,
             metadata.IsEmergencyTeleportVerified(localJobId),
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
             jobSpecificHeldClaimedPriority ||
-            smartRecuperateClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
             hardReset);
         var emergencyTeleportClaimedPriority = teleport.InputClaimed;
-        var guardDefense = defensiveUtility.ObserveGuard(
-            localPlayer,
-            isCrystallineConflict,
-            defensiveUtilitiesConfigurationEnabled,
-            configuration.DefensiveUtilitiesOnHeldKey,
-            configuration.GuardOnStunPressure,
-            pressureKnown,
-            incomingEnemyCount,
-            highPressureStunObserved,
-            purify.UseActionAttempted,
-            resilienceActive,
-            hasPurifyRemovableCrowdControl,
-            guardActive,
-            purifyClaimedPriority ||
-            jobSpecificHeldClaimedPriority ||
-            smartRecuperateClaimedPriority ||
-            emergencyTeleportClaimedPriority ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset: false,
-            prioritizedGuardianPass: defense);
-        var defensiveUtilityClaimedPriority = guardDefense.InputClaimed ||
-                                               guardianClaimedPriority;
-        ObserveAutoGuardFeedback(guardDefense.AutoGuardPopup);
         now = Environment.TickCount64;
         var pressureEscape = pressureEscapeSprint.Observe(
             localPlayer,
@@ -1409,9 +1404,8 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.HighPressureWarningSoundId,
             configuration.Enabled && configuration.EnablePressureEscapeSprintOnHeldKey,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
              jobSpecificHeldClaimedPriority ||
-             smartRecuperateClaimedPriority ||
              emergencyTeleportClaimedPriority ||
              defensiveUtilityClaimedPriority,
             emergencyInputFrame,
@@ -1424,9 +1418,8 @@ internal sealed class PersonalStatusService : IDisposable
             smartKardiaConfigurationEnabled,
             metadata.SmartKardiaVerified,
             guardActive,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
              jobSpecificHeldClaimedPriority ||
-             smartRecuperateClaimedPriority ||
              emergencyTeleportClaimedPriority ||
              defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
@@ -1445,9 +1438,8 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.MonkEarthReplyBeforeExpiry,
             configuration.MonkEarthReplyHpPercent,
             configuration.MonkEarthReplyExpirySeconds,
-            purifyClaimedPriority ||
+            immediateDefenseClaimedPriority ||
              jobSpecificHeldClaimedPriority ||
-             smartRecuperateClaimedPriority ||
              emergencyTeleportClaimedPriority ||
              defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
@@ -1464,6 +1456,12 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                recuperate.InputClaimed,
+                recuperate.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
+                guardDefense.InputClaimed,
+                guardDefense.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 astrologianOrbis.InputClaimed,
                 astrologianOrbis.CastCancellationRequest) ??
@@ -1505,14 +1503,8 @@ internal sealed class PersonalStatusService : IDisposable
                     DarkKnightShadowbringerOpportunityKind.SafeHpCost,
                 shadowbringer.CastCancellationLease) ??
             ClaimedCastCancellationRequest(
-                recuperate.InputClaimed,
-                recuperate.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
                 teleport.InputClaimed,
                 teleport.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                guardDefense.InputClaimed,
-                guardDefense.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 pressureEscape.InputClaimed,
                 pressureEscape.CastCancellationRequest);
@@ -1529,7 +1521,11 @@ internal sealed class PersonalStatusService : IDisposable
              }),
             configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
             isSupportedPvPContext,
-            guardActive,
+            castCancellationRequest is
+                { HelperKind: HeldCastCancellationHelperKind.Purify or
+                              HeldCastCancellationHelperKind.SmartRecuperate }
+                ? exactGuardActive
+                : guardActive,
             prioritizedInputClaimed: castCancellationRequest is { IsValid: true },
             intentOtherwiseReady: castCancellationRequest is { IsValid: true },
             request: castCancellationRequest,

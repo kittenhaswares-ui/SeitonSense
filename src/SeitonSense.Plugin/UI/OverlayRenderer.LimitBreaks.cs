@@ -10,6 +10,7 @@ internal sealed partial class OverlayRenderer
 {
     private static readonly Vector4 LimitBreakNameplateColor = new(1f, 0.7f, 0.1f, 1f);
     private static readonly Vector4 LimitBreakTimerColor = new(1f, 0.93f, 0.58f, 1f);
+    private static readonly Vector4 ChitenNameplateColor = new(1f, 0.12f, 0.22f, 1f);
 
     private CombatLimitBreakNameplateSource? combatLimitBreakNameplateSource;
 
@@ -54,6 +55,7 @@ internal sealed partial class OverlayRenderer
     private void DrawStackedNameplateEmblems(
         NamePlateAnchorSnapshot anchor,
         IReadOnlyList<CcProtectionDisplay> activeProtections,
+        ChitenWarningObservation? chiten,
         CombatLimitBreakActorState? limitBreak,
         long limitBreakSnapshotPublishedAtMilliseconds,
         long nowMilliseconds)
@@ -76,6 +78,15 @@ internal sealed partial class OverlayRenderer
                                     limitBreakSnapshotPublishedAtMilliseconds),
                                 nowMilliseconds,
                                 out limitBreakPlan);
+        var chitenPlan = default(ChitenWarningPlan);
+        var hasChiten = configuration.WarnEnemyChiten &&
+                        chiten is { } chitenState &&
+                        ChitenWarningRules.TryBuildNameplatePlan(
+                            anchorActor,
+                            anchor.CapturedAtMilliseconds,
+                            chitenState,
+                            nowMilliseconds,
+                            out chitenPlan);
         var protection = configuration.ShowCcProtection
             ? activeProtections
                 .Where(candidate => candidate.ExpiresAtMilliseconds > nowMilliseconds)
@@ -85,7 +96,7 @@ internal sealed partial class OverlayRenderer
                 .FirstOrDefault()
             : default;
         var hasProtection = protection.StatusId != 0;
-        if (!hasLimitBreak && !hasProtection) return;
+        if (!hasLimitBreak && !hasProtection && !hasChiten) return;
 
         var uiScale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
         var nativeHeight = Math.Max(1f, anchor.Height);
@@ -95,15 +106,26 @@ internal sealed partial class OverlayRenderer
         var protectionMetrics = hasProtection
             ? BuildProtectionMetrics(nativeHeight, uiScale)
             : default;
+        var chitenMetrics = hasChiten
+            ? BuildLimitBreakMetrics(nativeHeight, uiScale, showCountdown: true)
+            : default;
 
-        var requests = new List<NameplateVerticalStackRequest>(2);
-        var kinds = new List<NameplateEmblemKind>(2);
+        var requests = new List<NameplateVerticalStackRequest>(3);
+        var kinds = new List<NameplateEmblemKind>(3);
         if (hasLimitBreak)
         {
             requests.Add(new NameplateVerticalStackRequest(
                 limitBreakMetrics.TotalHeight,
                 limitBreakMetrics.MinimumTotalHeight));
             kinds.Add(NameplateEmblemKind.LimitBreak);
+        }
+
+        if (hasChiten)
+        {
+            requests.Add(new NameplateVerticalStackRequest(
+                chitenMetrics.TotalHeight,
+                chitenMetrics.MinimumTotalHeight));
+            kinds.Add(NameplateEmblemKind.Chiten);
         }
 
         if (hasProtection)
@@ -128,10 +150,45 @@ internal sealed partial class OverlayRenderer
                 requests,
                 out var placements))
         {
-            // Do not regress the existing CC warning at the extreme top edge.
-            // If both minimum-size blocks cannot fit, retain only CC; otherwise
-            // the single LB block still gets its own exact admission check.
-            if (hasProtection && hasLimitBreak)
+            // At the extreme top edge, retain safety information in strict
+            // order: CC protection, Chiten, then an ordinary LB activation.
+            if (hasLimitBreak && (hasProtection || hasChiten))
+            {
+                requests.RemoveAt(0);
+                kinds.RemoveAt(0);
+                if (!CombatLimitBreakNameplateRules.TryBuildVerticalStack(
+                        anchor.JobIconTopLeft.Y,
+                        topPadding,
+                        anchorGap,
+                        interBlockGap,
+                        requests,
+                        out placements))
+                {
+                    if (hasProtection)
+                    {
+                        requests =
+                        [
+                            new NameplateVerticalStackRequest(
+                                protectionMetrics.TotalHeight,
+                                protectionMetrics.MinimumTotalHeight),
+                        ];
+                        kinds = [NameplateEmblemKind.CcProtection];
+                        if (!CombatLimitBreakNameplateRules.TryBuildVerticalStack(
+                                anchor.JobIconTopLeft.Y,
+                                topPadding,
+                                anchorGap,
+                                interBlockGap,
+                                requests,
+                                out placements))
+                        {
+                            return;
+                        }
+                    }
+                    else
+                        return;
+                }
+            }
+            else if (hasProtection && hasChiten)
             {
                 requests =
                 [
@@ -180,8 +237,47 @@ internal sealed partial class OverlayRenderer
                         nowMilliseconds,
                         uiScale);
                     break;
+                case NameplateEmblemKind.Chiten:
+                    DrawChitenPlacement(
+                        nativeCenterX,
+                        screen.X,
+                        placement,
+                        chitenMetrics,
+                        chitenPlan,
+                        uiScale);
+                    break;
             }
         }
+    }
+
+    private void DrawChitenPlacement(
+        float nativeCenterX,
+        float screenWidth,
+        NameplateVerticalStackPlacement placement,
+        NameplateEmblemMetrics metrics,
+        ChitenWarningPlan plan,
+        float uiScale)
+    {
+        var iconSize = metrics.IconSize * placement.Scale;
+        var timerGap = metrics.TimerGap * placement.Scale;
+        var timerHeight = metrics.TimerHeight * placement.Scale;
+        var glowMargin = Math.Max(12f * uiScale, iconSize * 0.36f);
+        var centerX = ClampNameplateCenter(nativeCenterX, screenWidth, iconSize, glowMargin);
+        var iconMax = PixelSnap(new Vector2(centerX + (iconSize * 0.5f), placement.Bottom));
+        var iconMin = PixelSnap(iconMax - new Vector2(iconSize));
+        DrawIconBadge(
+            iconMin,
+            iconMax,
+            plan.IconId,
+            ChitenNameplateColor,
+            crossed: false,
+            cornerLabel: "SAM",
+            countdown: null,
+            emphasized: true);
+
+        var timerMax = PixelSnap(new Vector2(iconMax.X, iconMin.Y - timerGap));
+        var timerMin = PixelSnap(new Vector2(iconMin.X, timerMax.Y - timerHeight));
+        DrawLimitBreakTimer(timerMin, timerMax, plan.RemainingMilliseconds, uiScale);
     }
 
     private void DrawLimitBreakPlacement(
@@ -346,6 +442,7 @@ internal sealed partial class OverlayRenderer
     {
         LimitBreak = 0,
         CcProtection = 1,
+        Chiten = 2,
     }
 
     private readonly record struct NameplateEmblemMetrics(

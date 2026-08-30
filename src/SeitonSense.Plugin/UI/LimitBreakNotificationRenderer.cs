@@ -13,6 +13,8 @@ internal readonly record struct LimitBreakNotificationOptions(
     bool ShowSelfActivation,
     bool ShowAllyDamageEvents,
     bool ShowEnemyDangerWarnings,
+    bool ShowSummonerLimitBreakWarning,
+    bool ShowChitenWarning,
     bool PlayEnemyDangerWarningSound,
     int EnemyDangerWarningSoundId,
     bool ShowNames,
@@ -38,6 +40,7 @@ internal sealed class LimitBreakNotificationRenderer
     private static readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.98f);
 
     private readonly CombatLimitBreakRuntimeService runtime;
+    private readonly ExecuteTracker tracker;
     private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
     private readonly IPluginLog log;
@@ -47,12 +50,14 @@ internal sealed class LimitBreakNotificationRenderer
 
     internal LimitBreakNotificationRenderer(
         CombatLimitBreakRuntimeService runtime,
+        ExecuteTracker tracker,
         IGameGui gameGui,
         ITextureProvider textureProvider,
         IPluginLog log,
         Func<LimitBreakNotificationOptions> optionsProvider)
     {
         this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        this.tracker = tracker ?? throw new ArgumentNullException(nameof(tracker));
         this.gameGui = gameGui ?? throw new ArgumentNullException(nameof(gameGui));
         this.textureProvider = textureProvider ?? throw new ArgumentNullException(nameof(textureProvider));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
@@ -70,13 +75,15 @@ internal sealed class LimitBreakNotificationRenderer
             if (!options.Enabled ||
                 (!options.ShowSelfActivation &&
                  !options.ShowAllyDamageEvents &&
-                 !options.ShowEnemyDangerWarnings))
+                 !options.ShowEnemyDangerWarnings &&
+                 !options.ShowSummonerLimitBreakWarning &&
+                 !options.ShowChitenWarning))
             {
                 return;
             }
 
             var snapshot = runtime.Snapshot;
-            if (!snapshot.Active) return;
+            if (!snapshot.Active && !options.ShowChitenWarning) return;
 
             var now = Environment.TickCount64;
             var viewport = ImGui.GetMainViewport();
@@ -89,15 +96,18 @@ internal sealed class LimitBreakNotificationRenderer
             var dangerBannerDrawn = false;
             var dangerBannerRectangle = default(LimitBreakNotificationRectangle);
 
-            if (options.ShowEnemyDangerWarnings &&
-                TryResolveDragoonWarning(snapshot, now, out var dragoon))
+            var dangerNotifications = ResolveDangerNotifications(snapshot, options, now);
+            if (dangerNotifications.Count > 0)
             {
                 if (options.PlayEnemyDangerWarningSound)
                 {
-                    dragoonWarningSound.TryPlayThreat(
-                        dragoon.EpisodeToken,
-                        options.EnemyDangerWarningSoundId,
-                        now);
+                    foreach (var notification in dangerNotifications)
+                    {
+                        dragoonWarningSound.TryPlayThreat(
+                            ComposeDangerSoundToken(notification.Kind, notification.EpisodeToken),
+                            options.EnemyDangerWarningSoundId,
+                            now);
+                    }
                 }
 
                 var dangerConfiguredScale = Math.Clamp(
@@ -108,29 +118,35 @@ internal sealed class LimitBreakNotificationRenderer
                     Math.Max(0.5f, ImGuiHelpers.GlobalScale) * dangerConfiguredScale,
                     0.5f,
                     4f);
-                if (CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangle(
+                if (CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangles(
                         viewport.WorkPos.X,
                         viewport.WorkPos.Y,
                         viewport.WorkSize.X,
                         viewport.WorkSize.Y,
                         dangerScale,
-                        out var dangerRectangle))
+                        dangerNotifications.Count,
+                        out var dangerRectangles))
                 {
-                    DrawBanner(
-                        draw,
-                        new BannerNotification(
-                            "DRG LIMIT BREAK!",
-                            "IN THE AIR  •  SKY SHATTER INCOMING",
-                            dragoon.IconId,
-                            dragoon.ShowCountdown,
-                            dragoon.RemainingMilliseconds,
-                            true),
-                        dangerRectangle,
-                        dangerConfiguredScale,
-                        dangerScale,
-                        options.BackgroundOpacity);
+                    for (var index = 0; index < dangerRectangles.Length; index++)
+                    {
+                        var notification = dangerNotifications[index];
+                        DrawBanner(
+                            draw,
+                            new BannerNotification(
+                                notification.Headline,
+                                notification.Name,
+                                notification.IconId,
+                                notification.ShowCountdown,
+                                notification.RemainingMilliseconds,
+                                true),
+                            dangerRectangles[index],
+                            dangerConfiguredScale,
+                            dangerScale,
+                            options.BackgroundOpacity);
+                    }
+
                     dangerBannerDrawn = true;
-                    dangerBannerRectangle = dangerRectangle;
+                    dangerBannerRectangle = dangerRectangles[^1];
                 }
             }
 
@@ -253,6 +269,61 @@ internal sealed class LimitBreakNotificationRenderer
         return true;
     }
 
+    private IReadOnlyList<DangerNotification> ResolveDangerNotifications(
+        CombatLimitBreakRuntimeSnapshot snapshot,
+        LimitBreakNotificationOptions options,
+        long nowMilliseconds)
+    {
+        var notifications = new List<DangerNotification>(3);
+        if (options.ShowEnemyDangerWarnings &&
+            TryResolveDragoonWarning(snapshot, nowMilliseconds, out var dragoon))
+        {
+            notifications.Add(new DangerNotification(
+                EnemyDangerKind.Dragoon,
+                "DRG LIMIT BREAK!",
+                "IN THE AIR  •  SKY SHATTER INCOMING",
+                dragoon.IconId,
+                dragoon.ShowCountdown,
+                dragoon.RemainingMilliseconds,
+                dragoon.ActivatedAtMilliseconds,
+                dragoon.EpisodeToken));
+        }
+
+        if (options.ShowSummonerLimitBreakWarning &&
+            TryResolveSummonerWarning(snapshot, nowMilliseconds, out var summoner))
+        {
+            notifications.Add(new DangerNotification(
+                EnemyDangerKind.Summoner,
+                "SUMMONER LIMIT BREAK!",
+                summoner.SummonName,
+                summoner.IconId,
+                summoner.ShowCountdown,
+                summoner.RemainingMilliseconds,
+                summoner.ActivatedAtMilliseconds,
+                summoner.EpisodeToken));
+        }
+
+        if (options.ShowChitenWarning &&
+            TryResolveChitenWarning(nowMilliseconds, out var chiten))
+        {
+            notifications.Add(new DangerNotification(
+                EnemyDangerKind.Chiten,
+                "CHITEN!",
+                "DO NOT HIT THE SAMURAI",
+                chiten.IconId,
+                true,
+                chiten.RemainingMilliseconds,
+                chiten.ActivatedAtMilliseconds,
+                chiten.EpisodeToken));
+        }
+
+        return notifications
+            .OrderByDescending(static notification => notification.ActivatedAtMilliseconds)
+            .ThenBy(static notification => notification.Kind)
+            .Take(CombatLimitBreakNotificationRules.MaximumVisibleDangerBanners)
+            .ToArray();
+    }
+
     private static bool TryResolveDragoonWarning(
         CombatLimitBreakRuntimeSnapshot snapshot,
         long nowMilliseconds,
@@ -303,8 +374,110 @@ internal sealed class LimitBreakNotificationRenderer
             selectedPlan.IconId,
             selectedPlan.ShowCountdown,
             selectedPlan.RemainingMilliseconds,
+            selectedState.ActivatedAtMilliseconds,
             selectedPlan.EpisodeToken);
         return true;
+    }
+
+    private static bool TryResolveSummonerWarning(
+        CombatLimitBreakRuntimeSnapshot snapshot,
+        long nowMilliseconds,
+        out SummonerNotification notification)
+    {
+        notification = default;
+        CombatLimitBreakActorState selectedState = default;
+        SummonerLimitBreakWarningPlan selectedPlan = default;
+        var found = false;
+        foreach (var state in snapshot.Actors)
+        {
+            if (!CombatLimitBreakNotificationRules.TryBuildSummonerWarningPlan(
+                    new SummonerLimitBreakWarningObservation(
+                        state.Actor,
+                        state.Side == CombatLimitBreakRosterSide.Enemy,
+                        state.Slot,
+                        state.JobId,
+                        state.ActivationActionId,
+                        state.IconId,
+                        state.Presentation,
+                        state.DurationConfirmed,
+                        state.EvidenceStatusId,
+                        state.ActivatedAtMilliseconds,
+                        state.ExpiresAtMilliseconds,
+                        snapshot.PublishedAtMilliseconds,
+                        state.EpisodeToken),
+                    nowMilliseconds,
+                    out var plan))
+            {
+                continue;
+            }
+
+            if (found &&
+                (state.ActivatedAtMilliseconds < selectedState.ActivatedAtMilliseconds ||
+                 state.ActivatedAtMilliseconds == selectedState.ActivatedAtMilliseconds &&
+                 state.EpisodeToken <= selectedState.EpisodeToken))
+            {
+                continue;
+            }
+
+            found = true;
+            selectedState = state;
+            selectedPlan = plan;
+        }
+
+        if (!found) return false;
+        notification = new SummonerNotification(
+            selectedPlan.IconId,
+            selectedPlan.SummonName,
+            selectedPlan.ShowCountdown,
+            selectedPlan.RemainingMilliseconds,
+            selectedState.ActivatedAtMilliseconds,
+            selectedPlan.EpisodeToken);
+        return true;
+    }
+
+    private bool TryResolveChitenWarning(
+        long nowMilliseconds,
+        out ChitenNotification notification)
+    {
+        notification = default;
+        var found = false;
+        ChitenWarningPlan selectedPlan = default;
+        foreach (var enemy in tracker.Enemies)
+        {
+            if (enemy.ChitenWarning is not { } observation ||
+                !ChitenWarningRules.TryBuildWarningPlan(
+                    observation,
+                    nowMilliseconds,
+                    out var plan))
+            {
+                continue;
+            }
+
+            if (found &&
+                (plan.ActivatedAtMilliseconds < selectedPlan.ActivatedAtMilliseconds ||
+                 plan.ActivatedAtMilliseconds == selectedPlan.ActivatedAtMilliseconds &&
+                 plan.EpisodeToken <= selectedPlan.EpisodeToken))
+            {
+                continue;
+            }
+
+            found = true;
+            selectedPlan = plan;
+        }
+
+        if (!found) return false;
+        notification = new ChitenNotification(
+            selectedPlan.IconId,
+            selectedPlan.RemainingMilliseconds,
+            selectedPlan.ActivatedAtMilliseconds,
+            selectedPlan.EpisodeToken);
+        return true;
+    }
+
+    private static ulong ComposeDangerSoundToken(EnemyDangerKind kind, ulong episodeToken)
+    {
+        var value = episodeToken ^ (0x9E3779B97F4A7C15UL * ((ulong)kind + 1UL));
+        return value == 0 ? (ulong)kind + 1UL : value;
     }
 
     private IReadOnlyList<DamageNotification> ResolveDamageCards(
@@ -711,7 +884,39 @@ internal sealed class LimitBreakNotificationRenderer
         uint IconId,
         bool ShowCountdown,
         long RemainingMilliseconds,
+        long ActivatedAtMilliseconds,
         ulong EpisodeToken);
+
+    private readonly record struct SummonerNotification(
+        uint IconId,
+        string SummonName,
+        bool ShowCountdown,
+        long RemainingMilliseconds,
+        long ActivatedAtMilliseconds,
+        ulong EpisodeToken);
+
+    private readonly record struct ChitenNotification(
+        uint IconId,
+        long RemainingMilliseconds,
+        long ActivatedAtMilliseconds,
+        ulong EpisodeToken);
+
+    private readonly record struct DangerNotification(
+        EnemyDangerKind Kind,
+        string Headline,
+        string Name,
+        uint IconId,
+        bool ShowCountdown,
+        long RemainingMilliseconds,
+        long ActivatedAtMilliseconds,
+        ulong EpisodeToken);
+
+    private enum EnemyDangerKind : byte
+    {
+        Dragoon = 0,
+        Summoner = 1,
+        Chiten = 2,
+    }
 
     private readonly record struct BannerNotification(
         string Headline,

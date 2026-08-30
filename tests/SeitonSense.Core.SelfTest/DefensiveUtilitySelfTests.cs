@@ -205,11 +205,11 @@ internal static class DefensiveUtilitySelfTests
             "wrong local identity cannot retract");
     }
 
-    public static void AutoGuardProtectionOwnershipRequiresTheExactAcceptedAttempt()
+    public static void AutoGuardProtectionOwnershipRequiresTheExactConfirmedAttempt()
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
         True(
-            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+            AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
                 latestGuardAttemptGeneration: 42,
                 generationBeforeCall: 41,
                 latestTerritoryId: 250,
@@ -217,10 +217,23 @@ internal static class DefensiveUtilitySelfTests
                 latestLocalPlayer: local,
                 currentLocalPlayer: local,
                 observedAtMilliseconds: 1_000,
-                nowMilliseconds: 1_001),
-            "the exact hook generation accepted by the automatic helper may own Guard");
+                nowMilliseconds: 1_001,
+                exactGuardActive: true),
+            "the exact hook generation plus live Guard status may own protection");
         False(
-            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+            AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
+                42,
+                41,
+                250,
+                250,
+                local,
+                local,
+                1_000,
+                1_001,
+                exactGuardActive: false),
+            "a provisional client-true request without exact status cannot own protection");
+        False(
+            AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
                 41,
                 41,
                 250,
@@ -228,10 +241,11 @@ internal static class DefensiveUtilitySelfTests
                 local,
                 local,
                 1_000,
-                1_001),
+                1_001,
+                exactGuardActive: true),
             "a manual or missing hook generation cannot own Guard");
         False(
-            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+            AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
                 42,
                 41,
                 250,
@@ -239,10 +253,11 @@ internal static class DefensiveUtilitySelfTests
                 local,
                 local with { EntityId = 0x2002 },
                 1_000,
-                1_001),
+                1_001,
+                exactGuardActive: true),
             "local identity drift cannot own Guard");
         True(
-            AutoGuardProtectionRules.CanArmFromAcceptedAttempt(
+            AutoGuardProtectionRules.CanArmFromConfirmedAttempt(
                 1,
                 long.MaxValue,
                 250,
@@ -250,29 +265,38 @@ internal static class DefensiveUtilitySelfTests
                 local,
                 local,
                 1_000,
-                1_001),
+                1_001,
+                exactGuardActive: true),
             "generation wrap remains exact");
     }
 
-    public static void AutoGuardProtectionBridgesPropagationAndFollowsTheExactStatus()
+    public static void AutoGuardProtectionStartsOnlyAfterExactStatus()
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
-        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
-        True(armed.IsArmed, "a validated accepted automatic Guard arms protection");
+        var provisional = AutoGuardProtectionRules.ArmConfirmed(
+            42,
+            250,
+            local,
+            1_000,
+            exactGuardActive: false);
+        False(provisional.IsArmed, "client acceptance without exact status cannot arm protection");
 
-        var propagation = AutoGuardProtectionRules.Observe(
+        var armed = AutoGuardProtectionRules.ArmConfirmed(
+            42,
+            250,
+            local,
+            1_100,
+            exactGuardActive: true);
+        True(armed.IsArmed, "exact live Guard confirmation arms protection");
+
+        var protectedNow = AutoGuardProtectionRules.Observe(
             armed,
-            ProtectionObservation(local, exactGuardActive: false, actionCanCancelGuard: true, now: 1_000));
-        True(propagation.ShouldBlockAction, "a cancelling action is blocked during propagation");
-        Equal(1_500L, propagation.RemainingMilliseconds, "propagation interval is exact");
-
-        var confirmed = AutoGuardProtectionRules.Observe(
-            propagation.NextState,
             ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: false, now: 1_100));
-        True(confirmed.NextState.ExactGuardObserved, "the exact live Guard status takes ownership");
+        False(protectedNow.ShouldBlockAction, "non-cancelling observation remains untouched");
+        True(protectedNow.NextState.ExactGuardObserved, "armed ownership is already confirmed");
 
         var protectedLate = AutoGuardProtectionRules.Observe(
-            confirmed.NextState,
+            protectedNow.NextState,
             ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: true, now: 5_500));
         True(protectedLate.ShouldBlockAction, "protection follows the full live automatic Guard status");
 
@@ -287,7 +311,7 @@ internal static class DefensiveUtilitySelfTests
     public static void AutoGuardProtectionHasExplicitAndBoundedReleasePaths()
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
-        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
+        var armed = AutoGuardProtectionRules.ArmConfirmed(42, 250, local, 1_000, true);
         var protectedReuse = AutoGuardProtectionRules.Observe(
             armed,
             ProtectionObservation(
@@ -319,29 +343,26 @@ internal static class DefensiveUtilitySelfTests
             explicitRelease.Reason,
             "explicit release reason");
 
-        var confirmed = AutoGuardProtectionRules.Observe(
-            armed,
-            ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: false, now: 1_100));
         var maximum = AutoGuardProtectionRules.Observe(
-            confirmed.NextState,
+            armed,
             ProtectionObservation(local, exactGuardActive: true, actionCanCancelGuard: true, now: 7_000));
         False(maximum.ShouldBlockAction, "the hard maximum boundary fails open");
         False(maximum.NextState.IsArmed, "the hard maximum clears stale status ownership");
 
-        var neverAppeared = AutoGuardProtectionRules.Observe(
+        var ended = AutoGuardProtectionRules.Observe(
             armed,
             ProtectionObservation(local, exactGuardActive: false, actionCanCancelGuard: true, now: 2_500));
-        False(neverAppeared.ShouldBlockAction, "missing status releases at the propagation boundary");
+        False(ended.ShouldBlockAction, "missing exact status releases immediately after ownership");
         Equal(
-            AutoGuardProtectionDecisionReason.PropagationExpired,
-            neverAppeared.Reason,
-            "propagation timeout reason");
+            AutoGuardProtectionDecisionReason.GuardEnded,
+            ended.Reason,
+            "status-end reason");
     }
 
     public static void AutoGuardProtectionContextDriftAlwaysFailsOpen()
     {
         var local = new TargetPressureActorIdentity(0x1001, 0x2001);
-        var armed = AutoGuardProtectionRules.Arm(42, 250, local, 1_000);
+        var armed = AutoGuardProtectionRules.ArmConfirmed(42, 250, local, 1_000, true);
 
         var disabled = AutoGuardProtectionRules.Observe(
             armed,
@@ -371,6 +392,93 @@ internal static class DefensiveUtilitySelfTests
             ProtectionObservation(local, true, actionCanCancelGuard: false, now: 1_100));
         False(unknownAction.ShouldBlockAction, "unknown action resolution fails open");
         True(unknownAction.NextState.IsArmed, "one unknown action does not destroy valid ownership");
+    }
+
+    public static void AutoGuardConfirmationIsStatusFirstAndRetriesOnlyOnce()
+    {
+        True(
+            AutoGuardConfirmationRules.ShouldRetainUnspentRetry(
+                ClientActionAttemptOutcome.SoftUnavailable),
+            "a pre-native retry race retains the unspent retry");
+        False(
+            AutoGuardConfirmationRules.ShouldRetainUnspentRetry(
+                ClientActionAttemptOutcome.ClientRejected),
+            "a crossed clean-false boundary spends the retry");
+
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var pending = AutoGuardConfirmationRules.ArmProvisional(
+            generationBeforeCall: 41,
+            territoryId: 250,
+            local,
+            requestedAtMilliseconds: 1_000,
+            opportunityExpiresAtMilliseconds: 4_000,
+            confirmationRetrySpent: false);
+        True(pending.IsPending, "a bounded provisional request starts confirmation only");
+
+        var waiting = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local, exactGuardActive: false, AutoGuardRetryReadiness.Ready, 2_499));
+        False(waiting.Confirmed, "client true alone is not confirmation");
+        False(waiting.ShouldRetry, "no retry occurs before the exact confirmation timeout");
+
+        var retry = AutoGuardConfirmationRules.Observe(
+            waiting.NextState,
+            ConfirmationObservation(local, exactGuardActive: false, AutoGuardRetryReadiness.Ready, 2_500));
+        True(retry.ShouldRetry, "exact readiness allows one retry at the timeout");
+
+        var retried = AutoGuardConfirmationRules.ArmProvisional(
+            generationBeforeCall: 42,
+            territoryId: 250,
+            local,
+            requestedAtMilliseconds: 2_500,
+            opportunityExpiresAtMilliseconds: 4_000,
+            confirmationRetrySpent: true);
+        var retryExhausted = AutoGuardConfirmationRules.Observe(
+            retried,
+            ConfirmationObservation(local, exactGuardActive: false, AutoGuardRetryReadiness.Ready, 4_000));
+        False(retryExhausted.ShouldRetry, "a second provisional true can never dispatch a third call");
+        False(retryExhausted.NextState.IsPending, "the one-retry episode retires without exact status");
+
+        var confirmed = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local, exactGuardActive: true, AutoGuardRetryReadiness.Unknown, 1_100));
+        True(confirmed.Confirmed, "exact live Guard confirms before any retry decision");
+        False(confirmed.ShouldRetry, "confirmation never also retries");
+    }
+
+    public static void AutoGuardConfirmationFailsClosedOnReadinessOrContextDrift()
+    {
+        var local = new TargetPressureActorIdentity(0x1001, 0x2001);
+        var pending = AutoGuardConfirmationRules.ArmProvisional(
+            41,
+            250,
+            local,
+            1_000,
+            4_000,
+            confirmationRetrySpent: false);
+
+        var busy = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local, false, AutoGuardRetryReadiness.NativeBoundaryBusy, 2_500));
+        True(busy.NextState.IsPending, "a transient native boundary waits inside the original lease");
+        False(busy.ShouldRetry, "busy native state cannot cross the boundary");
+
+        var cooldown = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local, false, AutoGuardRetryReadiness.CooldownUnavailable, 2_500));
+        False(cooldown.NextState.IsPending, "cooldown evidence retires without another request");
+        False(cooldown.ShouldRetry, "cooldown-unavailable Guard is never retried");
+
+        var unknown = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local, false, AutoGuardRetryReadiness.Unknown, 2_500));
+        False(unknown.NextState.IsPending, "unknown readiness retires fail closed");
+
+        var drift = AutoGuardConfirmationRules.Observe(
+            pending,
+            ConfirmationObservation(local with { EntityId = 0x2002 }, false, AutoGuardRetryReadiness.Ready, 1_100));
+        False(drift.NextState.IsPending, "local actor drift retires provisional ownership");
+        False(drift.Confirmed, "another actor's Guard cannot confirm this request");
     }
 
     public static void GuardianEligibilityUsesNativeReachability()
@@ -619,57 +727,52 @@ internal static class DefensiveUtilitySelfTests
         True(reset is null, "hard reset clears the popup immediately");
     }
 
-    public static void AutoGuardTriggerPopupIsAcceptedOnlyAndDeduplicated()
+    public static void AutoGuardTriggerPopupIsConfirmedOnlyAndDeduplicated()
     {
-        var rejected = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+        var provisional = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
             previous: null,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guard,
-            useActionAttempted: true,
-            useActionAccepted: false,
-            acceptedAttemptToken: 1,
+            exactActivationConfirmed: false,
+            confirmedAttemptToken: 1,
             nowMilliseconds: 1_000);
-        True(rejected is null, "a rejected Guard request never creates an Auto-Guard popup");
+        True(provisional is null, "a provisional client-true Guard never creates a popup");
 
         var guardian = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
             previous: null,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guardian,
-            useActionAttempted: true,
-            useActionAccepted: true,
-            acceptedAttemptToken: 1,
+            exactActivationConfirmed: true,
+            confirmedAttemptToken: 1,
             nowMilliseconds: 1_000);
-        True(guardian is null, "Guardian acceptance cannot masquerade as Auto-Guard");
+        True(guardian is null, "Guardian confirmation cannot masquerade as Auto-Guard");
 
-        var accepted = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
+        var confirmed = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
             previous: null,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guard,
-            useActionAttempted: true,
-            useActionAccepted: true,
-            acceptedAttemptToken: 7,
+            exactActivationConfirmed: true,
+            confirmedAttemptToken: 7,
             nowMilliseconds: 1_000);
-        True(accepted is not null, "accepted Auto-Guard creates a popup");
-        Equal(7L, accepted!.Value.Token, "popup retains exact accepted-attempt token");
-        Equal(3_000L, accepted.Value.EndsAtMilliseconds, "Auto-Guard popup matches the two-second reuse lock");
+        True(confirmed is not null, "confirmed Auto-Guard creates a popup");
+        Equal(7L, confirmed!.Value.Token, "popup retains exact confirmed-attempt token");
+        Equal(3_000L, confirmed.Value.EndsAtMilliseconds, "Auto-Guard popup matches the two-second reuse lock");
 
         var duplicate = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
-            accepted,
+            confirmed,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.Guard,
-            useActionAttempted: true,
-            useActionAccepted: true,
-            acceptedAttemptToken: 7,
+            exactActivationConfirmed: true,
+            confirmedAttemptToken: 7,
             nowMilliseconds: 1_100);
-        Equal(accepted.Value, duplicate!.Value, "same accepted attempt cannot restart the popup");
+        Equal(confirmed.Value, duplicate!.Value, "same confirmed attempt cannot restart the popup");
 
         var expired = DefensiveUtilityRules.ObserveAutoGuardTriggerPopup(
             duplicate,
             runtimeEnabled: true,
             DefensiveUtilityActionKind.None,
-            useActionAttempted: false,
-            useActionAccepted: false,
-            acceptedAttemptToken: 0,
+            exactActivationConfirmed: false,
+            confirmedAttemptToken: 0,
             nowMilliseconds: 3_000);
         True(expired is null, "popup expires exactly at its bounded end");
     }
@@ -710,6 +813,20 @@ internal static class DefensiveUtilitySelfTests
             ExactGuardActive: exactGuardActive,
             ActionCanCancelGuard: actionCanCancelGuard,
             IsExplicitGuardReuse: explicitGuardReuse,
+            NowMilliseconds: now);
+
+    private static AutoGuardConfirmationObservation ConfirmationObservation(
+        TargetPressureActorIdentity local,
+        bool exactGuardActive,
+        AutoGuardRetryReadiness retryReadiness,
+        long now) =>
+        new(
+            RuntimeEnabled: true,
+            TerritoryId: 250,
+            LocalPlayer: local,
+            LocalPlayerLive: true,
+            ExactGuardActive: exactGuardActive,
+            RetryReadiness: retryReadiness,
             NowMilliseconds: now);
 
     private static void True(bool condition, string label)

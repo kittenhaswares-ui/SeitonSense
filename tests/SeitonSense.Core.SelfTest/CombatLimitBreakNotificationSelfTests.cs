@@ -155,6 +155,70 @@ internal static class CombatLimitBreakNotificationSelfTests
             "stale snapshot fails closed");
     }
 
+    internal static void SummonerWarningRequiresExactActivationAndStatusPair()
+    {
+        const long now = 20_000;
+        var bahamut = new SummonerLimitBreakWarningObservation(
+            new TargetPressureActorIdentity(500, 600),
+            true,
+            2,
+            CombatLimitBreakNotificationRules.SummonerJobId,
+            CombatLimitBreakNotificationRules.SummonBahamutActionId,
+            CombatLimitBreakNotificationRules.SummonBahamutIconId,
+            CombatLimitBreakPresentationKind.Duration,
+            false,
+            0,
+            now - 100,
+            now + CombatLimitBreakCatalog.InstantFlashMilliseconds - 100,
+            now,
+            11);
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildSummonerWarningPlan(
+                bahamut,
+                now,
+                out var flash),
+            "Bahamut activation warns immediately");
+        False(flash.ShowCountdown, "activation flash has no invented duration");
+        Equal("BAHAMUT SUMMONED", flash.SummonName, "Bahamut label");
+
+        var confirmedBahamut = bahamut with
+        {
+            DurationConfirmed = true,
+            EvidenceStatusId = CombatLimitBreakNotificationRules.DreadwyrmTranceStatusId,
+            ExpiresAtMilliseconds = now + 14_000,
+        };
+        True(TrySummoner(confirmedBahamut, now), "Bahamut exact live status");
+        False(
+            TrySummoner(
+                confirmedBahamut with
+                {
+                    EvidenceStatusId = CombatLimitBreakNotificationRules.FirebirdTranceStatusId,
+                },
+                now),
+            "Bahamut cannot borrow Phoenix status");
+
+        var phoenix = confirmedBahamut with
+        {
+            ActivationActionId = CombatLimitBreakNotificationRules.SummonPhoenixActionId,
+            IconId = CombatLimitBreakNotificationRules.SummonPhoenixIconId,
+            EvidenceStatusId = CombatLimitBreakNotificationRules.FirebirdTranceStatusId,
+            EpisodeToken = 12,
+        };
+        True(
+            CombatLimitBreakNotificationRules.TryBuildSummonerWarningPlan(
+                phoenix,
+                now,
+                out var phoenixPlan),
+            "Phoenix exact action/icon/status pair");
+        Equal("PHOENIX SUMMONED", phoenixPlan.SummonName, "Phoenix label");
+        False(TrySummoner(phoenix with { IconId = 9_681 }, now), "cross-paired icon");
+        False(TrySummoner(phoenix with { IsEnemy = false }, now), "ally SMN");
+        False(TrySummoner(phoenix with { JobId = 30 }, now), "wrong job");
+        False(TrySummoner(phoenix with { ActivationActionId = 29_680 }, now), "follow-up action");
+        False(TrySummoner(phoenix with { EpisodeToken = 0 }, now), "missing episode token");
+    }
+
     internal static void NotificationLayoutStaysInsideSafeScreenLanes()
     {
         True(
@@ -202,6 +266,45 @@ internal static class CombatLimitBreakNotificationSelfTests
             "self banner remains visible below default DRG danger scale");
         True(defaultScaledDanger.Bottom < stackedSelf.Top,
             "default DRG danger and self activation never overlap");
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangles(
+                0f,
+                0f,
+                1_920f,
+                1_080f,
+                1f,
+                3,
+                out var dangerStack),
+            "three simultaneous enemy warnings stack");
+        Equal(3, dangerStack.Length, "danger stack count");
+        True(dangerStack[0].Bottom < dangerStack[1].Top, "danger stack first gap");
+        True(dangerStack[1].Bottom < dangerStack[2].Top, "danger stack second gap");
+        True(
+            CombatLimitBreakNotificationRules.TryBuildSelfBannerRectangleBelow(
+                0f,
+                0f,
+                1_920f,
+                1_080f,
+                1f,
+                dangerStack[^1],
+                out var selfBelowDangerStack),
+            "self banner remains below complete danger stack");
+        True(dangerStack[^1].Bottom < selfBelowDangerStack.Top, "danger and self lanes stay separate");
+
+        True(
+            CombatLimitBreakNotificationRules.TryBuildEnemyDangerBannerRectangles(
+                0f,
+                0f,
+                1_280f,
+                720f,
+                1.45f,
+                3,
+                out var constrainedDangerStack),
+            "a constrained viewport still keeps the highest-priority warning");
+        True(
+            constrainedDangerStack.Length is >= 1 and < 3,
+            "only the warning cards which fit are admitted");
 
         True(
             CombatLimitBreakNotificationRules.TryBuildDamageCardRectangles(
@@ -257,6 +360,11 @@ internal static class CombatLimitBreakNotificationSelfTests
         in DragoonLimitBreakWarningObservation observation,
         long now) =>
         CombatLimitBreakNotificationRules.TryBuildDragoonWarningPlan(observation, now, out _);
+
+    private static bool TrySummoner(
+        in SummonerLimitBreakWarningObservation observation,
+        long now) =>
+        CombatLimitBreakNotificationRules.TryBuildSummonerWarningPlan(observation, now, out _);
 
     private static void NearlyEqual(float expected, float actual, string message)
     {

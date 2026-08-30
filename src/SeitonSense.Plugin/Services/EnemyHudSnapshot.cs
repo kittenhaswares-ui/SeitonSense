@@ -18,6 +18,7 @@ internal sealed record EnemyHudSnapshot(
     uint MaxMp)
 {
     internal bool HasTrustedMp { get; init; }
+    internal ChitenWarningObservation? ChitenWarning { get; init; }
 
     public string SlotLabel => $"S{Slot}";
     public bool SeitonEligible => SeitonCue == SeitonCueKind.Execute;

@@ -7,6 +7,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 using SeitonSense.Plugin.Services;
 
@@ -30,10 +31,21 @@ internal sealed class PressureCounterWindow : Window, IDisposable
         new(3, 3, 40, 3, TargetPressureEvidence.RecentHarmfulAction, 0, []),
     ];
 
+    private static readonly OpponentLimitBreakGaugeValue[] PreviewLimitBreakGauges =
+    [
+        new(new TargetPressureActorIdentity(1, 1), 1, 19, 0, 20, 100),
+        new(new TargetPressureActorIdentity(2, 2), 2, 22, 0, 45, 100),
+        new(new TargetPressureActorIdentity(3, 3), 3, 27, 0, 70, 100),
+        new(new TargetPressureActorIdentity(4, 4), 4, 31, 0, 92, 100),
+        new(new TargetPressureActorIdentity(5, 5), 5, 34, 0, 100, 100),
+    ];
+
     private readonly PluginConfiguration configuration;
     private readonly TargetPressureTracker tracker;
+    private readonly OpponentLimitBreakGaugeService limitBreakGauges;
     private readonly ITextureProvider textureProvider;
     private readonly IGameGui gameGui;
+    private readonly IDalamudPluginInterface pluginInterface;
     private readonly IFontHandle numberFont;
     private bool resetPosition;
     private bool disposed;
@@ -41,6 +53,7 @@ internal sealed class PressureCounterWindow : Window, IDisposable
     internal PressureCounterWindow(
         PluginConfiguration configuration,
         TargetPressureTracker tracker,
+        OpponentLimitBreakGaugeService limitBreakGauges,
         ITextureProvider textureProvider,
         IGameGui gameGui,
         IDalamudPluginInterface pluginInterface)
@@ -48,8 +61,10 @@ internal sealed class PressureCounterWindow : Window, IDisposable
     {
         this.configuration = configuration;
         this.tracker = tracker;
+        this.limitBreakGauges = limitBreakGauges;
         this.textureProvider = textureProvider;
         this.gameGui = gameGui;
+        this.pluginInterface = pluginInterface;
         numberFont = pluginInterface.UiBuilder.FontAtlas.NewGameFontHandle(
             new GameFontStyle(GameFontFamilyAndSize.Jupiter90));
 
@@ -62,6 +77,7 @@ internal sealed class PressureCounterWindow : Window, IDisposable
     }
 
     internal bool PreviewEnabled { get; set; }
+    internal string LimitBreakGaugeDiagnostics => limitBreakGauges.Diagnostics.ToChatLine();
 
     public override bool DrawConditions() =>
         !gameGui.GameUiHidden &&
@@ -89,6 +105,22 @@ internal sealed class PressureCounterWindow : Window, IDisposable
 
     public override void Draw()
     {
+        var gaugeSnapshot = limitBreakGauges.Snapshot;
+        var gauges = PreviewEnabled
+            ? PreviewLimitBreakGauges
+            : gaugeSnapshot.Active &&
+              OpponentLimitBreakGaugeRules.IsFresh(
+                  gaugeSnapshot.PublishedAtMilliseconds,
+                  Environment.TickCount64) &&
+              OpponentLimitBreakGaugeRules.IsCompleteExactEnemySet(gaugeSnapshot.Enemies)
+                ? gaugeSnapshot.Enemies
+                : [];
+        if (configuration.ShowOpponentLimitBreakBars && gauges.Count == 5)
+        {
+            DrawOpponentLimitBreakBars(gauges, Environment.TickCount64);
+            ImGui.Spacing();
+        }
+
         var opponents = PreviewEnabled
             ? PreviewOpponents
             : tracker.Snapshot.Opponents.Where(static opponent => opponent.IsIncoming).ToArray();
@@ -110,6 +142,77 @@ internal sealed class PressureCounterWindow : Window, IDisposable
         }
 
         ImGui.EndGroup();
+    }
+
+    private void DrawOpponentLimitBreakBars(
+        IReadOnlyList<OpponentLimitBreakGaugeValue> gauges,
+        long nowMilliseconds)
+    {
+        var scale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
+        var rowHeight = 22f * scale;
+        var rowGap = 3f * scale;
+        var iconSize = 18f * scale;
+        var labelWidth = 25f * scale;
+        var barWidth = Math.Clamp(configuration.PressureNumberPixelSize * 2.8f, 190f, 340f) * scale;
+        var start = PixelRound(ImGui.GetCursorScreenPos());
+        var draw = ImGui.GetWindowDrawList();
+        var reducedMotion = pluginInterface.UiBuilder.ShouldUseReducedMotion;
+
+        for (var index = 0; index < gauges.Count; index++)
+        {
+            var gauge = gauges[index];
+            var rowTop = start.Y + (index * (rowHeight + rowGap));
+            var iconMin = PixelRound(new Vector2(start.X, rowTop + ((rowHeight - iconSize) * 0.5f)));
+            var iconMax = iconMin + new Vector2(iconSize);
+            if (!TryDrawJobIcon(gauge.JobId, iconMin, iconMax))
+            {
+                draw.AddRectFilled(iconMin, iconMax, 0xFF25202C, 3f * scale);
+            }
+
+            var slotPosition = new Vector2(iconMax.X + (4f * scale), rowTop + (2f * scale));
+            draw.AddText(slotPosition, 0xFFE8EDF8, $"S{gauge.EnemySlot}");
+
+            var barMin = PixelRound(new Vector2(iconMax.X + labelWidth, rowTop));
+            var barMax = barMin + new Vector2(barWidth, rowHeight);
+            var rounding = 5f * scale;
+            draw.AddRectFilled(barMin, barMax, 0xE6201B2A, rounding);
+            var fraction = Math.Clamp(gauge.Fraction, 0f, 1f);
+            var fillMax = new Vector2(barMin.X + (barWidth * fraction), barMax.Y);
+            var pulse = OpponentLimitBreakGaugeRules.ReadyPulseAlpha(
+                gauge.IsReady,
+                nowMilliseconds,
+                reducedMotion);
+            var fillColor = gauge.IsReady
+                ? new Vector4(1f, 0.72f, 0.12f, pulse)
+                : new Vector4(0.16f, 0.72f, 1f, 0.92f);
+            if (fillMax.X > barMin.X)
+                draw.AddRectFilled(barMin, fillMax, ImGui.ColorConvertFloat4ToU32(fillColor), rounding);
+            draw.AddRect(
+                barMin,
+                barMax,
+                ImGui.ColorConvertFloat4ToU32(
+                    gauge.IsReady
+                        ? new Vector4(1f, 0.92f, 0.48f, pulse)
+                        : new Vector4(0.48f, 0.68f, 0.86f, 0.9f)),
+                rounding,
+                ImDrawFlags.None,
+                Math.Max(1f, 1.5f * scale));
+
+            if (gauge.IsReady)
+            {
+                const string ready = "LB READY";
+                var textSize = ImGui.CalcTextSize(ready);
+                draw.AddText(
+                    new Vector2(
+                        barMax.X - textSize.X - (7f * scale),
+                        rowTop + ((rowHeight - textSize.Y) * 0.5f)),
+                    ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 1f, 0.88f, pulse)),
+                    ready);
+            }
+        }
+
+        var totalHeight = (gauges.Count * rowHeight) + ((gauges.Count - 1) * rowGap);
+        ImGui.Dummy(new Vector2(iconSize + labelWidth + barWidth, totalHeight));
     }
 
     internal void ResetWindowPosition() => resetPosition = true;

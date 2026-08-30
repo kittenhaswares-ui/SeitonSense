@@ -170,6 +170,14 @@ internal sealed partial class SettingsWindow
             "Show MCH-on-you and airborne DRG LB warnings",
             configuration.WarnMarksmanSpite,
             value => configuration.WarnMarksmanSpite = value);
+        changed |= Checkbox(
+            "Show enemy Summoner Bahamut / Phoenix LB warning",
+            configuration.WarnSummonerLimitBreak,
+            value => configuration.WarnSummonerLimitBreak = value);
+        changed |= Checkbox(
+            "Show enemy Samurai Chiten warning and nameplate icon",
+            configuration.WarnEnemyChiten,
+            value => configuration.WarnEnemyChiten = value);
         changed |= Slider(
             "Dangerous LB warning size",
             configuration.MarksmanSpiteWarningScale,
@@ -178,7 +186,7 @@ internal sealed partial class SettingsWindow
             value => configuration.MarksmanSpiteWarningScale = value,
             "%.2f x");
         changed |= Checkbox(
-            "Play a sound for verified MCH / airborne DRG LB warnings",
+            "Play a sound for verified enemy danger warnings",
             configuration.MchLimitBreakSoundEnabled,
             value => configuration.MchLimitBreakSoundEnabled = value);
         changed |= SliderInt(
@@ -191,9 +199,9 @@ internal sealed partial class SettingsWindow
         if (ImGui.Button("Test dangerous LB warning sound"))
             personalStatus.PlayMachinistLimitBreakSoundPreview();
         ImGui.TextDisabled(
-            "The MCH alert requires its exact early marker on you. The DRG alert starts from exact enemy Sky High " +
-            "activation while airborne and never waits for impact. Both require the personal-warning master and this " +
-            "toggle. Sound is one-shot per verified threat; neither alert presses Guard or another action.");
+            "MCH requires its exact early marker on you; DRG, SMN, and Chiten require exact activation/status evidence. " +
+            "Chiten also draws its verified timer above the Samurai's native nameplate. Sound is one-shot per episode; " +
+            "none of these warnings presses Guard or another action.");
 
         return changed;
     }

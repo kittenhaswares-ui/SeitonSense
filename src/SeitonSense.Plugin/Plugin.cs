@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.40.0.2";
+    private const string CurrentReleaseVersion = "0.41.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -38,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
     private readonly TargetPressureTracker pressureTracker;
+    private readonly OpponentLimitBreakGaugeService opponentLimitBreakGauges;
     private readonly AutoEnemyFocusMarkService autoEnemyFocusMark;
     private readonly AutoLowMpFocusTargetService autoLowMpFocusTarget;
     private readonly IsolationAwarenessService isolationAwareness;
@@ -122,7 +123,8 @@ public sealed class Plugin : IDalamudPlugin
             partyList,
             log,
             configuration,
-            metadata);
+            metadata,
+            samuraiReactiveMetadata);
         combatLimitBreakRuntime = new CombatLimitBreakRuntimeService(
             clientState,
             objectTable,
@@ -136,8 +138,19 @@ public sealed class Plugin : IDalamudPlugin
                   (configuration.ShowEnemyLimitBreaksOnNameplates ||
                    configuration.ShowLimitBreakActivationMessages ||
                    configuration.ShowAllyLimitBreakDamageEvents ||
-                   (configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite)),
+                   (configuration.ShowPersonalWarnings &&
+                    (configuration.WarnMarksmanSpite || configuration.WarnSummonerLimitBreak))),
             () => configuration.ShowAllyLimitBreakDamageEvents);
+        opponentLimitBreakGauges = new OpponentLimitBreakGaugeService(
+            clientState,
+            objectTable,
+            framework,
+            gameGui,
+            tracker,
+            log,
+            () => configuration.Enabled &&
+                  configuration.ShowPressureCounter &&
+                  configuration.ShowOpponentLimitBreakBars);
         pressureTracker = new TargetPressureTracker(
             clientState,
             objectTable,
@@ -309,6 +322,7 @@ public sealed class Plugin : IDalamudPlugin
             () => configuration.Enabled && configuration.ShowEnemyLimitBreaksOnNameplates);
         limitBreakNotifications = new LimitBreakNotificationRenderer(
             combatLimitBreakRuntime,
+            tracker,
             gameGui,
             textureProvider,
             log,
@@ -317,6 +331,8 @@ public sealed class Plugin : IDalamudPlugin
                 configuration.ShowLimitBreakActivationMessages,
                 configuration.ShowAllyLimitBreakDamageEvents,
                 configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite,
+                configuration.ShowPersonalWarnings && configuration.WarnSummonerLimitBreak,
+                configuration.ShowPersonalWarnings && configuration.WarnEnemyChiten,
                 configuration.MchLimitBreakSoundEnabled,
                 configuration.MchLimitBreakSoundId,
                 configuration.LimitBreakFeedShowNames,
@@ -326,6 +342,7 @@ public sealed class Plugin : IDalamudPlugin
         pressureCounter = new PressureCounterWindow(
             configuration,
             pressureTracker,
+            opponentLimitBreakGauges,
             textureProvider,
             gameGui,
             pluginInterface);
@@ -375,10 +392,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Smart Action now arms without requiring a live S1 enemy or a selected target; the best exact S1-S5 target is chosen only when the harmful action arrives.",
-                "Direct attacks no longer fail because an unrelated enemy briefly disagrees between the S-slot and object-table views. The chosen enemy still needs exact protection, native range, and line-of-sight proof.",
-                "Target-circle and unknown AoE attacks retain the complete hostile snapshot so Chiten, Guard, Cover, and LB protection cannot be clipped nearby.",
-                "All 553 Core tests and release gates pass. Current-client action acceptance, especially dead S1 with no selected target, remains an in-game validation boundary.",
+                "Auto Purify and Auto Recuperate no longer give up after one briefly blocked frame. They recheck and retry only inside their original safety window.",
+                "High-pressure Stun Auto-Guard is now keyless. Its popup, sound, and press protection start only after Guard is truly active; one safe retry is allowed, and rejection cannot block manual Guard.",
+                "New exact enemy warnings cover SAM Chiten and SMN Bahamut/Phoenix LB. Chiten also appears above the Samurai nameplate with its confirmed countdown.",
+                "Experimental opponent LB-ready bars are available above the pressure display but stay off by default pending live layout validation. All 562 Core tests and release gates pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -619,6 +636,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
         namePlateAnchors.Start();
         tracker.Start();
+        opponentLimitBreakGauges.Start();
         pressureTracker.Start();
         smartTabTargeting.Start();
         autoEnemyFocusMark.Start();
@@ -666,6 +684,7 @@ public sealed class Plugin : IDalamudPlugin
         autoLowMpFocusTarget.Dispose();
         autoEnemyFocusMark.Dispose();
         pressureTracker.Dispose();
+        opponentLimitBreakGauges.Dispose();
         tracker.Dispose();
         namePlateAnchors.Dispose();
         pressureCounter.Dispose();
@@ -909,7 +928,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"sample={ccBrake.LastSampledStatuses},last={ccBrake.LastEvent}], " +
                     $"pressure[{pressureTracker.Diagnostics.ToChatLine()}," +
                     $"ccmeta={pressureTracker.VerifiedProtectionStatusCount}/" +
-                    $"{CcProtectionStatusCatalog.Definitions.Count}]");
+                    $"{CcProtectionStatusCatalog.Definitions.Count}], " +
+                    $"{opponentLimitBreakGauges.Diagnostics.ToChatLine()}");
                 chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
                 chatGui.Print(
                     $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +

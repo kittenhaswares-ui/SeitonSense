@@ -163,9 +163,9 @@ public readonly record struct SmartRecuperateNativeAttemptDecision(
 
 /// <summary>
 /// Stateful policy shared by held and automatic Smart Recuperate. A proven
-/// client false is retried at the shared 50 ms cadence. Automatic consent is
-/// capped at the legacy eight-call budget even when the held latency-response
-/// policy is extended. Known local unavailability spends no retry budget. A
+/// client false is retried at the shared 50 ms cadence. Automatic consent
+/// freezes the currently configured latency-response budget when its exact
+/// health episode is created. Known local unavailability spends no retry budget. A
 /// successful request cannot repeat until its accepted cooldown has first been
 /// observed unavailable and then ready again.
 /// </summary>
@@ -174,6 +174,13 @@ public static class SmartRecuperateRules
     public const uint ActionId = 29_711;
     public const uint MinimumMissingHp = 16_000;
     public const uint MpCost = 2_000;
+
+    /// <summary>
+    /// Higher-priority recovery yields only to exact live Guard. A provisional
+    /// hook observation is deliberately not an input to this rule.
+    /// </summary>
+    public static bool ShouldSuppressForOwnGuard(bool exactGuardActive) =>
+        exactGuardActive;
 
     public static SmartRecuperateDecision Observe(
         SmartRecuperateObservation observation) =>
@@ -499,7 +506,7 @@ public static class SmartRecuperateRules
                 Stamp(previous, observation.NowMilliseconds),
                 SmartRecuperateDecisionReason.NativeBoundaryUnavailable);
         }
-        if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+        if (!CanAttemptFrozenRetryBudget(
                 previous.Retry,
                 observation.NowMilliseconds))
         {
@@ -761,8 +768,17 @@ public static class SmartRecuperateRules
             ? new HeldActionRetryState(
                 NativeAttemptCount: 0,
                 NextNativeAttemptAtMilliseconds: -1,
-                NativeAttemptLimit: HeldActionRetryRules.MaximumNativeAttempts)
+                NativeAttemptLimit: HeldActionRetryRules.CurrentMaximumNativeAttempts)
             : HeldActionRetryState.Initial;
+
+    private static bool CanAttemptFrozenRetryBudget(
+        HeldActionRetryState retry,
+        long nowMilliseconds) =>
+        (nowMilliseconds >= 0 &&
+         retry.NativeAttemptCount == 0 &&
+         retry.NextNativeAttemptAtMilliseconds == -1 &&
+         HeldActionRetryRules.ResolveAttemptLimit(retry) > 0) ||
+        HeldActionRetryRules.CanAttemptFrozenIntent(retry, nowMilliseconds);
 
     private static SmartRecuperateDecision Dispatch(
         SmartRecuperateState state,

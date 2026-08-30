@@ -11,6 +11,12 @@ internal static class SmartRecuperateSelfTests
         Equal(29_711u, SmartRecuperateRules.ActionId, "PvP Recuperate action");
         Equal(16_000u, SmartRecuperateRules.MinimumMissingHp, "missing HP threshold");
         Equal(2_000u, SmartRecuperateRules.MpCost, "exact MP cost");
+        False(
+            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: false),
+            "a provisional Guard request without exact status cannot suppress Recuperate");
+        True(
+            SmartRecuperateRules.ShouldSuppressForOwnGuard(exactGuardActive: true),
+            "exact live Guard still suppresses Recuperate");
 
         var below = Observe(Observation() with { CurrentHp = 84_001 });
         None(below, SmartRecuperateDecisionReason.MissingHealthBelowThreshold, "15,999 missing");
@@ -268,7 +274,7 @@ internal static class SmartRecuperateSelfTests
         Equal(LocalPlayer, intent.LocalPlayer, "automatic intent remains self-only");
         Equal(1UL, intent.HealthEventToken, "automatic first event token");
         Equal(
-            HeldActionRetryRules.MaximumNativeAttempts,
+            HeldActionRetryRules.CurrentMaximumNativeAttempts,
             automatic.NextState.Retry.NativeAttemptLimit,
             "automatic retry cap frozen at intent creation");
         True(
@@ -347,6 +353,30 @@ internal static class SmartRecuperateSelfTests
             "automatic final gate preserves own Guard");
     }
 
+    public static void AutomaticPreNativeSoftWaitRetainsHealthEpisodeAndRetriesNextFrame()
+    {
+        var dispatched = Observe(AutomaticObservation());
+        Dispatch(dispatched, "automatic health opportunity reaches the first attempt boundary");
+        var frozenIntent = dispatched.Intent ??
+                           throw new InvalidOperationException("missing automatic intent");
+
+        var soft = SmartRecuperateRules.ApplyNativeAttemptOutcome(
+            dispatched.NextState,
+            ClientActionAttemptOutcome.SoftUnavailable,
+            1_000);
+        True(soft.SoftWait, "pre-native drift is a soft wait");
+        False(soft.Terminal, "pre-native drift is not terminal");
+        Equal(SmartRecuperatePhase.Buffered, soft.NextState.Phase, "health episode remains buffered");
+        Equal(frozenIntent, soft.NextState.Intent!.Value, "exact health episode is retained");
+        Equal(0, soft.NextState.Retry.NativeAttemptCount, "pre-native wait spends no native call");
+
+        var retry = SmartRecuperateRules.Observe(
+            soft.NextState,
+            AutomaticObservation() with { NowMilliseconds = 1_001 });
+        Dispatch(retry, "same automatic health episode retries on the next ready frame");
+        Equal(frozenIntent, retry.Intent!.Value, "retry cannot substitute the frozen health episode");
+    }
+
     public static void AutomaticTerminalNeedsANewHpOpportunity()
     {
         var first = Observe(AutomaticObservation());
@@ -410,21 +440,21 @@ internal static class SmartRecuperateSelfTests
         Equal(2UL, nextOpportunity.Intent!.Value.HealthEventToken, "new HP opportunity gets a new token");
     }
 
-    public static void AutomaticFalseRetriesIgnoreHeldLatencyExpansion()
+    public static void AutomaticFalseRetriesUseFrozenLatencyExpansion()
     {
         HeldActionRetryRules.ConfigureLatencyResponsePolicy(true, 1_500);
         try
         {
+            var attemptLimit = HeldActionRetryRules.CurrentMaximumNativeAttempts;
             True(
-                HeldActionRetryRules.CurrentMaximumNativeAttempts >
-                HeldActionRetryRules.MaximumNativeAttempts,
+                attemptLimit > HeldActionRetryRules.MaximumNativeAttempts,
                 "test precondition: held retry policy is expanded");
             var decision = Observe(AutomaticObservation());
             var state = decision.NextState;
             Equal(
-                HeldActionRetryRules.MaximumNativeAttempts,
+                attemptLimit,
                 state.Retry.NativeAttemptLimit,
-                "automatic intent freezes the legacy retry cap");
+                "automatic intent freezes the configured retry cap");
 
             var held = Observe(Observation());
             var heldRejected = SmartRecuperateRules.ApplyNativeAttemptOutcome(
@@ -432,12 +462,12 @@ internal static class SmartRecuperateSelfTests
                 ClientActionAttemptOutcome.ClientRejected,
                 1_000);
             Equal(
-                HeldActionRetryRules.CurrentMaximumNativeAttempts,
+                attemptLimit,
                 heldRejected.NextState.Retry.NativeAttemptLimit,
-                "legacy held mode still inherits the configured expanded retry window");
+                "held mode inherits the same configured retry window");
 
             for (var attempt = 1;
-                 attempt <= HeldActionRetryRules.MaximumNativeAttempts;
+                 attempt <= attemptLimit;
                  attempt++)
             {
                 var now = 1_000L +
@@ -448,7 +478,7 @@ internal static class SmartRecuperateSelfTests
                     ClientActionAttemptOutcome.ClientRejected,
                     now);
                 state = completion.NextState;
-                if (attempt < HeldActionRetryRules.MaximumNativeAttempts)
+                if (attempt < attemptLimit)
                 {
                     True(completion.RetryScheduled, $"automatic retry {attempt} scheduled");
                     decision = SmartRecuperateRules.Observe(
@@ -463,7 +493,7 @@ internal static class SmartRecuperateSelfTests
                 }
                 else
                 {
-                    True(completion.Terminal, "eighth automatic clean false is terminal");
+                    True(completion.Terminal, "configured final automatic clean false is terminal");
                     Equal(
                         SmartRecuperatePhase.SpentUntilKeyRelease,
                         state.Phase,
@@ -471,13 +501,18 @@ internal static class SmartRecuperateSelfTests
                 }
             }
 
-            var noNinthBatch = SmartRecuperateRules.Observe(
+            var noSecondBatch = SmartRecuperateRules.Observe(
                 state,
-                AutomaticObservation() with { NowMilliseconds = 1_500 });
+                AutomaticObservation() with
+                {
+                    NowMilliseconds = 1_000L +
+                                      (attemptLimit *
+                                       HeldActionRetryRules.NativeRetryThrottleMilliseconds),
+                });
             None(
-                noNinthBatch,
+                noSecondBatch,
                 SmartRecuperateDecisionReason.NativeRetryLimitReached,
-                "same automatic HP opportunity cannot start a ninth call");
+                "same automatic HP opportunity cannot start another retry batch");
         }
         finally
         {

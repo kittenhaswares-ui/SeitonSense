@@ -274,6 +274,14 @@ internal sealed partial class SettingsWindow
             "Show CC enemy slots",
             configuration.PressureShowEnemySlots,
             value => configuration.PressureShowEnemySlots = value);
+        changed |= Checkbox(
+            "Experimental: show opponent LB bars above the pressure counter",
+            configuration.ShowOpponentLimitBreakBars,
+            value => configuration.ShowOpponentLimitBreakBars = value);
+        ImGui.TextDisabled(
+            "Default off; CC only. Current-client GaugeBar node semantics still need live confirmation. All S1-S5 " +
+            "bars hide together unless row names, actor slots, direct values, and the same-frame local LB controller " +
+            "cross-check are stable. No charge-time estimate is used.");
         ImGui.Separator();
         ImGui.TextUnformatted("Counter appearance");
         changed |= Slider(
@@ -337,6 +345,7 @@ internal sealed partial class SettingsWindow
         ImGui.SameLine();
         if (ImGui.Button("Reset counter position")) pressureCounter.ResetWindowPosition();
         ImGui.TextDisabled(pressureTracker.Diagnostics.ToChatLine());
+        ImGui.TextDisabled(pressureCounter.LimitBreakGaugeDiagnostics);
 
         return changed;
     }
