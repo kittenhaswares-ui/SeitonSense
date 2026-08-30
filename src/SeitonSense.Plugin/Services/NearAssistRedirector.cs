@@ -1138,29 +1138,37 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return scope;
     }
 
-    internal NearAssistArmResult ArmSmartActionTarget()
+    internal NearAssistArmResult ArmSmartActionTarget() =>
+        ArmSmartActionTarget(SmartTargetRedirectMode.CombatPriority, "Smart Action");
+
+    internal NearAssistArmResult ArmFarthestSmartActionTarget() =>
+        ArmSmartActionTarget(SmartTargetRedirectMode.FarthestReachable, "Seiton Far");
+
+    private NearAssistArmResult ArmSmartActionTarget(
+        SmartTargetRedirectMode selectionMode,
+        string displayName)
     {
         ClearToken("Replaced or cleared by a new Smart Action arm request");
 
         if (disposed || !started || !configuration.Enabled || !configuration.EnableSmartActionMacro)
-            return SmartTargetArmFailure(NearAssistArmOutcome.Disabled, "Smart Action arm ignored: feature disabled");
+            return SmartTargetArmFailure(NearAssistArmOutcome.Disabled, $"{displayName} arm ignored: feature disabled");
         if (useActionHook is null || !useActionHook.IsEnabled)
-            return SmartTargetArmFailure(NearAssistArmOutcome.HookUnavailable, "Smart Action arm ignored: hook unavailable");
+            return SmartTargetArmFailure(NearAssistArmOutcome.HookUnavailable, $"{displayName} arm ignored: hook unavailable");
         if (!smartActionProtectionMetadataVerified)
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.FailedClosed,
-                "Smart Action arm failed closed: protection metadata unverified");
+                $"{displayName} arm failed closed: protection metadata unverified");
         var context = ResolveContext();
         if (context != SupportedPvPContext.CrystallineConflict)
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.NotCrystallineConflict,
-                "Smart Action arm ignored: not in Crystalline Conflict");
+                $"{displayName} arm ignored: not in Crystalline Conflict");
 
         var localPlayer = objectTable.LocalPlayer;
         if (!IsLivePlayer(localPlayer))
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.LocalPlayerUnavailable,
-                "Smart Action arm ignored: local player unavailable");
+                $"{displayName} arm ignored: local player unavailable");
 
         try
         {
@@ -1169,7 +1177,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 clientState.TerritoryType,
                 localPlayer!.EntityId,
                 localPlayer.GameObjectId,
-                now + TokenLifetimeMilliseconds);
+                now + TokenLifetimeMilliseconds) with
+            {
+                SelectionMode = selectionMode,
+            };
             lock (tokenGate)
             {
                 castedMacroRedirectGeneration++;
@@ -1177,18 +1188,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 smartTargetArmedCount++;
                 smartTargetLastEnemySlot = 0;
                 smartTargetLastEvent =
-                    "Armed without a live S1 dependency; waiting for exact harmful action";
-                RecordTraceLocked($"smart-arm ctx={context} carrier=target-independent");
+                    $"{displayName} armed without a live S1 dependency; waiting for exact harmful action";
+                RecordTraceLocked(
+                    $"smart-arm ctx={context} mode={selectionMode} carrier=target-independent");
             }
 
             return new NearAssistArmResult(NearAssistArmOutcome.Armed, 0, 0f);
         }
         catch (Exception exception)
         {
-            LogFailure(exception, "Seiton Sense Smart Action arm failed closed.");
+            LogFailure(exception, $"Seiton Sense {displayName} arm failed closed.");
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.FailedClosed,
-                "Smart Action arm failed closed: token creation failed");
+                $"{displayName} arm failed closed: token creation failed");
         }
     }
 
@@ -3153,6 +3165,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         selectedSlot = 0;
         reason = "Smart Action fallback: invalid context";
 
+        if (!Enum.IsDefined(token.SelectionMode))
+        {
+            reason = "Smart Action fallback: selection mode changed";
+            return originalTargetId;
+        }
+
+        var farthestReachable =
+            token.SelectionMode == SmartTargetRedirectMode.FarthestReachable;
+
         var now = Environment.TickCount64;
         var localPlayer = objectTable.LocalPlayer;
         var localIdentityValid = IsLivePlayer(localPlayer) &&
@@ -3239,7 +3260,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         {
             var slot = canonicalEnemy.Slot;
             var enemy = canonicalEnemy.Player;
-            if (!TryResolveSmartTargetReachTier(local, enemy, out var reachTier)) continue;
+            var reachTier = SmartTargetReachTier.RangedOrOther;
+            if (!farthestReachable &&
+                !TryResolveSmartTargetReachTier(local, enemy, out reachTier))
+            {
+                continue;
+            }
+
+            var edgeDistanceYalms = float.NaN;
+            if (farthestReachable &&
+                !SmartTargetFarthestSelectionRules.TryMeasureEdgeDistance(
+                    local.Position,
+                    local.HitboxRadius,
+                    enemy.Position,
+                    enemy.HitboxRadius,
+                    out edgeDistanceYalms))
+            {
+                reason = "Seiton Far fallback: enemy distance snapshot ambiguous";
+                return originalTargetId;
+            }
 
             var targetObject = GetNativeObject(enemy);
             var hasValidActionTarget = targetObject != null;
@@ -3302,17 +3341,33 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 currentMp,
                 maximumMp,
                 CallerProvenProtectionSafe: protectionSafe);
-            candidates.Add(new SmartTargetRuntimeCandidate(enemy, selection));
+            candidates.Add(new SmartTargetRuntimeCandidate(
+                enemy,
+                selection,
+                edgeDistanceYalms));
         }
 
         var selectionCandidates = candidates.Select(static candidate => candidate.Selection).ToArray();
-        if (!SmartTargetSelectionRules.TryCreateIntent(
+        var selectedIntent = farthestReachable
+            ? SmartTargetFarthestSelectionRules.TryCreateIntent(
+                resolvedActionId,
+                candidates
+                    .Select(static candidate => new SmartTargetFarthestCandidate(
+                        candidate.Selection,
+                        candidate.EdgeDistanceYalms))
+                    .ToArray(),
+                localActor,
+                out var intent)
+            : SmartTargetSelectionRules.TryCreateIntent(
                 resolvedActionId,
                 selectionCandidates,
                 localActor,
-                out var intent))
+                out intent);
+        if (!selectedIntent)
         {
-            reason = "Smart Action fallback: no exact reachable candidate";
+            reason = farthestReachable
+                ? "Seiton Far fallback: no exact reachable safe candidate"
+                : "Smart Action fallback: no exact reachable candidate";
             return originalTargetId;
         }
 
@@ -3376,7 +3431,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         rewritten = true;
         selectedSlot = intent.EnemySlot;
-        reason = $"Smart Action redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
+        reason = farthestReachable
+            ? $"Seiton Far redirected S{selectedSlot}, resolved={resolvedActionId}, " +
+              $"distance={selected.EdgeDistanceYalms:F1}, range={finalRange}"
+            : $"Smart Action redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
         return intent.Target.GameObjectId;
     }
 
@@ -5308,15 +5366,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ulong CarrierEnemyGameObjectId,
         long ExpiresAtMilliseconds);
 
+    private enum SmartTargetRedirectMode : byte
+    {
+        CombatPriority,
+        FarthestReachable,
+    }
+
     private readonly record struct ArmedSmartTarget(
         uint TerritoryId,
         uint LocalEntityId,
         ulong LocalGameObjectId,
-        long ExpiresAtMilliseconds);
+        long ExpiresAtMilliseconds)
+    {
+        internal SmartTargetRedirectMode SelectionMode { get; init; }
+    }
 
     private readonly record struct SmartTargetRuntimeCandidate(
         IPlayerCharacter Player,
-        SmartTargetSelectionCandidate Selection);
+        SmartTargetSelectionCandidate Selection,
+        float EdgeDistanceYalms);
 
     private readonly record struct ArmedNearHelpTarget(
         uint TerritoryId,

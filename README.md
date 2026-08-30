@@ -2,7 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.3 fixes an Auto Recuperate
+assistance, and target highlights. Version 0.42.0.4 adds `/seitonfar`, a one-shot
+Smart Action variant that chooses the farthest actually reachable safe enemy,
+and upgrades exact-CC Auto-Zantetsuken to choose the farthest reachable exact
+own-Kuzushi, zero-shield target. Both paths freeze one actor and retain final
+native range/line-of-sight and protection checks without changing the visible
+target. Version 0.42.0.3 fixes an Auto Recuperate
 reliability latch: an accepted heal can no longer wait forever when the client
 does not expose, or the framework misses, the brief cooldown-unavailable frame.
 The exact verified 1.0-second recast remains an anti-duplicate floor; after it
@@ -1264,6 +1269,16 @@ or switching the selected target, choosing an alternate action/actor, or
 replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
+For held Auto-Zantetsuken in exact CC, selection now evaluates every exact
+canonical endpoint that has one own-source Kuzushi, zero shield, and native
+range/line of sight. It chooses the farthest finite hitbox-edge-distance target,
+then stable S-slot. Zantetsuken's 100%-maximum-HP rule applies only to the
+selected Kuzushi target; the surrounding 24,000-potency effect is deliberately
+not counted as another confirmed kill. The endpoint is frozen once. Final
+identity, Kuzushi, shield, Bind, readiness, range, or line-of-sight drift cancels
+without choosing another actor. Wolves' Den deliberately remains exact-current-
+target only.
+
 After an exact plugin-owned request lands, the matching nonzero source sequence,
 action, target, status, delay, and target-edge distance can contribute one
 bounded timing sample. At most 24 delay/distance samples are kept per supported
@@ -1423,10 +1438,10 @@ spatial validity; Smart Tab never sends a combat action or keeps pending work.
 ## One-shot Smart Action macro
 
 The previous harmful-action targeting helper is now the separately default-off
-Smart Action option. `/smartaction` (`/ssaction`) arms one 750-ms Crystalline
-Conflict token for the next already incoming harmful PvP macro action. Smart
-Action replaces only that call's target ID with its selected Smart Target; it
-never changes your visible hard, soft, Focus, or mouseover target. The
+Smart Action option. `/smartaction` (`/ssaction`) or `/seitonfar` arms one 750-ms
+Crystalline Conflict token for the next already incoming harmful PvP macro
+action. Smart Action replaces only that call's target ID with its selected Smart
+Target; it never changes your visible hard, soft, Focus, or mouseover target. The
 recommended authored shape is:
 
 ```text
@@ -1435,6 +1450,13 @@ recommended authored shape is:
 /pvpac "Ability" <e1>
 /pvpac "Ability" <t>
 ```
+
+Replace `/smartaction` with `/seitonfar` when the endpoint itself should be as
+far away as possible. The incoming action's exact native range and line-of-sight
+result is the reach authority. Eligible actors rank by descending hitbox-edge
+distance and stable native S-slot, without Smart Action's normal melee-first/gap-
+closer tier or HP, pressure, Guard-cooldown, and MP order. Every protection,
+cast, frozen-target, fallback, and final-revalidation rule below remains shared.
 
 Cast-time actions are deliberately not invisibly redirected by default. If the
 first `<e1>` carrier has a proven adjusted or base cast time and is not the exact
@@ -1477,6 +1499,11 @@ melee reach, then a reviewed job-specific gap-closer tier; ranged/other jobs use
 the general tier. Within a tier the order is lowest exact HP ratio, highest
 positive fresh team pressure, observed Guard-cooldown unavailability, lowest
 trusted MP ratio, then stable S-slot.
+
+`/seitonfar` uses the same candidate and protection snapshot but replaces only
+that ranking step with farthest finite hitbox-edge distance, then stable S-slot.
+An out-of-range, line-of-sight-blocked, protected, ambiguous, or non-finite actor
+cannot win. After one endpoint is chosen, distance changes cannot cause a rerank.
 
 For a target-centered circle, protection safety includes the exact effect radius
 plus each protected actor's hitbox. A verified Guard-ignoring action ignores only
@@ -1779,7 +1806,7 @@ focus module to avoid drawing both over the same actor.
 | Optional RDM fresh-Guard held-key engage | Yes | Yes, for the exact current target when test mode is enabled | No |
 | Optional DRK Shadowbringer held-key helper | Yes, held Smart Action policy with one exact frozen actor | Yes, exact current duel/dummy target when test mode is enabled | No |
 | Optional DPS Smart Tab | Yes | No | No |
-| One-shot Smart Action macro | Yes | No | No |
+| One-shot Smart Action and `/seitonfar` macros | Yes | No | No |
 | Near Assist | Yes | No | No |
 | Near Help | Yes | No | No |
 | Far Help | Yes | No | No |
@@ -1934,6 +1961,10 @@ update through the same repository.
   while every other cast-time hidden carrier is suppressed so the authored
   visible `<t>` line stays vanilla
 - `/ssaction` - collision-free alias for `/smartaction`
+- `/seitonfar` - arm the same optional CC-only harmful-action redirect but rank
+  exact safe candidates by farthest action-reachable hitbox-edge distance; it
+  shares the Smart Action toggle and has no alias because `/ssfar` belongs to
+  friendly Far Help
 - `/autoseiton [on|off|toggle]` - change whether the held-key NIN Auto-Seiton
   helper is available; ON still requires continuous physical held-key consent
 - `/nearassist` - arm one CC-only 750 ms target choice for the immediately
@@ -2224,7 +2255,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 574-test Core registry and source checks pin
+For the current source, the exact 579-test Core registry and source checks pin
 configuration schema 48, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
@@ -2244,7 +2275,9 @@ hard-target setter/readback, and no retry or alternate. They additionally pin on
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
   paths. Smart Action remains a separate one-shot harmful-action macro contract.
-  Its checks now pin target-independent arming, the closed metadata-verified SAM
+  Its checks now pin target-independent arming, `/seitonfar` as a mode on that
+  same token, farthest finite hitbox-edge ranking with action-native reach/line-
+  of-sight authority, the closed metadata-verified SAM
   Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible-
   target pass-through for every other cast, selection with `S1` absent,
 shape-scoped caller-proven target protection safety, exact Chiten,

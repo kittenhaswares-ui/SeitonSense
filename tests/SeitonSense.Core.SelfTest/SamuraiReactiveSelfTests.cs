@@ -408,6 +408,110 @@ internal static class SamuraiReactiveSelfTests
             "reviewed Wolves Den dummy opt-in");
     }
 
+    public static void ZantetsukenRanksFarthestReachableEligibleTargetThenSlot()
+    {
+        var candidates = new[]
+        {
+            ZantetsukenCandidate(1, edgeDistance: 8f),
+            ZantetsukenCandidate(2, edgeDistance: 18f),
+            ZantetsukenCandidate(3, edgeDistance: 12f),
+        };
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(candidates),
+            "farthest exact eligible target wins");
+
+        var ineligibleFarthest = new[]
+        {
+            ZantetsukenCandidate(1, edgeDistance: 19f) with
+            {
+                ShieldPercentage = 1,
+            },
+            ZantetsukenCandidate(2, edgeDistance: 18f) with
+            {
+                OwnSourceKuzushiCount = 0,
+            },
+            ZantetsukenCandidate(3, edgeDistance: 11f),
+        };
+        Equal(
+            2,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(ineligibleFarthest),
+            "shielded or non-owned Kuzushi targets are not selected");
+
+        var slotTie = new[]
+        {
+            ZantetsukenCandidate(4, edgeDistance: 14f),
+            ZantetsukenCandidate(2, edgeDistance: 14f),
+        };
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(slotTie),
+            "equal distance uses lower S-slot");
+    }
+
+    public static void ZantetsukenFarthestRankingFailsClosedAndRequiresReachability()
+    {
+        var candidates = new[]
+        {
+            ZantetsukenCandidate(1, edgeDistance: 18f) with
+            {
+                HasNativeRangeAndLineOfSight = false,
+            },
+            ZantetsukenCandidate(2, edgeDistance: 12f),
+        };
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(candidates),
+            "unreachable endpoint cannot be selected");
+
+        var duplicate = new[]
+        {
+            ZantetsukenCandidate(1, edgeDistance: 10f),
+            ZantetsukenCandidate(1, edgeDistance: 15f) with
+            {
+                Target = new SamuraiReactiveCounterCcTarget(
+                    GameObjectId: 0x3002,
+                    EntityId: 0x302,
+                    JobId: 23),
+            },
+        };
+        Equal(
+            -1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(duplicate),
+            "ambiguous native slot set fails closed");
+
+        var invalidDistance = new[]
+        {
+            ZantetsukenCandidate(1, edgeDistance: 10f),
+            ZantetsukenCandidate(2, edgeDistance: float.NaN),
+        };
+        Equal(
+            -1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectFarthestEligibleTargetIndex(invalidDistance),
+            "unknown edge distance fails the complete snapshot closed");
+    }
+
+    private static SamuraiZantetsukenTargetCandidate ZantetsukenCandidate(
+        int slot,
+        float edgeDistance) => new(
+        slot,
+        new SamuraiReactiveCounterCcTarget(
+            GameObjectId: (ulong)(0x3000 + slot),
+            EntityId: (uint)(0x300 + slot),
+            JobId: 23),
+        ExactCanonicalIdentity: true,
+        AliveAndTargetable: true,
+        OwnSourceKuzushiCount: 1,
+        ShieldPercentage: 0,
+        HasNativeRangeAndLineOfSight: true,
+        TargetEdgeDistanceYalms: edgeDistance);
+
     private static SamuraiReactiveCounterCcObservation CounterObservation(
         float distance,
         bool protectionPresent) => new(

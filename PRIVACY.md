@@ -11,7 +11,7 @@ hooks
 leave OFF, reverse, and calls outside that handler on the native paths. The
 separate default-off Smart Action macro helper can replace
 only the target ID on one already incoming exact harmful PvP action after an
-explicit `/smartaction` or `/ssaction` token; it does not change a visible hard,
+explicit `/smartaction`, `/ssaction`, or `/seitonfar` token; it does not change a visible hard,
 soft, Focus, mouseover, camera, or facing target. For an action with a proven
 adjusted or base cast time, Smart Action, Near Assist, and Near Help normally
 consume their one-shot token without an invisible redirect: a hidden or missing
@@ -191,8 +191,9 @@ following data already available in the local FFXIV client:
   line-of-sight evidence;
 - when the optional Samurai helpers are enabled, exact local Samurai identity,
   held-key ownership, enemy Purify/Guard action-and-status evidence, the frozen
-  Soten/Mineuchi stage, own Kuzushi attribution, target shield amount, action
-  readiness, range/line of sight, and bounded source/global sequence data;
+  Soten/Mineuchi stage, exact canonical enemy positions and hitboxes for the
+  Auto-Zantetsuken farthest-target choice, own Kuzushi attribution, target shield amount,
+  action readiness, range/line of sight, and bounded source/global sequence data;
 - when reactive counter-CC timing is learned, the exact plugin-owned action,
   target and nonzero source sequence are correlated transiently with the matching
   server status. Only the resulting action ID, landing delay, and target-edge
@@ -561,12 +562,13 @@ is no persisted input or upload.
 ## One-shot Smart Action
 
 Smart Action has its own default-off macro-helper switch and runs only in exact
-Crystalline Conflict. `/smartaction` or `/ssaction` creates one local token lasting
+Crystalline Conflict. `/smartaction`, `/ssaction`, or `/seitonfar` creates one local token lasting
 at most 750 ms. The authored macro then supplies the harmful action first with
 `<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
 does not read or retain the macro text and does not require a current target.
 Arming reads no enemy slot and stores only the current territory, exact local
-identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.
+identity, expiry, and whether combat-priority or farthest-reachable ranking was
+requested; a live `S1` is not a plugin-side arm prerequisite.
 
 Only an exact non-ground-target PvP hostile action and unique live canonical
 `S1`-`S5` candidates may qualify. Active Chiten, Guard, Covered, Paladin LB
@@ -575,6 +577,12 @@ unverified Chiten metadata conservatively blocks every Samurai. Candidates that
 pass protection safety rank by native reach tier first (melee, gap closer, then
 ranged/other), followed by lowest HP, fresh positive team pressure, known
 Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity.
+`/seitonfar` uses the same complete candidate/protection snapshot but ranks only
+eligible actors by descending finite hitbox-edge distance and stable S-slot. It
+does not apply the generic melee/gap-closer prefilter; the exact incoming
+action's native range/line-of-sight probe is authoritative. Invalid geometry or
+an ambiguous identity set fails to the authored fallback. Distance changes after
+one actor is frozen cannot trigger a rerank.
 Target-centered circles also compare their effect radius with every protected
 actor's current position and hitbox. Other unreviewed AoE shapes do not redirect
 while any protected actor exists. Those area/unknown shapes require the complete

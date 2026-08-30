@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.42.0.4
+
+- Added `/seitonfar`, a one-shot Crystalline Conflict harmful-action macro mode
+  under the existing Smart Action opt-in. It chooses the farthest finite
+  hitbox-edge-distance enemy that is actually reachable by the incoming action
+  and safe under the complete Chiten, Guard, Cover, Paladin-LB, Dark-Knight-LB,
+  and area-protection policy. It shares the same 750-ms token, reviewed SAM-cast
+  exception, exact `<t>` fallback lease, final native range/line-of-sight check,
+  and no-visible-target-change contract as `/smartaction`.
+- Improved held Auto-Zantetsuken target selection in exact CC. It now chooses
+  the farthest finite hitbox-edge-distance enemy with exact own-source Kuzushi,
+  zero shield, and native range/line of sight; equal distances use stable native
+  S-slot. Only the selected Kuzushi target is treated as the 100%-maximum-HP
+  hit—the surrounding 24,000-potency effect is not assumed to execute other
+  enemies. The winner is frozen once and final readiness, identity, status,
+  shield, range, and line-of-sight drift cancels instead of reranking. Wolves'
+  Den remains exact-current-target only.
+- Configuration schema remains `48`. Source build, all `579` Core tests, safety,
+  package parity, and release verification are automated. Final target choice
+  and native/server action acceptance remain live-current-client validation
+  boundaries.
+
 ## 0.42.0.3
 
 - Fixed Auto Recuperate becoming permanently stuck after an accepted heal when

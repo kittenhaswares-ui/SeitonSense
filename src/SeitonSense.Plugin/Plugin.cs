@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.3";
+    private const string CurrentReleaseVersion = "0.42.0.4";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -22,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string SmartTabAliasCommand = "/sstarget";
     private const string SmartActionCommand = "/smartaction";
     private const string SmartActionAliasCommand = "/ssaction";
+    private const string SeitonFarCommand = "/seitonfar";
     private const string AutoSeitonCommand = "/autoseiton";
     private const string NearHelpCommand = "/nearhelp";
     private const string NearHelpAliasCommand = "/sshelp";
@@ -68,6 +69,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool smartTabAliasRegistered;
     private readonly bool smartActionCommandRegistered;
     private readonly bool smartActionAliasRegistered;
+    private readonly bool seitonFarCommandRegistered;
     private readonly bool autoSeitonCommandRegistered;
     private readonly bool nearHelpCommandRegistered;
     private readonly bool nearHelpAliasRegistered;
@@ -404,10 +406,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto Recuperate can no longer become permanently stuck after one accepted heal when the client's brief cooldown-unavailable frame is missed.",
-                "A second heal remains blocked for Recuperate's exact verified 1.0-second recast, then may rearm from current positive readiness without requiring the missing frame.",
-                "HP, MP, Purify priority, Guard, Hidden, cast, queue, resource, identity, and PvP-context checks still run before every native request.",
-                "Configuration schema remains 48. All 574 Core tests and release gates pass; live current-client confirmation remains pending.",
+                "Added /seitonfar: one harmful macro action now targets the farthest actually reachable safe enemy through the full Smart Action protection and fallback path.",
+                "Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then the stable enemy slot; nearby normal AoE damage is not treated as another execute.",
+                "Both paths freeze one exact actor, recheck native range and line of sight, and never visibly change or rerank your target after commitment.",
+                "Configuration schema remains 48. All 579 Core tests and release gates pass; live current-client confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -528,6 +530,21 @@ public sealed class Plugin : IDalamudPlugin
                 (smartActionAliasRegistered
                     ? "Use /ssaction meanwhile."
                     : "Disable the conflicting plugin and reload."));
+        }
+
+        seitonFarCommandRegistered = commandManager.AddHandler(
+            SeitonFarCommand,
+            new CommandInfo(OnSeitonFarCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "Optional CC-only farthest reachable harmful-action redirect with Smart Action safety.",
+            });
+        if (!seitonFarCommandRegistered)
+        {
+            log.Warning("/seitonfar is already owned by another plugin.");
+            chatGui.PrintError(
+                "[Seiton Sense] /seitonfar is owned by another plugin. Disable the conflicting plugin and reload.");
         }
 
         autoSeitonCommandRegistered = commandManager.AddHandler(
@@ -673,6 +690,7 @@ public sealed class Plugin : IDalamudPlugin
         if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand);
         if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand);
         if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand);
+        if (seitonFarCommandRegistered) commandManager.RemoveHandler(SeitonFarCommand);
         if (autoSeitonCommandRegistered) commandManager.RemoveHandler(AutoSeitonCommand);
         if (nearHelpCommandRegistered) commandManager.RemoveHandler(NearHelpCommand);
         if (nearHelpAliasRegistered) commandManager.RemoveHandler(NearHelpAliasCommand);
@@ -1318,6 +1336,7 @@ public sealed class Plugin : IDalamudPlugin
             "/ssense is an alias; /nearassist and /ssassist arm the one-shot CC macro assist. " +
             "/smarttab and /sstarget [on|off|toggle] control the melee override for FFXIV's normal forward targeting. " +
             "/smartaction and /ssaction optionally arm one harmful-action target redirect. " +
+            "/seitonfar arms the same safe one-shot redirect but chooses the farthest reachable enemy. " +
             "/nearhelp and /sshelp arm the one-shot survival-target helper (pressure/self when the action allows). " +
             "/farhelp and /ssfar arm the one-shot farthest friendly movement helper. " +
             "/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead in CC or enabled " +
@@ -1441,6 +1460,20 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense Auto-Seiton toggle command failed.");
+        }
+    }
+
+    private void OnSeitonFarCommand(string _, string arguments)
+    {
+        if (!string.IsNullOrWhiteSpace(arguments)) return;
+
+        try
+        {
+            nearAssist.ArmFarthestSmartActionTarget();
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense farthest Smart Action command failed closed.");
         }
     }
 

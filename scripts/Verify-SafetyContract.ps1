@@ -236,12 +236,14 @@ $opponentLimitBreakGaugeServicePath = Join-Path $pluginServicesRoot 'OpponentLim
 $localMpWarningRulesPath = Join-Path $coreRoot 'LocalMpWarningRules.cs'
 $localMpWarningSelfTestsPath = Join-Path $coreSelfTestRoot 'LocalMpWarningSelfTests.cs'
 $smartTargetSelectionRulesPath = Join-Path $coreRoot 'SmartTargetSelectionRules.cs'
+$smartTargetFarthestSelectionRulesPath = Join-Path $coreRoot 'SmartTargetFarthestSelectionRules.cs'
 $smartTargetSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetSelectionSelfTests.cs'
 $smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRules.cs'
 $smartActionGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionGuardBypassRules.cs'
 $smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
 $castedMacroRedirectRulesPath = Join-Path $coreRoot 'CastedMacroRedirectRules.cs'
 $samuraiSmartActionCastRulesPath = Join-Path $coreRoot 'SamuraiSmartActionCastRules.cs'
+$samuraiZantetsukenTargetSelectionRulesPath = Join-Path $coreRoot 'SamuraiZantetsukenTargetSelectionRules.cs'
 $nearAssistOneShotSelfTestsPath = Join-Path $coreSelfTestRoot 'NearAssistOneShotSelfTests.cs'
 $smartActionProtectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionProtectionSelfTests.cs'
 $smartActionSafetyLeaseSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionSafetyLeaseSelfTests.cs'
@@ -734,7 +736,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 574-test registry.
+# 579-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -754,11 +756,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 533 -or
+if ($staticIntegratedTestCount -ne 538 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 574 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 579 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -766,7 +768,7 @@ if ($staticIntegratedTestCount -ne 533 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 574-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 579-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1213,6 +1215,7 @@ Assert-Literals $pluginSource @(
     'SmartTabAliasCommand = "/sstarget"',
     'SmartActionCommand = "/smartaction"',
     'SmartActionAliasCommand = "/ssaction"',
+    'SeitonFarCommand = "/seitonfar"',
     'new SmartTabTargetingService(',
     'smartTabTargeting.Start()',
     'smartTabCommandRegistered = commandManager.AddHandler(',
@@ -1222,12 +1225,16 @@ Assert-Literals $pluginSource @(
     'smartActionAliasRegistered = commandManager.AddHandler(',
     'new CommandInfo(OnSmartActionCommand)',
     'nearAssist.ArmSmartActionTarget()',
+    'seitonFarCommandRegistered = commandManager.AddHandler(',
+    'new CommandInfo(OnSeitonFarCommand)',
+    'nearAssist.ArmFarthestSmartActionTarget()',
     'if (smartTabCommandRegistered) commandManager.RemoveHandler(SmartTabCommand)',
     'if (smartTabAliasRegistered) commandManager.RemoveHandler(SmartTabAliasCommand)',
     'if (smartActionCommandRegistered) commandManager.RemoveHandler(SmartActionCommand)',
     'if (smartActionAliasRegistered) commandManager.RemoveHandler(SmartActionAliasCommand)',
+    'if (seitonFarCommandRegistered) commandManager.RemoveHandler(SeitonFarCommand)',
     'smartTabTargeting.Dispose()'
-) 'Separate Smart Tab toggle and Smart Action macro command ownership and lifecycle'
+) 'Separate Smart Tab toggle plus Smart Action and Seiton Far macro command ownership and lifecycle'
 if ($pluginSource -match 'lowest-health ally helper') {
     throw 'Near Help command copy must describe survival targeting with bounded pressure and action-gated self eligibility.'
 }
@@ -1465,11 +1472,21 @@ $smartTabCommandMatch = [regex]::Match(
 $smartActionCommandMatch = [regex]::Match(
     $pluginSource,
     '(?s)private void OnSmartActionCommand\(.*?\n    \}\r?\n\r?\n    private void OnAutoSeitonCommand')
+$seitonFarCommandMatch = [regex]::Match(
+    $pluginSource,
+    '(?s)private void OnSeitonFarCommand\(.*?\n    \}\r?\n\r?\n    private void OnFarHelpCommand')
+$seitonFarRegistrationMatch = [regex]::Match(
+    $pluginSource,
+    '(?s)seitonFarCommandRegistered = commandManager\.AddHandler\(\s*SeitonFarCommand,\s*new CommandInfo\(OnSeitonFarCommand\).*?\}\);')
 if (-not $smartTabCommandMatch.Success -or -not $smartActionCommandMatch.Success -or
+    -not $seitonFarCommandMatch.Success -or -not $seitonFarRegistrationMatch.Success -or
     $smartTabCommandMatch.Value -match '\bnearAssist\b|ArmSmartActionTarget' -or
     $smartActionCommandMatch.Value -match 'EnableSmartTabTargeting|\bsmartTabTargeting\b' -or
-    $smartActionCommandMatch.Value -notmatch 'nearAssist\.ArmSmartActionTarget\(\)') {
-    throw 'Smart Tab toggle and one-shot Smart Action must remain separate commands with no shared arm/toggle path.'
+    $smartActionCommandMatch.Value -notmatch 'nearAssist\.ArmSmartActionTarget\(\)' -or
+    $seitonFarCommandMatch.Value -notmatch 'nearAssist\.ArmFarthestSmartActionTarget\(\)' -or
+    $seitonFarCommandMatch.Value -match 'EnableSmartTabTargeting|\bsmartTabTargeting\b' -or
+    $seitonFarRegistrationMatch.Value -notmatch 'AllowedInMacros\s*=\s*true') {
+    throw 'Smart Tab toggle, one-shot Smart Action, and macro-enabled Seiton Far must remain separate commands with no shared arm/toggle path.'
 }
 
 $smartTabConfigurationPath = Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs'
@@ -1494,6 +1511,8 @@ $smartActionConsumeMethod = [regex]::Match(
     $normalizedNearAssistForSmartAction,
     'private bool TryConsumeEligibleSmartTargetToken\(.*?private bool TryConsumeEligibleToken\(')
 if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\).*?configuration\.EnableSmartActionMacro' -or
+    $normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\) => ArmSmartActionTarget\(SmartTargetRedirectMode\.CombatPriority, "Smart Action"\);' -or
+    $normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmFarthestSmartActionTarget\(\) => ArmSmartActionTarget\(SmartTargetRedirectMode\.FarthestReachable, "Seiton Far"\);' -or
     $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && \(heldActionSelection \|\| configuration\.EnableSmartActionMacro\) && clientState\.TerritoryType == token\.TerritoryId && ResolveContext\(\) == SupportedPvPContext\.CrystallineConflict && localIdentityValid;' -or
     $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\) \{ shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
     $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
@@ -1501,6 +1520,7 @@ if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult 
 }
 if (!$smartActionArmMethod.Success -or
     $smartActionArmMethod.Value -notmatch 'new ArmedSmartTarget\( clientState\.TerritoryType, localPlayer!\.EntityId, localPlayer\.GameObjectId, now \+ TokenLifetimeMilliseconds\)' -or
+    $smartActionArmMethod.Value -notmatch 'SelectionMode = selectionMode' -or
     $smartActionArmMethod.Value -notmatch 'carrier=target-independent' -or
     $smartActionArmMethod.Value -match '\b(?:ResolveCanonicalEnemies|EnemySlotRules\.FirstSlot|GetNativeHardTargetId|CarrierEnemy|NoCanonicalEnemySlots)\b' -or
     !$smartActionConsumeMethod.Success -or
@@ -1531,6 +1551,7 @@ if (!$heldSmartActionSelector.Success -or
 }
 
 $smartTargetSelectionRules = Read-RequiredSource $smartTargetSelectionRulesPath 'Smart Action target selection rules'
+$smartTargetFarthestSelectionRules = Read-RequiredSource $smartTargetFarthestSelectionRulesPath 'Seiton Far target selection rules'
 $smartTargetSelectionSelfTests = Read-RequiredSource $smartTargetSelectionSelfTestsPath 'Smart Action target selection self-tests'
 $smartActionProtectionRules = Read-RequiredSource $smartActionProtectionRulesPath 'Smart Action protected-target rules'
 $smartActionGuardBypassRules = Read-RequiredSource $smartActionGuardBypassRulesPath 'Smart Action Guard-bypass metadata rules'
@@ -1600,6 +1621,43 @@ Assert-Literals $smartTargetSelectionSelfTests @(
 Assert-Literals $smartActionTestProgram @(
     'SmartTargetSelectionSelfTests.MissingFirstEnemySlotDoesNotBlockRemainingCandidates'
 ) 'Smart Action missing-S1 target-selection test registration'
+Assert-Literals $smartTargetFarthestSelectionRules @(
+    'SmartTargetSelectionRules.HasUnambiguousCandidateSet(selections, localPlayer)',
+    'SmartTargetSelectionRules.IsEligibleCandidate(candidate.Selection, localPlayer)',
+    '!float.IsFinite(candidate.EdgeDistanceYalms)',
+    'candidate.EdgeDistanceYalms < 0f',
+    'right.EdgeDistanceYalms.CompareTo(left.EdgeDistanceYalms)',
+    'left.Selection.EnemySlot.CompareTo(right.Selection.EnemySlot)',
+    'centerDistance - sourceHitboxRadius - targetHitboxRadius'
+) 'Seiton Far finite hitbox-edge distance ranking and shared Smart Action eligibility'
+Assert-Literals $smartTargetSelectionSelfTests @(
+    'public static void FarthestModeRanksOnlyEligibleSmartActionCandidates()',
+    'public static void FarthestModeIsDeterministicAndFailsClosedOnUnknownDistance()',
+    'public static void FarthestModeFreezesOneActorWithoutReranking()',
+    'CallerProvenProtectionSafe = false',
+    'HasNativeRangeAndLineOfSight = false',
+    'EdgeDistanceYalms = float.NaN',
+    '"stable native slot breaks an exact distance tie"',
+    '"a now-farther alternate cannot replace the frozen actor"'
+) 'Seiton Far reach, protection, finite-distance, deterministic tie, and frozen-actor regressions'
+Assert-Literals $smartActionTestProgram @(
+    'SmartTargetSelectionSelfTests.FarthestModeRanksOnlyEligibleSmartActionCandidates',
+    'SmartTargetSelectionSelfTests.FarthestModeIsDeterministicAndFailsClosedOnUnknownDistance',
+    'SmartTargetSelectionSelfTests.FarthestModeFreezesOneActorWithoutReranking'
+) 'Three Seiton Far Core test registrations'
+if ($smartTargetFarthestSelectionRules -match '\b(?:ActionManager|IPlayerCharacter|ObjectTable|UseAction|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b') {
+    throw 'Seiton Far ranking must remain pure value-only Core code with no action, target, actor-table, time, or thread boundary.'
+}
+if ($normalizedSmartActionRuntime -notmatch 'private enum SmartTargetRedirectMode : byte \{ CombatPriority, FarthestReachable, \}' -or
+    $normalizedSmartActionRuntime -notmatch 'var farthestReachable = token\.SelectionMode == SmartTargetRedirectMode\.FarthestReachable;' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!farthestReachable && !TryResolveSmartTargetReachTier\(local, enemy, out reachTier\)\)' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartTargetFarthestSelectionRules\.TryMeasureEdgeDistance\( local\.Position, local\.HitboxRadius, enemy\.Position, enemy\.HitboxRadius, out edgeDistanceYalms\)' -or
+    $normalizedSmartActionRuntime -notmatch 'ActionManager\.GetActionInRangeOrLoS\(resolvedActionId, sourceObject, targetObject\)' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartTargetFarthestSelectionRules\.TryCreateIntent\( resolvedActionId, candidates .*?SmartTargetFarthestCandidate\( candidate\.Selection, candidate\.EdgeDistanceYalms\).*?localActor, out var intent\)' -or
+    $normalizedSmartActionRuntime -notmatch 'Revalidate the frozen tuple immediately before forwarding the sole.*?incoming native call\. Never rerun ranking or select a second actor\.' -or
+    $normalizedSmartActionRuntime -notmatch 'SmartTargetSelectionRules\.CanUseExactIntent\( intent, finalCandidate, localActor, resolvedActionId\)') {
+    throw 'Seiton Far must change only ranking on the shared one-shot Smart Action token while retaining exact CC, protection, action-native range/LoS, frozen-actor revalidation, and fallback behavior.'
+}
 Assert-Literals $smartActionSafetyLeaseRules @(
     'public const long DefaultLifetimeMilliseconds = 750;',
     'territoryId != token.TerritoryId',
@@ -1709,7 +1767,7 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtecti
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out _, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
     $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
-    $normalizedSmartActionRuntime -notmatch 'Smart Action arm failed closed: protection metadata unverified') {
+    $normalizedSmartActionRuntime -notmatch '\$"\{displayName\} arm failed closed: protection metadata unverified"') {
     throw 'Smart Action must replace its target only after shape-scoped current protection proof, retain complete geometry for area/unknown shapes, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
 }
 if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\).*?if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId = smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe \? inspectedSmartActionTargetId : targetId;.*?TryConsumeEligibleSmartTargetToken' -or
@@ -4371,6 +4429,7 @@ $miracleGuardFollowupSelfTests = Read-RequiredSource $miracleGuardFollowupSelfTe
 $miracleProtectionEndSelfTests = Read-RequiredSource $miracleProtectionEndSelfTestsPath 'Shared protection-end self-tests'
 $samuraiReactiveSelfTests = Read-RequiredSource $samuraiReactiveSelfTestsPath 'SAM reactive self-tests'
 $samuraiReactiveProbe = Read-RequiredSource $samuraiReactiveCounterCcProbePath 'SAM reactive runtime'
+$samuraiZantetsukenTargetSelectionRules = Read-RequiredSource $samuraiZantetsukenTargetSelectionRulesPath 'SAM Zantetsuken farthest eligible-target rules'
 $normalizedSamuraiReactiveProbe = $samuraiReactiveProbe -replace '\s+', ' '
 $miracleGuardProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registry'
 $miracleCleanseTestMethods = @(
@@ -4422,7 +4481,9 @@ $samuraiReactiveTestMethods = @(
     'PredictiveTimingRequiresExactWarmEvidence',
     'ProtectionEndConsentUsesTheCurrentHeldKey',
     'WolvesDenUsesExactCurrentTargetAndTargetedActions',
-    'ZantetsukenRequiresOwnKuzushiAndZeroShield'
+    'ZantetsukenRequiresOwnKuzushiAndZeroShield',
+    'ZantetsukenRanksFarthestReachableEligibleTargetThenSlot',
+    'ZantetsukenFarthestRankingFailsClosedAndRequiresReachability'
 )
 foreach ($method in $samuraiReactiveTestMethods) {
     Assert-Literals $samuraiReactiveSelfTests @("public static void $method()") "SAM reactive self-test $method"
@@ -4436,10 +4497,39 @@ if ([regex]::Matches($miracleCleanseFollowupSelfTests, '\binternal static void\s
 }
 if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
-    [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 533) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 533-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 8 -or
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 538) {
+    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 538-test static Core registry before the appended repeat-policy suites must remain pinned.'
+}
+Assert-Literals $samuraiZantetsukenTargetSelectionRules @(
+    'candidate.AliveAndTargetable',
+    'candidate.OwnSourceKuzushiCount == 1',
+    'candidate.ShieldPercentage == 0',
+    'candidate.HasNativeRangeAndLineOfSight',
+    'float.IsFinite(candidate.TargetEdgeDistanceYalms)',
+    'candidate.TargetEdgeDistanceYalms >= 0f',
+    'candidate.TargetEdgeDistanceYalms >',
+    'candidate.EnemySlot < candidates[bestIndex].EnemySlot',
+    '!occupiedSlots.Add(candidate.EnemySlot)',
+    '!occupiedGameObjectIds.Add(candidate.Target.GameObjectId)',
+    '!occupiedEntityIds.Add(candidate.Target.EntityId)'
+) 'SAM Zantetsuken exact lethal eligibility, farthest finite edge distance, S-slot tie, and complete identity ambiguity policy'
+Assert-Literals $samuraiReactiveSelfTests @(
+    '"farthest exact eligible target wins"',
+    '"shielded or non-owned Kuzushi targets are not selected"',
+    '"equal distance uses lower S-slot"',
+    'HasNativeRangeAndLineOfSight = false',
+    '"unreachable endpoint cannot be selected"',
+    '"ambiguous native slot set fails closed"',
+    'edgeDistance: float.NaN',
+    '"unknown edge distance fails the complete snapshot closed"'
+) 'SAM Zantetsuken farthest eligible-target regressions'
+if ($samuraiZantetsukenTargetSelectionRules -match '\b(?:ActionManager|IPlayerCharacter|ObjectTable|UseAction|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $normalizedSamuraiReactiveProbe -notmatch 'if \(context == SupportedPvPContext\.WolvesDen\).*?TryResolveWolvesDenCurrentTarget\(localPlayer, out var wolvesTarget\).*?IsZantetsukenCandidate\(localPlayer, current\).*?target = wolvesTarget; return true;' -or
+    $normalizedSamuraiReactiveProbe -notmatch 'var candidates = new List<ResolvedZantetsukenTargetCandidate>\(\);.*?ExactCanonicalIdentity: true, AliveAndTargetable: IsLiveTarget\(player\), OwnSourceKuzushiCount: CountOwnSourceKuzushi\( player, localPlayer\.EntityId\), player\.ShieldPercentage, HasNativeRangeAndLineOfSight\( localPlayer, player, SamuraiZantetsukenRules\.ActionId\), edgeDistance' -or
+    $normalizedSamuraiReactiveProbe -notmatch 'SamuraiZantetsukenTargetSelectionRules \.SelectFarthestEligibleTargetIndex\( candidates\.Select\(static candidate => candidate\.Candidate\)\.ToArray\(\)\).*?if \(selectedIndex < 0\) return false;.*?target = CreateFrozenTarget\( context, selected\.Candidate\.EnemySlot, selected\.Player, DarkKnightWolvesDenTargetKind\.None\);') {
+    throw 'Exact-CC Auto-Zantetsuken must rank one canonical own-Kuzushi, zero-shield, live, native-reachable farthest endpoint and freeze it without alternate selection; Wolves Den must remain exact-current-target only.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -10069,15 +10159,18 @@ Assert-Literals $settingsWindow @(
     'Toggle OFF is fully vanilla.',
     'retry, rerank, or alternate target.',
     'Enable one-shot /nearassist, /nearhelp, and /farhelp targeting',
-    'Enable optional /smartaction harmful-action targeting',
+    'Enable optional /smartaction and /seitonfar harmful-action targeting',
     'Smart Action macro — optional harmful-action redirect',
-    '/smartaction arms one 750 ms token',
+    'Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.',
+    '/smartaction or /seitonfar arms one 750 ms token',
+    'instead ranks every action-reachable safe enemy by farthest hitbox-edge distance, then stable S-slot.',
     'invalidates that carrier and leaves the following <t> line as the only fallback.',
-    'Cast-time actions are never invisibly redirected.',
+    'Generic cast-time actions are never invisibly redirected.',
     'A hidden <e1>/<2> carrier is suppressed, consumes',
     'the one-shot token, and lets the following authored <t> fallback use your visible target;',
     '<t> cast remains vanilla. Instant actions keep Smart Action targeting.',
-    'native auto-face turning you toward a hidden target after you manually switch targets.',
+    'FFXIV''s delayed native auto-face turning you toward a',
+    'hidden target after you manually switch targets.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON still requires',
     'a currently held gameplay key; it never creates no-input automatic actions.',
@@ -10537,17 +10630,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.3</Version>',
-    '<AssemblyVersion>0.42.0.3</AssemblyVersion>',
-    '<FileVersion>0.42.0.3</FileVersion>'
-) 'v0.42.0.3 project version'
+    '<Version>0.42.0.4</Version>',
+    '<AssemblyVersion>0.42.0.4</AssemblyVersion>',
+    '<FileVersion>0.42.0.4</FileVersion>'
+) 'v0.42.0.4 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.3";',
-    'Auto Recuperate can no longer become permanently stuck after one accepted heal when the client''s brief cooldown-unavailable frame is missed.',
-    'A second heal remains blocked for Recuperate''s exact verified 1.0-second recast, then may rearm from current positive readiness without requiring the missing frame.',
-    'HP, MP, Purify priority, Guard, Hidden, cast, queue, resource, identity, and PvP-context checks still run before every native request.',
-    'Configuration schema remains 48. All 574 Core tests and release gates pass; live current-client confirmation remains pending.'
-) 'v0.42.0.3 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.4";',
+    'Added /seitonfar: one harmful macro action now targets the farthest actually reachable safe enemy through the full Smart Action protection and fallback path.',
+    'Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then the stable enemy slot; nearby normal AoE damage is not treated as another execute.',
+    'Both paths freeze one exact actor, recheck native range and line of sight, and never visibly change or rerank your target after commitment.',
+    'Configuration schema remains 48. All 579 Core tests and release gates pass; live current-client confirmation remains pending.'
+) 'v0.42.0.4 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10568,20 +10661,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.3 plugin manifest metadata'
+) 'v0.42.0.4 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.3"',
-    'Fixed Auto Recuperate becoming permanently stuck after one accepted heal when the client''s brief cooldown-unavailable frame was missed.',
-    'no second request can occur before Recuperate''s verified 1.0-second recast',
-    'current positive readiness may safely open the next fully revalidated heal episode afterward without requiring the missing negative frame.',
-    'HP, MP, Purify priority, Guard, NIN Hidden, cast, queue, resource, identity, and PvP-context gates remain exact.',
-    'Configuration schema 48; all 574 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.42.0.4"',
+    'Added /seitonfar, a one-shot CC harmful-action macro mode that chooses the farthest actually reachable safe enemy',
+    'Smart Action''s exact range/line-of-sight, Chiten/Guard/Cover/LB protection, frozen-target, cast, and authored <t> fallback rules.',
+    'Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then stable S-slot;',
+    'only the selected Kuzushi target is treated as the 100%-maximum-HP hit.',
+    'Wolves'' Den remains exact-current-target only.',
+    'Configuration schema 48; all 579 Core tests and release gates pass.',
     'Live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.3 custom-repository metadata'
+) 'v0.42.0.4 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10673,7 +10767,7 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
-    'Arming reads no enemy slot and stores only the current territory, exact local identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.',
+    'Arming reads no enemy slot and stores only the current territory, exact local identity, expiry, and whether combat-priority or farthest-reachable ranking was requested; a live `S1` is not a plugin-side arm prerequisite.',
     'An action with a proven adjusted or exact base cast time is normally never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
     'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the ordinary game path.',
     'The only exception is the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
@@ -10682,9 +10776,27 @@ Assert-Literals $normalizedPrivacy @(
     'Seiton Sense does not write facing or camera state for this rule; any initial facing is FFXIV''s normal cast behavior toward the frozen or visible target.',
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
-    'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.42.0.3 recovery, instant-leave lifecycle, SAM cast targeting, warning, experimental-LB, and retained safety/privacy disclosure'
+    'shape-appropriate protection proof is rebuilt immediately before forwarding.',
+    '## One-shot Smart Action',
+    '`/smartaction`, `/ssaction`, or `/seitonfar` creates one local token lasting at most 750 ms.',
+    'identity, expiry, and whether combat-priority or farthest-reachable ranking was requested;',
+    '`/seitonfar` uses the same complete candidate/protection snapshot but ranks only eligible actors by descending finite hitbox-edge distance and stable S-slot.',
+    'the exact incoming action''s native range/line-of-sight probe is authoritative.',
+    'Distance changes after one actor is frozen cannot trigger a rerank.',
+    'Auto-Zantetsuken farthest-target choice, own Kuzushi attribution, target shield amount'
+) 'v0.42.0.4 Seiton Far, Zantetsuken targeting, recovery, instant-leave, warning, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.42.0.4 adds `/seitonfar`, a one-shot Smart Action variant that chooses the farthest actually reachable safe enemy, and upgrades exact-CC Auto-Zantetsuken to choose the farthest reachable exact own-Kuzushi, zero-shield target.',
+    'Both paths freeze one actor and retain final native range/line-of-sight and protection checks without changing the visible target.',
+    '`/smartaction` (`/ssaction`) or `/seitonfar` arms one 750-ms Crystalline Conflict token for the next already incoming harmful PvP macro action.',
+    'Replace `/smartaction` with `/seitonfar` when the endpoint itself should be as far away as possible.',
+    'Eligible actors rank by descending hitbox-edge distance and stable native S-slot',
+    'HP, pressure, Guard-cooldown, and MP order.',
+    'For held Auto-Zantetsuken in exact CC, selection now evaluates every exact canonical endpoint that has one own-source Kuzushi, zero shield, and native range/line of sight.',
+    'It chooses the farthest finite hitbox-edge-distance target, then stable S-slot.',
+    'Zantetsuken''s 100%-maximum-HP rule applies only to the selected Kuzushi target; the surrounding 24,000-potency effect is deliberately not counted as another confirmed kill.',
+    'Final identity, Kuzushi, shield, Bind, readiness, range, or line-of-sight drift cancels without choosing another actor.',
+    'Wolves'' Den deliberately remains exact-current-',
     'Version 0.42.0.3 fixes an Auto Recuperate reliability latch: an accepted heal can no longer wait forever when the client does not expose, or the framework misses, the brief cooldown-unavailable frame.',
     'The exact verified 1.0-second recast remains an anti-duplicate floor; after it elapses, current positive readiness may open the next fully revalidated heal episode.',
     'Version 0.42.0.2 fixes the observed instant-leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
@@ -10781,11 +10893,12 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
-    'For the current source, the exact 574-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
+    'For the current source, the exact 579-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
-    'target-independent arming, the closed metadata-verified SAM Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible- target pass-through for every other cast, selection with `S1` absent',
+    'target-independent arming, `/seitonfar` as a mode on that same token, farthest finite hitbox-edge ranking with action-native reach/line-',
+    'Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible- target pass-through for every other cast, selection with `S1` absent',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
@@ -10793,8 +10906,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.3 current README release and safety contract'
+) 'v0.42.0.4 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.4',
+    'Added `/seitonfar`, a one-shot Crystalline Conflict harmful-action macro mode under the existing Smart Action opt-in.',
+    'It chooses the farthest finite hitbox-edge-distance enemy that is actually reachable by the incoming action and safe under the complete Chiten, Guard, Cover, Paladin-LB, Dark-Knight-LB, and area-protection policy.',
+    'It shares the same 750-ms token, reviewed SAM-cast exception, exact `<t>` fallback lease, final native range/line-of-sight check, and no-visible-target-change contract as `/smartaction`.',
+    'Improved held Auto-Zantetsuken target selection in exact CC. It now chooses the farthest finite hitbox-edge-distance enemy with exact own-source Kuzushi, zero shield, and native range/line of sight; equal distances use stable native S-slot.',
+    'Only the selected Kuzushi target is treated as the 100%-maximum-HP hit—the surrounding 24,000-potency effect is not assumed to execute other enemies.',
+    'The winner is frozen once and final readiness, identity, status, shield, range, and line-of-sight drift cancels instead of reranking. Wolves'' Den remains exact-current-target only.',
+    'Configuration schema remains `48`. Source build, all `579` Core tests, safety, package parity, and release verification are automated.',
     '## 0.42.0.3',
     'Fixed Auto Recuperate becoming permanently stuck after an accepted heal when `IsActionOffCooldown(29711)` did not expose, or the framework missed, its brief false frame.',
     'The accepted action time is now frozen independently and current positive readiness may open the next heal episode after Recuperate''s exact verified 1.0-second recast, even without that negative edge.',
@@ -10900,7 +11021,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.3 release notes and retained v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.4 release notes and retained v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12409,4 +12530,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.3 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 574-test Core registry. Auto Recuperate freezes the accepted timestamp, enforces its metadata-verified one-second recast, and may rearm from current positive readiness after that floor without requiring a sampled cooldown-unavailable frame. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, and PvP-context gate remains exact. Default-off instant public-CC leave retains its one-shot result intent and single non-forced native request. SAM Soten, Mineuchi, Zantetsuken, Ogi Namikiri, and Tendo Setsugekka retain their exact current metadata and frozen-target safety. Exact Chiten and SMN warnings remain bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.4 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 579-test Core registry. /seitonfar reuses one Smart Action token and its exact protection, native range/line-of-sight, frozen-target, cast, and authored fallback boundaries while ranking finite reachable candidates by farthest hitbox-edge distance then stable S-slot. Auto-Zantetsuken chooses the farthest exact own-Kuzushi, zero-shield, live, native-reachable target and keeps Wolves' Den exact-current-target only. Auto Recuperate retains its metadata-verified one-second recast floor and reliability rearm. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, and PvP-context gate remains exact. Default-off instant public-CC leave retains its one-shot result intent and single non-forced native request. Exact Chiten and SMN warnings remain bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

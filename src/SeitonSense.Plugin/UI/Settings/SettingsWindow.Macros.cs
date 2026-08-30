@@ -15,7 +15,7 @@ internal sealed partial class SettingsWindow
             configuration.EnableNearAssistMacro,
             value => configuration.EnableNearAssistMacro = value);
         changed |= Checkbox(
-            "Enable optional /smartaction harmful-action targeting",
+            "Enable optional /smartaction and /seitonfar harmful-action targeting",
             configuration.EnableSmartActionMacro,
             value => configuration.EnableSmartActionMacro = value);
         ImGui.TextUnformatted("Near Assist preferences");
@@ -56,24 +56,28 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/smartaction");
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
+            ImGui.TextUnformatted("Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Crystalline Conflict only. /smartaction arms one 750 ms token and resolves the actual harmful PvP " +
+                "Crystalline Conflict only. /smartaction or /seitonfar arms one 750 ms token and resolves the actual harmful PvP " +
                 "action on the next line. No selected target is required. Only living, targetable exact S1-S5 " +
-                "enemies inside that action's native range and line of sight are considered; live Guard is excluded.");
+                "enemies inside that action's native range and line of sight are considered; blocking protection is excluded, " +
+                "while reviewed Guard-bypass actions may still target Guard.");
             ImGui.TextDisabled(
                 "Inside the relevant reach tier, ranking is lowest exact HP%, then highest fresh team pressure, " +
                 "observed Guard cooldown unavailable, lowest trusted MP%, and stable S-slot. Melee jobs first prefer " +
-                "5-yalm melee reach, then enemies no farther than that job's own reviewed gap-closer range. " +
+                "5-yalm melee reach, then enemies no farther than that job's own reviewed gap-closer range. /seitonfar " +
+                "instead ranks every action-reachable safe enemy by farthest hitbox-edge distance, then stable S-slot. " +
                 "The <e1> line is only a carrier. When no exact smart target survives final revalidation, Seiton " +
                 "invalidates that carrier and leaves the following <t> line as the only fallback. It never visibly " +
                 "changes your target, retries, reranks after commitment, or sends an action by itself. /ssaction is " +
                 "the collision-free alias.");
             ImGui.TextDisabled(
-                "Cast-time actions are never invisibly redirected. A hidden <e1>/<2> carrier is suppressed, consumes " +
+                "Generic cast-time actions are never invisibly redirected. A hidden <e1>/<2> carrier is suppressed, consumes " +
                 "the one-shot token, and lets the following authored <t> fallback use your visible target; a direct " +
-                "<t> cast remains vanilla. Instant actions keep Smart Action targeting. This avoids FFXIV's delayed " +
-                "native auto-face turning you toward a hidden target after you manually switch targets.");
+                "<t> cast remains vanilla. Instant actions keep Smart Action targeting. The only reviewed exception is " +
+                "SAM Ogi Namikiri/Tendo Setsugekka. This avoids FFXIV's delayed native auto-face turning you toward a " +
+                "hidden target after you manually switch targets.");
             ImGui.PopTextWrapPos();
         }
 

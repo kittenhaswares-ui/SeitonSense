@@ -208,6 +208,121 @@ internal static class SmartTargetSelectionSelfTests
             "invalid action identity cannot freeze an intent");
     }
 
+    public static void FarthestModeRanksOnlyEligibleSmartActionCandidates()
+    {
+        var candidates = new[]
+        {
+            Farthest(Candidate(1, hp: 1, reach: SmartTargetReachTier.Melee, pressure: 5,
+                guard: GuardAvailability.Unavailable, mp: 0), 25f),
+            Farthest(Candidate(2, hp: 99, pressure: null,
+                guard: GuardAvailability.Unknown, mpTrusted: false), 225f),
+            Farthest(Candidate(3) with
+            {
+                HasNativeRangeAndLineOfSight = false,
+            }, 400f),
+            Farthest(Candidate(4) with
+            {
+                CallerProvenProtectionSafe = false,
+            }, 625f),
+        };
+
+        True(SmartTargetFarthestSelectionRules.TryCreateIntent(
+                29_391,
+                candidates,
+                LocalPlayer,
+                out var intent),
+            "one reachable protection-safe farthest target can be frozen");
+        Equal(2, intent.EnemySlot,
+            "distance outranks HP pressure Guard MP and standard reach signals");
+    }
+
+    public static void FarthestModeIsDeterministicAndFailsClosedOnUnknownDistance()
+    {
+        True(SmartTargetFarthestSelectionRules.TryMeasureEdgeDistance(
+                new System.Numerics.Vector3(0f, 0f, 0f),
+                1f,
+                new System.Numerics.Vector3(10f, 0f, 0f),
+                2f,
+                out var edgeDistance),
+            "finite actor geometry produces one hitbox-edge distance");
+        Equal(7f, edgeDistance, "both hitbox radii are removed from center distance");
+        False(SmartTargetFarthestSelectionRules.TryMeasureEdgeDistance(
+                new System.Numerics.Vector3(float.NaN, 0f, 0f),
+                1f,
+                new System.Numerics.Vector3(10f, 0f, 0f),
+                2f,
+                out _),
+            "non-finite actor geometry fails closed");
+
+        var tied = new[]
+        {
+            Farthest(Candidate(5), 100f),
+            Farthest(Candidate(2), 100f),
+        };
+        Equal(1, SmartTargetFarthestSelectionRules.SelectBestCandidateIndex(tied, LocalPlayer),
+            "stable native slot breaks an exact distance tie");
+
+        var unknownDistance = tied.ToArray();
+        unknownDistance[0] = unknownDistance[0] with { EdgeDistanceYalms = float.NaN };
+        Equal(-1, SmartTargetFarthestSelectionRules.SelectBestCandidateIndex(
+                unknownDistance,
+                LocalPlayer),
+            "one non-finite distance makes the complete farthest ordering unknowable");
+
+        var duplicateActor = new[]
+        {
+            Farthest(Candidate(1, gameObjectId: 0x900, entityId: 0x901), 25f),
+            Farthest(Candidate(2, gameObjectId: 0x900, entityId: 0x902), 100f),
+        };
+        Equal(-1, SmartTargetFarthestSelectionRules.SelectBestCandidateIndex(
+                duplicateActor,
+                LocalPlayer),
+            "partial canonical identity collisions still fail closed");
+    }
+
+    public static void FarthestModeFreezesOneActorWithoutReranking()
+    {
+        const uint actionId = 29_537;
+        var selected = Candidate(4);
+        True(SmartTargetFarthestSelectionRules.TryCreateIntent(
+                actionId,
+                [Farthest(Candidate(1), 25f), Farthest(selected, 225f)],
+                LocalPlayer,
+                out var intent),
+            "the farthest exact actor can be frozen");
+        Equal(4, intent.EnemySlot, "the farthest slot is frozen");
+
+        True(SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                selected,
+                LocalPlayer,
+                actionId),
+            "the frozen actor remains usable after ranking is complete");
+        False(SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                Candidate(1),
+                LocalPlayer,
+                actionId),
+            "a now-farther alternate cannot replace the frozen actor");
+        False(SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                selected with { HasNativeRangeAndLineOfSight = false },
+                LocalPlayer,
+                actionId),
+            "final reach drift cancels without reranking");
+        False(SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                selected with { CallerProvenProtectionSafe = false },
+                LocalPlayer,
+                actionId),
+            "final protection drift cancels without reranking");
+    }
+
+    private static SmartTargetFarthestCandidate Farthest(
+        SmartTargetSelectionCandidate candidate,
+        float edgeDistanceYalms) =>
+        new(candidate, edgeDistanceYalms);
+
     private static int Select(IReadOnlyList<SmartTargetSelectionCandidate> candidates) =>
         SmartTargetSelectionRules.SelectBestCandidateIndex(candidates, LocalPlayer);
 

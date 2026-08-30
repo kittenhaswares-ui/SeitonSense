@@ -1144,8 +1144,15 @@ internal sealed class SamuraiReactiveCounterCcProbe
             return true;
         }
 
+        if (HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId) ||
+            !IsActionSpecificReady(SamuraiZantetsukenRules.ActionId))
+        {
+            return false;
+        }
+
         // Selection is deterministic and ends before the intent is frozen.
         // After this point actor drift never falls through to another S-slot.
+        var candidates = new List<ResolvedZantetsukenTargetCandidate>();
         foreach (var enemy in executeTracker.Enemies
                      .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
                      .OrderBy(static enemy => enemy.Slot))
@@ -1156,21 +1163,50 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 player.EntityId != enemy.EntityId ||
                 !player.ClassJob.IsValid ||
                 player.ClassJob.RowId != enemy.JobId ||
-                !HasCoherentObjectTableIdentity(player) ||
-                !IsZantetsukenCandidate(localPlayer, player))
+                !HasCoherentObjectTableIdentity(player))
             {
                 continue;
             }
 
-            target = CreateFrozenTarget(
-                context,
-                enemy.Slot,
+            var edgeDistance = TryGetEdgeDistance(
+                localPlayer,
                 player,
-                DarkKnightWolvesDenTargetKind.None);
-            return true;
+                out var measuredEdgeDistance)
+                ? measuredEdgeDistance
+                : float.NaN;
+            candidates.Add(new ResolvedZantetsukenTargetCandidate(
+                new SamuraiZantetsukenTargetCandidate(
+                    enemy.Slot,
+                    new SamuraiReactiveCounterCcTarget(
+                        player.GameObjectId,
+                        player.EntityId,
+                        player.ClassJob.RowId),
+                    ExactCanonicalIdentity: true,
+                    AliveAndTargetable: IsLiveTarget(player),
+                    OwnSourceKuzushiCount: CountOwnSourceKuzushi(
+                        player,
+                        localPlayer.EntityId),
+                    player.ShieldPercentage,
+                    HasNativeRangeAndLineOfSight(
+                        localPlayer,
+                        player,
+                        SamuraiZantetsukenRules.ActionId),
+                    edgeDistance),
+                player));
         }
 
-        return false;
+        var selectedIndex = SamuraiZantetsukenTargetSelectionRules
+            .SelectFarthestEligibleTargetIndex(
+                candidates.Select(static candidate => candidate.Candidate).ToArray());
+        if (selectedIndex < 0) return false;
+
+        var selected = candidates[selectedIndex];
+        target = CreateFrozenTarget(
+            context,
+            selected.Candidate.EnemySlot,
+            selected.Player,
+            DarkKnightWolvesDenTargetKind.None);
+        return true;
     }
 
     private bool IsZantetsukenCandidate(
@@ -2013,6 +2049,10 @@ internal sealed class SamuraiReactiveCounterCcProbe
         nint Address,
         DarkKnightWolvesDenTargetKind WolvesDenTargetKind,
         bool AllowJoblessWolvesDenTarget);
+
+    private readonly record struct ResolvedZantetsukenTargetCandidate(
+        SamuraiZantetsukenTargetCandidate Candidate,
+        IPlayerCharacter Player);
 
     private readonly record struct FrozenProtectionEpisode(
         SamuraiReactiveProtectionSignal Signal,
