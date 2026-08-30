@@ -70,7 +70,7 @@ public readonly record struct CrystallineConflictInstantLeaveTransition(
 /// </summary>
 public static class CrystallineConflictInstantLeaveRules
 {
-    public const long MaximumResultAgeMilliseconds = 10_000;
+    public const long MaximumResultAgeMilliseconds = 30_000;
 
     public static bool ShouldObserveResult(
         bool pluginEnabled,
@@ -163,12 +163,7 @@ public static class CrystallineConflictInstantLeaveRules
         if (state.Phase == CrystallineConflictInstantLeavePhase.LeaveRequested)
         {
             if (confirmedContextExit)
-            {
-                return new CrystallineConflictInstantLeaveTransition(
-                    CrystallineConflictInstantLeaveState.Idle,
-                    CrystallineConflictInstantLeaveDecision.ExitConfirmed,
-                    CrystallineConflictInstantLeaveReason.ExitConfirmed);
-            }
+                return ResetSpentContext(state);
 
             return Unchanged(
                 state,
@@ -179,12 +174,7 @@ public static class CrystallineConflictInstantLeaveRules
         if (state.Phase == CrystallineConflictInstantLeavePhase.Cancelled)
         {
             if (confirmedContextExit)
-            {
-                return new CrystallineConflictInstantLeaveTransition(
-                    CrystallineConflictInstantLeaveState.Idle,
-                    CrystallineConflictInstantLeaveDecision.ContextReset,
-                    CrystallineConflictInstantLeaveReason.ContextReset);
-            }
+                return ResetSpentContext(state);
 
             return Unchanged(state, CrystallineConflictInstantLeaveDecision.None, state.Reason);
         }
@@ -227,6 +217,43 @@ public static class CrystallineConflictInstantLeaveRules
             CrystallineConflictInstantLeaveReason.LeaveReserved);
     }
 
+    /// <summary>
+    /// A nonzero territory-change event is authoritative even when framework
+    /// updates were paused for the complete loading transition. This closes the
+    /// spent result context without trusting ambiguous zero-valued telemetry.
+    /// </summary>
+    public static CrystallineConflictInstantLeaveTransition ObserveTerritoryChanged(
+        CrystallineConflictInstantLeaveState state,
+        uint territoryId)
+    {
+        if (!state.ContextSpent || territoryId == 0 || territoryId == state.TerritoryId)
+            return Unchanged(state, CrystallineConflictInstantLeaveDecision.None, state.Reason);
+
+        return ResetSpentContext(state);
+    }
+
+    /// <summary>
+    /// Starting a public CC duty proves that any previously spent result belongs
+    /// to an older match. This rearms same-map consecutive matches even if the
+    /// client emitted no observable framework frame during either zone change.
+    /// </summary>
+    public static CrystallineConflictInstantLeaveTransition ObserveDutyStarted(
+        CrystallineConflictInstantLeaveState state,
+        bool liveIsPvpExcludingWolvesDen,
+        uint liveTerritoryId,
+        ulong liveLocalContentId)
+    {
+        if (!state.ContextSpent ||
+            !liveIsPvpExcludingWolvesDen ||
+            !PvPMatchRules.IsPublicCrystallineConflictTerritory(liveTerritoryId) ||
+            liveLocalContentId == 0)
+        {
+            return Unchanged(state, CrystallineConflictInstantLeaveDecision.None, state.Reason);
+        }
+
+        return ResetSpentContext(state);
+    }
+
     public static CrystallineConflictInstantLeaveState MarkNativeCallFailed(
         CrystallineConflictInstantLeaveState state) =>
         state.Phase == CrystallineConflictInstantLeavePhase.LeaveRequested
@@ -248,6 +275,20 @@ public static class CrystallineConflictInstantLeaveRules
             },
             CrystallineConflictInstantLeaveDecision.Cancelled,
             reason);
+
+    private static CrystallineConflictInstantLeaveTransition ResetSpentContext(
+        CrystallineConflictInstantLeaveState state)
+    {
+        var requested = state.Phase == CrystallineConflictInstantLeavePhase.LeaveRequested;
+        return new CrystallineConflictInstantLeaveTransition(
+            CrystallineConflictInstantLeaveState.Idle,
+            requested
+                ? CrystallineConflictInstantLeaveDecision.ExitConfirmed
+                : CrystallineConflictInstantLeaveDecision.ContextReset,
+            requested
+                ? CrystallineConflictInstantLeaveReason.ExitConfirmed
+                : CrystallineConflictInstantLeaveReason.ContextReset);
+    }
 
     private static CrystallineConflictInstantLeaveTransition Unchanged(
         CrystallineConflictInstantLeaveState state,

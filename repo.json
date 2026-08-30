@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.42.0.0",
-    "Changelog": "Added a default-off instant-leave option for completed public Crystalline Conflict matches. It reuses the exact complete 10-player result capture, attempts local W/L persistence first when enabled, waits for FFXIV's native leave-ready boundary, then sends exactly one normal non-forced leave request. The 10-second in-memory intent cancels on context, territory, identity, transition, toggle, or native-boundary drift and never retries the void request. Wolves' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded. Configuration schema 48; all 570 Core tests and release gates pass. The current-client post-result transition remains live in-game validation.",
+    "AssemblyVersion": "0.42.0.1",
+    "Changelog": "Fixed instant leave so it rearms for later public Crystalline Conflict matches, including consecutive matches on the same map, even when loading suppresses framework updates. A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch; zero or invalid lifecycle signals remain inert. The native leave-ready window is now 30 seconds. Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues. Smart Action, Near Assist, and Near Help now consume cast-time redirect tokens without invisibly retargeting: hidden carriers are suppressed so the authored visible-target fallback stays vanilla, preventing delayed native auto-face turns. Configuration schema 48; all 570 Core tests and release gates pass. Live current-client validation remains pending.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788087837"
+    "LastUpdate": "1788093684"
   }
 ]

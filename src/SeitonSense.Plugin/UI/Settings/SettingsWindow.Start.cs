@@ -45,7 +45,9 @@ internal sealed partial class SettingsWindow
         ImGui.TextDisabled(
             "Default off. After the complete local 10-player result is confirmed, Seiton Sense waits for FFXIV's " +
             "native leave-ready boundary and sends one normal, non-forced Leave Duty request. Public Crystalline " +
-            "Conflict only: never Wolves' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing.");
+            "Conflict only: never Wolves' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing. " +
+            "The intent waits up to 30 seconds. A later exact public-CC duty start rearms the helper, including on " +
+            "the same map.");
         ImGui.TextDisabled(crystallineConflictInstantLeave.Diagnostics.ToChatLine());
         ImGui.PopTextWrapPos();
 

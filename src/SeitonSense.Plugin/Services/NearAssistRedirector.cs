@@ -228,6 +228,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionSafetyLeaseState.Initial;
     private ArmedNearHelpTarget? armedHelpTarget;
     private NearHelpOneShotState nearHelpState = NearHelpOneShotState.Initial;
+    private ulong castedMacroRedirectGeneration;
     private ArmedFarHelpTarget? armedFarHelpTarget;
     private FarHelpOneShotState farHelpState = FarHelpOneShotState.Initial;
     private FarHelpFallbackSuppressionState farHelpFallbackSuppressionState =
@@ -1004,6 +1005,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 now + TokenLifetimeMilliseconds);
             lock (tokenGate)
             {
+                castedMacroRedirectGeneration++;
                 armedTarget = token;
                 oneShotState = nextOneShotState;
                 armedCount++;
@@ -1166,6 +1168,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 now + TokenLifetimeMilliseconds);
             lock (tokenGate)
             {
+                castedMacroRedirectGeneration++;
                 armedSmartTarget = token;
                 smartTargetArmedCount++;
                 smartTargetLastEnemySlot = 0;
@@ -1220,6 +1223,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 now + TokenLifetimeMilliseconds);
             lock (tokenGate)
             {
+                castedMacroRedirectGeneration++;
                 armedHelpTarget = token;
                 nearHelpState = nextState;
                 helpArmedCount++;
@@ -1313,6 +1317,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             now + TokenLifetimeMilliseconds);
         lock (tokenGate)
         {
+            castedMacroRedirectGeneration++;
             armedTarget = token;
             oneShotState = nextOneShotState;
             armedCount++;
@@ -1420,7 +1425,30 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var smartTargetTokenConsumed = false;
             var smartTargetOwnershipChanged = false;
             var smartToken = default(ArmedSmartTarget);
-            if (potentialSmartTargetToken is not null)
+            var castRedirectDecision = !bypassRedirect
+                ? TryConsumeCastedMacroRedirect(
+                    thisPtr,
+                    actionType,
+                    actionId,
+                    targetId,
+                    mode)
+                : CastedMacroRedirectDecision.NotApplicable;
+            var passingThroughWithoutRedirect =
+                CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                    castRedirectDecision);
+            if (castRedirectDecision != CastedMacroRedirectDecision.NotApplicable)
+            {
+                helperTokenConsumed = true;
+                potentialSmartTargetToken = null;
+                if (castRedirectDecision is
+                    CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget or
+                    CastedMacroRedirectDecision.SuppressStaleOwnership)
+                {
+                    return false;
+                }
+            }
+
+            if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)
             {
                 var smartTargetCallEligible = IsEligibleSmartActionRedirectAction(
                     thisPtr,
@@ -1447,7 +1475,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 }
             }
 
-            if (smartTargetOwnershipChanged)
+            if (passingThroughWithoutRedirect)
+            {
+                // Keep every action argument bit-for-bit. Native facing now
+                // follows only the user's authored/visible target, and a stale
+                // lifecycle claim cannot consume a newer helper generation.
+            }
+            else if (smartTargetOwnershipChanged)
             {
                 // Never let an older in-flight call steal or pass through a
                 // newer arm generation observed between the two token locks.
@@ -2025,6 +2059,299 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (clientAccepted && hasSmartKardiaPreflight)
             ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);
         return clientAccepted;
+    }
+
+    private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ulong authoredTargetId,
+        ActionManager.UseActionMode mode)
+    {
+        var claim = CaptureCastedMacroRedirectClaim();
+        if (!claim.IsValid)
+            return CastedMacroRedirectDecision.NotApplicable;
+
+        try
+        {
+            // A lifecycle update can lag this action hook by one framework
+            // tick. Never let an expired or context-invalid arm suppress a
+            // native action; retire only the exact stale claim we captured.
+            if (!IsLiveCastedMacroRedirectClaim(claim))
+            {
+                TryConsumeCastedMacroRedirectClaim(
+                    claim,
+                    CastedMacroRedirectDecision.PassThroughStaleLifecycle);
+                // Even if ownership changed while the lifecycle snapshot was
+                // checked, this older call must not enter a legacy redirect
+                // branch and consume the newer generation.
+                return CastedMacroRedirectDecision.PassThroughStaleLifecycle;
+            }
+
+            if (!IsPotentialMacroAction(actionType, mode))
+                return CastedMacroRedirectDecision.NotApplicable;
+
+            if (!IsEligibleCastedMacroRedirectAction(
+                    claim.Owner,
+                    actionManager,
+                    actionType,
+                    actionId,
+                    mode))
+            {
+                return CastedMacroRedirectDecision.NotApplicable;
+            }
+
+            var resolvedActionId = ResolveActionId(actionManager, actionType, actionId);
+            GameAction action = default;
+            var exactMetadata =
+                resolvedActionId != 0 &&
+                TryGetActionMetadata(
+                    actionType,
+                    actionId,
+                    resolvedActionId,
+                    out action);
+            var adjustedCastTime = resolvedActionId == 0
+                ? 0
+                : ActionManager.GetAdjustedCastTime(actionType, resolvedActionId);
+            var decision = CastedMacroRedirectRules.Evaluate(
+                redirectTokenArmed: true,
+                IsSupportedActionType(actionType),
+                exactMetadata,
+                adjustedCastTime,
+                exactMetadata ? action.Cast100ms : 0u,
+                IsExactCurrentHardTarget(authoredTargetId));
+            if (decision == CastedMacroRedirectDecision.NotApplicable)
+                return decision;
+
+            return TryConsumeCastedMacroRedirectClaim(claim, decision)
+                ? decision
+                : CastedMacroRedirectDecision.SuppressStaleOwnership;
+        }
+        catch (Exception exception)
+        {
+            var consumed = TryConsumeCastedMacroRedirectClaim(
+                claim,
+                CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget);
+            LogFailure(
+                exception,
+                consumed
+                    ? "Seiton Sense cast-time macro redirect preflight failed closed and consumed its exact token."
+                    : "Seiton Sense suppressed a stale cast-time macro call while preserving newer token ownership.");
+            return consumed
+                ? CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget
+                : CastedMacroRedirectDecision.SuppressStaleOwnership;
+        }
+    }
+
+    private bool IsLiveCastedMacroRedirectClaim(CastedMacroRedirectClaim claim)
+    {
+        var localPlayer = objectTable.LocalPlayer;
+        if (!configuration.Enabled ||
+            !clientState.IsLoggedIn ||
+            ResolveContext() != SupportedPvPContext.CrystallineConflict ||
+            !IsLivePlayer(localPlayer))
+        {
+            return false;
+        }
+
+        var now = Environment.TickCount64;
+        var territoryId = clientState.TerritoryType;
+        var local = localPlayer!;
+        return claim.Owner switch
+        {
+            CastedMacroRedirectOwner.SmartAction =>
+                configuration.EnableSmartActionMacro &&
+                claim.SmartTarget.ExpiresAtMilliseconds > now &&
+                claim.SmartTarget.TerritoryId == territoryId &&
+                claim.SmartTarget.LocalEntityId == local.EntityId &&
+                claim.SmartTarget.LocalGameObjectId == local.GameObjectId,
+            CastedMacroRedirectOwner.NearAssist =>
+                configuration.EnableNearAssistMacro &&
+                claim.NearAssistState.IsArmed &&
+                claim.NearAssist.ExpiresAtMilliseconds > now &&
+                claim.NearAssist.TerritoryId == territoryId &&
+                claim.NearAssist.LocalEntityId == local.EntityId &&
+                claim.NearAssist.LocalGameObjectId == local.GameObjectId,
+            CastedMacroRedirectOwner.NearHelp =>
+                configuration.EnableNearAssistMacro &&
+                claim.NearHelpState.IsArmed &&
+                claim.NearHelp.ExpiresAtMilliseconds > now &&
+                claim.NearHelp.TerritoryId == territoryId &&
+                claim.NearHelp.LocalEntityId == local.EntityId &&
+                claim.NearHelp.LocalGameObjectId == local.GameObjectId,
+            _ => false,
+        };
+    }
+
+    private CastedMacroRedirectClaim CaptureCastedMacroRedirectClaim()
+    {
+        lock (tokenGate)
+        {
+            if (armedSmartTarget is { } smartTarget)
+            {
+                return new CastedMacroRedirectClaim(
+                    CastedMacroRedirectOwner.SmartAction,
+                    smartTarget,
+                    default,
+                    default,
+                    default,
+                    default,
+                    castedMacroRedirectGeneration);
+            }
+
+            if (armedTarget is { } nearAssist && oneShotState.IsArmed)
+            {
+                return new CastedMacroRedirectClaim(
+                    CastedMacroRedirectOwner.NearAssist,
+                    default,
+                    nearAssist,
+                    oneShotState,
+                    default,
+                    default,
+                    castedMacroRedirectGeneration);
+            }
+
+            if (armedHelpTarget is { } nearHelp && nearHelpState.IsArmed)
+            {
+                return new CastedMacroRedirectClaim(
+                    CastedMacroRedirectOwner.NearHelp,
+                    default,
+                    default,
+                    default,
+                    nearHelp,
+                    nearHelpState,
+                    castedMacroRedirectGeneration);
+            }
+
+            return default;
+        }
+    }
+
+    private bool IsEligibleCastedMacroRedirectAction(
+        CastedMacroRedirectOwner owner,
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint actionId,
+        ActionManager.UseActionMode mode) =>
+        owner switch
+        {
+            CastedMacroRedirectOwner.SmartAction =>
+                IsEligibleSmartActionRedirectAction(
+                    actionManager,
+                    actionType,
+                    actionId,
+                    mode),
+            CastedMacroRedirectOwner.NearAssist =>
+                IsEligibleRedirectAction(actionManager, actionType, actionId, mode),
+            CastedMacroRedirectOwner.NearHelp =>
+                IsEligibleHelpAction(actionManager, actionType, actionId, mode),
+            _ => false,
+        };
+
+    private bool TryConsumeCastedMacroRedirectClaim(
+        CastedMacroRedirectClaim claim,
+        CastedMacroRedirectDecision decision)
+    {
+        lock (tokenGate)
+        {
+            if (claim.Generation != castedMacroRedirectGeneration)
+            {
+                RecordTraceLocked(
+                    "stale cast redirect suppressed; newer token generation preserved");
+                return false;
+            }
+
+            switch (claim.Owner)
+            {
+                case CastedMacroRedirectOwner.SmartAction
+                    when armedSmartTarget is { } smartTarget &&
+                         smartTarget.Equals(claim.SmartTarget):
+                    armedSmartTarget = null;
+                    smartTargetLastEnemySlot = 0;
+                    smartTargetLastEvent = FormatCastedMacroRedirectEvent(
+                        decision,
+                        "Smart Action");
+                    break;
+                case CastedMacroRedirectOwner.NearAssist
+                    when armedTarget is { } nearAssist &&
+                         nearAssist.Equals(claim.NearAssist) &&
+                         oneShotState.Equals(claim.NearAssistState):
+                    armedTarget = null;
+                    oneShotState = NearAssistOneShotState.Initial;
+                    lastEvent = FormatCastedMacroRedirectEvent(
+                        decision,
+                        "Near Assist");
+                    break;
+                case CastedMacroRedirectOwner.NearHelp
+                    when armedHelpTarget is { } nearHelp &&
+                         nearHelp.Equals(claim.NearHelp) &&
+                         nearHelpState.Equals(claim.NearHelpState):
+                    armedHelpTarget = null;
+                    nearHelpState = NearHelpOneShotState.Initial;
+                    helpLastEvent = FormatCastedMacroRedirectEvent(
+                        decision,
+                        "Near Help");
+                    break;
+                default:
+                    RecordTraceLocked(
+                        "stale cast redirect suppressed; newer token ownership preserved");
+                    return false;
+            }
+
+            RecordTraceLocked(decision switch
+            {
+                CastedMacroRedirectDecision.PreserveAuthoredTarget =>
+                    "cast redirect retired; authored target preserved",
+                CastedMacroRedirectDecision.PassThroughStaleLifecycle =>
+                    "cast redirect retired; stale lifecycle claim passed through",
+                _ => "cast redirect retired; hidden/missing carrier suppressed",
+            });
+            return true;
+        }
+    }
+
+    private static string FormatCastedMacroRedirectEvent(
+        CastedMacroRedirectDecision decision,
+        string owner) =>
+        decision switch
+        {
+            CastedMacroRedirectDecision.PreserveAuthoredTarget =>
+                $"Cast-time action kept its authored target; {owner} token consumed",
+            CastedMacroRedirectDecision.PassThroughStaleLifecycle =>
+                $"Stale {owner} token retired; native action preserved",
+            _ => $"Cast-time hidden/missing carrier suppressed; {owner} token consumed",
+        };
+
+    private bool IsExactCurrentHardTarget(ulong authoredTargetId)
+    {
+        if (!IsNetworkObjectId(authoredTargetId)) return false;
+
+        var local = objectTable.LocalPlayer;
+        if (!IsLivePlayer(local)) return false;
+        var hardTargetId = GetNativeHardTargetId(local!);
+        if (!IsNetworkObjectId(hardTargetId)) return false;
+        if (hardTargetId == authoredTargetId) return true;
+
+        var hardTarget = ResolvePlayerByNativeId(hardTargetId);
+        var authoredTarget = ResolvePlayerByNativeId(authoredTargetId);
+        return HasSameNativeIdentity(hardTarget, authoredTarget);
+    }
+
+    private IPlayerCharacter? ResolvePlayerByNativeId(ulong nativeId)
+    {
+        if (!IsNetworkObjectId(nativeId)) return null;
+
+        var byObjectId = objectTable.SearchById(nativeId) as IPlayerCharacter;
+        var byEntityId = nativeId <= uint.MaxValue
+            ? objectTable.SearchByEntityId((uint)nativeId) as IPlayerCharacter
+            : null;
+        if (byObjectId is not null && byEntityId is not null &&
+            !HasSameNativeIdentity(byObjectId, byEntityId))
+        {
+            return null;
+        }
+
+        return byObjectId ?? byEntityId;
     }
 
     private PredictiveCcBrakeBypassIntent? TryConsumePredictiveCcBrakeBypass(
@@ -4432,6 +4759,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     {
         lock (tokenGate)
         {
+            // Clearing ownership is itself a generation boundary. This makes a
+            // concurrently captured claim stale even when no replacement arm
+            // has been installed yet.
+            castedMacroRedirectGeneration++;
             var hadToken = armedTarget is not null || oneShotState.IsArmed ||
                            armedSmartTarget is not null ||
                            smartActionSafetyLeaseState.IsArmed ||
@@ -4949,4 +5280,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint CarrierEntityId,
         ulong CarrierGameObjectId,
         long ExpiresAtMilliseconds);
+
+    private enum CastedMacroRedirectOwner : byte
+    {
+        None,
+        SmartAction,
+        NearAssist,
+        NearHelp,
+    }
+
+    private readonly record struct CastedMacroRedirectClaim(
+        CastedMacroRedirectOwner Owner,
+        ArmedSmartTarget SmartTarget,
+        ArmedNearAssistTarget NearAssist,
+        NearAssistOneShotState NearAssistState,
+        ArmedNearHelpTarget NearHelp,
+        NearHelpOneShotState NearHelpState,
+        ulong Generation)
+    {
+        internal bool IsValid => Owner != CastedMacroRedirectOwner.None;
+    }
 }

@@ -69,6 +69,11 @@ internal sealed partial class SettingsWindow
                 "invalidates that carrier and leaves the following <t> line as the only fallback. It never visibly " +
                 "changes your target, retries, reranks after commitment, or sends an action by itself. /ssaction is " +
                 "the collision-free alias.");
+            ImGui.TextDisabled(
+                "Cast-time actions are never invisibly redirected. A hidden <e1>/<2> carrier is suppressed, consumes " +
+                "the one-shot token, and lets the following authored <t> fallback use your visible target; a direct " +
+                "<t> cast remains vanilla. Instant actions keep Smart Action targeting. This avoids FFXIV's delayed " +
+                "native auto-face turning you toward a hidden target after you manually switch targets.");
             ImGui.PopTextWrapPos();
         }
 

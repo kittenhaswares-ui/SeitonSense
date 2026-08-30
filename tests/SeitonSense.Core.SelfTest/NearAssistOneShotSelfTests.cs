@@ -83,6 +83,59 @@ internal static class NearAssistOneShotSelfTests
             Arm(),
             ValidAttempt() with { IsSupportedActionMode = false });
         ConsumedFallback(mode, NearAssistOneShotReason.UnsupportedActionMode, "unsupported mode");
+
+        Equal(
+            CastedMacroRedirectDecision.PreserveAuthoredTarget,
+            CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, true),
+            "adjusted cast keeps authored target");
+        Equal(
+            CastedMacroRedirectDecision.PreserveAuthoredTarget,
+            CastedMacroRedirectRules.Evaluate(true, true, true, 0, 15, true),
+            "base cast metadata keeps authored target when adjusted timing is ambiguous");
+        Equal(
+            CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget,
+            CastedMacroRedirectRules.Evaluate(true, true, true, 1_500, 15, false),
+            "cast with hidden or missing target suppresses");
+        Equal(
+            CastedMacroRedirectDecision.NotApplicable,
+            CastedMacroRedirectRules.Evaluate(true, true, true, 0, 0, true),
+            "instant action keeps redirect path");
+        Equal(
+            CastedMacroRedirectDecision.NotApplicable,
+            CastedMacroRedirectRules.Evaluate(false, true, true, 1_500, 15, true),
+            "cast cannot consume a missing token");
+        Equal(
+            CastedMacroRedirectDecision.NotApplicable,
+            CastedMacroRedirectRules.Evaluate(true, false, true, 1_500, 15, true),
+            "unsupported action type cannot consume cast token");
+        Equal(
+            CastedMacroRedirectDecision.NotApplicable,
+            CastedMacroRedirectRules.Evaluate(true, true, false, 0, 15, true),
+            "unverified base cast metadata cannot prove a cast");
+        Equal(
+            CastedMacroRedirectDecision.PreserveAuthoredTarget,
+            CastedMacroRedirectRules.Evaluate(true, true, false, 1_500, 0, true),
+            "adjusted cast time independently proves a cast");
+        True(
+            CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                CastedMacroRedirectDecision.PassThroughStaleLifecycle),
+            "stale lifecycle disposition bypasses every legacy redirect");
+        True(
+            CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                CastedMacroRedirectDecision.PreserveAuthoredTarget),
+            "visible authored cast bypasses every legacy redirect");
+        False(
+            CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                CastedMacroRedirectDecision.NotApplicable),
+            "not-applicable cast classification keeps the normal redirect path");
+        False(
+            CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget),
+            "hidden cast suppression never passes through");
+        False(
+            CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
+                CastedMacroRedirectDecision.SuppressStaleOwnership),
+            "stale ownership suppression never passes through");
     }
 
     public static void NonMacroCallsDoNotStealTheToken()

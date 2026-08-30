@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.0";
+    private const string CurrentReleaseVersion = "0.42.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -366,6 +366,7 @@ public sealed class Plugin : IDalamudPlugin
             playerState,
             framework,
             condition,
+            dutyState,
             crystallineConflictMapStatistics,
             log);
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
@@ -402,10 +403,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New opt-in: instantly leave after a fully confirmed public Crystalline Conflict result so the loading transition can begin sooner.",
-                "It reuses the exact 10-player result capture, records local W/L first when enabled, then waits for FFXIV's own leave-ready signal.",
-                "Only one normal non-forced leave request is sent. Wolves' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.",
-                "The request has a 10-second safety window and never retries after the native call. All 570 Core tests and release gates pass; the live transition still needs an in-game match test.",
+                "Hotfix: instant leave now rearms for every later public Crystalline Conflict match, including consecutive matches on the same map.",
+                "A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch; zero or invalid lifecycle signals remain inert.",
+                "The native leave-ready window is now 30 seconds. Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.",
+                "Smart Action, Near Assist, and Near Help no longer invisibly redirect cast-time actions: hidden carriers are suppressed and the visible <t> fallback remains vanilla. All 570 Core tests and release gates pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.42.0.1
+
+- Fixed instant leave after the first successful match. Both reported match
+  results reached the exact result validator, but a fast loading transition
+  could skip every framework frame that previously cleared the spent one-shot
+  latch. A different nonzero `TerritoryChanged` event now closes that old context, and
+  the next exact public-CC `DutyStarted` event is a same-map backstop. Zero,
+  non-PvP, non-public, and identity-unknown lifecycle signals remain inert.
+- Extended the exact native leave-ready polling window from 10 to 30 seconds.
+  The result, public territory, local identity, area-transition, option, and
+  native-boundary checks still run on every frame. Each result reserves at most
+  one normal `LeaveCurrentContent(false)` request; the void call is never
+  retried and no match is queued.
+- Added concise lifecycle diagnostics for arm, duplicate, request, cancellation,
+  exit, and reset events. This distinguishes a future native-readiness timeout
+  from a stale match latch without continuously scanning game files.
+- Smart Action, Near Assist, and Near Help no longer invisibly redirect actions
+  with a proven adjusted or base cast time. A hidden macro carrier is consumed
+  and suppressed so the following visible `<t>` fallback remains vanilla; a
+  direct cast already authored on the exact current hard target passes through
+  unchanged. Instant actions retain the existing smart redirect behavior. This
+  avoids delayed native auto-facing toward a hidden target after a manual target
+  switch without adding a rotation or FaceTarget hook.
+- Configuration schema remains `48`. Source build, all `570` Core tests, safety,
+  package parity, and release verification are automated. Consecutive live
+  match exit and cast-facing behavior remain current-client validation points.
+
 ## 0.42.0.0
 
 - Added a separate default-off **instant leave after public Crystalline

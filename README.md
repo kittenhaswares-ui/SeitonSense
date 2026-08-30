@@ -3,12 +3,16 @@
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
 assistance, and target highlights. Version 0.42.0.0 adds a separate default-off
-instant-leave option for completed public Crystalline Conflict matches. It
-reuses the exact complete 10-player result proof, attempts enabled local W/L
-persistence first, waits for FFXIV's native leave-ready boundary, and sends one
-normal non-forced leave request within a ten-second safety window. It never
-applies in Wolves' Den, custom CC, Frontline, or Rival Wings and never queues a
-new match. Version 0.41.0.0 makes automatic Purify and
+instant-leave option for completed public Crystalline Conflict matches. Version
+0.42.0.1 fixes its consecutive-match lifecycle: a nonzero territory change or
+the next exact public-CC duty start clears only the spent previous-match latch,
+including when the next match uses the same map, and the native-ready window is
+now 30 seconds. It also keeps cast-time Smart Action, Near Assist, and Near Help
+on the visible authored target: hidden carriers are suppressed so FFXIV cannot
+later auto-face a stale invisible redirect after a manual target switch. Instant
+actions retain smart targeting. Wolves' Den, custom CC, Frontline, and Rival
+Wings remain excluded from instant leave, and it never queues a new match.
+Version 0.41.0.0 makes automatic Purify and
 Recuperate retain their exact episode through temporary native blocks and retry
 only inside the original bounded window after every safety recheck. High-
 pressure Stun Auto-Guard is now keyless and confirmed-only: one readiness-proven
@@ -89,9 +93,12 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Optional instant public-CC exit:** after one complete public 5v5 result with
   the exact local Content ID is confirmed, the default-off helper waits for
   FFXIV to report that the current content can be left and sends one normal,
-  non-forced leave request. The intent expires after ten seconds and cancels on
+  non-forced leave request. The intent expires after 30 seconds and cancels on
   context, territory, identity, transition, toggle, or native-boundary drift;
   the void request is never retried. Local W/L is attempted first when enabled.
+  A different nonzero territory or the next exact public-CC duty start rearms
+  later matches, including consecutive matches on the same map; zero and invalid
+  lifecycle signals remain inert.
   There is no custom/Wolves' Den/Frontline/Rival Wings path and no auto-queue.
 - **Local CC rotation panel:** while in Wolves' Den Pier, one larger movable and
   lockable current-map card shows the Patch 7.5 map, live countdown, local FFXIV
@@ -1419,6 +1426,15 @@ recommended authored shape is:
 /pvpac "Ability" <t>
 ```
 
+Cast-time actions are deliberately not invisibly redirected. If the first
+`<e1>` carrier has a proven adjusted or base cast time and is not the exact
+current visible hard target, Seiton consumes and suppresses that carrier so the
+following `<t>` line executes normally. A direct `<t>` cast already matching the
+current hard target passes through unchanged. This avoids FFXIV's delayed native
+auto-face turning the character toward a hidden target after a fast manual
+target switch. Instant actions keep the full Smart Action selection described
+below. The same cast policy applies to Near Assist and Near Help.
+
 No selected target is required. Arming performs no `S1`-`S5` scan and has no
 hard-target or live-`S1` prerequisite; `<t>` is only the user-authored fallback
 when the carrier is deliberately invalidated. At action time, Smart Action resolves
@@ -1891,7 +1907,8 @@ update through the same repository.
   FFXIV's normal forward world-target cycle
 - `/sstarget [on|off|toggle]` - collision-free alias for `/smarttab`
 - `/smartaction` - arm one optional CC-only 750 ms harmful-action target redirect;
-  the authored `<t>` line remains the only fallback
+  instant actions use the Smart Target, while cast-time hidden carriers are
+  suppressed so the authored visible `<t>` line stays vanilla
 - `/ssaction` - collision-free alias for `/smartaction`
 - `/autoseiton [on|off|toggle]` - change whether the held-key NIN Auto-Seiton
   helper is available; ON still requires continuous physical held-key consent
@@ -2203,7 +2220,8 @@ hard-target setter/readback, and no retry or alternate. They additionally pin on
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
 paths. Smart Action remains a separate one-shot harmful-action macro contract.
-Its checks now pin target-independent arming, selection with `S1` absent,
+Its checks now pin target-independent arming, cast-time hidden-carrier
+suppression with visible-target pass-through, selection with `S1` absent,
 shape-scoped caller-proven target protection safety, exact Chiten,
 Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact
 resolved-action English metadata gate for Guard-ignoring damage, conservative

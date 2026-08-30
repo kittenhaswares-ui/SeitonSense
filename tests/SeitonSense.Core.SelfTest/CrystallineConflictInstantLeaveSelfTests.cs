@@ -73,7 +73,7 @@ internal static class CrystallineConflictInstantLeaveSelfTests
                      (true, true, true, 250u, 1003ul, 1_000L, 1_000L),
                      (true, true, true, 1293u, 0ul, 1_000L, 1_000L),
                      (true, true, true, 1293u, 1003ul, 1_001L, 1_000L),
-                     (true, true, true, 1293u, 1003ul, 1_000L, 11_001L),
+                     (true, true, true, 1293u, 1003ul, 1_000L, 31_001L),
                  })
         {
             var result = CrystallineConflictInstantLeaveRules.ObserveConfirmedResult(
@@ -110,7 +110,7 @@ internal static class CrystallineConflictInstantLeaveSelfTests
         var state = Arm().State;
         var unavailable = Evaluate(state, canLeave: true, nativeAvailable: false);
         Equal(CrystallineConflictInstantLeavePhase.Cancelled, unavailable.State.Phase, "unavailable cancels");
-        var expired = Evaluate(state, canLeave: true, now: 11_001);
+        var expired = Evaluate(state, canLeave: true, now: 31_001);
         Equal(CrystallineConflictInstantLeaveReason.ResultExpired, expired.Reason, "expired result cancels");
 
         var reserved = Evaluate(state, canLeave: true).State;
@@ -118,14 +118,33 @@ internal static class CrystallineConflictInstantLeaveSelfTests
         Equal(CrystallineConflictInstantLeavePhase.Cancelled, faulted.Phase, "native fault is terminal");
         var noRetry = Evaluate(faulted, canLeave: true);
         Equal(CrystallineConflictInstantLeaveDecision.None, noRetry.Decision, "fault never retries");
+        var faultReset = CrystallineConflictInstantLeaveRules.ObserveDutyStarted(
+            faulted,
+            true,
+            1293,
+            1003);
+        Equal(CrystallineConflictInstantLeaveDecision.ContextReset, faultReset.Decision, "new duty resets cancelled context");
+        False(faultReset.State.ContextSpent, "cancelled context becomes idle");
     }
 
     public static void ContextExitConfirmsAndRearmsOnlyANewMatch()
     {
         var requested = Evaluate(Arm().State, canLeave: true).State;
-        var confirmed = Evaluate(requested, canLeave: false, livePvp: false, betweenAreas: true);
-        Equal(CrystallineConflictInstantLeaveDecision.ExitConfirmed, confirmed.Decision, "context exit confirms");
-        False(confirmed.State.ContextSpent, "exit resets context latch");
+        var zeroTerritory = CrystallineConflictInstantLeaveRules.ObserveTerritoryChanged(requested, 0);
+        Equal(CrystallineConflictInstantLeaveDecision.None, zeroTerritory.Decision, "zero territory is ambiguous");
+        True(zeroTerritory.State.ContextSpent, "zero territory preserves spent latch");
+        var sameTerritory = CrystallineConflictInstantLeaveRules.ObserveTerritoryChanged(requested, 1293);
+        Equal(CrystallineConflictInstantLeaveDecision.None, sameTerritory.Decision, "same territory is not an exit");
+        var unrelatedDuty = CrystallineConflictInstantLeaveRules.ObserveDutyStarted(
+            requested,
+            true,
+            250,
+            1003);
+        Equal(CrystallineConflictInstantLeaveDecision.None, unrelatedDuty.Decision, "non-CC duty cannot rearm");
+
+        var confirmed = CrystallineConflictInstantLeaveRules.ObserveTerritoryChanged(requested, 250);
+        Equal(CrystallineConflictInstantLeaveDecision.ExitConfirmed, confirmed.Decision, "territory event confirms exit");
+        False(confirmed.State.ContextSpent, "territory event resets context latch");
 
         var next = CrystallineConflictInstantLeaveRules.ObserveConfirmedResult(
             confirmed.State,
@@ -137,6 +156,55 @@ internal static class CrystallineConflictInstantLeaveSelfTests
             2_000,
             2_000);
         Equal(CrystallineConflictInstantLeaveDecision.Armed, next.Decision, "new public match can arm");
+
+        var sameMapRequested = Evaluate(next.State, canLeave: true, territory: 1032, now: 2_100).State;
+        var nextDuty = CrystallineConflictInstantLeaveRules.ObserveDutyStarted(
+            sameMapRequested,
+            true,
+            1032,
+            1003);
+        Equal(CrystallineConflictInstantLeaveDecision.ExitConfirmed, nextDuty.Decision, "next public duty rearms without loading frames");
+        False(nextDuty.State.ContextSpent, "same-map duty start resets spent latch");
+        var sameMapResult = CrystallineConflictInstantLeaveRules.ObserveConfirmedResult(
+            nextDuty.State,
+            true,
+            true,
+            true,
+            1032,
+            1003,
+            3_000,
+            3_000);
+        Equal(CrystallineConflictInstantLeaveDecision.Armed, sameMapResult.Decision, "same-map second result can arm");
+        var sameMapLeave = Evaluate(
+            sameMapResult.State,
+            canLeave: true,
+            territory: 1032,
+            now: 3_100);
+        Equal(CrystallineConflictInstantLeaveDecision.RequestLeave, sameMapLeave.Decision, "same-map second match leaves");
+        var sameMapNoRepeat = Evaluate(
+            sameMapLeave.State,
+            canLeave: true,
+            territory: 1032,
+            now: 3_200);
+        Equal(CrystallineConflictInstantLeaveDecision.None, sameMapNoRepeat.Decision, "same-map second match leaves once");
+
+        foreach (var invalid in new (bool Pvp, uint Territory, ulong Content)[]
+                 {
+                     (false, 1032u, 1003ul),
+                     (true, 0u, 1003ul),
+                     (true, 250u, 1003ul),
+                     (true, 1294u, 1003ul),
+                     (true, 1032u, 0ul),
+                 })
+        {
+            var ignored = CrystallineConflictInstantLeaveRules.ObserveDutyStarted(
+                sameMapRequested,
+                invalid.Pvp,
+                invalid.Territory,
+                invalid.Content);
+            Equal(CrystallineConflictInstantLeaveDecision.None, ignored.Decision, "invalid duty start cannot rearm");
+            Equal(sameMapRequested, ignored.State, "invalid duty start preserves spent context");
+        }
     }
 
     public static void ResultObservationIsIndependentFromMapStatistics()

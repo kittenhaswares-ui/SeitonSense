@@ -240,6 +240,8 @@ $smartTargetSelectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartTargetSel
 $smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRules.cs'
 $smartActionGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionGuardBypassRules.cs'
 $smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
+$castedMacroRedirectRulesPath = Join-Path $coreRoot 'CastedMacroRedirectRules.cs'
+$nearAssistOneShotSelfTestsPath = Join-Path $coreSelfTestRoot 'NearAssistOneShotSelfTests.cs'
 $smartActionProtectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionProtectionSelfTests.cs'
 $smartActionSafetyLeaseSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionSafetyLeaseSelfTests.cs'
 $samuraiReactiveMetadataGuardPath = Join-Path $pluginServicesRoot 'SamuraiReactiveMetadataGuard.cs'
@@ -862,7 +864,7 @@ if ([regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictMapStatis
     throw 'Local CC map statistics must retain all six pure fail-closed Core tests.'
 }
 Assert-Literals $crystallineConflictInstantLeaveRules @(
-    'public const long MaximumResultAgeMilliseconds = 10_000;',
+    'public const long MaximumResultAgeMilliseconds = 30_000;',
     'pluginEnabled && (mapStatisticsEnabled || instantLeaveEnabled);',
     '!PvPMatchRules.IsPublicCrystallineConflictTerritory(capturedTerritoryId)',
     'capturedLocalContentId == 0',
@@ -882,19 +884,35 @@ Assert-Literals $crystallineConflictInstantLeaveRules @(
     'if (!canLeaveCurrentContent)',
     'Phase = CrystallineConflictInstantLeavePhase.LeaveRequested',
     'CrystallineConflictInstantLeaveDecision.RequestLeave',
+    'public static CrystallineConflictInstantLeaveTransition ObserveTerritoryChanged(',
+    'territoryId == 0 || territoryId == state.TerritoryId',
+    'public static CrystallineConflictInstantLeaveTransition ObserveDutyStarted(',
+    '!liveIsPvpExcludingWolvesDen',
+    '!PvPMatchRules.IsPublicCrystallineConflictTerritory(liveTerritoryId)',
+    'liveLocalContentId == 0',
+    'return ResetSpentContext(state);',
     'public static CrystallineConflictInstantLeaveState MarkNativeCallFailed('
-) 'Exact public-CC, ten-second, reserve-before-void instant-leave policy'
+) 'Exact public-CC, thirty-second, lifecycle-rearmed, reserve-before-void instant-leave policy'
 $normalizedCrystallineConflictInstantLeaveRules =
     $crystallineConflictInstantLeaveRules -replace '\s+', ' '
 if ($normalizedCrystallineConflictInstantLeaveRules -notmatch
         'if \(!exactResultConfirmed \|\| !capturedIsPvpExcludingWolvesDen \|\| !PvPMatchRules\.IsPublicCrystallineConflictTerritory\(capturedTerritoryId\) \|\| capturedLocalContentId == 0 \|\| capturedAtMilliseconds < 0 \|\| capturedAtMilliseconds > long\.MaxValue - MaximumResultAgeMilliseconds \|\| capturedAtMilliseconds > nowMilliseconds \|\| nowMilliseconds - capturedAtMilliseconds > MaximumResultAgeMilliseconds\).*?InvalidResultBoundary.*?if \(state\.ContextSpent\).*?DuplicateIgnored.*?var armed = new CrystallineConflictInstantLeaveState\( CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary,.*?capturedAtMilliseconds \+ MaximumResultAgeMilliseconds, true\);.*?CrystallineConflictInstantLeaveDecision\.Armed' -or
     $normalizedCrystallineConflictInstantLeaveRules -notmatch
-        'var confirmedContextExit = betweenAreas \|\| \(liveTerritoryId != 0 && liveTerritoryId != state\.TerritoryId\) \|\| \(liveLocalContentId != 0 && liveLocalContentId != state\.LocalContentId\); if \(state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested\) \{ if \(confirmedContextExit\).*?CrystallineConflictInstantLeaveDecision\.None, CrystallineConflictInstantLeaveReason\.LeaveReserved.*?if \(state\.Phase == CrystallineConflictInstantLeavePhase\.Cancelled\) \{ if \(confirmedContextExit\).*?CrystallineConflictInstantLeaveDecision\.ContextReset.*?if \(state\.Phase != CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary\).*?if \(!enabled\).*?FeatureDisabled.*?if \(betweenAreas\).*?TransitionStarted.*?if \(!exactLiveContext\).*?ContextDrift.*?if \(nowMilliseconds > state\.ExpiresAtMilliseconds\).*?ResultExpired.*?if \(!nativeBoundaryAvailable\).*?NativeBoundaryUnavailable.*?if \(!canLeaveCurrentContent\).*?CrystallineConflictInstantLeaveDecision\.Waiting.*?var reserved = state with.*?Phase = CrystallineConflictInstantLeavePhase\.LeaveRequested.*?CrystallineConflictInstantLeaveDecision\.RequestLeave') {
-    throw 'Instant CC leave must arm only from one exact fresh result, wait only inside the frozen ten-second context, reserve before the void request, preserve its spent latch across ambiguous zero/flicker telemetry, and never retry a requested or cancelled context.'
+        'var confirmedContextExit = betweenAreas \|\| \(liveTerritoryId != 0 && liveTerritoryId != state\.TerritoryId\) \|\| \(liveLocalContentId != 0 && liveLocalContentId != state\.LocalContentId\); if \(state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?CrystallineConflictInstantLeaveDecision\.None, CrystallineConflictInstantLeaveReason\.LeaveReserved.*?if \(state\.Phase == CrystallineConflictInstantLeavePhase\.Cancelled\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?if \(state\.Phase != CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary\).*?if \(!enabled\).*?FeatureDisabled.*?if \(betweenAreas\).*?TransitionStarted.*?if \(!exactLiveContext\).*?ContextDrift.*?if \(nowMilliseconds > state\.ExpiresAtMilliseconds\).*?ResultExpired.*?if \(!nativeBoundaryAvailable\).*?NativeBoundaryUnavailable.*?if \(!canLeaveCurrentContent\).*?CrystallineConflictInstantLeaveDecision\.Waiting.*?var reserved = state with.*?Phase = CrystallineConflictInstantLeavePhase\.LeaveRequested.*?CrystallineConflictInstantLeaveDecision\.RequestLeave' -or
+    $normalizedCrystallineConflictInstantLeaveRules -notmatch
+        'ObserveTerritoryChanged\(.*?if \(!state\.ContextSpent \|\| territoryId == 0 \|\| territoryId == state\.TerritoryId\).*?return ResetSpentContext\(state\);.*?ObserveDutyStarted\(.*?if \(!state\.ContextSpent \|\| !liveIsPvpExcludingWolvesDen \|\| !PvPMatchRules\.IsPublicCrystallineConflictTerritory\(liveTerritoryId\) \|\| liveLocalContentId == 0\).*?return ResetSpentContext\(state\);' -or
+    [regex]::Matches($crystallineConflictInstantLeaveRules, 'return ResetSpentContext\(state\);').Count -ne 4 -or
+    $normalizedCrystallineConflictInstantLeaveRules -notmatch
+        'private static CrystallineConflictInstantLeaveTransition ResetSpentContext\(.*?var requested = state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested;.*?CrystallineConflictInstantLeaveState\.Idle, requested \? CrystallineConflictInstantLeaveDecision\.ExitConfirmed : CrystallineConflictInstantLeaveDecision\.ContextReset, requested \? CrystallineConflictInstantLeaveReason\.ExitConfirmed : CrystallineConflictInstantLeaveReason\.ContextReset\);') {
+    throw 'Instant CC leave must arm only from one exact fresh result, wait only inside the frozen thirty-second context, reserve before the void request, preserve its spent latch across ambiguous zero/flicker telemetry, rearm only from an authoritative lifecycle event, and never retry a requested or cancelled context.'
 }
 Assert-Literals $crystallineConflictInstantLeaveService @(
     'resultCapture.ConfirmedResult += OnConfirmedResult;',
     'resultCapture.ConfirmedResult -= OnConfirmedResult;',
+    'clientState.TerritoryChanged += OnTerritoryChanged;',
+    'clientState.TerritoryChanged -= OnTerritoryChanged;',
+    'dutyState.DutyStarted += OnDutyStarted;',
+    'dutyState.DutyStarted -= OnDutyStarted;',
     'condition[ConditionFlag.BetweenAreas]',
     'condition[ConditionFlag.BetweenAreas51]',
     'PvPMatchRules.IsPublicCrystallineConflictTerritory(liveTerritory)',
@@ -905,16 +923,33 @@ Assert-Literals $crystallineConflictInstantLeaveService @(
     'case CrystallineConflictInstantLeaveDecision.RequestLeave:',
     'EventFramework.LeaveCurrentContent(false);',
     'state = CrystallineConflictInstantLeaveRules.MarkNativeCallFailed(state);',
+    'CrystallineConflictInstantLeaveRules.ObserveTerritoryChanged(state, territoryId)',
+    'CrystallineConflictInstantLeaveRules.ObserveDutyStarted(',
+    'clientState.IsPvPExcludingDen,',
+    'playerState.ContentId),',
+    'result/request/exit/reset/duplicate/cancel/fault=',
     'configuration.EnableInstantLeaveAfterCrystallineConflict;'
-) 'Framework-thread normal-leave service and exact live-context revalidation'
+) 'Framework-thread normal-leave service, authoritative lifecycle rearm, and exact live-context revalidation'
 $normalizedCrystallineConflictInstantLeaveService =
     $crystallineConflictInstantLeaveService -replace '\s+', ' '
 if ([regex]::Matches($crystallineConflictInstantLeaveService, 'EventFramework\.CanLeaveCurrentContent\(\)').Count -ne 1 -or
     [regex]::Matches($crystallineConflictInstantLeaveService, 'EventFramework\.LeaveCurrentContent\(false\)').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'clientState\.TerritoryChanged \+= OnTerritoryChanged;').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'clientState\.TerritoryChanged -= OnTerritoryChanged;').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'dutyState\.DutyStarted \+= OnDutyStarted;').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'dutyState\.DutyStarted -= OnDutyStarted;').Count -ne 1 -or
     $crystallineConflictInstantLeaveService -match 'LeaveCurrentContent\(true\)|(?i:/leave)|\b(DutyCompleted|ExecuteCommand|FireCallback|HookFromAddress|HookFromSignature|ScanText)\b' -or
     $normalizedCrystallineConflictInstantLeaveService -notmatch
-        'if \(state\.Phase == CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary && enabled && exactLiveContext && !betweenAreas && now <= state\.ExpiresAtMilliseconds\).*?canLeaveCurrentContent = EventFramework\.CanLeaveCurrentContent\(\);.*?var transition = CrystallineConflictInstantLeaveRules\.Evaluate\(.*?state = transition\.State; switch \(transition\.Decision\).*?case CrystallineConflictInstantLeaveDecision\.RequestLeave:.*?EventFramework\.LeaveCurrentContent\(false\);.*?catch \(Exception exception\).*?state = CrystallineConflictInstantLeaveRules\.MarkNativeCallFailed\(state\);') {
+        'if \(state\.Phase == CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary && enabled && exactLiveContext && !betweenAreas && now <= state\.ExpiresAtMilliseconds\).*?canLeaveCurrentContent = EventFramework\.CanLeaveCurrentContent\(\);.*?var transition = CrystallineConflictInstantLeaveRules\.Evaluate\(.*?state = transition\.State; switch \(transition\.Decision\).*?case CrystallineConflictInstantLeaveDecision\.RequestLeave:.*?EventFramework\.LeaveCurrentContent\(false\);.*?catch \(Exception exception\).*?state = CrystallineConflictInstantLeaveRules\.MarkNativeCallFailed\(state\);' -or
+    $normalizedCrystallineConflictInstantLeaveService -notmatch
+        'private void OnTerritoryChanged\(uint territoryId\).*?ApplyLifecycleTransition\( CrystallineConflictInstantLeaveRules\.ObserveTerritoryChanged\(state, territoryId\), "territory change"\);.*?private void OnDutyStarted\(IDutyStateEventArgs _\).*?ApplyLifecycleTransition\( CrystallineConflictInstantLeaveRules\.ObserveDutyStarted\( state, clientState\.IsPvPExcludingDen, clientState\.TerritoryType, playerState\.ContentId\), "public CC duty start"\);') {
     throw 'Instant CC leave must query the reviewed native readiness API only inside the exact live lease, reserve policy state first, issue one non-forced request, and expose no forced/chat/UI/hook fallback.'
+}
+if ([regex]::Matches($crystallineConflictInstantLeaveService, 'confirmedExitCount\+\+;').Count -ne 2 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'lifecycleResetCount\+\+;').Count -ne 2 -or
+    $normalizedCrystallineConflictInstantLeaveService -notmatch
+        'case CrystallineConflictInstantLeaveDecision\.ExitConfirmed: confirmedExitCount\+\+;.*?case CrystallineConflictInstantLeaveDecision\.ContextReset: lifecycleResetCount\+\+;') {
+    throw 'Instant CC leave diagnostics must count confirmed requested exits and non-requested lifecycle resets exclusively.'
 }
 Assert-Literals $crystallineConflictInstantLeaveSelfTests @(
     'public static void ExactResultReservesExactlyOneLeaveRequest()',
@@ -930,8 +965,20 @@ Assert-Literals $crystallineConflictInstantLeaveSelfTests @(
     '"unknown telemetry preserves request latch"',
     '"unknown telemetry cannot reopen the match context"',
     '"unknown telemetry cannot permit a second request"',
-    '"context exit confirms"'
-) 'Ambiguous-zero latch retention and confirmed-context-exit tests'
+    '"zero territory is ambiguous"',
+    '"zero territory preserves spent latch"',
+    '"same territory is not an exit"',
+    '"non-CC duty cannot rearm"',
+    '"territory event confirms exit"',
+    '"next public duty rearms without loading frames"',
+    '"same-map second result can arm"',
+    '"same-map second match leaves"',
+    '"same-map second match leaves once"',
+    '"new duty resets cancelled context"',
+    '"cancelled context becomes idle"',
+    '"invalid duty start cannot rearm"',
+    '"invalid duty start preserves spent context"'
+) 'Ambiguous-zero latch retention and authoritative consecutive-match lifecycle tests'
 if ([regex]::Matches($crystallineConflictInstantLeaveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
     [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictInstantLeaveSelfTests\.\w+').Count -ne 8) {
     throw 'Instant CC leave must retain exactly eight registered pure Core tests.'
@@ -1050,7 +1097,7 @@ Assert-Literals $pluginSource @(
     'windowSystem.AddWindow(wolvesDenRotationWindow);'
 ) 'Local range, rotation deck, shared map-result capture, and instant-leave wiring'
 if ($normalizedPluginForIntegratedInput -notmatch
-        'new CrystallineConflictMapStatisticsService\(.*?\(\) => configuration\.Enabled, \(\) => configuration\.EnableLocalCrystallineConflictMapStatisticsCapture, \(\) => configuration\.EnableInstantLeaveAfterCrystallineConflict\); crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService\(.*?crystallineConflictMapStatistics, log\);' -or
+        'new CrystallineConflictMapStatisticsService\(.*?\(\) => configuration\.Enabled, \(\) => configuration\.EnableLocalCrystallineConflictMapStatisticsCapture, \(\) => configuration\.EnableInstantLeaveAfterCrystallineConflict\); crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService\(.*?condition, dutyState, crystallineConflictMapStatistics, log\);' -or
     $normalizedPluginForIntegratedInput -notmatch
         'crystallineConflictInstantLeave\.Dispose\(\); crystallineConflictMapStatistics\.Dispose\(\);' -or
     $normalizedPluginForIntegratedInput -match
@@ -1075,7 +1122,10 @@ Assert-Literals $settingsWindow @(
     'complete local 10-player result is confirmed',
     'native leave-ready boundary',
     'one normal, non-forced Leave Duty request',
-    'never Wolves'' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing.'
+    'never Wolves'' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing.',
+    'The intent waits up to 30 seconds.',
+    'A later exact public-CC duty start rearms the helper, including on',
+    'the same map.'
 ) 'Default-off exact-public-CC instant-leave settings disclosure'
 if ($settingsWindow -match 'WolvesDenRotationPanelExpanded|Keep map order and calibration expanded') {
     throw 'The retired rotation-deck expansion switch must not remain in settings.'
@@ -7753,6 +7803,8 @@ Assert-Literals $allyRescueBuffer @(
 
 $nearAssist = Read-RequiredSource $nearAssistPath 'Near Assist redirector'
 $normalizedNearAssist = $nearAssist -replace '\s+', ' '
+$castedMacroRedirectRules = Read-RequiredSource $castedMacroRedirectRulesPath 'Casted macro redirect rules'
+$nearAssistOneShotSelfTests = Read-RequiredSource $nearAssistOneShotSelfTestsPath 'Near Assist one-shot self-tests'
 Assert-Literals $nearAssist @(
     'HookFromAddress<ActionManager.Delegates.UseAction>',
     'ActionManager.MemberFunctionPointers.UseAction',
@@ -7797,6 +7849,94 @@ Assert-Literals $nearAssist @(
     'if (!rewritten && consumedFallbackCarrier)',
     'forwardedTargetId = InvalidCarrierTargetId'
 ) 'Near Assist redirector'
+Assert-Literals $castedMacroRedirectRules @(
+    'public enum CastedMacroRedirectDecision',
+    'PreserveAuthoredTarget',
+    'PassThroughStaleLifecycle',
+    'SuppressHiddenOrMissingTarget',
+    'SuppressStaleOwnership',
+    'public static bool ShouldPassThroughWithoutRedirect(',
+    'adjustedCastTimeMilliseconds > 0',
+    'exactActionMetadata && baseCastTime100Milliseconds > 0',
+    'authoredTargetMatchesVisibleTarget'
+) 'Cast-time macro redirects preserve only the visible authored target'
+$normalizedCastedMacroRedirectRules = $castedMacroRedirectRules -replace '\s+', ' '
+if ($normalizedCastedMacroRedirectRules -notmatch
+        'ShouldPassThroughWithoutRedirect\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
+        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
+    $castedMacroRedirectRules -match '\b(ActionManager|TargetManager|UseAction|SetTarget|SetRotation|FaceTarget|ObjectTable|IClientState)\b') {
+    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, and must contain no runtime action, target, facing, or context mutation.'
+}
+Assert-Literals $nearAssist @(
+    'TryConsumeCastedMacroRedirect(',
+    'CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(',
+    'CastedMacroRedirectDecision.PassThroughStaleLifecycle',
+    'var passingThroughWithoutRedirect =',
+    'if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)',
+    'if (passingThroughWithoutRedirect)',
+    'IsLiveCastedMacroRedirectClaim(claim)',
+    'IsEligibleCastedMacroRedirectAction(',
+    'CastedMacroRedirectOwner.SmartAction',
+    'CastedMacroRedirectOwner.NearAssist',
+    'CastedMacroRedirectOwner.NearHelp',
+    'IsEligibleSmartActionRedirectAction(',
+    'IsEligibleRedirectAction(actionManager, actionType, actionId, mode)',
+    'IsEligibleHelpAction(actionManager, actionType, actionId, mode)',
+    'ActionManager.GetAdjustedCastTime(actionType, resolvedActionId)',
+    'exactMetadata ? action.Cast100ms : 0',
+    'IsExactCurrentHardTarget(authoredTargetId)',
+    'claim.Generation != castedMacroRedirectGeneration',
+    'smartTarget.Equals(claim.SmartTarget)',
+    'nearAssist.Equals(claim.NearAssist)',
+    'oneShotState.Equals(claim.NearAssistState)',
+    'nearHelp.Equals(claim.NearHelp)',
+    'nearHelpState.Equals(claim.NearHelpState)',
+    'armedSmartTarget = null;',
+    'armedTarget = null;',
+    'armedHelpTarget = null;',
+    'Cast-time hidden/missing carrier suppressed',
+    'cast redirect retired; hidden/missing carrier suppressed',
+    'stale cast redirect suppressed; newer token generation preserved',
+    'configuration.EnableSmartActionMacro',
+    'configuration.EnableNearAssistMacro',
+    'claim.SmartTarget.ExpiresAtMilliseconds > now',
+    'claim.NearAssist.ExpiresAtMilliseconds > now',
+    'claim.NearHelp.ExpiresAtMilliseconds > now',
+    'ResolveContext() != SupportedPvPContext.CrystallineConflict',
+    'claim.SmartTarget.LocalEntityId == local.EntityId',
+    'claim.SmartTarget.LocalGameObjectId == local.GameObjectId'
+) 'Smart Action, Near Assist, and Near Help cast-target retirement'
+if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count -ne 2 -or
+    [regex]::Matches($nearAssist, '\bActionManager\.GetAdjustedCastTime\s*\(').Count -ne 1 -or
+    [regex]::Matches($nearAssist, 'castedMacroRedirectGeneration\+\+;').Count -ne 5 -or
+    $normalizedNearAssist -notmatch
+        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\);.*?if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable\).*?helperTokenConsumed = true; potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
+    $normalizedNearAssist -notmatch
+        'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
+    $normalizedNearAssist -notmatch
+        'private bool IsLiveCastedMacroRedirectClaim\(.*?!configuration\.Enabled \|\| !clientState\.IsLoggedIn \|\| ResolveContext\(\) != SupportedPvPContext\.CrystallineConflict.*?claim\.SmartTarget\.ExpiresAtMilliseconds > now.*?claim\.NearAssistState\.IsArmed.*?claim\.NearHelpState\.IsArmed' -or
+    $normalizedNearAssist -notmatch
+        'CastedMacroRedirectOwner\.SmartAction => IsEligibleSmartActionRedirectAction\(.*?CastedMacroRedirectOwner\.NearAssist => IsEligibleRedirectAction\(.*?CastedMacroRedirectOwner\.NearHelp => IsEligibleHelpAction\(' -or
+    $normalizedNearAssist -notmatch
+        'private bool IsExactCurrentHardTarget\(.*?if \(hardTargetId == authoredTargetId\) return true;.*?ResolvePlayerByNativeId\(hardTargetId\).*?ResolvePlayerByNativeId\(authoredTargetId\).*?HasSameNativeIdentity\(hardTarget, authoredTarget\)') {
+    throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, preserve the exact visible hard target, and leave instant redirects unchanged.'
+}
+Assert-Literals $nearAssistOneShotSelfTests @(
+    '"adjusted cast keeps authored target"',
+    '"base cast metadata keeps authored target when adjusted timing is ambiguous"',
+    '"cast with hidden or missing target suppresses"',
+    '"instant action keeps redirect path"',
+    '"cast cannot consume a missing token"',
+    '"unsupported action type cannot consume cast token"',
+    '"unverified base cast metadata cannot prove a cast"',
+    '"adjusted cast time independently proves a cast"',
+    '"stale lifecycle disposition bypasses every legacy redirect"',
+    '"visible authored cast bypasses every legacy redirect"',
+    '"not-applicable cast classification keeps the normal redirect path"',
+    '"hidden cast suppression never passes through"',
+    '"stale ownership suppression never passes through"'
+) 'Pure cast redirect classification self-tests'
 $nearAssistSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistSelectionRules.cs') 'Near Assist smart selection rules'
 Assert-Literals $nearAssistSelection @(
     'RolePreferenceWindowYalms = 8f',
@@ -9863,6 +10003,11 @@ Assert-Literals $settingsWindow @(
     'Smart Action macro — optional harmful-action redirect',
     '/smartaction arms one 750 ms token',
     'invalidates that carrier and leaves the following <t> line as the only fallback.',
+    'Cast-time actions are never invisibly redirected.',
+    'A hidden <e1>/<2> carrier is suppressed, consumes',
+    'the one-shot token, and lets the following authored <t> fallback use your visible target;',
+    '<t> cast remains vanilla. Instant actions keep Smart Action targeting.',
+    'native auto-face turning you toward a hidden target after you manually switch targets.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON still requires',
     'a currently held gameplay key; it never creates no-input automatic actions.',
@@ -10322,17 +10467,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.0</Version>',
-    '<AssemblyVersion>0.42.0.0</AssemblyVersion>',
-    '<FileVersion>0.42.0.0</FileVersion>'
-) 'v0.42.0.0 project version'
+    '<Version>0.42.0.1</Version>',
+    '<AssemblyVersion>0.42.0.1</AssemblyVersion>',
+    '<FileVersion>0.42.0.1</FileVersion>'
+) 'v0.42.0.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.0";',
-    'New opt-in: instantly leave after a fully confirmed public Crystalline Conflict result so the loading transition can begin sooner.',
-    'It reuses the exact 10-player result capture, records local W/L first when enabled, then waits for FFXIV''s own leave-ready signal.',
-    'Only one normal non-forced leave request is sent. Wolves'' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.',
-    'The request has a 10-second safety window and never retries after the native call. All 570 Core tests and release gates pass; the live transition still needs an in-game match test.'
-) 'v0.42.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.1";',
+    'Hotfix: instant leave now rearms for every later public Crystalline Conflict match, including consecutive matches on the same map.',
+    'A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch; zero or invalid lifecycle signals remain inert.',
+    'The native leave-ready window is now 30 seconds. Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.',
+    'Smart Action, Near Assist, and Near Help no longer invisibly redirect cast-time actions: hidden carriers are suppressed and the visible <t> fallback remains vanilla. All 570 Core tests and release gates pass.'
+) 'v0.42.0.1 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10353,22 +10498,21 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.0 plugin manifest metadata'
+) 'v0.42.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.0"',
-    'Added a default-off instant-leave option for completed public Crystalline Conflict matches.',
-    'reuses the exact complete 10-player result capture',
-    'attempts local W/L persistence first when enabled',
-    'sends exactly one normal non-forced leave request.',
-    'never retries the void request.',
-    'Wolves'' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.',
+    '"AssemblyVersion": "0.42.0.1"',
+    'Fixed instant leave so it rearms for later public Crystalline Conflict matches, including consecutive matches on the same map',
+    'A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch;',
+    'The native leave-ready window is now 30 seconds.',
+    'Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.',
+    'hidden carriers are suppressed so the authored visible-target fallback stays vanilla, preventing delayed native auto-face turns.',
     'Configuration schema 48; all 570 Core tests and release gates pass.',
-    'current-client post-result transition remains live in-game validation.',
+    'Live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.0 custom-repository metadata'
+) 'v0.42.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10411,11 +10555,15 @@ Assert-Literals $normalizedPrivacy @(
     'maps remain `NO DATA` until an exact future local match is confirmed.',
     'If the separate instant-leave option is enabled, the same already-confirmed public-CC result may arm one transient in-memory leave intent even when local W/L recording is disabled.',
     'W/L persistence is attempted first when it is enabled.',
-    'For at most ten seconds, the intent retains only the exact territory, local Content ID, monotonic result/expiry times, and one spent/requested state.',
+    'For at most 30 seconds, the intent retains only the exact territory, local Content ID, monotonic result/expiry times, and one spent/requested state.',
     'It cancels if the plugin or option is disabled, the live PvP/territory/identity changes, an area transition begins, the result expires, or the native leave boundary cannot be queried.',
     'On the first native ready frame it reserves the intent and sends one normal non-forced leave request; the void request is never retried.',
     'No leave history is saved or uploaded, no UI confirmation is clicked, and the feature does not queue a match.',
     'Wolves'' Den, custom CC, Frontline, and Rival Wings cannot arm it.',
+    'only an authoritative nonzero change to a different territory or the next exact public-CC duty-start event clears the old latch.',
+    'The duty-start path deliberately accepts the same arena so consecutive matches on one map can rearm even when loading suppresses every framework update.',
+    'Zero-valued, non-PvP, non-public, or identity-unknown lifecycle signals remain inert.',
+    'These lifecycle events do not call the leave function themselves.',
     '## Explicit manual Panic Shukuchi and camera-back dash macros',
     '`/seitonbw` accepts only the closed current PvP self-dash mapping for NIN, AST, DNC, DRG, RPR, and PCT.',
     'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210` set only local character facing',
@@ -10455,17 +10603,23 @@ Assert-Literals $normalizedPrivacy @(
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
     'Arming reads no enemy slot and stores only the current territory, exact local identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.',
+    'An action with a proven adjusted or exact base cast time is never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
+    'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the ordinary game path.',
+    'Instant actions retain the existing one-shot smart redirect.',
+    'Seiton Sense does not write facing or camera state for this rule;',
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.42.0.0 instant-leave, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
+) 'v0.42.0.1 instant-leave lifecycle, cast targeting, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.0 adds a separate default-off instant-leave option for completed public Crystalline Conflict matches.',
-    'reuses the exact complete 10-player result proof, attempts enabled local W/L persistence first, waits for FFXIV''s native leave-ready boundary, and sends one normal non-forced leave request within a ten-second safety window.',
-    'It never applies in Wolves'' Den, custom CC, Frontline, or Rival Wings and never queues a new match.',
+    'Version 0.42.0.1 fixes its consecutive-match lifecycle: a nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch',
+    'including when the next match uses the same map, and the native-ready window is now 30 seconds.',
+    'It also keeps cast-time Smart Action, Near Assist, and Near Help on the visible authored target: hidden carriers are suppressed',
+    'Instant actions retain smart targeting.',
     '**Optional instant public-CC exit:** after one complete public 5v5 result with the exact local Content ID is confirmed',
-    'The intent expires after ten seconds and cancels on context, territory, identity, transition, toggle, or native-boundary drift; the void request is never retried.',
+    'The intent expires after 30 seconds and cancels on context, territory, identity, transition, toggle, or native-boundary drift; the void request is never retried.',
     'Local W/L is attempted first when enabled.',
+    'A different nonzero territory or the next exact public-CC duty start rearms later matches, including consecutive matches on the same map; zero and invalid lifecycle signals remain inert.',
     'There is no custom/Wolves'' Den/Frontline/Rival Wings path and no auto-queue.',
     'Version 0.41.0.0 makes automatic Purify and Recuperate retain their exact episode through temporary native blocks and retry only inside the original bounded window after every safety recheck.',
     'one readiness-proven retry may occur inside its original lease, while the card, sound, action suppression, and two-second Guard-reuse protection begin only after the exact live Guard status appears.',
@@ -10530,6 +10684,11 @@ Assert-Literals $normalizedReadme @(
     'It retains Emergency Teleport plus v0.31''s ranged Smart Tab',
     'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
+    'Cast-time actions are deliberately not invisibly redirected.',
+    'Seiton consumes and suppresses that carrier so the following `<t>` line executes normally.',
+    'This avoids FFXIV''s delayed native auto-face turning the character toward a hidden target after a fast manual target switch.',
+    'Instant actions keep the full Smart Action selection described below.',
+    'The same cast policy applies to Near Assist and Near Help.',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
     'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
     'local 4,000/2,000-MP sounds',
@@ -10550,7 +10709,7 @@ Assert-Literals $normalizedReadme @(
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
-    'target-independent arming, selection with `S1` absent, shape-scoped caller-proven target protection safety',
+    'target-independent arming, cast-time hidden-carrier suppression with visible-target pass-through, selection with `S1` absent, shape-scoped caller-proven target protection safety',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
@@ -10558,8 +10717,22 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.0 current README release and safety contract'
+) 'v0.42.0.1 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.1',
+    'Fixed instant leave after the first successful match.',
+    'A different nonzero `TerritoryChanged` event now closes that old context, and the next exact public-CC `DutyStarted` event is a same-map backstop.',
+    'Zero, non-PvP, non-public, and identity-unknown lifecycle signals remain inert.',
+    'Extended the exact native leave-ready polling window from 10 to 30 seconds.',
+    'Each result reserves at most one normal `LeaveCurrentContent(false)` request; the void call is never retried and no match is queued.',
+    'Added concise lifecycle diagnostics for arm, duplicate, request, cancellation, exit, and reset events.',
+    'Smart Action, Near Assist, and Near Help no longer invisibly redirect actions with a proven adjusted or base cast time.',
+    'A hidden macro carrier is consumed and suppressed so the following visible `<t>` fallback remains vanilla;',
+    'a direct cast already authored on the exact current hard target passes through unchanged.',
+    'Instant actions retain the existing smart redirect behavior.',
+    'without adding a rotation or FaceTarget hook.',
+    'Configuration schema remains `48`. Source build, all `570` Core tests, safety, package parity, and release verification are automated.',
+    'Consecutive live match exit and cast-facing behavior remain current-client validation points.',
     '## 0.42.0.0',
     'Added a separate default-off **instant leave after public Crystalline Conflict** option.',
     'It shares the existing post-match hook and arms only after the complete result passes the same public-territory, result, duration, ten-unique-player, 5v5-team, known-job, and exact local-Content-ID proof used by the local map W/L feature.',
@@ -10637,7 +10810,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.0 release notes and retained v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.1 release notes and retained v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12146,4 +12319,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 570-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, attempts enabled W-L persistence first without coupling failures, preserves its spent latch across ambiguous telemetry, and reserves exactly one non-forced native request inside a ten-second frozen context. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. Smart Action and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 570-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, attempts enabled W-L persistence first without coupling failures, preserves its spent latch across ambiguous telemetry, rearms from authoritative territory or exact public-duty lifecycle events, and reserves exactly one non-forced native request inside a thirty-second frozen context. Cast-time Smart Action, Near Assist, and Near Help hidden carriers are consumed without invisible retargeting so the visible authored target remains vanilla; instant actions retain smart redirects. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

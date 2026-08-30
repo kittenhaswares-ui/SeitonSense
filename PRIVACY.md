@@ -10,9 +10,15 @@ targeting handler with one exact visible CC reviewed-DPS hard target. Its paired
 hooks
 leave OFF, reverse, and calls outside that handler on the native paths. The
 separate default-off Smart Action macro helper can replace
-only the target ID on one already incoming exact harmful PvP action after an
-explicit `/smartaction` or `/ssaction` token; it does not change a visible hard,
-soft, Focus, or mouseover target. The separate default-off NIN Guard-
+only the target ID on one already incoming exact harmful instant PvP action after
+an explicit `/smartaction` or `/ssaction` token; it does not change a visible hard,
+soft, Focus, mouseover, camera, or facing target. For an action with a proven
+adjusted or base cast time, Smart Action, Near Assist, and Near Help consume their
+one-shot token without an invisible redirect: a hidden or missing carrier is
+suppressed so the authored visible `<t>` fallback remains vanilla, while an
+authored target that already equals the exact current hard target passes through
+unchanged. The plugin does not call a face-target or rotation function for this
+policy. The separate default-off NIN Guard-
 Shukuchi helper may set only the exact jumped-to enemy as the hard target, and
 only after its one ground-targeted Shukuchi location request returns client-
 accepted. In particular, the separate default-off Guardian
@@ -591,6 +597,15 @@ appears only after native acceptance or during later cast/projectile travel is
 outside this local pre-dispatch boundary. The plugin creates no action, changes
 no selected target, stores no input, and persists or uploads none of these
 observations.
+
+An action with a proven adjusted or exact base cast time is never invisibly
+retargeted by Smart Action, Near Assist, or Near Help. If its authored target is
+the exact current visible hard target, the incoming call passes through unchanged;
+otherwise the hidden or missing carrier is suppressed and its one-shot token is
+consumed so the following authored `<t>` line remains the ordinary game path.
+Instant actions retain the existing one-shot smart redirect. Seiton Sense does
+not write facing or camera state for this rule; any facing on the visible-target
+fallback is FFXIV's normal cast behavior.
 
 ## One-shot Near Assist
 
@@ -1681,7 +1696,7 @@ confirmed.
 If the separate instant-leave option is enabled, the same already-confirmed
 public-CC result may arm one transient in-memory leave intent even when local
 W/L recording is disabled. W/L persistence is attempted first when it is
-enabled. For at most ten seconds, the intent retains only the exact territory,
+enabled. For at most 30 seconds, the intent retains only the exact territory,
 local Content ID, monotonic result/expiry times, and one spent/requested state.
 It cancels if the plugin or option is disabled, the live PvP/territory/identity
 changes, an area transition begins, the result expires, or the native leave
@@ -1690,6 +1705,13 @@ intent and sends one normal non-forced leave request; the void request is never
 retried. No leave history is saved or uploaded, no UI confirmation is clicked,
 and the feature does not queue a match. Wolves' Den, custom CC, Frontline, and
 Rival Wings cannot arm it.
+
+After that match context is spent, only an authoritative nonzero change to a
+different territory or the next exact public-CC duty-start event clears the old
+latch. The duty-start path deliberately accepts the same arena so consecutive
+matches on one map can rearm even when loading suppresses every framework update.
+Zero-valued, non-PvP, non-public, or identity-unknown lifecycle signals remain
+inert. These lifecycle events do not call the leave function themselves.
 
 The PvP range helper reads only the local player's current job, position, and
 hitbox radius plus the game's world-to-screen projection. It draws two fixed
