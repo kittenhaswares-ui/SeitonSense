@@ -22,6 +22,26 @@ internal static class SmartTargetSelectionSelfTests
             "gap-closer tier wins before ranged when melee is absent");
     }
 
+    public static void MissingFirstEnemySlotDoesNotBlockRemainingCandidates()
+    {
+        var candidates = new[]
+        {
+            Candidate(2, hp: 55),
+            Candidate(3, hp: 20),
+            Candidate(4, hp: 40),
+            Candidate(5, hp: 80),
+        };
+
+        True(SmartTargetSelectionRules.TryCreateIntent(
+                29_391,
+                candidates,
+                LocalPlayer,
+                out var intent),
+            "live S2-S5 candidates remain selectable without S1");
+        Equal(3, intent.EnemySlot,
+            "the best remaining exact candidate wins without inventing an S1 carrier");
+    }
+
     public static void RankingOrderIsExactAndDeterministic()
     {
         var worseSignalsLowerHp = new[]

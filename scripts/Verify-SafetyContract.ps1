@@ -693,7 +693,7 @@ Assert-Literals $normalizedNearAssistForIntegratedInput @(
 ) 'Exact buffered replay scope, Smart Action protection, and passive Smart Kardia observer'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'if \(integratedBufferReplayDepth > 0 && !TryConsumeIntegratedBufferedReplay\( thisPtr, actionType, actionId, forwardedTargetId, mode\)\) \{ return false; \}.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'private bool TryConsumeIntegratedBufferedReplay\(.*?integratedBufferReplayDepth != 1 \|\| scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.Consumed.*?scope\.Consumed = true;.*?mode != ActionManager\.UseActionMode\.None \|\| actionType != intent\.ActionType \|\| requestedActionId != intent\.RequestedActionId \|\| resolvedActionId != intent\.ResolvedActionId \|\| targetId != intent\.TargetId.*?if \(!intent\.RequiresSmartActionProtectionRecheck\) return true; return IsExactBufferedSmartActionProtectionSafe\( resolvedActionId, targetId\);.*?catch \(Exception exception\).*?return false;' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe\( ClassifySmartActionAttackShape\(action\), CreateSmartActionActorGeometry\(target\), action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\);') {
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?var attackShape = ClassifySmartActionAttackShape\(action\);.*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), attackShape, out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, CreateSmartActionActorGeometry\(target\), action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\);') {
     throw 'Buffered replay must single-consume one exact immutable tuple, rerun complete Smart Action protection when inherited, and preserve accepted Eukrasia observation without redirect/token rewriting.'
 }
 Assert-Literals $integratedActionBufferRuntime @(
@@ -720,7 +720,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 551-test registry.
+# 553-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -740,11 +740,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 510 -or
+if ($staticIntegratedTestCount -ne 512 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 551 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 553 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -752,7 +752,7 @@ if ($staticIntegratedTestCount -ne 510 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 46 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 551-test combined Core registry.'
+    throw 'Schema 46 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 553-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1313,11 +1313,25 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
+$smartActionArmMethod = [regex]::Match(
+    $normalizedNearAssistForSmartAction,
+    'internal NearAssistArmResult ArmSmartActionTarget\(\).*?internal NearHelpArmResult ArmHelp\(\)')
+$smartActionConsumeMethod = [regex]::Match(
+    $normalizedNearAssistForSmartAction,
+    'private bool TryConsumeEligibleSmartTargetToken\(.*?private bool TryConsumeEligibleToken\(')
 if ($normalizedNearAssistForSmartAction -notmatch 'internal NearAssistArmResult ArmSmartActionTarget\(\).*?configuration\.EnableSmartActionMacro' -or
     $normalizedNearAssistForSmartAction -notmatch 'var supportedContext = configuration\.Enabled && \(heldActionSelection \|\| configuration\.EnableSmartActionMacro\) && clientState\.TerritoryType == token\.TerritoryId && ResolveContext\(\) == SupportedPvPContext\.CrystallineConflict && localIdentityValid;' -or
     $normalizedNearAssistForSmartAction -notmatch 'if \(armedSmartTarget is \{ \} smartTargetToken\) \{ shouldClear \|= !configuration\.EnableSmartActionMacro;' -or
     $normalizedNearAssistForSmartAction -match 'internal NearAssistArmResult ArmSmartTarget\(') {
     throw 'The legacy one-shot harmful-action redirect must be exposed only as separately gated Smart Action, independent of the Smart Tab toggle.'
+}
+if (!$smartActionArmMethod.Success -or
+    $smartActionArmMethod.Value -notmatch 'new ArmedSmartTarget\( clientState\.TerritoryType, localPlayer!\.EntityId, localPlayer\.GameObjectId, now \+ TokenLifetimeMilliseconds\)' -or
+    $smartActionArmMethod.Value -notmatch 'carrier=target-independent' -or
+    $smartActionArmMethod.Value -match '\b(?:ResolveCanonicalEnemies|EnemySlotRules\.FirstSlot|GetNativeHardTargetId|CarrierEnemy|NoCanonicalEnemySlots)\b' -or
+    !$smartActionConsumeMethod.Success -or
+    $smartActionConsumeMethod.Value -match '\b(?:incomingTargetId|GetNativeHardTargetId|NearAssistCarrierRules|fallbackCarrier)\b') {
+    throw 'Smart Action arm and token consumption must remain target-independent: no S1 scan, hard-target dependency, or carrier identity may gate one eligible harmful action.'
 }
 
 $heldSmartActionSelector = [regex]::Match(
@@ -1334,7 +1348,7 @@ if (!$heldSmartActionSelector.Success -or
     $heldSmartActionSelector.Value -notmatch 'TryValidateExactHeldSmartActionTarget\( resolvedActionId, hardTargetId, expectedSlot: 0, expectedTarget: default' -or
     $heldSmartActionSelector.Value -match '\b(?:EnableSmartActionMacro|UseAction|UseActionLocation|Original|SetTarget|ITargetManager|TargetManager)\b' -or
     $heldSmartActionRevalidation.Value -notmatch 'TryValidateExactHeldSmartActionTarget\( resolvedActionId, target\.GameObjectId, enemySlot, target' -or
-    $heldSmartActionRevalidation.Value -notmatch 'TryBuildSmartActionProtectionSnapshot\( local!, partyEntityIds, out var canonicalEnemies, out var protectedActors\)' -or
+    $heldSmartActionRevalidation.Value -notmatch 'var attackShape = ClassifySmartActionAttackShape\(action\);.*?TryBuildSmartActionProtectionSnapshot\( local!, partyEntityIds, attackShape, out var canonicalEnemies, out var protectedActors\)' -or
     $heldSmartActionRevalidation.Value -notmatch 'exactMatches\.Length != 1' -or
     $heldSmartActionRevalidation.Value -notmatch 'SmartActionProtectionRules\.IsActionProtectionSafe\(.*?smartActionGuardBypassActions\.Contains\(resolvedActionId\)' -or
     $heldSmartActionRevalidation.Value -notmatch 'SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\)' -or
@@ -1374,6 +1388,8 @@ Assert-Literals $smartActionProtectionRules @(
     'SmartActionAttackShape.UnsupportedAreaOfEffect =>',
     'actors.All(actor =>',
     'public static SmartActionAttackShape ClassifyAttackShape(byte effectRange, byte castType)',
+    'public static bool RequiresCompleteHostileSnapshot(SmartActionAttackShape shape)',
+    'shape != SmartActionAttackShape.DirectSingleTarget',
     '(0, 1) => SmartActionAttackShape.DirectSingleTarget',
     '(> 0, 2) => SmartActionAttackShape.TargetCenteredCircle',
     '_ => SmartActionAttackShape.UnsupportedAreaOfEffect',
@@ -1401,6 +1417,15 @@ Assert-Literals $smartTargetSelectionRules @(
     'bool CallerProvenProtectionSafe = false',
     'candidate.CallerProvenProtectionSafe'
 ) 'Smart Action selection requires caller-proven protection safety'
+Assert-Literals $smartTargetSelectionSelfTests @(
+    'public static void MissingFirstEnemySlotDoesNotBlockRemainingCandidates()',
+    'Candidate(2, hp: 55)',
+    'Candidate(5, hp: 80)',
+    '"live S2-S5 candidates remain selectable without S1"'
+) 'Smart Action missing-S1 target-selection regression'
+Assert-Literals $smartActionTestProgram @(
+    'SmartTargetSelectionSelfTests.MissingFirstEnemySlotDoesNotBlockRemainingCandidates'
+) 'Smart Action missing-S1 target-selection test registration'
 Assert-Literals $smartActionSafetyLeaseRules @(
     'public const long DefaultLifetimeMilliseconds = 750;',
     'territoryId != token.TerritoryId',
@@ -1479,7 +1504,7 @@ if ($smartActionProtectionRules -match '\b(?:ActionManager|IPlayerCharacter|Stat
 if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtectionSnapshot\(').Count -ne 6 -or
     [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 5 -or
     $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionMetadataVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
-    $normalizedSmartActionRuntime -notmatch 'foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?!occupiedGameObjectIds\.Contains\(player\.GameObjectId\).*?!occupiedEntityIds\.Contains\(player\.EntityId\).*?observedHostileGameObjectIds\.SetEquals\(occupiedGameObjectIds\).*?observedHostileEntityIds\.SetEquals\(occupiedEntityIds\)' -or
+    $normalizedSmartActionRuntime -notmatch 'if \(!SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\)\) \{ canonicalEnemies = enemies\.ToArray\(\); protectedActors = protections\.ToArray\(\); return true; \}.*?foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?!occupiedGameObjectIds\.Contains\(player\.GameObjectId\).*?!occupiedEntityIds\.Contains\(player\.EntityId\).*?observedHostileGameObjectIds\.SetEquals\(occupiedGameObjectIds\).*?observedHostileEntityIds\.SetEquals\(occupiedEntityIds\)' -or
     $normalizedSmartActionRuntime -notmatch 'var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
@@ -1491,10 +1516,10 @@ if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtecti
     $normalizedSmartActionRuntime -notmatch 'forwardedTargetId = TryResolveSmartTargetRedirect\( thisPtr, actionType, actionId, mode, targetId, smartToken, heldActionSelection: false, out var rewritten, out _, out var selectedSlot, out var reason\);.*?useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId,' -or
     $normalizedSmartActionRuntime -notmatch 'private ulong TryResolveSmartTargetRedirect\(.*?bool heldActionSelection, out bool rewritten, out bool smartWinnerSelected,.*?smartWinnerSelected = true;.*?rewritten = true; selectedSlot = intent\.EnemySlot;.*?return intent\.Target\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'Smart Action arm failed closed: protection metadata unverified') {
-    throw 'Smart Action must replace its target only after complete current protection geometry, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
+    throw 'Smart Action must replace its target only after shape-scoped current protection proof, retain complete geometry for area/unknown shapes, exclude unverified SAM conservatively, and revalidate the one frozen actor without reranking.'
 }
 if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = targetId; var smartActionSafetyInspection = !bypassRedirect \? InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\).*?if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?var forwardedTargetId = smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe \? inspectedSmartActionTargetId : targetId;.*?TryConsumeEligibleSmartTargetToken' -or
-    $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, targetId, out smartToken, out consumedFallbackCarrier, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
+    $normalizedSmartActionRuntime -notmatch 'ArmedSmartTarget\? potentialSmartTargetToken = null;.*?potentialSmartTargetToken = armedSmartTarget;.*?var smartTargetCallEligible = IsEligibleSmartActionRedirectAction\( thisPtr, actionType, actionId, mode\); if \(!smartTargetCallEligible\).*?potentialSmartTargetToken = null;.*?smartTargetTokenConsumed = TryConsumeEligibleSmartTargetToken\( potentialSmartTargetToken\.Value, actionType, mode, out smartToken, out smartTargetOwnershipChanged\); potentialSmartTargetToken = smartTargetTokenConsumed \? smartToken : null;.*?if \(smartTargetOwnershipChanged\).*?suppressingSmartTargetCall = true;.*?newer token preserved.*?else if \(!bypassRedirect && smartTargetTokenConsumed\)' -or
     $normalizedSmartActionRuntime -notmatch 'private bool TryConsumeEligibleSmartTargetToken\( ArmedSmartTarget expectedToken,.*?if \(!candidate\.Equals\(expectedToken\)\).*?ownershipChanged = true; return false;.*?armedSmartTarget = null;' -or
     $normalizedSmartActionRuntime -notmatch 'private bool IsEligibleSmartActionRedirectAction\(.*?if \(!IsPotentialMacroAction\(actionType, mode\) \|\| actionId == 0\) return false;.*?if \(resolvedActionId == 0\) return true;.*?if \(!TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\)\).*?return true;.*?return action\.CanTargetHostile && !action\.TargetArea && action\.Range > 0;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \}.*?TryBuildSmartActionProtectionSnapshot' -or
@@ -1519,7 +1544,8 @@ foreach ($method in @(
     'DirectAndTargetCircleSafetyAreExact',
     'UnsupportedShapesAndInvalidGeometryFailClosed',
     'ProtectedCandidatesCannotWinOrReplaceFrozenIntent',
-    'GuardIgnoringActionsBypassOnlyGuard'
+    'GuardIgnoringActionsBypassOnlyGuard',
+    'SnapshotCompletenessMatchesAttackGeometry'
 )) {
     Assert-Literals $smartActionProtectionSelfTests @("public static void $method()") "Smart Action protection self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionProtectionSelfTests.$method") "Smart Action protection test registration $method"
@@ -1532,9 +1558,9 @@ foreach ($method in @(
     Assert-Literals $smartActionSafetyLeaseSelfTests @("public static void $method()") "Smart Action fallback lease self-test $method"
     Assert-Literals $smartActionTestProgram @("SmartActionSafetyLeaseSelfTests.$method") "Smart Action fallback lease test registration $method"
 }
-if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 5 -or
+if ([regex]::Matches($smartActionTestProgram, '\bSmartActionProtectionSelfTests\.\w+').Count -ne 6 -or
     [regex]::Matches($smartActionTestProgram, '\bSmartActionSafetyLeaseSelfTests\.\w+').Count -ne 3) {
-    throw 'All five Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
+    throw 'All six Smart Action protection tests and all three exact-fallback lease tests must be independently registered.'
 }
 foreach ($allowed in $allowedUnsafe) {
     if (-not (Test-Path -LiteralPath $allowed -PathType Leaf)) {
@@ -4185,8 +4211,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 510) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 510-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 512) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 512-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -10017,17 +10043,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.40.0.1</Version>',
-    '<AssemblyVersion>0.40.0.1</AssemblyVersion>',
-    '<FileVersion>0.40.0.1</FileVersion>'
-) 'v0.40.0.1 project version'
+    '<Version>0.40.0.2</Version>',
+    '<AssemblyVersion>0.40.0.2</AssemblyVersion>',
+    '<FileVersion>0.40.0.2</FileVersion>'
+) 'v0.40.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.40.0.1";',
-    'A new default-off automatic cast-cancel permission is shared only by Auto Purify and Auto Recuperate; the generic held-helper toggle remains independent.',
-    'Only metadata-verified BRD Powerful Shot (job 23 / action 29391) or MCH Blast Charge (job 31 / action 29402), with unchanged cast and adjusted identity, may be sacrificed. Every other or uncertain cast waits.',
-    'Cancellation owns one framework frame; the automatic helper fully revalidates on a later clear-cast frame before requesting Purify or Recuperate.',
-    'Automated and release checks cover this contract, but current-client BRD/MCH cancellation and final action acceptance still need in-game confirmation.'
-) 'v0.40.0.1 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.40.0.2";',
+    'Smart Action now arms without requiring a live S1 enemy or a selected target; the best exact S1-S5 target is chosen only when the harmful action arrives.',
+    'Direct attacks no longer fail because an unrelated enemy briefly disagrees between the S-slot and object-table views. The chosen enemy still needs exact protection, native range, and line-of-sight proof.',
+    'Target-circle and unknown AoE attacks retain the complete hostile snapshot so Chiten, Guard, Cover, and LB protection cannot be clipped nearby.',
+    'All 553 Core tests and release gates pass. Current-client action acceptance, especially dead S1 with no selected target, remains an in-game validation boundary.'
+) 'v0.40.0.2 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10048,19 +10074,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.40.0.1 plugin manifest metadata'
+) 'v0.40.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.40.0.1"',
-    'Added one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate;',
-    'exact metadata-verified BRD job 23 / Powerful Shot 29391 or MCH job 31 / Blast Charge 29402',
-    'live job, active cast, and adjusted raw-action identity all match.',
-    'Every other, transformed, or uncertain cast waits.',
-    'Configuration schema 46; all 551 Core tests and release gates pass',
+    '"AssemblyVersion": "0.40.0.2"',
+    'Fixed intermittent ranged Smart Action no-op behavior.',
+    'Arming no longer requires a live S1 carrier or selected target;',
+    'Direct single-target attacks no longer require unrelated hostile object-table completeness',
+    'complete target-circle/unknown-AoE geometry remain fail-closed.',
+    'Configuration schema 46; all 553 Core tests and release gates pass.',
     '"IsHide": false'
-) 'v0.40.0.1 custom-repository metadata'
+) 'v0.40.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10131,10 +10157,16 @@ Assert-Literals $normalizedPrivacy @(
     'It does not infer an LB from gauge state, movement, disappearance, `Sky Shatter` status `3181`, or the later landing damage actions `29498`/`29499`.',
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
-    'this helper cannot remove or break Guard.'
-) 'v0.40.0.1 automatic basic-shot cancellation and retained safety/privacy disclosure'
+    'this helper cannot remove or break Guard.',
+    'Arming reads no enemy slot and stores only the current territory, exact local identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.',
+    'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
+    'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
+    'shape-appropriate protection proof is rebuilt immediately before forwarding.'
+) 'v0.40.0.2 Smart Action reliability and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.40.0.1 adds one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.',
+    'Version 0.40.0.2 fixes intermittent ranged Smart Action no-ops by making the 750-ms arm target-independent and deferring exact enemy selection until the harmful action arrives.',
+    'Direct single-target actions no longer require an unrelated complete hostile object-table snapshot; exact target protection, native range/line of sight, and frozen-target revalidation remain mandatory, while target-circle and unknown AoE geometry stay complete and fail-closed.',
+    'Version 0.40.0.1 added one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.',
     'It admits only metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 / Blast Charge `29402` when the live job, cast, and adjusted identity all remain exact;',
     'The generic held-helper toggle stays independent, and a permitted automatic helper still revalidates only on a later clear-cast frame.',
     'Version 0.40.0.0 added the separate default-off automatic Purify and Recuperate modes while preserving the legacy held helpers',
@@ -10206,11 +10238,11 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 46 is current',
-    'For the current source, the exact 551-test Core registry and source checks pin configuration schema 46',
+    'For the current source, the exact 553-test Core registry and source checks pin configuration schema 46',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
-    'caller-proven target protection safety',
+    'target-independent arming, selection with `S1` absent, shape-scoped caller-proven target protection safety',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
@@ -10218,8 +10250,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.40.0.1 current README release and safety contract'
+) 'v0.40.0.2 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.40.0.2',
+    'Fixed the intermittent ranged **Smart Action** no-op where `/smartaction` refused to arm unless the live `S1` actor was already usable.',
+    'Arming is now target-independent: it freezes only local identity, territory, and the existing 750-ms lifetime.',
+    'Exact `S1`-`S5` selection happens only when the next eligible harmful action actually reaches the hook',
+    'Direct single-target actions no longer require the unrelated hostile object table to match every current S-slot before they can select a target.',
+    'Target-centered circles, unsupported AoEs, and unknown attack shapes retain the complete hostile snapshot comparison.',
+    'Configuration schema remains `46`. Source build, all `553` Core tests, safety, package parity, and release verification are automated.',
+    'Whether the current client emits the authored `<e1>` action call when `S1` is unusable— especially with no selected target—and final action acceptance remain live in-game validation boundaries.',
     '## 0.40.0.1',
     'Added one separate default-off **automatic basic-shot cast cancellation** permission shared only by Automatic Purify and Automatic Recuperate.',
     'The generic held-helper cast-cancel toggle remains independent and cannot enable or widen either automatic path.',
@@ -10271,7 +10311,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.40.0.1 release notes and retained v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.40.0.2 release notes and retained v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -11770,4 +11810,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.40.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 46 and the exact 551-test Core registry. Automatic Purify and Recuperate remain separate default-off keyless trigger identities and share one independent default-off cast-cancel permission. That automatic permission admits only metadata-verified BRD job 23 / Powerful Shot 29391 or MCH job 31 / Blast Charge 29402 when the live job, active cast, and adjusted identity remain exact; Blazing Shot 41468, legacy Heat Blast 29403, transformations, and every other or uncertain cast fail closed. A permitted cancellation consumes its frame, and the automatic helper repeats its full preflight only on a later clear-cast frame. The generic held-helper cast-cancel toggle remains independent. Both automatic helpers retain frame-local claims and fail closed for NIN Hidden uncertainty. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.40.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 46 and the exact 553-test Core registry. Smart Action arming is target-independent and cannot scan S1, carrier identity, or a selected target. Direct single-target actions may skip unrelated hostile object-table completeness only after exact S-slot/status collection; target-circle, unsupported-AoE, and unknown shapes retain the complete hostile geometry comparison. The selected actor still requires exact protection, native range/line of sight, and frozen-target revalidation before one original action call, with no generated dispatch, rerank, retry, or visible target write. Automatic Purify and Recuperate remain separate default-off keyless trigger identities and share one independent default-off cast-cancel permission. AST held Near Help, /seitonbw, the Wolves' Den rotation panel, and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

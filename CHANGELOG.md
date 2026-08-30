@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.40.0.2
+
+- Fixed the intermittent ranged **Smart Action** no-op where `/smartaction`
+  refused to arm unless the live `S1` actor was already usable. Arming is now
+  target-independent: it freezes only local identity, territory, and the
+  existing 750-ms lifetime. Exact `S1`-`S5` selection happens only when the
+  next eligible harmful action actually reaches the hook, so neither a live
+  `S1` carrier nor a selected hard target is a plugin-side prerequisite.
+- Direct single-target actions no longer require the unrelated hostile object
+  table to match every current S-slot before they can select a target. They
+  still require one unique live canonical candidate, exact protection status,
+  native range/line of sight, and the unchanged frozen-target recheck directly
+  before the sole original action call.
+- Target-centered circles, unsupported AoEs, and unknown attack shapes retain
+  the complete hostile snapshot comparison. Chiten, Guard, Covered, Paladin LB,
+  and Dark Knight LB protection remain fail-closed, including the exact
+  action-specific Guard-bypass rule. There is still no visible target change,
+  generated action, rerank, alternate, or retry.
+- Configuration schema remains `46`. Source build, all `553` Core tests,
+  safety, package parity, and release verification are automated. Whether the
+  current client emits the authored `<e1>` action call when `S1` is unusable—
+  especially with no selected target—and final action acceptance remain live
+  in-game validation boundaries.
+
 ## 0.40.0.1
 
 - Added one separate default-off **automatic basic-shot cast cancellation**

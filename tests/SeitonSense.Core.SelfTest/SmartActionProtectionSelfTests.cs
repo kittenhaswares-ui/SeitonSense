@@ -75,6 +75,22 @@ internal static class SmartActionProtectionSelfTests
             "the selected protected actor is always inside its centered circle");
     }
 
+    public static void SnapshotCompletenessMatchesAttackGeometry()
+    {
+        False(SmartActionProtectionRules.RequiresCompleteHostileSnapshot(
+                SmartActionAttackShape.DirectSingleTarget),
+            "a direct action needs only each candidate's own exact protection proof");
+        True(SmartActionProtectionRules.RequiresCompleteHostileSnapshot(
+                SmartActionAttackShape.TargetCenteredCircle),
+            "a target-centered circle retains complete hostile geometry");
+        True(SmartActionProtectionRules.RequiresCompleteHostileSnapshot(
+                SmartActionAttackShape.UnsupportedAreaOfEffect),
+            "an unsupported area shape retains the complete fail-closed snapshot");
+        True(SmartActionProtectionRules.RequiresCompleteHostileSnapshot(
+                (SmartActionAttackShape)255),
+            "unknown future geometry can never acquire the direct-target relaxation");
+    }
+
     public static void UnsupportedShapesAndInvalidGeometryFailClosed()
     {
         var target = Geometry(1);

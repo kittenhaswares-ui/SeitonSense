@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.40.0.1";
+    private const string CurrentReleaseVersion = "0.40.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -375,10 +375,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "A new default-off automatic cast-cancel permission is shared only by Auto Purify and Auto Recuperate; the generic held-helper toggle remains independent.",
-                "Only metadata-verified BRD Powerful Shot (job 23 / action 29391) or MCH Blast Charge (job 31 / action 29402), with unchanged cast and adjusted identity, may be sacrificed. Every other or uncertain cast waits.",
-                "Cancellation owns one framework frame; the automatic helper fully revalidates on a later clear-cast frame before requesting Purify or Recuperate.",
-                "Automated and release checks cover this contract, but current-client BRD/MCH cancellation and final action acceptance still need in-game confirmation.",
+                "Smart Action now arms without requiring a live S1 enemy or a selected target; the best exact S1-S5 target is chosen only when the harmful action arrives.",
+                "Direct attacks no longer fail because an unrelated enemy briefly disagrees between the S-slot and object-table views. The chosen enemy still needs exact protection, native range, and line-of-sight proof.",
+                "Target-circle and unknown AoE attacks retain the complete hostile snapshot so Chiten, Guard, Cover, and LB protection cannot be clipped nearby.",
+                "All 553 Core tests and release gates pass. Current-client action acceptance, especially dead S1 with no selected target, remains an in-game validation boundary.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

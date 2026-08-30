@@ -46,8 +46,9 @@ public readonly record struct SmartActionProtectedActor(
     SmartActionProtectionKind Kind);
 
 /// <summary>
-/// Pure fail-closed protection policy for one Smart Action target. The caller
-/// must provide the complete current set of exact protected enemy actors.
+/// Pure fail-closed protection policy for one Smart Action target. Area and
+/// unknown shapes require the complete current set of exact protected enemy
+/// actors; direct actions require exact protection proof for their target.
 /// </summary>
 public static class SmartActionProtectionRules
 {
@@ -93,6 +94,15 @@ public static class SmartActionProtectionRules
             (> 0, 2) => SmartActionAttackShape.TargetCenteredCircle,
             _ => SmartActionAttackShape.UnsupportedAreaOfEffect,
         };
+
+    /// <summary>
+    /// Direct attacks can hit only their exact selected actor, so their safety
+    /// proof needs that actor's canonical protection state but not unrelated
+    /// enemy geometry. Every area or unknown shape retains the complete hostile
+    /// actor snapshot because an omitted protected peer could still be hit.
+    /// </summary>
+    public static bool RequiresCompleteHostileSnapshot(SmartActionAttackShape shape) =>
+        shape != SmartActionAttackShape.DirectSingleTarget;
 
     /// <summary>
     /// A direct action is safe only when the exact target is not protected.

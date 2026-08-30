@@ -535,9 +535,11 @@ Crystalline Conflict. `/smartaction` or `/ssaction` creates one local token last
 at most 750 ms. The authored macro then supplies the harmful action first with
 `<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
 does not read or retain the macro text and does not require a current target.
+Arming reads no enemy slot and stores only the current territory, exact local
+identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.
 
-Only an exact non-ground-target PvP hostile action and one complete, unique
-canonical `S1`-`S5` set may qualify. Active Chiten, Guard, Covered, Paladin LB
+Only an exact non-ground-target PvP hostile action and unique live canonical
+`S1`-`S5` candidates may qualify. Active Chiten, Guard, Covered, Paladin LB
 Hallowed Ground, and Dark Knight LB Undead Redemption are protection blockers;
 unverified Chiten metadata conservatively blocks every Samurai. Candidates that
 pass protection safety rank by native reach tier first (melee, gap closer, then
@@ -545,11 +547,14 @@ ranged/other), followed by lowest HP, fresh positive team pressure, known
 Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity.
 Target-centered circles also compare their effect radius with every protected
 actor's current position and hitbox. Other unreviewed AoE shapes do not redirect
-while any protected actor exists.
+while any protected actor exists. Those area/unknown shapes require the complete
+hostile S-slot/object-table snapshot. A direct single-target action instead
+requires exact protection evidence for its selected actor and does not require
+unrelated hostile object-table completeness.
 
 The token is consumed before selection only while it is strictly live; an
 expired arm remains on the vanilla path. One action and actor freeze and the
-complete protection snapshot is rebuilt immediately before forwarding. Drift
+shape-appropriate protection proof is rebuilt immediately before forwarding. Drift
 suppresses that carrier call without reranking or retry. A fresh post-claim
 safety lease of at most 750 ms keeps the same semantic resolved action and its
 authored raw identity under the protection check for the authored `<t>` fallback

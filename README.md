@@ -2,7 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.40.0.1 adds one separate default-off
+assistance, and target highlights. Version 0.40.0.2 fixes intermittent ranged
+Smart Action no-ops by making the 750-ms arm target-independent and deferring
+exact enemy selection until the harmful action arrives. Direct single-target
+actions no longer require an unrelated complete hostile object-table snapshot;
+exact target protection, native range/line of sight, and frozen-target
+revalidation remain mandatory, while target-circle and unknown AoE geometry
+stay complete and fail-closed. Version 0.40.0.1 added one separate default-off
 automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.
 It admits only metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 /
 Blast Charge `29402` when the live job, cast, and adjusted identity all remain
@@ -1370,8 +1376,9 @@ recommended authored shape is:
 /pvpac "Ability" <t>
 ```
 
-No selected target is required; `<t>` is only the user-authored fallback when
-the carrier is deliberately invalidated. At action time, Smart Action resolves
+No selected target is required. Arming performs no `S1`-`S5` scan and has no
+hard-target or live-`S1` prerequisite; `<t>` is only the user-authored fallback
+when the carrier is deliberately invalidated. At action time, Smart Action resolves
 the actual non-ground-target hostile action and its native range/line-of-sight
 result. It considers only unique, living, targetable exact canonical `S1`-`S5`
 enemies. Active Chiten, Covered, Paladin LB Hallowed Ground, and Dark Knight LB
@@ -1393,10 +1400,13 @@ For a target-centered circle, protection safety includes the exact effect radius
 plus each protected actor's hitbox. A verified Guard-ignoring action ignores only
 Guard-only actors in that geometry; Chiten, Covered, and LB invulnerability still
 block, including when combined with Guard. An unreviewed line, cone, or other AoE
-shape is not redirected while any non-bypassed protected enemy exists. The one-shot token is
+shape is not redirected while any non-bypassed protected enemy exists. Direct
+single-target actions need the selected actor's exact protection evidence but
+do not require unrelated hostile object-table completeness; target-circle and
+unknown area shapes retain that complete-world comparison. The one-shot token is
 consumed before selection only while it is strictly live; an expired arm remains
 on the vanilla path. The selected action/actor tuple is frozen and the
-complete protection snapshot is rebuilt immediately before the original call is
+shape-appropriate protection proof is rebuilt immediately before the original call is
 forwarded with the exact canonical enemy ID, never a mutable selected-target
 carrier. Drift cancels that carrier without reranking, retrying, dispatching a
 generated action, or changing the visible target. A short exact-action lease
@@ -2120,7 +2130,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 551-test Core registry and source checks pin
+For the current source, the exact 553-test Core registry and source checks pin
 configuration schema 46, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
 automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
@@ -2139,10 +2149,12 @@ hard-target setter/readback, and no retry or alternate. They additionally pin on
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
 paths. Smart Action remains a separate one-shot harmful-action macro contract.
-Its checks now require caller-proven target protection safety, exact Chiten,
+Its checks now pin target-independent arming, selection with `S1` absent,
+shape-scoped caller-proven target protection safety, exact Chiten,
 Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact
 resolved-action English metadata gate for Guard-ignoring damage, conservative
-target-centered-circle geometry, a frozen canonical target ID for the sole
+target-centered-circle/unknown-AoE complete geometry, direct-target protection
+without unrelated object-table completeness, a frozen canonical target ID for the sole
 native action call, and a bounded exact-action fallback lease.
 
 The same current checks pin Smart Recuperate's exact CC-or-enabled-Den context
