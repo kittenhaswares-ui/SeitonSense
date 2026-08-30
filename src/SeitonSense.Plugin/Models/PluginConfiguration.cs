@@ -54,7 +54,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSeitonPopup { get; set; } = true;
     public bool ShowPersistentSeitonCue { get; set; } = true;
     public bool ShowSeitonPreparation { get; set; } = true;
-    // Schema-28 compatibility only. Runtime and UI use continuous held consent.
+    // Schema-28 compatibility only. The serialized held-name below is retained
+    // so existing /autoseiton opt-ins now arm the automatic availability lane.
     public bool EnableNinjaSeitonOnFreshGameplayKey { get; set; }
     public bool EnableNinjaSeitonOnHeldGameplayKey { get; set; }
     public bool EnableNinjaGuardShukuchiOnHeldGameplayKey { get; set; }
@@ -203,6 +204,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     { get; set; } = [];
     public bool ReactiveCcSamuraiSotenMineuchi { get; set; }
     public float ReactiveCcSamuraiSotenMaximumRangeYalms { get; set; } = 20f;
+    // Serialized legacy name retained for schema compatibility. This default-off
+    // option now arms automatic Zantetsuken and no longer observes a held key.
     public bool EnableSamuraiZantetsukenOnHeldKey { get; set; }
     public bool EnableMonkEarthReplyHelper { get; set; }
     public bool MonkEarthReplyOnLowHp { get; set; } = true;

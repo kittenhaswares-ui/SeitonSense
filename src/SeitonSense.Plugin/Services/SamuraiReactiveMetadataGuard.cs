@@ -12,6 +12,7 @@ internal sealed record SamuraiReactiveMetadataValidation(
     bool MineuchiVerified,
     bool ZantetsukenVerified,
     bool KuzushiVerified,
+    bool ZantetsukenProtectionStatusesVerified,
     bool ChitenVerified,
     bool ProtectionSignalPrerequisitesVerified,
     bool SmartActionCastsVerified,
@@ -19,9 +20,11 @@ internal sealed record SamuraiReactiveMetadataValidation(
 {
     internal bool CounterCcVerified =>
         SotenVerified && MineuchiVerified && ProtectionSignalPrerequisitesVerified;
-    internal bool ZantetsukenWorkflowVerified => ZantetsukenVerified && KuzushiVerified;
+    internal bool ZantetsukenWorkflowVerified =>
+        ZantetsukenVerified && ZantetsukenProtectionStatusesVerified;
 
     internal static SamuraiReactiveMetadataValidation None { get; } = new(
+        false,
         false,
         false,
         false,
@@ -45,6 +48,7 @@ internal static class SamuraiReactiveMetadataGuard
     internal const uint ChitenStatusId = 1_240;
     internal const uint ChitenIconId = 214_820;
     internal const uint OgiNamikiriIconId = 9_663;
+    internal const uint OgiNamikiriFollowUpIconId = 9_664;
     internal const uint TendoSetsugekkaCarrierIconId = 9_206;
     internal const uint TendoSetsugekkaIconId = 9_786;
 
@@ -116,6 +120,31 @@ internal static class SamuraiReactiveMetadataGuard
                           kuzushiRow.Description.ExtractText().Contains(
                               "samurai who applied this effect",
                               StringComparison.Ordinal);
+            var zantetsukenProtectionStatuses =
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId,
+                    "Covered") &&
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.CoveredStatusId,
+                    "Covered") &&
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId,
+                    "Covered") &&
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId,
+                    "Covered") &&
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId,
+                    "Hallowed Ground") &&
+                ValidateExactNamedStatus(
+                    statuses,
+                    NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
+                    "Undead Redemption");
             var chiten = statuses.TryGetRow(ChitenStatusId, out var chitenRow) &&
                          chitenRow.RowId == ChitenStatusId &&
                          string.Equals(
@@ -184,6 +213,12 @@ internal static class SamuraiReactiveMetadataGuard
                                              out var tendoSetsugekkaCarrierRow) &&
                                          ValidateTendoSetsugekkaCarrier(
                                              tendoSetsugekkaCarrierRow);
+            var ogiNamikiriFollowUp = actions.TryGetRow(
+                                          SamuraiSmartActionCastRules
+                                              .OgiNamikiriFollowUpActionId,
+                                          out var ogiNamikiriFollowUpRow) &&
+                                      ValidateOgiNamikiriFollowUp(
+                                          ogiNamikiriFollowUpRow);
             var tendoSetsugekka = actions.TryGetRow(
                                       SamuraiSmartActionCastRules.TendoSetsugekkaActionId,
                                       out var tendoSetsugekkaRow) &&
@@ -199,7 +234,10 @@ internal static class SamuraiReactiveMetadataGuard
                                       additionalCooldownGroup: 0,
                                       castType: 1);
             var smartActionCasts =
-                ogiNamikiri && tendoSetsugekkaCarrier && tendoSetsugekka;
+                ogiNamikiri &&
+                ogiNamikiriFollowUp &&
+                tendoSetsugekkaCarrier &&
+                tendoSetsugekka;
             var dummy = StrictWolvesDenStrikingDummyResolver.ValidateMetadata(
                 dataManager,
                 log);
@@ -209,7 +247,12 @@ internal static class SamuraiReactiveMetadataGuard
             if (!zantetsuken)
                 log.Warning("Seiton Sense disabled unverified SAM Zantetsuken runtime.");
             if (!kuzushi)
-                log.Warning("Seiton Sense disabled unverified SAM Kuzushi runtime.");
+                log.Warning("Seiton Sense disabled the unverified SAM Kuzushi tie-breaker.");
+            if (!zantetsukenProtectionStatuses)
+            {
+                log.Warning(
+                    "Seiton Sense disabled automatic SAM Zantetsuken because exact Cover/invulnerability status metadata drifted.");
+            }
             if (!chiten)
             {
                 log.Warning(
@@ -231,6 +274,7 @@ internal static class SamuraiReactiveMetadataGuard
                 mineuchi,
                 zantetsuken,
                 kuzushi,
+                zantetsukenProtectionStatuses,
                 chiten,
                 protectionSignalPrerequisites,
                 smartActionCasts,
@@ -377,6 +421,37 @@ internal static class SamuraiReactiveMetadataGuard
         action.RequiresLineOfSight &&
         !action.AffectsPosition;
 
+    private static bool ValidateOgiNamikiriFollowUp(GameAction action) =>
+        action.RowId == SamuraiSmartActionCastRules.OgiNamikiriFollowUpActionId &&
+        string.Equals(
+            action.Name.ExtractText(),
+            "Kaeshi: Namikiri",
+            StringComparison.Ordinal) &&
+        action.Icon == OgiNamikiriFollowUpIconId &&
+        action.IsPvP &&
+        !action.IsPlayerAction &&
+        action.ClassJob.IsValid &&
+        action.ClassJob.RowId == SamuraiSmartActionCastRules.SamuraiJobId &&
+        action.Range == 8 &&
+        action.EffectRange == 8 &&
+        action.Cast100ms == 0 &&
+        action.ExtraCastTime100ms == 0 &&
+        action.Recast100ms == 25 &&
+        action.MaxCharges == 0 &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == 3 &&
+        action.CooldownGroup == 58 &&
+        action.AdditionalCooldownGroup == 0 &&
+        action.CastType == 3 &&
+        action.CanTargetHostile &&
+        !action.CanTargetSelf &&
+        !action.CanTargetParty &&
+        !action.CanTargetAlly &&
+        !action.CanTargetAlliance &&
+        !action.TargetArea &&
+        action.RequiresLineOfSight &&
+        !action.AffectsPosition;
+
     private static bool ValidateProtectionStatus(
         ExcelSheet<Status> statuses,
         uint statusId,
@@ -392,5 +467,17 @@ internal static class SamuraiReactiveMetadataGuard
         !status.IsPermanent &&
         status.Description.ExtractText().Contains(
             descriptionFragment,
+            StringComparison.Ordinal);
+
+    private static bool ValidateExactNamedStatus(
+        ExcelSheet<Status> statuses,
+        uint statusId,
+        string expectedName) =>
+        NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(statusId) &&
+        statuses.TryGetRow(statusId, out var status) &&
+        status.RowId == statusId &&
+        string.Equals(
+            status.Name.ExtractText(),
+            expectedName,
             StringComparison.Ordinal);
 }

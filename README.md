@@ -2,12 +2,15 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.4 adds `/seitonfar`, a one-shot
-Smart Action variant that chooses the farthest actually reachable safe enemy,
-and upgrades exact-CC Auto-Zantetsuken to choose the farthest reachable exact
-own-Kuzushi, zero-shield target. Both paths freeze one actor and retain final
-native range/line-of-sight and protection checks without changing the visible
-target. Version 0.42.0.3 fixes an Auto Recuperate
+assistance, and target highlights. Version 0.42.0.5 makes the existing
+Auto-Zantetsuken and `/autoseiton` switches fully automatic while armed, without
+held-key consent or automatic cast cancellation. Zantetsuken now ranks the
+largest vulnerable target-centered 5-yalm cluster, while NIN base and Unsealed
+Seiton use separate readiness epochs with safe pre-request reranking. It also
+repairs Smart Action Ogi, Kaeshi: Namikiri, and Tendo so an unrelated protected
+enemy no longer stalls them; the selected actor and both Namikiri actions'
+candidate-local Chiten cone remain protected. Version 0.42.0.4 adds `/seitonfar`, a one-shot Smart Action variant
+that chooses the farthest actually reachable safe enemy. Version 0.42.0.3 fixes an Auto Recuperate
 reliability latch: an accepted heal can no longer wait forever when the client
 does not expose, or the framework misses, the brief cooldown-unavailable frame.
 The exact verified 1.0-second recast remains an anti-duplicate floor; after it
@@ -93,7 +96,7 @@ redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and 
 unusable fixed Combat Frames runtime and its click/mouseover and calibrated-gauge
 paths. Useful Limit Break evidence now appears as exact enemy nameplate icons, a
 safe self activation banner, and a bounded ally damage feed. It also provides a
-visible `/autoseiton` ON/OFF tile that still requires a physical held key, local
+visible `/autoseiton` ON/OFF tile that arms fully automatic NIN Seiton, local
 4,000/2,000-MP sounds, a version-acknowledged What's New window, a pressure-aware
 Guardian policy, and three-second protection-end leases.
 The suite combines the useful parts of HOWMANY, CCImmunityWatch, NearAssist,
@@ -149,7 +152,7 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the same direct-enemy count is at least three. The movement key still reaches
   FFXIV. Known unavailability waits, explicit client rejection permits only the
   bounded same-intent retry, and any later native PvP action ends Sprint.
-- **Stable held-action leases:** Purify, AST held Near Help, SAM, NIN Seiton,
+- **Stable held-action leases:** Purify, AST held Near Help, SAM counter-CC,
   VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue,
   Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK, held Monk, Smart
   Recuperate, Emergency Teleport, Guard, and pressure Sprint prefer an
@@ -224,15 +227,19 @@ and Super Focus Glow into one configurable custom-repository plugin.
 - **Ninja Seiton decisions:** persistent job-icon cards, `S1`-`S5`, preparation
   cues, and entry pulses use FFXIV's native CC enemy order and verified
   range/line-of-sight checks.
-- **Experimental Ninja Seiton helper:** a separate default-off option can use
-  continuous held-key consent for exact adjusted-action Seiton epochs. It selects
+- **Experimental Ninja Auto-Seiton helper:** a separate default-off persistent
+  arm can automatically dispatch exact adjusted-action Seiton epochs. It selects
   the lowest exact HP ratio among canonical `S1`-`S5` enemies that are strictly
   below 50% and natively reachable. Exact CC context, Ninja job, adjusted action
   readiness, own-Guard safety, and the shared higher-priority helper boundary
   all fail closed. `/autoseiton` and the movable action-bar-style tile switch
-  availability ON/OFF and show a ready sparkle, but ON never replaces the held-
-  key consent requirement. Base Seiton and the verified Unsealed follow-up are
-  distinct epochs; a rejected base request can never substitute the follow-up.
+  availability ON/OFF and show a ready sparkle; ON needs no held or freshly
+  pressed gameplay key. Base Seiton and the verified Unsealed follow-up are
+  distinct readiness epochs. Pre-request target drift can rerank on the next
+  frame; after a native attempt the actor remains frozen and only a bounded
+  explicit-rejection retry is permitted. The helper waits through casts rather
+  than cancelling them. Enabled Wolves' Den testing uses only the exact current
+  duel target or reviewed striking dummy.
 - **Experimental Viper Serpentiner Geist helper:** a separate default-off option
   checks FFXIV's currently transformed Serpent's Tail carrier `39183` while any
   eligible gameplay key, including WASD, remains held. If the carrier exposes
@@ -735,27 +742,30 @@ In Crystalline Conflict, `S1`-`S5` follows FFXIV's native `<e1>`-`<e5>` order.
 Wolves' Den testing accepts only one strict native hostile duel opponent and
 uses synthetic visual `S1`; it does not claim that `<e1>` exists in a duel.
 
-The separate **Seiton on held gameplay key** experiment is disabled by default
-and runs only in exact Crystalline Conflict on PvP Ninja. Continuous physical-
-key consent considers the exact canonical `S1`-`S5` enemy actors whenever a new
-eligible adjusted-action epoch is available.
+The separate **Automatic Seiton when available** experiment is disabled by
+default and runs on PvP Ninja in exact Crystalline Conflict, plus the explicit
+Wolves' Den test mode described below. While armed, it needs no held or freshly
+pressed gameplay key. Exact CC considers the canonical `S1`-`S5` enemy actors
+whenever a new eligible adjusted-action readiness epoch is available.
 The `/autoseiton [on|off|toggle]` command and NIN-only action-bar-style tile
-change only this persisted opt-in; neither substitutes for a held physical
-gameplay key.
+change only this persisted automatic arm.
 Every candidate must remain living, targetable, hostile, strictly below 50% HP,
 and accepted by FFXIV's native action range and line-of-sight result. The lowest
 exact HP ratio wins, followed by stable S-slot and actor-identity tie-breaks.
 The current adjusted action must be the ready base Seiton Tenchu `29515` or its
-verified Unsealed follow-up `29516`.
+verified Unsealed follow-up `29516`; each action has its own availability epoch.
+Enabled Wolves' Den testing considers only the exact current hostile duel target
+or reviewed striking dummy.
 
-Before ranking and again at every frozen retry, optional cast-cancel request,
-and final native action boundary, Seiton Sense checks the exact actor for the
+Before ranking, at every frozen retry, and at the final native action boundary,
+Seiton Sense checks the exact actor for the
 target-side Guardian `Covered` rows, Phalanx's Paladin-only `Hallowed Ground`,
 and Eventide's `Undead Redemption`. Those targets are ineligible until the
 status disappears. The covering Paladin, Phalanx's party-wide 33% mitigation,
 and Guard / Wehr are not blockers. Execute/PREP cues clear for protected actors,
 and a metadata mismatch disables automated Seiton fail-closed; manual Seiton is
-never intercepted.
+never intercepted. Auto-Seiton waits through active casts and never requests
+cast cancellation.
 
 Ninja Seiton follows only Purify. It precedes reactive counter-CC, Ally Rescue,
 PLD Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung, Smart
@@ -763,21 +773,24 @@ Recuperate, Emergency Teleport, generic Guard, pressure Sprint, event Kardia,
 and event Monk.
 Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
-helper. One exact adjusted-action epoch freezes one target. Known unavailable
-states wait without consuming the common retry budget. Only an explicit client
-rejection may call that same intent again after 50 ms. The default legacy budget
-is eight native calls; the separate default-off PvP latency-response option
-freezes the configured 100-1500 ms clean-false budget for that exact intent
-(1000 ms = 21 calls, 1500 ms = 31). Acceptance or ambiguity is terminal. A genuine accepted base-to-
-Unsealed action transition can create a later distinct epoch on the same hold,
+helper. One exact adjusted-action availability epoch freezes one target. Known
+unavailable states wait without consuming the common retry budget. If identity,
+HP, protection, or reachability drifts before any native request, no call was
+made: the frozen intent clears while the same unspent availability epoch may
+rank a new exact actor on the next frame. After any native request, that epoch
+never reranks. Only an explicit client rejection may call the same frozen intent
+again after 50 ms. The default legacy budget is eight native calls; the separate
+default-off PvP latency-response option freezes the configured 100-1500 ms
+clean-false budget for that exact intent (1000 ms = 21 calls, 1500 ms = 31).
+Acceptance, ambiguity, exhaustion, or post-request drift is terminal. A genuine
+base-to-Unsealed adjusted-action transition can create a later distinct epoch,
 but rejected base Seiton can never substitute the follow-up. The same frozen
 S-slot and actor identity are resolved before every possible request, and that
 exact actor's HP and protection are read again. Exactly 50% or higher or newly
-observed Covered/LB invulnerability cancels and retires that exact intent. This minimizes wasted
+observed Covered/LB invulnerability invalidates that actor. This minimizes wasted
 LBs when healing races the selection, but cannot eliminate the unavoidable
 interval between the final client read, request, and server execution. The
-helper never mutates a hard, soft, or focus target and never swallows the
-original gameplay key. A client-accepted return is dispatch feedback only; it
+helper never mutates a hard, soft, or focus target. A client-accepted return is dispatch feedback only; it
 does not prove that Seiton
 landed, executed the enemy, or caused a kill. Current-patch timing and dispatch
 remain live-validation boundaries.
@@ -802,13 +815,15 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar Critical Strategy is Purify, AST same-
-target healing, SAM reactive actions, NIN Seiton, VPR Serpentiner Geist, GNB
-Continuation, reactive
-counter-CC, Ally Rescue, PLD Guardian, then NIN Guard-Shukuchi. DRK Dark Arts
-Shadowbringer, Hiebsprung, the safe Shadowbringer fallback, and held Monk combo
-follow before Smart Recuperate, Emergency Teleport, and the generic helpers. Continuous held consent
-can produce a frozen Critical Strategy intent for a distinct eligible episode.
+The current request order before Scholar Critical Strategy is Purify, Smart
+Recuperate, automatic Guard, AST same-target healing, RDM fresh-Guard
+Corps-a-corps, SAM reactive actions or automatic Zantetsuken, NIN Auto-Seiton,
+VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, PLD
+Guardian, then NIN Guard-Shukuchi. DRK Dark Arts Shadowbringer, Hiebsprung, the
+safe Shadowbringer fallback, and held Monk combo follow Scholar before
+Emergency Teleport and the remaining generic or event helpers. Continuous held
+consent can produce a frozen Critical Strategy intent for a distinct eligible
+episode.
 The frozen enemy is revalidated for exact identity, action readiness, live Guard,
 and native range/line of sight before every possible bounded call. Pressure drift
 neither reranks nor switches or invalidates the frozen target. The helper never
@@ -1269,15 +1284,24 @@ or switching the selected target, choosing an alternate action/actor, or
 replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
-For held Auto-Zantetsuken in exact CC, selection now evaluates every exact
-canonical endpoint that has one own-source Kuzushi, zero shield, and native
-range/line of sight. It chooses the farthest finite hitbox-edge-distance target,
-then stable S-slot. Zantetsuken's 100%-maximum-HP rule applies only to the
-selected Kuzushi target; the surrounding 24,000-potency effect is deliberately
-not counted as another confirmed kill. The endpoint is frozen once. Final
-identity, Kuzushi, shield, Bind, readiness, range, or line-of-sight drift cancels
-without choosing another actor. Wolves' Den deliberately remains exact-current-
-target only.
+For fully automatic Auto-Zantetsuken in exact CC, every living, targetable,
+natively reachable canonical endpoint is evaluated without requiring Kuzushi or
+zero shield. Covered, Hallowed Ground, and Undead Redemption exclude an endpoint
+and an enemy from useful cluster membership; Guard and Chiten do not. The winner
+is the endpoint whose target-centered 5-yalm circle intersects the most useful
+enemy hitboxes. Equal clusters prefer one exact own-source Kuzushi with zero
+shield, then lower HP ratio, then stable S-slot. That Kuzushi/shield state is
+only a tie-breaker, never an execution gate.
+
+The endpoint and selected cluster evidence freeze for an intent. Casts and other
+temporary native blocks wait without automatic cast cancellation. Identity,
+life, blocking protection, Bind, readiness, range, and line of sight are checked
+again at the latest native boundary. If the endpoint becomes invalid before any
+native request, the still-ready LB epoch may rank again on the next frame. After
+a request, only the bounded explicit-rejection retry may reuse that same frozen
+endpoint; acceptance, ambiguity, exhaustion, or drift is terminal. Enabled
+Wolves' Den testing deliberately remains restricted to the exact current duel
+target or reviewed striking dummy, without Kuzushi or shield gates.
 
 After an exact plugin-owned request lands, the matching nonzero source sequence,
 action, target, status, delay, and target-edge distance can contribute one
@@ -1325,9 +1349,11 @@ Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally
 Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
 Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) >
 Monk combo > Emergency Teleport > pressure
-Sprint > event Kardia > event Monk**. The job-specific physical-hold helpers use
-that deterministic order; recovery and automatic Guard run before the job helpers,
-and reactive counter-CC remains before ally cleanse.
+Sprint > event Kardia > event Monk**. The job-specific helpers use
+this deterministic order; automatic Zantetsuken and Auto-Seiton occupy their
+slots without key consent, while held helpers retain their exact key leases.
+Recovery and automatic Guard run before the job helpers, and reactive counter-CC
+remains before ally cleanse.
 Kardia and Monk retain their separate
 event-driven origins. At the reactive counter-CC stage, the chosen opportunity
 freezes one exact-target intent;
@@ -1466,14 +1492,20 @@ current hard target passes through unchanged. This avoids FFXIV's delayed native
 auto-face turning the character toward a stale hidden target after a fast manual
 target switch.
 
-The only reviewed exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka
+The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka
 (`29536 -> 41454`, or direct `41454`). With exact startup metadata and local SAM
-identity, these two 1.5-second base casts continue through the ordinary Smart
-Action ranking and freeze one exact actor for the cast. Ogi's cone remains an
-unsupported area shape, so the complete hostile snapshot must contain no
-non-bypassed Chiten, Guard, Cover, or LB protection; Tendo is checked as direct
-single-target. Kaeshi Namikiri `29531` and Tendo Kaeshi Setsugekka `41455` are
-instant follow-ups and receive no cast exception. The plugin never calls a
+identity, these two reviewed base casts continue through the ordinary Smart
+Action ranking and freeze one exact actor for the cast. Protection is now checked
+for each candidate rather than globally: an unrelated enemy elsewhere with
+Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.
+The selected actor must still be safe under the ordinary direct-target policy.
+Ogi additionally rejects that candidate when a Chiten actor's hitbox intersects
+the reviewed target-facing 8-yalm, 90-degree cone; out-of-cone Chiten and
+incidental Guard/Cover/LB-protected actors do not veto it. Instant Kaeshi:
+Namikiri `29531` uses that same candidate-local cone policy, with separately
+pinned icon `9664`, 8-yalm range/effect range, and cast type `3`. Tendo remains a
+direct single-target check. Tendo Kaeshi Setsugekka `41455` is an instant
+follow-up and receives no cast exception. The plugin never calls a
 face-target or rotation function; FFXIV may still perform its ordinary initial
 auto-facing toward the frozen cast target, but later manual target changes cannot
 retarget that cast through Seiton. Near Assist, Near Help, and every other cast
@@ -1794,12 +1826,12 @@ focus module to avoid drawing both over the same actor.
 | Optional DRK Hiebsprung held-key helper | Yes | No | No |
 | Seiton `S1`-`S5` decision cues | Yes | Synthetic visual `S1` | No |
 | Optional NIN Guard-Shukuchi held-key helper | Yes | No | No |
-| Optional NIN Seiton held-key helper | Yes | No | No |
+| Optional automatic NIN Seiton helper | Yes | Yes, for the exact current duel target or reviewed dummy when test mode is enabled | No |
 | Optional AST held Near Help | Yes | Yes, for living self/party players when test mode is enabled | No |
 | Optional SGE Smart Kardia after accepted Eukrasia | Yes | No | No |
 | Optional VPR Serpentiner-Geist held-key helper | Yes | Yes, for the exact current hostile duel opponent or reviewed dummy when test mode is enabled | No |
 | Optional GNB Continuation held-key helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
-| Optional SAM Soten/Mineuchi and Zantetsuken held helpers | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
+| Optional held SAM Soten/Mineuchi plus automatic Zantetsuken | Yes | Yes, for the exact current duel target or reviewed dummy when test mode is enabled | No |
 | Optional MNK held combo helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
 | Optional manual camera-back job dash macro (NIN/AST/DNC/DRG/RPR/PCT) | Yes | Yes, when test mode is enabled | No |
@@ -1930,8 +1962,9 @@ shared by the closed NIN/AST/DNC/DRG/RPR/PCT camera-back dash catalog. The gener
 held-action cast-cancellation test and schema-46 automatic basic-shot permission
 are both explicitly off for fresh, reset, and migrated configurations. An older
 explicitly enabled NIN fresh-edge helper still traverses
-schema 29 and migrates to the replacement held-key option; the obsolete
-compatibility field is then cleared. Every other existing master and helper
+schema 29 and migrates to the retained compatibility-named opt-in; the obsolete
+field is then cleared. That opt-in now arms fully automatic Seiton and does not
+restore a held-key requirement. Every other existing master and helper
 choice is preserved. Older configurations still traverse the earlier migrations
 first, including schema 28's default-off post-Guard migration. Fresh and reset
 configurations keep every action-helper master off; post-Guard defaults on only
@@ -1965,8 +1998,8 @@ update through the same repository.
   exact safe candidates by farthest action-reachable hitbox-edge distance; it
   shares the Smart Action toggle and has no alias because `/ssfar` belongs to
   friendly Far Help
-- `/autoseiton [on|off|toggle]` - change whether the held-key NIN Auto-Seiton
-  helper is available; ON still requires continuous physical held-key consent
+- `/autoseiton [on|off|toggle]` - arm or disarm fully automatic NIN Auto-Seiton;
+  ON needs no held or freshly pressed gameplay key
 - `/nearassist` - arm one CC-only 750 ms target choice for the immediately
   following supported PvP macro action
 - `/ssassist` - collision-free alias for `/nearassist`; `/seiton assist` is an
@@ -2056,7 +2089,8 @@ reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
 Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK
 Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint
 > event Kardia > event Monk**. The
-job-specific physical-hold helpers use that deterministic urgency order;
+job-specific helpers use that deterministic urgency order; automatic
+Zantetsuken and Auto-Seiton need no key while held helpers retain explicit consent;
 reactive counter-CC still leads ally cleanse. Kardia requires its
 separate accepted-Eukrasia trigger and does not originate from the physical key;
 Monk is an automatic follow-up.
@@ -2080,7 +2114,7 @@ Manual Guard never creates this ownership. Ally Rescue labels a
 removal `CLEANSED` only after the exact successful status-removal ActionEffect is
 observed; attempts and client-accepted requests alone are not success claims.
 
-For the twenty shared physical-hold option trackers, key choice prefers stable movement, then any
+For the shared physical-hold option trackers, key choice prefers stable movement, then any
 other stable held gameplay key, then fresh movement and fresh other gameplay
 keys as fallbacks. Each helper evaluates its held lease before fresh input and
 retains the exact frozen key until its normal release, ineligibility, reset, or
@@ -2089,13 +2123,14 @@ from displacing a valid long-held WASD lease.
 
 The separate **Cancel my active cast for an otherwise-ready held helper** test
 is disabled by default. It applies only to exact frozen physical-hold intents
-for Purify, AST same-target Orbis, RDM fresh-Guard engage, SAM counter-CC/Zantetsuken, NIN Seiton, reactive counter-CC, Ally
+for Purify, AST same-target Orbis, RDM fresh-Guard engage, SAM counter-CC, reactive counter-CC, Ally
 Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Shadowbringer,
 DRK Hiebsprung, Smart Recuperate, Emergency Teleport, Guard, and pressure
 Sprint. Smart
 Kardia and Monk Earth's Reply are excluded because they do not originate from
 held input; every already-incoming manual/Turbo redirect, including Paean, and
-all macro helpers are excluded as well. Viper Serpentiner Geist is excluded
+all macro helpers are excluded as well. Automatic Zantetsuken and Auto-Seiton
+never use this permission. Viper Serpentiner Geist is excluded
 because it polls only the currently transformed carrier. GNB Continuation and
 held Monk combo likewise wait for a clear cast instead of cancelling it. The cast-cancellation
 experiment therefore constructs sixteen reviewed request shapes across seventeen

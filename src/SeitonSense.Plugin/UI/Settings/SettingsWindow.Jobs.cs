@@ -12,10 +12,10 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Job-specific PvP cues and helpers. After Purify, the physical-hold helpers share the second priority tier " +
-            "in deterministic urgency order: AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after Purify, then RDM and SAM; " +
-            "reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
+            "Job-specific PvP cues and helpers. Purify stays first; Smart Recuperate and automatic Guard run before the job-helper tier. " +
+            "That tier uses deterministic urgency order: AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
+            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after recovery and Guard, then RDM and SAM; " +
+            "Auto-Zantetsuken and Auto-Seiton need no key while the other held helpers keep their explicit consent. Reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Astrologian — Harmonischer Orbis", ImGuiTreeNodeFlags.DefaultOpen))
         {
@@ -227,38 +227,41 @@ internal sealed partial class SettingsWindow
             ImGui.TextDisabled(
                 "Only after Shukuchi returns client-accepted does Seiton Sense re-resolve and hard-target that exact " +
                 "same living enemy once. Rejection, unknown acceptance, identity drift, or target readback failure never " +
-                "changes your target. A continuing hold may let enabled NIN Seiton use a later framework frame.");
+                "changes your target. Enabled Auto-Seiton may independently use a later free framework frame.");
             ImGui.PopTextWrapPos();
 
             ImGui.Spacing();
             changed |= Checkbox(
-                "Seiton on held gameplay key (experimental)",
+                "Automatic Seiton when available (experimental)",
                 configuration.EnableNinjaSeitonOnHeldGameplayKey,
                 value => configuration.EnableNinjaSeitonOnHeldGameplayKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and exact Crystalline Conflict only. On PvP Ninja, continuous held-key consent can request " +
+                "Default off. On PvP Ninja, the persistent arm automatically requests " +
                 "the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
-                "exact canonical S1-S5 enemies that are living, targetable, below 50% HP, and accepted by FFXIV's native " +
+                "exact canonical S1-S5 enemies in Crystalline Conflict, or only the exact current target in the enabled " +
+                "Wolves' Den test context. A candidate must be living, targetable, below 50% HP, and accepted by FFXIV's native " +
                 "range/line-of-sight check. A target with Guardian's Covered status, a Paladin's Phalanx self-" +
                 "invulnerability, or a Dark Knight's Eventide invulnerability is excluded; Guard itself remains valid. " +
                 "The lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
-                "its bounded propagation gate blocks the helper. On Ninja, Auto-Seiton is the earliest NIN held job " +
+                "its bounded propagation gate blocks the helper. On Ninja, Auto-Seiton is the earliest NIN automatic job " +
                 "helper after Purify and can claim before the later NIN/reactive helpers in that framework frame.");
             ImGui.TextDisabled(
-                "Each exact adjusted-action epoch freezes one actor. An explicit client rejection may retry that same " +
-                "intent after a short delay while every gate and the same key remain valid; client acceptance ends the " +
-                "epoch immediately. A later genuine 29515-to-29516 follow-up epoch may use the continuing hold, but a " +
-                "rejected base action is never replaced by the follow-up. Seiton Sense never changes the target, selects " +
-                "again inside an epoch, chooses an alternate, falls back, or replays. The frozen actor and its HP are " +
+                "Each exact locally-ready adjusted-action availability epoch freezes one actor. An explicit client " +
+                "rejection may retry only that same intent after a short delay while every gate remains valid; client " +
+                "acceptance or ambiguous acceptance retires the epoch immediately. A later genuine 29515-to-29516 " +
+                "follow-up is a separate epoch, but a " +
+                "rejected base action is never replaced by the follow-up. After any native request, Seiton Sense never " +
+                "selects again inside that epoch, chooses an alternate, falls back, or replays. If the frozen actor drifts " +
+                "before any native request, no call was made and the still-open epoch may choose a new exact actor on the next frame. The actor and its HP are " +
                 "read again at the latest safe point before every request; exactly 50% or higher or newly observed " +
-                "Covered/LB invulnerability cancels the intent. " +
-                "The original gameplay key is not swallowed. A client-accepted return is dispatch feedback only, not " +
+                "Covered/LB invulnerability cancels the intent. Active casts and native animation lock are waited out; " +
+                "automatic Seiton does not require or swallow a gameplay key. A client-accepted return is dispatch feedback only, not " +
                 "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
             ImGui.TextDisabled(
                 "Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF. The tile " +
-                "shows separate ON/OFF icons and sparkles when the resolved Seiton action is ready. ON still requires " +
-                "a currently held gameplay key; it never creates no-input automatic actions.");
+                "shows separate ON/OFF icons and sparkles when the resolved Seiton action is ready. ON is fully automatic " +
+                "and needs no held or freshly pressed gameplay key.");
             ImGui.PopTextWrapPos();
 
             ImGui.Spacing();
@@ -336,21 +339,21 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Samurai — Zantetsuken", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Use your own SAM Zantetsuken on held key when exact Kuzushi has no shield",
+                "Automatically use your own SAM Zantetsuken on the best 5y enemy cluster",
                 configuration.EnableSamuraiZantetsukenOnHeldKey,
                 value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Samurai only. The exact target must have exactly one Kuzushi applied by you, " +
-                "zero ShieldPercentage at selection and at the final native boundary, be alive, targetable, in native " +
-                "range/line of sight, and you must not be Bound. Crystalline Conflict uses one exact canonical S-slot; " +
-                "enabled Wolves' Den testing uses only the exact current duel target or reviewed striking dummy. There " +
-                "is no visible target change, alternate, fallback, or retry after the one native request.");
+                "Default off and PvP Samurai only; no held key is required. In Crystalline Conflict it selects the " +
+                "reachable canonical enemy whose target-centered 5y circle reaches the most vulnerable enemies. " +
+                "Covered, Hallowed Ground, and Undead Redemption are excluded; Guard and Chiten are allowed. Equal " +
+                "clusters prefer your own unshielded Kuzushi, then lower HP%, then stable S-slot. Wolves' Den testing " +
+                "uses only the exact current duel target or reviewed striking dummy.");
             ImGui.TextDisabled(
                 "Purify stays absolute priority. The separate SAM post-Purify/Guard Soten-to-Mineuchi option runs first; " +
                 "an accepted Soten reserves its bounded Mineuchi arrival window before Zantetsuken or any lower helper. " +
-                "With the global held-helper cast-cancel test enabled, an otherwise-ready frozen SAM intent may request " +
-                "the same one-shot native cast cancellation used by reactive counter-CC.");
+                "The automatic target stays frozen through global animation/cast waits and explicit client rejections " +
+                "use the shared bounded retry throttle. Accepted or ambiguous outcomes close that LB-ready epoch.");
             ImGui.PopTextWrapPos();
         }
 

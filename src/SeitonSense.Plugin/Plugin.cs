@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.4";
+    private const string CurrentReleaseVersion = "0.42.0.5";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -406,9 +406,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Added /seitonfar: one harmful macro action now targets the farthest actually reachable safe enemy through the full Smart Action protection and fallback path.",
-                "Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then the stable enemy slot; nearby normal AoE damage is not treated as another execute.",
-                "Both paths freeze one exact actor, recheck native range and line of sight, and never visibly change or rerank your target after commitment.",
+                "Auto-Zantetsuken is now fully automatic while armed and chooses the reachable target with the largest vulnerable enemy cluster inside its target-centered 5-yalm circle.",
+                "Auto-Seiton is now fully automatic while its command or movable tile is ON; base and Unsealed readiness are separate bounded action epochs.",
+                "Smart Action Ogi, Kaeshi: Namikiri, and Tendo no longer stall because an unrelated enemy has Guard, Cover, or LB invulnerability; both Namikiri actions still avoid Chiten intersecting their cone.",
                 "Configuration schema remains 48. All 579 Core tests and release gates pass; live current-client confirmation remains pending.",
             ],
             () => !string.Equals(
@@ -1170,7 +1170,7 @@ public sealed class Plugin : IDalamudPlugin
                     $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome},attempts=" +
                     $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/" +
                     $"{samurai.ZantetsukenAttemptCount},accepted={samurai.AcceptedCount}," +
-                    $"own-zan-enabled/meta/phase={samurai.ZantetsukenHeldHelperEnabled}/" +
+                    $"auto-zan-enabled/meta/phase={samurai.ZantetsukenAutomaticHelperEnabled}/" +
                     $"{samurai.ZantetsukenMetadataVerified}/{samurai.ZantetsukenPhase}," +
                     $"mirror-q/capture/drop=" +
                     $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
@@ -1239,7 +1239,8 @@ public sealed class Plugin : IDalamudPlugin
                     $"{ninja.ThresholdDriftCancellationCount}," +
                     $"protection-cancel={ninja.ProtectionDriftCancelled}/" +
                     $"{ninja.ProtectionDriftCancellationCount}," +
-                    $"fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}," +
+                    $"epoch={ninja.AvailabilityEpochActionId}/spent={ninja.AvailabilityEpochSpent}," +
+                    $"claimed={ninja.InputClaimed}," +
                     $"attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}," +
                     $"count={ninja.AttemptCount}/{ninja.AcceptedCount}," +
                     $"resolve={ninja.CandidateResolution},last={ninja.LastEvent}]");
@@ -1343,7 +1344,7 @@ public sealed class Plugin : IDalamudPlugin
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
             "/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT. It immediately " +
             "uses the job's reviewed self dash without moving the camera or changing target. " +
-            "/autoseiton [on|off|toggle] controls whether held-key NIN Auto-Seiton is available. " +
+            "/autoseiton [on|off|toggle] arms or disarms fully automatic NIN Auto-Seiton. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
         else chatGui.Print($"[Seiton Sense] {text}");

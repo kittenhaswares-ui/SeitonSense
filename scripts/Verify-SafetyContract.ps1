@@ -703,13 +703,13 @@ Assert-Literals $normalizedNearAssistForIntegratedInput @(
     'if (!intent.RequiresSmartActionProtectionRecheck) return true;',
     'return IsExactBufferedSmartActionProtectionSafe(',
     'TryBuildSmartActionProtectionSnapshot(',
-    'SmartActionProtectionRules.IsActionProtectionSafe(',
+    'IsSmartActionProtectionSafe(',
     'if ((bypassRedirect && !integratedBufferReplay) ||',
     'if (clientAccepted && hasSmartKardiaPreflight) ArmAcceptedSmartKardiaTrigger(smartKardiaPreflight);'
 ) 'Exact buffered replay scope, Smart Action protection, and passive Smart Kardia observer'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'if \(integratedBufferReplayDepth > 0 && !TryConsumeIntegratedBufferedReplay\( thisPtr, actionType, actionId, forwardedTargetId, mode\)\) \{ return false; \}.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'private bool TryConsumeIntegratedBufferedReplay\(.*?integratedBufferReplayDepth != 1 \|\| scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.Consumed.*?scope\.Consumed = true;.*?mode != ActionManager\.UseActionMode\.None \|\| actionType != intent\.ActionType \|\| requestedActionId != intent\.RequestedActionId \|\| resolvedActionId != intent\.ResolvedActionId \|\| targetId != intent\.TargetId.*?if \(!intent\.RequiresSmartActionProtectionRecheck\) return true; return IsExactBufferedSmartActionProtectionSafe\( resolvedActionId, targetId\);.*?catch \(Exception exception\).*?return false;' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?var attackShape = ClassifySmartActionAttackShape\(action\);.*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), attackShape, out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, CreateSmartActionActorGeometry\(target\), action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\);') {
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool IsExactBufferedSmartActionProtectionSafe\(.*?TryGetExactResolvedPvpActionMetadata\(resolvedActionId, out var action\).*?var attackShape = ClassifySmartActionAttackShape\(action\);.*?TryBuildSmartActionProtectionSnapshot\( local!, GetPartyEntityIds\(\), attackShape, out var canonicalEnemies, out var protectedActors\).*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\( resolvedActionId, local!, attackShape, target, action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\);') {
     throw 'Buffered replay must single-consume one exact immutable tuple, rerun complete Smart Action protection when inherited, and preserve accepted Eukrasia observation without redirect/token rewriting.'
 }
 Assert-Literals $integratedActionBufferRuntime @(
@@ -1544,7 +1544,7 @@ if (!$heldSmartActionSelector.Success -or
     $heldSmartActionRevalidation.Value -notmatch 'TryValidateExactHeldSmartActionTarget\( resolvedActionId, target\.GameObjectId, enemySlot, target' -or
     $heldSmartActionRevalidation.Value -notmatch 'var attackShape = ClassifySmartActionAttackShape\(action\);.*?TryBuildSmartActionProtectionSnapshot\( local!, partyEntityIds, attackShape, out var canonicalEnemies, out var protectedActors\)' -or
     $heldSmartActionRevalidation.Value -notmatch 'exactMatches\.Length != 1' -or
-    $heldSmartActionRevalidation.Value -notmatch 'SmartActionProtectionRules\.IsActionProtectionSafe\(.*?smartActionGuardBypassActions\.Contains\(resolvedActionId\)' -or
+    $heldSmartActionRevalidation.Value -notmatch 'IsSmartActionProtectionSafe\( resolvedActionId, local!, attackShape, exact, action\.EffectRange, protectedActors, smartActionGuardBypassActions\.Contains\(resolvedActionId\)' -or
     $heldSmartActionRevalidation.Value -notmatch 'SeitonRangeRules\.HasNativeRangeAndLineOfSight\(rangeResult\)' -or
     $heldSmartActionRevalidation.Value -notmatch 'SmartTargetSelectionRules\.IsEligibleCandidate\(') {
     throw 'Held VPR Smart Action selection must remain exact-CC-only, macro-toggle independent, protection/range/LoS safe, freeze one canonical actor, reject a drifted ranked winner without hard-target substitution, and own no action or target boundary.'
@@ -1676,6 +1676,7 @@ Assert-Literals $normalizedSmartActionRuntime @(
     'nowMilliseconds + SmartActionSafetyLeaseRules.DefaultLifetimeMilliseconds'
 ) 'Smart Action strict arm expiry and fresh post-claim safety lease'
 Assert-Literals $samuraiReactiveMetadataGuard @(
+    'bool ZantetsukenProtectionStatusesVerified',
     'bool ChitenVerified',
     'bool SmartActionCastsVerified',
     'internal const uint ChitenStatusId = 1_240;',
@@ -1693,11 +1694,26 @@ Assert-Literals $samuraiReactiveMetadataGuard @(
     'action.AdditionalCooldownGroup == additionalCooldownGroup'
 ) 'English-sheet SAM action/status metadata pins and conservative drift policy'
 Assert-Literals $samuraiReactiveMetadataGuard @(
+    'ZantetsukenVerified && ZantetsukenProtectionStatusesVerified',
+    'var zantetsukenProtectionStatuses =',
+    'NinjaSeitonProtectionStatusCatalog.CoveredLegacyStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpStatusId',
+    'NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId',
+    'NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId',
+    'NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId',
+    'ValidateExactNamedStatus(',
+    'disabled the unverified SAM Kuzushi tie-breaker',
+    'disabled automatic SAM Zantetsuken'
+) 'Automatic SAM Zantetsuken independent hard-protection metadata and optional Kuzushi tie-breaker'
+Assert-Literals $samuraiReactiveMetadataGuard @(
     'internal const uint OgiNamikiriIconId = 9_663;',
+    'internal const uint OgiNamikiriFollowUpIconId = 9_664;',
     'internal const uint TendoSetsugekkaCarrierIconId = 9_206;',
     'internal const uint TendoSetsugekkaIconId = 9_786;',
     'var smartActionCasts =',
-    'ogiNamikiri && tendoSetsugekkaCarrier && tendoSetsugekka;',
+    'ogiNamikiriFollowUp &&',
+    'ValidateOgiNamikiriFollowUp(',
     'ValidateSmartActionCast(',
     'ValidateTendoSetsugekkaCarrier(',
     'SmartActionCastsVerified'
@@ -1754,14 +1770,16 @@ if ($smartActionProtectionRules -match '\b(?:ActionManager|IPlayerCharacter|Stat
     throw 'Smart Action protection and exact-fallback lease policy must remain pure value-only Core code.'
 }
 if ([regex]::Matches($normalizedSmartActionRuntime, 'TryBuildSmartActionProtectionSnapshot\(').Count -ne 6 -or
-    [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 5 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'IsSmartActionProtectionSafe\(').Count -ne 6 -or
+    [regex]::Matches($normalizedSmartActionRuntime, 'SmartActionProtectionRules\.IsActionProtectionSafe\(').Count -ne 1 -or
     $normalizedSmartActionRuntime -notmatch 'if \(!smartActionProtectionMetadataVerified\).*?canonicalEnemies = \[\]; protectedActors = \[\]; return false;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!SmartActionProtectionRules\.RequiresCompleteHostileSnapshot\(attackShape\)\) \{ canonicalEnemies = enemies\.ToArray\(\); protectedActors = protections\.ToArray\(\); return true; \}.*?foreach \(var player in objectTable\.PlayerObjects\.OfType<IPlayerCharacter>\(\)\).*?!occupiedGameObjectIds\.Contains\(player\.GameObjectId\).*?!occupiedEntityIds\.Contains\(player\.EntityId\).*?observedHostileGameObjectIds\.SetEquals\(occupiedGameObjectIds\).*?observedHostileEntityIds\.SetEquals\(occupiedEntityIds\)' -or
-    $normalizedSmartActionRuntime -notmatch 'var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
+    $normalizedSmartActionRuntime -notmatch 'var protectionSafe = IsSmartActionProtectionSafe\(.*?CallerProvenProtectionSafe: protectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?CallerProvenProtectionSafe = finalProtectionSafe' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionProtectionRules\.ClassifyAttackShape\( action\.EffectRange, action\.CastType\)' -or
     [regex]::Matches($normalizedSmartActionRuntime, 'smartActionGuardBypassActions\.Contains\(resolvedActionId\)').Count -ne 4 -or
-    $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = smartActionGuardBypassActions\.Contains\(resolvedActionId\);.*?var protectionSafe = SmartActionProtectionRules\.IsActionProtectionSafe\(.*?protectedActors, actionIgnoresGuard\).*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?finalProtectedActors, actionIgnoresGuard\)' -or
+    $normalizedSmartActionRuntime -notmatch 'var actionIgnoresGuard = smartActionGuardBypassActions\.Contains\(resolvedActionId\);.*?var protectionSafe = IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, canonicalEnemy, action\.EffectRange, protectedActors, actionIgnoresGuard\).*?var finalProtectionSafe = currentEnemy is not null && TryBuildSmartActionProtectionSnapshot\(.*?IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, new CanonicalEnemy\(intent\.EnemySlot, currentEnemy\), action\.EffectRange, finalProtectedActors, actionIgnoresGuard\)' -or
+    $normalizedSmartActionRuntime -notmatch 'private bool IsSmartActionProtectionSafe\(.*?SamuraiSmartActionCastRules\.IsOgiNamikiriConeAction\(resolvedActionId\) && samuraiSmartActionCastsMetadataVerified.*?SamuraiSmartActionCastRules\.IsOgiNamikiriProtectionSafe\( localPlayer\.Position, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\).*?return SmartActionProtectionRules\.IsActionProtectionSafe\( attackShape, targetGeometry, effectRange, protectedActors, actionIgnoresGuard\);' -or
     $normalizedSmartActionRuntime -notmatch 'protectionKind \|= exactKind; continue;.*?protectionKind \|= exactKind;' -or
     $normalizedSmartActionRuntime -notmatch '!chitenMetadataVerified && \(jobId == EnemyCombatConstants\.SamuraiJobId \|\| jobId == 0\) \? SmartActionProtectionKind\.Chiten' -or
     $normalizedSmartActionRuntime -notmatch 'if \(exactKind == SmartActionProtectionKind\.Chiten\).*?jobId != EnemyCombatConstants\.SamuraiJobId.*?!\(!chitenMetadataVerified && jobId == 0\).*?return false;' -or
@@ -1779,7 +1797,7 @@ if ($normalizedSmartActionRuntime -notmatch 'var inspectedSmartActionTargetId = 
     $normalizedSmartActionRuntime -notmatch 'if \(!recognizedMode \|\| !IsSupportedActionType\(actionType\)\).*?if \(!potentiallyExactAction\).*?SmartActionSafetyInspectionOutcome\.NotApplicable;.*?Blocked exact Smart Action fallback: invocation mode drifted.*?SmartActionSafetyInspectionOutcome\.Unsafe;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?ClearSmartActionSafetyLease\(\);' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!bypassRedirect && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\).*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, forwardedTargetId, mode, out var finalSmartActionTargetId\);.*?if \(smartActionSafetyInspection != SmartActionSafetyInspectionOutcome\.Safe\) return false;.*?forwardedTargetId = finalSmartActionTargetId; \}.*?var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?clientAccepted = useActionHook!\.Original\(' -or
-    $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId;.*?exactMatches\.Length != 1.*?SmartActionProtectionRules\.IsActionProtectionSafe.*?if \(safe\) canonicalTargetId = target\.Player\.GameObjectId;' -or
+    $normalizedSmartActionRuntime -notmatch 'var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId \? GetNativeHardTargetId\(local\) : incomingTargetId;.*?exactMatches\.Length != 1.*?IsSmartActionProtectionSafe\( resolvedActionId, local, attackShape, target, action\.EffectRange, protectedActors, actionIgnoresGuard: smartActionGuardBypassActions\.Contains\(resolvedActionId\)\).*?if \(safe\) canonicalTargetId = target\.Player\.GameObjectId;' -or
     $normalizedSmartActionRuntime -notmatch 'if \(!heldActionSelection\) \{ ArmSmartActionSafetyLease\( token, localActor, actionType, actionId, resolvedActionId, now\); \} if \(resolvedActionId == 0\).*?TryGetExactResolvedPvpActionMetadata' -or
     $normalizedSmartActionRuntime -notmatch 'if \(Environment\.TickCount64 >= candidate\.ExpiresAtMilliseconds\).*?armedSmartTarget = null;.*?ownershipChanged = false;.*?Expired before exact Smart Action claim.*?return false;' -or
     $normalizedSmartActionRuntime -notmatch 'SmartActionSafetyLeaseRules\.Arm\( token\.TerritoryId, localPlayer, \(uint\)actionType, rawActionId, resolvedActionId, nowMilliseconds, nowMilliseconds \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);' -or
@@ -4429,7 +4447,7 @@ $miracleGuardFollowupSelfTests = Read-RequiredSource $miracleGuardFollowupSelfTe
 $miracleProtectionEndSelfTests = Read-RequiredSource $miracleProtectionEndSelfTestsPath 'Shared protection-end self-tests'
 $samuraiReactiveSelfTests = Read-RequiredSource $samuraiReactiveSelfTestsPath 'SAM reactive self-tests'
 $samuraiReactiveProbe = Read-RequiredSource $samuraiReactiveCounterCcProbePath 'SAM reactive runtime'
-$samuraiZantetsukenTargetSelectionRules = Read-RequiredSource $samuraiZantetsukenTargetSelectionRulesPath 'SAM Zantetsuken farthest eligible-target rules'
+$samuraiZantetsukenTargetSelectionRules = Read-RequiredSource $samuraiZantetsukenTargetSelectionRulesPath 'SAM Zantetsuken 5y cluster target rules'
 $normalizedSamuraiReactiveProbe = $samuraiReactiveProbe -replace '\s+', ' '
 $miracleGuardProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Core self-test registry'
 $miracleCleanseTestMethods = @(
@@ -4481,9 +4499,9 @@ $samuraiReactiveTestMethods = @(
     'PredictiveTimingRequiresExactWarmEvidence',
     'ProtectionEndConsentUsesTheCurrentHeldKey',
     'WolvesDenUsesExactCurrentTargetAndTargetedActions',
-    'ZantetsukenRequiresOwnKuzushiAndZeroShield',
-    'ZantetsukenRanksFarthestReachableEligibleTargetThenSlot',
-    'ZantetsukenFarthestRankingFailsClosedAndRequiresReachability'
+    'ZantetsukenAutomaticGateBlocksOnlyExactHardProtection',
+    'ZantetsukenRanksLargestVulnerableFiveYalmCluster',
+    'ZantetsukenClusterRankingFailsClosedAndRequiresReachability'
 )
 foreach ($method in $samuraiReactiveTestMethods) {
     Assert-Literals $samuraiReactiveSelfTests @("public static void $method()") "SAM reactive self-test $method"
@@ -4503,33 +4521,37 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 538-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiZantetsukenTargetSelectionRules @(
+    'public const float EffectRangeYalms = 5f;',
     'candidate.AliveAndTargetable',
-    'candidate.OwnSourceKuzushiCount == 1',
-    'candidate.ShieldPercentage == 0',
+    'candidate.ExecuteBlockingProtectionCount == 0',
     'candidate.HasNativeRangeAndLineOfSight',
-    'float.IsFinite(candidate.TargetEdgeDistanceYalms)',
-    'candidate.TargetEdgeDistanceYalms >= 0f',
-    'candidate.TargetEdgeDistanceYalms >',
-    'candidate.EnemySlot < candidates[bestIndex].EnemySlot',
+    'CountUsefulClusterMembers(candidates, index)',
+    'rightClusterSize.CompareTo(leftClusterSize)',
+    'HasOwnUnshieldedKuzushi(left)',
+    'CompareHealthRatio(left, right)',
+    'left.EnemySlot.CompareTo(right.EnemySlot)',
+    'var hitRadius = (double)EffectRangeYalms + candidate.HitboxRadius;',
     '!occupiedSlots.Add(candidate.EnemySlot)',
     '!occupiedGameObjectIds.Add(candidate.Target.GameObjectId)',
     '!occupiedEntityIds.Add(candidate.Target.EntityId)'
-) 'SAM Zantetsuken exact lethal eligibility, farthest finite edge distance, S-slot tie, and complete identity ambiguity policy'
+) 'SAM Zantetsuken 5y cluster, hard-protection exclusion, deterministic tie, and complete identity ambiguity policy'
 Assert-Literals $samuraiReactiveSelfTests @(
-    '"farthest exact eligible target wins"',
-    '"shielded or non-owned Kuzushi targets are not selected"',
-    '"equal distance uses lower S-slot"',
+    '"middle endpoint reaches the largest 5y cluster"',
+    '"protected endpoint and cluster member are excluded"',
+    '"equal clusters prefer own unshielded Kuzushi before HP"',
+    '"equal cluster and execute value prefer lower HP ratio"',
+    '"remaining tie uses lower stable S-slot"',
     'HasNativeRangeAndLineOfSight = false',
-    '"unreachable endpoint cannot be selected"',
+    '"unreachable best endpoint cannot be selected; stable tie remains"',
     '"ambiguous native slot set fails closed"',
-    'edgeDistance: float.NaN',
-    '"unknown edge distance fails the complete snapshot closed"'
-) 'SAM Zantetsuken farthest eligible-target regressions'
+    'x: float.NaN',
+    '"unknown geometry fails the complete snapshot closed"'
+) 'SAM Zantetsuken automatic cluster and hard-protection regressions'
 if ($samuraiZantetsukenTargetSelectionRules -match '\b(?:ActionManager|IPlayerCharacter|ObjectTable|UseAction|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $normalizedSamuraiReactiveProbe -notmatch 'if \(context == SupportedPvPContext\.WolvesDen\).*?TryResolveWolvesDenCurrentTarget\(localPlayer, out var wolvesTarget\).*?IsZantetsukenCandidate\(localPlayer, current\).*?target = wolvesTarget; return true;' -or
-    $normalizedSamuraiReactiveProbe -notmatch 'var candidates = new List<ResolvedZantetsukenTargetCandidate>\(\);.*?ExactCanonicalIdentity: true, AliveAndTargetable: IsLiveTarget\(player\), OwnSourceKuzushiCount: CountOwnSourceKuzushi\( player, localPlayer\.EntityId\), player\.ShieldPercentage, HasNativeRangeAndLineOfSight\( localPlayer, player, SamuraiZantetsukenRules\.ActionId\), edgeDistance' -or
-    $normalizedSamuraiReactiveProbe -notmatch 'SamuraiZantetsukenTargetSelectionRules \.SelectFarthestEligibleTargetIndex\( candidates\.Select\(static candidate => candidate\.Candidate\)\.ToArray\(\)\).*?if \(selectedIndex < 0\) return false;.*?target = CreateFrozenTarget\( context, selected\.Candidate\.EnemySlot, selected\.Player, DarkKnightWolvesDenTargetKind\.None\);') {
-    throw 'Exact-CC Auto-Zantetsuken must rank one canonical own-Kuzushi, zero-shield, live, native-reachable farthest endpoint and freeze it without alternate selection; Wolves Den must remain exact-current-target only.'
+    $normalizedSamuraiReactiveProbe -notmatch 'var candidates = new List<ResolvedZantetsukenTargetCandidate>\(\);.*?ExactCanonicalIdentity: true, AliveAndTargetable: IsLiveTarget\(player\), player\.CurrentHp, player\.MaxHp, OwnSourceKuzushiCount: metadata\.KuzushiVerified \? CountOwnSourceKuzushi\(player, localPlayer\.EntityId\) : 0, player\.ShieldPercentage, ExecuteBlockingProtectionCount: CountExecuteBlockingProtections\(player\), HasNativeRangeAndLineOfSight\( localPlayer, player, SamuraiZantetsukenRules\.ActionId\), player\.Position, player\.HitboxRadius' -or
+    $normalizedSamuraiReactiveProbe -notmatch 'SamuraiZantetsukenTargetSelectionRules \.SelectBestEligibleTargetIndex\( candidates\.Select\(static candidate => candidate\.Candidate\)\.ToArray\(\)\).*?if \(selectedIndex < 0\) return false;.*?target = CreateFrozenTarget\( context, selected\.Candidate\.EnemySlot, selected\.Player, DarkKnightWolvesDenTargetKind\.None\);') {
+    throw 'Exact-CC automatic Zantetsuken must rank one canonical vulnerable 5y cluster endpoint and freeze it; Wolves Den must remain exact-current-target only.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4559,9 +4581,38 @@ $zantetsukenPreNativeCancellation = [regex]::Match(
     $normalizedSamuraiReactiveProbe,
     'if \(decision\.Kind == SamuraiZantetsukenDecisionKind\.Cancelled\) \{(?<Body>.*?)return PublishSnapshot\(\); \}')
 if (-not $zantetsukenPreNativeCancellation.Success -or
-    $zantetsukenPreNativeCancellation.Groups['Body'].Value -notmatch 'zantetsukenTarget = null;' -or
-    $zantetsukenPreNativeCancellation.Groups['Body'].Value -match 'zantetsukenSpentKeyToken\s*=') {
-    throw 'SAM Zantetsuken must release a pre-native frozen intent without spending the still-held physical generation.'
+    $zantetsukenPreNativeCancellation.Groups['Body'].Value -notmatch 'ResetZantetsukenIntent\(\);' -or
+    $zantetsukenPreNativeCancellation.Groups['Body'].Value -notmatch 'zantetsukenReadyEpochTerminal = nativeAttemptAlreadyMade;') {
+    throw 'Automatic SAM Zantetsuken must release a pre-native frozen intent while terminally closing any epoch which already crossed a native boundary.'
+}
+Assert-Literals $samuraiReactiveProbe @(
+    'var actionReady = IsActionSpecificReady(',
+    'if (zantetsukenReadyEpochTerminal)',
+    'HeldActionRetryRules.RetainsSchedulerFrame(',
+    'HeldActionRetryRules.CanAttemptFrozenIntent(',
+    'HeldActionRetryRules.Complete(',
+    'completion.RetryScheduled',
+    'completion.Disposition == HeldActionRetryDisposition.SoftWait',
+    'CountExecuteBlockingProtections(target) != 0',
+    'result.TerminalFailure || nativeAttemptAlreadyMade',
+    'TerminalFailure: true',
+    'LB-ready epoch retired',
+    'zantetsukenReadyEpochTerminal = true;',
+    'Automatic Zantetsuken epoch completed'
+) 'Automatic SAM Zantetsuken readiness epoch, hard-protection boundary, and bounded explicit-rejection retries'
+$automaticZantetsukenBody = [regex]::Match(
+    $normalizedSamuraiReactiveProbe,
+    'internal unsafe SamuraiReactiveCounterCcProbeSnapshot ObserveZantetsuken\((?<Body>.*?)internal void Reset\(\)')
+if (-not $automaticZantetsukenBody.Success -or
+    $automaticZantetsukenBody.Groups['Body'].Value -match 'allowHeldGameplayKey|TryResolveEligibleGameplayKey|IsTextInputActive') {
+    throw 'Automatic SAM Zantetsuken must not require held-key, fresh-key, or text-input consent.'
+}
+$zantetsukenNativeBoundary = [regex]::Match(
+    $normalizedSamuraiReactiveProbe,
+    'private unsafe AttemptResult TryUseZantetsukenOnce\((?<Body>.*?)private static unsafe bool IsActionSpecificReady')
+if (-not $zantetsukenNativeBoundary.Success -or
+    $zantetsukenNativeBoundary.Groups['Body'].Value -notmatch 'catch \(Exception exception\).*?SAM Zantetsuken boundary failed.*?TerminalFailure: true') {
+    throw 'Unknown Auto-Zantetsuken native-boundary failures must terminally retire the current LB-ready epoch instead of rearming every frame.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -5304,7 +5355,6 @@ $castRequestProducers = @(
     [pscustomobject]@{ Path = $allyRescueProbePath; Kind = 'AllyRescue'; Count = 1 },
     [pscustomobject]@{ Path = $defensiveUtilityProbePath; Kind = 'Guardian'; Count = 1 },
     [pscustomobject]@{ Path = $ninjaGuardShukuchiProbePath; Kind = 'NinjaGuardShukuchi'; Count = 1 },
-    [pscustomobject]@{ Path = $ninjaSeitonProbePath; Kind = 'NinjaSeiton'; Count = 1 },
     [pscustomobject]@{ Path = $scholarCriticalStrategyProbePath; Kind = 'ScholarCriticalStrategy'; Count = 1 },
     [pscustomobject]@{ Path = $darkKnightPlungeProbePath; Kind = 'DarkKnightPlunge'; Count = 1 },
     [pscustomobject]@{ Path = $smartRecuperateProbePath; Kind = 'SmartRecuperate'; Count = 1 },
@@ -5315,8 +5365,8 @@ $castRequestProducerPaths = @($castRequestProducers.Path | Sort-Object -Unique)
 $allCastRequestProducerSource = (($castRequestProducerPaths | ForEach-Object {
     Read-RequiredSource $_ "Held cast cancellation request producer $_"
 }) + (Read-RequiredSource $personalStatusPath 'DRK Shadowbringer cast cancellation adapter')) -join "`n"
-if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 15) {
-    throw 'Production runtime must construct exactly fifteen reviewed cast-cancellation request shapes; keyless Auto-Guard, VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
+if ([regex]::Matches($allCastRequestProducerSource, '\bnew HeldCastCancellationRequest\s*\(').Count -ne 14) {
+    throw 'Production runtime must construct exactly fourteen reviewed cast-cancellation request shapes; keyless Auto-Guard, automatic NIN Seiton, VPR Serpent Tail, GNB Continuation, held Monk combo, and event Monk remain explicitly excluded.'
 }
 foreach ($producer in $castRequestProducers) {
     $producerSource = Read-RequiredSource $producer.Path "Cast-cancellation producer $($producer.Kind)"
@@ -5342,11 +5392,11 @@ $castSelection = [regex]::Match(
     $normalizedHeldCastPersonalStatus,
     'var castCancellationRequest =(?<Body>.*?)heldCastCancellation\.Observe\(')
 if (-not $castSelection.Success -or
-    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 15 -or
+    [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedCastCancellationRequest\(').Count -ne 14 -or
     [regex]::Matches($castSelection.Groups['Body'].Value, 'ClaimedDarkKnightShadowbringerCastCancellationRequest\(').Count -ne 2 -or
-    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?ninja\.InputClaimed, ninja\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
+    $castSelection.Groups['Body'].Value -notmatch 'purify\.InputClaimed, purify\.CastCancellationRequest\).*?recuperate\.InputClaimed, recuperate\.CastCancellationRequest\).*?guardDefense\.InputClaimed, guardDefense\.CastCancellationRequest\).*?astrologianOrbis\.InputClaimed, astrologianOrbis\.CastCancellationRequest\).*?redMageGuard\.InputClaimed, redMageGuard\.CastCancellationRequest\).*?samurai\.InputClaimed, samurai\.CastCancellationRequest\).*?miracle\.InputClaimed, miracle\.CastCancellationRequest\).*?rescue\.InputClaimed, rescue\.CastCancellationRequest\).*?defense\.InputClaimed, defense\.CastCancellationRequest\).*?guardShukuchi\.InputClaimed, guardShukuchi\.CastCancellationRequest\).*?scholar\.InputClaimed, scholar\.CastCancellationRequest\).*?shadowbringerPre\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.DarkArts.*?plunge\.InputClaimed, plunge\.CastCancellationRequest\).*?shadowbringer\.InputClaimed.*?DarkKnightShadowbringerOpportunityKind\.SafeHpCost.*?teleport\.InputClaimed, teleport\.CastCancellationRequest\).*?pressureEscape\.InputClaimed, pressureEscape\.CastCancellationRequest\)' -or
     $castSelection.Groups['Body'].Value -match '\b(viper|gunbreaker|kardia|monk)\b') {
-    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Recuperate > keyless Guard (null by design) > AST Orbis > RDM Guard engage > SAM > NIN Seiton > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Emergency Teleport > Sprint order, excluding VPR, GNB, Kardia, and Monk.'
+    throw 'PersonalStatus must select exactly one cast-cancel request in canonical Purify > Recuperate > keyless Guard (null by design) > AST Orbis > RDM Guard engage > SAM > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Emergency Teleport > Sprint order, excluding automatic NIN Seiton, VPR, GNB, Kardia, and Monk.'
 }
 Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
@@ -5827,25 +5877,23 @@ Assert-Literals $personalStatus @(
     'var pressureEscapeSprintHeldInputEnabled = configuration.Enabled &&',
     'var darkKnightPlungeHeldInputEnabled = darkKnightPlungeConfigurationEnabled &&',
     'var ninjaGuardShukuchiHeldInputEnabled =',
-    'var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&',
     'var viperSerpentTailHeldInputEnabled =',
     'var gunbreakerContinuationHeldInputEnabled =',
     'var darkKnightShadowbringerHeldInputEnabled =',
     'var monkHeldComboInputEnabled =',
     'var samuraiCounterCcHeldInputEnabled =',
-    'var samuraiZantetsukenHeldInputEnabled =',
     'var anyPersistentHeldInputEnabled = purifyHeldInputEnabled ||',
     'ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled',
-    'ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled',
+    'ninjaSeitonHeldEnabled: false',
     'viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled',
     'gunbreakerContinuationHeldEnabled: gunbreakerContinuationHeldInputEnabled',
     'darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled',
     'monkHeldComboEnabled: monkHeldComboInputEnabled',
     'samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled',
-    'samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled',
+    'samuraiZantetsukenHeldEnabled: false',
     'astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled',
     'redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled'
- ) 'Guard-independent persistent physical held-input observation gates for nineteen held helpers plus the explicit keyless Auto-Guard compatibility slot'
+ ) 'Guard-independent persistent physical held-input observation gates plus the explicit keyless Auto-Guard and automatic-Zantetsuken compatibility slots'
 $requiredReactiveCcGateFragments = @(
     'miracleIntercept = new MiracleInterceptProbe( objectTable, nearAssist.VerifiedCcBrakeActionIds, nearAssist.VerifiedCcBrakeStatusIds, executeTracker, pressureTracker, nearAssist, machinistLimitBreakCapture, log, metadata, configuration);',
     'var isPaladin = localJobId == EnemyCombatConstants.PaladinJobId; var isRedMage = localJobId == ReactiveCounterCcProfileRules.RedMageJobId; var isBlackMage = localJobId == ReactiveCounterCcProfileRules.BlackMageJobId;',
@@ -5916,7 +5964,8 @@ if ($normalizedPersonalStatus -notmatch 'var purifyClaimedPriority = purify\.Inp
     throw 'The runtime must propagate frame-local priority exactly as Purify > Recuperate > confirmed-resilience Auto-Guard > AST Harmonic Orbis > RDM Guard engage > SAM > NIN Seiton > VPR > GNB > reactive CC > Rescue > Guardian > Guard-Shukuchi > SCH Critical > DRK Dark Arts > DRK Plunge > DRK fallback > Monk > Emergency Teleport > Sprint, while active removable CC still absolutely blocks Recuperate.'
 }
 if ($normalizedPersonalStatus -notmatch 'var ninjaGuardShukuchiConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaGuardShukuchiOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
-    $normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isCrystallineConflict && isNinja;' -or
+    $normalizedPersonalStatus -notmatch 'var ninjaSeitonConfigurationEnabled = configuration\.Enabled && configuration\.EnableNinjaSeitonOnHeldGameplayKey && isSupportedPvPContext && isNinja;' -or
+    $normalizedPersonalStatus -match '\bvar ninjaSeitonHeldInputEnabled\b' -or
     $normalizedPersonalStatus -notmatch 'viperSerpentTail = new ViperSerpentTailProbe\( clientState, objectTable, nearAssist, log\);' -or
     $normalizedPersonalStatus -notmatch 'var viperSerpentTailConfigurationEnabled = configuration\.Enabled && configuration\.EnableViperSerpentTailOnHeldKey && isSupportedPvPContext && isViper;' -or
     $normalizedPersonalStatus -notmatch 'var viperSerpentTailHeldInputEnabled = viperSerpentTailConfigurationEnabled && metadata\.ViperSerpentTailVerified;' -or
@@ -7155,10 +7204,10 @@ if ($unexpectedSmartPaeanReferences.Count -gt 0 -or
     throw "Smart Paean may be constructed once and consulted only by the existing shared action detour: $($locations -join ', ')"
 }
 
-# The NIN Seiton helper is a separate default-off held-level action boundary.
-# Pure rules select exactly one canonical CC enemy by exact HP ratio. Runtime
+# The NIN Seiton helper is a separate default-off automatic action boundary.
+# Pure rules select exactly one context-bound enemy by exact HP ratio. Runtime
 # claims only one scheduler frame per native boundary, retries only a proven
-# clean false, and opens one follow-up epoch only after an accepted base action.
+# clean false, and spends each exact adjusted-action availability epoch once.
 $ninjaSeitonRules = Read-RequiredSource $ninjaSeitonDispatchRulesPath 'NIN Seiton dispatch rules'
 $ninjaSeiton = Read-RequiredSource $ninjaSeitonProbePath 'NIN Seiton dispatch runtime'
 $normalizedNinjaSeitonRules = $ninjaSeitonRules -replace '\s+', ' '
@@ -7167,13 +7216,15 @@ Assert-Literals $ninjaSeitonRules @(
     'BaseActionId = 29_515',
     'FollowUpActionId = 29_516',
     'IReadOnlyList<NinjaSeitonDispatchCandidate>? Candidates',
-    'NinjaSeitonAcceptedHoldState(',
-    'BeginAcceptedHold(',
-    'ObserveAcceptedHold(',
+    'SupportedPvPContext Context',
+    'NinjaSeitonAvailabilityEpochState(',
+    'ObserveAvailabilityEpoch(',
     'CanOpenAdjustedActionEpoch(',
-    'RetireAdjustedActionEpoch(',
-    'FollowUpEpochSpent',
-    'HeldGameplayKeyEligible',
+    'SpendAdjustedActionEpoch(',
+    'CancelFrozenAvailabilityEpoch(',
+    'AvailabilityEpochOpen',
+    'OutsideSupportedPvPContext',
+    'AvailabilityEpochClosed',
     'ActionHelpersSuppressedByGuard',
     'HigherPriorityClaimed',
     'ExactCanonicalIdentity',
@@ -7200,14 +7251,19 @@ Assert-Literals $ninjaSeitonRules @(
     'left.Actor.GameObjectId.CompareTo(right.Actor.GameObjectId)',
     'public bool ShouldConsumeInputGeneration => ShouldDispatch',
     'CanUseExactIntent(',
+    'context == intent.Context',
+    'candidate.Context == intent.Context',
     'candidate.EnemySlot == intent.EnemySlot',
     'candidate.Actor == intent.Target',
     'selector again after consuming input; drift simply cancels the attempt'
-) 'Deterministic exact NIN Seiton dispatch policy'
-if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(!observation\.IsCrystallineConflict\).*?OutsideCrystallineConflict.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.InputProbeSucceeded\).*?InputProbeUnavailable.*?if \(observation\.IsTextInputActive\).*?TextInputActive.*?if \(!observation\.HeldGameplayKeyEligible\).*?NoHeldGameplayKey.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
-    throw 'NIN Seiton policy must require default-off enablement, exact CC/NIN/local identity, verified metadata, no Guard or higher claim, one exact held non-text key epoch, and exact ready 29515/29516.'
+) 'Deterministic exact automatic NIN Seiton dispatch policy'
+if ($normalizedNinjaSeitonRules -notmatch 'if \(!observation\.ConfigurationEnabled\).*?ConfigurationDisabled.*?if \(observation\.Context == SupportedPvPContext\.None\).*?OutsideSupportedPvPContext.*?if \(!observation\.LocalPlayer\.IsValid\).*?LocalPlayerIdentityInvalid.*?if \(!observation\.IsLocalPlayerAlive\).*?LocalPlayerDead.*?if \(!ExecuteThreshold\.IsNinja\(observation\.LocalJobId\)\).*?LocalJobInvalid.*?if \(!observation\.MetadataVerified\).*?MetadataUnverified.*?if \(observation\.ActionHelpersSuppressedByGuard\).*?GuardSuppressed.*?if \(observation\.HigherPriorityClaimed\).*?HigherPriorityClaimed.*?if \(!observation\.AvailabilityEpochOpen\).*?AvailabilityEpochClosed.*?if \(!IsExactSeitonAction\(observation\.ResolvedActionId\)\).*?ResolvedActionInvalid.*?if \(!observation\.ActionLocallyReady\).*?ActionNotReady') {
+    throw 'NIN Seiton policy must require default-off enablement, an exact supported PvP context, NIN/local identity, verified metadata, no Guard or higher claim, one open adjusted-action availability epoch, and exact ready 29515/29516.'
 }
-if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?!candidate\.HasExecuteBlockingProtection.*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
+if (($ninjaSeitonRules + $ninjaSeiton) -match '\b(InputProbeSucceeded|IsTextInputActive|HeldGameplayKeyEligible|FreshGameplayKey|VirtualKey|IsGameplayKeyPhysicallyDown|IsGameplayKeyGenerationEligible)\b') {
+    throw 'Automatic NIN Seiton must not depend on keyboard probes, text-input state, fresh or held keys, or physical key identity.'
+}
+if ($normalizedNinjaSeitonRules -notmatch 'candidate\.Context != SupportedPvPContext\.None.*?candidate\.Actor != localPlayer.*?EnemySlotRules\.IsValidSlot\(candidate\.EnemySlot\).*?candidate\.ExactCanonicalIdentity.*?candidate\.Alive.*?candidate\.Targetable.*?ExecuteThreshold\.IsBelowHalf\(candidate\.CurrentHp, candidate\.MaximumHp\).*?!candidate\.HasExecuteBlockingProtection.*?candidate\.HasValidActionTarget.*?candidate\.HasNativeRangeAndLineOfSight' -or
     $normalizedNinjaSeitonRules -notmatch 'if \(!occupiedSlots\.Add\(candidate\.EnemySlot\) \|\| !occupiedActors\.Add\(candidate\.Actor\)\) \{ return -1; \}.*?if \(bestIndex < 0 \|\| Compare\(candidate, candidates\[bestIndex\]\) < 0\) bestIndex = index;' -or
     $normalizedNinjaSeitonRules -notmatch '\(\(ulong\)leftCurrent \* rightMaximum\)\.CompareTo\( \(ulong\)rightCurrent \* leftMaximum\)') {
     throw 'NIN Seiton selection must fail closed on duplicate exact slots/actors and rank only eligible sub-50 targets by overflow-safe exact HP ratio.'
@@ -7217,12 +7273,12 @@ if ($normalizedNinjaSeitonRules -notmatch 'public static bool IsExecuteBlockingS
     throw 'NIN Seiton protection metadata must remain the exact six target-side Covered, Hallowed Ground, and Undead Redemption rows.'
 }
 if ($normalizedNinjaSeitonRules -notmatch 'var health = CompareRatio\( left\.CurrentHp, left\.MaximumHp, right\.CurrentHp, right\.MaximumHp\); if \(health != 0\) return health; var slot = left\.EnemySlot\.CompareTo\(right\.EnemySlot\); if \(slot != 0\) return slot; var entity = left\.Actor\.EntityId\.CompareTo\(right\.Actor\.EntityId\); return entity != 0 \? entity : left\.Actor\.GameObjectId\.CompareTo\(right\.Actor\.GameObjectId\);' -or
-    $normalizedNinjaSeitonRules -notmatch 'intent\.IsValid && actionLocallyReady && resolvedActionId == intent\.ActionId && candidate\.EnemySlot == intent\.EnemySlot && candidate\.Actor == intent\.Target && IsEligibleCandidate\(candidate, localPlayer\)') {
-    throw 'NIN Seiton must use ratio, S-slot, EntityId, and GameObjectId ordering, then validate only the frozen action/slot/actor intent.'
+    $normalizedNinjaSeitonRules -notmatch 'intent\.IsValid && actionLocallyReady && resolvedActionId == intent\.ActionId && context == intent\.Context && candidate\.Context == intent\.Context && candidate\.EnemySlot == intent\.EnemySlot && candidate\.Actor == intent\.Target && IsEligibleCandidate\(candidate, localPlayer, context\)') {
+    throw 'NIN Seiton must use ratio, S-slot, EntityId, and GameObjectId ordering, then validate only the frozen context/action/slot/actor intent.'
 }
 if ($ninjaSeitonRules -match '\b(UseAction|UseActionLocation|ExecuteAction|SendAction|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $ninjaSeitonRules -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|ActionQueued|QueueAction|PendingDispatch|BufferedDispatch)\b') {
-    throw 'Pure NIN Seiton rules may model held epochs but must never dispatch, observe time, buffer, queue, mutate, or depend on the visible target.'
+    throw 'Pure NIN Seiton rules may model automatic availability epochs but must never dispatch, observe time, buffer, queue, mutate, or depend on the visible target.'
 }
 
 if ([regex]::Matches($ninjaSeiton, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
@@ -7230,6 +7286,9 @@ if ([regex]::Matches($ninjaSeiton, '(?:->|\.)UseAction\s*\(').Count -ne 1) {
 }
 Assert-Literals $ninjaSeiton @(
     'NinjaSeitonDispatchProbeSnapshot(',
+    'SupportedPvPContext Context',
+    'AvailabilityEpochActionId',
+    'AvailabilityEpochSpent',
     'UseActionAttempted',
     'UseActionAccepted',
     'RevalidatedCurrentHp',
@@ -7240,6 +7299,8 @@ Assert-Literals $ninjaSeiton @(
     'ProtectionDriftCancelled',
     'ThresholdDriftCancellationCount',
     'ProtectionDriftCancellationCount',
+    'observedBlockingStatusId =',
+    'observedBoundaryCandidate.ExecuteBlockingStatusId',
     'CandidateCount',
     'CandidateResolution',
     'executeTracker.Diagnostics',
@@ -7263,9 +7324,10 @@ Assert-Literals $ninjaSeiton @(
     'objectTable.SearchByEntityId(target.EntityId)',
     'SeitonReadinessProbe.TryGetReadyAction(',
     'SeitonReadinessProbe.HasRangeAndLineOfSight(',
-    'inputFrame.HeldGameplayKeyEligible',
-    'NinjaSeitonDispatchRules.ObserveAcceptedHold(',
+    'NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(',
     'NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(',
+    'NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(',
+    'NinjaSeitonDispatchRules.CancelFrozenAvailabilityEpoch(',
     'NinjaSeitonDispatchRules.Observe(',
     'inputFrame.Consume()',
     'HeldActionRetryRules.RetainsSchedulerFrame(',
@@ -7284,16 +7346,18 @@ Assert-Literals $ninjaSeiton @(
     'ClientActionAttemptBoundary.Capture(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'HeldActionRetryRules.Complete(',
-    'HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(',
-    'NinjaSeitonDispatchRules.BeginAcceptedHold(',
-    'NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(',
     'ActionType.Action',
     'ActionManager.UseActionMode.None',
     'HeldActionRetryRules.ResolveAttemptLimit(retryState)'
-) 'Exact held-epoch NIN Seiton runtime, shared retry boundary, and truthful diagnostics'
-if ($normalizedNinjaSeiton -notmatch 'var featureContextReady = configurationEnabled && isCrystallineConflict && localAlive && ExecuteThreshold\.IsNinja\(localJobId\) && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var actionLocallyReady = featureContextReady && localIdentity\.IsValid && SeitonReadinessProbe\.TryGetReadyAction\(localPlayer!, out resolvedActionId\) && IsActionResourceReady\(resolvedActionId\); var nearQueueable = actionLocallyReady && IsNativeBoundaryNearQueueable\(localPlayer!\);' -or
-    $normalizedNinjaSeiton -notmatch 'acceptedHold = NinjaSeitonDispatchRules\.ObserveAcceptedHold\(.*?var hasHeldEpoch = acceptedHold\.OwnsHold \? NinjaSeitonDispatchRules\.CanOpenAdjustedActionEpoch\( acceptedHold, resolvedActionId\) : inputFrame\.HeldGameplayKeyEligible; var shouldResolveCandidates = frozenRetry is null && terminalHeldKey == VirtualKey\.NO_KEY && actionLocallyReady && !higherPriorityClaimed && input\.ProbeSucceeded && !input\.IsTextInputActive && hasHeldEpoch;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\(localPlayer!, resolvedActionId, out candidateResolution\) : \[\];.*?hasHeldEpoch, resolvedActionId, actionLocallyReady, candidates, hardReset') {
-    throw 'NIN Seiton may capture candidates only behind exact CC/NIN/metadata/Guard/readiness gates and one unclaimed exact held action epoch.'
+) 'Exact automatic availability-epoch NIN Seiton runtime, shared retry boundary, and truthful diagnostics'
+if ($normalizedNinjaSeiton -notmatch 'var featureContextReady = configurationEnabled && context != SupportedPvPContext\.None && localAlive && ExecuteThreshold\.IsNinja\(localJobId\) && metadataVerified && !actionHelpersSuppressedByGuard && !hardReset; var resolvedActionId = 0u; var availabilityReady = featureContextReady && localIdentity\.IsValid && SeitonReadinessProbe\.TryGetReadyAction\( localPlayer!, out resolvedActionId\); var actionLocallyReady = availabilityReady && IsActionResourceReady\(resolvedActionId\);' -or
+    $normalizedNinjaSeiton -notmatch 'availabilityEpoch = NinjaSeitonDispatchRules\.ObserveAvailabilityEpoch\( availabilityEpoch, hardReset, featureContextReady, availabilityReady, resolvedActionId\); var hasOpenAvailabilityEpoch = NinjaSeitonDispatchRules\.CanOpenAdjustedActionEpoch\( availabilityEpoch, resolvedActionId\); var shouldResolveCandidates = frozenRetry is null && actionLocallyReady && !higherPriorityClaimed && !inputFrame\.IsConsumed && hasOpenAvailabilityEpoch;.*?var candidates = shouldResolveCandidates \? ResolveExactCandidates\( localPlayer!, context, resolvedActionId, wolvesDenStrikingDummyMetadataVerified, out candidateResolution\) : \[\];.*?hasOpenAvailabilityEpoch, resolvedActionId, actionLocallyReady, candidates, hardReset') {
+    throw 'NIN Seiton may capture candidates only behind exact supported-context/NIN/metadata/Guard/readiness gates and one unspent adjusted-action availability epoch.'
+}
+if ($normalizedNinjaSeiton -notmatch 'if \(context == SupportedPvPContext\.WolvesDen\).*?ResolveExactWolvesDenCandidate\( localPlayer, actionId, wolvesDenStrikingDummyMetadataVerified, out resolution\).*?if \(context != SupportedPvPContext\.CrystallineConflict\).*?return \[\];' -or
+    $normalizedNinjaSeiton -notmatch 'ResolveExactWolvesDenCandidate\(.*?DarkKnightWolvesDenCurrentTargetResolver \.TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, localPlayer, out var target, out var identity, out var kind, out _\).*?BuildExactCandidate\( localPlayer, actionId, SupportedPvPContext\.WolvesDen, EnemySlotRules\.FirstSlot, identity, target\).*?return \[exact\];' -or
+    $normalizedNinjaSeiton -notmatch 'if \(intent\.Context == SupportedPvPContext\.CrystallineConflict\).*?BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target\).*?if \(intent\.Context != SupportedPvPContext\.WolvesDen.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, localPlayer, out var target, out var identity, out _, out _\).*?identity != intent\.Target.*?return BuildExactCandidate\( localPlayer, actionId, SupportedPvPContext\.WolvesDen, intent\.EnemySlot, intent\.Target, target\);') {
+    throw 'Automatic NIN Seiton must keep CC on the exact e1-e5 snapshot while Wolves Den uses only the exact current duel opponent or verified dummy and freezes that same context-bound actor.'
 }
 if ($normalizedNinjaSeiton -notmatch 'var diagnosticsBefore = executeTracker\.Diagnostics; if \(!diagnosticsBefore\.Active \|\| !diagnosticsBefore\.IsCrystallineConflict \|\| !diagnosticsBefore\.SeitonMetadataVerified\).*?if \(diagnosticsBefore\.SlotCapacity != EnemySlotRules\.LastSlot \|\| diagnosticsBefore\.ResolvedSlots != EnemySlotRules\.LastSlot\).*?var snapshots = executeTracker\.Enemies\.ToArray\(\); var diagnosticsAfter = executeTracker\.Diagnostics; if \(!ReferenceEquals\(diagnosticsBefore, diagnosticsAfter\)\).*?if \(snapshots\.Length > EnemySlotRules\.LastSlot \|\| snapshots\.Length != diagnosticsBefore\.ValidEnemySlots\)' -or
     $normalizedNinjaSeiton -notmatch 'foreach \(var snapshotEnemy in snapshots\).*?!seenSlots\.Add\(snapshotEnemy\.Slot\).*?!seenGameObjectIds\.Add\(snapshotEnemy\.GameObjectId\).*?!seenEntityIds\.Add\(snapshotEnemy\.EntityId\).*?return \[\];.*?snapshotsBySlot\.Add\(snapshotEnemy\.Slot, snapshotEnemy\);') {
@@ -7308,13 +7372,14 @@ if ($normalizedNinjaSeiton -notmatch 'var eligibleCurrentSlots = currentSlots \.
 if ($normalizedNinjaSeiton -notmatch 'foreach \(var \(slot, player\) in currentSlots\).*?var stablePlayer = EnemySlotResolver\.Resolve\(objectTable, slot\); if \(!HasValidNativeIdentity\(stablePlayer\) \|\| stablePlayer!\.Address != player\.Address \|\| stablePlayer\.GameObjectId != player\.GameObjectId \|\| stablePlayer\.EntityId != player\.EntityId\).*?return \[\];.*?var protectedCandidates = candidates\.Count\( static candidate => candidate\.HasExecuteBlockingProtection\); resolution = \$"Exact coherent set: \{candidates\.Count\} candidates, protected=\{protectedCandidates\}"; return candidates;') {
     throw 'NIN Seiton must re-resolve the complete native e1-e5 identity set unchanged before returning any ranked candidates.'
 }
-if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out var executeBlockingStatusId, out _\).*?executeBlockingStatusId, validActionTarget, rangeAndLineOfSight') {
-    throw 'Every NIN Seiton candidate must re-resolve one canonical e-slot, match both exact actor IDs/address, and pass FFXIV native range/LoS.'
+if ($normalizedNinjaSeiton -notmatch 'var target = EnemySlotResolver\.Resolve\(objectTable, enemySlot\); if \(!HasValidNativeIdentity\(target\) \|\| target!\.GameObjectId != expectedTarget\.GameObjectId \|\| target\.EntityId != expectedTarget\.EntityId\).*?BuildExactCandidate\( localPlayer, actionId, SupportedPvPContext\.CrystallineConflict, enemySlot, expectedTarget, target\)' -or
+    $normalizedNinjaSeiton -notmatch 'private unsafe NinjaSeitonDispatchCandidate\? BuildExactCandidate\(.*?context == SupportedPvPContext\.None.*?target\.GameObjectId != expectedTarget\.GameObjectId.*?target\.EntityId != expectedTarget\.EntityId.*?var tableTarget = objectTable\.SearchByEntityId\(target\.EntityId\) as IBattleChara; var exactCanonicalIdentity = tableTarget is not null && tableTarget\.Address == target\.Address && tableTarget\.GameObjectId == target\.GameObjectId && tableTarget\.EntityId == target\.EntityId;.*?SeitonReadinessProbe\.HasRangeAndLineOfSight\( localPlayer, target, actionId, out _\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out var executeBlockingStatusId, out _\).*?return new NinjaSeitonDispatchCandidate\( context, enemySlot, expectedTarget, exactCanonicalIdentity,.*?executeBlockingStatusId, validActionTarget, rangeAndLineOfSight\);') {
+    throw 'Every NIN Seiton candidate must retain its exact PvP context, match canonical actor IDs/address, and pass FFXIV native range/LoS and execute-protection checks.'
 }
 $ninjaConsume = [regex]::Match($ninjaSeiton, 'inputClaimed\s*=\s*true\s*;\s*\r?\n\s*inputFrame\.Consume\(\);')
-$ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(\s*localPlayer!,\s*retry\.Intent,\s*finalResolvedActionId\)')
+$ninjaFrozenResolve = [regex]::Match($ninjaSeiton, 'ResolveFrozenIntent\(\s*localPlayer!,\s*retry\.Intent,\s*finalResolvedActionId,\s*wolvesDenStrikingDummyMetadataVerified\)')
 $ninjaIntentRevalidation = [regex]::Match($ninjaSeiton, 'NinjaSeitonDispatchRules\.CanUseExactIntent\s*\(')
-$ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\s*\(\s*localPlayer!,\s*intent,\s*out attempted,')
+$ninjaTryUse = [regex]::Match($ninjaSeiton, 'TryUseSeitonOnce\s*\(\s*localPlayer!,\s*intent,\s*wolvesDenStrikingDummyMetadataVerified,\s*out attempted,')
 $ninjaNativeCall = [regex]::Match($ninjaSeiton, 'actionManager->UseAction\s*\(')
 if (-not $ninjaConsume.Success -or -not $ninjaFrozenResolve.Success -or
     -not $ninjaIntentRevalidation.Success -or -not $ninjaTryUse.Success -or -not $ninjaNativeCall.Success -or
@@ -7330,9 +7395,9 @@ if ($ninjaPostConsumeWindow -match '\b(ResolveExactCandidates|SelectBestCandidat
     $ninjaPostConsumeWindow -match '\bexecuteTracker\.Enemies\b') {
     throw 'After scheduler-frame claim NIN Seiton may use only the frozen intent; it must never rerank or choose an alternate.'
 }
-if ($normalizedNinjaSeiton -notmatch 'BuildExactSlotCandidate\( localPlayer, actionId, intent\.EnemySlot, intent\.Target\)' -or
+if ($normalizedNinjaSeiton -notmatch 'ResolveFrozenIntent\( localPlayer, intent, resolvedActionId, wolvesDenStrikingDummyMetadataVerified\)' -or
     $normalizedNinjaSeiton -notmatch 'actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\)') {
-    throw 'NIN Seiton final validation and UseAction must retain the one frozen slot, exact actor, and exact adjusted action with no fallback.'
+    throw 'NIN Seiton final validation and UseAction must retain the one frozen context, slot, exact actor, and exact adjusted action with no fallback.'
 }
 $ninjaTryUseMethod = [regex]::Match(
     $normalizedNinjaSeiton,
@@ -7344,14 +7409,14 @@ $ninjaTryUseBody = $ninjaTryUseMethod.Groups['Body'].Value
 $ninjaBoundaryThresholdBody = $ninjaBoundaryThresholdMethod.Groups['Body'].Value
 if (-not $ninjaTryUseMethod.Success -or
     -not $ninjaBoundaryThresholdMethod.Success -or
-    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( intent, out var currentHp, out var maximumHp, out var executeBlockingStatusId\).*?ExecuteBlockingStatusId = executeBlockingStatusId.*?if \(thresholdResult == BoundaryThresholdResult\.Protected\).*?protectionDriftAtBoundary = true; return false;.*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); attemptedAtBoundary = true; var clientAccepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); boundaryAfter = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); return clientAccepted;.*?return attemptedAtBoundary \? ClientActionAttemptBoundaryRules\.Classify\( accepted, intent\.ActionId, boundaryBefore, boundaryAfter\) : softUnavailableAtBoundary \? ClientActionAttemptOutcome\.SoftUnavailable : ClientActionAttemptOutcome\.NotInvoked;' -or
+    $ninjaTryUseBody -notmatch 'nearAssist\.RunWithoutRedirect\(\(\) =>.*?SeitonReadinessProbe\.TryGetReadyAction\( localPlayer, out var resolvedActionId\).*?ResolveFrozenIntent\( localPlayer, intent, resolvedActionId, wolvesDenStrikingDummyMetadataVerified\).*?NinjaSeitonDispatchRules\.CanUseExactIntent\( intent, frozenCandidate, currentLocalIdentity, intent\.Context, resolvedActionId, actionLocallyReady: true\).*?ReadFrozenThresholdAtUseActionBoundary\( localPlayer, intent, wolvesDenStrikingDummyMetadataVerified, out var currentHp, out var maximumHp, out var executeBlockingStatusId\).*?ExecuteBlockingStatusId = executeBlockingStatusId.*?if \(thresholdResult == BoundaryThresholdResult\.Protected\).*?protectionDriftAtBoundary = true; return false;.*?if \(thresholdResult != BoundaryThresholdResult\.BelowHalf\).*?return false;.*?thresholdRevalidatedAtBoundary = true; boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); attemptedAtBoundary = true; var clientAccepted = actionManager->UseAction\( ActionType\.Action, intent\.ActionId, intent\.Target\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); boundaryAfter = ClientActionAttemptBoundary\.Capture\( actionManager, intent\.ActionId\); return clientAccepted;.*?return attemptedAtBoundary \? ClientActionAttemptBoundaryRules\.Classify\( accepted, intent\.ActionId, boundaryBefore, boundaryAfter\) : softUnavailableAtBoundary \? ClientActionAttemptOutcome\.SoftUnavailable : ClientActionAttemptOutcome\.NotInvoked;' -or
     $ninjaTryUseBody -match '\b(ResolveExactCandidates|SelectBestCandidateIndex)\s*\(|\bexecuteTracker\.Enemies\b') {
     throw 'At the NIN UseAction boundary, the internal bypass must revalidate only the same frozen action/S-slot/GOID/EID, perform the latest strict sub-50 HP read, and classify the complete pre/post native fingerprint with no rerank or alternate.'
 }
-if ($ninjaBoundaryThresholdBody -notmatch 'EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\).*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IPlayerCharacter.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out executeBlockingStatusId, out _\).*?BoundaryThresholdResult\.Protected.*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
+if ($ninjaBoundaryThresholdBody -notmatch 'if \(intent\.Context == SupportedPvPContext\.CrystallineConflict\).*?target = EnemySlotResolver\.Resolve\(objectTable, intent\.EnemySlot\);.*?else if \(intent\.Context == SupportedPvPContext\.WolvesDen.*?TryResolveExactCurrentHardTarget\( objectTable, wolvesDenStrikingDummyMetadataVerified, localPlayer, out var wolvesTarget, out var wolvesIdentity, out _, out _\).*?wolvesIdentity == intent\.Target.*?target = wolvesTarget;.*?target = null;.*?target!\.GameObjectId != intent\.Target\.GameObjectId.*?target\.EntityId != intent\.Target\.EntityId.*?objectTable\.SearchByEntityId\(target\.EntityId\) as IBattleChara.*?tableTarget\.Address != target\.Address.*?tableTarget\.GameObjectId != target\.GameObjectId.*?tableTarget\.EntityId != target\.EntityId.*?currentHp = target\.CurrentHp; maximumHp = target\.MaxHp;.*?target\.IsDead.*?!target\.IsTargetable.*?!ExecuteThreshold\.HasValidHp\(currentHp, maximumHp\).*?NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( target, out executeBlockingStatusId, out _\).*?BoundaryThresholdResult\.Protected.*?ExecuteThreshold\.IsBelowHalf\(currentHp, maximumHp\).*?BoundaryThresholdResult\.BelowHalf.*?BoundaryThresholdResult\.AtOrAboveHalf' -or
     [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.CurrentHp\b').Count -ne 1 -or
     [regex]::Matches($ninjaBoundaryThresholdBody, '\btarget\.MaxHp\b').Count -ne 1) {
-    throw 'The final NIN threshold read must resolve only the frozen S-slot and exact GOID/EID/address, read that actor HP once, reject invalid/dead/untargetable state, and treat exactly 50 percent or higher as terminal cancellation.'
+    throw 'The final NIN threshold read must resolve only the frozen CC S-slot or exact Wolves Den target and exact GOID/EID/address, read that actor HP once, reject invalid/dead/untargetable state, and treat exactly 50 percent or higher as terminal cancellation.'
 }
 $ninjaSeitonProtectionProbe = Read-RequiredSource $ninjaSeitonProtectionProbePath 'NIN Seiton protection probe'
 Assert-Literals $ninjaSeitonProtectionProbe @(
@@ -7362,32 +7427,35 @@ Assert-Literals $ninjaSeitonProtectionProbe @(
 ) 'Exact live NIN Seiton protection status scan'
 if ($ninjaSeitonProtectionProbe -match '(?i)status\.Name|Name\.TextValue' -or
     [regex]::Matches($ninjaSeiton, 'NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\s*\(').Count -ne 2) {
-    throw 'NIN Seiton protection must use only exact numeric status metadata at candidate, cast-cancel, and final native boundaries.'
+    throw 'NIN Seiton protection must use only exact numeric status metadata at candidate and final native boundaries.'
 }
 $ninjaSeitonExecuteTracker = Read-RequiredSource (Join-Path $pluginServicesRoot 'ExecuteTracker.cs') 'NIN Seiton cue tracker'
 $normalizedNinjaSeitonExecuteTracker = $ninjaSeitonExecuteTracker -replace '\s+', ' '
 if ($normalizedNinjaSeitonExecuteTracker -notmatch 'var executeProtected = NinjaSeitonProtectionProbe\.TryFindExecuteBlockingStatus\( player, out _, out _\); var seitonTargetReady = seitonResourceReady && !executeProtected;.*?PersistentSeitonCueRules\.Observe\( state\.SeitonCue, seitonTargetReady,.*?hardReset: !isNinja \|\| !metadata\.SeitonVerified \|\| executeProtected\)') {
     throw 'Persistent Seiton execute/preparation cues must clear while the exact enemy has execute-blocking protection.'
 }
-$ninjaCastCancellationMethod = [regex]::Match(
-    $normalizedNinjaSeiton,
-    'private HeldCastCancellationRequest\? CreateCastCancellationRequest\(.*?\) \{(?<Body>.*?)\} private ulong NextIntentEpochToken')
-if (-not $ninjaCastCancellationMethod.Success -or
-    $ninjaCastCancellationMethod.Groups['Body'].Value -notmatch 'ResolveFrozenIntent\( localPlayer, frozen\.Intent, resolvedActionId\).*?candidate\.HasExecuteBlockingProtection.*?executeBlockingStatusId = candidate\.ExecuteBlockingStatusId; return null;.*?NinjaSeitonDispatchRules\.CanUseExactIntent\( frozen\.Intent, candidate, currentLocalIdentity, resolvedActionId, actionLocallyReady: true\).*?new HeldCastCancellationRequest\(') {
-    throw 'NIN Seiton may request cast cancellation only after exact frozen actor and execute-protection revalidation.'
+if ($ninjaSeiton -match '\b(HeldCastCancellationRequest|CreateCastCancellationRequest|CastCancellationRequest|CancelCast)\b') {
+    throw 'Automatic NIN Seiton must wait for a natural native boundary and must never create or expose a cast-cancellation request.'
 }
 $ninjaSeitonSelfTests = Read-RequiredSource $ninjaSeitonDispatchSelfTestsPath 'NIN Seiton dispatch self-tests'
 Assert-Literals $ninjaSeitonSelfTests @(
     'public static void ExecuteBlockingProtectionStatusSetIsExact()',
     'public static void ProtectedTargetsAreSkippedAndFrozenProtectionDriftCancels()',
-    'public static void HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime()',
-    'NinjaSeitonDispatchRules.BeginAcceptedHold(',
+    'public static void DispatchRequiresEveryAutomaticGate()',
+    'public static void AutomaticAvailabilityUsesOneAcceptedAdjustedActionEpochAtATime()',
+    'NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(',
     'NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(',
-    '"same accepted base epoch cannot repeat"',
-    '"adjusted follow-up is one distinct epoch"',
-    '"spent follow-up epoch cannot reopen after terminal drift"',
-    '"accepted follow-up cannot repeat"',
-    '"key release ends accepted ownership"',
+    'NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(',
+    'NinjaSeitonDispatchRules.CancelFrozenAvailabilityEpoch(',
+    '"Wolves'' Den automatic Seiton"',
+    '"fresh base availability opens automatically"',
+    '"accepted base availability cannot repeat while still ready"',
+    '"target drift before a native request keeps automatic availability open"',
+    '"pre-native drift may select a new exact target next frame"',
+    '"target drift after a native request retires the availability epoch"',
+    '"real adjusted follow-up transition opens one distinct automatic epoch"',
+    '"accepted follow-up cannot repeat in the same availability epoch"',
+    '"real local unavailability closes the spent epoch"',
     'alternate with { CurrentHp = 50, MaximumHp = 100 }',
     '"healing to exactly half cancels the frozen intent"',
     'alternate with { CurrentHp = 51, MaximumHp = 100 }',
@@ -7396,8 +7464,9 @@ Assert-Literals $ninjaSeitonSelfTests @(
 Assert-Literals $coreSelfTestProgramForGuardian @(
     'NinjaSeitonDispatchSelfTests.ExecuteBlockingProtectionStatusSetIsExact',
     'NinjaSeitonDispatchSelfTests.ProtectedTargetsAreSkippedAndFrozenProtectionDriftCancels',
-    'NinjaSeitonDispatchSelfTests.HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime'
-) 'NIN held base/follow-up accepted-epoch test registration'
+    'NinjaSeitonDispatchSelfTests.DispatchRequiresEveryAutomaticGate',
+    'NinjaSeitonDispatchSelfTests.AutomaticAvailabilityUsesOneAcceptedAdjustedActionEpochAtATime'
+) 'NIN automatic base/follow-up availability-epoch test registration'
 if ($ninjaSeiton -match '\b(IGameInteropProvider|Hook<|HookFromAddress|SignatureAttribute|SigScanner|ITargetManager|TargetManager|SetTarget|ResolvePlaceholder)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=' -or
     $ninjaSeiton -cmatch '\b(RetryAction|RetryDispatch|QueuedAction|QueueAction|PendingDispatch|BufferedDispatch)\b' -or
     $ninjaSeiton -match '(?:->|\.)Original\s*\(') {
@@ -7415,7 +7484,8 @@ Assert-Literals $pluginSource @(
     '{ninja.ThresholdDriftCancellationCount}',
     'protection-cancel={ninja.ProtectionDriftCancelled}/',
     '{ninja.ProtectionDriftCancellationCount}',
-    'fresh={ninja.FreshGameplayKey},claimed={ninja.InputClaimed}',
+    'epoch={ninja.AvailabilityEpochActionId}/spent={ninja.AvailabilityEpochSpent}',
+    'claimed={ninja.InputClaimed}',
     'attempt={ninja.UseActionAttempted}/{ninja.UseActionAccepted}',
     'count={ninja.AttemptCount}/{ninja.AcceptedCount}',
     'resolve={ninja.CandidateResolution},last={ninja.LastEvent}'
@@ -8002,22 +8072,36 @@ Assert-Literals $samuraiSmartActionCastRules @(
     'public const uint SamuraiJobId = 34;',
     'public const uint OgiNamikiriActionId = 29_530;',
     'public const uint OgiNamikiriFollowUpActionId = 29_531;',
+    'public const float OgiNamikiriEffectRangeYalms = 8f;',
+    'public const float OgiNamikiriConeHalfAngleDegrees = 45f;',
     'public const uint TendoSetsugekkaCarrierActionId = 29_536;',
     'public const uint TendoSetsugekkaActionId = 41_454;',
     'public const uint TendoSetsugekkaFollowUpActionId = 41_455;',
-    'public static bool IsReviewedBaseCastPair('
-) 'Closed Ogi Namikiri and Tendo Setsugekka base-cast catalog'
+    'public static bool IsOgiNamikiriConeAction(uint resolvedActionId)',
+    'resolvedActionId is OgiNamikiriActionId or OgiNamikiriFollowUpActionId;',
+    'public static bool IsReviewedBaseCastPair(',
+    'public static bool IsOgiNamikiriProtectionSafe(',
+    'SmartActionProtectionRules.IsDirectTargetSafe(',
+    'SmartActionProtectionKind.Chiten',
+    'IntersectsOgiCone('
+) 'Closed Ogi Namikiri and Tendo Setsugekka base-cast catalog with candidate-local cone safety'
 Assert-Literals $samuraiSmartActionCastSelfTests @(
     'public static void ExactRawAndAdjustedPairsAreClosed()',
     'public static void ReviewedCastDecisionPreservesEveryOtherCastPolicy()',
-    'public static void OgiConeAndTendoDirectProtectionFailClosed()',
+    'public static void OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect()',
+    'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_530)',
+    'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_531)',
+    'Kaeshi Namikiri uses the same reviewed cone protection policy',
+    'incidental Guard, Cover, and invulnerability actors do not globally stall Ogi',
+    'an out-of-cone Chiten actor does not veto this candidate',
+    'a Chiten actor intersecting the candidate cone still vetoes Ogi',
     'SmartActionAttackShape.UnsupportedAreaOfEffect',
     'SmartActionAttackShape.DirectSingleTarget'
 ) 'Reviewed SAM cast pair, generic anti-spin, and protection-shape regressions'
 Assert-Literals $smartActionTestProgram @(
     'SamuraiSmartActionCastSelfTests.ExactRawAndAdjustedPairsAreClosed',
     'SamuraiSmartActionCastSelfTests.ReviewedCastDecisionPreservesEveryOtherCastPolicy',
-    'SamuraiSmartActionCastSelfTests.OgiConeAndTendoDirectProtectionFailClosed'
+    'SamuraiSmartActionCastSelfTests.OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect'
 ) 'Reviewed SAM Smart Action cast test registration'
 Assert-Literals $nearAssist @(
     'TryConsumeCastedMacroRedirect(',
@@ -8028,6 +8112,9 @@ Assert-Literals $nearAssist @(
     '!continuingReviewedSmartActionCast',
     'IsReviewedSamuraiSmartActionCast(',
     'samuraiSmartActionCastsMetadataVerified',
+    'IsSmartActionProtectionSafe(',
+    'SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId)',
+    'SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(',
     'var passingThroughWithoutRedirect =',
     'if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)',
     'if (passingThroughWithoutRedirect)',
@@ -10172,12 +10259,15 @@ Assert-Literals $settingsWindow @(
     'FFXIV''s delayed native auto-face turning you toward a',
     'hidden target after you manually switch targets.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
-    'ON still requires',
-    'a currently held gameplay key; it never creates no-input automatic actions.',
-    'Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian >',
+    'ON is fully automatic',
+    'and needs no held or freshly pressed gameplay key.',
+    'If the frozen actor drifts',
+    'before any native request, no call was made and the still-open epoch may choose a new exact actor on the next frame.',
+    'Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian >',
     'DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk.',
-    'job-specific physical-hold helpers use this deterministic order.',
-    'Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, and SAM follows AST;',
+    'The job-specific helpers use this deterministic order;',
+    'Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent.',
+    'Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, RDM follows AST, and SAM follows RDM;',
     'Only Purify keeps priority over Smart Recuperate.',
     'automatic Guard, then every later job helper, Emergency Teleport, and pressure Sprint',
     'budget frozen from the current PvP latency-response setting (eight calls by default).',
@@ -10630,17 +10720,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.4</Version>',
-    '<AssemblyVersion>0.42.0.4</AssemblyVersion>',
-    '<FileVersion>0.42.0.4</FileVersion>'
-) 'v0.42.0.4 project version'
+    '<Version>0.42.0.5</Version>',
+    '<AssemblyVersion>0.42.0.5</AssemblyVersion>',
+    '<FileVersion>0.42.0.5</FileVersion>'
+) 'v0.42.0.5 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.4";',
-    'Added /seitonfar: one harmful macro action now targets the farthest actually reachable safe enemy through the full Smart Action protection and fallback path.',
-    'Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then the stable enemy slot; nearby normal AoE damage is not treated as another execute.',
-    'Both paths freeze one exact actor, recheck native range and line of sight, and never visibly change or rerank your target after commitment.',
+    'private const string CurrentReleaseVersion = "0.42.0.5";',
+    'Auto-Zantetsuken is now fully automatic while armed and chooses the reachable target with the largest vulnerable enemy cluster inside its target-centered 5-yalm circle.',
+    'Auto-Seiton is now fully automatic while its command or movable tile is ON; base and Unsealed readiness are separate bounded action epochs.',
+    'Smart Action Ogi, Kaeshi: Namikiri, and Tendo no longer stall because an unrelated enemy has Guard, Cover, or LB invulnerability; both Namikiri actions still avoid Chiten intersecting their cone.',
     'Configuration schema remains 48. All 579 Core tests and release gates pass; live current-client confirmation remains pending.'
-) 'v0.42.0.4 version-acknowledged What''s New content'
+) 'v0.42.0.5 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10661,21 +10751,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.4 plugin manifest metadata'
+) 'v0.42.0.5 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.4"',
-    'Added /seitonfar, a one-shot CC harmful-action macro mode that chooses the farthest actually reachable safe enemy',
-    'Smart Action''s exact range/line-of-sight, Chiten/Guard/Cover/LB protection, frozen-target, cast, and authored <t> fallback rules.',
-    'Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then stable S-slot;',
-    'only the selected Kuzushi target is treated as the 100%-maximum-HP hit.',
-    'Wolves'' Den remains exact-current-target only.',
-    'Configuration schema 48; all 579 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.42.0.5"',
+    'Auto-Zantetsuken is now fully automatic while armed and ranks the largest vulnerable target-centered 5-yalm cluster;',
+    'Guard and Chiten stay valid, while Covered, Hallowed Ground, and Undead Redemption are blocked.',
+    '/autoseiton and its tile now arm fully automatic NIN Seiton for distinct 29515/29516 readiness epochs',
+    'pre-request reranking, bounded rejection retries, and no automatic cast cancellation.',
+    'Smart Action Ogi, Kaeshi: Namikiri, and Tendo no longer stall on unrelated Guard/Cover/LB protection;',
+    'both Namikiri actions still reject a protected selected target or Chiten intersecting their cone.',
+    'Schema 48; all 579 Core tests and release gates pass.',
     'Live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.4 custom-repository metadata'
+) 'v0.42.0.5 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10771,7 +10862,8 @@ Assert-Literals $normalizedPrivacy @(
     'An action with a proven adjusted or exact base cast time is normally never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
     'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the ordinary game path.',
     'The only exception is the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
-    'Their instant Kaeshi actions `29531` and `41455` are not cast exceptions.',
+    'Instant Kaeshi: Namikiri `29531` uses the same cone policy after its separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.',
+    'The instant Kaeshi actions `29531` and `41455` are not cast exceptions.',
     'Near Assist, Near Help, every unreviewed cast, and metadata drift retain the visible-target path.',
     'Seiton Sense does not write facing or camera state for this rule; any initial facing is FFXIV''s normal cast behavior toward the frozen or visible target.',
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
@@ -10783,20 +10875,26 @@ Assert-Literals $normalizedPrivacy @(
     '`/seitonfar` uses the same complete candidate/protection snapshot but ranks only eligible actors by descending finite hitbox-edge distance and stable S-slot.',
     'the exact incoming action''s native range/line-of-sight probe is authoritative.',
     'Distance changes after one actor is frozen cannot trigger a rerank.',
-    'Auto-Zantetsuken farthest-target choice, own Kuzushi attribution, target shield amount'
-) 'v0.42.0.4 Seiton Far, Zantetsuken targeting, recovery, instant-leave, warning, and retained safety/privacy disclosure'
+    'Automatic Zantetsuken additionally reads its armed state, adjusted-action readiness epoch, exact canonical enemy life/targetability, HP, positions and hitboxes for the target-centered 5-yalm cluster',
+    '## Experimental Ninja Auto-Seiton helper',
+    'While ON, no held or freshly pressed gameplay key is read or required;',
+    'Active casts wait; Auto-Seiton never requests cast cancellation.',
+    'the frozen intent clears without spending the readiness epoch and a different exact actor may be selected on a later frame.',
+    'Automatic Zantetsuken and Auto-Seiton never use this permission.'
+) 'v0.42.0.5 automatic Zantetsuken/Seiton, candidate-local Namikiri, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.4 adds `/seitonfar`, a one-shot Smart Action variant that chooses the farthest actually reachable safe enemy, and upgrades exact-CC Auto-Zantetsuken to choose the farthest reachable exact own-Kuzushi, zero-shield target.',
-    'Both paths freeze one actor and retain final native range/line-of-sight and protection checks without changing the visible target.',
+    'Version 0.42.0.5 makes the existing Auto-Zantetsuken and `/autoseiton` switches fully automatic while armed, without held-key consent or automatic cast cancellation.',
+    'Zantetsuken now ranks the largest vulnerable target-centered 5-yalm cluster, while NIN base and Unsealed Seiton use separate readiness epochs with safe pre-request reranking.',
+    'repairs Smart Action Ogi, Kaeshi: Namikiri, and Tendo so an unrelated protected enemy no longer stalls them;',
     '`/smartaction` (`/ssaction`) or `/seitonfar` arms one 750-ms Crystalline Conflict token for the next already incoming harmful PvP macro action.',
     'Replace `/smartaction` with `/seitonfar` when the endpoint itself should be as far away as possible.',
     'Eligible actors rank by descending hitbox-edge distance and stable native S-slot',
     'HP, pressure, Guard-cooldown, and MP order.',
-    'For held Auto-Zantetsuken in exact CC, selection now evaluates every exact canonical endpoint that has one own-source Kuzushi, zero shield, and native range/line of sight.',
-    'It chooses the farthest finite hitbox-edge-distance target, then stable S-slot.',
-    'Zantetsuken''s 100%-maximum-HP rule applies only to the selected Kuzushi target; the surrounding 24,000-potency effect is deliberately not counted as another confirmed kill.',
-    'Final identity, Kuzushi, shield, Bind, readiness, range, or line-of-sight drift cancels without choosing another actor.',
-    'Wolves'' Den deliberately remains exact-current-',
+    'For fully automatic Auto-Zantetsuken in exact CC, every living, targetable, natively reachable canonical endpoint is evaluated without requiring Kuzushi or zero shield.',
+    'The winner is the endpoint whose target-centered 5-yalm circle intersects the most useful enemy hitboxes.',
+    'Equal clusters prefer one exact own-source Kuzushi with zero shield, then lower HP ratio, then stable S-slot.',
+    'If the endpoint becomes invalid before any native request, the still-ready LB epoch may rank again on the next frame.',
+    'Wolves'' Den testing deliberately remains restricted to the exact current duel target or reviewed striking dummy',
     'Version 0.42.0.3 fixes an Auto Recuperate reliability latch: an accepted heal can no longer wait forever when the client does not expose, or the framework misses, the brief cooldown-unavailable frame.',
     'The exact verified 1.0-second recast remains an anti-duplicate floor; after it elapses, current positive readiness may open the next fully revalidated heal episode.',
     'Version 0.42.0.2 fixes the observed instant-leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
@@ -10873,12 +10971,17 @@ Assert-Literals $normalizedReadme @(
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
     'Cast-time actions are deliberately not invisibly redirected by default.',
     'Seiton consumes and suppresses that carrier so the following `<t>` line executes normally.',
-    'The only reviewed exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
-    'Ogi''s cone remains an unsupported area shape, so the complete hostile snapshot must contain no non-bypassed Chiten, Guard, Cover, or LB protection;',
-    'Kaeshi Namikiri `29531` and Tendo Kaeshi Setsugekka `41455` are instant follow-ups and receive no cast exception.',
+    'The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
+    'Protection is now checked for each candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.',
+    'Instant Kaeshi: Namikiri `29531` uses that same candidate-local cone policy, with separately pinned icon `9664`, 8-yalm range/effect range, and cast type `3`.',
     'Near Assist, Near Help, and every other cast retain the visible-target policy above.',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
-    'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
+    'visible `/autoseiton` ON/OFF tile that arms fully automatic NIN Seiton',
+    'The separate **Automatic Seiton when available** experiment is disabled by default',
+    'While armed, it needs no held or freshly pressed gameplay key.',
+    'If identity, HP, protection, or reachability drifts before any native request, no call was made: the frozen intent clears while the same unspent availability epoch may rank a new exact actor on the next frame.',
+    'Auto-Seiton waits through active casts and never requests cast cancellation.',
+    '`/autoseiton [on|off|toggle]` - arm or disarm fully automatic NIN Auto-Seiton;',
     'local 4,000/2,000-MP sounds',
     'version-acknowledged What''s New window',
     '**Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk**',
@@ -10902,12 +11005,26 @@ Assert-Literals $normalizedReadme @(
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
-    'Twenty physical-hold option enable edges share the scheduler input.',
+    'For the shared physical-hold option trackers, key choice prefers stable movement',
+    'Automatic Zantetsuken and Auto-Seiton never use this permission.',
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.4 current README release and safety contract'
+) 'v0.42.0.5 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.5',
+    'Changed the existing default-off Auto-Zantetsuken option from held-key consent to fully automatic dispatch while armed.',
+    'ranks the reachable endpoint whose target-centered 5-yalm circle intersects the largest vulnerable enemy cluster.',
+    'Equal clusters prefer exact own-source Kuzushi with zero shield, then lower HP ratio, then stable native S-slot.',
+    'Guard and Chiten remain valid targets and cluster members; Covered, Hallowed Ground, and Undead Redemption are excluded.',
+    'Changed `/autoseiton` and its movable tile into a persistent automatic arm; ON no longer needs a held or freshly pressed gameplay key.',
+    'Base Seiton Tenchu `29515` and Unsealed `29516` use separate readiness epochs.',
+    'A frozen actor that drifts before any native call may be ranked again on the next frame',
+    'does not cancel casts.',
+    'Fixed Smart Action Ogi Namikiri, Kaeshi: Namikiri, and Tendo Setsugekka stalling because an unrelated enemy elsewhere had Guard, Cover, or LB invulnerability.',
+    'Both Namikiri actions additionally reject a candidate when a Chiten actor''s hitbox intersects that candidate''s reviewed 8-yalm, 90-degree cone;',
+    'Kaeshi metadata is pinned separately as instant action `29531`, icon `9664`, 8-yalm range/effect range, and cast type `3`.',
+    'Configuration schema remains `48`. Source build, all `579` Core tests, safety, package parity, and release verification are automated.',
     '## 0.42.0.4',
     'Added `/seitonfar`, a one-shot Crystalline Conflict harmful-action macro mode under the existing Smart Action opt-in.',
     'It chooses the farthest finite hitbox-edge-distance enemy that is actually reachable by the incoming action and safe under the complete Chiten, Guard, Cover, Paladin-LB, Dark-Knight-LB, and area-protection policy.',
@@ -11021,7 +11138,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.4 release notes and retained v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.5 release notes and retained v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -11367,9 +11484,9 @@ Assert-Literals $normalizedChangelog @(
 Assert-Literals $normalizedPrivacy @(
     '## Experimental held-action cast cancellation',
     'This separate test is disabled by default',
-    'exact physical-hold intents for Purify, AST same-target Orbis, RDM fresh-Guard engage, SAM counter-CC/Zantetsuken, NIN Seiton, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency Teleport, Guard, and pressure Sprint',
+    'exact physical-hold intents for Purify, AST same-target Orbis, RDM fresh-Guard engage, SAM counter-CC, reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency Teleport, Guard, and pressure Sprint',
     'Smart Kardia, Monk Earth''s Reply, every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded',
-    'Viper Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded',
+    'Automatic Zantetsuken and Auto-Seiton never use this permission. Viper Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded',
     'Cast cancellation therefore constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'highest-priority eligible intent',
     'rechecks exact local and target identity, held key, context, own Guard, helper action/readiness/resources, empty queue, and nonblocking animation lock',
@@ -11396,7 +11513,7 @@ Assert-Literals $normalizedReadme @(
     'three seconds from the original release',
     'Binding never restarts that deadline',
     'no different key can inherit the frozen intent',
-    '**Stable held-action leases:** Purify, AST held Near Help, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC',
+    '**Stable held-action leases:** Purify, AST held Near Help, SAM counter-CC, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC',
     '**Experimental cast cancellation:** the existing separate default-off held- helper test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
@@ -11414,7 +11531,8 @@ Assert-Literals $normalizedReadme @(
     'An explicit client rejection may retry only the same exact self epoch',
     '**Experimental Paladin Guardian job tool:** an independent default-off held-key option can attempt Guardian on one exact reachable ally',
     'large fixed red `FOCUSED xN` card at the top center',
-    'An older explicitly enabled NIN fresh-edge helper still traverses schema 29 and migrates to the replacement held-key option',
+    'An older explicitly enabled NIN fresh-edge helper still traverses schema 29 and migrates to the retained compatibility-named opt-in',
+    'That opt-in now arms fully automatic Seiton and does not restore a held-key requirement.',
     'Every other existing master and helper choice is preserved',
     'Fresh and reset configurations keep every action-helper master off',
     'three or more exact current hard/cast targets',
@@ -11755,8 +11873,8 @@ Assert-Literals $normalizedPrivacy @(
     'separate Auto Low-MP Focus Target opt-in',
     'Configuration schema 48 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
-    'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
-    'clears the obsolete compatibility field',
+    'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the retained compatibility-named opt-in',
+    'clears the obsolete field. The retained opt-in now arms fully automatic Seiton;',
     'Every other existing master/helper choice is preserved',
     'post-Guard defaults on only behind the disabled reactive-counter master',
     'Older configurations still traverse the earlier migrations first'
@@ -11836,8 +11954,9 @@ Assert-Literals $privacy @(
     'Configuration schema 48 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
-    'One framework frame permits at most one held-helper native boundary',
+    'The current action-request priority is **Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk**',
+    'automatic Zantetsuken and Auto-Seiton need no key, while physical-hold helpers retain explicit consent.',
+    'One framework frame permits at most one helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
 ) 'Current exact action-request priority privacy disclosure'
 Assert-Literals $normalizedPrivacy @(
@@ -12530,4 +12649,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.4 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 579-test Core registry. /seitonfar reuses one Smart Action token and its exact protection, native range/line-of-sight, frozen-target, cast, and authored fallback boundaries while ranking finite reachable candidates by farthest hitbox-edge distance then stable S-slot. Auto-Zantetsuken chooses the farthest exact own-Kuzushi, zero-shield, live, native-reachable target and keeps Wolves' Den exact-current-target only. Auto Recuperate retains its metadata-verified one-second recast floor and reliability rearm. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, and PvP-context gate remains exact. Default-off instant public-CC leave retains its one-shot result intent and single non-forced native request. Exact Chiten and SMN warnings remain bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.5 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 579-test Core registry. Armed Auto-Zantetsuken and Auto-Seiton are keyless, wait through casts without cancelling them, and retain exact readiness epochs plus bounded explicit-rejection retries. Zantetsuken ranks the largest vulnerable target-centered 5-yalm cluster, with own unshielded Kuzushi, HP ratio, and stable slot as deterministic ties; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Ogi and Kaeshi: Namikiri use candidate-local 8-yalm cone protection, including intersecting Chiten, while unrelated protected actors no longer globally stall them; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."

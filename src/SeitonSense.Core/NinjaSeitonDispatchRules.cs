@@ -1,6 +1,7 @@
 namespace SeitonSense.Core;
 
 public readonly record struct NinjaSeitonDispatchCandidate(
+    SupportedPvPContext Context,
     int EnemySlot,
     TargetPressureActorIdentity Actor,
     bool ExactCanonicalIdentity,
@@ -43,37 +44,36 @@ public static class NinjaSeitonProtectionStatusCatalog
 }
 
 public readonly record struct NinjaSeitonDispatchIntent(
+    SupportedPvPContext Context,
     uint ActionId,
     int EnemySlot,
     TargetPressureActorIdentity Target)
 {
     public bool IsValid =>
+        Context != SupportedPvPContext.None &&
         NinjaSeitonDispatchRules.IsExactSeitonAction(ActionId) &&
         EnemySlotRules.IsValidSlot(EnemySlot) &&
         Target.IsValid;
 }
 
-public readonly record struct NinjaSeitonAcceptedHoldState(
-    bool OwnsHold,
-    int HeldKeyCode,
-    uint LastAcceptedActionId,
-    bool FollowUpEpochSpent)
+public readonly record struct NinjaSeitonAvailabilityEpochState(
+    bool Active,
+    uint ActionId,
+    bool Spent)
 {
-    public static NinjaSeitonAcceptedHoldState Initial => default;
+    public static NinjaSeitonAvailabilityEpochState Initial => default;
 }
 
 public readonly record struct NinjaSeitonDispatchObservation(
     bool ConfigurationEnabled,
-    bool IsCrystallineConflict,
+    SupportedPvPContext Context,
     uint LocalJobId,
     TargetPressureActorIdentity LocalPlayer,
     bool IsLocalPlayerAlive,
     bool MetadataVerified,
     bool ActionHelpersSuppressedByGuard,
     bool HigherPriorityClaimed,
-    bool InputProbeSucceeded,
-    bool IsTextInputActive,
-    bool HeldGameplayKeyEligible,
+    bool AvailabilityEpochOpen,
     uint ResolvedActionId,
     bool ActionLocallyReady,
     IReadOnlyList<NinjaSeitonDispatchCandidate>? Candidates,
@@ -91,19 +91,17 @@ public enum NinjaSeitonDispatchDecisionReason
     None = 0,
     HardReset = 1,
     ConfigurationDisabled = 2,
-    OutsideCrystallineConflict = 3,
+    OutsideSupportedPvPContext = 3,
     LocalPlayerIdentityInvalid = 4,
     LocalPlayerDead = 5,
     LocalJobInvalid = 6,
     MetadataUnverified = 7,
     GuardSuppressed = 8,
     HigherPriorityClaimed = 9,
-    InputProbeUnavailable = 10,
-    TextInputActive = 11,
-    NoHeldGameplayKey = 12,
-    ResolvedActionInvalid = 13,
-    ActionNotReady = 14,
-    NoExactEligibleTarget = 15,
+    AvailabilityEpochClosed = 10,
+    ResolvedActionInvalid = 11,
+    ActionNotReady = 12,
+    NoExactEligibleTarget = 13,
 }
 
 public readonly record struct NinjaSeitonDispatchDecision(
@@ -118,59 +116,69 @@ public readonly record struct NinjaSeitonDispatchDecision(
 
     /// <summary>
     /// The caller claims only the current scheduler frame before final
-    /// revalidation or the native action boundary. Exact held-key episode
+    /// revalidation or the native action boundary. Availability-epoch
     /// ownership remains a caller-side state machine.
     /// </summary>
     public bool ShouldConsumeInputGeneration => ShouldDispatch;
 }
 
 /// <summary>
-/// Pure selection policy for the default-off Ninja PvP Seiton helper. A held
-/// gameplay-key episode selects the lowest exact HP ratio among currently
-/// eligible canonical CC enemy slots, then freezes that one target and action.
+/// Pure selection policy for the default-off automatic Ninja PvP Seiton helper.
+/// One exact locally-ready adjusted-action availability epoch selects the
+/// lowest exact HP ratio among currently eligible canonical enemies, then
+/// freezes that one target and action.
 /// </summary>
 public static class NinjaSeitonDispatchRules
 {
     public const uint BaseActionId = 29_515;
     public const uint FollowUpActionId = 29_516;
 
-    public static NinjaSeitonAcceptedHoldState BeginAcceptedHold(
-        int heldKeyCode,
-        uint acceptedActionId) =>
-        heldKeyCode > 0 && IsExactSeitonAction(acceptedActionId)
-            ? new NinjaSeitonAcceptedHoldState(
-                true,
-                heldKeyCode,
-                acceptedActionId,
-                acceptedActionId == FollowUpActionId)
-            : NinjaSeitonAcceptedHoldState.Initial;
-
-    public static NinjaSeitonAcceptedHoldState RetireAdjustedActionEpoch(
-        NinjaSeitonAcceptedHoldState state,
-        uint actionId) =>
-        state.OwnsHold &&
-        state.LastAcceptedActionId == BaseActionId &&
-        actionId == FollowUpActionId
-            ? state with { FollowUpEpochSpent = true }
-            : state;
-
-    public static NinjaSeitonAcceptedHoldState ObserveAcceptedHold(
-        NinjaSeitonAcceptedHoldState state,
+    public static NinjaSeitonAvailabilityEpochState ObserveAvailabilityEpoch(
+        NinjaSeitonAvailabilityEpochState state,
         bool hardReset,
         bool ownershipContextValid,
-        bool exactHeldKeyStillDown) =>
-        state.OwnsHold &&
-        (hardReset || !ownershipContextValid || !exactHeldKeyStillDown)
-            ? NinjaSeitonAcceptedHoldState.Initial
+        bool availabilityReady,
+        uint resolvedActionId)
+    {
+        if (hardReset || !ownershipContextValid ||
+            !availabilityReady || !IsExactSeitonAction(resolvedActionId))
+        {
+            return NinjaSeitonAvailabilityEpochState.Initial;
+        }
+
+        // A stable adjusted action remains the same availability epoch even if
+        // another scheduler lane temporarily owns a frame. A real 29515/29516
+        // transition is a new exact epoch and may dispatch once independently.
+        return !state.Active || state.ActionId != resolvedActionId
+            ? new NinjaSeitonAvailabilityEpochState(
+                Active: true,
+                ActionId: resolvedActionId,
+                Spent: false)
             : state;
+    }
 
     public static bool CanOpenAdjustedActionEpoch(
-        NinjaSeitonAcceptedHoldState state,
+        NinjaSeitonAvailabilityEpochState state,
         uint resolvedActionId) =>
-        state.OwnsHold &&
-        state.LastAcceptedActionId == BaseActionId &&
-        !state.FollowUpEpochSpent &&
-        resolvedActionId == FollowUpActionId;
+        state.Active &&
+        !state.Spent &&
+        state.ActionId == resolvedActionId &&
+        IsExactSeitonAction(resolvedActionId);
+
+    public static NinjaSeitonAvailabilityEpochState SpendAdjustedActionEpoch(
+        NinjaSeitonAvailabilityEpochState state,
+        uint actionId) =>
+        state.Active && state.ActionId == actionId && IsExactSeitonAction(actionId)
+            ? state with { Spent = true }
+            : state;
+
+    public static NinjaSeitonAvailabilityEpochState CancelFrozenAvailabilityEpoch(
+        NinjaSeitonAvailabilityEpochState state,
+        uint actionId,
+        int priorNativeAttemptCount) =>
+        priorNativeAttemptCount == 0
+            ? state
+            : SpendAdjustedActionEpoch(state, actionId);
 
     public static NinjaSeitonDispatchDecision Observe(
         NinjaSeitonDispatchObservation observation)
@@ -185,7 +193,8 @@ public static class NinjaSeitonDispatchRules
 
         var selectedIndex = SelectBestCandidateIndex(
             observation.Candidates,
-            observation.LocalPlayer);
+            observation.LocalPlayer,
+            observation.Context);
         if (selectedIndex < 0)
         {
             return new NinjaSeitonDispatchDecision(
@@ -195,6 +204,7 @@ public static class NinjaSeitonDispatchRules
 
         var candidate = observation.Candidates![selectedIndex];
         var intent = new NinjaSeitonDispatchIntent(
+            observation.Context,
             observation.ResolvedActionId,
             candidate.EnemySlot,
             candidate.Actor);
@@ -212,6 +222,7 @@ public static class NinjaSeitonDispatchRules
         NinjaSeitonDispatchCandidate candidate,
         TargetPressureActorIdentity localPlayer) =>
         localPlayer.IsValid &&
+        candidate.Context != SupportedPvPContext.None &&
         candidate.Actor.IsValid &&
         candidate.Actor != localPlayer &&
         EnemySlotRules.IsValidSlot(candidate.EnemySlot) &&
@@ -223,9 +234,18 @@ public static class NinjaSeitonDispatchRules
         candidate.HasValidActionTarget &&
         candidate.HasNativeRangeAndLineOfSight;
 
+    public static bool IsEligibleCandidate(
+        NinjaSeitonDispatchCandidate candidate,
+        TargetPressureActorIdentity localPlayer,
+        SupportedPvPContext context) =>
+        context != SupportedPvPContext.None &&
+        candidate.Context == context &&
+        IsEligibleCandidate(candidate, localPlayer);
+
     public static int SelectBestCandidateIndex(
         IReadOnlyList<NinjaSeitonDispatchCandidate>? candidates,
-        TargetPressureActorIdentity localPlayer)
+        TargetPressureActorIdentity localPlayer,
+        SupportedPvPContext context = SupportedPvPContext.CrystallineConflict)
     {
         if (candidates is null || candidates.Count == 0 || !localPlayer.IsValid)
             return -1;
@@ -236,7 +256,7 @@ public static class NinjaSeitonDispatchRules
         for (var index = 0; index < candidates.Count; index++)
         {
             var candidate = candidates[index];
-            if (!IsEligibleCandidate(candidate, localPlayer)) continue;
+            if (!IsEligibleCandidate(candidate, localPlayer, context)) continue;
 
             // One canonical CC actor must occupy exactly one native enemy slot.
             // Duplicate slots or actors make the whole candidate set ambiguous,
@@ -262,14 +282,17 @@ public static class NinjaSeitonDispatchRules
         NinjaSeitonDispatchIntent intent,
         NinjaSeitonDispatchCandidate candidate,
         TargetPressureActorIdentity localPlayer,
+        SupportedPvPContext context,
         uint resolvedActionId,
         bool actionLocallyReady) =>
         intent.IsValid &&
         actionLocallyReady &&
         resolvedActionId == intent.ActionId &&
+        context == intent.Context &&
+        candidate.Context == intent.Context &&
         candidate.EnemySlot == intent.EnemySlot &&
         candidate.Actor == intent.Target &&
-        IsEligibleCandidate(candidate, localPlayer);
+        IsEligibleCandidate(candidate, localPlayer, context);
 
     private static NinjaSeitonDispatchDecisionReason GetGateFailure(
         NinjaSeitonDispatchObservation observation)
@@ -278,8 +301,8 @@ public static class NinjaSeitonDispatchRules
             return NinjaSeitonDispatchDecisionReason.HardReset;
         if (!observation.ConfigurationEnabled)
             return NinjaSeitonDispatchDecisionReason.ConfigurationDisabled;
-        if (!observation.IsCrystallineConflict)
-            return NinjaSeitonDispatchDecisionReason.OutsideCrystallineConflict;
+        if (observation.Context == SupportedPvPContext.None)
+            return NinjaSeitonDispatchDecisionReason.OutsideSupportedPvPContext;
         if (!observation.LocalPlayer.IsValid)
             return NinjaSeitonDispatchDecisionReason.LocalPlayerIdentityInvalid;
         if (!observation.IsLocalPlayerAlive)
@@ -292,12 +315,8 @@ public static class NinjaSeitonDispatchRules
             return NinjaSeitonDispatchDecisionReason.GuardSuppressed;
         if (observation.HigherPriorityClaimed)
             return NinjaSeitonDispatchDecisionReason.HigherPriorityClaimed;
-        if (!observation.InputProbeSucceeded)
-            return NinjaSeitonDispatchDecisionReason.InputProbeUnavailable;
-        if (observation.IsTextInputActive)
-            return NinjaSeitonDispatchDecisionReason.TextInputActive;
-        if (!observation.HeldGameplayKeyEligible)
-            return NinjaSeitonDispatchDecisionReason.NoHeldGameplayKey;
+        if (!observation.AvailabilityEpochOpen)
+            return NinjaSeitonDispatchDecisionReason.AvailabilityEpochClosed;
         if (!IsExactSeitonAction(observation.ResolvedActionId))
             return NinjaSeitonDispatchDecisionReason.ResolvedActionInvalid;
         if (!observation.ActionLocallyReady)

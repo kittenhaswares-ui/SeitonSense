@@ -314,8 +314,8 @@ internal sealed partial class SettingsWindow
             $"key={samurai.ReservedKey}, claim={samurai.InputClaimed}, last-action/outcome=" +
             $"{samurai.LastAttemptedActionId}/{samurai.LastAttemptOutcome}, attempts Soten/Mineuchi/Zan=" +
             $"{samurai.SotenAttemptCount}/{samurai.MineuchiAttemptCount}/{samurai.ZantetsukenAttemptCount}, " +
-            $"accepted={samurai.AcceptedCount}, own-Zan enabled/metadata/phase=" +
-            $"{samurai.ZantetsukenHeldHelperEnabled}/{samurai.ZantetsukenMetadataVerified}/" +
+            $"accepted={samurai.AcceptedCount}, auto-Zan enabled/metadata/phase=" +
+            $"{samurai.ZantetsukenAutomaticHelperEnabled}/{samurai.ZantetsukenMetadataVerified}/" +
             $"{samurai.ZantetsukenPhase}, mirror queue/capture/drop=" +
             $"{samurai.ProtectionSignalQueueDepth}/{samurai.CapturedProtectionSignalCount}/" +
             $"{samurai.DroppedProtectionSignalCount}, timing Soten/Mineuchi samples=" +
@@ -364,9 +364,9 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
-            "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event " +
-            "Kardia > event Monk. The job-specific physical-hold helpers use that deterministic order; AST runs directly after Purify, then RDM and SAM, " +
+            "The current request order is Purify > Recuperate > automatic Guard > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event " +
+            "Kardia > event Monk. The job-specific helpers use that deterministic order; Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent. AST runs directly after automatic recovery and Guard, then RDM and SAM, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +
             "it requires no preceding-action proof, uses the shared Smart Action target policy in CC, and never visibly " +

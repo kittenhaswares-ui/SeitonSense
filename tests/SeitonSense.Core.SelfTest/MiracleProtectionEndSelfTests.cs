@@ -535,29 +535,21 @@ internal static class MiracleProtectionEndSelfTests
 
         var zantetsuken = SamuraiZantetsukenRules.Arm(
             samTarget,
-            gameplayKeyToken: 65,
             nowMilliseconds: 2_000);
-        var shielded = SamuraiZantetsukenRules.Observe(
+        var ordinaryTarget = SamuraiZantetsukenRules.Observe(
             zantetsuken,
-            ZanObservation(shieldPercentage: 1));
-        Equal(
-            SamuraiZantetsukenDecisionKind.Waiting,
-            shielded.Kind,
-            "Zantetsuken waits while even one authoritative shield percent remains");
-        var unshielded = SamuraiZantetsukenRules.Observe(
-            zantetsuken,
-            ZanObservation(shieldPercentage: 0));
+            ZanObservation());
         Equal(
             SamuraiZantetsukenRules.ActionId,
-            unshielded.ActionId,
-            "exact own-source Kuzushi with zero shields admits one Zantetsuken boundary");
-        var foreignOrMissingKuzushi = SamuraiZantetsukenRules.Observe(
+            ordinaryTarget.ActionId,
+            "automatic Zantetsuken does not require held input, Kuzushi, or zero shield");
+        var hardProtected = SamuraiZantetsukenRules.Observe(
             zantetsuken,
-            ZanObservation(shieldPercentage: 0) with { OwnSourceKuzushiCount = 0 });
+            ZanObservation(executeBlockingProtectionCount: 1));
         Equal(
             SamuraiZantetsukenDecisionKind.Cancelled,
-            foreignOrMissingKuzushi.Kind,
-            "missing or foreign-source Kuzushi cancels without a fallback target");
+            hardProtected.Kind,
+            "exact Cover or invulnerability cancels without a fallback target");
 
         foreach (var active in new[]
                  {
@@ -779,14 +771,12 @@ internal static class MiracleProtectionEndSelfTests
             SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms);
 
     private static SamuraiZantetsukenObservation ZanObservation(
-        byte shieldPercentage) => new(
+        int executeBlockingProtectionCount = 0) => new(
             Enabled: true,
             HardReset: false,
             ExactTargetStillCurrent: true,
             TargetAliveAndTargetable: true,
-            ExactGameplayKeyStillDown: true,
-            OwnSourceKuzushiCount: 1,
-            shieldPercentage,
+            ExecuteBlockingProtectionCount: executeBlockingProtectionCount,
             BoundPresent: false,
             ZantetsukenReady: true,
             HasNativeRangeAndLineOfSight: true);

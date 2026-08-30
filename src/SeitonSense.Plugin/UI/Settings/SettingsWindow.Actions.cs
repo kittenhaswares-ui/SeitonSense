@@ -14,9 +14,9 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
+            "Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
             "DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk. " +
-            "The job-specific physical-hold helpers use this deterministic order. Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, and SAM follows AST; " +
+            "The job-specific helpers use this deterministic order; Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent. Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, RDM follows AST, and SAM follows RDM; " +
             "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
             "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
             "frame. Kardia and Monk retain their separate event-driven origins.");
@@ -611,7 +611,7 @@ internal sealed partial class SettingsWindow
             "their native 20-yalm range. The enemy " +
             "must remain the exact canonical opponent, " +
             "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
-            "The enemy-SAM trigger here is separate from your own Samurai Zantetsuken held helper under Job Tools. " +
+            "The enemy-SAM trigger here is separate from your own automatic Samurai Zantetsuken helper under Job Tools. " +
             "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
             "accepts an exact enemy self-Purify action packet with or without an exposed Stun, Heavy, Bind, Silence, Deep " +
             "Freeze, or Miracle of Nature recovery tuple, observes real Resilience and remembers the exact enemy episode " +

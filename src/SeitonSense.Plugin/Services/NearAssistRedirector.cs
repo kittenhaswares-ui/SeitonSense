@@ -2544,9 +2544,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         var target = exactMatches[0];
-        var safe = SmartActionProtectionRules.IsActionProtectionSafe(
+        var safe = IsSmartActionProtectionSafe(
+            resolvedActionId,
+            local!,
             attackShape,
-            CreateSmartActionActorGeometry(target),
+            target,
             action.EffectRange,
             protectedActors,
             actionIgnoresGuard:
@@ -3105,9 +3107,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 sourceObject,
                 targetObject)
             : uint.MaxValue;
-        var protectionSafe = SmartActionProtectionRules.IsActionProtectionSafe(
+        var protectionSafe = IsSmartActionProtectionSafe(
+            resolvedActionId,
+            local!,
             attackShape,
-            CreateSmartActionActorGeometry(exact),
+            exact,
             action.EffectRange,
             protectedActors,
             smartActionGuardBypassActions.Contains(resolvedActionId));
@@ -3286,9 +3290,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 ? ActionManager.GetActionInRangeOrLoS(resolvedActionId, sourceObject, targetObject)
                 : uint.MaxValue;
             var actor = new TargetPressureActorIdentity(enemy.GameObjectId, enemy.EntityId);
-            var protectionSafe = SmartActionProtectionRules.IsActionProtectionSafe(
+            var protectionSafe = IsSmartActionProtectionSafe(
+                resolvedActionId,
+                local,
                 attackShape,
-                CreateSmartActionActorGeometry(canonicalEnemy),
+                canonicalEnemy,
                 action.EffectRange,
                 protectedActors,
                 actionIgnoresGuard);
@@ -3401,10 +3407,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                                       attackShape,
                                       out _,
                                       out var finalProtectedActors) &&
-                                  SmartActionProtectionRules.IsActionProtectionSafe(
+                                  IsSmartActionProtectionSafe(
+                                      resolvedActionId,
+                                      local,
                                       attackShape,
-                                      CreateSmartActionActorGeometry(
-                                          new CanonicalEnemy(intent.EnemySlot, currentEnemy)),
+                                      new CanonicalEnemy(intent.EnemySlot, currentEnemy),
                                       action.EffectRange,
                                       finalProtectedActors,
                                       actionIgnoresGuard);
@@ -4295,9 +4302,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             var target = exactMatches[0];
-            var safe = SmartActionProtectionRules.IsActionProtectionSafe(
+            var safe = IsSmartActionProtectionSafe(
+                resolvedActionId,
+                local,
                 attackShape,
-                CreateSmartActionActorGeometry(target),
+                target,
                 action.EffectRange,
                 protectedActors,
                 actionIgnoresGuard:
@@ -4464,6 +4473,35 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionProtectionRules.ClassifyAttackShape(
             action.EffectRange,
             action.CastType);
+
+    private bool IsSmartActionProtectionSafe(
+        uint resolvedActionId,
+        IPlayerCharacter localPlayer,
+        SmartActionAttackShape attackShape,
+        CanonicalEnemy target,
+        float effectRange,
+        IReadOnlyList<SmartActionProtectedActor> protectedActors,
+        bool actionIgnoresGuard)
+    {
+        var targetGeometry = CreateSmartActionActorGeometry(target);
+        if (SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId) &&
+            samuraiSmartActionCastsMetadataVerified)
+        {
+            return SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                localPlayer.Position,
+                targetGeometry,
+                effectRange,
+                protectedActors,
+                actionIgnoresGuard);
+        }
+
+        return SmartActionProtectionRules.IsActionProtectionSafe(
+            attackShape,
+            targetGeometry,
+            effectRange,
+            protectedActors,
+            actionIgnoresGuard);
+    }
 
     private static SmartActionActorGeometry CreateSmartActionActorGeometry(
         CanonicalEnemy enemy) =>

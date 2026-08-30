@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.42.0.5
+
+- Changed the existing default-off Auto-Zantetsuken option from held-key consent
+  to fully automatic dispatch while armed. In exact Crystalline Conflict it now
+  ranks the reachable endpoint whose target-centered 5-yalm circle intersects
+  the largest vulnerable enemy cluster. Equal clusters prefer exact own-source
+  Kuzushi with zero shield, then lower HP ratio, then stable native S-slot.
+  Guard and Chiten remain valid targets and cluster members; Covered, Hallowed
+  Ground, and Undead Redemption are excluded. Enabled Wolves' Den testing uses
+  only the exact current duel target or reviewed striking dummy. Casts are
+  waited out and never cancelled automatically.
+- Changed `/autoseiton` and its movable tile into a persistent automatic arm;
+  ON no longer needs a held or freshly pressed gameplay key. Base Seiton Tenchu
+  `29515` and Unsealed `29516` use separate readiness epochs. A frozen actor that
+  drifts before any native call may be ranked again on the next frame, while an
+  attempted epoch stays frozen and permits only the bounded explicit-rejection
+  retry. It remains below 50% HP, exact range/line-of-sight and protection gated,
+  supports the exact current duel target or reviewed dummy in enabled Wolves'
+  Den testing, and does not cancel casts.
+- Fixed Smart Action Ogi Namikiri, Kaeshi: Namikiri, and Tendo Setsugekka
+  stalling because an unrelated enemy elsewhere had Guard, Cover, or LB
+  invulnerability. The selected actor must still be protection-safe. Both
+  Namikiri actions additionally reject a candidate when a Chiten actor's hitbox
+  intersects that candidate's reviewed 8-yalm, 90-degree cone; unrelated and
+  out-of-cone actors no longer veto them. Tendo retains direct-target
+  protection. Kaeshi metadata is pinned separately as instant action `29531`,
+  icon `9664`, 8-yalm range/effect range, and cast type `3`.
+- Configuration schema remains `48`. Source build, all `579` Core tests, safety,
+  package parity, and release verification are automated. Final target choice,
+  cast timing, and native/server action acceptance remain live-current-client
+  validation boundaries.
+
 ## 0.42.0.4
 
 - Added `/seitonfar`, a one-shot Crystalline Conflict harmful-action macro mode

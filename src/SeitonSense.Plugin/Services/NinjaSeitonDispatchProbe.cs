@@ -1,5 +1,5 @@
-using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -10,6 +10,7 @@ namespace SeitonSense.Plugin.Services;
 internal sealed record NinjaSeitonDispatchProbeSnapshot(
     NinjaSeitonDispatchDecisionKind Decision,
     NinjaSeitonDispatchDecisionReason Reason,
+    SupportedPvPContext Context,
     uint ResolvedActionId,
     int CandidateCount,
     int EnemySlot,
@@ -22,9 +23,9 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     bool ThresholdDriftCancelled,
     bool ProtectionDriftCancelled,
     bool LocallyReady,
-    VirtualKey FreshGameplayKey,
+    uint AvailabilityEpochActionId,
+    bool AvailabilityEpochSpent,
     bool InputClaimed,
-    HeldCastCancellationRequest? CastCancellationRequest,
     bool UseActionAttempted,
     bool UseActionAccepted,
     long AttemptCount,
@@ -37,6 +38,7 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
     internal static NinjaSeitonDispatchProbeSnapshot Initial { get; } = new(
         NinjaSeitonDispatchDecisionKind.None,
         NinjaSeitonDispatchDecisionReason.None,
+        SupportedPvPContext.None,
         0,
         0,
         0,
@@ -49,9 +51,9 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
         false,
         false,
         false,
-        VirtualKey.NO_KEY,
+        0,
         false,
-        null,
+        false,
         false,
         false,
         0,
@@ -63,9 +65,10 @@ internal sealed record NinjaSeitonDispatchProbeSnapshot(
 }
 
 /// <summary>
-/// Converts a held physical gameplay-key episode into bounded exact Seiton
-/// requests. A client-accepted base action may expose one separately adjusted
-/// follow-up epoch; every frozen action/actor retry remains exact.
+/// Converts a default-off persistent Auto-Seiton arm into bounded exact Seiton
+/// requests. Every exact locally-ready adjusted action is one availability
+/// epoch; a client-accepted base action may expose one separately adjusted
+/// follow-up epoch, and every frozen action/actor retry remains exact.
 /// </summary>
 internal sealed class NinjaSeitonDispatchProbe
 {
@@ -74,9 +77,9 @@ internal sealed class NinjaSeitonDispatchProbe
     private readonly NearAssistRedirector nearAssist;
     private readonly IPluginLog log;
     private NinjaSeitonDispatchProbeSnapshot snapshot = NinjaSeitonDispatchProbeSnapshot.Initial;
-    private NinjaSeitonAcceptedHoldState acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+    private NinjaSeitonAvailabilityEpochState availabilityEpoch =
+        NinjaSeitonAvailabilityEpochState.Initial;
     private FrozenSeitonRetry? frozenRetry;
-    private VirtualKey terminalHeldKey = VirtualKey.NO_KEY;
     private long attemptCount;
     private long acceptedCount;
     private long thresholdDriftCancellationCount;
@@ -101,9 +104,10 @@ internal sealed class NinjaSeitonDispatchProbe
 
     internal NinjaSeitonDispatchProbeSnapshot Observe(
         IPlayerCharacter? localPlayer,
-        bool isCrystallineConflict,
+        SupportedPvPContext context,
         bool configurationEnabled,
         bool metadataVerified,
+        bool wolvesDenStrikingDummyMetadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -112,15 +116,8 @@ internal sealed class NinjaSeitonDispatchProbe
     {
         if (hardReset)
         {
-            acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+            availabilityEpoch = NinjaSeitonAvailabilityEpochState.Initial;
             frozenRetry = null;
-            terminalHeldKey = VirtualKey.NO_KEY;
-        }
-
-        if (terminalHeldKey != VirtualKey.NO_KEY &&
-            !inputFrame.IsGameplayKeyPhysicallyDown(terminalHeldKey))
-        {
-            terminalHeldKey = VirtualKey.NO_KEY;
         }
 
         var localAlive = IsLivePlayer(localPlayer);
@@ -131,69 +128,62 @@ internal sealed class NinjaSeitonDispatchProbe
             ? localPlayer.ClassJob.RowId
             : 0;
         var featureContextReady = configurationEnabled &&
-                                  isCrystallineConflict &&
+                                  context != SupportedPvPContext.None &&
                                   localAlive &&
                                   ExecuteThreshold.IsNinja(localJobId) &&
                                   metadataVerified &&
                                   !actionHelpersSuppressedByGuard &&
                                   !hardReset;
         var resolvedActionId = 0u;
-        var actionLocallyReady = featureContextReady &&
-                          localIdentity.IsValid &&
-                          SeitonReadinessProbe.TryGetReadyAction(localPlayer!, out resolvedActionId) &&
-                          IsActionResourceReady(resolvedActionId);
-        var nearQueueable = actionLocallyReady && IsNativeBoundaryNearQueueable(localPlayer!);
+        var availabilityReady = featureContextReady &&
+                                localIdentity.IsValid &&
+                                SeitonReadinessProbe.TryGetReadyAction(
+                                    localPlayer!,
+                                    out resolvedActionId);
+        var actionLocallyReady = availabilityReady &&
+                                 IsActionResourceReady(resolvedActionId);
 
-        var input = inputFrame.Snapshot;
-        var acceptedKey = acceptedHold.OwnsHold
-            ? (VirtualKey)acceptedHold.HeldKeyCode
-            : VirtualKey.NO_KEY;
-        var exactAcceptedKeyDown = acceptedHold.OwnsHold &&
-                                   inputFrame.IsGameplayKeyPhysicallyDown(acceptedKey);
-        acceptedHold = NinjaSeitonDispatchRules.ObserveAcceptedHold(
-            acceptedHold,
+        availabilityEpoch = NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(
+            availabilityEpoch,
             hardReset,
-            featureContextReady && input.ProbeSucceeded && !input.IsTextInputActive,
-            exactAcceptedKeyDown);
-        acceptedKey = acceptedHold.OwnsHold
-            ? (VirtualKey)acceptedHold.HeldKeyCode
-            : VirtualKey.NO_KEY;
-        var hasHeldEpoch = acceptedHold.OwnsHold
-            ? NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
-                acceptedHold,
-                resolvedActionId)
-            : inputFrame.HeldGameplayKeyEligible;
+            featureContextReady,
+            availabilityReady,
+            resolvedActionId);
+        var hasOpenAvailabilityEpoch =
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                availabilityEpoch,
+                resolvedActionId);
         var shouldResolveCandidates = frozenRetry is null &&
-                                      terminalHeldKey == VirtualKey.NO_KEY &&
                                       actionLocallyReady &&
                                       !higherPriorityClaimed &&
-                                      input.ProbeSucceeded &&
-                                      !input.IsTextInputActive &&
-                                      hasHeldEpoch;
-        var candidateResolution = "Not evaluated: no eligible held action epoch";
+                                      !inputFrame.IsConsumed &&
+                                      hasOpenAvailabilityEpoch;
+        var candidateResolution = "Not evaluated: no open automatic availability epoch";
         var candidates = shouldResolveCandidates
-            ? ResolveExactCandidates(localPlayer!, resolvedActionId, out candidateResolution)
+            ? ResolveExactCandidates(
+                localPlayer!,
+                context,
+                resolvedActionId,
+                wolvesDenStrikingDummyMetadataVerified,
+                out candidateResolution)
             : [];
         var decision = NinjaSeitonDispatchRules.Observe(
             new NinjaSeitonDispatchObservation(
                 configurationEnabled,
-                isCrystallineConflict,
+                context,
                 localJobId,
                 localIdentity,
                 localAlive,
                 metadataVerified,
                 actionHelpersSuppressedByGuard,
                 higherPriorityClaimed,
-                input.ProbeSucceeded,
-                input.IsTextInputActive,
-                hasHeldEpoch,
+                hasOpenAvailabilityEpoch,
                 resolvedActionId,
                 actionLocallyReady,
                 candidates,
                 hardReset));
 
         var inputClaimed = false;
-        HeldCastCancellationRequest? castCancellationRequest = null;
         var attempted = false;
         var accepted = false;
         var revalidatedCurrentHp = 0u;
@@ -206,14 +196,15 @@ internal sealed class NinjaSeitonDispatchProbe
         if (frozenRetry is { } retry)
         {
             var exactBaseContext = featureContextReady &&
+                                   context == retry.Intent.Context &&
                                    localIdentity == retry.LocalPlayer &&
-                                   input.ProbeSucceeded &&
-                                   !input.IsTextInputActive &&
-                                   inputFrame.IsGameplayKeyPhysicallyDown(retry.HeldKey);
+                                   NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                                       availabilityEpoch,
+                                       retry.Intent.ActionId);
             if (!exactBaseContext)
             {
-                SpendFrozenEpisode(retry, latchCircuitBreaker: false);
-                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact context/key drift";
+                CancelFrozenIntent(retry);
+                lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact context/availability drift";
             }
             else
             {
@@ -225,7 +216,7 @@ internal sealed class NinjaSeitonDispatchProbe
                                          IsNativeBoundaryNearQueueable(localPlayer!);
                 if (finalActionReady && finalResolvedActionId != retry.Intent.ActionId)
                 {
-                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                    CancelFrozenIntent(retry);
                     lastEvent = $"S{retry.Intent.EnemySlot} frozen action changed from {retry.Intent.ActionId} to {finalResolvedActionId}";
                 }
                 else if (finalActionReady)
@@ -233,7 +224,8 @@ internal sealed class NinjaSeitonDispatchProbe
                     var finalCandidate = ResolveFrozenIntent(
                         localPlayer!,
                         retry.Intent,
-                        finalResolvedActionId);
+                        finalResolvedActionId,
+                        wolvesDenStrikingDummyMetadataVerified);
                     observedCandidate = finalCandidate;
                     if (finalCandidate is { } finalObserved)
                     {
@@ -246,6 +238,7 @@ internal sealed class NinjaSeitonDispatchProbe
                             retry.Intent,
                             exactCandidate,
                             localIdentity,
+                            context,
                             finalResolvedActionId,
                             finalActionReady))
                     {
@@ -258,7 +251,7 @@ internal sealed class NinjaSeitonDispatchProbe
                         if (protectionDriftCancelled)
                             observedBlockingStatusId =
                                 finalCandidate!.Value.ExecuteBlockingStatusId;
-                        SpendFrozenEpisode(retry, latchCircuitBreaker: false);
+                        CancelFrozenIntent(retry);
                         lastEvent = protectionDriftCancelled
                             ? $"S{retry.Intent.EnemySlot} frozen Seiton cancelled by protection status {finalCandidate!.Value.ExecuteBlockingStatusId}"
                             : $"S{retry.Intent.EnemySlot} frozen Seiton retry cancelled by exact target/range/threshold drift";
@@ -280,21 +273,7 @@ internal sealed class NinjaSeitonDispatchProbe
                             inputFrame.Consume();
                             if (!finalNearQueueable)
                             {
-                                castCancellationRequest = CreateCastCancellationRequest(
-                                    localPlayer!,
-                                    retry,
-                                    out var castBlockingStatusId);
-                                if (castBlockingStatusId != 0)
-                                {
-                                    protectionDriftCancelled = true;
-                                    observedBlockingStatusId = castBlockingStatusId;
-                                    SpendFrozenEpisode(retry, latchCircuitBreaker: false);
-                                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton protection {castBlockingStatusId} blocked cast cancellation";
-                                }
-                                else
-                                {
-                                    lastEvent = $"S{retry.Intent.EnemySlot} frozen Seiton waiting for global native boundary";
-                                }
+                                lastEvent = $"S{retry.Intent.EnemySlot} frozen automatic Seiton waiting for global native boundary";
                             }
                             else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
                                          retry.Retry,
@@ -307,6 +286,7 @@ internal sealed class NinjaSeitonDispatchProbe
                                 var outcome = TryUseSeitonOnce(
                                     localPlayer!,
                                     retry.Intent,
+                                    wolvesDenStrikingDummyMetadataVerified,
                                     out attempted,
                                     out var boundaryCandidate,
                                     out boundaryThresholdRevalidated,
@@ -325,7 +305,11 @@ internal sealed class NinjaSeitonDispatchProbe
                                 }
 
                                 accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
-                                CompleteAttempt(retry, outcome, nowMilliseconds);
+                                CompleteAttempt(
+                                    retry,
+                                    outcome,
+                                    attempted,
+                                    nowMilliseconds);
                                 lastEvent = protectionDriftCancelled
                                     ? $"S{retry.Intent.EnemySlot} protection status {observedBlockingStatusId} blocked native Seiton"
                                     : DescribeAttempt(
@@ -339,17 +323,12 @@ internal sealed class NinjaSeitonDispatchProbe
                 }
             }
         }
-        else if (terminalHeldKey == VirtualKey.NO_KEY &&
-                 decision.ShouldDispatch &&
+        else if (decision.ShouldDispatch &&
                  decision.Intent is { } intent)
         {
-            var heldKey = acceptedHold.OwnsHold
-                ? (VirtualKey)acceptedHold.HeldKeyCode
-                : input.HeldGameplayKey;
             var retryIntent = new FrozenSeitonRetry(
                 intent,
                 localIdentity,
-                heldKey,
                 NextIntentEpochToken(),
                 HeldActionRetryState.Initial);
             inputClaimed = true;
@@ -357,6 +336,7 @@ internal sealed class NinjaSeitonDispatchProbe
             var outcome = TryUseSeitonOnce(
                 localPlayer!,
                 intent,
+                wolvesDenStrikingDummyMetadataVerified,
                 out attempted,
                 out var boundaryCandidate,
                 out boundaryThresholdRevalidated,
@@ -367,24 +347,19 @@ internal sealed class NinjaSeitonDispatchProbe
             {
                 revalidatedCurrentHp = observedBoundaryCandidate.CurrentHp;
                 revalidatedMaximumHp = observedBoundaryCandidate.MaximumHp;
-            }
-
-            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
-            CompleteAttempt(retryIntent, outcome, nowMilliseconds);
-            if (outcome == ClientActionAttemptOutcome.SoftUnavailable)
-            {
-                castCancellationRequest = CreateCastCancellationRequest(
-                    localPlayer!,
-                    retryIntent,
-                    out var castBlockingStatusId);
-                if (castBlockingStatusId != 0)
+                if (observedBoundaryCandidate.HasExecuteBlockingProtection)
                 {
-                    protectionDriftCancelled = true;
-                    observedBlockingStatusId = castBlockingStatusId;
-                    SpendFrozenEpisode(retryIntent, latchCircuitBreaker: false);
+                    observedBlockingStatusId =
+                        observedBoundaryCandidate.ExecuteBlockingStatusId;
                 }
             }
 
+            accepted = outcome == ClientActionAttemptOutcome.ClientAccepted;
+            CompleteAttempt(
+                retryIntent,
+                outcome,
+                attempted,
+                nowMilliseconds);
             lastEvent = protectionDriftCancelled
                 ? $"S{intent.EnemySlot} protection status {observedBlockingStatusId} blocked Seiton"
                 : DescribeAttempt(intent, 1, retryIntent.Retry, outcome);
@@ -405,6 +380,7 @@ internal sealed class NinjaSeitonDispatchProbe
         var result = new NinjaSeitonDispatchProbeSnapshot(
             decision.Kind,
             decision.Reason,
+            context,
             resolvedActionId,
             candidates.Count,
             selectedCandidate?.EnemySlot ?? 0,
@@ -419,10 +395,9 @@ internal sealed class NinjaSeitonDispatchProbe
             thresholdDriftCancelled,
             protectionDriftCancelled,
             actionLocallyReady,
-            frozenRetry?.HeldKey ??
-            (acceptedHold.OwnsHold ? (VirtualKey)acceptedHold.HeldKeyCode : input.HeldGameplayKey),
+            availabilityEpoch.ActionId,
+            availabilityEpoch.Spent,
             inputClaimed,
-            castCancellationRequest,
             attempted,
             accepted,
             Interlocked.Read(ref attemptCount),
@@ -437,9 +412,8 @@ internal sealed class NinjaSeitonDispatchProbe
 
     internal void Reset()
     {
-        acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+        availabilityEpoch = NinjaSeitonAvailabilityEpochState.Initial;
         frozenRetry = null;
-        terminalHeldKey = VirtualKey.NO_KEY;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, NinjaSeitonDispatchProbeSnapshot.Initial with
         {
@@ -455,14 +429,11 @@ internal sealed class NinjaSeitonDispatchProbe
 
     internal NinjaSeitonDispatchProbeSnapshot FailClosed()
     {
-        var failedKey = frozenRetry?.HeldKey ??
-                        (acceptedHold.OwnsHold
-                            ? (VirtualKey)acceptedHold.HeldKeyCode
-                            : terminalHeldKey);
-        acceptedHold = NinjaSeitonAcceptedHoldState.Initial;
+        availabilityEpoch = NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(
+            availabilityEpoch,
+            availabilityEpoch.ActionId);
         frozenRetry = null;
-        terminalHeldKey = failedKey;
-        lastEvent = "Failed closed";
+        lastEvent = "Failed closed; current availability epoch retired";
         var result = NinjaSeitonDispatchProbeSnapshot.Initial with
         {
             Decision = NinjaSeitonDispatchDecisionKind.Cancelled,
@@ -481,9 +452,26 @@ internal sealed class NinjaSeitonDispatchProbe
 
     private IReadOnlyList<NinjaSeitonDispatchCandidate> ResolveExactCandidates(
         IPlayerCharacter localPlayer,
+        SupportedPvPContext context,
         uint actionId,
+        bool wolvesDenStrikingDummyMetadataVerified,
         out string resolution)
     {
+        if (context == SupportedPvPContext.WolvesDen)
+        {
+            return ResolveExactWolvesDenCandidate(
+                localPlayer,
+                actionId,
+                wolvesDenStrikingDummyMetadataVerified,
+                out resolution);
+        }
+
+        if (context != SupportedPvPContext.CrystallineConflict)
+        {
+            resolution = "Unsupported PvP context";
+            return [];
+        }
+
         var diagnosticsBefore = executeTracker.Diagnostics;
         if (!diagnosticsBefore.Active ||
             !diagnosticsBefore.IsCrystallineConflict ||
@@ -634,15 +622,85 @@ internal sealed class NinjaSeitonDispatchProbe
         return candidates;
     }
 
+    private IReadOnlyList<NinjaSeitonDispatchCandidate>
+        ResolveExactWolvesDenCandidate(
+            IPlayerCharacter localPlayer,
+            uint actionId,
+            bool wolvesDenStrikingDummyMetadataVerified,
+            out string resolution)
+    {
+        if (!DarkKnightWolvesDenCurrentTargetResolver
+                .TryResolveExactCurrentHardTarget(
+                    objectTable,
+                    wolvesDenStrikingDummyMetadataVerified,
+                    localPlayer,
+                    out var target,
+                    out var identity,
+                    out var kind,
+                    out _) ||
+            target is null)
+        {
+            resolution = "Wolves' Den exact current target unavailable";
+            return [];
+        }
+
+        var candidate = BuildExactCandidate(
+            localPlayer,
+            actionId,
+            SupportedPvPContext.WolvesDen,
+            EnemySlotRules.FirstSlot,
+            identity,
+            target);
+        if (candidate is not { } exact)
+        {
+            resolution = "Wolves' Den current-target action validation failed";
+            return [];
+        }
+
+        resolution =
+            $"Exact Wolves' Den current target: {kind}, protected={exact.HasExecuteBlockingProtection}";
+        return [exact];
+    }
+
     private NinjaSeitonDispatchCandidate? ResolveFrozenIntent(
         IPlayerCharacter localPlayer,
         NinjaSeitonDispatchIntent intent,
-        uint actionId) =>
-        BuildExactSlotCandidate(
+        uint actionId,
+        bool wolvesDenStrikingDummyMetadataVerified)
+    {
+        if (intent.Context == SupportedPvPContext.CrystallineConflict)
+        {
+            return BuildExactSlotCandidate(
+                localPlayer,
+                actionId,
+                intent.EnemySlot,
+                intent.Target);
+        }
+
+        if (intent.Context != SupportedPvPContext.WolvesDen ||
+            !DarkKnightWolvesDenCurrentTargetResolver
+                .TryResolveExactCurrentHardTarget(
+                    objectTable,
+                    wolvesDenStrikingDummyMetadataVerified,
+                    localPlayer,
+                    out var target,
+                    out var identity,
+                    out _,
+                    out _) ||
+            target is null ||
+            identity != intent.Target)
+        {
+            return null;
+        }
+
+        return BuildExactCandidate(
             localPlayer,
             actionId,
+            SupportedPvPContext.WolvesDen,
             intent.EnemySlot,
-            intent.Target);
+            intent.Target,
+            target);
+    }
 
     private unsafe NinjaSeitonDispatchCandidate? BuildExactSlotCandidate(
         IPlayerCharacter localPlayer,
@@ -665,7 +723,34 @@ internal sealed class NinjaSeitonDispatchProbe
             return null;
         }
 
-        var tableTarget = objectTable.SearchByEntityId(target.EntityId) as IPlayerCharacter;
+        return BuildExactCandidate(
+            localPlayer,
+            actionId,
+            SupportedPvPContext.CrystallineConflict,
+            enemySlot,
+            expectedTarget,
+            target);
+    }
+
+    private unsafe NinjaSeitonDispatchCandidate? BuildExactCandidate(
+        IPlayerCharacter localPlayer,
+        uint actionId,
+        SupportedPvPContext context,
+        int enemySlot,
+        TargetPressureActorIdentity expectedTarget,
+        IBattleChara target)
+    {
+        if (context == SupportedPvPContext.None ||
+            !NinjaSeitonDispatchRules.IsExactSeitonAction(actionId) ||
+            !EnemySlotRules.IsValidSlot(enemySlot) ||
+            !expectedTarget.IsValid ||
+            target.GameObjectId != expectedTarget.GameObjectId ||
+            target.EntityId != expectedTarget.EntityId)
+        {
+            return null;
+        }
+
+        var tableTarget = objectTable.SearchByEntityId(target.EntityId) as IBattleChara;
         var exactCanonicalIdentity = tableTarget is not null &&
                                      tableTarget.Address == target.Address &&
                                      tableTarget.GameObjectId == target.GameObjectId &&
@@ -684,10 +769,11 @@ internal sealed class NinjaSeitonDispatchProbe
             out var executeBlockingStatusId,
             out _);
         return new NinjaSeitonDispatchCandidate(
+            context,
             enemySlot,
             expectedTarget,
             exactCanonicalIdentity,
-            IsLivePlayer(target),
+            IsLiveBattleCharacter(target),
             target.IsTargetable,
             target.CurrentHp,
             target.MaxHp,
@@ -699,6 +785,7 @@ internal sealed class NinjaSeitonDispatchProbe
     private unsafe ClientActionAttemptOutcome TryUseSeitonOnce(
         IPlayerCharacter localPlayer,
         NinjaSeitonDispatchIntent intent,
+        bool wolvesDenStrikingDummyMetadataVerified,
         out bool attempted,
         out NinjaSeitonDispatchCandidate? boundaryCandidate,
         out bool boundaryThresholdRevalidated,
@@ -753,7 +840,8 @@ internal sealed class NinjaSeitonDispatchProbe
                 var exactCandidate = ResolveFrozenIntent(
                     localPlayer,
                     intent,
-                    resolvedActionId);
+                    resolvedActionId,
+                    wolvesDenStrikingDummyMetadataVerified);
                 if (exactCandidate is not { } frozenCandidate)
                     return false;
 
@@ -762,6 +850,7 @@ internal sealed class NinjaSeitonDispatchProbe
                         intent,
                         frozenCandidate,
                         currentLocalIdentity,
+                        intent.Context,
                         resolvedActionId,
                         actionLocallyReady: true))
                 {
@@ -777,7 +866,9 @@ internal sealed class NinjaSeitonDispatchProbe
                 // preflight, leaving only the unavoidable client-call/server
                 // execution race after this strict sub-50 check.
                 var thresholdResult = ReadFrozenThresholdAtUseActionBoundary(
+                    localPlayer,
                     intent,
+                    wolvesDenStrikingDummyMetadataVerified,
                     out var currentHp,
                     out var maximumHp,
                     out var executeBlockingStatusId);
@@ -830,11 +921,9 @@ internal sealed class NinjaSeitonDispatchProbe
         catch (Exception exception)
         {
             LogAttemptFailure(exception, Environment.TickCount64);
-            return attemptedAtBoundary
-                ? ClientActionAttemptOutcome.AcceptanceUnknown
-                : softUnavailableAtBoundary
-                    ? ClientActionAttemptOutcome.SoftUnavailable
-                    : ClientActionAttemptOutcome.NotInvoked;
+            return softUnavailableAtBoundary
+                ? ClientActionAttemptOutcome.SoftUnavailable
+                : ClientActionAttemptOutcome.AcceptanceUnknown;
         }
         finally
         {
@@ -847,7 +936,9 @@ internal sealed class NinjaSeitonDispatchProbe
     }
 
     private BoundaryThresholdResult ReadFrozenThresholdAtUseActionBoundary(
+        IPlayerCharacter localPlayer,
         NinjaSeitonDispatchIntent intent,
+        bool wolvesDenStrikingDummyMetadataVerified,
         out uint currentHp,
         out uint maximumHp,
         out uint executeBlockingStatusId)
@@ -855,7 +946,30 @@ internal sealed class NinjaSeitonDispatchProbe
         currentHp = 0;
         maximumHp = 0;
         executeBlockingStatusId = 0;
-        var target = EnemySlotResolver.Resolve(objectTable, intent.EnemySlot);
+        IBattleChara? target;
+        if (intent.Context == SupportedPvPContext.CrystallineConflict)
+        {
+            target = EnemySlotResolver.Resolve(objectTable, intent.EnemySlot);
+        }
+        else if (intent.Context == SupportedPvPContext.WolvesDen &&
+                 DarkKnightWolvesDenCurrentTargetResolver
+                     .TryResolveExactCurrentHardTarget(
+                         objectTable,
+                         wolvesDenStrikingDummyMetadataVerified,
+                         localPlayer,
+                         out var wolvesTarget,
+                         out var wolvesIdentity,
+                         out _,
+                         out _) &&
+                 wolvesIdentity == intent.Target)
+        {
+            target = wolvesTarget;
+        }
+        else
+        {
+            target = null;
+        }
+
         if (!HasValidNativeIdentity(target) ||
             target!.GameObjectId != intent.Target.GameObjectId ||
             target.EntityId != intent.Target.EntityId)
@@ -863,7 +977,7 @@ internal sealed class NinjaSeitonDispatchProbe
             return BoundaryThresholdResult.Unresolved;
         }
 
-        var tableTarget = objectTable.SearchByEntityId(target.EntityId) as IPlayerCharacter;
+        var tableTarget = objectTable.SearchByEntityId(target.EntityId) as IBattleChara;
         if (tableTarget is null ||
             tableTarget.Address != target.Address ||
             tableTarget.GameObjectId != target.GameObjectId ||
@@ -910,76 +1024,6 @@ internal sealed class NinjaSeitonDispatchProbe
                    actionManager->ActionQueued);
     }
 
-    private static unsafe bool IsCastCancellationBoundaryReady(
-        IPlayerCharacter localPlayer)
-    {
-        var actionManager = ActionManager.Instance();
-        return actionManager != null &&
-               localPlayer.IsCasting &&
-               actionManager->CastActionId != 0 &&
-               !actionManager->ActionQueued &&
-               float.IsFinite(actionManager->AnimationLock) &&
-               actionManager->AnimationLock >= 0f &&
-               actionManager->AnimationLock <=
-               HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
-    }
-
-    private HeldCastCancellationRequest? CreateCastCancellationRequest(
-        IPlayerCharacter localPlayer,
-        FrozenSeitonRetry frozen,
-        out uint executeBlockingStatusId)
-    {
-        executeBlockingStatusId = 0;
-        if (!IsCastCancellationBoundaryReady(localPlayer) ||
-            !HasValidNativeIdentity(localPlayer))
-        {
-            return null;
-        }
-
-        var currentLocalIdentity = new TargetPressureActorIdentity(
-            localPlayer.GameObjectId,
-            localPlayer.EntityId);
-        if (currentLocalIdentity != frozen.LocalPlayer ||
-            !SeitonReadinessProbe.TryGetReadyAction(
-                localPlayer,
-                out var resolvedActionId) ||
-            resolvedActionId != frozen.Intent.ActionId ||
-            !IsActionResourceReady(resolvedActionId))
-        {
-            return null;
-        }
-
-        var exactCandidate = ResolveFrozenIntent(
-            localPlayer,
-            frozen.Intent,
-            resolvedActionId);
-        if (exactCandidate is not { } candidate) return null;
-        if (candidate.HasExecuteBlockingProtection)
-        {
-            executeBlockingStatusId = candidate.ExecuteBlockingStatusId;
-            return null;
-        }
-
-        if (!NinjaSeitonDispatchRules.CanUseExactIntent(
-                frozen.Intent,
-                candidate,
-                currentLocalIdentity,
-                resolvedActionId,
-                actionLocallyReady: true))
-        {
-            return null;
-        }
-
-        var request = new HeldCastCancellationRequest(
-            HeldCastCancellationHelperKind.NinjaSeiton,
-            frozen.Intent.ActionId,
-            frozen.LocalPlayer,
-            frozen.Intent.Target,
-            (int)frozen.HeldKey,
-            frozen.IntentEpochToken);
-        return request.IsValid ? request : null;
-    }
-
     private ulong NextIntentEpochToken()
     {
         while (true)
@@ -1018,7 +1062,7 @@ internal sealed class NinjaSeitonDispatchProbe
         Protected = 4,
     }
 
-    private static unsafe GameObject* GetNativeObject(IPlayerCharacter? player)
+    private static unsafe GameObject* GetNativeObject(IGameObject? player)
     {
         if (!HasValidNativeIdentity(player)) return null;
         var native = (GameObject*)player!.Address;
@@ -1033,7 +1077,13 @@ internal sealed class NinjaSeitonDispatchProbe
         player.CurrentHp > 0 &&
         player.MaxHp >= player.CurrentHp;
 
-    private static bool HasValidNativeIdentity(IPlayerCharacter? player) =>
+    private static bool IsLiveBattleCharacter(IBattleChara? actor) =>
+        actor is not null &&
+        !actor.IsDead &&
+        actor.CurrentHp > 0 &&
+        actor.MaxHp >= actor.CurrentHp;
+
+    private static bool HasValidNativeIdentity(IGameObject? player) =>
         player is not null &&
         player.Address != 0 &&
         player.EntityId is not 0 and not 0xE0000000 &&
@@ -1042,8 +1092,15 @@ internal sealed class NinjaSeitonDispatchProbe
     private void CompleteAttempt(
         FrozenSeitonRetry frozen,
         ClientActionAttemptOutcome outcome,
+        bool nativeAttempted,
         long nowMilliseconds)
     {
+        if (!nativeAttempted && outcome == ClientActionAttemptOutcome.NotInvoked)
+        {
+            CancelFrozenIntent(frozen);
+            return;
+        }
+
         var completion = HeldActionRetryRules.Complete(
             frozen.Retry,
             Math.Max(0, nowMilliseconds),
@@ -1056,30 +1113,21 @@ internal sealed class NinjaSeitonDispatchProbe
         }
 
         frozenRetry = null;
-        if (outcome == ClientActionAttemptOutcome.ClientAccepted)
+        if (completion.IsTerminal)
         {
-            acceptedHold = NinjaSeitonDispatchRules.BeginAcceptedHold(
-                (int)frozen.HeldKey,
+            availabilityEpoch = NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(
+                availabilityEpoch,
                 frozen.Intent.ActionId);
-            return;
         }
-
-        SpendFrozenEpisode(
-            frozen,
-            HeldActionRetryRules.ShouldLatchHeldKeyUntilRelease(
-                completion.Disposition));
     }
 
-    private void SpendFrozenEpisode(
-        FrozenSeitonRetry frozen,
-        bool latchCircuitBreaker)
+    private void CancelFrozenIntent(FrozenSeitonRetry frozen)
     {
         frozenRetry = null;
-        acceptedHold = NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(
-            acceptedHold,
-            frozen.Intent.ActionId);
-        if (latchCircuitBreaker)
-            terminalHeldKey = frozen.HeldKey;
+        availabilityEpoch = NinjaSeitonDispatchRules.CancelFrozenAvailabilityEpoch(
+            availabilityEpoch,
+            frozen.Intent.ActionId,
+            frozen.Retry.NativeAttemptCount);
     }
 
     private static string DescribeAttempt(
@@ -1100,7 +1148,6 @@ internal sealed class NinjaSeitonDispatchProbe
     private readonly record struct FrozenSeitonRetry(
         NinjaSeitonDispatchIntent Intent,
         TargetPressureActorIdentity LocalPlayer,
-        VirtualKey HeldKey,
         ulong IntentEpochToken,
         HeldActionRetryState Retry);
 }

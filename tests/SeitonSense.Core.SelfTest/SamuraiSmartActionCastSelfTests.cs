@@ -10,6 +10,15 @@ internal static class SamuraiSmartActionCastSelfTests
             "Ogi Namikiri raw/resolved action");
         Equal(29_531u, SamuraiSmartActionCastRules.OgiNamikiriFollowUpActionId,
             "Kaeshi Namikiri follow-up");
+        True(
+            SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_530),
+            "Ogi base uses the reviewed cone protection policy");
+        True(
+            SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(29_531),
+            "Kaeshi Namikiri uses the same reviewed cone protection policy");
+        False(
+            SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(41_455),
+            "Tendo Kaeshi stays on direct-target protection");
         Equal(29_536u, SamuraiSmartActionCastRules.TendoSetsugekkaCarrierActionId,
             "Meikyo Shisui raw carrier");
         Equal(41_454u, SamuraiSmartActionCastRules.TendoSetsugekkaActionId,
@@ -79,32 +88,78 @@ internal static class SamuraiSmartActionCastSelfTests
             "reviewed-cast permission cannot turn an instant action into a cast");
     }
 
-    public static void OgiConeAndTendoDirectProtectionFailClosed()
+    public static void OgiConeProtectionIsCandidateLocalAndTendoRemainsDirect()
     {
-        var target = Geometry(1, 0x201, 0x301, 0f);
-        var farProtected = new SmartActionProtectedActor(
-            Geometry(2, 0x202, 0x302, 100f),
-            SmartActionProtectionKind.Chiten);
+        var source = Vector3.Zero;
+        var target = Geometry(1, 0x201, 0x301, 6f, 0f);
 
         var ogiShape = SmartActionProtectionRules.ClassifyAttackShape(
             effectRange: 8,
             castType: 3);
         Equal(SmartActionAttackShape.UnsupportedAreaOfEffect, ogiShape,
-            "Ogi CastType 3 is not mislabeled as a target-centered circle");
+            "only the exact reviewed Ogi action opts into its cone policy");
         True(SmartActionProtectionRules.RequiresCompleteHostileSnapshot(ogiShape),
-            "Ogi retains the complete hostile protection snapshot");
-        False(SmartActionProtectionRules.IsActionProtectionSafe(
-                ogiShape,
+            "Ogi cone safety still requires every hostile actor geometry");
+
+        var incidentalProtections = new[]
+        {
+            new SmartActionProtectedActor(
+                Geometry(2, 0x202, 0x302, 3f, 0f),
+                SmartActionProtectionKind.Guard),
+            new SmartActionProtectedActor(
+                Geometry(3, 0x203, 0x303, 4f, 1f),
+                SmartActionProtectionKind.Covered),
+            new SmartActionProtectedActor(
+                Geometry(4, 0x204, 0x304, 5f, -1f),
+                SmartActionProtectionKind.Invulnerability),
+        };
+        True(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
                 target,
-                effectRange: 8f,
-                [farProtected]),
-            "without reviewed cone-angle geometry any protected enemy blocks Ogi");
-        True(SmartActionProtectionRules.IsActionProtectionSafe(
-                ogiShape,
+                SamuraiSmartActionCastRules.OgiNamikiriEffectRangeYalms,
+                incidentalProtections),
+            "incidental Guard, Cover, and invulnerability actors do not globally stall Ogi");
+
+        var outsideConeChiten = new SmartActionProtectedActor(
+            Geometry(2, 0x212, 0x312, 0f, 6f),
+            SmartActionProtectionKind.Chiten);
+        True(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
                 target,
-                effectRange: 8f,
+                SamuraiSmartActionCastRules.OgiNamikiriEffectRangeYalms,
+                [outsideConeChiten]),
+            "an out-of-cone Chiten actor does not veto this candidate");
+
+        var intersectingChiten = new SmartActionProtectedActor(
+            Geometry(2, 0x222, 0x322, 4f, 0f),
+            SmartActionProtectionKind.Chiten);
+        False(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
+                target,
+                SamuraiSmartActionCastRules.OgiNamikiriEffectRangeYalms,
+                [intersectingChiten]),
+            "a Chiten actor intersecting the candidate cone still vetoes Ogi");
+        var edgeIntersectingChiten = new SmartActionProtectedActor(
+            Geometry(2, 0x232, 0x332, 4f, 5.2f),
+            SmartActionProtectionKind.Chiten);
+        False(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
+                target,
+                SamuraiSmartActionCastRules.OgiNamikiriEffectRangeYalms,
+                [edgeIntersectingChiten]),
+            "Chiten hitbox intersection at the cone edge is conservative");
+        False(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
+                target,
+                SamuraiSmartActionCastRules.OgiNamikiriEffectRangeYalms,
+                [new SmartActionProtectedActor(target, SmartActionProtectionKind.Guard)]),
+            "Ogi never selects a protected primary target");
+        False(SamuraiSmartActionCastRules.IsOgiNamikiriProtectionSafe(
+                source,
+                target,
+                effectRange: 7f,
                 []),
-            "Ogi is protection-safe only when the complete snapshot has no protection");
+            "drifted Ogi cone range fails closed");
 
         var tendoShape = SmartActionProtectionRules.ClassifyAttackShape(
             effectRange: 0,
@@ -115,13 +170,13 @@ internal static class SamuraiSmartActionCastSelfTests
                 tendoShape,
                 target,
                 effectRange: 0f,
-                [farProtected]),
+                [outsideConeChiten]),
             "an unrelated protected enemy cannot block direct Tendo");
         False(SmartActionProtectionRules.IsActionProtectionSafe(
                 tendoShape,
                 target,
                 effectRange: 0f,
-                [farProtected with { Geometry = target }]),
+                [outsideConeChiten with { Geometry = target }]),
             "Tendo never selects its protected exact target");
     }
 
@@ -129,12 +184,13 @@ internal static class SamuraiSmartActionCastSelfTests
         int slot,
         ulong gameObjectId,
         uint entityId,
-        float x) =>
+        float x,
+        float z) =>
         new(
             slot,
             new TargetPressureActorIdentity(gameObjectId, entityId),
             ExactCanonicalIdentity: true,
-            new Vector3(x, 0f, 0f),
+            new Vector3(x, 0f, z),
             HitboxRadius: 1f);
 
     private static void True(bool condition, string message)

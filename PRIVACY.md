@@ -21,7 +21,10 @@ through unchanged. The sole closed exception is metadata-verified local SAM Ogi
 Namikiri or Tendo Setsugekka through Smart Action; those two casts freeze one
 ranked exact actor while Near Assist, Near Help, and every other cast retain the
 visible-target policy. The plugin does not call a face-target or rotation
-function for this policy. The separate default-off NIN Guard-
+function for this policy. For Ogi and instant Kaeshi: Namikiri, protection is candidate-local: the selected
+actor must be directly safe and any Chiten actor intersecting the reviewed
+8-yalm, 90-degree cone vetoes that candidate, while unrelated Guard, Cover, or
+LB invulnerability elsewhere does not. Tendo remains direct-target. The separate default-off NIN Guard-
 Shukuchi helper may set only the exact jumped-to enemy as the hard target, and
 only after its one ground-targeted Shukuchi location request returns client-
 accepted. In particular, the separate default-off Guardian
@@ -190,10 +193,14 @@ following data already available in the local FFXIV client:
   and one frozen reachable enemy identity with HP, distance, native range, and
   line-of-sight evidence;
 - when the optional Samurai helpers are enabled, exact local Samurai identity,
-  held-key ownership, enemy Purify/Guard action-and-status evidence, the frozen
-  Soten/Mineuchi stage, exact canonical enemy positions and hitboxes for the
-  Auto-Zantetsuken farthest-target choice, own Kuzushi attribution, target shield amount,
-  action readiness, range/line of sight, and bounded source/global sequence data;
+  held-key ownership for Soten/Mineuchi only, enemy Purify/Guard action-and-
+  status evidence, the frozen Soten/Mineuchi stage, and bounded source/global
+  sequence data. Automatic Zantetsuken additionally reads its armed state,
+  adjusted-action readiness epoch, exact canonical enemy life/targetability,
+  HP, positions and hitboxes for the target-centered 5-yalm cluster, blocking
+  protection rows, optional own Kuzushi attribution, shield amount, native
+  range/line of sight, Bind, cast/queue/animation state, frozen actor, and
+  bounded request/retry outcome;
 - when reactive counter-CC timing is learned, the exact plugin-owned action,
   target and nonzero source sequence are correlated transiently with the matching
   server status. Only the resulting action ID, landing delay, and target-edge
@@ -350,15 +357,17 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC /
-Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
+The current action-request priority is **Purify > Smart Recuperate > automatic
+Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged
+counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
-(safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic
-Guard > pressure Sprint > event Kardia > event Monk**. The job-specific physical-
-hold helpers use that deterministic urgency order; reactive counter-CC leads ally cleanse because
+(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event
+Kardia > event Monk**. The job-specific helpers use that deterministic urgency
+order; automatic Zantetsuken and Auto-Seiton need no key, while physical-hold
+helpers retain explicit consent. Reactive counter-CC leads ally cleanse because
 its LB and protection-end windows are shorter. One framework frame permits at
-most one held-helper native boundary, but a continuously held key remains consent
+most one helper native boundary, but a continuously held key remains consent
 for later distinct exact episodes. Kardia and Monk retain their separate event-
 driven origins.
 
@@ -618,8 +627,15 @@ path. The only exception is the exact local-SAM Smart Action pair Ogi Namikiri
 `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`, after
 strict current English action metadata verifies the cast, range, hostile target,
 job, and action identity. These two casts use the existing canonical ranking,
-range/line-of-sight check, frozen actor, and final protection recheck. Their
-instant Kaeshi actions `29531` and `41455` are not cast exceptions. Near Assist,
+range/line-of-sight check, frozen actor, and final protection recheck. The
+selected actor must remain directly protection-safe. Ogi additionally checks
+the candidate-facing reviewed 8-yalm, 90-degree cone and vetoes a candidate only
+when a Chiten actor's hitbox intersects it; unrelated Guard, Cover, Hallowed
+Ground, Undead Redemption, and out-of-cone Chiten actors do not globally stall
+the cast. Instant Kaeshi: Namikiri `29531` uses the same cone policy after its
+separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.
+Tendo remains direct-target. The instant Kaeshi actions `29531` and `41455` are
+not cast exceptions. Near Assist,
 Near Help, every unreviewed cast, and metadata drift retain the visible-target
 path. Other instant actions retain the existing one-shot smart redirect. Seiton
 Sense does not write facing or camera state for this rule; any initial facing is
@@ -803,7 +819,7 @@ validation boundary, and a Den result is not proof of CC behavior.
 Held-action helpers share one transient physical-key observation and one
 per-framework-frame claim. Claiming a frame never consumes the physical hold:
 the same exact key may remain consent for a later distinct Purify, AST same-
-target healing, RDM fresh-Guard engage, counter-CC, NIN Seiton, VPR Serpentiner Geist, ally cleanse,
+target healing, RDM fresh-Guard engage, counter-CC, VPR Serpentiner Geist, ally cleanse,
 Guardian, NIN Guard-Shukuchi,
 SCH Critical Strategy, DRK, Recuperate, Emergency Teleport,
 Guard, or pressure Sprint episode. Enabling an option while a key is already
@@ -812,7 +828,7 @@ failure, or reset clears the relevant leases. Own Guard suppresses every native
 helper boundary without consuming the physical hold; individual frozen episodes
 either wait or cancel according to their exact action-specific contract.
 
-The twenty shared physical-hold option trackers prefer an already-held movement key, then another
+The shared physical-hold option trackers prefer an already-held movement key, then another
 stable held gameplay key, before fresh movement/other fallback. Each helper
 checks its held lease before fresh input and retains the exact frozen key until
 release, ineligibility, reset, or its action-specific terminal outcome. A short
@@ -855,12 +871,13 @@ are neither persisted nor uploaded.
 This separate test is disabled by default. It is the generic held-helper
 permission and applies only to otherwise-ready exact physical-hold intents for
 Purify, AST same-target Orbis,
-RDM fresh-Guard engage, SAM counter-CC/Zantetsuken, NIN Seiton,
+RDM fresh-Guard engage, SAM counter-CC,
 reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical
 Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency
 Teleport, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
 every already-incoming manual/Turbo redirect (including Paean), and macro helpers are excluded.
-Viper Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded
+Automatic Zantetsuken and Auto-Seiton never use this permission. Viper
+Serpentiner Geist, GNB Continuation, and held Monk combo are also excluded
 because they poll their current native state and deliberately do not cancel a cast.
 Cast cancellation therefore constructs sixteen reviewed request shapes across
 seventeen ordered selection slots; held Shadowbringer uses the same exact request
@@ -1533,59 +1550,58 @@ cannot create a new epoch. Frozen identity, key/cooldown epochs, positions,
 native results, target readback, and aggregate diagnostics remain bounded in
 memory and are not persisted or uploaded.
 
-## Experimental Ninja Seiton held-key helper
+## Experimental Ninja Auto-Seiton helper
 
-This helper is disabled by default and runs only for PvP Ninja in exact
-Crystalline Conflict. When explicitly enabled, it transiently reads the local
-player's exact identity and job, continuous physical gameplay-key consent, own
-Guard state, the current adjusted Seiton action and readiness state, and the
-exact canonical `<e1>`-`<e5>` enemy actors. Eligible candidates must remain
-living, targetable, hostile, strictly below 50% HP, and accepted by FFXIV's
-native action range and line-of-sight check. Selection uses the lowest exact HP
-ratio, then stable enemy slot and actor identity.
+This helper is disabled by default and runs for PvP Ninja in exact Crystalline
+Conflict or explicitly enabled Wolves' Den testing. When armed, it transiently
+reads the local player's exact identity and job, own Guard state, the current
+adjusted Seiton action and readiness epoch, and either the exact canonical
+`<e1>`-`<e5>` enemy actors or the exact current duel target/reviewed striking
+dummy. Eligible candidates must remain living, targetable, hostile, strictly
+below 50% HP, and accepted by FFXIV's native action range and line-of-sight
+check. Selection uses the lowest exact HP ratio, then stable enemy slot and actor
+identity.
 
 The `/autoseiton [on|off|toggle]` command and the NIN-only action-bar-style
-ON/OFF tile change only the same persisted opt-in. A click or command does not
-itself submit an action: a physical gameplay key must still be held when an exact
-eligible Seiton episode is selected.
+ON/OFF tile change only the same persisted automatic arm. While ON, no held or
+freshly pressed gameplay key is read or required; the next eligible readiness
+epoch may submit automatically.
 
 Automated Seiton also reads the exact candidate's live status IDs. Guardian's
 target-side Covered rows, the Paladin's Phalanx self Hallowed Ground, and Dark
 Knight Eventide's Undead Redemption make that actor ineligible. The covering
-Paladin, Phalanx's party mitigation, and Guard itself are not blockers. The
-same exact status check is repeated for a frozen retry, before any optional
-cast-cancel request, and immediately before the native action request. A
-metadata mismatch disables this helper; no localized status text is used at
-runtime.
+Paladin, Phalanx's party mitigation, and Guard itself are not blockers. The same
+exact status check is repeated for a frozen retry and immediately before the
+native action request. Active casts wait; Auto-Seiton never requests cast
+cancellation. A metadata mismatch disables this helper; no localized status
+text is used at runtime.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
-and its Unsealed follow-up `29516`. Purify alone precedes NIN Seiton on Ninja in
-the current request order; Viper's job-exclusive Serpentiner-Geist slot has the
-same rank but can never coexist with NIN at runtime. NIN Seiton precedes reactive
-counter-CC, Ally Rescue, PLD
-Guardian, Guard-Shukuchi, SCH Critical Strategy, DRK, Smart Recuperate,
-Emergency Teleport, generic Guard, pressure
-Sprint, event Kardia, and event Monk.
-Active own Guard and the bounded post-request Guard-propagation state suppress the helper. The already-selected target is never changed, and
-the helper never changes the visible hard, soft, or focus target.
+and its Unsealed follow-up `29516`; each has a distinct availability epoch.
+Purify, Smart Recuperate, automatic Guard, AST, RDM, and the SAM helper tier
+precede NIN Auto-Seiton in the current request order. NIN Auto-Seiton precedes
+VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, PLD
+Guardian, Guard-Shukuchi, SCH Critical Strategy, DRK, Monk combo, Emergency
+Teleport, pressure Sprint, event Kardia, and event Monk. Active own Guard and
+the bounded post-request Guard-propagation state suppress the helper. The
+helper never changes the visible hard, soft, or focus target.
 
-After every gate passes, one adjusted-action epoch freezes the exact target.
-Known unavailable states wait, and only a clean explicit rejection may use the
-shared bounded same-intent retry. A later genuine adjusted-action transition
-from base Seiton to its Unsealed follow-up can create a distinct epoch on the
-same hold; a rejected base action can never substitute the follow-up. Changed
-identity, health, protection, or reachability; acceptance; ambiguity; or exception is
-terminal without another selection, alternate target, fallback action, or
-replay. The frozen S-slot and actor identity are resolved before every possible
-request and the same actor's current HP and protection are re-read. A value at
-exactly 50% or higher or an execute-blocking status cancels and retires the
-intent; this last client-side sample does
-not prove what HP the server observes when processing the request. The original
-gameplay key is neither swallowed nor replayed. The local request
-return may be kept as a bounded aggregate `client-accepted` diagnostic, but it
-is not proof that Seiton
-landed, executed the target, or caused a kill. No target, key, attempt, or result
-history is persisted, transmitted, or uploaded.
+After every gate passes, one adjusted-action readiness epoch freezes the exact
+target. Known unavailable states wait, and only a clean explicit rejection may
+use the shared bounded same-intent retry. If the actor becomes invalid before
+any native request, the frozen intent clears without spending the readiness
+epoch and a different exact actor may be selected on a later frame. Once a
+native request was attempted, the target stays frozen and drift is terminal. A
+later genuine adjusted-action transition from base Seiton `29515` to Unsealed
+`29516` creates a distinct readiness epoch; a rejected base action can never
+substitute the follow-up. The frozen S-slot and actor identity are resolved
+before every possible request and the same actor's current HP and protection are
+re-read. A value at exactly 50% or higher or an execute-blocking status
+invalidates that candidate; this last client-side sample does not prove what HP
+the server observes when processing the request. The local request return may be
+kept as a bounded aggregate `client-accepted` diagnostic, but it is not proof
+that Seiton landed, executed the target, or caused a kill. No target, attempt,
+or result history is persisted, transmitted, or uploaded.
 
 ## Experimental Monk Earth's Reply helper
 
@@ -1671,7 +1687,7 @@ scale, self/ally LB activation messages, optional ally names and ally LB damage,
   opt-ins and local sound ID, the local What's New
 acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
-the separate NIN Guard-Shukuchi and NIN Seiton held-key opt-ins, the Scholar
+the separate NIN Guard-Shukuchi held-key and automatic NIN Seiton opt-ins, the Scholar
 Critical Strategy, Astrologian held Near Help, and RDM fresh-Guard opt-ins, the
 RDM own-HP/MP thresholds, and the camera-back job dash command opt-in,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
@@ -1807,8 +1823,9 @@ existing Wolves' Den testing option. Schema 44 adds the separate default-off
 backward-command opt-in. The generic held-action cast-cancellation test and the
 schema-46 automatic basic-shot permission remain explicitly off for fresh, reset,
 and migrated configurations. An older explicitly enabled fresh-edge NIN Seiton option still
-traverses schema 29, migrates to the replacement held-key option, and clears the
-obsolete compatibility field. Every other existing master/helper choice is
+traverses schema 29, migrates to the retained compatibility-named opt-in, and
+clears the obsolete field. The retained opt-in now arms fully automatic Seiton;
+it does not restore a held-key requirement. Every other existing master/helper choice is
 preserved. Older configurations still traverse the earlier migrations first,
 including schema 28's default-off post-Guard migration. Schema 32 forces the
 retired Combat Frames master off, maps its optional name preference to the ally

@@ -150,6 +150,7 @@ internal sealed class AutoSeitonToggleWindow : Window
         ImGui.BeginTooltip();
         ImGui.TextUnformatted(enabled ? "AUTO SEITON: ON" : "AUTO SEITON: OFF");
         ImGui.TextUnformatted("Click to toggle");
+        ImGui.TextUnformatted(enabled ? "Automatic dispatch armed" : "Automatic dispatch disarmed");
         ImGui.Separator();
         if (!currentOptions.MetadataVerified)
             ImGui.TextUnformatted("Seiton metadata is not verified");

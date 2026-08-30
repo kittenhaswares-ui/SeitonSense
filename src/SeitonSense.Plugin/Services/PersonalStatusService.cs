@@ -691,7 +691,7 @@ internal sealed class PersonalStatusService : IDisposable
                                                      isSamurai;
         var ninjaSeitonConfigurationEnabled = configuration.Enabled &&
                                                configuration.EnableNinjaSeitonOnHeldGameplayKey &&
-                                               isCrystallineConflict &&
+                                               isSupportedPvPContext &&
                                                isNinja;
         var viperSerpentTailConfigurationEnabled = configuration.Enabled &&
                                                     configuration.EnableViperSerpentTailOnHeldKey &&
@@ -796,9 +796,6 @@ internal sealed class PersonalStatusService : IDisposable
             samuraiCounterCcConfigurationEnabled &&
             configuration.ReactiveCcOnHeldKey &&
             samuraiReactiveMetadata.CounterCcVerified;
-        var samuraiZantetsukenHeldInputEnabled =
-            samuraiZantetsukenConfigurationEnabled &&
-            samuraiReactiveMetadata.ZantetsukenWorkflowVerified;
         var scholarCriticalStrategyHeldInputEnabled =
             scholarCriticalStrategyConfigurationEnabled &&
             metadata.ScholarCriticalStrategyVerified;
@@ -814,8 +811,6 @@ internal sealed class PersonalStatusService : IDisposable
                                                isCrystallineConflict &&
                                                metadata.DarkKnightPlungeVerified &&
                                                isDarkKnight;
-        var ninjaSeitonHeldInputEnabled = ninjaSeitonConfigurationEnabled &&
-                                          metadata.SeitonVerified;
         var viperSerpentTailHeldInputEnabled =
             viperSerpentTailConfigurationEnabled &&
             metadata.ViperSerpentTailVerified;
@@ -867,13 +862,11 @@ internal sealed class PersonalStatusService : IDisposable
                                             allyRescueHeldInputEnabled ||
                                              miracleInterceptHeldInputEnabled ||
                                              samuraiCounterCcHeldInputEnabled ||
-                                             samuraiZantetsukenHeldInputEnabled ||
                                              scholarCriticalStrategyHeldInputEnabled ||
                                              emergencyTeleportHeldInputEnabled ||
                                              pressureEscapeSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
                                             ninjaGuardShukuchiHeldInputEnabled ||
-                                            ninjaSeitonHeldInputEnabled ||
                                             viperSerpentTailHeldInputEnabled ||
                                             gunbreakerContinuationHeldInputEnabled ||
                                              darkKnightShadowbringerHeldInputEnabled ||
@@ -891,9 +884,7 @@ internal sealed class PersonalStatusService : IDisposable
              allyRescueConfigurationEnabled ||
                                              miracleInterceptConfigurationEnabled ||
              samuraiCounterCcConfigurationEnabled ||
-             samuraiZantetsukenConfigurationEnabled ||
              ninjaGuardShukuchiHeldInputEnabled ||
-             ninjaSeitonHeldInputEnabled ||
              viperSerpentTailHeldInputEnabled ||
              gunbreakerContinuationHeldInputEnabled ||
              darkKnightShadowbringerHeldInputEnabled ||
@@ -916,13 +907,13 @@ internal sealed class PersonalStatusService : IDisposable
             pressureEscapeSprintHeldInputEnabled,
             darkKnightPlungeHeldInputEnabled,
             ninjaGuardShukuchiHeldEnabled: ninjaGuardShukuchiHeldInputEnabled,
-            ninjaSeitonHeldEnabled: ninjaSeitonHeldInputEnabled,
+            ninjaSeitonHeldEnabled: false,
             viperSerpentTailHeldEnabled: viperSerpentTailHeldInputEnabled,
             gunbreakerContinuationHeldEnabled: gunbreakerContinuationHeldInputEnabled,
             darkKnightShadowbringerHeldEnabled: darkKnightShadowbringerHeldInputEnabled,
             monkHeldComboEnabled: monkHeldComboInputEnabled,
              samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
-             samuraiZantetsukenHeldEnabled: samuraiZantetsukenHeldInputEnabled,
+             samuraiZantetsukenHeldEnabled: false,
              astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled,
              redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled);
         var purify = emergencyPurify.Observe(
@@ -1061,7 +1052,6 @@ internal sealed class PersonalStatusService : IDisposable
                 localPlayer,
                 context,
                 enabled: true,
-                allowHeldGameplayKey: true,
                 dispatchAllowed:
                      !guardActive &&
                      !immediateDefenseClaimedPriority &&
@@ -1078,16 +1068,17 @@ internal sealed class PersonalStatusService : IDisposable
                                      samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
-        // Purify is absolute, Recuperate is second. AST, SAM, then Auto-Seiton are the next
-        // action-level priorities;
+        // Purify is absolute, Recuperate is second, and automatic Guard follows.
+        // AST, RDM, SAM, then Auto-Seiton are the next action-level priorities;
         // once it claims this frame, every later held helper observes that
         // claim and stays armed for a later free frame.
         now = Environment.TickCount64;
         var ninja = ninjaSeiton.Observe(
             localPlayer,
-            isCrystallineConflict,
+            context,
             ninjaSeitonConfigurationEnabled,
             metadata.SeitonVerified,
+            metadata.WolvesDenStrikingDummyVerified,
             guardActive,
             immediateDefenseClaimedPriority ||
             samuraiClaimedPriority ||
@@ -1126,8 +1117,8 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset);
         // Reactive counter-CC and the remaining job-specific helpers follow
-        // Auto-Seiton, then generic self-healing/defense. A held key remains
-        // consent for a later distinct episode after an accepted action clears.
+        // Auto-Seiton. Their held-key helpers retain explicit consent for a
+        // later distinct episode after an accepted action clears.
         // The native hook may enqueue after this framework scan began. Refresh
         // the monotonic clock immediately before draining so a same-frame start
         // marker is never rejected as if it came from the future.
@@ -1471,9 +1462,6 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 samurai.InputClaimed,
                 samurai.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                ninja.InputClaimed,
-                ninja.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 miracle.InputClaimed,
                 miracle.CastCancellationRequest) ??

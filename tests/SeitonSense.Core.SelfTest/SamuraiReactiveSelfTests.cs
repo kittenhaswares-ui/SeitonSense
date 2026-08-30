@@ -369,109 +369,166 @@ internal static class SamuraiReactiveSelfTests
             "the local actor can never become its own Wolves Den counter target");
     }
 
-    public static void ZantetsukenRequiresOwnKuzushiAndZeroShield()
+    public static void ZantetsukenAutomaticGateBlocksOnlyExactHardProtection()
     {
-        var armed = SamuraiZantetsukenRules.Arm(Enemy, HeldKey, 2_000);
-        True(armed.IsActive, "exact Zantetsuken intent");
-        Equal(
-            SamuraiZantetsukenDecisionKind.Waiting,
-            SamuraiZantetsukenRules.Observe(
-                armed,
-                ZantetsukenObservation(shieldPercentage: 1)).Kind,
-            "any shield waits");
+        var armed = SamuraiZantetsukenRules.Arm(Enemy, 2_000);
+        True(armed.IsActive, "automatic exact Zantetsuken intent");
         Equal(
             SamuraiZantetsukenRules.ActionId,
             SamuraiZantetsukenRules.Observe(
                 armed,
-                ZantetsukenObservation(shieldPercentage: 0)).ActionId,
-            "own Kuzushi and zero shield");
+                ZantetsukenObservation()).ActionId,
+            "automatic intent needs no key, Kuzushi, or zero shield");
         Equal(
             SamuraiZantetsukenDecisionKind.Cancelled,
             SamuraiZantetsukenRules.Observe(
                 armed,
-                ZantetsukenObservation(shieldPercentage: 0) with
+                ZantetsukenObservation(executeBlockingProtectionCount: 1)).Kind,
+            "exact Covered or invulnerability cancels");
+        Equal(
+            SamuraiZantetsukenDecisionKind.Cancelled,
+            SamuraiZantetsukenRules.Observe(
+                armed,
+                ZantetsukenObservation() with
                 {
-                    OwnSourceKuzushiCount = 0,
+                    HasNativeRangeAndLineOfSight = false,
                 }).Kind,
-            "missing or foreign Kuzushi cancels");
+            "frozen endpoint reachability drift cancels before reranking");
+        Equal(
+            SamuraiZantetsukenDecisionKind.Waiting,
+            SamuraiZantetsukenRules.Observe(
+                armed,
+                ZantetsukenObservation() with
+                {
+                    BoundPresent = true,
+                }).Kind,
+            "Bind waits without spending the automatic intent");
+
+        False(
+            NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                SmartActionProtectionRules.GuardStatusId),
+            "Guard remains eligible");
+        False(
+            NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                SmartActionProtectionRules.ChitenStatusId),
+            "Chiten remains eligible");
+        True(
+            NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                NinjaSeitonProtectionStatusCatalog.CoveredPvpAlternateStatusId),
+            "Covered blocks");
+        True(
+            NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                NinjaSeitonProtectionStatusCatalog.HallowedGroundStatusId),
+            "Hallowed Ground blocks");
+        True(
+            NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId),
+            "Undead Redemption blocks");
 
         var joblessDummy = Enemy with { JobId = 0 };
         False(
-            SamuraiZantetsukenRules.Arm(joblessDummy, HeldKey, 2_000).IsActive,
+            SamuraiZantetsukenRules.Arm(joblessDummy, 2_000).IsActive,
             "jobless target rejected in normal CC");
         True(
             SamuraiZantetsukenRules.Arm(
                 joblessDummy,
-                HeldKey,
                 2_000,
                 allowJoblessWolvesDenTarget: true).IsActive,
             "reviewed Wolves Den dummy opt-in");
     }
 
-    public static void ZantetsukenRanksFarthestReachableEligibleTargetThenSlot()
+    public static void ZantetsukenRanksLargestVulnerableFiveYalmCluster()
     {
         var candidates = new[]
         {
-            ZantetsukenCandidate(1, edgeDistance: 8f),
-            ZantetsukenCandidate(2, edgeDistance: 18f),
-            ZantetsukenCandidate(3, edgeDistance: 12f),
+            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(2, x: 4f),
+            ZantetsukenCandidate(3, x: 8f),
         };
         Equal(
             1,
             SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(candidates),
-            "farthest exact eligible target wins");
+                .SelectBestEligibleTargetIndex(candidates),
+            "middle endpoint reaches the largest 5y cluster");
+        Equal(
+            3,
+            SamuraiZantetsukenTargetSelectionRules
+                .CountUsefulClusterMembers(candidates, 1),
+            "selected endpoint counts every intersected vulnerable hitbox");
 
-        var ineligibleFarthest = new[]
+        var protectedMiddle = new[]
         {
-            ZantetsukenCandidate(1, edgeDistance: 19f) with
+            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(2, x: 4f) with
             {
-                ShieldPercentage = 1,
+                ExecuteBlockingProtectionCount = 1,
             },
-            ZantetsukenCandidate(2, edgeDistance: 18f) with
+            ZantetsukenCandidate(3, x: 8f),
+        };
+        Equal(
+            0,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectBestEligibleTargetIndex(protectedMiddle),
+            "protected endpoint and cluster member are excluded");
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .CountUsefulClusterMembers(protectedMiddle, 0),
+            "protected nearby actor adds no useful cluster score");
+
+        var executeTie = new[]
+        {
+            ZantetsukenCandidate(1, x: 0f, currentHp: 80_000) with
             {
                 OwnSourceKuzushiCount = 0,
             },
-            ZantetsukenCandidate(3, edgeDistance: 11f),
-        };
-        Equal(
-            2,
-            SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(ineligibleFarthest),
-            "shielded or non-owned Kuzushi targets are not selected");
-
-        var slotTie = new[]
-        {
-            ZantetsukenCandidate(4, edgeDistance: 14f),
-            ZantetsukenCandidate(2, edgeDistance: 14f),
+            ZantetsukenCandidate(2, x: 20f, currentHp: 90_000),
         };
         Equal(
             1,
             SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(slotTie),
-            "equal distance uses lower S-slot");
+                .SelectBestEligibleTargetIndex(executeTie),
+            "equal clusters prefer own unshielded Kuzushi before HP");
+
+        var healthThenSlotTie = new[]
+        {
+            ZantetsukenCandidate(4, x: 0f, currentHp: 40_000),
+            ZantetsukenCandidate(2, x: 20f, currentHp: 30_000),
+        };
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectBestEligibleTargetIndex(healthThenSlotTie),
+            "equal cluster and execute value prefer lower HP ratio");
+        healthThenSlotTie[0] = healthThenSlotTie[0] with { CurrentHp = 30_000 };
+        Equal(
+            1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectBestEligibleTargetIndex(healthThenSlotTie),
+            "remaining tie uses lower stable S-slot");
     }
 
-    public static void ZantetsukenFarthestRankingFailsClosedAndRequiresReachability()
+    public static void ZantetsukenClusterRankingFailsClosedAndRequiresReachability()
     {
         var candidates = new[]
         {
-            ZantetsukenCandidate(1, edgeDistance: 18f) with
+            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(2, x: 4f) with
             {
                 HasNativeRangeAndLineOfSight = false,
             },
-            ZantetsukenCandidate(2, edgeDistance: 12f),
+            ZantetsukenCandidate(3, x: 8f),
         };
         Equal(
-            1,
+            0,
             SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(candidates),
-            "unreachable endpoint cannot be selected");
+                .SelectBestEligibleTargetIndex(candidates),
+            "unreachable best endpoint cannot be selected; stable tie remains");
 
         var duplicate = new[]
         {
-            ZantetsukenCandidate(1, edgeDistance: 10f),
-            ZantetsukenCandidate(1, edgeDistance: 15f) with
+            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(1, x: 4f) with
             {
                 Target = new SamuraiReactiveCounterCcTarget(
                     GameObjectId: 0x3002,
@@ -482,24 +539,25 @@ internal static class SamuraiReactiveSelfTests
         Equal(
             -1,
             SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(duplicate),
+                .SelectBestEligibleTargetIndex(duplicate),
             "ambiguous native slot set fails closed");
 
-        var invalidDistance = new[]
+        var invalidGeometry = new[]
         {
-            ZantetsukenCandidate(1, edgeDistance: 10f),
-            ZantetsukenCandidate(2, edgeDistance: float.NaN),
+            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(2, x: float.NaN),
         };
         Equal(
             -1,
             SamuraiZantetsukenTargetSelectionRules
-                .SelectFarthestEligibleTargetIndex(invalidDistance),
-            "unknown edge distance fails the complete snapshot closed");
+                .SelectBestEligibleTargetIndex(invalidGeometry),
+            "unknown geometry fails the complete snapshot closed");
     }
 
     private static SamuraiZantetsukenTargetCandidate ZantetsukenCandidate(
         int slot,
-        float edgeDistance) => new(
+        float x,
+        uint currentHp = 50_000) => new(
         slot,
         new SamuraiReactiveCounterCcTarget(
             GameObjectId: (ulong)(0x3000 + slot),
@@ -507,10 +565,14 @@ internal static class SamuraiReactiveSelfTests
             JobId: 23),
         ExactCanonicalIdentity: true,
         AliveAndTargetable: true,
+        CurrentHp: currentHp,
+        MaximumHp: 100_000,
         OwnSourceKuzushiCount: 1,
         ShieldPercentage: 0,
+        ExecuteBlockingProtectionCount: 0,
         HasNativeRangeAndLineOfSight: true,
-        TargetEdgeDistanceYalms: edgeDistance);
+        Position: new System.Numerics.Vector3(x, 0f, 0f),
+        HitboxRadius: 0f);
 
     private static SamuraiReactiveCounterCcObservation CounterObservation(
         float distance,
@@ -531,14 +593,12 @@ internal static class SamuraiReactiveSelfTests
             SamuraiReactiveCounterCcRules.SotenMaximumRangeYalms);
 
     private static SamuraiZantetsukenObservation ZantetsukenObservation(
-        byte shieldPercentage) => new(
+        int executeBlockingProtectionCount = 0) => new(
         Enabled: true,
         HardReset: false,
         ExactTargetStillCurrent: true,
         TargetAliveAndTargetable: true,
-        ExactGameplayKeyStillDown: true,
-        OwnSourceKuzushiCount: 1,
-        ShieldPercentage: shieldPercentage,
+        ExecuteBlockingProtectionCount: executeBlockingProtectionCount,
         BoundPresent: false,
         ZantetsukenReady: true,
         HasNativeRangeAndLineOfSight: true);

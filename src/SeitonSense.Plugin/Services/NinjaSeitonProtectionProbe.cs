@@ -1,4 +1,4 @@
-using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -12,7 +12,7 @@ namespace SeitonSense.Plugin.Services;
 internal static class NinjaSeitonProtectionProbe
 {
     internal static bool TryFindExecuteBlockingStatus(
-        IPlayerCharacter? player,
+        IBattleChara? player,
         out uint statusId,
         out float remainingTime)
     {

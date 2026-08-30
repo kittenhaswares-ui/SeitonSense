@@ -30,7 +30,7 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
     long CapturedProtectionSignalCount,
     long DroppedProtectionSignalCount,
     string ZantetsukenPhase,
-    bool ZantetsukenHeldHelperEnabled,
+    bool ZantetsukenAutomaticHelperEnabled,
     bool ZantetsukenMetadataVerified,
     int SotenTimingSampleCount,
     int MineuchiTimingSampleCount,
@@ -77,8 +77,8 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
 /// probe then requires live Resilience/Guard membership before it can remember
 /// the episode. Exact sequence-bound ActionEffects warm the optional two-stage
 /// Soten/Mineuchi timing; until then it waits for authoritative status absence.
-/// Zantetsuken is a separate held lane with an exact own-source Kuzushi and
-/// zero ShieldPercentage requirement at the final native boundary.
+/// Zantetsuken is a separate automatic lane with an exact frozen target,
+/// reviewed hard-protection exclusions, and bounded native retries.
 /// </summary>
 internal sealed class SamuraiReactiveCounterCcProbe
 {
@@ -111,7 +111,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
     private FrozenActionTarget? zantetsukenTarget;
     private SamuraiZantetsukenState zantetsukenState =
         SamuraiZantetsukenState.Initial;
-    private int zantetsukenSpentKeyToken;
+    private HeldActionRetryState zantetsukenRetryState =
+        HeldActionRetryState.Initial;
+    private bool zantetsukenReadyEpochTerminal;
     private long sotenArrivalDeadlineMilliseconds = -1;
     private long capturedSignalCount;
     private long droppedSignalCount;
@@ -123,7 +125,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
     private long zantetsukenAttemptCount;
     private long acceptedCount;
     private bool inputClaimedThisFrame;
-    private bool zantetsukenHeldHelperEnabled;
+    private bool zantetsukenAutomaticHelperEnabled;
     private uint timingLocalEntityId;
     private SupportedPvPContext timingContext;
     private int predictiveSotenLeadMilliseconds;
@@ -649,39 +651,42 @@ internal sealed class SamuraiReactiveCounterCcProbe
         IPlayerCharacter? localPlayer,
         SupportedPvPContext context,
         bool enabled,
-        bool allowHeldGameplayKey,
         bool dispatchAllowed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
         bool hardReset = false)
     {
-        zantetsukenHeldHelperEnabled = enabled;
+        zantetsukenAutomaticHelperEnabled = enabled;
         try
         {
             var localValid = IsValidLocalSamurai(localPlayer);
             var contextValid = context is SupportedPvPContext.CrystallineConflict or
                 SupportedPvPContext.WolvesDen;
-            if (hardReset || !enabled || !metadata.ZantetsukenWorkflowVerified ||
+            var metadataVerified = metadata.ZantetsukenWorkflowVerified;
+            if (hardReset || !enabled || !metadataVerified ||
                 !contextValid || !localValid)
             {
                 ResetZantetsuken();
-                lastEvent = !metadata.ZantetsukenWorkflowVerified
+                lastEvent = !metadataVerified
                     ? "SAM Zantetsuken metadata is not verified"
                     : "SAM Zantetsuken inactive";
                 return PublishSnapshot();
             }
 
-            if (zantetsukenSpentKeyToken > 0 &&
-                !IsExactGameplayKeyStillDown(inputFrame, zantetsukenSpentKeyToken))
+            var actionReady = IsActionSpecificReady(
+                SamuraiZantetsukenRules.ActionId);
+            if (!actionReady)
             {
-                zantetsukenSpentKeyToken = 0;
+                ResetZantetsukenIntent();
+                zantetsukenReadyEpochTerminal = false;
+                lastEvent = "Automatic Zantetsuken waiting for LB readiness";
+                return PublishSnapshot();
             }
 
-            if (!zantetsukenState.IsActive && zantetsukenSpentKeyToken == 0 &&
-                TryResolveEligibleGameplayKey(
-                    inputFrame,
-                    allowHeldGameplayKey,
-                    out var key) &&
+            if (zantetsukenReadyEpochTerminal)
+                return PublishSnapshot();
+
+            if (!zantetsukenState.IsActive &&
                 TrySelectExactZantetsukenTarget(
                     localPlayer!,
                     context,
@@ -690,10 +695,11 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 zantetsukenTarget = selected;
                 zantetsukenState = SamuraiZantetsukenRules.Arm(
                     selected.Identity,
-                    (int)key,
                     nowMilliseconds,
                     selected.AllowJoblessWolvesDenTarget);
-                lastEvent = $"Zantetsuken froze exact target {selected.Identity.EntityId:X8}";
+                zantetsukenRetryState = HeldActionRetryState.Initial;
+                lastEvent =
+                    $"Automatic Zantetsuken froze exact target {selected.Identity.EntityId:X8}";
             }
 
             if (!zantetsukenState.IsActive || zantetsukenTarget is not { } frozen)
@@ -701,9 +707,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
             var target = ResolveFrozenTarget(localPlayer!, frozen);
             var exactTargetCurrent = target is not null;
-            var ownKuzushiCount = exactTargetCurrent
-                ? CountOwnSourceKuzushi(target!, localPlayer!.EntityId)
-                : 0;
+            var executeBlockingProtectionCount = exactTargetCurrent
+                ? CountExecuteBlockingProtections(target!)
+                : -1;
             var hasRange = exactTargetCurrent && HasNativeRangeAndLineOfSight(
                 localPlayer!,
                 target!,
@@ -715,22 +721,20 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     HardReset: false,
                     exactTargetCurrent,
                     exactTargetCurrent && IsLiveTarget(target!),
-                    IsExactGameplayKeyStillDown(
-                        inputFrame,
-                        zantetsukenState.GameplayKeyToken),
-                    ownKuzushiCount,
-                    exactTargetCurrent ? target!.ShieldPercentage : byte.MaxValue,
+                    executeBlockingProtectionCount,
                     HasStatus(localPlayer!, EnemyCombatConstants.PvPBindStatusId),
-                    IsActionSpecificReady(SamuraiZantetsukenRules.ActionId),
+                    actionReady,
                     hasRange));
             zantetsukenState = decision.NextState;
             if (decision.Kind == SamuraiZantetsukenDecisionKind.Cancelled)
             {
-                zantetsukenTarget = null;
-                // No native boundary was crossed. Keep the physical generation
-                // eligible so a transient actor/status frame can recover, or a
-                // different exact Kuzushi target can be frozen on a later frame.
-                lastEvent = "Frozen Zantetsuken intent released before native attempt";
+                var nativeAttemptAlreadyMade =
+                    zantetsukenRetryState.NativeAttemptCount > 0;
+                ResetZantetsukenIntent();
+                zantetsukenReadyEpochTerminal = nativeAttemptAlreadyMade;
+                lastEvent = executeBlockingProtectionCount > 0
+                    ? "Frozen Zantetsuken intent cancelled by exact invulnerability/Cover"
+                    : "Frozen Zantetsuken intent released before native attempt";
                 return PublishSnapshot();
             }
 
@@ -740,22 +744,49 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 return PublishSnapshot();
             }
 
+            var retainsSchedulerFrame =
+                HeldActionRetryRules.RetainsSchedulerFrame(
+                    zantetsukenRetryState,
+                    nowMilliseconds,
+                    exactIntentValid: true,
+                    actionSpecificReady: actionReady,
+                    targetSpecificReady: hasRange);
+            if (!retainsSchedulerFrame)
+            {
+                ResetZantetsukenIntent();
+                lastEvent = "Frozen Zantetsuken retry became invalid";
+                return PublishSnapshot();
+            }
+
             inputClaimedThisFrame = true;
             inputFrame.Consume();
             if (!HasGlobalNativeBoundaryReadiness(localPlayer!))
             {
-                castCancellationRequestThisFrame = BuildCastCancellationRequest(
-                    localPlayer!,
-                    target!,
-                    SamuraiZantetsukenRules.ActionId,
-                    zantetsukenState.GameplayKeyToken,
-                    ZantetsukenIntentEpochToken(zantetsukenState),
-                    inputFrame);
+                lastEvent = "Frozen automatic Zantetsuken waiting for global native boundary";
+                return PublishSnapshot();
+            }
+
+            if (!HeldActionRetryRules.CanAttemptFrozenIntent(
+                    zantetsukenRetryState,
+                    nowMilliseconds))
+            {
+                lastEvent = "Frozen automatic Zantetsuken retaining retry throttle priority";
                 return PublishSnapshot();
             }
 
             var result = TryUseZantetsukenOnce(localPlayer!, frozen);
-            if (!result.Attempted) return PublishSnapshot();
+            if (!result.Attempted)
+            {
+                var nativeAttemptAlreadyMade =
+                    zantetsukenRetryState.NativeAttemptCount > 0;
+                ResetZantetsukenIntent();
+                zantetsukenReadyEpochTerminal =
+                    result.TerminalFailure || nativeAttemptAlreadyMade;
+                lastEvent = result.TerminalFailure
+                    ? "Frozen Zantetsuken hit an unknown boundary failure; LB-ready epoch retired"
+                    : "Frozen Zantetsuken failed final exact revalidation";
+                return PublishSnapshot();
+            }
 
             lastAttemptedActionId = SamuraiZantetsukenRules.ActionId;
             lastAttemptOutcome = result.Outcome;
@@ -766,11 +797,26 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 inputFrame.Consume();
             }
 
-            zantetsukenSpentKeyToken = zantetsukenState.GameplayKeyToken;
-            zantetsukenState = SamuraiZantetsukenRules.CompleteAttempt(
-                zantetsukenState);
+            var completion = HeldActionRetryRules.Complete(
+                zantetsukenRetryState,
+                Math.Max(0, nowMilliseconds),
+                result.Outcome);
+            if (completion.RetryScheduled ||
+                completion.Disposition == HeldActionRetryDisposition.SoftWait)
+            {
+                zantetsukenRetryState = completion.NextState;
+                lastEvent =
+                    $"Zantetsuken attempt {zantetsukenRetryState.NativeAttemptCount}/" +
+                    $"{HeldActionRetryRules.ResolveAttemptLimit(zantetsukenRetryState)}: " +
+                    $"{result.Outcome}";
+                return PublishSnapshot();
+            }
+
+            zantetsukenReadyEpochTerminal = true;
+            zantetsukenRetryState = HeldActionRetryState.Initial;
+            zantetsukenState = SamuraiZantetsukenRules.CompleteAttempt(zantetsukenState);
             zantetsukenTarget = null;
-            lastEvent = $"Zantetsuken boundary completed: {result.Outcome}";
+            lastEvent = $"Automatic Zantetsuken epoch completed: {result.Outcome}";
             return PublishSnapshot();
         }
         catch (Exception exception)
@@ -787,7 +833,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
         ResetCounter(clearSignals: true);
         ResetTimingSession();
         ResetZantetsuken();
-        zantetsukenHeldHelperEnabled = false;
+        zantetsukenAutomaticHelperEnabled = false;
         lastEvent = "Reset";
         PublishSnapshot();
     }
@@ -795,7 +841,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
     internal SamuraiReactiveCounterCcProbeSnapshot ResetZantetsukenLane()
     {
         ResetZantetsuken();
-        zantetsukenHeldHelperEnabled = false;
+        zantetsukenAutomaticHelperEnabled = false;
         return PublishSnapshot();
     }
 
@@ -1165,15 +1211,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 player.ClassJob.RowId != enemy.JobId ||
                 !HasCoherentObjectTableIdentity(player))
             {
-                continue;
+                return false;
             }
 
-            var edgeDistance = TryGetEdgeDistance(
-                localPlayer,
-                player,
-                out var measuredEdgeDistance)
-                ? measuredEdgeDistance
-                : float.NaN;
             candidates.Add(new ResolvedZantetsukenTargetCandidate(
                 new SamuraiZantetsukenTargetCandidate(
                     enemy.Slot,
@@ -1183,20 +1223,25 @@ internal sealed class SamuraiReactiveCounterCcProbe
                         player.ClassJob.RowId),
                     ExactCanonicalIdentity: true,
                     AliveAndTargetable: IsLiveTarget(player),
-                    OwnSourceKuzushiCount: CountOwnSourceKuzushi(
-                        player,
-                        localPlayer.EntityId),
+                    player.CurrentHp,
+                    player.MaxHp,
+                    OwnSourceKuzushiCount: metadata.KuzushiVerified
+                        ? CountOwnSourceKuzushi(player, localPlayer.EntityId)
+                        : 0,
                     player.ShieldPercentage,
+                    ExecuteBlockingProtectionCount:
+                        CountExecuteBlockingProtections(player),
                     HasNativeRangeAndLineOfSight(
                         localPlayer,
                         player,
                         SamuraiZantetsukenRules.ActionId),
-                    edgeDistance),
+                    player.Position,
+                    player.HitboxRadius),
                 player));
         }
 
         var selectedIndex = SamuraiZantetsukenTargetSelectionRules
-            .SelectFarthestEligibleTargetIndex(
+            .SelectBestEligibleTargetIndex(
                 candidates.Select(static candidate => candidate.Candidate).ToArray());
         if (selectedIndex < 0) return false;
 
@@ -1213,8 +1258,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
         IPlayerCharacter localPlayer,
         IBattleChara target) =>
         IsLiveTarget(target) &&
-        target.ShieldPercentage == 0 &&
-        CountOwnSourceKuzushi(target, localPlayer.EntityId) == 1 &&
+        CountExecuteBlockingProtections(target) == 0 &&
         !HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId) &&
         IsActionSpecificReady(SamuraiZantetsukenRules.ActionId) &&
         HasNativeRangeAndLineOfSight(
@@ -1506,8 +1550,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 var target = ResolveFrozenTarget(localPlayer, frozen);
                 if (target is null ||
                     !IsLiveTarget(target) ||
-                    target.ShieldPercentage != 0 ||
-                    CountOwnSourceKuzushi(target, localPlayer.EntityId) != 1 ||
+                    CountExecuteBlockingProtections(target) != 0 ||
                     HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId) ||
                     !IsActionSpecificReady(SamuraiZantetsukenRules.ActionId) ||
                     !HasGlobalNativeBoundaryReadiness(localPlayer) ||
@@ -1554,7 +1597,8 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 attempted
                     ? ClientActionAttemptOutcome.AcceptanceUnknown
                     : ClientActionAttemptOutcome.NotInvoked,
-                attempted);
+                attempted,
+                TerminalFailure: true);
         }
     }
 
@@ -1728,6 +1772,23 @@ internal sealed class SamuraiReactiveCounterCcProbe
         return count;
     }
 
+    private static int CountExecuteBlockingProtections(IBattleChara target)
+    {
+        var count = 0;
+        foreach (var status in target.StatusList)
+        {
+            if (!NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
+                    status.StatusId))
+            {
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
     private static bool HasStatus(IBattleChara actor, uint statusId)
     {
         foreach (var status in actor.StatusList)
@@ -1872,9 +1933,15 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
     private void ResetZantetsuken()
     {
+        ResetZantetsukenIntent();
+        zantetsukenReadyEpochTerminal = false;
+    }
+
+    private void ResetZantetsukenIntent()
+    {
         zantetsukenTarget = null;
         zantetsukenState = SamuraiZantetsukenState.Initial;
-        zantetsukenSpentKeyToken = 0;
+        zantetsukenRetryState = HeldActionRetryState.Initial;
     }
 
     private SamuraiReactiveCounterCcProbeSnapshot PublishSnapshot()
@@ -1913,7 +1980,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
             captured,
             dropped,
             zantetsukenState.Phase.ToString(),
-            zantetsukenHeldHelperEnabled,
+            zantetsukenAutomaticHelperEnabled,
             metadata.ZantetsukenWorkflowVerified,
             StoredTimingSampleCount(
                 SamuraiReactiveCounterCcRules.SotenActionId),
@@ -2010,17 +2077,6 @@ internal sealed class SamuraiReactiveCounterCcProbe
         return token == 0 ? 1 : token;
     }
 
-    private static ulong ZantetsukenIntentEpochToken(
-        SamuraiZantetsukenState state)
-    {
-        var token = unchecked(
-            (ulong)state.ArmedAtMilliseconds ^
-            state.Target.GameObjectId ^
-            ((ulong)state.Target.EntityId << 32) ^
-            ((ulong)SamuraiZantetsukenRules.ActionId << 8));
-        return token == 0 ? 1 : token;
-    }
-
     private static long SaturatingAdd(long left, long right) =>
         right > 0 && left > long.MaxValue - right
             ? long.MaxValue
@@ -2104,5 +2160,6 @@ internal sealed class SamuraiReactiveCounterCcProbe
         bool Attempted,
         ushort SourceSequence = 0,
         long AttemptedAtMilliseconds = -1,
-        float EdgeDistanceYalms = -1f);
+        float EdgeDistanceYalms = -1f,
+        bool TerminalFailure = false);
 }

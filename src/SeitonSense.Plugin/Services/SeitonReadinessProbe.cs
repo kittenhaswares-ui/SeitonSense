@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
@@ -63,7 +64,7 @@ internal static class SeitonReadinessProbe
 
     internal static unsafe bool HasRangeAndLineOfSight(
         IPlayerCharacter localPlayer,
-        IPlayerCharacter target,
+        IBattleChara target,
         uint resolvedActionId,
         out uint rangeStatus)
     {

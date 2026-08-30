@@ -154,14 +154,12 @@ public enum SamuraiZantetsukenDecisionKind : byte
 public readonly record struct SamuraiZantetsukenState(
     SamuraiZantetsukenPhase Phase,
     SamuraiReactiveCounterCcTarget Target,
-    int GameplayKeyToken,
     long ArmedAtMilliseconds,
     bool AllowJoblessWolvesDenTarget = false)
 {
     public static SamuraiZantetsukenState Initial => new(
         SamuraiZantetsukenPhase.Waiting,
         default,
-        0,
         -1,
         false);
 
@@ -169,7 +167,6 @@ public readonly record struct SamuraiZantetsukenState(
         Phase == SamuraiZantetsukenPhase.Armed &&
         (Target.IsValid ||
          (AllowJoblessWolvesDenTarget && Target.HasValidActorIdentity)) &&
-        GameplayKeyToken > 0 &&
         ArmedAtMilliseconds >= 0;
 }
 
@@ -178,9 +175,7 @@ public readonly record struct SamuraiZantetsukenObservation(
     bool HardReset,
     bool ExactTargetStillCurrent,
     bool TargetAliveAndTargetable,
-    bool ExactGameplayKeyStillDown,
-    int OwnSourceKuzushiCount,
-    byte ShieldPercentage,
+    int ExecuteBlockingProtectionCount,
     bool BoundPresent,
     bool ZantetsukenReady,
     bool HasNativeRangeAndLineOfSight);
@@ -191,9 +186,9 @@ public readonly record struct SamuraiZantetsukenDecision(
     uint ActionId);
 
 /// <summary>
-/// One frozen target and one native Zantetsuken boundary. Shield presence is
-/// authoritative and may clear while Kuzushi remains; target drift, a foreign
-/// Kuzushi source, key release, or Kuzushi loss cancels without fallback.
+/// One frozen automatic target and one native Zantetsuken boundary. Exact
+/// Covered, Hallowed Ground, or Undead Redemption presence cancels without a
+/// fallback at that boundary; Guard and Chiten deliberately remain eligible.
 /// </summary>
 public static class SamuraiZantetsukenRules
 {
@@ -203,17 +198,14 @@ public static class SamuraiZantetsukenRules
 
     public static SamuraiZantetsukenState Arm(
         SamuraiReactiveCounterCcTarget target,
-        int gameplayKeyToken,
         long nowMilliseconds,
         bool allowJoblessWolvesDenTarget = false) =>
         (target.IsValid ||
          (allowJoblessWolvesDenTarget && target.HasValidActorIdentity)) &&
-        gameplayKeyToken > 0 &&
         nowMilliseconds >= 0
             ? new SamuraiZantetsukenState(
                 SamuraiZantetsukenPhase.Armed,
                 target,
-                gameplayKeyToken,
                 nowMilliseconds,
                 allowJoblessWolvesDenTarget)
             : SamuraiZantetsukenState.Initial;
@@ -227,16 +219,14 @@ public static class SamuraiZantetsukenRules
             !observation.Enabled ||
             !observation.ExactTargetStillCurrent ||
             !observation.TargetAliveAndTargetable ||
-            !observation.ExactGameplayKeyStillDown ||
-            observation.OwnSourceKuzushiCount != 1)
+            observation.ExecuteBlockingProtectionCount != 0 ||
+            !observation.HasNativeRangeAndLineOfSight)
         {
             return Cancelled();
         }
 
-        return observation.ShieldPercentage == 0 &&
-               !observation.BoundPresent &&
-               observation.ZantetsukenReady &&
-               observation.HasNativeRangeAndLineOfSight
+        return !observation.BoundPresent &&
+               observation.ZantetsukenReady
             ? new SamuraiZantetsukenDecision(
                 state,
                 SamuraiZantetsukenDecisionKind.Attempt,

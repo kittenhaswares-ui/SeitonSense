@@ -112,12 +112,17 @@ internal static class NinjaSeitonDispatchSelfTests
                      NinjaSeitonDispatchRules.FollowUpActionId,
                  })
         {
-            var intent = new NinjaSeitonDispatchIntent(actionId, eligible.EnemySlot, eligible.Actor);
+            var intent = new NinjaSeitonDispatchIntent(
+                SupportedPvPContext.CrystallineConflict,
+                actionId,
+                eligible.EnemySlot,
+                eligible.Actor);
             True(
                 NinjaSeitonDispatchRules.CanUseExactIntent(
                     intent,
                     eligible,
                     LocalPlayer,
+                    SupportedPvPContext.CrystallineConflict,
                     actionId,
                     actionLocallyReady: true),
                 $"action {actionId} accepts unchanged unprotected frozen target");
@@ -130,6 +135,7 @@ internal static class NinjaSeitonDispatchSelfTests
                             NinjaSeitonProtectionStatusCatalog.UndeadRedemptionStatusId,
                     },
                     LocalPlayer,
+                    SupportedPvPContext.CrystallineConflict,
                     actionId,
                     actionLocallyReady: true),
                 $"action {actionId} cancels when frozen target gains protection");
@@ -157,23 +163,38 @@ internal static class NinjaSeitonDispatchSelfTests
         Equal(-1, NinjaSeitonDispatchRules.SelectBestCandidateIndex([], LocalPlayer), "empty candidates");
     }
 
-    public static void DispatchRequiresEveryGateAndHeldInput()
+    public static void DispatchRequiresEveryAutomaticGate()
     {
         var valid = Observation();
         Dispatch(valid, NinjaSeitonDispatchRules.BaseActionId, "base Seiton");
         Dispatch(valid with { ResolvedActionId = NinjaSeitonDispatchRules.FollowUpActionId }, NinjaSeitonDispatchRules.FollowUpActionId, "Unsealed Seiton");
 
         Cancel(valid with { ConfigurationEnabled = false }, NinjaSeitonDispatchDecisionReason.ConfigurationDisabled);
-        Cancel(valid with { IsCrystallineConflict = false }, NinjaSeitonDispatchDecisionReason.OutsideCrystallineConflict);
+        Dispatch(
+            valid with
+            {
+                Context = SupportedPvPContext.WolvesDen,
+                Candidates =
+                [
+                    Candidate(
+                        1,
+                        20_001,
+                        2_001,
+                        49,
+                        100,
+                        context: SupportedPvPContext.WolvesDen),
+                ],
+            },
+            NinjaSeitonDispatchRules.BaseActionId,
+            "Wolves' Den automatic Seiton");
+        Cancel(valid with { Context = SupportedPvPContext.None }, NinjaSeitonDispatchDecisionReason.OutsideSupportedPvPContext);
         Cancel(valid with { LocalPlayer = default }, NinjaSeitonDispatchDecisionReason.LocalPlayerIdentityInvalid);
         Cancel(valid with { IsLocalPlayerAlive = false }, NinjaSeitonDispatchDecisionReason.LocalPlayerDead);
         Cancel(valid with { LocalJobId = 29 }, NinjaSeitonDispatchDecisionReason.LocalJobInvalid);
         Cancel(valid with { MetadataVerified = false }, NinjaSeitonDispatchDecisionReason.MetadataUnverified);
         Cancel(valid with { ActionHelpersSuppressedByGuard = true }, NinjaSeitonDispatchDecisionReason.GuardSuppressed);
         Cancel(valid with { HigherPriorityClaimed = true }, NinjaSeitonDispatchDecisionReason.HigherPriorityClaimed);
-        Cancel(valid with { InputProbeSucceeded = false }, NinjaSeitonDispatchDecisionReason.InputProbeUnavailable);
-        Cancel(valid with { IsTextInputActive = true }, NinjaSeitonDispatchDecisionReason.TextInputActive);
-        Cancel(valid with { HeldGameplayKeyEligible = false }, NinjaSeitonDispatchDecisionReason.NoHeldGameplayKey);
+        Cancel(valid with { AvailabilityEpochOpen = false }, NinjaSeitonDispatchDecisionReason.AvailabilityEpochClosed);
         Cancel(valid with { ResolvedActionId = 0 }, NinjaSeitonDispatchDecisionReason.ResolvedActionInvalid);
         Cancel(valid with { ActionLocallyReady = false }, NinjaSeitonDispatchDecisionReason.ActionNotReady);
 
@@ -205,14 +226,6 @@ internal static class NinjaSeitonDispatchSelfTests
         Equal(3, intent.EnemySlot, "frozen slot");
         Equal(alternate.Actor, intent.Target, "frozen actor");
 
-        var castWaitRequest = new HeldCastCancellationRequest(
-            HeldCastCancellationHelperKind.NinjaSeiton,
-            intent.ActionId,
-            LocalPlayer,
-            intent.Target,
-            FrozenKeyCode: 0x57,
-            IntentEpochToken: 1);
-        True(castWaitRequest.IsValid, "cast wait retains the exact frozen Seiton intent");
         True(
             HeldActionRetryRules.RetainsSchedulerFrame(
                 HeldActionRetryState.Initial,
@@ -234,6 +247,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate,
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "unchanged intent");
@@ -242,6 +256,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate with { CurrentHp = 50, MaximumHp = 100 },
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "healing to exactly half cancels the frozen intent");
@@ -250,6 +265,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate with { CurrentHp = 51, MaximumHp = 100 },
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "healing above half cancels the frozen intent");
@@ -258,6 +274,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 selected,
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "an alternate candidate cannot replace the frozen actor");
@@ -266,6 +283,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate with { Actor = new TargetPressureActorIdentity(20_004, 2_004) },
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "actor drift");
@@ -274,6 +292,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate,
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.FollowUpActionId,
                 actionLocallyReady: true),
             "action drift");
@@ -282,6 +301,7 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate with { HasNativeRangeAndLineOfSight = false },
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: true),
             "range drift");
@@ -290,69 +310,113 @@ internal static class NinjaSeitonDispatchSelfTests
                 intent,
                 alternate,
                 LocalPlayer,
+                SupportedPvPContext.CrystallineConflict,
                 NinjaSeitonDispatchRules.BaseActionId,
                 actionLocallyReady: false),
             "readiness drift");
     }
 
-    public static void HeldLevelUsesOneAcceptedAdjustedActionEpochAtATime()
+    public static void AutomaticAvailabilityUsesOneAcceptedAdjustedActionEpochAtATime()
     {
-        True(NinjaSeitonDispatchRules.Observe(Observation()).ShouldDispatch, "held level dispatches");
+        True(NinjaSeitonDispatchRules.Observe(Observation()).ShouldDispatch, "automatic epoch dispatches without input");
 
-        var acceptedBase = NinjaSeitonDispatchRules.BeginAcceptedHold(
-            0x57,
-            NinjaSeitonDispatchRules.BaseActionId);
-        True(acceptedBase.OwnsHold, "accepted base owns exact key");
-        False(
-            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
-                acceptedBase,
-                NinjaSeitonDispatchRules.BaseActionId),
-            "same accepted base epoch cannot repeat");
+        var baseEpoch = NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(
+            NinjaSeitonAvailabilityEpochState.Initial,
+            hardReset: false,
+            ownershipContextValid: true,
+            availabilityReady: true,
+            resolvedActionId: NinjaSeitonDispatchRules.BaseActionId);
         True(
             NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
-                acceptedBase,
-                NinjaSeitonDispatchRules.FollowUpActionId),
-            "adjusted follow-up is one distinct epoch");
+                baseEpoch,
+                NinjaSeitonDispatchRules.BaseActionId),
+            "fresh base availability opens automatically");
 
-        var retiredFollowUp = NinjaSeitonDispatchRules.RetireAdjustedActionEpoch(
-            acceptedBase,
-            NinjaSeitonDispatchRules.FollowUpActionId);
-        False(
-            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
-                retiredFollowUp,
-                NinjaSeitonDispatchRules.FollowUpActionId),
-            "spent follow-up epoch cannot reopen after terminal drift");
-
-        var acceptedFollowUp = NinjaSeitonDispatchRules.BeginAcceptedHold(
-            0x57,
-            NinjaSeitonDispatchRules.FollowUpActionId);
-        False(
-            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
-                acceptedFollowUp,
-                NinjaSeitonDispatchRules.FollowUpActionId),
-            "accepted follow-up cannot repeat");
+        var preNativeDrift =
+            NinjaSeitonDispatchRules.CancelFrozenAvailabilityEpoch(
+                baseEpoch,
+                NinjaSeitonDispatchRules.BaseActionId,
+                priorNativeAttemptCount: 0);
         Equal(
-            NinjaSeitonAcceptedHoldState.Initial,
-            NinjaSeitonDispatchRules.ObserveAcceptedHold(
-                acceptedBase,
+            baseEpoch,
+            preNativeDrift,
+            "target drift before a native request keeps automatic availability open");
+        True(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                preNativeDrift,
+                NinjaSeitonDispatchRules.BaseActionId),
+            "pre-native drift may select a new exact target next frame");
+
+        var postNativeDrift =
+            NinjaSeitonDispatchRules.CancelFrozenAvailabilityEpoch(
+                baseEpoch,
+                NinjaSeitonDispatchRules.BaseActionId,
+                priorNativeAttemptCount: 1);
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                postNativeDrift,
+                NinjaSeitonDispatchRules.BaseActionId),
+            "target drift after a native request retires the availability epoch");
+
+        var spentBase = NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(
+            baseEpoch,
+            NinjaSeitonDispatchRules.BaseActionId);
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                spentBase,
+                NinjaSeitonDispatchRules.BaseActionId),
+            "accepted base availability cannot repeat while still ready");
+
+        var stableSpentBase = NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(
+            spentBase,
+            hardReset: false,
+            ownershipContextValid: true,
+            availabilityReady: true,
+            resolvedActionId: NinjaSeitonDispatchRules.BaseActionId);
+        Equal(spentBase, stableSpentBase, "same ready base frame preserves spent epoch");
+
+        var followUpEpoch = NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(
+            stableSpentBase,
+            hardReset: false,
+            ownershipContextValid: true,
+            availabilityReady: true,
+            resolvedActionId: NinjaSeitonDispatchRules.FollowUpActionId);
+        True(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                followUpEpoch,
+                NinjaSeitonDispatchRules.FollowUpActionId),
+            "real adjusted follow-up transition opens one distinct automatic epoch");
+
+        var spentFollowUp = NinjaSeitonDispatchRules.SpendAdjustedActionEpoch(
+            followUpEpoch,
+            NinjaSeitonDispatchRules.FollowUpActionId);
+        False(
+            NinjaSeitonDispatchRules.CanOpenAdjustedActionEpoch(
+                spentFollowUp,
+                NinjaSeitonDispatchRules.FollowUpActionId),
+            "accepted follow-up cannot repeat in the same availability epoch");
+
+        Equal(
+            NinjaSeitonAvailabilityEpochState.Initial,
+            NinjaSeitonDispatchRules.ObserveAvailabilityEpoch(
+                spentFollowUp,
                 hardReset: false,
                 ownershipContextValid: true,
-                exactHeldKeyStillDown: false),
-            "key release ends accepted ownership");
+                availabilityReady: false,
+                resolvedActionId: 0),
+            "real local unavailability closes the spent epoch");
     }
 
     private static NinjaSeitonDispatchObservation Observation() => new(
         ConfigurationEnabled: true,
-        IsCrystallineConflict: true,
+        Context: SupportedPvPContext.CrystallineConflict,
         LocalJobId: ExecuteThreshold.NinjaJobId,
         LocalPlayer,
         IsLocalPlayerAlive: true,
         MetadataVerified: true,
         ActionHelpersSuppressedByGuard: false,
         HigherPriorityClaimed: false,
-        InputProbeSucceeded: true,
-        IsTextInputActive: false,
-        HeldGameplayKeyEligible: true,
+        AvailabilityEpochOpen: true,
         ResolvedActionId: NinjaSeitonDispatchRules.BaseActionId,
         ActionLocallyReady: true,
         Candidates: [Candidate(1, 20_001, 2_001, 49, 100)]);
@@ -363,7 +427,9 @@ internal static class NinjaSeitonDispatchSelfTests
         uint entityId,
         uint hp,
         uint maxHp,
-        uint executeBlockingStatusId = 0) => new(
+        uint executeBlockingStatusId = 0,
+        SupportedPvPContext context = SupportedPvPContext.CrystallineConflict) => new(
+        context,
         slot,
         new TargetPressureActorIdentity(gameObjectId, entityId),
         ExactCanonicalIdentity: true,

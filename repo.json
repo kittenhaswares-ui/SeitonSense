@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.42.0.4",
-    "Changelog": "Added /seitonfar, a one-shot CC harmful-action macro mode that chooses the farthest actually reachable safe enemy while retaining Smart Action's exact range/line-of-sight, Chiten/Guard/Cover/LB protection, frozen-target, cast, and authored <t> fallback rules. Auto-Zantetsuken now chooses the farthest reachable exact own-Kuzushi, zero-shield target, then stable S-slot; only the selected Kuzushi target is treated as the 100%-maximum-HP hit. Wolves' Den remains exact-current-target only. Configuration schema 48; all 579 Core tests and release gates pass. Live current-client validation remains pending.",
+    "AssemblyVersion": "0.42.0.5",
+    "Changelog": "Auto-Zantetsuken is now fully automatic while armed and ranks the largest vulnerable target-centered 5-yalm cluster; ties prefer own unshielded Kuzushi, lower HP%, then S-slot. Guard and Chiten stay valid, while Covered, Hallowed Ground, and Undead Redemption are blocked. /autoseiton and its tile now arm fully automatic NIN Seiton for distinct 29515/29516 readiness epochs, with pre-request reranking, bounded rejection retries, and no automatic cast cancellation. Smart Action Ogi, Kaeshi: Namikiri, and Tendo no longer stall on unrelated Guard/Cover/LB protection; both Namikiri actions still reject a protected selected target or Chiten intersecting their cone. Schema 48; all 579 Core tests and release gates pass. Live current-client validation remains pending.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788105617"
+    "LastUpdate": "1788109635"
   }
 ]

@@ -1,60 +1,146 @@
+using System.Numerics;
+
 namespace SeitonSense.Core;
 
 /// <summary>
-/// One exact CC enemy observation used only before a Zantetsuken intent is
-/// frozen. The caller proves native actor identity, own-source Kuzushi, shield,
-/// and endpoint reachability; this value-only policy owns deterministic ranking.
+/// One exact CC enemy observation used only before an automatic Zantetsuken
+/// intent is frozen. The caller proves native actor identity, current status
+/// rows, geometry, and endpoint reachability; this value-only policy owns
+/// deterministic target-centered AoE ranking.
 /// </summary>
 public readonly record struct SamuraiZantetsukenTargetCandidate(
     int EnemySlot,
     SamuraiReactiveCounterCcTarget Target,
     bool ExactCanonicalIdentity,
     bool AliveAndTargetable,
+    uint CurrentHp,
+    uint MaximumHp,
     int OwnSourceKuzushiCount,
     byte ShieldPercentage,
+    int ExecuteBlockingProtectionCount,
     bool HasNativeRangeAndLineOfSight,
-    float TargetEdgeDistanceYalms);
+    Vector3 Position,
+    float HitboxRadius);
 
 /// <summary>
-/// Ranks exact eligible Zantetsuken targets by descending finite hitbox-edge
-/// distance, then stable native enemy slot. Zantetsuken's 100%-maximum-HP rule
-/// applies only to the selected Kuzushi target; its surrounding damage is not
-/// treated as another confirmed kill.
+/// Ranks reachable Zantetsuken endpoints by the number of vulnerable enemy
+/// hitboxes reached by its reviewed 5-yalm target-centered circle. Guard and
+/// Chiten are intentionally not blocking protections. Exact Covered, Hallowed
+/// Ground, and Undead Redemption rows exclude an actor from both endpoint
+/// selection and useful-cluster scoring.
 /// </summary>
 public static class SamuraiZantetsukenTargetSelectionRules
 {
-    public static int SelectFarthestEligibleTargetIndex(
+    public const float EffectRangeYalms = 5f;
+
+    public static int SelectBestEligibleTargetIndex(
         IReadOnlyList<SamuraiZantetsukenTargetCandidate>? candidates)
     {
         if (!HasUnambiguousCandidateSet(candidates)) return -1;
 
         var bestIndex = -1;
+        var bestClusterSize = -1;
         for (var index = 0; index < candidates!.Count; index++)
         {
             var candidate = candidates[index];
-            if (!IsEligibleTarget(candidate)) continue;
+            if (!IsSelectableTarget(candidate)) continue;
 
+            var clusterSize = CountUsefulClusterMembers(candidates, index);
             if (bestIndex < 0 ||
-                candidate.TargetEdgeDistanceYalms >
-                candidates[bestIndex].TargetEdgeDistanceYalms ||
-                candidate.TargetEdgeDistanceYalms ==
-                candidates[bestIndex].TargetEdgeDistanceYalms &&
-                candidate.EnemySlot < candidates[bestIndex].EnemySlot)
+                Compare(
+                    candidate,
+                    clusterSize,
+                    candidates[bestIndex],
+                    bestClusterSize) < 0)
             {
                 bestIndex = index;
+                bestClusterSize = clusterSize;
             }
         }
 
         return bestIndex;
     }
 
-    public static bool IsEligibleTarget(
+    public static int CountUsefulClusterMembers(
+        IReadOnlyList<SamuraiZantetsukenTargetCandidate>? candidates,
+        int targetIndex)
+    {
+        if (!HasUnambiguousCandidateSet(candidates) ||
+            targetIndex < 0 ||
+            targetIndex >= candidates!.Count ||
+            !IsSelectableTarget(candidates[targetIndex]))
+        {
+            return 0;
+        }
+
+        var target = candidates[targetIndex];
+        var count = 0;
+        foreach (var candidate in candidates)
+        {
+            if (!IsUsefulClusterMember(candidate) ||
+                !CircleReachesActor(target.Position, candidate))
+            {
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
+    public static bool IsSelectableTarget(
+        SamuraiZantetsukenTargetCandidate candidate) =>
+        IsUsefulClusterMember(candidate) &&
+        candidate.HasNativeRangeAndLineOfSight;
+
+    public static bool IsUsefulClusterMember(
         SamuraiZantetsukenTargetCandidate candidate) =>
         IsStructurallyValid(candidate) &&
         candidate.AliveAndTargetable &&
+        candidate.CurrentHp > 0 &&
+        candidate.ExecuteBlockingProtectionCount == 0;
+
+    private static int Compare(
+        SamuraiZantetsukenTargetCandidate left,
+        int leftClusterSize,
+        SamuraiZantetsukenTargetCandidate right,
+        int rightClusterSize)
+    {
+        var cluster = rightClusterSize.CompareTo(leftClusterSize);
+        if (cluster != 0) return cluster;
+
+        var leftExecute = HasOwnUnshieldedKuzushi(left);
+        var rightExecute = HasOwnUnshieldedKuzushi(right);
+        if (leftExecute != rightExecute) return leftExecute ? -1 : 1;
+
+        var health = CompareHealthRatio(left, right);
+        if (health != 0) return health;
+
+        return left.EnemySlot.CompareTo(right.EnemySlot);
+    }
+
+    private static bool HasOwnUnshieldedKuzushi(
+        SamuraiZantetsukenTargetCandidate candidate) =>
         candidate.OwnSourceKuzushiCount == 1 &&
-        candidate.ShieldPercentage == 0 &&
-        candidate.HasNativeRangeAndLineOfSight;
+        candidate.ShieldPercentage == 0;
+
+    private static int CompareHealthRatio(
+        SamuraiZantetsukenTargetCandidate left,
+        SamuraiZantetsukenTargetCandidate right) =>
+        ((ulong)left.CurrentHp * right.MaximumHp).CompareTo(
+            (ulong)right.CurrentHp * left.MaximumHp);
+
+    private static bool CircleReachesActor(
+        Vector3 center,
+        SamuraiZantetsukenTargetCandidate candidate)
+    {
+        var deltaX = (double)center.X - candidate.Position.X;
+        var deltaZ = (double)center.Z - candidate.Position.Z;
+        var distanceSquared = (deltaX * deltaX) + (deltaZ * deltaZ);
+        var hitRadius = (double)EffectRangeYalms + candidate.HitboxRadius;
+        return distanceSquared <= hitRadius * hitRadius;
+    }
 
     private static bool HasUnambiguousCandidateSet(
         IReadOnlyList<SamuraiZantetsukenTargetCandidate>? candidates)
@@ -83,7 +169,16 @@ public static class SamuraiZantetsukenTargetSelectionRules
         EnemySlotRules.IsValidSlot(candidate.EnemySlot) &&
         candidate.Target.IsValid &&
         candidate.ExactCanonicalIdentity &&
+        candidate.MaximumHp > 0 &&
+        candidate.CurrentHp <= candidate.MaximumHp &&
         candidate.OwnSourceKuzushiCount >= 0 &&
-        float.IsFinite(candidate.TargetEdgeDistanceYalms) &&
-        candidate.TargetEdgeDistanceYalms >= 0f;
+        candidate.ExecuteBlockingProtectionCount >= 0 &&
+        IsFinite(candidate.Position) &&
+        float.IsFinite(candidate.HitboxRadius) &&
+        candidate.HitboxRadius >= 0f;
+
+    private static bool IsFinite(Vector3 point) =>
+        float.IsFinite(point.X) &&
+        float.IsFinite(point.Y) &&
+        float.IsFinite(point.Z);
 }
