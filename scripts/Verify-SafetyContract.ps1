@@ -241,9 +241,11 @@ $smartActionProtectionRulesPath = Join-Path $coreRoot 'SmartActionProtectionRule
 $smartActionGuardBypassRulesPath = Join-Path $coreRoot 'SmartActionGuardBypassRules.cs'
 $smartActionSafetyLeaseRulesPath = Join-Path $coreRoot 'SmartActionSafetyLeaseRules.cs'
 $castedMacroRedirectRulesPath = Join-Path $coreRoot 'CastedMacroRedirectRules.cs'
+$samuraiSmartActionCastRulesPath = Join-Path $coreRoot 'SamuraiSmartActionCastRules.cs'
 $nearAssistOneShotSelfTestsPath = Join-Path $coreSelfTestRoot 'NearAssistOneShotSelfTests.cs'
 $smartActionProtectionSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionProtectionSelfTests.cs'
 $smartActionSafetyLeaseSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartActionSafetyLeaseSelfTests.cs'
+$samuraiSmartActionCastSelfTestsPath = Join-Path $coreSelfTestRoot 'SamuraiSmartActionCastSelfTests.cs'
 $samuraiReactiveMetadataGuardPath = Join-Path $pluginServicesRoot 'SamuraiReactiveMetadataGuard.cs'
 $smartActionGuardBypassCatalogPath = Join-Path $pluginServicesRoot 'SmartActionGuardBypassCatalog.cs'
 $limitBreakNotificationRendererPath = Join-Path $pluginUiRoot 'LimitBreakNotificationRenderer.cs'
@@ -732,7 +734,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 570-test registry.
+# 573-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -752,11 +754,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 529 -or
+if ($staticIntegratedTestCount -ne 532 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 570 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 573 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -764,7 +766,7 @@ if ($staticIntegratedTestCount -ne 529 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 570-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 573-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -898,7 +900,7 @@ $normalizedCrystallineConflictInstantLeaveRules =
 if ($normalizedCrystallineConflictInstantLeaveRules -notmatch
         'if \(!exactResultConfirmed \|\| !capturedIsPvpExcludingWolvesDen \|\| !PvPMatchRules\.IsPublicCrystallineConflictTerritory\(capturedTerritoryId\) \|\| capturedLocalContentId == 0 \|\| capturedAtMilliseconds < 0 \|\| capturedAtMilliseconds > long\.MaxValue - MaximumResultAgeMilliseconds \|\| capturedAtMilliseconds > nowMilliseconds \|\| nowMilliseconds - capturedAtMilliseconds > MaximumResultAgeMilliseconds\).*?InvalidResultBoundary.*?if \(state\.ContextSpent\).*?DuplicateIgnored.*?var armed = new CrystallineConflictInstantLeaveState\( CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary,.*?capturedAtMilliseconds \+ MaximumResultAgeMilliseconds, true\);.*?CrystallineConflictInstantLeaveDecision\.Armed' -or
     $normalizedCrystallineConflictInstantLeaveRules -notmatch
-        'var confirmedContextExit = betweenAreas \|\| \(liveTerritoryId != 0 && liveTerritoryId != state\.TerritoryId\) \|\| \(liveLocalContentId != 0 && liveLocalContentId != state\.LocalContentId\); if \(state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?CrystallineConflictInstantLeaveDecision\.None, CrystallineConflictInstantLeaveReason\.LeaveReserved.*?if \(state\.Phase == CrystallineConflictInstantLeavePhase\.Cancelled\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?if \(state\.Phase != CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary\).*?if \(!enabled\).*?FeatureDisabled.*?if \(betweenAreas\).*?TransitionStarted.*?if \(!exactLiveContext\).*?ContextDrift.*?if \(nowMilliseconds > state\.ExpiresAtMilliseconds\).*?ResultExpired.*?if \(!nativeBoundaryAvailable\).*?NativeBoundaryUnavailable.*?if \(!canLeaveCurrentContent\).*?CrystallineConflictInstantLeaveDecision\.Waiting.*?var reserved = state with.*?Phase = CrystallineConflictInstantLeavePhase\.LeaveRequested.*?CrystallineConflictInstantLeaveDecision\.RequestLeave' -or
+        'var confirmedContextExit = \(liveTerritoryId != 0 && liveTerritoryId != state\.TerritoryId\) \|\| \(liveLocalContentId != 0 && liveLocalContentId != state\.LocalContentId\); if \(state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?CrystallineConflictInstantLeaveDecision\.None, CrystallineConflictInstantLeaveReason\.LeaveReserved.*?if \(state\.Phase == CrystallineConflictInstantLeavePhase\.Cancelled\) \{ if \(confirmedContextExit\) return ResetSpentContext\(state\);.*?if \(state\.Phase != CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary\).*?if \(!enabled\).*?FeatureDisabled.*?if \(nowMilliseconds > state\.ExpiresAtMilliseconds\).*?ResultExpired.*?if \(betweenAreas\) \{.*?Reason = CrystallineConflictInstantLeaveReason\.TransitionStarted.*?CrystallineConflictInstantLeaveDecision\.Waiting.*?CrystallineConflictInstantLeaveReason\.TransitionStarted.*?\} if \(!exactLiveContext\).*?ContextDrift.*?if \(!nativeBoundaryAvailable\).*?NativeBoundaryUnavailable.*?if \(!canLeaveCurrentContent\).*?CrystallineConflictInstantLeaveDecision\.Waiting.*?var reserved = state with.*?Phase = CrystallineConflictInstantLeavePhase\.LeaveRequested.*?CrystallineConflictInstantLeaveDecision\.RequestLeave' -or
     $normalizedCrystallineConflictInstantLeaveRules -notmatch
         'ObserveTerritoryChanged\(.*?if \(!state\.ContextSpent \|\| territoryId == 0 \|\| territoryId == state\.TerritoryId\).*?return ResetSpentContext\(state\);.*?ObserveDutyStarted\(.*?if \(!state\.ContextSpent \|\| !liveIsPvpExcludingWolvesDen \|\| !PvPMatchRules\.IsPublicCrystallineConflictTerritory\(liveTerritoryId\) \|\| liveLocalContentId == 0\).*?return ResetSpentContext\(state\);' -or
     [regex]::Matches($crystallineConflictInstantLeaveRules, 'return ResetSpentContext\(state\);').Count -ne 4 -or
@@ -1617,15 +1619,35 @@ Assert-Literals $normalizedSmartActionRuntime @(
 ) 'Smart Action strict arm expiry and fresh post-claim safety lease'
 Assert-Literals $samuraiReactiveMetadataGuard @(
     'bool ChitenVerified',
+    'bool SmartActionCastsVerified',
     'internal const uint ChitenStatusId = 1_240;',
     'internal const uint ChitenIconId = 214_820;',
     '"Chiten"',
     '"countering attacks"',
-    'will conservatively exclude SAM from Smart Action'
-) 'English-sheet Chiten metadata pin and conservative drift policy'
+    'will conservatively exclude SAM from Smart Action',
+    'cooldownGroup: 2,',
+    'additionalCooldownGroup: 71,',
+    'cooldownGroup: 4,',
+    'cooldownGroup: 6,',
+    'actionCategoryId: 15,',
+    'action.ActionCategory.RowId == actionCategoryId',
+    'action.CooldownGroup == cooldownGroup',
+    'action.AdditionalCooldownGroup == additionalCooldownGroup'
+) 'English-sheet SAM action/status metadata pins and conservative drift policy'
+Assert-Literals $samuraiReactiveMetadataGuard @(
+    'internal const uint OgiNamikiriIconId = 9_663;',
+    'internal const uint TendoSetsugekkaCarrierIconId = 9_206;',
+    'internal const uint TendoSetsugekkaIconId = 9_786;',
+    'var smartActionCasts =',
+    'ogiNamikiri && tendoSetsugekkaCarrier && tendoSetsugekka;',
+    'ValidateSmartActionCast(',
+    'ValidateTendoSetsugekkaCarrier(',
+    'SmartActionCastsVerified'
+) 'Reviewed SAM cast metadata pins and conservative visible-target fallback'
 Assert-Literals $pluginSource @(
     'metadata.SmartActionProtectionStatusesVerified,',
     'metadata.SmartActionGuardBypassActions,',
+    'samuraiReactiveMetadata.SmartActionCastsVerified,',
     'samuraiReactiveMetadata.ChitenVerified,'
 ) 'Smart Action exact protection metadata wiring'
 $smartActionStatusMetadataGuard = Read-RequiredSource (
@@ -4411,8 +4433,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 529) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 529-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 532) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 532-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4437,6 +4459,14 @@ if ($normalizedSamuraiReactiveProbe -notmatch 'var blockerMetadataVerified = Has
     $normalizedSamuraiReactiveProbe -notmatch 'private bool HasCompleteMineuchiBlockerMetadata\(\).*?GetBlockerStatusIds\(CcImmunityBrakeBlockerFamily\.StandardPurifyCc\).*?\.All\(verifiedStatusIds\.Contains\);' -or
     $normalizedSamuraiReactiveProbe -notmatch 'actionId == SamuraiReactiveCounterCcRules\.MineuchiActionId && !TryGetOnlyScheduledProtection\( target, episode, out statusId, out remainingMilliseconds\).*?else if \(actionId == SamuraiReactiveCounterCcRules\.MineuchiActionId && CountMineuchiBlockingProtections\(target\) != 0\)') {
     throw 'SAM must fail closed unless the complete current-patch StandardPurifyCc blocker family is verified, then permit predictive Mineuchi through exactly its one scheduled row and natural Mineuchi through zero blocker rows.'
+}
+$zantetsukenPreNativeCancellation = [regex]::Match(
+    $normalizedSamuraiReactiveProbe,
+    'if \(decision\.Kind == SamuraiZantetsukenDecisionKind\.Cancelled\) \{(?<Body>.*?)return PublishSnapshot\(\); \}')
+if (-not $zantetsukenPreNativeCancellation.Success -or
+    $zantetsukenPreNativeCancellation.Groups['Body'].Value -notmatch 'zantetsukenTarget = null;' -or
+    $zantetsukenPreNativeCancellation.Groups['Body'].Value -match 'zantetsukenSpentKeyToken\s*=') {
+    throw 'SAM Zantetsuken must release a pre-native frozen intent without spending the still-held physical generation.'
 }
 Assert-Literals $miracleCleanseFollowupSelfTests @(
     'first validated packet is terminally remembered',
@@ -7804,6 +7834,8 @@ Assert-Literals $allyRescueBuffer @(
 $nearAssist = Read-RequiredSource $nearAssistPath 'Near Assist redirector'
 $normalizedNearAssist = $nearAssist -replace '\s+', ' '
 $castedMacroRedirectRules = Read-RequiredSource $castedMacroRedirectRulesPath 'Casted macro redirect rules'
+$samuraiSmartActionCastRules = Read-RequiredSource $samuraiSmartActionCastRulesPath 'Reviewed SAM Smart Action cast rules'
+$samuraiSmartActionCastSelfTests = Read-RequiredSource $samuraiSmartActionCastSelfTestsPath 'Reviewed SAM Smart Action cast self-tests'
 $nearAssistOneShotSelfTests = Read-RequiredSource $nearAssistOneShotSelfTestsPath 'Near Assist one-shot self-tests'
 Assert-Literals $nearAssist @(
     'HookFromAddress<ActionManager.Delegates.UseAction>',
@@ -7851,6 +7883,7 @@ Assert-Literals $nearAssist @(
 ) 'Near Assist redirector'
 Assert-Literals $castedMacroRedirectRules @(
     'public enum CastedMacroRedirectDecision',
+    'RedirectReviewedSmartActionCast',
     'PreserveAuthoredTarget',
     'PassThroughStaleLifecycle',
     'SuppressHiddenOrMissingTarget',
@@ -7858,20 +7891,48 @@ Assert-Literals $castedMacroRedirectRules @(
     'public static bool ShouldPassThroughWithoutRedirect(',
     'adjustedCastTimeMilliseconds > 0',
     'exactActionMetadata && baseCastTime100Milliseconds > 0',
-    'authoredTargetMatchesVisibleTarget'
-) 'Cast-time macro redirects preserve only the visible authored target'
+    'authoredTargetMatchesVisibleTarget',
+    'bool allowReviewedSmartActionCastRedirect = false',
+    'if (allowReviewedSmartActionCastRedirect)'
+) 'Cast-time macro redirects preserve only the visible authored target except reviewed SAM casts'
 $normalizedCastedMacroRedirectRules = $castedMacroRedirectRules -replace '\s+', ' '
 if ($normalizedCastedMacroRedirectRules -notmatch
         'ShouldPassThroughWithoutRedirect\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedCastedMacroRedirectRules -notmatch
-        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
+        'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowReviewedSmartActionCastRedirect\) return CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
     $castedMacroRedirectRules -match '\b(ActionManager|TargetManager|UseAction|SetTarget|SetRotation|FaceTarget|ObjectTable|IClientState)\b') {
-    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, and must contain no runtime action, target, facing, or context mutation.'
+    throw 'Pure cast redirect classification must require a live token, supported type, adjusted or exact base cast proof, allow only an explicit caller-reviewed Smart Action cast, and contain no runtime action, target, facing, or context mutation.'
 }
+Assert-Literals $samuraiSmartActionCastRules @(
+    'public const uint SamuraiJobId = 34;',
+    'public const uint OgiNamikiriActionId = 29_530;',
+    'public const uint OgiNamikiriFollowUpActionId = 29_531;',
+    'public const uint TendoSetsugekkaCarrierActionId = 29_536;',
+    'public const uint TendoSetsugekkaActionId = 41_454;',
+    'public const uint TendoSetsugekkaFollowUpActionId = 41_455;',
+    'public static bool IsReviewedBaseCastPair('
+) 'Closed Ogi Namikiri and Tendo Setsugekka base-cast catalog'
+Assert-Literals $samuraiSmartActionCastSelfTests @(
+    'public static void ExactRawAndAdjustedPairsAreClosed()',
+    'public static void ReviewedCastDecisionPreservesEveryOtherCastPolicy()',
+    'public static void OgiConeAndTendoDirectProtectionFailClosed()',
+    'SmartActionAttackShape.UnsupportedAreaOfEffect',
+    'SmartActionAttackShape.DirectSingleTarget'
+) 'Reviewed SAM cast pair, generic anti-spin, and protection-shape regressions'
+Assert-Literals $smartActionTestProgram @(
+    'SamuraiSmartActionCastSelfTests.ExactRawAndAdjustedPairsAreClosed',
+    'SamuraiSmartActionCastSelfTests.ReviewedCastDecisionPreservesEveryOtherCastPolicy',
+    'SamuraiSmartActionCastSelfTests.OgiConeAndTendoDirectProtectionFailClosed'
+) 'Reviewed SAM Smart Action cast test registration'
 Assert-Literals $nearAssist @(
     'TryConsumeCastedMacroRedirect(',
     'CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(',
     'CastedMacroRedirectDecision.PassThroughStaleLifecycle',
+    'CastedMacroRedirectDecision.RedirectReviewedSmartActionCast',
+    'var continuingReviewedSmartActionCast =',
+    '!continuingReviewedSmartActionCast',
+    'IsReviewedSamuraiSmartActionCast(',
+    'samuraiSmartActionCastsMetadataVerified',
     'var passingThroughWithoutRedirect =',
     'if (!passingThroughWithoutRedirect && potentialSmartTargetToken is not null)',
     'if (passingThroughWithoutRedirect)',
@@ -7911,13 +7972,17 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     [regex]::Matches($nearAssist, '\bActionManager\.GetAdjustedCastTime\s*\(').Count -ne 1 -or
     [regex]::Matches($nearAssist, 'castedMacroRedirectGeneration\+\+;').Count -ne 5 -or
     $normalizedNearAssist -notmatch
-        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\);.*?if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable\).*?helperTokenConsumed = true; potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
+        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingReviewedSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingReviewedSmartActionCast\).*?helperTokenConsumed = true; potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
     $normalizedNearAssist -notmatch
         'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedNearAssist -notmatch
         'private bool IsLiveCastedMacroRedirectClaim\(.*?!configuration\.Enabled \|\| !clientState\.IsLoggedIn \|\| ResolveContext\(\) != SupportedPvPContext\.CrystallineConflict.*?claim\.SmartTarget\.ExpiresAtMilliseconds > now.*?claim\.NearAssistState\.IsArmed.*?claim\.NearHelpState\.IsArmed' -or
     $normalizedNearAssist -notmatch
         'CastedMacroRedirectOwner\.SmartAction => IsEligibleSmartActionRedirectAction\(.*?CastedMacroRedirectOwner\.NearAssist => IsEligibleRedirectAction\(.*?CastedMacroRedirectOwner\.NearHelp => IsEligibleHelpAction\(' -or
+    $normalizedNearAssist -notmatch
+        'private bool IsReviewedSamuraiSmartActionCast\(.*?claim\.Owner != CastedMacroRedirectOwner\.SmartAction.*?!samuraiSmartActionCastsMetadataVerified.*?actionType != ActionType\.Action.*?!exactMetadata.*?action\.RowId != resolvedActionId.*?!action\.IsPvP.*?action\.ClassJob\.RowId != SamuraiSmartActionCastRules\.SamuraiJobId.*?action\.Cast100ms != 15.*?!action\.CanTargetHostile.*?action\.TargetArea.*?action\.Range != 8.*?!SamuraiSmartActionCastRules\.IsReviewedBaseCastPair\( rawActionId, resolvedActionId\).*?local\.ClassJob\.RowId == SamuraiSmartActionCastRules\.SamuraiJobId;' -or
+    $normalizedNearAssist -notmatch
+        'if \(decision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast\) \{ return decision; \} return TryConsumeCastedMacroRedirectClaim\(claim, decision\)' -or
     $normalizedNearAssist -notmatch
         'private bool IsExactCurrentHardTarget\(.*?if \(hardTargetId == authoredTargetId\) return true;.*?ResolvePlayerByNativeId\(hardTargetId\).*?ResolvePlayerByNativeId\(authoredTargetId\).*?HasSameNativeIdentity\(hardTarget, authoredTarget\)') {
     throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, preserve the exact visible hard target, and leave instant redirects unchanged.'
@@ -10467,17 +10532,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.1</Version>',
-    '<AssemblyVersion>0.42.0.1</AssemblyVersion>',
-    '<FileVersion>0.42.0.1</FileVersion>'
-) 'v0.42.0.1 project version'
+    '<Version>0.42.0.2</Version>',
+    '<AssemblyVersion>0.42.0.2</AssemblyVersion>',
+    '<FileVersion>0.42.0.2</FileVersion>'
+) 'v0.42.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.1";',
-    'Hotfix: instant leave now rearms for every later public Crystalline Conflict match, including consecutive matches on the same map.',
-    'A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch; zero or invalid lifecycle signals remain inert.',
-    'The native leave-ready window is now 30 seconds. Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.',
-    'Smart Action, Near Assist, and Near Help no longer invisibly redirect cast-time actions: hidden carriers are suppressed and the visible <t> fallback remains vanilla. All 570 Core tests and release gates pass.'
-) 'v0.42.0.1 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.2";',
+    'Instant Leave now keeps its exact one-shot intent through the brief BetweenAreas frame seen on the result boundary, then leaves as soon as the same public-CC context is stable and native-ready.',
+    'SAM held Soten, Mineuchi, and Zantetsuken now use their exact current action metadata. A cancelled pre-native Zantetsuken freeze no longer consumes the still-held key.',
+    'Smart Action now smart-targets and freezes Ogi Namikiri and Tendo Setsugekka. Every other cast keeps the visible-target anti-spin path; Kaeshi follow-ups remain ordinary instant actions.',
+    'Ogi and Tendo keep full Chiten, Guard, Cover, and LB protection checks. All 573 Core tests and release gates pass.'
+) 'v0.42.0.2 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10498,21 +10563,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.1 plugin manifest metadata'
+) 'v0.42.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.1"',
-    'Fixed instant leave so it rearms for later public Crystalline Conflict matches, including consecutive matches on the same map',
-    'A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch;',
-    'The native leave-ready window is now 30 seconds.',
-    'Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.',
-    'hidden carriers are suppressed so the authored visible-target fallback stays vanilla, preventing delayed native auto-face turns.',
-    'Configuration schema 48; all 570 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.42.0.2"',
+    'Fixed the result-boundary race where Instant Leave armed and was cancelled one millisecond later by a transient BetweenAreas frame.',
+    'Fixed SAM Soten, Mineuchi, and Zantetsuken being disabled by one incorrect shared metadata tuple',
+    'Smart Action now ranks and freezes a protection-safe target for the reviewed Ogi Namikiri and Tendo Setsugekka casts;',
+    'all other casts retain the visible-target anti-spin path and Kaeshi follow-ups remain ordinary instant actions.',
+    'Configuration schema 48; all 573 Core tests and release gates pass.',
     'Live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.1 custom-repository metadata'
+) 'v0.42.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10556,8 +10620,9 @@ Assert-Literals $normalizedPrivacy @(
     'If the separate instant-leave option is enabled, the same already-confirmed public-CC result may arm one transient in-memory leave intent even when local W/L recording is disabled.',
     'W/L persistence is attempted first when it is enabled.',
     'For at most 30 seconds, the intent retains only the exact territory, local Content ID, monotonic result/expiry times, and one spent/requested state.',
-    'It cancels if the plugin or option is disabled, the live PvP/territory/identity changes, an area transition begins, the result expires, or the native leave boundary cannot be queried.',
-    'On the first native ready frame it reserves the intent and sends one normal non-forced leave request; the void request is never retried.',
+    'It cancels if the plugin or option is disabled, the live PvP/territory/identity changes, the result expires, or the native leave boundary cannot be queried.',
+    'A transient `BetweenAreas` frame alone keeps the exact intent waiting because the client can raise it on the confirmed result boundary before leave becomes ready.',
+    'On the first later stable native-ready frame it reserves the intent and sends one normal non-forced leave request; the void request is never retried.',
     'No leave history is saved or uploaded, no UI confirmation is clicked, and the feature does not queue a match.',
     'Wolves'' Den, custom CC, Frontline, and Rival Wings cannot arm it.',
     'only an authoritative nonzero change to a different territory or the next exact public-CC duty-start event clears the old latch.',
@@ -10603,21 +10668,22 @@ Assert-Literals $normalizedPrivacy @(
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
     'Arming reads no enemy slot and stores only the current territory, exact local identity, and expiry; a live `S1` is not a plugin-side arm prerequisite.',
-    'An action with a proven adjusted or exact base cast time is never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
+    'An action with a proven adjusted or exact base cast time is normally never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
     'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the ordinary game path.',
-    'Instant actions retain the existing one-shot smart redirect.',
-    'Seiton Sense does not write facing or camera state for this rule;',
+    'The only exception is the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
+    'Their instant Kaeshi actions `29531` and `41455` are not cast exceptions.',
+    'Near Assist, Near Help, every unreviewed cast, and metadata drift retain the visible-target path.',
+    'Seiton Sense does not write facing or camera state for this rule; any initial facing is FFXIV''s normal cast behavior toward the frozen or visible target.',
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.42.0.1 instant-leave lifecycle, cast targeting, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
+) 'v0.42.0.2 instant-leave lifecycle, SAM cast targeting, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.1 fixes its consecutive-match lifecycle: a nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch',
-    'including when the next match uses the same map, and the native-ready window is now 30 seconds.',
-    'It also keeps cast-time Smart Action, Near Assist, and Near Help on the visible authored target: hidden carriers are suppressed',
-    'Instant actions retain smart targeting.',
+    'Version 0.42.0.2 fixes the observed instant- leave race where the exact result intent armed and a transient `BetweenAreas` frame cancelled it one millisecond later.',
+    'It also repairs distinct current metadata for held SAM Soten, Mineuchi, and Zantetsuken, and makes the reviewed Ogi Namikiri and Tendo Setsugekka casts use Smart Action''s ranked, frozen target.',
+    'Every other cast keeps v0.42.0.1''s visible-target anti-spin behavior; instant actions retain smart targeting.',
     '**Optional instant public-CC exit:** after one complete public 5v5 result with the exact local Content ID is confirmed',
-    'The intent expires after 30 seconds and cancels on context, territory, identity, transition, toggle, or native-boundary drift; the void request is never retried.',
+    'A brief `BetweenAreas` result-boundary frame keeps the same intent waiting instead of cancelling it; the void request is never retried.',
     'Local W/L is attempted first when enabled.',
     'A different nonzero territory or the next exact public-CC duty start rearms later matches, including consecutive matches on the same map; zero and invalid lifecycle signals remain inert.',
     'There is no custom/Wolves'' Den/Frontline/Rival Wings path and no auto-queue.',
@@ -10684,11 +10750,12 @@ Assert-Literals $normalizedReadme @(
     'It retains Emergency Teleport plus v0.31''s ranged Smart Tab',
     'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
-    'Cast-time actions are deliberately not invisibly redirected.',
+    'Cast-time actions are deliberately not invisibly redirected by default.',
     'Seiton consumes and suppresses that carrier so the following `<t>` line executes normally.',
-    'This avoids FFXIV''s delayed native auto-face turning the character toward a hidden target after a fast manual target switch.',
-    'Instant actions keep the full Smart Action selection described below.',
-    'The same cast policy applies to Near Assist and Near Help.',
+    'The only reviewed exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
+    'Ogi''s cone remains an unsupported area shape, so the complete hostile snapshot must contain no non-bypassed Chiten, Guard, Cover, or LB protection;',
+    'Kaeshi Namikiri `29531` and Tendo Kaeshi Setsugekka `41455` are instant follow-ups and receive no cast exception.',
+    'Near Assist, Near Help, and every other cast retain the visible-target policy above.',
     'exact enemy nameplate icons, a safe self activation banner, and a bounded ally damage feed',
     'visible `/autoseiton` ON/OFF tile that still requires a physical held key',
     'local 4,000/2,000-MP sounds',
@@ -10705,11 +10772,11 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
-    'For the current source, the exact 570-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
+    'For the current source, the exact 573-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
-    'target-independent arming, cast-time hidden-carrier suppression with visible-target pass-through, selection with `S1` absent, shape-scoped caller-proven target protection safety',
+    'target-independent arming, the closed metadata-verified SAM Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible- target pass-through for every other cast, selection with `S1` absent',
     'resolved-action English metadata gate for Guard-ignoring damage',
     'a frozen canonical target ID for the sole native action call',
     'a bounded exact-action fallback lease',
@@ -10717,8 +10784,17 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.1 current README release and safety contract'
+) 'v0.42.0.2 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.2',
+    'Fixed the observed instant-leave result-boundary race.',
+    'That flag now keeps the same one-shot intent waiting; it can request leave once the same public-CC territory and local identity are stable again.',
+    'Fixed the held SAM runtime being disabled at startup.',
+    'Soten `29532`, Mineuchi `29535`, and Zantetsuken `29537` now validate against their distinct current action-category/cooldown tuples instead of one incorrect shared tuple.',
+    'A frozen Zantetsuken intent cancelled before any native request no longer spends the still-held physical-key generation;',
+    'Added a closed Smart Action cast exception for Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
+    'Kaeshi Namikiri `29531`, Tendo Kaeshi Setsugekka `41455`, Near Assist, Near Help, and every unreviewed cast retain their previous behavior.',
+    'Configuration schema remains `48`. Source build, all `573` Core tests, safety, package parity, and release verification are automated.',
     '## 0.42.0.1',
     'Fixed instant leave after the first successful match.',
     'A different nonzero `TerritoryChanged` event now closes that old context, and the next exact public-CC `DutyStarted` event is a same-map backstop.',
@@ -10810,7 +10886,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.1 release notes and retained v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.2 release notes and retained v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12319,4 +12395,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 570-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, attempts enabled W-L persistence first without coupling failures, preserves its spent latch across ambiguous telemetry, rearms from authoritative territory or exact public-duty lifecycle events, and reserves exactly one non-forced native request inside a thirty-second frozen context. Cast-time Smart Action, Near Assist, and Near Help hidden carriers are consumed without invisible retargeting so the visible authored target remains vanilla; instant actions retain smart redirects. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.2 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 573-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, preserves its one-shot intent through transient result-boundary BetweenAreas telemetry, and still reserves exactly one non-forced native request inside a thirty-second frozen context. SAM Soten, Mineuchi, and Zantetsuken pin their distinct current metadata; only a real Zantetsuken native attempt spends the held generation. Metadata-verified Ogi Namikiri and Tendo Setsugekka may retain Smart Action's frozen ranked target, while every other cast, Near Assist, and Near Help retain the visible-target anti-spin path. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. All prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

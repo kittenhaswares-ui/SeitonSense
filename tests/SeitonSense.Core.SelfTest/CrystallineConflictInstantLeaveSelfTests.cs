@@ -102,7 +102,11 @@ internal static class CrystallineConflictInstantLeaveSelfTests
         var identityDrift = Evaluate(state, canLeave: true, contentId: 2003);
         Equal(CrystallineConflictInstantLeaveReason.ContextDrift, identityDrift.Reason, "identity drift");
         var transition = Evaluate(state, canLeave: true, betweenAreas: true);
-        Equal(CrystallineConflictInstantLeaveReason.TransitionStarted, transition.Reason, "existing transition");
+        Equal(CrystallineConflictInstantLeaveDecision.Waiting, transition.Decision, "transient transition waits");
+        Equal(CrystallineConflictInstantLeavePhase.WaitingForNativeBoundary, transition.State.Phase, "transition retains intent");
+        Equal(CrystallineConflictInstantLeaveReason.TransitionStarted, transition.Reason, "transition is observable");
+        var stableAgain = Evaluate(transition.State, canLeave: true, betweenAreas: false, now: 1_101);
+        Equal(CrystallineConflictInstantLeaveDecision.RequestLeave, stableAgain.Decision, "stable context can still leave");
     }
 
     public static void NativeUnavailableFaultAndExpiryAreTerminal()
@@ -130,6 +134,15 @@ internal static class CrystallineConflictInstantLeaveSelfTests
     public static void ContextExitConfirmsAndRearmsOnlyANewMatch()
     {
         var requested = Evaluate(Arm().State, canLeave: true).State;
+        var transientTransition = Evaluate(
+            requested,
+            canLeave: false,
+            betweenAreas: true,
+            livePvp: false,
+            territory: 0,
+            contentId: 0);
+        Equal(CrystallineConflictInstantLeaveDecision.None, transientTransition.Decision, "transition flag alone cannot rearm");
+        True(transientTransition.State.ContextSpent, "one-shot latch survives ambiguous transition telemetry");
         var zeroTerritory = CrystallineConflictInstantLeaveRules.ObserveTerritoryChanged(requested, 0);
         Equal(CrystallineConflictInstantLeaveDecision.None, zeroTerritory.Decision, "zero territory is ambiguous");
         True(zeroTerritory.State.ContextSpent, "zero territory preserves spent latch");

@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.1";
+    private const string CurrentReleaseVersion = "0.42.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -227,6 +227,7 @@ public sealed class Plugin : IDalamudPlugin
             ccImmunityBrake,
             metadata.SmartActionProtectionStatusesVerified,
             metadata.SmartActionGuardBypassActions,
+            samuraiReactiveMetadata.SmartActionCastsVerified,
             samuraiReactiveMetadata.ChitenVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
@@ -403,10 +404,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Hotfix: instant leave now rearms for every later public Crystalline Conflict match, including consecutive matches on the same map.",
-                "A nonzero territory change or the next exact public-CC duty start clears only the spent previous-match latch; zero or invalid lifecycle signals remain inert.",
-                "The native leave-ready window is now 30 seconds. Each confirmed result still permits exactly one normal non-forced leave request and never retries or re-queues.",
-                "Smart Action, Near Assist, and Near Help no longer invisibly redirect cast-time actions: hidden carriers are suppressed and the visible <t> fallback remains vanilla. All 570 Core tests and release gates pass.",
+                "Instant Leave now keeps its exact one-shot intent through the brief BetweenAreas frame seen on the result boundary, then leaves as soon as the same public-CC context is stable and native-ready.",
+                "SAM held Soten, Mineuchi, and Zantetsuken now use their exact current action metadata. A cancelled pre-native Zantetsuken freeze no longer consumes the still-held key.",
+                "Smart Action now smart-targets and freezes Ogi Namikiri and Tendo Setsugekka. Every other cast keeps the visible-target anti-spin path; Kaeshi follow-ups remain ordinary instant actions.",
+                "Ogi and Tendo keep full Chiten, Guard, Cover, and LB protection checks. All 573 Core tests and release gates pass.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

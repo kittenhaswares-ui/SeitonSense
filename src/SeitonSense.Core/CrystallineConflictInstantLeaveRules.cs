@@ -155,8 +155,12 @@ public static class CrystallineConflictInstantLeaveRules
             liveTerritoryId == state.TerritoryId &&
             liveLocalContentId != 0 &&
             liveLocalContentId == state.LocalContentId;
+        // The client can briefly raise BetweenAreas on the result boundary
+        // before the normal leave boundary becomes available. That flag alone
+        // is therefore not authoritative proof that this exact match context
+        // has exited. Territory/content drift and the lifecycle callbacks below
+        // remain the re-arm boundaries.
         var confirmedContextExit =
-            betweenAreas ||
             (liveTerritoryId != 0 && liveTerritoryId != state.TerritoryId) ||
             (liveLocalContentId != 0 && liveLocalContentId != state.LocalContentId);
 
@@ -184,12 +188,22 @@ public static class CrystallineConflictInstantLeaveRules
 
         if (!enabled)
             return Cancel(state, CrystallineConflictInstantLeaveReason.FeatureDisabled);
-        if (betweenAreas)
-            return Cancel(state, CrystallineConflictInstantLeaveReason.TransitionStarted);
-        if (!exactLiveContext)
-            return Cancel(state, CrystallineConflictInstantLeaveReason.ContextDrift);
         if (nowMilliseconds > state.ExpiresAtMilliseconds)
             return Cancel(state, CrystallineConflictInstantLeaveReason.ResultExpired);
+        if (betweenAreas)
+        {
+            var waitingForStableContext = state with
+            {
+                Reason = CrystallineConflictInstantLeaveReason.TransitionStarted,
+            };
+            return new CrystallineConflictInstantLeaveTransition(
+                waitingForStableContext,
+                CrystallineConflictInstantLeaveDecision.Waiting,
+                CrystallineConflictInstantLeaveReason.TransitionStarted);
+        }
+
+        if (!exactLiveContext)
+            return Cancel(state, CrystallineConflictInstantLeaveReason.ContextDrift);
         if (!nativeBoundaryAvailable)
             return Cancel(state, CrystallineConflictInstantLeaveReason.NativeBoundaryUnavailable);
         if (!canLeaveCurrentContent)

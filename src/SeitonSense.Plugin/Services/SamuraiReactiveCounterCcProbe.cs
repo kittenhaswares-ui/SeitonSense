@@ -708,7 +708,6 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 localPlayer!,
                 target!,
                 SamuraiZantetsukenRules.ActionId);
-            var frozenKeyToken = zantetsukenState.GameplayKeyToken;
             var decision = SamuraiZantetsukenRules.Observe(
                 zantetsukenState,
                 new SamuraiZantetsukenObservation(
@@ -727,9 +726,11 @@ internal sealed class SamuraiReactiveCounterCcProbe
             zantetsukenState = decision.NextState;
             if (decision.Kind == SamuraiZantetsukenDecisionKind.Cancelled)
             {
-                zantetsukenSpentKeyToken = frozenKeyToken;
                 zantetsukenTarget = null;
-                lastEvent = "Frozen Zantetsuken intent cancelled without fallback";
+                // No native boundary was crossed. Keep the physical generation
+                // eligible so a transient actor/status frame can recover, or a
+                // different exact Kuzushi target can be frozen on a later frame.
+                lastEvent = "Frozen Zantetsuken intent released before native attempt";
                 return PublishSnapshot();
             }
 

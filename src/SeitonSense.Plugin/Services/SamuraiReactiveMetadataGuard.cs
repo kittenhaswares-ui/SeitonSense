@@ -14,6 +14,7 @@ internal sealed record SamuraiReactiveMetadataValidation(
     bool KuzushiVerified,
     bool ChitenVerified,
     bool ProtectionSignalPrerequisitesVerified,
+    bool SmartActionCastsVerified,
     bool WolvesDenStrikingDummyVerified)
 {
     internal bool CounterCcVerified =>
@@ -21,6 +22,7 @@ internal sealed record SamuraiReactiveMetadataValidation(
     internal bool ZantetsukenWorkflowVerified => ZantetsukenVerified && KuzushiVerified;
 
     internal static SamuraiReactiveMetadataValidation None { get; } = new(
+        false,
         false,
         false,
         false,
@@ -42,6 +44,9 @@ internal static class SamuraiReactiveMetadataGuard
     internal const uint KuzushiIconId = 214_954;
     internal const uint ChitenStatusId = 1_240;
     internal const uint ChitenIconId = 214_820;
+    internal const uint OgiNamikiriIconId = 9_663;
+    internal const uint TendoSetsugekkaCarrierIconId = 9_206;
+    internal const uint TendoSetsugekkaIconId = 9_786;
 
     internal static SamuraiReactiveMetadataValidation Validate(
         IDataManager dataManager,
@@ -62,6 +67,9 @@ internal static class SamuraiReactiveMetadataGuard
                             effectRange: 0,
                             recast100ms: 100,
                             maxCharges: 3,
+                            actionCategoryId: 4,
+                            cooldownGroup: 2,
+                            additionalCooldownGroup: 71,
                             affectsPosition: true);
             var mineuchi = actions.TryGetRow(
                                SamuraiReactiveCounterCcRules.MineuchiActionId,
@@ -74,6 +82,9 @@ internal static class SamuraiReactiveMetadataGuard
                                effectRange: 0,
                                recast100ms: 160,
                                maxCharges: 0,
+                               actionCategoryId: 4,
+                               cooldownGroup: 4,
+                               additionalCooldownGroup: 0,
                                affectsPosition: false);
             var zantetsuken = actions.TryGetRow(
                                   SamuraiZantetsukenRules.ActionId,
@@ -86,6 +97,9 @@ internal static class SamuraiReactiveMetadataGuard
                                   effectRange: 5,
                                   recast100ms: 100,
                                   maxCharges: 0,
+                                  actionCategoryId: 15,
+                                  cooldownGroup: 6,
+                                  additionalCooldownGroup: 0,
                                   affectsPosition: true);
             var kuzushi = statuses.TryGetRow(
                               SamuraiZantetsukenRules.KuzushiStatusId,
@@ -150,6 +164,42 @@ internal static class SamuraiReactiveMetadataGuard
                     "Guard",
                     iconId: 214_715,
                     "All Stun, Heavy, Bind, Silence");
+            var ogiNamikiri = actions.TryGetRow(
+                                   SamuraiSmartActionCastRules.OgiNamikiriActionId,
+                                   out var ogiNamikiriRow) &&
+                               ValidateSmartActionCast(
+                                   ogiNamikiriRow,
+                                   SamuraiSmartActionCastRules.OgiNamikiriActionId,
+                                   "Ogi Namikiri",
+                                   OgiNamikiriIconId,
+                                   isPlayerAction: true,
+                                   effectRange: 8,
+                                   recast100ms: 160,
+                                   cooldownGroup: 1,
+                                   additionalCooldownGroup: 58,
+                                   castType: 3);
+            var tendoSetsugekkaCarrier = actions.TryGetRow(
+                                             SamuraiSmartActionCastRules
+                                                 .TendoSetsugekkaCarrierActionId,
+                                             out var tendoSetsugekkaCarrierRow) &&
+                                         ValidateTendoSetsugekkaCarrier(
+                                             tendoSetsugekkaCarrierRow);
+            var tendoSetsugekka = actions.TryGetRow(
+                                      SamuraiSmartActionCastRules.TendoSetsugekkaActionId,
+                                      out var tendoSetsugekkaRow) &&
+                                  ValidateSmartActionCast(
+                                      tendoSetsugekkaRow,
+                                      SamuraiSmartActionCastRules.TendoSetsugekkaActionId,
+                                      "Tendo Setsugekka",
+                                      TendoSetsugekkaIconId,
+                                      isPlayerAction: false,
+                                      effectRange: 0,
+                                      recast100ms: 25,
+                                      cooldownGroup: 58,
+                                      additionalCooldownGroup: 0,
+                                      castType: 1);
+            var smartActionCasts =
+                ogiNamikiri && tendoSetsugekkaCarrier && tendoSetsugekka;
             var dummy = StrictWolvesDenStrikingDummyResolver.ValidateMetadata(
                 dataManager,
                 log);
@@ -170,6 +220,11 @@ internal static class SamuraiReactiveMetadataGuard
                 log.Warning(
                     "Seiton Sense disabled SAM counter-CC because shared Purify/Guard metadata drifted.");
             }
+            if (!smartActionCasts)
+            {
+                log.Warning(
+                    "Seiton Sense kept Ogi Namikiri and Tendo Setsugekka on the normal visible-target cast path because reviewed SAM cast metadata drifted.");
+            }
 
             return new SamuraiReactiveMetadataValidation(
                 soten,
@@ -178,6 +233,7 @@ internal static class SamuraiReactiveMetadataGuard
                 kuzushi,
                 chiten,
                 protectionSignalPrerequisites,
+                smartActionCasts,
                 dummy);
         }
         catch (Exception exception)
@@ -200,6 +256,9 @@ internal static class SamuraiReactiveMetadataGuard
         byte effectRange,
         ushort recast100ms,
         byte maxCharges,
+        byte actionCategoryId,
+        byte cooldownGroup,
+        byte additionalCooldownGroup,
         bool affectsPosition) =>
         action.RowId != 0 &&
         string.Equals(action.Name.ExtractText(), name, StringComparison.Ordinal) &&
@@ -214,9 +273,9 @@ internal static class SamuraiReactiveMetadataGuard
         action.Recast100ms == recast100ms &&
         action.MaxCharges == maxCharges &&
         action.ActionCategory.IsValid &&
-        action.ActionCategory.RowId == 4 &&
-        action.CooldownGroup == 3 &&
-        action.AdditionalCooldownGroup == 0 &&
+        action.ActionCategory.RowId == actionCategoryId &&
+        action.CooldownGroup == cooldownGroup &&
+        action.AdditionalCooldownGroup == additionalCooldownGroup &&
         action.CanTargetHostile &&
         !action.CanTargetSelf &&
         !action.CanTargetParty &&
@@ -245,6 +304,75 @@ internal static class SamuraiReactiveMetadataGuard
         !action.CanTargetHostile &&
         !action.CanTargetParty &&
         !action.CanTargetAlly &&
+        !action.TargetArea &&
+        action.RequiresLineOfSight &&
+        !action.AffectsPosition;
+
+    private static bool ValidateSmartActionCast(
+        GameAction action,
+        uint actionId,
+        string name,
+        uint iconId,
+        bool isPlayerAction,
+        byte effectRange,
+        ushort recast100ms,
+        byte cooldownGroup,
+        byte additionalCooldownGroup,
+        byte castType) =>
+        action.RowId == actionId &&
+        string.Equals(action.Name.ExtractText(), name, StringComparison.Ordinal) &&
+        action.Icon == iconId &&
+        action.IsPvP &&
+        action.IsPlayerAction == isPlayerAction &&
+        action.ClassJob.IsValid &&
+        action.ClassJob.RowId == SamuraiSmartActionCastRules.SamuraiJobId &&
+        action.Range == 8 &&
+        action.EffectRange == effectRange &&
+        action.Cast100ms == 15 &&
+        action.ExtraCastTime100ms == 0 &&
+        action.Recast100ms == recast100ms &&
+        action.MaxCharges == 0 &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == 3 &&
+        action.CooldownGroup == cooldownGroup &&
+        action.AdditionalCooldownGroup == additionalCooldownGroup &&
+        action.CastType == castType &&
+        action.CanTargetHostile &&
+        !action.CanTargetSelf &&
+        !action.CanTargetParty &&
+        !action.CanTargetAlly &&
+        !action.CanTargetAlliance &&
+        !action.TargetArea &&
+        action.RequiresLineOfSight &&
+        !action.AffectsPosition;
+
+    private static bool ValidateTendoSetsugekkaCarrier(GameAction action) =>
+        action.RowId == SamuraiSmartActionCastRules.TendoSetsugekkaCarrierActionId &&
+        string.Equals(
+            action.Name.ExtractText(),
+            "Meikyo Shisui",
+            StringComparison.Ordinal) &&
+        action.Icon == TendoSetsugekkaCarrierIconId &&
+        action.IsPvP &&
+        action.IsPlayerAction &&
+        action.ClassJob.IsValid &&
+        action.ClassJob.RowId == SamuraiSmartActionCastRules.SamuraiJobId &&
+        action.Range == 0 &&
+        action.EffectRange == 0 &&
+        action.Cast100ms == 0 &&
+        action.ExtraCastTime100ms == 0 &&
+        action.Recast100ms == 200 &&
+        action.MaxCharges == 0 &&
+        action.ActionCategory.IsValid &&
+        action.ActionCategory.RowId == 4 &&
+        action.CooldownGroup == 5 &&
+        action.AdditionalCooldownGroup == 0 &&
+        action.CastType == 1 &&
+        action.CanTargetSelf &&
+        !action.CanTargetHostile &&
+        !action.CanTargetParty &&
+        !action.CanTargetAlly &&
+        !action.CanTargetAlliance &&
         !action.TargetArea &&
         action.RequiresLineOfSight &&
         !action.AffectsPosition;

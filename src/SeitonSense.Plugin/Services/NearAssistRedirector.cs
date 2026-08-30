@@ -212,6 +212,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly CcImmunityBrakeService ccImmunityBrake;
     private readonly bool smartActionProtectionMetadataVerified;
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
+    private readonly bool samuraiSmartActionCastsMetadataVerified;
     private readonly bool chitenMetadataVerified;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
@@ -282,6 +283,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         CcImmunityBrakeService ccImmunityBrake,
         bool smartActionProtectionMetadataVerified,
         SmartActionGuardBypassCatalog smartActionGuardBypassActions,
+        bool samuraiSmartActionCastsMetadataVerified,
         bool chitenMetadataVerified,
         IPluginLog log)
     {
@@ -298,6 +300,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.ccImmunityBrake = ccImmunityBrake;
         this.smartActionProtectionMetadataVerified = smartActionProtectionMetadataVerified;
         this.smartActionGuardBypassActions = smartActionGuardBypassActions;
+        this.samuraiSmartActionCastsMetadataVerified =
+            samuraiSmartActionCastsMetadataVerified;
         this.chitenMetadataVerified = chitenMetadataVerified;
         this.log = log;
         observedTerritory = clientState.TerritoryType;
@@ -1436,7 +1440,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var passingThroughWithoutRedirect =
                 CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
                     castRedirectDecision);
-            if (castRedirectDecision != CastedMacroRedirectDecision.NotApplicable)
+            var continuingReviewedSmartActionCast =
+                castRedirectDecision ==
+                CastedMacroRedirectDecision.RedirectReviewedSmartActionCast;
+            if (castRedirectDecision != CastedMacroRedirectDecision.NotApplicable &&
+                !continuingReviewedSmartActionCast)
             {
                 helperTokenConsumed = true;
                 potentialSmartTargetToken = null;
@@ -2119,9 +2127,21 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 exactMetadata,
                 adjustedCastTime,
                 exactMetadata ? action.Cast100ms : 0u,
-                IsExactCurrentHardTarget(authoredTargetId));
+                IsExactCurrentHardTarget(authoredTargetId),
+                IsReviewedSamuraiSmartActionCast(
+                    claim,
+                    actionType,
+                    actionId,
+                    resolvedActionId,
+                    exactMetadata,
+                    action));
             if (decision == CastedMacroRedirectDecision.NotApplicable)
                 return decision;
+            if (decision ==
+                CastedMacroRedirectDecision.RedirectReviewedSmartActionCast)
+            {
+                return decision;
+            }
 
             return TryConsumeCastedMacroRedirectClaim(claim, decision)
                 ? decision
@@ -2141,6 +2161,39 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 ? CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget
                 : CastedMacroRedirectDecision.SuppressStaleOwnership;
         }
+    }
+
+    private bool IsReviewedSamuraiSmartActionCast(
+        CastedMacroRedirectClaim claim,
+        ActionType actionType,
+        uint rawActionId,
+        uint resolvedActionId,
+        bool exactMetadata,
+        GameAction action)
+    {
+        if (claim.Owner != CastedMacroRedirectOwner.SmartAction ||
+            !samuraiSmartActionCastsMetadataVerified ||
+            actionType != ActionType.Action ||
+            !exactMetadata ||
+            action.RowId != resolvedActionId ||
+            !action.IsPvP ||
+            !action.ClassJob.IsValid ||
+            action.ClassJob.RowId != SamuraiSmartActionCastRules.SamuraiJobId ||
+            action.Cast100ms != 15 ||
+            !action.CanTargetHostile ||
+            action.TargetArea ||
+            action.Range != 8 ||
+            !SamuraiSmartActionCastRules.IsReviewedBaseCastPair(
+                rawActionId,
+                resolvedActionId))
+        {
+            return false;
+        }
+
+        var local = objectTable.LocalPlayer;
+        return IsLivePlayer(local) &&
+               local!.ClassJob.IsValid &&
+               local.ClassJob.RowId == SamuraiSmartActionCastRules.SamuraiJobId;
     }
 
     private bool IsLiveCastedMacroRedirectClaim(CastedMacroRedirectClaim claim)

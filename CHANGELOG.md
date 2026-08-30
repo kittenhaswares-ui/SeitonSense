@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.42.0.2
+
+- Fixed the observed instant-leave result-boundary race. The failed match armed
+  its exact leave intent, then a transient `BetweenAreas` frame cancelled it one
+  millisecond later before the normal native-ready frame arrived. That flag now
+  keeps the same one-shot intent waiting; it can request leave once the same
+  public-CC territory and local identity are stable again. Expiry is checked
+  first, real territory/content drift remains terminal, and one confirmed result
+  still permits at most one normal non-forced native leave request.
+- Fixed the held SAM runtime being disabled at startup. Soten `29532`, Mineuchi
+  `29535`, and Zantetsuken `29537` now validate against their distinct current
+  action-category/cooldown tuples instead of one incorrect shared tuple. A
+  frozen Zantetsuken intent cancelled before any native request no longer spends
+  the still-held physical-key generation; an actual native attempt still does.
+- Added a closed Smart Action cast exception for Ogi Namikiri `29530` and Tendo
+  Setsugekka (`29536 -> 41454`, or direct `41454`). These two reviewed 1.5-second
+  casts now use the existing range-first Smart Target ranking, freeze one exact
+  actor, and recheck protection directly before the sole incoming action call.
+  Ogi's unmodelled cone geometry remains conservative and requires a complete
+  protection-safe hostile snapshot; Tendo is checked as direct single-target.
+  Kaeshi Namikiri `29531`, Tendo Kaeshi Setsugekka `41455`, Near Assist, Near
+  Help, and every unreviewed cast retain their previous behavior.
+- Configuration schema remains `48`. Source build, all `573` Core tests, safety,
+  package parity, and release verification are automated. Final native action
+  acceptance and initial FFXIV auto-facing for the two casts remain live-client
+  validation boundaries.
+
 ## 0.42.0.1
 
 - Fixed instant leave after the first successful match. Both reported match

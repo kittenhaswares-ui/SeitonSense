@@ -2,16 +2,17 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.0 adds a separate default-off
-instant-leave option for completed public Crystalline Conflict matches. Version
-0.42.0.1 fixes its consecutive-match lifecycle: a nonzero territory change or
-the next exact public-CC duty start clears only the spent previous-match latch,
-including when the next match uses the same map, and the native-ready window is
-now 30 seconds. It also keeps cast-time Smart Action, Near Assist, and Near Help
-on the visible authored target: hidden carriers are suppressed so FFXIV cannot
-later auto-face a stale invisible redirect after a manual target switch. Instant
-actions retain smart targeting. Wolves' Den, custom CC, Frontline, and Rival
-Wings remain excluded from instant leave, and it never queues a new match.
+assistance, and target highlights. Version 0.42.0.2 fixes the observed instant-
+leave race where the exact result intent armed and a transient `BetweenAreas`
+frame cancelled it one millisecond later. The intent now waits through that
+ambiguous frame and can leave when the same public-CC identity is stable and
+native-ready. It also repairs distinct current metadata for held SAM Soten,
+Mineuchi, and Zantetsuken, and makes the reviewed Ogi Namikiri and Tendo
+Setsugekka casts use Smart Action's ranked, frozen target. Every other cast keeps
+v0.42.0.1's visible-target anti-spin behavior; instant actions retain smart
+targeting. The native-ready window remains 30 seconds. Wolves' Den, custom CC,
+Frontline, and Rival Wings remain excluded from instant leave, and it never
+queues a new match.
 Version 0.41.0.0 makes automatic Purify and
 Recuperate retain their exact episode through temporary native blocks and retry
 only inside the original bounded window after every safety recheck. High-
@@ -94,8 +95,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   the exact local Content ID is confirmed, the default-off helper waits for
   FFXIV to report that the current content can be left and sends one normal,
   non-forced leave request. The intent expires after 30 seconds and cancels on
-  context, territory, identity, transition, toggle, or native-boundary drift;
-  the void request is never retried. Local W/L is attempted first when enabled.
+  real context, territory, identity, toggle, or native-boundary drift. A brief
+  `BetweenAreas` result-boundary frame keeps the same intent waiting instead of
+  cancelling it; the void request is never retried. Local W/L is attempted first when enabled.
   A different nonzero territory or the next exact public-CC duty start rearms
   later matches, including consecutive matches on the same map; zero and invalid
   lifecycle signals remain inert.
@@ -1426,14 +1428,27 @@ recommended authored shape is:
 /pvpac "Ability" <t>
 ```
 
-Cast-time actions are deliberately not invisibly redirected. If the first
-`<e1>` carrier has a proven adjusted or base cast time and is not the exact
+Cast-time actions are deliberately not invisibly redirected by default. If the
+first `<e1>` carrier has a proven adjusted or base cast time and is not the exact
 current visible hard target, Seiton consumes and suppresses that carrier so the
 following `<t>` line executes normally. A direct `<t>` cast already matching the
 current hard target passes through unchanged. This avoids FFXIV's delayed native
-auto-face turning the character toward a hidden target after a fast manual
-target switch. Instant actions keep the full Smart Action selection described
-below. The same cast policy applies to Near Assist and Near Help.
+auto-face turning the character toward a stale hidden target after a fast manual
+target switch.
+
+The only reviewed exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka
+(`29536 -> 41454`, or direct `41454`). With exact startup metadata and local SAM
+identity, these two 1.5-second base casts continue through the ordinary Smart
+Action ranking and freeze one exact actor for the cast. Ogi's cone remains an
+unsupported area shape, so the complete hostile snapshot must contain no
+non-bypassed Chiten, Guard, Cover, or LB protection; Tendo is checked as direct
+single-target. Kaeshi Namikiri `29531` and Tendo Kaeshi Setsugekka `41455` are
+instant follow-ups and receive no cast exception. The plugin never calls a
+face-target or rotation function; FFXIV may still perform its ordinary initial
+auto-facing toward the frozen cast target, but later manual target changes cannot
+retarget that cast through Seiton. Near Assist, Near Help, and every other cast
+retain the visible-target policy above. Other instant actions keep the full
+Smart Action selection described below.
 
 No selected target is required. Arming performs no `S1`-`S5` scan and has no
 hard-target or live-`S1` prerequisite; `<t>` is only the user-authored fallback
@@ -1907,8 +1922,9 @@ update through the same repository.
   FFXIV's normal forward world-target cycle
 - `/sstarget [on|off|toggle]` - collision-free alias for `/smarttab`
 - `/smartaction` - arm one optional CC-only 750 ms harmful-action target redirect;
-  instant actions use the Smart Target, while cast-time hidden carriers are
-  suppressed so the authored visible `<t>` line stays vanilla
+  instant actions and the reviewed SAM Ogi/Tendo base casts use the Smart Target,
+  while every other cast-time hidden carrier is suppressed so the authored
+  visible `<t>` line stays vanilla
 - `/ssaction` - collision-free alias for `/smartaction`
 - `/autoseiton [on|off|toggle]` - change whether the held-key NIN Auto-Seiton
   helper is available; ON still requires continuous physical held-key consent
@@ -2200,7 +2216,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 570-test Core registry and source checks pin
+For the current source, the exact 573-test Core registry and source checks pin
 configuration schema 48, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
@@ -2219,9 +2235,10 @@ current-target-anchored ranked cycle with wrap, complete actor freeze, one
 hard-target setter/readback, and no retry or alternate. They additionally pin one 25-yalm tier for BRD/BLM/SMN/MCH/RDM/PCT,
 one 15-yalm tier for DNC, and the absence of a melee preference for ranged jobs.
 OFF, reverse targeting, and calls outside the scoped handler retain their native
-paths. Smart Action remains a separate one-shot harmful-action macro contract.
-Its checks now pin target-independent arming, cast-time hidden-carrier
-suppression with visible-target pass-through, selection with `S1` absent,
+  paths. Smart Action remains a separate one-shot harmful-action macro contract.
+  Its checks now pin target-independent arming, the closed metadata-verified SAM
+  Ogi/Tendo cast exception, cast-time hidden-carrier suppression with visible-
+  target pass-through for every other cast, selection with `S1` absent,
 shape-scoped caller-proven target protection safety, exact Chiten,
 Guard, Covered, Hallowed Ground, and Undead Redemption handling, an exact
 resolved-action English metadata gate for Guard-ignoring damage, conservative
