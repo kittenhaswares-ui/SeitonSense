@@ -16,6 +16,7 @@ internal enum HeldCastCancellationNativeStatus : byte
     NativeBoundaryUnavailable = 2,
     RequestFaulted = 3,
     BlockedByOwnGuard = 4,
+    BlockedByAutomaticRecoveryCastBoundary = 5,
 }
 
 internal sealed record HeldCastCancellationSnapshot(
@@ -25,6 +26,10 @@ internal sealed record HeldCastCancellationSnapshot(
     HeldCastCancellationRequest? Request,
     HeldCastCancellationRequest? LastRequestedIntent,
     uint CastActionId,
+    uint AdjustedCastActionId,
+    uint LocalJobId,
+    bool AutomaticRecoveryBasicShotCancellationEnabled,
+    bool AutomaticRecoveryBasicShotMetadataVerified,
     HeldCastCancellationNativeStatus NativeStatus,
     HeldCastCancellationNativeStatus LastNativeStatus,
     long NativeRequestCount,
@@ -38,6 +43,10 @@ internal sealed record HeldCastCancellationSnapshot(
         null,
         null,
         0,
+        0,
+        0,
+        false,
+        false,
         HeldCastCancellationNativeStatus.None,
         HeldCastCancellationNativeStatus.None,
         0,
@@ -56,6 +65,8 @@ internal sealed unsafe class HeldCastCancellationService
     private readonly IPluginLog log;
     private readonly Func<TargetPressureActorIdentity, bool>
         finalOwnGuardActiveOrPropagating;
+    private readonly AutomaticRecoveryShotCastMetadataValidation
+        automaticRecoveryShotCastMetadata;
     private HeldCastCancellationState state = HeldCastCancellationState.Initial;
     private HeldCastCancellationSnapshot snapshot = HeldCastCancellationSnapshot.Initial;
     private HeldCastCancellationRequest? lastRequestedIntent;
@@ -67,13 +78,19 @@ internal sealed unsafe class HeldCastCancellationService
     internal HeldCastCancellationService(
         IPluginLog log,
         Func<TargetPressureActorIdentity, bool>
-            finalOwnGuardActiveOrPropagating)
+            finalOwnGuardActiveOrPropagating,
+        AutomaticRecoveryShotCastMetadataValidation
+            automaticRecoveryShotCastMetadata)
     {
         this.log = log;
         this.finalOwnGuardActiveOrPropagating =
             finalOwnGuardActiveOrPropagating ??
             throw new ArgumentNullException(
                 nameof(finalOwnGuardActiveOrPropagating));
+        this.automaticRecoveryShotCastMetadata =
+            automaticRecoveryShotCastMetadata ??
+            throw new ArgumentNullException(
+                nameof(automaticRecoveryShotCastMetadata));
     }
 
     internal HeldCastCancellationSnapshot Snapshot => Volatile.Read(ref snapshot);
@@ -81,6 +98,7 @@ internal sealed unsafe class HeldCastCancellationService
     internal HeldCastCancellationSnapshot Observe(
         IPlayerCharacter? localPlayer,
         bool featureEnabled,
+        bool automaticRecoveryBasicShotCancellationEnabled,
         bool supportedContext,
         bool guardActive,
         bool prioritizedInputClaimed,
@@ -94,17 +112,29 @@ internal sealed unsafe class HeldCastCancellationService
             localPlayer,
             out var currentLocalIdentity);
         var requestValid = request is { IsValid: true };
-        var automaticPurifyRequest =
-            request is { IsValid: true, IsAutomaticPurify: true };
-        var textInputActive = automaticPurifyRequest
+        var automaticRecoveryRequest =
+            request is { IsValid: true, IsAutomaticRecovery: true };
+        var textInputActive = automaticRecoveryRequest
             ? !TryGetTextInputState(out var currentTextInputActive) ||
               currentTextInputActive
             : inputFrame.Snapshot.IsTextInputActive;
         var frozenKeyStillDown = requestValid &&
-                                 (automaticPurifyRequest ||
+                                 (automaticRecoveryRequest ||
                                   (IsExactVirtualKey(request!.Value.FrozenKeyCode) &&
                                    inputFrame.IsGameplayKeyPhysicallyDown(
                                        (VirtualKey)request.Value.FrozenKeyCode)));
+
+        var localJobId = localPlayer?.ClassJob.IsValid == true
+            ? localPlayer.ClassJob.RowId
+            : 0;
+        var castActionId = actionManager == null ? 0 : actionManager->CastActionId;
+        var adjustedCastActionId = TryGetAdjustedCastActionId(
+            actionManager,
+            castActionId);
+        var automaticRecoveryBasicShotMetadataVerified =
+            automaticRecoveryShotCastMetadata.IsVerified(
+                localJobId,
+                castActionId);
 
         var boundary = requestValid && actionManager != null
             ? ClientActionAttemptBoundary.Capture(
@@ -119,7 +149,7 @@ internal sealed unsafe class HeldCastCancellationService
             GuardActive: guardActive,
             PrioritizedInputClaimed:
                 prioritizedInputClaimed &&
-                (inputFrame.IsConsumed || request?.IsAutomaticPurify == true),
+                (inputFrame.IsConsumed || request?.IsAutomaticRecovery == true),
             IntentOtherwiseReady: intentOtherwiseReady,
             Request: request,
             FrozenKeyStillDown: frozenKeyStillDown,
@@ -127,11 +157,17 @@ internal sealed unsafe class HeldCastCancellationService
             CurrentLocalPlayer: currentLocalIdentity,
             LocalPlayerAlive: IsAlive(localPlayer),
             LocalPlayerTargetable: localPlayer?.IsTargetable == true,
+            CurrentLocalJobId: localJobId,
             ResolvedHelperActionId: boundary.AdjustedActionId,
             HelperActionOffCooldown: boundary.Captured && boundary.IsActionOffCooldown,
             HelperActionResourcesReady: boundary.Captured && boundary.ResourceStatus == 0,
             LocalPlayerIsCasting: localPlayer?.IsCasting == true,
-            CastActionId: actionManager == null ? 0 : actionManager->CastActionId,
+            CastActionId: castActionId,
+            AdjustedCastActionId: adjustedCastActionId,
+            AutomaticRecoveryBasicShotCancellationEnabled:
+                automaticRecoveryBasicShotCancellationEnabled,
+            AutomaticRecoveryBasicShotMetadataVerified:
+                automaticRecoveryBasicShotMetadataVerified,
             ActionQueued: actionManager == null || actionManager->ActionQueued,
             AnimationLockSeconds: actionManager == null
                 ? float.NaN
@@ -160,6 +196,15 @@ internal sealed unsafe class HeldCastCancellationService
                     nativeStatus =
                         HeldCastCancellationNativeStatus.BlockedByOwnGuard;
                 }
+                else if (!AutomaticRecoveryCastBoundaryStillValid(
+                             request!.Value,
+                             localPlayer,
+                             actionManager,
+                             automaticRecoveryBasicShotCancellationEnabled))
+                {
+                    nativeStatus = HeldCastCancellationNativeStatus
+                        .BlockedByAutomaticRecoveryCastBoundary;
+                }
                 else
                 {
                     uiState->Hotbar.CancelCast();
@@ -184,6 +229,10 @@ internal sealed unsafe class HeldCastCancellationService
             request,
             lastRequestedIntent,
             observation.CastActionId,
+            observation.AdjustedCastActionId,
+            observation.CurrentLocalJobId,
+            automaticRecoveryBasicShotCancellationEnabled,
+            automaticRecoveryBasicShotMetadataVerified,
             nativeStatus,
             lastNativeStatus,
             nativeRequestCount,
@@ -239,6 +288,48 @@ internal sealed unsafe class HeldCastCancellationService
         localPlayer.CurrentHp > 0 &&
         localPlayer.MaxHp >= localPlayer.CurrentHp;
 
+    private bool AutomaticRecoveryCastBoundaryStillValid(
+        HeldCastCancellationRequest request,
+        IPlayerCharacter? localPlayer,
+        ActionManager* actionManager,
+        bool automaticRecoveryBasicShotCancellationEnabled)
+    {
+        if (!request.IsAutomaticRecovery) return true;
+        if (localPlayer?.ClassJob.IsValid != true || actionManager == null)
+            return false;
+
+        var localJobId = localPlayer.ClassJob.RowId;
+        var castActionId = actionManager->CastActionId;
+        var adjustedCastActionId = TryGetAdjustedCastActionId(
+            actionManager,
+            castActionId);
+        return automaticRecoveryBasicShotCancellationEnabled &&
+               localPlayer.IsCasting &&
+               automaticRecoveryShotCastMetadata.IsVerified(
+                   localJobId,
+                   castActionId) &&
+               AutomaticRecoveryShotCastRules
+                   .IsExactAllowedPairWithAdjustedIdentity(
+                       localJobId,
+                       castActionId,
+                       adjustedCastActionId);
+    }
+
+    private static uint TryGetAdjustedCastActionId(
+        ActionManager* actionManager,
+        uint castActionId)
+    {
+        if (actionManager == null || castActionId == 0) return 0;
+        try
+        {
+            return actionManager->GetAdjustedActionId(castActionId);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     private static bool IsExactVirtualKey(int keyCode)
     {
         if (keyCode <= 0) return false;
@@ -261,6 +352,8 @@ internal sealed unsafe class HeldCastCancellationService
                 "Native cast cancellation requested; awaiting a later clear-cast frame",
             HeldCastCancellationNativeStatus.BlockedByOwnGuard =>
                 "Native cast cancellation vetoed by a fresh exact own-Guard check",
+            HeldCastCancellationNativeStatus.BlockedByAutomaticRecoveryCastBoundary =>
+                "Automatic recovery cast cancellation vetoed by the final exact BRD/MCH basic-shot boundary",
             HeldCastCancellationNativeStatus.NativeBoundaryUnavailable =>
                 "Native cast-cancel boundary unavailable; no retry in this cast epoch",
             HeldCastCancellationNativeStatus.RequestFaulted =>

@@ -152,7 +152,9 @@ $logicalHotbarRepeatPolicySelfTestsPath = Join-Path $coreSelfTestRoot 'LogicalHo
 $physicalGameplayKeyRulesPath = Join-Path $coreRoot 'PhysicalGameplayKeyRules.cs'
 $physicalGameplayKeySelfTestsPath = Join-Path $coreSelfTestRoot 'PhysicalGameplayKeySelfTests.cs'
 $heldCastCancellationRulesPath = Join-Path $coreRoot 'HeldCastCancellationRules.cs'
+$automaticRecoveryShotCastRulesPath = Join-Path $coreRoot 'AutomaticRecoveryShotCastRules.cs'
 $heldCastCancellationServicePath = Join-Path $pluginServicesRoot 'HeldCastCancellationService.cs'
+$automaticRecoveryShotCastMetadataGuardPath = Join-Path $pluginServicesRoot 'AutomaticRecoveryShotCastMetadataGuard.cs'
 $heldCastCancellationSelfTestsPath = Join-Path $coreSelfTestRoot 'HeldCastCancellationSelfTests.cs'
 $astrologianHarmonicOrbisRulesPath = Join-Path $coreRoot 'AstrologianHarmonicOrbisRules.cs'
 $astrologianHarmonicOrbisSelfTestsPath = Join-Path $coreSelfTestRoot 'AstrologianHarmonicOrbisSelfTests.cs'
@@ -718,7 +720,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 549-test registry.
+# 551-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -738,11 +740,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 508 -or
+if ($staticIntegratedTestCount -ne 510 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 549 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 551 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -750,7 +752,7 @@ if ($staticIntegratedTestCount -ne 508 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 45 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 549-test combined Core registry.'
+    throw 'Schema 46 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 551-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -1306,8 +1308,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 45;') {
-    throw 'Schema 45 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 46;') {
+    throw 'Schema 46 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -3059,10 +3061,9 @@ if (($smartKardiaRules + $smartKardiaProbe + $smartKardiaMetadata) -match '\b(?:
 }
 
 # Smart Recuperate is one shared self-heal state machine with separate held and
-# keyless automatic consent. Automatic wins when both are enabled, freezes key
-# zero, never requests cast cancellation, and cannot start or retire the shared
-# physical-held observer. Both paths retain one exact self/context/action/health
-# intent and frame-local scheduler ownership only.
+# keyless automatic consent. Automatic wins when both are enabled and freezes
+# key zero. Its separately opted-in cast-cancel request is limited to a verified
+# BRD/MCH basic shot and cannot start or retire the shared physical observer.
 $smartRecuperateRules = Read-RequiredSource $smartRecuperateRulesPath 'Smart Recuperate rules'
 $normalizedSmartRecuperateRules = $smartRecuperateRules -replace '\s+', ' '
 $smartRecuperateProbe = Read-RequiredSource $smartRecuperateProbePath 'Smart Recuperate runtime probe'
@@ -3147,6 +3148,8 @@ Assert-Literals $smartRecuperateProbe @(
     'if (inputClaimed) inputFrame.Consume();',
     'bool heldModeEnabled,',
     'bool automaticModeEnabled,',
+    'bool automaticRecoveryBasicShotCancellationEnabled,',
+    'bool automaticRecoveryBasicShotMetadataVerified,',
     'HeldModeEnabled: effectiveHeldModeEnabled,',
     'AutomaticModeEnabled: effectiveAutomaticModeEnabled',
     'intent.IsAutomatic ? 0 : intent.FrozenKeyCode,',
@@ -3167,6 +3170,18 @@ Assert-Literals $smartRecuperateProbe @(
     'Recuperate waiting without spending retry budget'
 ) 'Shared-policy Smart Recuperate runtime'
 Assert-Literals $smartRecuperateProbe @(
+    '(intent.IsAutomatic &&',
+    '!automaticRecoveryBasicShotCancellationEnabled ||',
+    '!automaticRecoveryBasicShotMetadataVerified',
+    'HasExactAutomaticRecoveryBasicShotCastBoundary(localPlayer)',
+    'AutomaticRecoveryShotCastRules',
+    '.IsExactAllowedPairWithAdjustedIdentity(',
+    'intent.IsAutomatic ? 0 : intent.FrozenKeyCode,',
+    'intent.IsAutomatic ||',
+    'HeldCastCancellationHelperKind.SmartRecuperate,',
+    'intent.HealthEventToken);'
+) 'Automatic Recuperate exact keyless BRD/MCH cast-cancel request boundary'
+Assert-Literals $smartRecuperateProbe @(
     'var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(',
     'NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(',
     'var effectiveHeldModeEnabled = heldModeEnabled;',
@@ -3184,11 +3199,11 @@ Assert-Literals $smartRecuperateProbe @(
     'NinjaShukuchiStealthGate.IsActive('
 ) 'Ninja Hidden blocks both Recuperate modes without erasing duplicate-safety latches, while automatic mode additionally fails closed on unverifiable NIN metadata'
 if ([regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.IsActive\s*\(').Count -ne 3 -or
-    [regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.ShouldSuppressAutomaticRecovery\s*\(').Count -ne 2) {
-    throw 'Recuperate must check exact Hidden at observation, held cast-cancel, and final held dispatch, plus the fail-closed automatic NIN gate at observation and final automatic dispatch.'
+    [regex]::Matches($smartRecuperateProbe, '\bNinjaShukuchiStealthGate\.ShouldSuppressAutomaticRecovery\s*\(').Count -ne 3) {
+    throw 'Recuperate must check exact Hidden at observation, cast-cancel construction, and final dispatch for both held and automatic consent.'
 }
 if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.ShouldConsumeInputGeneration; if \(inputClaimed\) inputFrame\.Consume\(\);.*?if \(decision\.ShouldDispatch && decision\.Intent is \{ \} intent\).*?TryUseRecuperate' -or
-    $normalizedSmartRecuperateProbe -notmatch 'private HeldCastCancellationRequest\? BuildCastCancellationRequest\(.*?currentState\.Intent is not \{ IsValid: true \} intent \|\| intent\.IsAutomatic \|\|.*?return null;.*?return new HeldCastCancellationRequest\(' -or
+    $normalizedSmartRecuperateProbe -notmatch 'private HeldCastCancellationRequest\? BuildCastCancellationRequest\(.*?currentState\.Intent is not \{ IsValid: true \} intent \|\| \(intent\.IsAutomatic && \(!automaticRecoveryBasicShotCancellationEnabled \|\| !automaticRecoveryBasicShotMetadataVerified\)\).*?\(intent\.IsAutomatic && !HasExactAutomaticRecoveryBasicShotCastBoundary\(localPlayer\)\).*?SmartRecuperateRules\.CanUseFrozenIntent\(.*?intent\.IsAutomatic \? 0 : intent\.FrozenKeyCode, intent\.IsAutomatic \|\| inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)intent\.FrozenKeyCode\).*?return new HeldCastCancellationRequest\(' -or
     $normalizedSmartRecuperateProbe -notmatch 'if \(effectiveAutomaticModeEnabled\).*?inputProbeSucceeded = TryGetTextInputState\(out textInputActive\);.*?if \(!inputProbeSucceeded\) textInputActive = true;' -or
     $normalizedSmartRecuperateProbe -notmatch 'var textInputActive = intent\.IsAutomatic \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive;' -or
     $normalizedSmartRecuperateRules -notmatch 'Context is SupportedPvPContext\.CrystallineConflict or SupportedPvPContext\.WolvesDen' -or
@@ -3200,7 +3215,7 @@ if ($normalizedSmartRecuperateProbe -notmatch 'var inputClaimed = decision\.Shou
     [regex]::Matches($smartRecuperateProbe, '\bClientActionAttemptBoundaryRules\.Classify\s*\(').Count -ne 1 -or
     [regex]::Matches($smartRecuperateProbe, '\binputFrame\.Consume\s*\(').Count -ne 1 -or
     $smartRecuperateProbe -match '\b(?:ITargetManager|TargetManager|SetTarget|Hook<|HookFromAddress|QueueAction|PendingDispatch)\b|\.(Target|FocusTarget|SoftTarget|MouseOverTarget|GPoseTarget)\s*=') {
-    throw 'Smart Recuperate must freeze distinct held/automatic identities, give automatic consent key zero, reject automatic cast-cancel, fail closed on text input, claim only its current scheduler frame, and issue one exact frozen self-GOID boundary with no retarget, alternate, or replay.'
+    throw 'Smart Recuperate must freeze distinct held/automatic identities, give automatic consent key zero, limit its optional cast-cancel to the exact verified BRD/MCH shot, fail closed on text input, claim only its current scheduler frame, and issue one exact frozen self-GOID boundary with no retarget, alternate, or replay.'
 }
 $physicalObserverIntegration = [regex]::Match(
     $normalizedAutomaticRecoveryPersonalStatus,
@@ -4170,8 +4185,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 508) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 508-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 510) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 510-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -4539,8 +4554,8 @@ Assert-Literals $heldCastCancellationForAstrologian @(
     'finalOwnGuardActiveOrPropagating',
     'Native cast cancellation vetoed by a fresh exact own-Guard check'
 ) 'Fresh exact own-Guard veto immediately before held cast cancellation'
-if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
-    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?if \(finalOwnGuardActiveOrPropagating\( request!\.Value\.LocalPlayer\)\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
+if ($normalizedHeldCastCancellationForAstrologian -notmatch 'HeldCastCancellationService\( IPluginLog log, Func<TargetPressureActorIdentity, bool> finalOwnGuardActiveOrPropagating, AutomaticRecoveryShotCastMetadataValidation automaticRecoveryShotCastMetadata\).*?this\.finalOwnGuardActiveOrPropagating = finalOwnGuardActiveOrPropagating \?\? throw new ArgumentNullException' -or
+    $normalizedHeldCastCancellationForAstrologian -notmatch 'if \(decision\.ShouldInvokeNative\).*?if \(finalOwnGuardActiveOrPropagating\( request!\.Value\.LocalPlayer\)\).*?HeldCastCancellationNativeStatus\.BlockedByOwnGuard;.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else.*?uiState->Hotbar\.CancelCast\(\);.*?HeldCastCancellationNativeStatus\.Requested;' -or
     [regex]::Matches($heldCastCancellationForAstrologian, '\bCancelCast\s*\(').Count -ne 1) {
     throw 'Held cast cancellation must inject one fail-closed exact-own-Guard dependency and call the sole native CancelCast boundary only after its fresh veto passes.'
 }
@@ -4738,14 +4753,17 @@ Assert-Literals $coreSelfTestProgramForGuardian @(
 ) 'Held-before-fresh helper regression registrations'
 
 # One central coordinator may request the game's native cast cancellation for
-# only the highest-priority otherwise-ready exact intent. The sole keyless shape
-# is exact automatic self-Purify 29056; every other producer retains its frozen
-# physical key. The void native boundary rearms only after both cast signals clear.
+# only the highest-priority otherwise-ready exact intent. Exact automatic
+# Purify 29056 and automatic Recuperate 29711 are the only keyless shapes, and
+# their separate default-off permission is limited to two verified BRD/MCH
+# basic-shot casts. The void boundary rearms only after both cast signals clear.
 $heldCastCancellationRules = Read-RequiredSource $heldCastCancellationRulesPath 'Held cast cancellation rules'
 $normalizedHeldCastCancellationRules = $heldCastCancellationRules -replace '\s+', ' '
 $heldCastCancellationService = Read-RequiredSource $heldCastCancellationServicePath 'Held cast cancellation native service'
 $normalizedHeldCastCancellationService = $heldCastCancellationService -replace '\s+', ' '
 $heldCastCancellationSelfTests = Read-RequiredSource $heldCastCancellationSelfTestsPath 'Held cast cancellation self-tests'
+$automaticRecoveryShotCastRules = Read-RequiredSource $automaticRecoveryShotCastRulesPath 'Automatic recovery basic-shot allowlist'
+$automaticRecoveryShotCastMetadataGuard = Read-RequiredSource $automaticRecoveryShotCastMetadataGuardPath 'Automatic recovery basic-shot metadata guard'
 Assert-Literals $heldCastCancellationRules @(
     'public enum HeldCastCancellationHelperKind : byte',
     'None = 0,',
@@ -4772,25 +4790,60 @@ Assert-Literals $heldCastCancellationRules @(
     'HelperKind == HeldCastCancellationHelperKind.Purify &&',
     'HelperActionId == HeldCastCancellationRules.AutomaticPurifyActionId &&',
     'FrozenKeyCode == 0;',
-    'public bool RequiresFrozenKey => !IsAutomaticPurify;',
+    'public bool IsAutomaticRecuperate =>',
+    'HelperKind == HeldCastCancellationHelperKind.SmartRecuperate &&',
+    'HelperActionId == HeldCastCancellationRules.AutomaticRecuperateActionId &&',
+    'public bool IsAutomaticRecovery =>',
+    'IsAutomaticPurify || IsAutomaticRecuperate;',
+    'public bool RequiresFrozenKey => !IsAutomaticRecovery;',
     'public const uint AutomaticPurifyActionId = 29_056;',
+    'public const uint AutomaticRecuperateActionId = 29_711;',
     'LocalPlayer.IsValid',
     'Target.IsValid',
-    '(IsAutomaticPurify || FrozenKeyCode > 0)',
+    '(IsAutomaticRecovery || FrozenKeyCode > 0)',
     'IntentEpochToken != 0',
     'public const float MaximumCancellationAnimationLockSeconds = 0.050f;',
     'HeldCastCancellationDecisionReason.CastSignalChangedWithoutClear',
     'HeldCastCancellationDecisionReason.LocalPlayerChanged',
+    'HeldCastCancellationDecisionReason',
+    '.AutomaticRecoveryCastNotAllowed;',
     'next = next with { CancellationRequested = true };'
-) 'Exact fourteen-kind cast cancellation request, keyless-only automatic Purify exception, and once-per-cast state'
+) 'Exact cast cancellation request, keyless automatic recovery identities, exact basic-shot gate, and once-per-cast state'
 if ($normalizedHeldCastCancellationRules -notmatch 'var anyCastSignal = observation\.LocalPlayerIsCasting \|\| observation\.CastActionId != 0; if \(!anyCastSignal\).*?CastEpochActive = false, CancellationRequested = false, CastSignalMismatch = false, ObservedCastActionId = 0, ObservedLocalPlayer = default, LocalPlayerIdentityMismatch = false,' -or
-    $normalizedHeldCastCancellationRules -notmatch 'public bool IsAutomaticPurify => HelperKind == HeldCastCancellationHelperKind\.Purify && HelperActionId == HeldCastCancellationRules\.AutomaticPurifyActionId && FrozenKeyCode == 0; public bool RequiresFrozenKey => !IsAutomaticPurify; public bool IsValid =>.*?\(IsAutomaticPurify \|\| FrozenKeyCode > 0\)' -or
+    $normalizedHeldCastCancellationRules -notmatch 'public bool IsAutomaticPurify => HelperKind == HeldCastCancellationHelperKind\.Purify && HelperActionId == HeldCastCancellationRules\.AutomaticPurifyActionId && FrozenKeyCode == 0; public bool IsAutomaticRecuperate => HelperKind == HeldCastCancellationHelperKind\.SmartRecuperate && HelperActionId == HeldCastCancellationRules\.AutomaticRecuperateActionId && FrozenKeyCode == 0; public bool IsAutomaticRecovery => IsAutomaticPurify \|\| IsAutomaticRecuperate; public bool RequiresFrozenKey => !IsAutomaticRecovery; public bool IsValid =>.*?\(IsAutomaticRecovery \|\| FrozenKeyCode > 0\)' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(state\.ObservedCastActionId != 0 && observation\.CastActionId != 0 && state\.ObservedCastActionId != observation\.CastActionId\).*?CastSignalMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'else if \(next\.ObservedLocalPlayer != observation\.CurrentLocalPlayer\).*?LocalPlayerIdentityMismatch = true' -or
     $normalizedHeldCastCancellationRules -notmatch 'if \(next\.CancellationRequested\) return Waiting\(next, HeldCastCancellationDecisionReason\.AlreadyRequested\);.*?if \(next\.CastSignalMismatch\).*?CastSignalChangedWithoutClear.*?if \(next\.LocalPlayerIdentityMismatch\).*?LocalPlayerChanged' -or
-    $normalizedHeldCastCancellationRules -notmatch 'if \(observation\.HardReset\).*?if \(!observation\.FeatureEnabled\).*?if \(!observation\.SupportedContext\).*?if \(observation\.TextInputActive\).*?if \(observation\.GuardActive\).*?if \(!observation\.PrioritizedInputClaimed\).*?if \(observation\.Request is not \{ IsValid: true \} request\).*?if \(!observation\.IntentOtherwiseReady\).*?if \(!observation\.FrozenKeyStillDown\).*?if \(!observation\.LocalPlayerIdentityValid.*?if \(request\.LocalPlayer != observation\.CurrentLocalPlayer\).*?if \(!observation\.LocalPlayerAlive\).*?if \(!observation\.LocalPlayerTargetable\).*?if \(observation\.ResolvedHelperActionId != request\.HelperActionId\).*?if \(!observation\.HelperActionOffCooldown\).*?if \(!observation\.HelperActionResourcesReady\).*?if \(!observation\.LocalPlayerIsCasting \|\| observation\.CastActionId == 0\).*?if \(observation\.ActionQueued\).*?if \(!float\.IsFinite\(observation\.AnimationLockSeconds\) \|\| observation\.AnimationLockSeconds < 0f\).*?if \(observation\.AnimationLockSeconds > MaximumCancellationAnimationLockSeconds\)') {
+    $normalizedHeldCastCancellationRules -notmatch 'if \(observation\.HardReset\).*?if \(!observation\.FeatureEnabled\).*?if \(!observation\.SupportedContext\).*?if \(observation\.TextInputActive\).*?if \(observation\.GuardActive\).*?if \(!observation\.PrioritizedInputClaimed\).*?if \(observation\.Request is not \{ IsValid: true \} request\).*?if \(!observation\.IntentOtherwiseReady\).*?if \(!observation\.FrozenKeyStillDown\).*?if \(!observation\.LocalPlayerIdentityValid.*?if \(request\.LocalPlayer != observation\.CurrentLocalPlayer\).*?if \(!observation\.LocalPlayerAlive\).*?if \(!observation\.LocalPlayerTargetable\).*?if \(observation\.ResolvedHelperActionId != request\.HelperActionId\).*?if \(!observation\.HelperActionOffCooldown\).*?if \(!observation\.HelperActionResourcesReady\).*?if \(!observation\.LocalPlayerIsCasting \|\| observation\.CastActionId == 0\).*?if \(request\.IsAutomaticRecovery && !AutomaticRecoveryCastIsAllowed\(request, observation\)\).*?AutomaticRecoveryCastNotAllowed.*?if \(observation\.ActionQueued\).*?if \(!float\.IsFinite\(observation\.AnimationLockSeconds\) \|\| observation\.AnimationLockSeconds < 0f\).*?if \(observation\.AnimationLockSeconds > MaximumCancellationAnimationLockSeconds\)') {
     throw 'Central cast cancellation must fail closed across toggle, context, text, Guard, priority/claim, exact request/key/local/action/readiness/resources, dual cast signals, queue, finite lock, identity drift, and cast-ID drift.'
 }
+
+Assert-Literals $automaticRecoveryShotCastRules @(
+    'public const uint BardJobId = 23;',
+    'public const uint MachinistJobId = 31;',
+    'public const uint BardPowerfulShotActionId = 29_391;',
+    'public const uint MachinistBlastChargeActionId = 29_402;',
+    'public const uint MachinistBlazingShotActionId = 41_468;',
+    'public const uint MachinistLegacyHeatBlastActionId = 29_403;',
+    'adjustedRawActionId == castActionId &&',
+    'IsExactAllowedPair(jobId, castActionId);'
+) 'Exact BRD/MCH automatic-recovery basic-shot allowlist and instant exclusions'
+Assert-Literals $automaticRecoveryShotCastMetadataGuard @(
+    'AutomaticRecoveryShotCastMetadataValidation(',
+    'bool BardPowerfulShotVerified,',
+    'bool MachinistBlastChargeVerified)',
+    'private const ushort ExpectedCast100ms = 15;',
+    'private const ushort ExpectedRecast100ms = 25;',
+    'private const byte ExpectedCooldownGroup = 58;',
+    'ClientLanguage.English',
+    'action.IsPvP',
+    'action.IsPlayerAction',
+    'action.ClassJob.RowId == expected.JobId',
+    'action.CanTargetHostile',
+    '!action.TargetArea',
+    'action.RequiresLineOfSight',
+    'return AutomaticRecoveryShotCastMetadataValidation.None;'
+) 'Per-pair fail-closed current-client basic-shot metadata proof'
 
 Assert-Literals $heldCastCancellationService @(
     'using FFXIVClientStructs.FFXIV.Client.Game.UI;',
@@ -4800,25 +4853,30 @@ Assert-Literals $heldCastCancellationService @(
     'HeldCastCancellationNativeStatus LastNativeStatus,',
     'private HeldCastCancellationRequest? lastRequestedIntent;',
     'private HeldCastCancellationNativeStatus lastNativeStatus;',
-    'var automaticPurifyRequest =',
-    'request is { IsValid: true, IsAutomaticPurify: true };',
-    'automaticPurifyRequest ||',
-    'var textInputActive = automaticPurifyRequest',
+    'var automaticRecoveryRequest =',
+    'request is { IsValid: true, IsAutomaticRecovery: true };',
+    'automaticRecoveryRequest ||',
+    'var textInputActive = automaticRecoveryRequest',
     '? !TryGetTextInputState(out var currentTextInputActive) ||',
     'prioritizedInputClaimed &&',
-    '(inputFrame.IsConsumed || request?.IsAutomaticPurify == true)',
+    '(inputFrame.IsConsumed || request?.IsAutomaticRecovery == true)',
     'inputFrame.IsGameplayKeyPhysicallyDown(',
     'ClientActionAttemptBoundary.Capture(',
     'ResolvedHelperActionId: boundary.AdjustedActionId',
     'HelperActionOffCooldown: boundary.Captured && boundary.IsActionOffCooldown',
     'HelperActionResourcesReady: boundary.Captured && boundary.ResourceStatus == 0',
     'LocalPlayerIsCasting: localPlayer?.IsCasting == true',
-    'CastActionId: actionManager == null ? 0 : actionManager->CastActionId',
+    'CastActionId: castActionId',
+    'AdjustedCastActionId: adjustedCastActionId',
+    'AutomaticRecoveryBasicShotCancellationEnabled:',
+    'AutomaticRecoveryBasicShotMetadataVerified:',
     'ActionQueued: actionManager == null || actionManager->ActionQueued',
     'state = decision.NextState;',
     'if (decision.ShouldInvokeNative)',
     'lastRequestedIntent = request;',
     'var uiState = UIState.Instance();',
+    'AutomaticRecoveryCastBoundaryStillValid(',
+    'BlockedByAutomaticRecoveryCastBoundary',
     'uiState->Hotbar.CancelCast();',
     'lastNativeStatus = nativeStatus;',
     'request,',
@@ -4827,11 +4885,12 @@ Assert-Literals $heldCastCancellationService @(
     'lastNativeStatus,',
     'localPlayer.CurrentHp > 0 &&',
     'localPlayer.MaxHp >= localPlayer.CurrentHp;'
-) 'Central void native cast-cancel boundary and truthful persistent diagnostics'
-if ($normalizedHeldCastCancellationService -notmatch 'var automaticPurifyRequest = request is \{ IsValid: true, IsAutomaticPurify: true \}; var textInputActive = automaticPurifyRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticPurifyRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
-    $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticPurify == true\)' -or
-    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
-    $normalizedHeldCastCancellationService -notmatch 'new HeldCastCancellationSnapshot\( decision\.Kind, decision\.Reason, decision\.NextState\.LastCastEpochToken, request, lastRequestedIntent, observation\.CastActionId, nativeStatus, lastNativeStatus, nativeRequestCount, nativeFaultCount,' -or
+) 'Central void native cast-cancel boundary, exact automatic final recheck, and truthful diagnostics'
+if ($normalizedHeldCastCancellationService -notmatch 'var automaticRecoveryRequest = request is \{ IsValid: true, IsAutomaticRecovery: true \}; var textInputActive = automaticRecoveryRequest \? !TryGetTextInputState\(out var currentTextInputActive\) \|\| currentTextInputActive : inputFrame\.Snapshot\.IsTextInputActive; var frozenKeyStillDown = requestValid && \(automaticRecoveryRequest \|\| \(IsExactVirtualKey\(request!\.Value\.FrozenKeyCode\) && inputFrame\.IsGameplayKeyPhysicallyDown\( \(VirtualKey\)request\.Value\.FrozenKeyCode\)\)\);' -or
+    $normalizedHeldCastCancellationService -notmatch 'PrioritizedInputClaimed: prioritizedInputClaimed && \(inputFrame\.IsConsumed \|\| request\?\.IsAutomaticRecovery == true\)' -or
+    $normalizedHeldCastCancellationService -notmatch 'var decision = HeldCastCancellationRules\.Observe\(state, observation\);.*?state = decision\.NextState;.*?if \(decision\.ShouldInvokeNative\).*?lastRequestedIntent = request;.*?var uiState = UIState\.Instance\(\);.*?if \(uiState == null\).*?NativeBoundaryUnavailable.*?else if \(finalOwnGuardActiveOrPropagating.*?BlockedByOwnGuard.*?else if \(!AutomaticRecoveryCastBoundaryStillValid\(.*?BlockedByAutomaticRecoveryCastBoundary.*?else \{ uiState->Hotbar\.CancelCast\(\); nativeStatus = HeldCastCancellationNativeStatus\.Requested; nativeRequestCount\+\+; \}.*?catch \(Exception exception\).*?RequestFaulted.*?lastNativeStatus = nativeStatus;' -or
+    $normalizedHeldCastCancellationService -notmatch 'private bool AutomaticRecoveryCastBoundaryStillValid\(.*?if \(!request\.IsAutomaticRecovery\) return true;.*?automaticRecoveryBasicShotCancellationEnabled && localPlayer\.IsCasting && automaticRecoveryShotCastMetadata\.IsVerified\( localJobId, castActionId\) && AutomaticRecoveryShotCastRules \.IsExactAllowedPairWithAdjustedIdentity\( localJobId, castActionId, adjustedCastActionId\);' -or
+    $normalizedHeldCastCancellationService -notmatch 'new HeldCastCancellationSnapshot\( decision\.Kind, decision\.Reason, decision\.NextState\.LastCastEpochToken, request, lastRequestedIntent, observation\.CastActionId, observation\.AdjustedCastActionId, observation\.CurrentLocalJobId, automaticRecoveryBasicShotCancellationEnabled, automaticRecoveryBasicShotMetadataVerified, nativeStatus, lastNativeStatus, nativeRequestCount, nativeFaultCount,' -or
     $heldCastCancellationService -match '\b(UseAction|UseActionLocation|SendInput|keybd_event|mouse_event|ExecuteCommand|QueueAction|ClearActionQueue|Jump|MovePlayer)\s*\(|VirtualKey\.(?:ESCAPE|SPACE|W|A|S|D)\b|->(?:CastActionId|AnimationLock|ActionQueued|QueuedActionId|QueuedTargetId)\s*=(?!=|>)') {
     throw 'The cast-cancel service must latch before exactly one void Hotbar request, keep current versus last-request diagnostics separate, and never use/inject an action, Escape, movement, jump, queue write, or cast-field mutation.'
 }
@@ -4855,16 +4914,18 @@ $heldCastCancellationTestMethods = @(
     'OnlyConsistentClearRearmsAndSignalDriftFailsClosed',
     'EveryCentralSafetyGateFailsClosed',
     'RequestIdentityAndLockBoundaryAreExact',
-    'OnlyExactAutomaticPurifyMayBeKeyless',
+    'OnlyExactAutomaticRecoveriesMayBeKeyless',
+    'AutomaticRecoveryBasicShotPolicyIsExact',
+    'AutomaticRecoveryBasicShotCatalogIsPinned',
     'TerminalRequestSurvivesLaterGateChanges'
 )
 foreach ($method in $heldCastCancellationTestMethods) {
     Assert-Literals $heldCastCancellationSelfTests @("internal static void $method()") "Held cast cancellation self-test $method"
     Assert-Literals $coreSelfTestProgramForGuardian @("HeldCastCancellationSelfTests.$method") "Held cast cancellation test registration $method"
 }
-if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 8 -or
-    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 8) {
-    throw 'All eight canonical-order, once-per-cast, dual-clear, drift-quarantine, exact keyless-Purify boundary, and central-gate cast-cancellation tests must remain registered exactly once.'
+if ([regex]::Matches($heldCastCancellationSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 10 -or
+    [regex]::Matches($coreSelfTestProgramForGuardian, '\bHeldCastCancellationSelfTests\.\w+').Count -ne 10) {
+    throw 'All ten canonical-order, once-per-cast, dual-clear, drift-quarantine, exact keyless-recovery, BRD/MCH allowlist, and central-gate cast-cancellation tests must remain registered exactly once.'
 }
 
 $castRequestProducers = @(
@@ -4925,11 +4986,14 @@ Assert-Literals $heldCastPersonalStatus @(
     'cast-cancel request owns this frame; the normal UseAction boundary is',
     'deliberately reached no earlier than a later clear-cast frame.',
     'configuration.AllowHeldHelpersToCancelOwnCast',
+    'configuration.AllowAutomaticRecoveryToCancelBasicShotCasts',
+    '{ IsAutomaticRecovery: true } =>',
+    '{ RequiresFrozenKey: true } =>',
     'prioritizedInputClaimed: castCancellationRequest is { IsValid: true }',
     'intentOtherwiseReady: castCancellationRequest is { IsValid: true }',
     'request: castCancellationRequest',
     'inputClaimed && request is { IsValid: true }'
-) 'Canonical one-request-per-frame held cast cancellation selection'
+) 'Canonical one-request-per-frame cast cancellation selection with independent held and automatic permissions'
 foreach ($excludedPath in @(
     $viperSerpentTailProbePath,
     $gunbreakerContinuationProbePath,
@@ -4951,8 +5015,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 45;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 45 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 46 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 # Schema 45 introduces two genuinely automatic self-actions. Both are plain
@@ -4963,14 +5027,27 @@ Assert-Literals $castConfiguration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 45;'
+    'Version = 46;'
 ) 'Schema-45 default-off automatic Purify and Recuperate configuration'
 if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \} Version = 45;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 45;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
-    throw 'Schema 45 must keep automatic Purify and automatic Recuperate off for fresh, migrated, and reset configurations without changing their separate held options.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 46;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 46 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
+}
+
+Assert-Literals $castConfiguration @(
+    'public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }',
+    'if (Version < 46)',
+    'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
+    'Version = 46;'
+) 'Schema-46 separate default-off automatic recovery basic-shot cast-cancel permission'
+if ($castConfiguration -match '(?m)^\s*public bool AllowAutomaticRecoveryToCancelBasicShotCasts \{ get; set; \}\s*=\s*true;' -or
+    [regex]::Matches($castConfiguration, '\bAllowAutomaticRecoveryToCancelBasicShotCasts\s*=\s*false\s*;').Count -ne 2 -or
+    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \} Version = 46;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 46;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
+    throw 'Schema 46 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -4987,9 +5064,19 @@ Assert-Literals $settingsActions @(
     'changes a target',
     'combines cancel and UseAction in the same framework frame',
     'BRD Powerful Shot / MCH Blast Charge',
-    'current-patch in-game behavior still needs live testing'
+    'current-patch in-game behavior still needs live testing',
+    'Allow Auto Purify / Recuperate to cancel verified BRD/MCH basic shots',
+    'configuration.AllowAutomaticRecoveryToCancelBasicShotCasts',
+    'Default off and independent from the held-helper option.',
+    'only an exact BRD Powerful Shot (29391) or MCH Blast Charge (29402)',
+    'current job, active cast, unchanged adjusted action, and startup metadata must all match',
+    'Cancellation owns one framework frame'
 ) 'Default-off held cast cancellation warning copy'
 Assert-Literals $settingsDiagnostics @(
+    'held-enabled={configuration.AllowHeldHelpersToCancelOwnCast}',
+    'auto-basic-shot-enabled={configuration.AllowAutomaticRecoveryToCancelBasicShotCasts}',
+    'job/cast/adjusted={castCancellation.LocalJobId}/{castCancellation.CastActionId}/',
+    'basic-shot-metadata=',
     'current-helper={castCancellation.Request?.HelperKind ?? HeldCastCancellationHelperKind.None}',
     'last-helper={castCancellation.LastRequestedIntent?.HelperKind ?? HeldCastCancellationHelperKind.None}',
     'last-action={castCancellation.LastRequestedIntent?.HelperActionId ?? 0}',
@@ -9358,6 +9445,10 @@ if ($normalizedLimitBreakNotificationRenderer -notmatch 'if \(options\.ShowEnemy
     throw 'The DRG danger banner and self-activation banner must render independently in the same frame, with the self banner moved below an already-drawn danger banner.'
 }
 Assert-Literals $pluginSource @(
+    'cast-cancel[held-enabled=',
+    'auto-basic-shot-enabled=',
+    'job/cast/adjusted={castCancellation.LocalJobId}/',
+    'basic-shot-metadata=',
     'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite)),',
     'configuration.ShowPersonalWarnings && configuration.WarnMarksmanSpite,',
     'configuration.MchLimitBreakSoundEnabled,',
@@ -9926,17 +10017,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.40.0.0</Version>',
-    '<AssemblyVersion>0.40.0.0</AssemblyVersion>',
-    '<FileVersion>0.40.0.0</FileVersion>'
-) 'v0.40.0.0 project version'
+    '<Version>0.40.0.1</Version>',
+    '<AssemblyVersion>0.40.0.1</AssemblyVersion>',
+    '<FileVersion>0.40.0.1</FileVersion>'
+) 'v0.40.0.1 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.40.0.0";',
-    'New default-off Auto Purify reacts to the exact enabled CC status without needing a fresh or held gameplay key.',
-    'Auto Purify can cancel one current cast when that is the sole remaining block, then rechecks and sends Purify only on a later clear frame.',
-    'New default-off Auto Recuperate uses the existing 16,000 missing HP / 2,000 MP boundary without a key. It waits for casts instead of cancelling them.',
-    'Both automatic helpers preserve Guard and NIN Shukuchi stealth safety. Legacy held modes remain separate; current-client acceptance still needs in-game confirmation.'
-) 'v0.40.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.40.0.1";',
+    'A new default-off automatic cast-cancel permission is shared only by Auto Purify and Auto Recuperate; the generic held-helper toggle remains independent.',
+    'Only metadata-verified BRD Powerful Shot (job 23 / action 29391) or MCH Blast Charge (job 31 / action 29402), with unchanged cast and adjusted identity, may be sacrificed. Every other or uncertain cast waits.',
+    'Cancellation owns one framework frame; the automatic helper fully revalidates on a later clear-cast frame before requesting Purify or Recuperate.',
+    'Automated and release checks cover this contract, but current-client BRD/MCH cancellation and final action acceptance still need in-game confirmation.'
+) 'v0.40.0.1 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -9957,19 +10048,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.40.0.0 plugin manifest metadata'
+) 'v0.40.0.1 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.40.0.0"',
-    'Added separate default-off Auto Purify and Auto Recuperate modes.',
-    'Auto Purify reacts to an exact enabled live CC without a gameplay key and may cancel one current cast before revalidating on a later clear frame.',
-    'Auto Recuperate uses the existing 16,000-missing-HP / 2,000-MP boundary without a key but never cancels casts.',
-    'Both preserve Guard and NIN Hidden safety, share bounded one-episode latches with their legacy held modes, and do not retire the physical hold generation.',
-    'Configuration schema 45; all 549 Core tests and release gates pass',
+    '"AssemblyVersion": "0.40.0.1"',
+    'Added one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate;',
+    'exact metadata-verified BRD job 23 / Powerful Shot 29391 or MCH job 31 / Blast Charge 29402',
+    'live job, active cast, and adjusted raw-action identity all match.',
+    'Every other, transformed, or uncertain cast waits.',
+    'Configuration schema 46; all 551 Core tests and release gates pass',
     '"IsHide": false'
-) 'v0.40.0.0 custom-repository metadata'
+) 'v0.40.0.1 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10017,11 +10108,16 @@ Assert-Literals $normalizedPrivacy @(
     'The dedicated exact command scope releases ownership only for the matching NIN location action or reviewed directional standard action',
     'The PvP range helper reads only the local player''s current job, position, and hitbox radius plus the game''s world-to-screen projection.',
     'does not scan other actors, retain movement history, raycast terrain, change a target, or issue/suppress an action.',
-    'Automatic Purify is a keyless exception to the generic cast-cancel toggle only for exact action `29056` and one exact enabled status/self episode.',
-    'Automatic Recuperate never requests cast cancellation.',
+    '## Experimental automatic basic-shot cast cancellation',
+    'Their sole cast-cancel route is a second persisted permission which is independently disabled by default.',
+    '`23` / Powerful Shot `29391` or exact local MCH job `31` / Blast Charge `29402`.',
+    'the active cast plus adjusted raw-action identity must still equal that same row.',
+    'instant transformations such as MCH Blazing Shot `41468`, the legacy Heat Blast row `29403`, and every other uncertainty fail closed',
+    'The relevant keyless Purify `29056` or Recuperate `29711` intent must already be otherwise ready.',
+    'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
-    'Configuration schema 45 is current.',
-    'It adds separate automatic Purify and Recuperate settings and initializes both off for every upgrade and Reset Defaults.',
+    'Configuration schema 46 is current.',
+    'It adds the separate automatic basic-shot cast-cancel permission and initializes it off for every upgrade and Reset Defaults',
     'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
     'exact Blackblood status-row presence',
     'its own opt-in reuses the complete Smart Action ranking and protection snapshot without changing a visible target.',
@@ -10036,9 +10132,12 @@ Assert-Literals $normalizedPrivacy @(
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.'
-) 'v0.40.0.0 automatic self-actions and retained safety/privacy disclosure'
+) 'v0.40.0.1 automatic basic-shot cancellation and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.40.0.0 adds separate default-off automatic Purify and Recuperate modes that need no gameplay key while preserving the legacy held helpers, exact Guard/NIN Hidden safety, and shared one-episode anti-duplicate state.',
+    'Version 0.40.0.1 adds one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.',
+    'It admits only metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 / Blast Charge `29402` when the live job, cast, and adjusted identity all remain exact;',
+    'The generic held-helper toggle stays independent, and a permitted automatic helper still revalidates only on a later clear-cast frame.',
+    'Version 0.40.0.0 added the separate default-off automatic Purify and Recuperate modes while preserving the legacy held helpers',
     'Version 0.39.0.2 repairs AST held Harmonischer Orbis and its same-target Zweifachzauber follow-up',
     'keeps non-NIN `/seitonbw` screen-back movement authoritative through ReAction''s camera-relative dash rewrite',
     'restores a compact one-card CC rotation view with an expandable six-map deck.',
@@ -10070,10 +10169,12 @@ Assert-Literals $normalizedReadme @(
     'Your own active or still-propagating Guard suppresses the entire sequence and is rechecked at the final action/cast-cancel boundaries',
     'Automatic mode reacts to the actually present exact status without a gameplay key;',
     'automatic mode does not retire its generation.',
-    'automatic Purify can request one native cast cancellation for that cast epoch and dispatch only on a later clear frame.',
-    'Automatic mode never cancels the current cast; it waits for a clear frame and rechecks whether healing is still required.',
-    'Automatic Purify is the one narrowly scoped keyless exception:',
-    'Automatic Recuperate is deliberately excluded and always waits for the current cast to end before rechecking its complete health/safety boundary.',
+    'Automatic Purify does not inherit the generic held-helper cast-cancel toggle.',
+    'Only the separate default-off automatic permission may request one cancellation, and only for exact metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 / Blast Charge `29402`',
+    'Automatic Recuperate normally waits for casting to end. Only the same separate default-off automatic permission described above may cancel an exact verified BRD Powerful Shot or MCH Blast Charge;',
+    'Automatic Purify and Automatic Recuperate never inherit the generic held-helper cast-cancel toggle.',
+    'Their sole cancellation route is the separate schema-46 default-off permission.',
+    'Cross-job pairs, missing or drifted metadata, changed cast signals, instant transformations such as MCH Blazing Shot `41468`, and every other uncertainty wait for a natural cast end.',
     'Automatic wins if both modes are enabled; it needs no gameplay key and does not retire the held generation.',
     'v0.35.0.3''s exact Guard-ignoring Smart Action support',
     'v0.35.0.2''s Panic Shukuchi repair and Ninja Hidden protection',
@@ -10104,8 +10205,9 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 45 is current',
-    'For the current source, the exact 549-test Core registry and source checks pin configuration schema 45',
+    'Configuration schema 46 is current',
+    'For the current source, the exact 551-test Core registry and source checks pin configuration schema 46',
+    'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
     'caller-proven target protection safety',
@@ -10116,8 +10218,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.40.0.0 current README release and safety contract'
+) 'v0.40.0.1 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.40.0.1',
+    'Added one separate default-off **automatic basic-shot cast cancellation** permission shared only by Automatic Purify and Automatic Recuperate.',
+    'The generic held-helper cast-cancel toggle remains independent and cannot enable or widen either automatic path.',
+    '**BRD job 23 / Powerful Shot `29391`** or **MCH job 31 / Blast Charge `29402`** pair.',
+    'Startup English PvP metadata must verify the action row, and the live local job, active cast ID, and adjusted raw-action identity must still match that same row.',
+    'Instant MCH Blazing Shot `41468` and the legacy Heat Blast row `29403` are explicitly excluded.',
+    'Purify or Recuperate is never requested in that frame; only a later clear-cast frame may repeat the complete automatic helper preflight.',
+    'Configuration schema is `46`. Source build, all `551` Core tests, safety, package parity, and release verification are automated;',
     '## 0.40.0.0',
     'Added a separate default-off **Automatic Purify** mode.',
     'request Purify `29056` without a fresh or held gameplay key.',
@@ -10161,7 +10271,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.40.0.0 release notes and retained v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.40.0.1 release notes and retained v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -10288,7 +10398,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 45 is current.'
+    'Configuration schema 46 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -10417,7 +10527,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 45 is current'
+    'Configuration schema 46 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -10523,9 +10633,10 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 45 is current',
+    'Configuration schema 46 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
-    'held-action cast-cancellation test remains explicitly off for fresh, reset, and migrated configurations'
+    'generic held-action cast-cancellation test',
+    'schema-46 automatic basic-shot permission remain explicitly off for fresh, reset, and migrated configurations'
 ) 'v0.27.1.0 held cast cancellation privacy and persistent bounded diagnostics disclosure'
 Assert-Literals $normalizedReadme @(
     'The v0.30 line moved the optional harmful-action redirect to `/smartaction` (`/ssaction`) behind its own default-off setting and retired the unusable fixed Combat Frames runtime',
@@ -10536,7 +10647,7 @@ Assert-Literals $normalizedReadme @(
     'Binding never restarts that deadline',
     'no different key can inherit the frozen intent',
     '**Stable held-action leases:** Purify, AST held Near Help, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC',
-    '**Experimental held-action cast cancellation:** a separate default-off test',
+    '**Experimental cast cancellation:** the existing separate default-off held- helper test',
     'known cooldown/resource/cast/queue/full-animation-lock states spend no attempt',
     'only a clean explicit client rejection can retry the same frozen intent after 50 ms with eight calls maximum',
     'Client acceptance, exceptions, uncertain queue/sequence transitions, key release, context/job/ identity drift, and other ambiguity are terminal',
@@ -10892,7 +11003,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 45 is current',
+    'Configuration schema 46 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -10972,7 +11083,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 45 is current'
+    'Configuration schema 46 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -11042,7 +11153,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 45',
+    'public int Version { get; set; } = 46',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -11203,7 +11314,9 @@ Assert-Literals $configuration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 45',
+    'if (Version < 46)',
+    'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
+    'Version = 46',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -11230,7 +11343,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-45 default-off automatic Purify/Recuperate plus retained RDM Guard engage, Blackblood preservation, read-only rotation/range overlays, and legacy compatibility fields'
+) 'Schema-46 automatic recovery cast-cancel opt-in plus retained automatic Purify/Recuperate, RDM Guard engage, Blackblood preservation, read-only rotation/range overlays, and legacy compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -11314,8 +11427,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*45\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 45\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?Version = 45;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*46\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 46\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?Version = 46;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -11332,7 +11445,7 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*45\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableLocalCrystallineConflictMapStatisticsCapture\s*=\s*true\s*;').Count -ne 2 -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 45 must preserve every earlier explicit opt-in/migration, add default-off automatic Purify and Recuperate, retain the default-off RDM Guard engage helper, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
+    throw 'Schema 46 must preserve every earlier explicit opt-in/migration, add default-off automatic Purify and Recuperate, add the separate default-off automatic BRD/MCH basic-shot cast-cancel permission, retain the default-off RDM Guard engage helper, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -11657,4 +11770,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.40.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 45 and the exact 549-test Core registry. Default-off automatic Purify and Recuperate own separate keyless trigger identities: only exact automatic Purify may request cast cancellation, while automatic Recuperate cannot; both retain frame-local claims and fail closed for NIN Hidden uncertainty. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.40.0.1 source safety contract verified across $($sourceFiles.Count) source files with schema 46 and the exact 551-test Core registry. Automatic Purify and Recuperate remain separate default-off keyless trigger identities and share one independent default-off cast-cancel permission. That automatic permission admits only metadata-verified BRD job 23 / Powerful Shot 29391 or MCH job 31 / Blast Charge 29402 when the live job, active cast, and adjusted identity remain exact; Blazing Shot 41468, legacy Heat Blast 29403, transformations, and every other or uncertain cast fail closed. A permitted cancellation consumes its frame, and the automatic helper repeats its full preflight only on a later clear-cast frame. The generic held-helper cast-cancel toggle remains independent. Both automatic helpers retain frame-local claims and fail closed for NIN Hidden uncertainty. AST held Near Help owns exact 29243->29243 and raw Double Cast 29245->adjusted Orbis 29247 boundaries on one frozen ally. /seitonbw owns one immediate closed NIN/AST/DNC/DRG/RPR/PCT camera-back self-dash boundary with no camera or target mutation, wait, retry, or fallback; only directional jobs write local actor facing. The Wolves' Den rotation panel defaults to one animated current card and can expand the six remaining local-artwork cards with enlarged text and fail-closed per-map local W/L. All prior frozen-intent, protection, held-priority, Smart Action, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

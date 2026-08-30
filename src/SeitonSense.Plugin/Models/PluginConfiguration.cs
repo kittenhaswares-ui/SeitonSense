@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 45;
+    public int Version { get; set; } = 46;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -81,6 +81,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableGunbreakerContinuationOnHeldKey { get; set; }
     public bool EnableMonkHeldComboOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
+    public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }
     public bool EnablePvpLatencyResponseHelper { get; set; }
     public int PvpLatencyResponseWindowMilliseconds { get; set; } =
         HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
@@ -304,7 +305,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 45)
+        if (Version >= 46)
         {
             if (repaired) Save();
             return;
@@ -784,7 +785,15 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableAutomaticRecuperate = false;
         }
 
-        Version = 45;
+        if (Version < 46)
+        {
+            // Cancelling a mobile BRD/MCH basic-shot cast is a new automatic
+            // recovery side effect. Preserve every existing helper opt-in, but
+            // require separate consent before either automatic lane may do it.
+            AllowAutomaticRecoveryToCancelBasicShotCasts = false;
+        }
+
+        Version = 46;
         ClampSettings();
         Save();
     }
@@ -793,7 +802,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 45;
+        Version = 46;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -828,6 +837,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableGunbreakerContinuationOnHeldKey = false;
         EnableMonkHeldComboOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
+        AllowAutomaticRecoveryToCancelBasicShotCasts = false;
         EnablePvpLatencyResponseHelper = false;
         PvpLatencyResponseWindowMilliseconds =
             HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;

@@ -108,6 +108,8 @@ internal sealed unsafe class SmartRecuperateProbe
         bool heldModeEnabled,
         bool automaticModeEnabled,
         bool metadataVerified,
+        bool automaticRecoveryBasicShotCancellationEnabled,
+        bool automaticRecoveryBasicShotMetadataVerified,
         bool actionHelpersSuppressedByGuard,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
@@ -221,6 +223,8 @@ internal sealed unsafe class SmartRecuperateProbe
             currentMp,
             maximumMp,
             inputClaimed,
+            automaticRecoveryBasicShotCancellationEnabled,
+            automaticRecoveryBasicShotMetadataVerified,
             state,
             inputFrame,
             ninjaShukuchiHiddenStatuses);
@@ -454,6 +458,8 @@ internal sealed unsafe class SmartRecuperateProbe
         uint currentMp,
         uint maximumMp,
         bool inputClaimed,
+        bool automaticRecoveryBasicShotCancellationEnabled,
+        bool automaticRecoveryBasicShotMetadataVerified,
         SmartRecuperateState currentState,
         EmergencyActionInputFrame inputFrame,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses)
@@ -462,14 +468,22 @@ internal sealed unsafe class SmartRecuperateProbe
             !actionStructurallyReady ||
             currentState.Phase != SmartRecuperatePhase.Buffered ||
             currentState.Intent is not { IsValid: true } intent ||
-            intent.IsAutomatic ||
+            (intent.IsAutomatic &&
+             (!automaticRecoveryBasicShotCancellationEnabled ||
+              !automaticRecoveryBasicShotMetadataVerified)) ||
             localPlayer is null ||
-            NinjaShukuchiStealthGate.IsActive(
-                localPlayer,
-                ninjaShukuchiHiddenStatuses) ||
+            (intent.IsAutomatic
+                ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)
+                : NinjaShukuchiStealthGate.IsActive(
+                    localPlayer,
+                    ninjaShukuchiHiddenStatuses)) ||
             !TryGetExactIdentity(localPlayer, out var currentIdentity) ||
             currentIdentity != localIdentity ||
             !HasCastCancellationBoundary(localPlayer) ||
+            (intent.IsAutomatic &&
+             !HasExactAutomaticRecoveryBasicShotCastBoundary(localPlayer)) ||
             !SmartRecuperateRules.CanUseFrozenIntent(
                 intent,
                 configurationEnabled,
@@ -486,7 +500,8 @@ internal sealed unsafe class SmartRecuperateProbe
                 maximumHp,
                 currentMp,
                 maximumMp,
-                intent.FrozenKeyCode,
+                intent.IsAutomatic ? 0 : intent.FrozenKeyCode,
+                intent.IsAutomatic ||
                 inputFrame.IsGameplayKeyPhysicallyDown(
                     (VirtualKey)intent.FrozenKeyCode),
                 heldModeEnabled,
@@ -536,6 +551,33 @@ internal sealed unsafe class SmartRecuperateProbe
                actionManager->AnimationLock >= 0f &&
                actionManager->AnimationLock <=
                HeldCastCancellationRules.MaximumCancellationAnimationLockSeconds;
+    }
+
+    private static bool HasExactAutomaticRecoveryBasicShotCastBoundary(
+        IPlayerCharacter localPlayer)
+    {
+        if (!localPlayer.ClassJob.IsValid) return false;
+        var actionManager = ActionManager.Instance();
+        if (actionManager == null) return false;
+
+        var castActionId = actionManager->CastActionId;
+        uint adjustedCastActionId;
+        try
+        {
+            adjustedCastActionId = castActionId == 0
+                ? 0
+                : actionManager->GetAdjustedActionId(castActionId);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return AutomaticRecoveryShotCastRules
+            .IsExactAllowedPairWithAdjustedIdentity(
+                localPlayer.ClassJob.RowId,
+                castActionId,
+                adjustedCastActionId);
     }
 
     private bool TryGetExactIdentity(

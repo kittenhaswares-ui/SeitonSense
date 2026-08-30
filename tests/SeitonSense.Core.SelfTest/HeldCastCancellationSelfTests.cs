@@ -257,7 +257,7 @@ internal static class HeldCastCancellationSelfTests
         True(exactMaximum.ShouldInvokeNative, "maximum lock is inclusive");
     }
 
-    internal static void OnlyExactAutomaticPurifyMayBeKeyless()
+    internal static void OnlyExactAutomaticRecoveriesMayBeKeyless()
     {
         var automaticPurify = Request() with
         {
@@ -266,18 +266,28 @@ internal static class HeldCastCancellationSelfTests
             FrozenKeyCode = 0,
         };
         True(automaticPurify.IsAutomaticPurify, "exact action 29056 is automatic Purify");
+        True(automaticPurify.IsAutomaticRecovery, "automatic Purify is automatic recovery");
         False(automaticPurify.RequiresFrozenKey, "automatic Purify requires no physical key");
         True(automaticPurify.IsValid, "exact automatic Purify request is valid");
 
-        var automaticDecision = HeldCastCancellationRules.Observe(
-            HeldCastCancellationState.Initial,
-            ReadyObservation() with
-            {
-                Request = automaticPurify,
-                ResolvedHelperActionId = HeldCastCancellationRules.AutomaticPurifyActionId,
-                FrozenKeyStillDown = true,
-            });
-        True(automaticDecision.ShouldInvokeNative, "exact keyless Purify reaches cast cancellation");
+        var automaticRecuperate = Request() with
+        {
+            HelperKind = HeldCastCancellationHelperKind.SmartRecuperate,
+            HelperActionId = HeldCastCancellationRules.AutomaticRecuperateActionId,
+            FrozenKeyCode = 0,
+        };
+        True(
+            automaticRecuperate.IsAutomaticRecuperate,
+            "exact action 29711 is automatic Recuperate");
+        True(
+            automaticRecuperate.IsAutomaticRecovery,
+            "automatic Recuperate is automatic recovery");
+        False(
+            automaticRecuperate.RequiresFrozenKey,
+            "automatic Recuperate requires no physical key");
+        True(
+            automaticRecuperate.IsValid,
+            "exact automatic Recuperate request is valid");
 
         var wrongAction = automaticPurify with
         {
@@ -287,18 +297,183 @@ internal static class HeldCastCancellationSelfTests
         True(wrongAction.RequiresFrozenKey, "wrong action restores physical-key requirement");
         False(wrongAction.IsValid, "wrong keyless action is invalid");
 
-        var nonPurify = automaticPurify with
+        var wrongRecuperateAction = automaticRecuperate with
         {
-            HelperKind = HeldCastCancellationHelperKind.SmartRecuperate,
+            HelperActionId =
+                HeldCastCancellationRules.AutomaticRecuperateActionId + 1,
         };
-        False(nonPurify.IsAutomaticPurify, "non-Purify helper is not automatic Purify");
-        True(nonPurify.RequiresFrozenKey, "non-Purify helper requires a physical key");
-        False(nonPurify.IsValid, "non-Purify keyless request is invalid");
+        False(
+            wrongRecuperateAction.IsAutomaticRecuperate,
+            "wrong action is not automatic Recuperate");
+        True(
+            wrongRecuperateAction.RequiresFrozenKey,
+            "wrong Recuperate action restores physical-key requirement");
+        False(
+            wrongRecuperateAction.IsValid,
+            "wrong keyless Recuperate action is invalid");
+
+        var wrongKind = automaticPurify with
+        {
+            HelperKind = HeldCastCancellationHelperKind.ReactiveCounterCc,
+        };
+        False(wrongKind.IsAutomaticRecovery, "unrelated helper is not automatic recovery");
+        True(wrongKind.RequiresFrozenKey, "unrelated helper requires a physical key");
+        False(wrongKind.IsValid, "unrelated keyless helper is invalid");
 
         var physicalPurify = automaticPurify with { FrozenKeyCode = FrozenKeyCode };
         False(physicalPurify.IsAutomaticPurify, "physical Purify remains the held path");
         True(physicalPurify.RequiresFrozenKey, "physical Purify keeps its exact key lease");
         True(physicalPurify.IsValid, "physical Purify request remains valid");
+    }
+
+    internal static void AutomaticRecoveryBasicShotPolicyIsExact()
+    {
+        var automaticPurify = AutomaticRequest(
+            HeldCastCancellationHelperKind.Purify,
+            HeldCastCancellationRules.AutomaticPurifyActionId);
+        var automaticRecuperate = AutomaticRequest(
+            HeldCastCancellationHelperKind.SmartRecuperate,
+            HeldCastCancellationRules.AutomaticRecuperateActionId);
+
+        True(
+            DecideAutomatic(
+                automaticPurify,
+                AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId)
+                .ShouldInvokeNative,
+            "BRD Powerful Shot permits automatic Purify with explicit consent");
+        True(
+            DecideAutomatic(
+                automaticRecuperate,
+                AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId)
+                .ShouldInvokeNative,
+            "BRD Powerful Shot permits automatic Recuperate with explicit consent");
+        True(
+            DecideAutomatic(
+                automaticRecuperate,
+                AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId)
+                .ShouldInvokeNative,
+            "MCH Blast Charge permits automatic Recuperate with explicit consent");
+
+        var blockedCases = new (string Label, uint JobId, uint CastActionId,
+            uint AdjustedActionId, bool Enabled, bool MetadataVerified)[]
+        {
+            ("toggle off", AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                false, true),
+            ("metadata drift", AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                true, false),
+            ("cross-job pair", AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId,
+                true, true),
+            ("other job", 24,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+                true, true),
+            ("adjusted transform", AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId,
+                AutomaticRecoveryShotCastRules.MachinistBlazingShotActionId,
+                true, true),
+            ("instant transformed cast", AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlazingShotActionId,
+                AutomaticRecoveryShotCastRules.MachinistBlazingShotActionId,
+                true, true),
+            ("legacy instant Heat Blast", AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistLegacyHeatBlastActionId,
+                AutomaticRecoveryShotCastRules.MachinistLegacyHeatBlastActionId,
+                true, true),
+            ("other BRD cast", AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId + 1,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId + 1,
+                true, true),
+        };
+
+        foreach (var test in blockedCases)
+        {
+            var decision = DecideAutomatic(
+                automaticRecuperate,
+                test.JobId,
+                test.CastActionId,
+                test.AdjustedActionId,
+                test.Enabled,
+                test.MetadataVerified);
+            False(decision.ShouldInvokeNative, test.Label);
+            Equal(
+                HeldCastCancellationDecisionReason
+                    .AutomaticRecoveryCastNotAllowed,
+                decision.Reason,
+                test.Label);
+        }
+
+        var bardPurifyToggleOff = DecideAutomatic(
+            automaticPurify,
+            AutomaticRecoveryShotCastRules.BardJobId,
+            AutomaticRecoveryShotCastRules.BardPowerfulShotActionId,
+            enabled: false);
+        Equal(
+            HeldCastCancellationDecisionReason.AutomaticRecoveryCastNotAllowed,
+            bardPurifyToggleOff.Reason,
+            "BRD automatic Purify also requires the shot toggle");
+
+        var whiteMagePurify = DecideAutomatic(
+            automaticPurify,
+            24,
+            29_224,
+            adjustedActionId: 29_224,
+            enabled: false,
+            metadataVerified: false);
+        False(
+            whiteMagePurify.ShouldInvokeNative,
+            "automatic Purify never cancels an unrelated cast");
+        Equal(
+            HeldCastCancellationDecisionReason.AutomaticRecoveryCastNotAllowed,
+            whiteMagePurify.Reason,
+            "unrelated automatic Purify cast reason");
+
+        var physicalHeld = HeldCastCancellationRules.Observe(
+            HeldCastCancellationState.Initial,
+            ReadyObservation() with
+            {
+                AutomaticRecoveryBasicShotCancellationEnabled = false,
+                AutomaticRecoveryBasicShotMetadataVerified = false,
+            });
+        True(
+            physicalHeld.ShouldInvokeNative,
+            "automatic shot policy never narrows physical held cancellation");
+    }
+
+    internal static void AutomaticRecoveryBasicShotCatalogIsPinned()
+    {
+        Equal(2, AutomaticRecoveryShotCastRules.Definitions.Count, "definition count");
+        True(
+            AutomaticRecoveryShotCastRules.IsExactAllowedPair(
+                AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.BardPowerfulShotActionId),
+            "BRD pair");
+        True(
+            AutomaticRecoveryShotCastRules.IsExactAllowedPair(
+                AutomaticRecoveryShotCastRules.MachinistJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId),
+            "MCH pair");
+        False(
+            AutomaticRecoveryShotCastRules.IsExactAllowedPair(
+                AutomaticRecoveryShotCastRules.BardJobId,
+                AutomaticRecoveryShotCastRules.MachinistBlastChargeActionId),
+            "cross pair");
+        True(
+            AutomaticRecoveryShotCastRules.IsExplicitlyExcludedAction(
+                AutomaticRecoveryShotCastRules.MachinistBlazingShotActionId),
+            "Blazing Shot exclusion");
+        True(
+            AutomaticRecoveryShotCastRules.IsExplicitlyExcludedAction(
+                AutomaticRecoveryShotCastRules.MachinistLegacyHeatBlastActionId),
+            "Heat Blast exclusion");
     }
 
     internal static void TerminalRequestSurvivesLaterGateChanges()
@@ -331,6 +506,37 @@ internal static class HeldCastCancellationSelfTests
             FrozenKeyCode,
             IntentEpochToken: 7);
 
+    private static HeldCastCancellationRequest AutomaticRequest(
+        HeldCastCancellationHelperKind kind,
+        uint actionId) =>
+        new(
+            kind,
+            actionId,
+            LocalPlayer,
+            LocalPlayer,
+            FrozenKeyCode: 0,
+            IntentEpochToken: 8);
+
+    private static HeldCastCancellationDecision DecideAutomatic(
+        HeldCastCancellationRequest request,
+        uint jobId,
+        uint castActionId,
+        uint? adjustedActionId = null,
+        bool enabled = true,
+        bool metadataVerified = true) =>
+        HeldCastCancellationRules.Observe(
+            HeldCastCancellationState.Initial,
+            ReadyObservation() with
+            {
+                Request = request,
+                CurrentLocalJobId = jobId,
+                ResolvedHelperActionId = request.HelperActionId,
+                CastActionId = castActionId,
+                AdjustedCastActionId = adjustedActionId ?? castActionId,
+                AutomaticRecoveryBasicShotCancellationEnabled = enabled,
+                AutomaticRecoveryBasicShotMetadataVerified = metadataVerified,
+            });
+
     private static HeldCastCancellationObservation ReadyObservation() =>
         new(
             HardReset: false,
@@ -346,11 +552,15 @@ internal static class HeldCastCancellationSelfTests
             CurrentLocalPlayer: LocalPlayer,
             LocalPlayerAlive: true,
             LocalPlayerTargetable: true,
+            CurrentLocalJobId: AutomaticRecoveryShotCastRules.BardJobId,
             ResolvedHelperActionId: HelperActionId,
             HelperActionOffCooldown: true,
             HelperActionResourcesReady: true,
             LocalPlayerIsCasting: true,
             CastActionId,
+            AdjustedCastActionId: CastActionId,
+            AutomaticRecoveryBasicShotCancellationEnabled: false,
+            AutomaticRecoveryBasicShotMetadataVerified: false,
             ActionQueued: false,
             AnimationLockSeconds: 0f);
 

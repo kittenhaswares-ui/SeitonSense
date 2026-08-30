@@ -35,7 +35,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader(
-                "Held-action cast cancellation (experimental)",
+                "Cast cancellation (experimental)",
                 ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawHeldActionCastCancellationControls();
 
@@ -206,6 +206,16 @@ internal sealed partial class SettingsWindow
             "BRD Powerful Shot / MCH Blast Charge, but current-patch in-game behavior still needs live testing; an " +
             "action the client refuses to cancel simply continues. Enabling this can deliberately sacrifice your " +
             "current cast for the held helper.");
+        changed |= Checkbox(
+            "Allow Auto Purify / Recuperate to cancel verified BRD/MCH basic shots",
+            configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
+            value => configuration.AllowAutomaticRecoveryToCancelBasicShotCasts = value);
+        ImGui.TextDisabled(
+            "Default off and independent from the held-helper option. When the corresponding automatic helper is " +
+            "enabled, only an exact BRD Powerful Shot (29391) or MCH Blast Charge (29402) may be cancelled. The " +
+            "current job, active cast, unchanged adjusted action, and startup metadata must all match; transformed " +
+            "or uncertain actions wait. Cancellation owns one framework frame, and Purify or Recuperate revalidates " +
+            "normally before acting on a later clear-cast frame.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -260,8 +270,10 @@ internal sealed partial class SettingsWindow
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
             "Only the exact enabled debuff types can trigger this. Automatic mode freezes the real live CC instance and " +
-            "exact self, then gives ready Purify absolute priority without consuming a physical hold generation. It can " +
-            "cancel one current cast and sends Purify only on a later clear-cast frame. Cooldown or resource " +
+            "exact self, then gives ready Purify absolute priority without consuming a physical hold generation. It " +
+            "normally waits for a clear cast; with the separate automatic-recovery cast-cancel toggle it may cancel " +
+            "only a verified BRD/MCH basic-shot cast. Purify is sent only on a later clear-cast " +
+            "frame. Cooldown or resource " +
             "unavailability does not starve lower helpers; queue and animation-lock waits retain priority without " +
             "spending an attempt. Guard, text input, Resilience, and NIN Shukuchi Hidden suppress it. The legacy mode " +
             "still accepts a fresh physical key after CC, optionally including a key already held at status entry. " +
@@ -349,8 +361,10 @@ internal sealed partial class SettingsWindow
             "toggle, in Wolves' Den for controlled testing. Automatic mode wins when both options are enabled and uses " +
             "no physical-key generation. Held mode listens to the shared continuous gameplay-key consent, including " +
             "WASD. At exactly 16,000 or more missing HP and at least 2,000 observed MP, the selected mode may request one " +
-            "self-targeted PvP Recuperate (29711). Automatic Recuperate never cancels your current cast; it waits for a " +
-            "clear native boundary. If MP or the action is not ready, it does not block a usable lower-priority helper.");
+            "self-targeted PvP Recuperate (29711). Automatic Recuperate normally waits for a clear native boundary. " +
+            "With the separate automatic-recovery cast-cancel toggle, it may cancel only a verified BRD Powerful Shot " +
+            "or MCH Blast Charge, then revalidates and acts on a later frame. If MP or the action is not ready, it does " +
+            "not block a usable lower-priority helper.");
         ImGui.TextDisabled(
             "Purify and the complete job-specific second tier keep priority. Smart Recuperate is evaluated before " +
             "Emergency Teleport, generic Guard, and pressure Sprint, while " +

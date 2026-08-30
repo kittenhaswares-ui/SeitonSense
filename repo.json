@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.40.0.0",
-    "Changelog": "Added separate default-off Auto Purify and Auto Recuperate modes. Auto Purify reacts to an exact enabled live CC without a gameplay key and may cancel one current cast before revalidating on a later clear frame. Auto Recuperate uses the existing 16,000-missing-HP / 2,000-MP boundary without a key but never cancels casts. Both preserve Guard and NIN Hidden safety, share bounded one-episode latches with their legacy held modes, and do not retire the physical hold generation. Configuration schema 45; all 549 Core tests and release gates pass, while current-client action acceptance remains live validation.",
+    "AssemblyVersion": "0.40.0.1",
+    "Changelog": "Added one separate default-off automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate; the generic held-helper toggle remains independent. It may request cancellation only for exact metadata-verified BRD job 23 / Powerful Shot 29391 or MCH job 31 / Blast Charge 29402 when the live job, active cast, and adjusted raw-action identity all match. Every other, transformed, or uncertain cast waits. Cancellation owns one frame and the helper fully revalidates on a later clear-cast frame. Configuration schema 46; all 551 Core tests and release gates pass, while current-client BRD/MCH cancellation and final action acceptance remain live validation.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788001756"
+    "LastUpdate": "1788065370"
   }
 ]

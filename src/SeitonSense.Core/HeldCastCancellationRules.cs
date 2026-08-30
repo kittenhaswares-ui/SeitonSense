@@ -45,14 +45,22 @@ public readonly record struct HeldCastCancellationRequest(
         HelperActionId == HeldCastCancellationRules.AutomaticPurifyActionId &&
         FrozenKeyCode == 0;
 
-    public bool RequiresFrozenKey => !IsAutomaticPurify;
+    public bool IsAutomaticRecuperate =>
+        HelperKind == HeldCastCancellationHelperKind.SmartRecuperate &&
+        HelperActionId == HeldCastCancellationRules.AutomaticRecuperateActionId &&
+        FrozenKeyCode == 0;
+
+    public bool IsAutomaticRecovery =>
+        IsAutomaticPurify || IsAutomaticRecuperate;
+
+    public bool RequiresFrozenKey => !IsAutomaticRecovery;
 
     public bool IsValid =>
         HelperKind != HeldCastCancellationHelperKind.None &&
         HelperActionId != 0 &&
         LocalPlayer.IsValid &&
         Target.IsValid &&
-        (IsAutomaticPurify || FrozenKeyCode > 0) &&
+        (IsAutomaticRecovery || FrozenKeyCode > 0) &&
         IntentEpochToken != 0;
 }
 
@@ -91,6 +99,7 @@ public enum HeldCastCancellationDecisionReason : byte
     InvalidAnimationLock = 21,
     AnimationLockBusy = 22,
     AlreadyRequested = 23,
+    AutomaticRecoveryCastNotAllowed = 24,
 }
 
 /// <summary>
@@ -124,11 +133,15 @@ public readonly record struct HeldCastCancellationObservation(
     TargetPressureActorIdentity CurrentLocalPlayer,
     bool LocalPlayerAlive,
     bool LocalPlayerTargetable,
+    uint CurrentLocalJobId,
     uint ResolvedHelperActionId,
     bool HelperActionOffCooldown,
     bool HelperActionResourcesReady,
     bool LocalPlayerIsCasting,
     uint CastActionId,
+    uint AdjustedCastActionId,
+    bool AutomaticRecoveryBasicShotCancellationEnabled,
+    bool AutomaticRecoveryBasicShotMetadataVerified,
     bool ActionQueued,
     float AnimationLockSeconds);
 
@@ -144,6 +157,7 @@ public readonly record struct HeldCastCancellationDecision(
 public static class HeldCastCancellationRules
 {
     public const uint AutomaticPurifyActionId = 29_056;
+    public const uint AutomaticRecuperateActionId = 29_711;
     public const float MaximumCancellationAnimationLockSeconds = 0.050f;
 
     public static HeldCastCancellationDecision Observe(
@@ -274,6 +288,12 @@ public static class HeldCastCancellationRules
             return HeldCastCancellationDecisionReason.ActionResourcesUnavailable;
         if (!observation.LocalPlayerIsCasting || observation.CastActionId == 0)
             return HeldCastCancellationDecisionReason.CastSignalIncomplete;
+        if (request.IsAutomaticRecovery &&
+            !AutomaticRecoveryCastIsAllowed(request, observation))
+        {
+            return HeldCastCancellationDecisionReason
+                .AutomaticRecoveryCastNotAllowed;
+        }
         if (observation.ActionQueued)
             return HeldCastCancellationDecisionReason.NativeQueueOccupied;
         if (!float.IsFinite(observation.AnimationLockSeconds) ||
@@ -285,6 +305,26 @@ public static class HeldCastCancellationRules
             return HeldCastCancellationDecisionReason.AnimationLockBusy;
 
         return HeldCastCancellationDecisionReason.None;
+    }
+
+    /// <summary>
+    /// Either automatic recovery lane may cancel only one of the two reviewed
+    /// mobile basic-shot casts. Every other automatic cast-cancel shape fails
+    /// closed; physical held requests use their independent generic policy.
+    /// </summary>
+    private static bool AutomaticRecoveryCastIsAllowed(
+        HeldCastCancellationRequest request,
+        HeldCastCancellationObservation observation)
+    {
+        if (observation.CurrentLocalJobId == 0) return false;
+
+        return observation.AutomaticRecoveryBasicShotCancellationEnabled &&
+               observation.AutomaticRecoveryBasicShotMetadataVerified &&
+               AutomaticRecoveryShotCastRules
+                   .IsExactAllowedPairWithAdjustedIdentity(
+                       observation.CurrentLocalJobId,
+                       observation.CastActionId,
+                       observation.AdjustedCastActionId);
     }
 
     private static HeldCastCancellationDecision Observing(

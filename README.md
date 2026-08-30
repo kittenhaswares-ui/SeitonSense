@@ -2,10 +2,16 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.40.0.0 adds separate default-off
-automatic Purify and Recuperate modes that need no gameplay key while preserving
-the legacy held helpers, exact Guard/NIN Hidden safety, and shared one-episode
-anti-duplicate state. Version 0.39.0.2 repairs AST held Harmonischer Orbis and its
+assistance, and target highlights. Version 0.40.0.1 adds one separate default-off
+automatic cast-cancel permission shared only by Auto Purify and Auto Recuperate.
+It admits only metadata-verified BRD job 23 / Powerful Shot `29391` or MCH job 31 /
+Blast Charge `29402` when the live job, cast, and adjusted identity all remain
+exact; every other or uncertain cast waits. The generic held-helper toggle stays
+independent, and a permitted automatic helper still revalidates only on a later
+clear-cast frame. Version 0.40.0.0 added the separate default-off automatic
+Purify and Recuperate modes while preserving the legacy held helpers, exact
+Guard/NIN Hidden safety, and shared one-episode anti-duplicate state. Version
+0.39.0.2 repairs AST held Harmonischer Orbis and its
 same-target Zweifachzauber follow-up, keeps non-NIN `/seitonbw` screen-back
 movement authoritative through ReAction's camera-relative dash rewrite, and
 restores a compact one-card CC rotation view with an expandable six-map deck.
@@ -110,14 +116,16 @@ and Super Focus Glow into one configurable custom-repository plugin.
   three seconds from the original release. Binding never restarts that deadline.
   A text-poisoned generation is never eligible, and no different key can inherit
   the frozen intent.
-- **Experimental held-action cast cancellation:** a separate default-off test
-  may request one native cancel for the current cast when the highest-priority
-  exact held intent is otherwise ready. It never requests the helper in that
-  same frame, synthesizes movement or Escape, clears the queue, or changes a
-  target; the later helper frame repeats full validation. The void cancel call
-  reports only `requested`, not confirmed, and current-patch BRD/MCH live proof
-  remains pending. The carrier-polled Viper Serpentiner-Geist helper is
-  deliberately excluded from cast cancellation.
+- **Experimental cast cancellation:** the existing separate default-off held-
+  helper test may request one native cancel when its highest-priority exact held
+  intent is otherwise ready. A second, independent default-off permission lets
+  only Auto Purify or Auto Recuperate sacrifice exact metadata-verified BRD
+  Powerful Shot `29391` or MCH Blast Charge `29402`; job, active cast, and
+  adjusted identity must all match. Every other or uncertain automatic cast
+  waits. Cancellation never shares a frame with the helper, synthesizes movement
+  or Escape, clears the queue, or changes a target; a later clear frame repeats
+  full validation. The void call reports only `requested`, not confirmed, and
+  current-patch BRD/MCH live proof remains pending.
 - **Pressure on enemy nameplates:** `P#` shows how many valid allies currently
   hard-target that enemy. A separate fixed slot shows `YOU`, `HIT`, or `LB` when
   the enemy is directly targeting/casting at you, recently hit you, or placed
@@ -373,9 +381,9 @@ and Super Focus Glow into one configurable custom-repository plugin.
   macro, and job-specific controls stay in their own pages. Configuration schema
   33 separates the new native Smart Tab switch from the previous Smart Action
   macro opt-in while retaining schema 32's Combat Frames retirement and useful
-  LB-display migration. The held-action cast-
-  cancellation test remains explicitly off for fresh, reset, and migrated
-  configurations. Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
+  LB-display migration. Both the generic held-helper cast-cancellation test and
+  schema-46 automatic basic-shot permission remain explicitly off for fresh,
+  reset, and migrated configurations. Smart Recuperate, accepted-Eukrasia Smart Kardia, PLD
   Guardian, Auto Low-MP Focus, held DRK Shadowbringer, pressure Sprint and its native
   system sound, the Bard Paean pressure redirect, Guardian team communication,
   and Scholar Critical Strategy remain separate opt-ins. Every action-attempt,
@@ -844,8 +852,12 @@ The original key is never swallowed, delayed, or replayed, and automatic mode
 does not retire its generation. Ready Purify has absolute priority while the
 exact enabled CC is active. Cooldown/resource shortage does not starve lower
 helpers; cast, queue, or animation-lock blocks wait without spending an attempt.
-If casting is the sole remaining block, automatic Purify can request one native
-cast cancellation for that cast epoch and dispatch only on a later clear frame.
+Automatic Purify does not inherit the generic held-helper cast-cancel toggle.
+Only the separate default-off automatic permission may request one cancellation,
+and only for exact metadata-verified BRD job 23 / Powerful Shot `29391` or MCH
+job 31 / Blast Charge `29402` when the live job, cast, and adjusted raw-action
+identity agree. Every other, transformed, or uncertain cast waits. Purify may
+dispatch only after its complete preflight succeeds again on a later clear frame.
 Only an explicit client rejection may retry the same frozen self intent after 50 ms.
 The default remains eight native calls; the separate default-off PvP latency-
 response option can freeze a 100-1500 ms clean-false budget for that exact CC
@@ -865,9 +877,13 @@ are inclusive: exactly 16,000 missing HP and exactly 2,000 MP are eligible.
 
 Held consent or an automatic opportunity may wait while Recuperate is not ready
 or MP is below 2,000, without starving a currently usable lower-priority helper.
-Automatic mode never cancels the current cast; it waits for a clear frame and
-rechecks whether healing is still required. Once all gates pass, the exact self
-intent is revalidated before every possible call. Only an explicit client
+Automatic Recuperate normally waits for casting to end. Only the same separate
+default-off automatic permission described above may cancel an exact verified
+BRD Powerful Shot or MCH Blast Charge; it never inherits the generic held-helper
+toggle. Any other or uncertain cast waits, and healing need, HP/MP, identity,
+context, Guard, NIN Hidden, metadata, and readiness are all rechecked on a later
+clear-cast frame. Once all gates pass, the exact self intent is revalidated before
+every possible call. Only an explicit client
 rejection may retry that epoch under the common bound. Temporary readiness/MP,
 higher-priority, and Guard states wait without spending a call; dropping below
 the HP threshold cancels the current intent. Acceptance ends that epoch, and a
@@ -1700,9 +1716,12 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 45 is current. It adds separate default-off automatic
-Purify and Recuperate options without changing either legacy held opt-in for an
-upgrade. Schema 44 adds the default-off RDM fresh-Guard engage with 80% HP / 50%
+Configuration schema 46 is current. It adds the separate default-off automatic
+basic-shot cast-cancel permission without changing either automatic helper opt-in
+or the independent generic held-helper cast-cancel toggle for an upgrade. Schema
+45 added separate default-off automatic Purify and Recuperate options without
+changing either legacy held opt-in. Schema 44 adds the default-off RDM fresh-
+Guard engage with 80% HP / 50%
 MP defaults and the separate default-off `/seitonbw` macro option, and initializes
 the local CC map W/L capture toggle to on for fresh, upgraded, and Reset Defaults
 configurations. Schema 43 adds
@@ -1784,10 +1803,10 @@ Reset Defaults configurations because it both initiates an action and may change
 the exact hard target after client acceptance. `/panicshu` remains command-only
 and uses the existing global plugin enable plus the existing Wolves' Den testing
 option; schema 44 adds the separate default-off `/seitonbw` command toggle, now
-shared by the closed NIN/AST/DNC/DRG/RPR/PCT camera-back dash catalog. The held-action
-cast-cancellation test is explicitly off
-for fresh, reset, and migrated
-configurations. An older explicitly enabled NIN fresh-edge helper still traverses
+shared by the closed NIN/AST/DNC/DRG/RPR/PCT camera-back dash catalog. The generic
+held-action cast-cancellation test and schema-46 automatic basic-shot permission
+are both explicitly off for fresh, reset, and migrated configurations. An older
+explicitly enabled NIN fresh-edge helper still traverses
 schema 29 and migrates to the replacement held-key option; the obsolete
 compatibility field is then cleared. Every other existing master and helper
 choice is preserved. Older configurations still traverse the earlier migrations
@@ -1844,8 +1863,8 @@ update through the same repository.
   Recuperate, accepted-Eukrasia Smart Kardia, LB activation/damage telemetry,
   Auto Low-MP Focus, NIN Guard-Shukuchi, RDM fresh-Guard engage, DRK Hiebsprung/
   Shadowbringer, forward Panic Shukuchi and camera-back job dash,
-  retained reactive counter-CC opportunity results, and the held-action cast-
-  cancel request/epoch state
+  retained reactive counter-CC opportunity results, and cast-cancel held/automatic
+  switches, current job/cast/adjusted identity, metadata proof, request, and epoch state
 - `/seiton reset` - restore defaults
 - `/howmany show` / `/howmany hide` - show or hide only the integrated pressure
   counter; these do not disable pressure-dependent helpers
@@ -1962,27 +1981,35 @@ helper `UseAction` request. Only a later frame that observes both cast signals
 clear may run the normal complete helper preflight again. The option does not
 synthesize movement or Escape, clear the native action queue, write cast state,
 or mutate a selected target. It can sacrifice the current cast, and FFXIV may
-refuse to cancel some actions. Stationary casts and mobile BRD Powerful Shot /
-MCH Blast Charge still require current-patch live validation. The ordinary
+refuse to cancel some actions. Generic held-helper stationary casts and the
+separately permitted automatic BRD/MCH mobile casts still require current-patch
+live validation. The ordinary
 clean-`false` action retry remains independent: calls stay at least 50 ms apart.
 Its legacy default is eight attempts; the separate default-off PvP latency-
 response option freezes the selected extended budget per exact intent, and
 acceptance or ambiguity remains terminal.
 
-Automatic Purify is the one narrowly scoped keyless exception: its own explicit
-opt-in may request the same once-per-cast-epoch native cancellation independently
-of that generic held-helper toggle, but only for exact Purify `29056`, the same
-still-present enabled CC instance, and an otherwise structurally ready self
-intent. Automatic Recuperate is deliberately excluded and always waits for the
-current cast to end before rechecking its complete health/safety boundary.
+Automatic Purify and Automatic Recuperate never inherit the generic held-helper
+cast-cancel toggle. Their sole cancellation route is the separate schema-46
+default-off permission. The relevant keyless Purify `29056` or Recuperate `29711`
+intent must already be otherwise ready, and the local player must be either exact
+BRD job `23` casting Powerful Shot `29391` or exact MCH job `31` casting Blast
+Charge `29402`. Startup English PvP metadata for that exact pair must verify, and
+the active cast ID plus the adjusted raw-action identity must still equal the
+same allowed row. Cross-job pairs, missing or drifted metadata, changed cast
+signals, instant transformations such as MCH Blazing Shot `41468`, and every
+other uncertainty wait for a natural cast end. One cancellation owns that frame;
+the automatic helper can act only after its full action-specific preflight passes
+again on a later clear-cast frame.
 
 The separate default-off automatic and held Smart Recuperate modes may freeze one
 shared exact self Recuperate `29711` epoch when missing HP is at least 16,000 and
 MP is at least 2,000. They run in exact CC or explicitly enabled Wolves' Den
 testing and freeze that supported context with the intent. Automatic wins if
 both modes are enabled; it needs no gameplay key and does not retire the held
-generation. Readiness, casting, or insufficient MP waits without starving a
-currently usable lower helper. Only an explicit client rejection may use the
+generation. Readiness, a cast outside the exact automatic allowlist, or
+insufficient MP waits without starving a currently usable lower helper. Only an
+explicit client rejection may use the
 common bounded same-intent retry; acceptance, ambiguity, or context drift is
 terminal with no target change, alternate, or replay.
 
@@ -2093,9 +2120,11 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 549-test Core registry and source checks pin
-configuration schema 45, automatic/keyless and legacy held Purify/Recuperate
-intent boundaries, the deterministic local CC rotation and fail-closed
+For the current source, the exact 551-test Core registry and source checks pin
+configuration schema 46, the independent default-off automatic basic-shot
+cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
+automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
+deterministic local CC rotation and fail-closed
 per-character map W/L capture, the complete
 fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
 generic smart buffer and default-off native Turbo,
@@ -2226,12 +2255,15 @@ Kardia and Monk retain their separate event-driven origins.
 
 The same checks pin stable-movement, stable-other, fresh-movement, then fresh-
 other key selection and held-lease-before-fresh behavior for all eleven physical-
-hold helpers. Cast-cancel checks cover the separate schema-30 default-off toggle,
-exact inclusion/exclusion list, one native cancel request per observed cast,
-void/requested-only diagnostics, no same-frame helper action, fully revalidated
-later dispatch, and the absence of movement/Escape synthesis, queue clearing,
-cast-state writes, or target mutation. They cannot prove that FFXIV canceled a
-live cast; current-patch stationary and mobile BRD/MCH tests remain required.
+hold helpers. Cast-cancel checks cover the separate schema-30 generic held toggle,
+the independent schema-46 automatic permission, the exact BRD `23` / Powerful
+Shot `29391` and MCH `31` / Blast Charge `29402` metadata-verified allowlist,
+job/cast/adjusted identity matching, explicit transformed-action exclusions, one
+native cancel request per observed cast, void/requested-only diagnostics, no
+same-frame helper action, fully revalidated later dispatch, and the absence of
+movement/Escape synthesis, queue clearing, cast-state writes, or target mutation.
+They cannot prove that FFXIV canceled a live cast; current-patch stationary and
+automatic mobile BRD/MCH tests remain required.
 
 The same release checks bounded current-key attachment inside an urgent startup's
 original threat lease; exact Purify/Guard actor/action/episode memory without an

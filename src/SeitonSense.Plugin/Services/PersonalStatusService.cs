@@ -35,6 +35,8 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly PluginConfiguration configuration;
     private readonly PvPMetadataValidation metadata;
     private readonly SamuraiReactiveMetadataValidation samuraiReactiveMetadata;
+    private readonly AutomaticRecoveryShotCastMetadataValidation
+        automaticRecoveryShotCastMetadata;
     private readonly bool astrologianHarmonicOrbisMetadataVerified;
     private readonly TargetPressureTracker pressureTracker;
     private readonly NearAssistRedirector nearAssist;
@@ -114,6 +116,8 @@ internal sealed class PersonalStatusService : IDisposable
         this.configuration = configuration;
         this.metadata = metadata;
         this.samuraiReactiveMetadata = samuraiReactiveMetadata;
+        automaticRecoveryShotCastMetadata =
+            AutomaticRecoveryShotCastMetadataGuard.Validate(dataManager, log);
         astrologianHarmonicOrbisMetadataVerified =
             AstrologianHarmonicOrbisProbe.ValidateMetadata(dataManager, log);
         this.pressureTracker = pressureTracker;
@@ -124,7 +128,8 @@ internal sealed class PersonalStatusService : IDisposable
             criticalUtilityCoordination.ClaimCurrentFrame);
         heldCastCancellation = new HeldCastCancellationService(
             log,
-            nearAssist.IsExactLocalGuardActiveOrPropagating);
+            nearAssist.IsExactLocalGuardActiveOrPropagating,
+            automaticRecoveryShotCastMetadata);
         emergencyPurify = new EmergencyPurifyProbe(
             log,
             nearAssist.IsExactLocalGuardActiveOrPropagating);
@@ -1330,12 +1335,21 @@ internal sealed class PersonalStatusService : IDisposable
                                              plunge.InputClaimed ||
                                              shadowbringer.InputClaimed ||
                                              monkCombo.InputClaimed;
+        var automaticRecoveryBasicShotMetadataVerified =
+            AutomaticRecoveryShotCastRules.TryGetRawActionId(
+                localJobId,
+                out var automaticRecoveryRawShotActionId) &&
+            automaticRecoveryShotCastMetadata.IsVerified(
+                localJobId,
+                automaticRecoveryRawShotActionId);
         var recuperate = smartRecuperate.Observe(
             localPlayer,
             context,
             smartRecuperateHeldInputEnabled,
             smartRecuperateAutomaticConfigurationEnabled,
             metadata.RecuperateVerified,
+            configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
+            automaticRecoveryBasicShotMetadataVerified,
             guardActive,
             hasPurifyRemovableCrowdControl ||
             purifyClaimedPriority ||
@@ -1505,8 +1519,15 @@ internal sealed class PersonalStatusService : IDisposable
         heldCastCancellation.Observe(
             localPlayer,
             configuration.Enabled &&
-            (configuration.AllowHeldHelpersToCancelOwnCast ||
-             castCancellationRequest?.IsAutomaticPurify == true),
+            (castCancellationRequest switch
+             {
+                 { IsAutomaticRecovery: true } =>
+                     configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
+                 { RequiresFrozenKey: true } =>
+                     configuration.AllowHeldHelpersToCancelOwnCast,
+                 _ => false,
+             }),
+            configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
             isSupportedPvPContext,
             guardActive,
             prioritizedInputClaimed: castCancellationRequest is { IsValid: true },

@@ -134,11 +134,14 @@ following data already available in the local FFXIV client:
   additionally reads the exact current hard target only when it is either the
   native hostile duel opponent or the reviewed combat striking dummy with NameId
   `541`;
-- when the separate held-action cast-cancellation test is enabled, the exact
-  highest-priority frozen helper/action/target/key/intent epoch, both current
-  local cast signals and cast action ID, own Guard, queue, animation lock,
-  context, identity, readiness, and one-request-per-cast latch needed to decide
-  whether to request FFXIV's native cast cancellation;
+- when either separate cast-cancellation permission is enabled, the exact
+  highest-priority frozen helper/action/target/key-or-keyless intent epoch, both
+  current local cast signals and cast action ID, own Guard, queue, animation
+  lock, context, identity, readiness, and one-request-per-cast latch needed to
+  decide whether to request FFXIV's native cast cancellation. The automatic
+  permission additionally reads the exact local job, adjusted raw action, and
+  startup metadata-verification result needed to admit only the reviewed
+  BRD/MCH basic-shot pair;
 - when the DRK Hiebsprung helper is enabled, the exact local DRK identity, held-
   key ownership, action `29092` metadata/readiness and cooldown epoch, animation
   lock, own Bind/Guard state, complete canonical `S1`-`S5` identity/HP/Guard
@@ -790,8 +793,10 @@ are neither persisted nor uploaded.
 
 ## Experimental held-action cast cancellation
 
-This separate test is disabled by default. It applies only to otherwise-ready
-exact physical-hold intents for Purify, AST same-target Orbis, RDM fresh-Guard engage, SAM counter-CC/Zantetsuken, NIN Seiton,
+This separate test is disabled by default. It is the generic held-helper
+permission and applies only to otherwise-ready exact physical-hold intents for
+Purify, AST same-target Orbis,
+RDM fresh-Guard engage, SAM counter-CC/Zantetsuken, NIN Seiton,
 reactive counter-CC, Ally Rescue, Guardian, NIN Guard-Shukuchi, SCH Critical
 Strategy, DRK Shadowbringer, DRK Hiebsprung, Smart Recuperate, Emergency
 Teleport, Guard, and pressure Sprint. Smart Kardia, Monk Earth's Reply,
@@ -823,9 +828,24 @@ intent and native request result, plus request/fault counts in memory; none is
 persisted or uploaded. The separate
 explicit-`false` helper-action retry remains at least 50 ms apart. It uses eight
 calls by default or the exact intent's frozen opt-in PvP latency-response budget.
-Automatic Purify is a keyless exception to the generic cast-cancel toggle only
-for exact action `29056` and one exact enabled status/self episode. Automatic
-Recuperate never requests cast cancellation.
+
+## Experimental automatic basic-shot cast cancellation
+
+Automatic Purify and Automatic Recuperate do not inherit that generic held-
+helper permission. Their sole cast-cancel route is a second persisted permission
+which is independently disabled by default. It can admit only exact local BRD job
+`23` / Powerful Shot `29391` or exact local MCH job `31` / Blast Charge `29402`.
+The matching English PvP action row must pass startup metadata verification, and
+the active cast plus adjusted raw-action identity must still equal that same row.
+Missing or drifted metadata, cross-job identity, changed cast signals, instant
+transformations such as MCH Blazing Shot `41468`, the legacy Heat Blast row
+`29403`, and every other uncertainty fail closed and wait for the cast to end.
+The relevant keyless Purify `29056` or Recuperate `29711` intent must already be
+otherwise ready. A cancellation consumes that framework frame; the automatic
+helper may act only after its full preflight passes again on a later clear-cast
+frame. The native request remains `requested`, never proof that FFXIV canceled
+the cast. Automatic observation does not retire a physical held-key generation,
+and the generic held-helper toggle remains independent.
 
 ## Experimental Purify helper
 
@@ -848,8 +868,10 @@ retire a physical held-key generation. While the exact enabled CC remains active
 a structurally ready Purify has absolute scheduler priority and may retain its
 exact status/keyless or legacy held-key lease for bounded pre-acceptance retry;
 cooldown/resource shortage yields the frame. Automatic mode may request native
-cast cancellation once per observed cast epoch, then waits for a later clear
-frame before revalidation and Purify. A client-accepted or ambiguous call is
+cast cancellation only through the separate default-off permission and exact
+verified BRD/MCH basic-shot boundary described above. Every other cast waits.
+After a permitted cancellation it waits for a later clear frame before complete
+revalidation and Purify. A client-accepted or ambiguous call is
 terminal for that CC episode. ReAction Turbo's logical repeats do not create
 physical consent. Other plugins can still alter the downstream call if
 configured to rewrite Purify or its target.
@@ -972,8 +994,11 @@ Exactly 16,000 or more missing HP and at least 2,000 observed MP are required.
 
 If MP or native readiness is not yet eligible, or a higher-priority/Guard state
 temporarily blocks it, the frozen intent waits without spending a native call.
-Automatic mode does not request cast cancellation; it waits for casting to end
-and rechecks HP/MP before any call.
+Automatic mode normally waits for casting to end. Only the separate default-off
+automatic permission may cancel the exact metadata-verified BRD Powerful Shot or
+MCH Blast Charge boundary described above; all other or uncertain casts wait.
+After a permitted cancellation it rechecks HP/MP and every other gate on a later
+clear-cast frame before any call.
 Dropping below the missing-HP threshold cancels that intent and permits a later
 distinct health event on the same hold. Once eligible, identity, context, life,
 targetability, Guard, metadata/readiness, HP, MP, and the same frozen supported
@@ -1588,8 +1613,8 @@ RDM own-HP/MP thresholds, and the camera-back job dash command opt-in,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer,
   nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,
-  the held-action cast-
-cancellation test opt-in, and the CC-immunity-brake master plus exact per-job/
+  the generic held-helper cast-cancellation test and independent automatic
+  basic-shot cast-cancellation opt-ins, and the CC-immunity-brake master plus exact per-job/
 per-action selections. Retired Combat Frames properties remain only as legacy
 configuration compatibility fields; no current runtime or settings page reads
 them to draw frames, change targets, or publish mouseover actors.
@@ -1629,8 +1654,11 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 45 is current. It adds separate automatic Purify and
-Recuperate settings and initializes both off for every upgrade and Reset Defaults.
+Configuration schema 46 is current. It adds the separate automatic basic-shot
+cast-cancel permission and initializes it off for every upgrade and Reset
+Defaults without changing either automatic helper opt-in or the independent
+generic held-helper toggle. Schema 45 added separate automatic Purify and
+Recuperate settings and initialized both off for every upgrade and Reset Defaults.
 Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every
 upgrade while initializing the RDM 80% HP / 50% MP defaults, and explicitly
 initializes local CC map W/L capture to on for fresh, upgraded, and Reset Defaults
@@ -1686,10 +1714,9 @@ and Reset Defaults configurations because it initiates an action and may set the
 exact hard target after client acceptance. Forward Panic Shukuchi remains
 command-only and saves no dedicated option; it uses the global plugin enable and
 existing Wolves' Den testing option. Schema 44 adds the separate default-off
-backward-command opt-in.
-The held-action cast-cancellation test remains explicitly off for fresh, reset,
-and migrated
-configurations. An older explicitly enabled fresh-edge NIN Seiton option still
+backward-command opt-in. The generic held-action cast-cancellation test and the
+schema-46 automatic basic-shot permission remain explicitly off for fresh, reset,
+and migrated configurations. An older explicitly enabled fresh-edge NIN Seiton option still
 traverses schema 29, migrates to the replacement held-key option, and clears the
 obsolete compatibility field. Every other existing master/helper choice is
 preserved. Older configurations still traverse the earlier migrations first,

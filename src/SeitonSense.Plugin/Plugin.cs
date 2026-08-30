@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.40.0.0";
+    private const string CurrentReleaseVersion = "0.40.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -375,10 +375,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New default-off Auto Purify reacts to the exact enabled CC status without needing a fresh or held gameplay key.",
-                "Auto Purify can cancel one current cast when that is the sole remaining block, then rechecks and sends Purify only on a later clear frame.",
-                "New default-off Auto Recuperate uses the existing 16,000 missing HP / 2,000 MP boundary without a key. It waits for casts instead of cancelling them.",
-                "Both automatic helpers preserve Guard and NIN Shukuchi stealth safety. Legacy held modes remain separate; current-client acceptance still needs in-game confirmation.",
+                "A new default-off automatic cast-cancel permission is shared only by Auto Purify and Auto Recuperate; the generic held-helper toggle remains independent.",
+                "Only metadata-verified BRD Powerful Shot (job 23 / action 29391) or MCH Blast Charge (job 31 / action 29402), with unchanged cast and adjusted identity, may be sacrificed. Every other or uncertain cast waits.",
+                "Cancellation owns one framework frame; the automatic helper fully revalidates on a later clear-cast frame before requesting Purify or Recuperate.",
+                "Automated and release checks cover this contract, but current-client BRD/MCH cancellation and final action acceptance still need in-game confirmation.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -1043,10 +1043,16 @@ public sealed class Plugin : IDalamudPlugin
                     $"{monkCombo.UseActionAccepted},native={monkCombo.NativeAttemptCount}/" +
                     $"{monkCombo.LastNativeOutcome},last={monkCombo.LastEvent}]");
                 chatGui.Print(
-                    $"[Seiton Sense] cast-cancel[enabled=" +
+                    $"[Seiton Sense] cast-cancel[held-enabled=" +
                     $"{configuration.AllowHeldHelpersToCancelOwnCast}," +
+                    $"auto-basic-shot-enabled=" +
+                    $"{configuration.AllowAutomaticRecoveryToCancelBasicShotCasts}," +
                     $"state={castCancellation.Decision}/{castCancellation.Reason}," +
-                    $"cast={castCancellation.CastActionId},epoch={castCancellation.CastEpochToken}," +
+                    $"job/cast/adjusted={castCancellation.LocalJobId}/" +
+                    $"{castCancellation.CastActionId}/{castCancellation.AdjustedCastActionId}," +
+                    $"basic-shot-metadata=" +
+                    $"{castCancellation.AutomaticRecoveryBasicShotMetadataVerified}," +
+                    $"epoch={castCancellation.CastEpochToken}," +
                     $"current-helper={castCancellation.Request?.HelperKind ?? HeldCastCancellationHelperKind.None}," +
                     $"last-helper={castCancellation.LastRequestedIntent?.HelperKind ?? HeldCastCancellationHelperKind.None}," +
                     $"last-action={castCancellation.LastRequestedIntent?.HelperActionId ?? 0}," +

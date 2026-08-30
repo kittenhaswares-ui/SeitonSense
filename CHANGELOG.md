@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.40.0.1
+
+- Added one separate default-off **automatic basic-shot cast cancellation**
+  permission shared only by Automatic Purify and Automatic Recuperate. Existing
+  automatic helper opt-ins are preserved across the upgrade, but schema 46
+  initializes this new side effect off for every upgraded, fresh, and Reset
+  Defaults configuration. The generic held-helper cast-cancel toggle remains
+  independent and cannot enable or widen either automatic path.
+- The automatic permission admits only the exact current **BRD job 23 / Powerful
+  Shot `29391`** or **MCH job 31 / Blast Charge `29402`** pair. Startup English
+  PvP metadata must verify the action row, and the live local job, active cast
+  ID, and adjusted raw-action identity must still match that same row. Missing,
+  drifted, transformed, cross-job, or otherwise uncertain evidence waits for the
+  cast to end; it never falls back to another action. Instant MCH Blazing Shot
+  `41468` and the legacy Heat Blast row `29403` are explicitly excluded.
+- A permitted cancellation remains once per observed cast epoch and owns its
+  framework frame. Purify or Recuperate is never requested in that frame; only
+  a later clear-cast frame may repeat the complete automatic helper preflight.
+  The void native call reports only `requested`, not confirmed.
+- Configuration schema is `46`. Source build, all `551` Core tests, safety,
+  package parity, and release verification are automated; current-client BRD/MCH
+  cast cancellation and final Purify/Recuperate acceptance remain live-validation
+  boundaries.
+
 ## 0.40.0.0
 
 - Added a separate default-off **Automatic Purify** mode. An individually

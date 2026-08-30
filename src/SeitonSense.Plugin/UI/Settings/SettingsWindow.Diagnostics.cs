@@ -234,9 +234,13 @@ internal sealed partial class SettingsWindow
             $"{monkCombo.UseActionAccepted}, native={monkCombo.NativeAttemptCount}/" +
             $"{monkCombo.LastNativeOutcome}, last={monkCombo.LastEvent}");
         ImGui.TextWrapped(
-            $"Held cast cancellation: enabled={configuration.AllowHeldHelpersToCancelOwnCast}, " +
+            $"Cast cancellation: held-enabled={configuration.AllowHeldHelpersToCancelOwnCast}, " +
+            $"auto-basic-shot-enabled={configuration.AllowAutomaticRecoveryToCancelBasicShotCasts}, " +
             $"state={castCancellation.Decision}/{castCancellation.Reason}, " +
-            $"cast={castCancellation.CastActionId}, epoch={castCancellation.CastEpochToken}, " +
+            $"job/cast/adjusted={castCancellation.LocalJobId}/{castCancellation.CastActionId}/" +
+            $"{castCancellation.AdjustedCastActionId}, basic-shot-metadata=" +
+            $"{castCancellation.AutomaticRecoveryBasicShotMetadataVerified}, " +
+            $"epoch={castCancellation.CastEpochToken}, " +
             $"current-helper={castCancellation.Request?.HelperKind ?? HeldCastCancellationHelperKind.None}, " +
             $"last-helper={castCancellation.LastRequestedIntent?.HelperKind ?? HeldCastCancellationHelperKind.None}, " +
             $"last-action={castCancellation.LastRequestedIntent?.HelperActionId ?? 0}, " +
