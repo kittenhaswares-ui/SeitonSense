@@ -44,6 +44,7 @@ var tests = new (string Name, Action Run)[]
     ("smart action buffer runtime safety gates cancel while paused", SmartActionBufferSelfTests.EveryRuntimeSafetyGateCancels),
     ("smart action buffer expires at the exact default deadline", SmartActionBufferSelfTests.DefaultWindowExpiresAtItsExactDeadline),
     ("smart action buffer dispatches exactly once under contention", SmartActionBufferSelfTests.ConcurrentEvaluationDispatchesExactlyOnce),
+    ("release notes content is bounded and non-fatal", ReleaseNotesContentSelfTests.MalformedContentIsBoundedAndNeverThrows),
     ("held helper scheduler priority order is pinned", HeldCastCancellationSelfTests.CanonicalHelperPriorityOrderIsPinned),
     ("held cast cancel requests once per observed cast epoch", HeldCastCancellationSelfTests.ExactRequestIsOncePerObservedCastEpoch),
     ("held cast cancel can become eligible inside the same cast", HeldCastCancellationSelfTests.IntentMayBecomeEligibleInsideTheSameCast),

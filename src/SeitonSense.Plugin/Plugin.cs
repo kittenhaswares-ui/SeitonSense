@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.6";
+    private const string CurrentReleaseVersion = "0.42.0.7";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -406,11 +406,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto-Zantetsuken no longer fires from LB readiness alone. While armed, it waits until its selected primary target has exact Kuzushi applied by you.",
-                "It still chooses the best vulnerable target-centered 5-yalm cluster, allows shields, and rechecks the same own-source Kuzushi immediately before the native action request.",
-                "Wolves' Den uses the same Kuzushi gate, so a striking dummy cannot bypass it. Auto-Seiton was audited and remains unchanged: exact adjusted readiness plus a target strictly below 50% HP.",
-                "Smart Action no longer stalls an entire AoE because an unrelated enemy has Guard, Cover, or LB invulnerability. Incidental Chiten remains protected.",
-                "Reviewed ordinary gap closers and disengages can now use a guarded enemy as their movement target; stun-focused Forked/Fleeting Raiju remain blocked by Guard.",
+                "Fixed the 0.42.0.6 update-load failure caused by an oversized What's New list. Seiton Sense now loads normally instead of disappearing after an update.",
+                "Malformed or oversized release notes are now sanitized, capped at five bullets, and hidden safely when empty; they can no longer stop the gameplay plugin from starting.",
+                "Smart Buffer, Turbo, recovery helpers, Smart Action, and CC transition behavior are otherwise unchanged by this hotfix.",
                 "Configuration schema remains 48. Live current-client confirmation remains pending.",
             ],
             () => !string.Equals(

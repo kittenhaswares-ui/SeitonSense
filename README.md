@@ -2,8 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.6 fixes automatic
-Zantetsuken firing from LB readiness alone. While armed, it now waits for its
+assistance, and target highlights. Version 0.42.0.7 fixes the 0.42.0.6
+update-load failure where six What's New bullets exceeded the window's
+five-entry contract and aborted plugin construction after the prior version had
+already unloaded. Release-note content is now bounded and non-fatal, while
+Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior remain
+unchanged by the hotfix. Version 0.42.0.6 fixes automatic Zantetsuken firing
+from LB readiness alone. While armed, it now waits for its
 selected primary target to carry exact Kuzushi applied by the local Samurai,
 then ranks the best vulnerable target-centered 5-yalm cluster and rechecks that
 same proc immediately before the native request. Shields do not block it, and
@@ -2305,7 +2310,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 579-test Core registry and source checks pin
+For the current source, the exact 580-test Core registry and source checks pin
 configuration schema 48, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,

@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
+using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.UI;
 
@@ -34,25 +35,11 @@ internal sealed class WhatsNewWindow : Window
         Action acknowledge)
         : base("What's New###SeitonSenseWhatsNew")
     {
-        if (string.IsNullOrWhiteSpace(currentVersion))
-            throw new ArgumentException("A current version is required.", nameof(currentVersion));
-        ArgumentNullException.ThrowIfNull(bullets);
         ArgumentNullException.ThrowIfNull(shouldShow);
         ArgumentNullException.ThrowIfNull(acknowledge);
 
-        var sanitizedBullets = bullets
-            .Where(static bullet => !string.IsNullOrWhiteSpace(bullet))
-            .Select(static bullet => bullet.Trim())
-            .ToArray();
-        if (sanitizedBullets.Length is < 3 or > 5)
-        {
-            throw new ArgumentException(
-                "What's New requires three to five non-empty bullets.",
-                nameof(bullets));
-        }
-
-        this.currentVersion = currentVersion.Trim();
-        this.bullets = sanitizedBullets;
+        this.currentVersion = currentVersion?.Trim() ?? string.Empty;
+        this.bullets = ReleaseNotesContentRules.NormalizeBullets(bullets);
         this.shouldShow = shouldShow;
         this.acknowledge = acknowledge;
 
@@ -66,6 +53,7 @@ internal sealed class WhatsNewWindow : Window
 
     public override bool DrawConditions()
     {
+        if (bullets.Length == 0) return false;
         if (Volatile.Read(ref acknowledgementClaimed) != 0) return false;
 
         bool visible;
@@ -143,7 +131,9 @@ internal sealed class WhatsNewWindow : Window
     }
 
     private static string VersionLabel(string version) =>
-        version.StartsWith('v') || version.StartsWith('V')
+        string.IsNullOrWhiteSpace(version)
+            ? "current release"
+            : version.StartsWith('v') || version.StartsWith('V')
             ? version
             : $"v{version}";
 }

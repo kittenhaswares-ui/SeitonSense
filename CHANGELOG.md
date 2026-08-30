@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.42.0.7
+
+- Fixed the `0.42.0.6` update-load failure. That release passed six What's New
+  bullets into a presentation window which allowed at most five, so Dalamud
+  unloaded the previous plugin and the replacement constructor then threw.
+  Entering CC near that update made the whole plugin appear to die there even
+  though the failure was release-note initialization, not CC or buffer logic.
+- Made optional release-note content non-fatal. Blank entries are discarded,
+  oversized lists retain only their first five ordered entries, and an empty
+  result hides the window safely instead of blocking the gameplay plugin.
+- Added a Core regression test for null, blank, and six-entry release-note
+  content. The current What's New panel contains four concise entries.
+- Smart Buffer, native hotbar Turbo, automatic Purify/Recuperate, Smart Action,
+  and CC transition behavior are unchanged by this startup-only hotfix.
+- Configuration schema remains `48`. Source build, all `580` Core tests, safety,
+  package parity, release verification, and live update confirmation are pending.
+
 ## 0.42.0.6
 
 - Fixed the `0.42.0.5` Auto-Zantetsuken regression that allowed an armed helper

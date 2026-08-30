@@ -256,6 +256,8 @@ $limitBreakNotificationRendererPath = Join-Path $pluginUiRoot 'LimitBreakNotific
 $overlayRendererLimitBreaksPath = Join-Path $pluginUiRoot 'OverlayRenderer.LimitBreaks.cs'
 $autoSeitonToggleWindowPath = Join-Path $pluginUiRoot 'AutoSeitonToggleWindow.cs'
 $whatsNewWindowPath = Join-Path $pluginUiRoot 'WhatsNewWindow.cs'
+$releaseNotesContentRulesPath = Join-Path $coreRoot 'ReleaseNotesContentRules.cs'
+$releaseNotesContentSelfTestsPath = Join-Path $coreSelfTestRoot 'ReleaseNotesContentSelfTests.cs'
 $smartWardensPaeanRulesPath = Join-Path $coreRoot 'SmartWardensPaeanTargetRules.cs'
 $smartWardensPaeanServicePath = Join-Path $pluginServicesRoot 'SmartWardensPaeanService.cs'
 $smartWardensPaeanSelfTestsPath = Join-Path $coreSelfTestRoot 'SmartWardensPaeanTargetSelfTests.cs'
@@ -738,7 +740,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 579-test registry.
+# 580-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -758,11 +760,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 538 -or
+if ($staticIntegratedTestCount -ne 539 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 579 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 580 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -770,7 +772,7 @@ if ($staticIntegratedTestCount -ne 538 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 579-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 580-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -4553,8 +4555,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 8 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 538) {
-    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 538-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 539) {
+    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 539-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiZantetsukenTargetSelectionRules @(
     'public const float EffectRangeYalms = 5f;',
@@ -10806,18 +10808,53 @@ Assert-Literals $physicalKeyRules @(
 $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.csproj') 'Plugin project'
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
+$whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
+$releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
+$releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.6</Version>',
-    '<AssemblyVersion>0.42.0.6</AssemblyVersion>',
-    '<FileVersion>0.42.0.6</FileVersion>'
-) 'v0.42.0.6 project version'
+    '<Version>0.42.0.7</Version>',
+    '<AssemblyVersion>0.42.0.7</AssemblyVersion>',
+    '<FileVersion>0.42.0.7</FileVersion>'
+) 'v0.42.0.7 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.6";',
-    'Auto-Zantetsuken no longer fires from LB readiness alone. While armed, it waits until its selected primary target has exact Kuzushi applied by you.',
-    'It still chooses the best vulnerable target-centered 5-yalm cluster, allows shields, and rechecks the same own-source Kuzushi immediately before the native action request.',
-    'Wolves'' Den uses the same Kuzushi gate, so a striking dummy cannot bypass it. Auto-Seiton was audited and remains unchanged: exact adjusted readiness plus a target strictly below 50% HP.',
+    'private const string CurrentReleaseVersion = "0.42.0.7";',
+    'Fixed the 0.42.0.6 update-load failure caused by an oversized What''s New list. Seiton Sense now loads normally instead of disappearing after an update.',
+    'Malformed or oversized release notes are now sanitized, capped at five bullets, and hidden safely when empty; they can no longer stop the gameplay plugin from starting.',
+    'Smart Buffer, Turbo, recovery helpers, Smart Action, and CC transition behavior are otherwise unchanged by this hotfix.',
     'Configuration schema remains 48. Live current-client confirmation remains pending.'
-) 'v0.42.0.6 version-acknowledged What''s New content'
+) 'v0.42.0.7 version-acknowledged What''s New content'
+Assert-Literals $releaseNotesContentRules @(
+    'public const int MaximumBulletCount = 5;',
+    'if (bullets is null) return [];',
+    '.Where(static bullet => !string.IsNullOrWhiteSpace(bullet))',
+    '.Take(MaximumBulletCount)'
+) 'Non-fatal bounded release-note normalization'
+Assert-Literals $whatsNewWindow @(
+    'this.bullets = ReleaseNotesContentRules.NormalizeBullets(bullets);',
+    'if (bullets.Length == 0) return false;'
+) 'Fail-soft optional What''s New presentation'
+if ($whatsNewWindow -match 'requires three to five|sanitizedBullets\.Length\s+is\s+<') {
+    throw 'Optional What''s New content must never abort plugin construction because of bullet cardinality.'
+}
+Assert-Literals $releaseNotesContentSelfTests @(
+    'MalformedContentIsBoundedAndNeverThrows()',
+    'ReleaseNotesContentRules.NormalizeBullets(null)',
+    'ReleaseNotesContentRules.MaximumBulletCount',
+    '"six"'
+) 'Release-note null, blank, and oversized-content regression test'
+$currentWhatsNewInitializer = [regex]::Match(
+    $pluginSource,
+    'whatsNew\s*=\s*new\s+WhatsNewWindow\(\s*CurrentReleaseVersion,\s*\[(?<bullets>.*?)\],\s*\(\)\s*=>',
+    [System.Text.RegularExpressions.RegexOptions]::Singleline)
+if (-not $currentWhatsNewInitializer.Success) {
+    throw 'Current What''s New initializer could not be inspected.'
+}
+$currentWhatsNewBulletCount = [regex]::Matches(
+    $currentWhatsNewInitializer.Groups['bullets'].Value,
+    '(?m)^\s*"(?:[^"\\]|\\.)*",\s*$').Count
+if ($currentWhatsNewBulletCount -lt 3 -or $currentWhatsNewBulletCount -gt 5) {
+    throw "Current What's New initializer must contain three to five concise bullets; found $currentWhatsNewBulletCount."
+}
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10838,24 +10875,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.6 plugin manifest metadata'
+) 'v0.42.0.7 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.6"',
-    'Hotfix: armed Auto-Zantetsuken now requires exactly one current own-source Kuzushi on its selected primary',
-    'shields remain allowed and Wolves'' Den uses the same gate.',
-    'NIN Auto-Seiton was audited unchanged.',
-    'Smart Action no longer stalls an entire AoE because an unrelated enemy has Guard, Cover, Hallowed Ground, or Undead Redemption;',
-    'selected protections and incidental Chiten remain enforced.',
-    'A closed 16-action ordinary movement catalog lets reviewed gap closers and disengages target Guard.',
-    'The optional CC brake permits Intervene and Repelling Shot through Guard while Forked/Fleeting Raiju remain blocked',
-    'Resilience, Paean, and job-specific immunity blocks remain strict.',
+    '"AssemblyVersion": "0.42.0.7"',
+    'Startup hotfix: version 0.42.0.6 supplied six What''s New bullets to a window that permitted at most five',
+    'Release-note content is now bounded and non-fatal',
+    'Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior are otherwise unchanged.',
     'Schema 48;',
     'live current-client validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.6 custom-repository metadata'
+) 'v0.42.0.7 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10979,8 +11011,10 @@ Assert-Literals $normalizedPrivacy @(
     'Active casts wait; Auto-Seiton never requests cast cancellation.',
     'the frozen intent clears without spending the readiness epoch and a different exact actor may be selected on a later frame.',
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
-) 'v0.42.0.6 required-Kuzushi Zantetsuken, retained Auto-Seiton/Namikiri, and safety/privacy disclosure'
+) 'v0.42.0.7 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.42.0.7 fixes the 0.42.0.6 update-load failure where six What''s New bullets exceeded the window''s five-entry contract and aborted plugin construction after the prior version had already unloaded.',
+    'Release-note content is now bounded and non-fatal, while Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior remain unchanged by the hotfix.',
     'Version 0.42.0.6 fixes automatic Zantetsuken firing from LB readiness alone.',
     'selected primary target to carry exact Kuzushi applied by the local Samurai, then ranks the best vulnerable target-centered 5-yalm cluster and rechecks that same proc immediately before the native request.',
     'Shields do not block it, and Wolves'' Den uses the same Kuzushi gate.',
@@ -11102,7 +11136,7 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
-    'For the current source, the exact 579-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
+    'For the current source, the exact 580-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -11116,8 +11150,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.6 current README release, required-Kuzushi Zantetsuken, and retained safety contract'
+) 'v0.42.0.7 current README startup hotfix, retained required-Kuzushi Zantetsuken, and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.7',
+    'Fixed the `0.42.0.6` update-load failure.',
+    'That release passed six What''s New bullets into a presentation window which allowed at most five, so Dalamud unloaded the previous plugin and the replacement constructor then threw.',
+    'Made optional release-note content non-fatal.',
+    'oversized lists retain only their first five ordered entries',
+    'Added a Core regression test for null, blank, and six-entry release-note content.',
+    'Smart Buffer, native hotbar Turbo, automatic Purify/Recuperate, Smart Action, and CC transition behavior are unchanged by this startup-only hotfix.',
+    'Configuration schema remains `48`. Source build, all `580` Core tests, safety, package parity, release verification, and live update confirmation are pending.',
     '## 0.42.0.6',
     'Fixed the `0.42.0.5` Auto-Zantetsuken regression that allowed an armed helper to fire as soon as limit-break action `29537` became ready.',
     'the selected primary target must carry exactly one current Kuzushi `3202` whose source is the local Samurai.',
@@ -11254,7 +11296,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.6 release notes and retained v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.7 release notes and retained v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12765,4 +12807,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.6 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 579-test Core registry. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.7 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 580-test Core registry. Optional What's New content is normalized, capped, and non-fatal, while the current initializer is release-gated to three through five concise bullets. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."
