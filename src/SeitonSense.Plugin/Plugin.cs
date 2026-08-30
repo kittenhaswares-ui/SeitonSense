@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.7";
+    private const string CurrentReleaseVersion = "0.42.0.8";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -54,6 +54,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
+    private readonly MovementDirectedEnAvantTracker movementDirectedEnAvant;
     private readonly PanicShukuchiService panicShukuchi;
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
@@ -77,6 +78,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly bool farHelpAliasRegistered;
     private readonly bool panicShukuchiCommandRegistered;
     private readonly bool backwardPanicShukuchiCommandRegistered;
+    private readonly bool movementEnAvantCommandRegistered;
     private readonly bool pressureCommandRegistered;
 
     public Plugin(
@@ -278,6 +280,13 @@ public sealed class Plugin : IDalamudPlugin
             nearAssist,
             criticalUtilityCoordination);
         nearAssist.AttachIntegratedInputRuntime(integratedInput);
+        movementDirectedEnAvant = new MovementDirectedEnAvantTracker(
+            configuration,
+            clientState,
+            objectTable,
+            framework,
+            dutyState,
+            condition);
         panicShukuchi = new PanicShukuchiService(
             configuration,
             clientState,
@@ -406,10 +415,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed the 0.42.0.6 update-load failure caused by an oversized What's New list. Seiton Sense now loads normally instead of disappearing after an update.",
-                "Malformed or oversized release notes are now sanitized, capped at five bullets, and hidden safely when empty; they can no longer stop the gameplay plugin from starting.",
-                "Smart Buffer, Turbo, recovery helpers, Smart Action, and CC transition behavior are otherwise unchanged by this hotfix.",
-                "Configuration schema remains 48. Live current-client confirmation remains pending.",
+                "Added /seitonenavant: DNC can make one immediate En Avant along the direction the character is currently moving.",
+                "The direction comes from two fresh world-movement segments, so strafe, diagonals, remapped controls, and Standard or Legacy movement share one path.",
+                "The command uses the existing directional-dash opt-in and exact En Avant boundary. It never changes camera or target and has no queue, retry, or guessed fallback.",
+                "Configuration schema remains 48. Automated source and package checks pass; live cardinal, diagonal, and controller confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -645,6 +654,22 @@ public sealed class Plugin : IDalamudPlugin
                 "[Seiton Sense] /seitonbw is owned by another plugin. Disable the conflict and reload before using the camera-back dash.");
         }
 
+        movementEnAvantCommandRegistered = commandManager.AddHandler(
+            PanicShukuchiService.MovementEnAvantCommand,
+            new CommandInfo(OnMovementEnAvantCommand)
+            {
+                AllowedInMacros = true,
+                HelpMessage =
+                    "Default-off DNC-only movement dash: immediately try one PvP En Avant in the character's " +
+                    "current world movement direction without moving the camera or changing target.",
+            });
+        if (!movementEnAvantCommandRegistered)
+        {
+            log.Warning("/seitonenavant is already owned by another plugin; movement-directed En Avant remains unavailable.");
+            chatGui.PrintError(
+                "[Seiton Sense] /seitonenavant is owned by another plugin. Disable the conflict and reload before using movement-directed En Avant.");
+        }
+
         pressureCommandRegistered = commandManager.AddHandler(
             PressureCommand,
             new CommandInfo(OnPressureCommand)
@@ -675,6 +700,7 @@ public sealed class Plugin : IDalamudPlugin
         nearAssist.Start();
         personalStatus.Start();
         integratedInput.Start();
+        movementDirectedEnAvant.Start();
         panicShukuchi.Start();
         combatLimitBreakRuntime.Start();
     }
@@ -700,6 +726,8 @@ public sealed class Plugin : IDalamudPlugin
             commandManager.RemoveHandler(PanicShukuchiService.Command);
         if (backwardPanicShukuchiCommandRegistered)
             commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand);
+        if (movementEnAvantCommandRegistered)
+            commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand);
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
@@ -710,6 +738,7 @@ public sealed class Plugin : IDalamudPlugin
         personalStatus.Dispose();
         criticalUtilityCoordination.Dispose();
         smartTabTargeting.Dispose();
+        movementDirectedEnAvant.Dispose();
         panicShukuchi.Dispose();
         nearAssist.Dispose();
         isolationAwareness.Dispose();
@@ -880,6 +909,7 @@ public sealed class Plugin : IDalamudPlugin
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
                 var smartPaean = nearAssist.SmartWardensPaeanDiagnostics;
                 var panic = panicShukuchi.Diagnostics;
+                var enAvantMovement = movementDirectedEnAvant.Diagnostics;
                 var instantLeave = crystallineConflictInstantLeave.Diagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
@@ -1293,7 +1323,10 @@ public sealed class Plugin : IDalamudPlugin
                 chatGui.Print(
                     $"[Seiton Sense] panic-shukuchi[cmd={panicShukuchiCommandRegistered}," +
                     $"bw-cmd={backwardPanicShukuchiCommandRegistered}," +
+                    $"enavant-cmd={movementEnAvantCommandRegistered}," +
                     $"{panic.ToChatLine()}]");
+                chatGui.Print(
+                    $"[Seiton Sense] movement-enavant[{enAvantMovement.ToChatLine()}]");
                 if (!string.IsNullOrEmpty(assist.RecentTrace))
                     chatGui.Print($"[Seiton Sense] assist trace: {assist.RecentTrace}");
                 return;
@@ -1344,6 +1377,8 @@ public sealed class Plugin : IDalamudPlugin
             "Wolves' Den testing, including from own Guard and without cursor or target changes. " +
             "/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT. It immediately " +
             "uses the job's reviewed self dash without moving the camera or changing target. " +
+            "/seitonenavant uses the same default-off option and immediately moves DNC En Avant along the " +
+            "character's current fresh movement direction, including strafe and diagonals. " +
             "/autoseiton [on|off|toggle] arms or disarms fully automatic NIN Auto-Seiton. " +
             "Integrated pressure uses /howmany; its reset subcommand restores only the counter position.";
         if (error) chatGui.PrintError($"[Seiton Sense] {text}");
@@ -1513,6 +1548,20 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception exception)
         {
             log.Error(exception, "Seiton Sense backward Panic Shukuchi command failed closed.");
+        }
+    }
+
+    private void OnMovementEnAvantCommand(string _, string arguments)
+    {
+        try
+        {
+            panicShukuchi.ExecuteMovementEnAvant(
+                arguments,
+                movementDirectedEnAvant.Capture());
+        }
+        catch (Exception exception)
+        {
+            log.Error(exception, "Seiton Sense movement-directed En Avant command failed closed.");
         }
     }
 

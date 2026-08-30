@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.42.0.8
+
+- Added `/seitonenavant`, a DNC-only explicit macro command using the same
+  default-off directional-dash option as `/seitonbw`. In exact Crystalline
+  Conflict or opted-in Wolves' Den testing, it attempts one PvP En Avant
+  `29430` along the direction the local character is currently moving.
+- Direction comes from three fresh finite local world positions forming two
+  consecutive, directionally consistent segments. This preserves forward,
+  backward, strafe, diagonal, remapped-control, Standard/Legacy, and autorun
+  movement without guessing a physical key or using camera facing. Controller
+  follows the same processed-input design but remains live-test pending.
+  Current processed locomotion or autorun must remain active, so releasing
+  movement clears the observation instead of retaining the previous heading.
+- The frozen movement identity includes territory, local address, game-object
+  identity, entity identity, and exact DNC job. Stationary, stale,
+  discontinuous, non-finite, forced, mounted, loading, or teleport-sized
+  movement clears the observation and exposes no last-direction fallback.
+- Reused the audited non-NIN directional boundary: current metadata, adjusted
+  action, native charge/readiness, cast/animation state, compatibility, local
+  identity, and PvP context are revalidated around one self-targeted native
+  action request. It does not read or change a target or camera, has no queue,
+  retry, delayed replay, alternate action, or automatic trigger, and remains an
+  explicit own-Guard exception like `/seitonbw`.
+- Configuration schema remains `48`. Source build and all `585` Core tests pass;
+  safety, package parity, release verification, and live cardinal/diagonal/
+  controller confirmation are pending.
+
 ## 0.42.0.7
 
 - Fixed the `0.42.0.6` update-load failure. That release passed six What's New

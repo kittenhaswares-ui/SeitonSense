@@ -185,12 +185,12 @@ internal sealed partial class SettingsWindow
 
         ImGui.Spacing();
         changed |= Checkbox(
-            "Enable /seitonbw camera-back job dash",
+            "Enable directional dash macros (/seitonbw, /seitonenavant)",
             configuration.EnableBackwardPanicShukuchiCommand,
             value => configuration.EnableBackwardPanicShukuchiCommand = value);
-        if (ImGui.CollapsingHeader("Camera-back dash — NIN / AST / DNC / DRG / RPR / PCT", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Directional dashes — NIN / AST / DNC / DRG / RPR / PCT", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.TextUnformatted("Use this single macro line:");
+            ImGui.TextUnformatted("Camera-back macro:");
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbw");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
@@ -210,6 +210,17 @@ internal sealed partial class SettingsWindow
                 "your first enabled non-NIN command. ReAction camera-relative-only is allowed; ReAction action/target " +
                 "rewrites or MOAction ownership of the dash fail closed. " +
                 "It has no queue, pending lease, retry, fallback, or later replay.");
+            ImGui.Spacing();
+            ImGui.TextUnformatted("DNC current-movement macro:");
+            ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonenavant");
+            ImGui.TextDisabled(
+                "DNC-only. While your character is already moving, this makes one immediate En Avant along the " +
+                "fresh world-space path you are actually running: forward, backward, strafe, or diagonal. It uses " +
+                "two recent consistent movement segments and processed locomotion state, so keyboard remaps, " +
+                "Standard/Legacy movement, and autorun do not need physical-key guesses. The controller path uses " +
+                "the same processed status but remains live-test pending. Stationary, stale, discontinuous, forced, " +
+                "or identity-changing movement fails closed with no camera direction, actor-facing, or target fallback. " +
+                "The command shares /seitonbw's exact readiness, compatibility, own-Guard, and one-call boundary.");
             ImGui.PopTextWrapPos();
         }
 

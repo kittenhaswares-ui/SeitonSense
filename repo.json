@@ -5,8 +5,8 @@
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
     "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.42.0.7",
-    "Changelog": "Startup hotfix: version 0.42.0.6 supplied six What's New bullets to a window that permitted at most five, so the update constructor failed after unloading the previous plugin. Release-note content is now bounded and non-fatal, and the current panel uses four concise bullets. Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior are otherwise unchanged. Schema 48; live current-client validation remains pending.",
+    "AssemblyVersion": "0.42.0.8",
+    "Changelog": "Adds /seitonenavant for DNC: one explicit En Avant follows the character's fresh world movement direction, including strafe and diagonals, without camera or target changes. It reuses the existing default-off directional-dash option and exact one-call En Avant boundary; stationary, stale, discontinuous, or identity-changing movement fails closed with no queue, retry, or fallback. Schema 48; live cardinal and diagonal validation remains pending.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788119650"
+    "LastUpdate": "1788125754"
   }
 ]

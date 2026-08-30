@@ -47,12 +47,15 @@ internal readonly record struct PanicShukuchiDiagnostics(
 }
 
 /// <summary>
-/// Executes the explicit /panicshu command and its default-off /seitonbw sister.
+/// Executes the explicit /panicshu command and its default-off directional dash
+/// sisters /seitonbw and /seitonenavant.
 /// NIN keeps the exact 19.5-yalm ground-point/UseActionLocation implementation.
 /// AST, DNC, DRG, RPR, and PCT use one reviewed self-action: /seitonbw reads the
 /// normal gameplay camera, writes only the local actor facing required for that
 /// action to travel screen-back, and immediately makes at most one UseAction
-/// call. It never rotates the camera or changes a target. Both branches have no
+/// call. DNC /seitonenavant instead accepts one separately sampled, fresh
+/// world-movement heading and uses the same exact En Avant boundary. Neither
+/// command rotates the camera or changes a target. All branches have no
 /// scheduler, Guard/CC gate, Purify priority, wait, pending state, retry, target
 /// search, or alternate action. Exact current metadata, base-action identity,
 /// charge/resource state, and an immediately clean native boundary are required.
@@ -90,6 +93,7 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
 
     internal const string Command = "/panicshu";
     internal const string BackwardCameraCommand = "/seitonbw";
+    internal const string MovementEnAvantCommand = "/seitonenavant";
 
     private const ulong DefaultTargetSentinel = 0xE0000000UL;
     private const float GroundProbeStartAboveYalms = 5f;
@@ -206,8 +210,13 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             return;
         }
 
-        ExecuteBackwardDirectional(arguments);
+        ExecuteBackwardDirectional(arguments, movementSnapshot: null);
     }
+
+    internal void ExecuteMovementEnAvant(
+        string arguments,
+        MovementDirectedEnAvantSnapshot movementSnapshot) =>
+        ExecuteBackwardDirectional(arguments, movementSnapshot);
 
     private unsafe void ExecuteImmediate(string arguments, DestinationMode mode)
     {
@@ -486,12 +495,18 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
         }
     }
 
-    private unsafe void ExecuteBackwardDirectional(string arguments)
+    private unsafe void ExecuteBackwardDirectional(
+        string arguments,
+        MovementDirectedEnAvantSnapshot? movementSnapshot)
     {
+        var movementDirected = movementSnapshot.HasValue;
+        var command = movementDirected
+            ? MovementEnAvantCommand
+            : BackwardCameraCommand;
         lock (diagnosticsGate)
         {
             commandCount++;
-            lastCommand = BackwardCameraCommand;
+            lastCommand = command;
             lastCamera = default;
             lastMetadataVerified = false;
             lastDirectionalCompatibilityPassed = false;
@@ -499,7 +514,7 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
 
         if (!string.IsNullOrWhiteSpace(arguments))
         {
-            RecordRefused($"Arguments rejected; use {BackwardCameraCommand} without arguments");
+            RecordRefused($"Arguments rejected; use {command} without arguments");
             return;
         }
 
@@ -511,13 +526,13 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
 
         if (!configuration.EnableBackwardPanicShukuchiCommand)
         {
-            RecordRefused("/seitonbw is disabled in Macro Helpers");
+            RecordRefused("Directional dash macros are disabled in Macro Helpers");
             return;
         }
 
         if (!EnsureDirectionalRotationHookEnabled())
         {
-            RecordRefused("Directional rotation hook unavailable; non-NIN /seitonbw failed closed");
+            RecordRefused($"Directional rotation hook unavailable; {command} failed closed");
             return;
         }
 
@@ -546,13 +561,23 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                     context,
                     configuration.EnableWolvesDenTesting))
             {
-                RecordRefused("/seitonbw is available only in CC or enabled Wolves' Den testing");
+                RecordRefused($"{command} is available only in CC or enabled Wolves' Den testing");
                 return;
             }
 
             if (!BackwardDashRules.TryGetDirectionalProfile(localJobId, out var profile))
             {
-                RecordRefused("Current job has no reviewed camera-back self dash");
+                RecordRefused(movementDirected
+                    ? "/seitonenavant is DNC-only"
+                    : "Current job has no reviewed camera-back self dash");
+                return;
+            }
+
+            if (movementDirected &&
+                (profile.JobId != BackwardDashRules.DancerJobId ||
+                 profile.ActionId != MovementDirectedEnAvantRules.ActionId))
+            {
+                RecordRefused("/seitonenavant is DNC-only");
                 return;
             }
 
@@ -571,20 +596,53 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 return;
             }
 
-            var cameraObservation = CaptureBackwardCameraObservation();
             var position = local!.Position;
             var origin = new PanicShukuchiPoint(position.X, position.Y, position.Z);
-            if (!BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(
-                    origin,
-                    cameraObservation,
-                    out var screenBackHeading,
-                    out _) ||
+            var cameraObservation = default(BackwardPanicShukuchiCameraObservation);
+            float requestedWorldHeading;
+            if (movementDirected)
+            {
+                var snapshot = movementSnapshot!.Value;
+                if (!MovementDirectedEnAvantRules.MatchesCurrentIdentity(
+                        snapshot,
+                        clientState.TerritoryType,
+                        (ulong)(nuint)local.Address,
+                        local.GameObjectId,
+                        local.EntityId,
+                        localJobId) ||
+                    !MovementDirectedEnAvantRules.IsFreshSnapshot(
+                        snapshot,
+                        Environment.TickCount64))
+                {
+                    RecordRefused("Fresh current movement direction is unavailable");
+                    return;
+                }
+
+                requestedWorldHeading = snapshot.HeadingRadians;
+            }
+            else
+            {
+                cameraObservation = CaptureBackwardCameraObservation();
+                if (!BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(
+                        origin,
+                        cameraObservation,
+                        out requestedWorldHeading,
+                        out _))
+                {
+                    RecordRefused("Normal gameplay camera direction is unavailable");
+                    return;
+                }
+            }
+
+            if (
                 !BackwardDashRules.TryResolveActorFacing(
-                    screenBackHeading,
+                    requestedWorldHeading,
                     profile.MovementKind,
                     out var desiredActorHeading))
             {
-                RecordRefused("Normal gameplay camera direction is unavailable");
+                RecordRefused(movementDirected
+                    ? "Current movement heading is invalid"
+                    : "Normal gameplay camera direction is unavailable");
                 return;
             }
 
@@ -651,7 +709,9 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             {
                 TryRestoreHeading(nativeLocal, originalHeading);
                 facingWritten = false;
-                RecordRefused("Camera-back actor-facing write was not confirmed");
+                RecordRefused(movementDirected
+                    ? "Movement-directed actor-facing write was not confirmed"
+                    : "Camera-back actor-facing write was not confirmed");
                 return;
             }
 
@@ -669,6 +729,17 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 finalLocal.EntityId != local.EntityId ||
                 !finalLocal.ClassJob.IsValid ||
                 finalLocal.ClassJob.RowId != profile.JobId ||
+                (movementDirected &&
+                 (!MovementDirectedEnAvantRules.MatchesCurrentIdentity(
+                      movementSnapshot!.Value,
+                      clientState.TerritoryType,
+                      (ulong)(nuint)finalLocal.Address,
+                      finalLocal.GameObjectId,
+                      finalLocal.EntityId,
+                      finalLocal.ClassJob.RowId) ||
+                  !MovementDirectedEnAvantRules.IsFreshSnapshot(
+                      movementSnapshot.Value,
+                      Environment.TickCount64))) ||
                 !backwardDashMetadata.Contains(profile.ActionId) ||
                 !before.IsExactActionReady(profile.ActionId) ||
                 before.AnimationLockSeconds >
@@ -684,7 +755,7 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             {
                 TryRestoreHeading(nativeLocal, originalHeading);
                 facingWritten = false;
-                RecordRefused("/seitonbw state changed before its native boundary");
+                RecordRefused($"{command} state changed before its native boundary");
                 return;
             }
 
@@ -695,7 +766,7 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             {
                 TryRestoreHeading(nativeLocal, originalHeading);
                 facingWritten = false;
-                RecordRefused($"/seitonbw foreign action ownership blocked: {compatibilityReason}");
+                RecordRefused($"{command} foreign action ownership blocked: {compatibilityReason}");
                 return;
             }
 
@@ -732,12 +803,13 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                     lock (diagnosticsGate)
                     {
                         refusedCount++;
-                        lastEvent = $"Immediate /seitonbw {profile.Name} rotation boundary failed closed";
+                        lastEvent = $"Immediate {command} {profile.Name} rotation boundary failed closed";
                     }
 
                     log.Error(
                         exception,
-                        "Seiton Sense immediate /seitonbw {ActionName} rotation boundary failed closed.",
+                        "Seiton Sense immediate {Command} {ActionName} rotation boundary failed closed.",
+                        command,
                         profile.Name);
                     return;
                 }
@@ -745,12 +817,13 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 lock (diagnosticsGate)
                 {
                     rejectedCount++;
-                    lastEvent = $"Immediate /seitonbw {profile.Name} native call threw; acceptance unknown";
+                    lastEvent = $"Immediate {command} {profile.Name} native call threw; acceptance unknown";
                 }
 
                 log.Error(
                     exception,
-                    "Seiton Sense immediate /seitonbw {ActionName} native call failed.",
+                    "Seiton Sense immediate {Command} {ActionName} native call failed.",
+                    command,
                     profile.Name);
                 return;
             }
@@ -781,12 +854,12 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 if (accepted)
                 {
                     acceptedCount++;
-                    lastEvent = $"Immediate /seitonbw {profile.Name} accepted";
+                    lastEvent = $"Immediate {command} {profile.Name} accepted";
                 }
                 else
                 {
                     rejectedCount++;
-                    lastEvent = $"Immediate /seitonbw {profile.Name} returned {outcome}";
+                    lastEvent = $"Immediate {command} {profile.Name} returned {outcome}";
                 }
             }
         }
@@ -799,13 +872,14 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             {
                 refusedCount++;
                 lastEvent = nativeBoundaryEntered
-                    ? "Immediate /seitonbw directional validation faulted after native entry"
-                    : "Immediate /seitonbw directional validation failed closed";
+                    ? $"Immediate {command} directional validation faulted after native entry"
+                    : $"Immediate {command} directional validation failed closed";
             }
 
             log.Error(
                 exception,
-                "Seiton Sense immediate directional /seitonbw command failed closed.");
+                "Seiton Sense immediate directional {Command} command failed closed.",
+                command);
         }
     }
 

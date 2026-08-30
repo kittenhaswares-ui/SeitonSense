@@ -35,6 +35,9 @@ $backwardPanicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'BackwardPanic
 $backwardDashRulesPath = Join-Path $coreRoot 'BackwardDashRules.cs'
 $backwardDashSelfTestsPath = Join-Path $coreSelfTestRoot 'BackwardDashSelfTests.cs'
 $backwardDashMetadataCatalogPath = Join-Path $pluginServicesRoot 'BackwardDashMetadataCatalog.cs'
+$movementDirectedEnAvantRulesPath = Join-Path $coreRoot 'MovementDirectedEnAvantRules.cs'
+$movementDirectedEnAvantTrackerPath = Join-Path $pluginServicesRoot 'MovementDirectedEnAvantTracker.cs'
+$movementDirectedEnAvantSelfTestsPath = Join-Path $coreSelfTestRoot 'MovementDirectedEnAvantSelfTests.cs'
 $ninjaGuardShukuchiProbePath = Join-Path $pluginServicesRoot 'NinjaGuardShukuchiProbe.cs'
 $redMageGuardEngageProbePath = Join-Path $pluginServicesRoot 'RedMageGuardEngageProbe.cs'
 $ninjaGuardShukuchiRulesPath = Join-Path $coreRoot 'NinjaGuardShukuchiRules.cs'
@@ -361,6 +364,7 @@ $allowedUnsafe = @(
     $ccImmunityBrakeServicePath,
     $autoLowMpFocusTargetServicePath,
     $panicShukuchiServicePath,
+    $movementDirectedEnAvantTrackerPath,
     $ninjaGuardShukuchiProbePath,
     $redMageGuardEngageProbePath,
     $darkKnightPlungeProbePath,
@@ -389,7 +393,8 @@ if ($unexpectedUnsafe.Count -gt 0) {
 # MCH/pressure capture owns the read-only ActionEffect receive hook and forwards
 # value-only activation/damage records to the bounded Combat LB buffer. The map
 # statistics service owns one separately pinned post-match result hook. Explicit
-# directional /seitonbw owns one same-lane local-facing preservation hook.
+# directional /seitonbw owns one same-lane local-facing preservation hook. The
+# movement En Avant tracker uses only the reviewed logical MOVE_* / autorun reads.
 # Plugin.cs only constructor-injects interop and the signature scanner.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
@@ -740,7 +745,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 580-test registry.
+# 585-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -760,11 +765,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 539 -or
+if ($staticIntegratedTestCount -ne 544 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 580 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 585 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -772,7 +777,7 @@ if ($staticIntegratedTestCount -ne 539 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 580-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 585-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -2230,10 +2235,13 @@ if ($autoLowMpFocusTypeReferences.Count -ne 4 -or
 $panicShukuchiRules = Read-RequiredSource $panicShukuchiRulesPath 'Panic Shukuchi rules'
 $backwardPanicShukuchiRules = Read-RequiredSource $backwardPanicShukuchiRulesPath 'Backward Panic Shukuchi camera rules'
 $backwardDashRules = Read-RequiredSource $backwardDashRulesPath 'Directional backward dash rules'
+$movementDirectedEnAvantRules = Read-RequiredSource $movementDirectedEnAvantRulesPath 'Movement-directed En Avant rules'
+$movementDirectedEnAvantTracker = Read-RequiredSource $movementDirectedEnAvantTrackerPath 'Movement-directed En Avant tracker'
 $panicShukuchiService = Read-RequiredSource $panicShukuchiServicePath 'Panic Shukuchi service'
 $panicShukuchiSelfTests = Read-RequiredSource $panicShukuchiSelfTestsPath 'Panic Shukuchi self-tests'
 $backwardPanicShukuchiSelfTests = Read-RequiredSource $backwardPanicShukuchiSelfTestsPath 'Backward Panic Shukuchi self-tests'
 $backwardDashSelfTests = Read-RequiredSource $backwardDashSelfTestsPath 'Directional backward dash self-tests'
+$movementDirectedEnAvantSelfTests = Read-RequiredSource $movementDirectedEnAvantSelfTestsPath 'Movement-directed En Avant self-tests'
 $backwardDashMetadataCatalog = Read-RequiredSource $backwardDashMetadataCatalogPath 'Directional backward dash metadata catalog'
 $panicShukuchiProgram = Read-RequiredSource (
     Join-Path $coreSelfTestRoot 'Program.cs') 'Panic Shukuchi test registry'
@@ -2245,11 +2253,17 @@ $panicShukuchiConfiguration = Read-RequiredSource (
     Join-Path $sourceRoot 'SeitonSense.Plugin\Models\PluginConfiguration.cs') 'Plugin configuration'
 $panicShukuchiMacroUi = Read-RequiredSource (
     Join-Path $sourceRoot 'SeitonSense.Plugin\UI\Settings\SettingsWindow.Macros.cs') 'Panic Shukuchi macro settings UI'
+$panicShukuchiReadme = Read-RequiredSource (Join-Path $resolvedRoot 'README.md') 'Explicit dash README'
+$panicShukuchiPrivacy = Read-RequiredSource (Join-Path $resolvedRoot 'PRIVACY.md') 'Explicit dash privacy documentation'
 $normalizedPanicShukuchiRules = $panicShukuchiRules -replace '\s+', ' '
 $normalizedBackwardPanicShukuchiRules = $backwardPanicShukuchiRules -replace '\s+', ' '
 $normalizedBackwardDashRules = $backwardDashRules -replace '\s+', ' '
+$normalizedMovementDirectedEnAvantRules = $movementDirectedEnAvantRules -replace '\s+', ' '
+$normalizedMovementDirectedEnAvantTracker = $movementDirectedEnAvantTracker -replace '\s+', ' '
 $normalizedPanicShukuchiService = $panicShukuchiService -replace '\s+', ' '
 $normalizedPanicShukuchiPlugin = $pluginSource -replace '\s+', ' '
+$normalizedPanicShukuchiReadme = $panicShukuchiReadme -replace '\s+', ' '
+$normalizedPanicShukuchiPrivacy = $panicShukuchiPrivacy -replace '\s+', ' '
 
 Assert-Literals $panicShukuchiRules @(
     'public const uint NinjaJobId = 30',
@@ -2351,12 +2365,102 @@ if ([regex]::Matches($backwardDashRules, 'new\(').Count -ne 5 -or
     throw 'Directional /seitonbw Core rules must remain a pure closed five-self-dash catalog, excluding hostile-target backsteps, stored returns, and NIN location dispatch.'
 }
 
+Assert-Literals $movementDirectedEnAvantRules @(
+    'public readonly record struct MovementDirectedEnAvantFingerprint(',
+    'uint TerritoryId,',
+    'ulong LocalActorAddress,',
+    'ulong LocalGameObjectId,',
+    'uint LocalEntityId,',
+    'uint LocalJobId)',
+    'LocalJobId == BackwardDashRules.DancerJobId',
+    'public readonly record struct MovementDirectedEnAvantSample(',
+    'public readonly record struct MovementDirectedEnAvantState(',
+    'public readonly record struct MovementDirectedEnAvantSnapshot(',
+    'public const uint ActionId = 29_430',
+    'public const int RequiredConsistentSegmentCount = 2',
+    'public const long MaximumSampleGapMilliseconds = 150',
+    'public const long MaximumDirectionAgeMilliseconds = 150',
+    'public const float MinimumSegmentDistanceYalms = 0.005f',
+    'public const float MaximumSegmentDistanceYalms = 1.5f',
+    'public const float MinimumConsistentDistanceYalms = 0.025f',
+    'public const float MaximumSegmentHeadingDeltaRadians = MathF.PI / 4f',
+    'public static MovementDirectedEnAvantState Observe(',
+    'public static bool TryCapture(',
+    'public static bool MatchesCurrentIdentity(',
+    'public static bool IsFreshSnapshot(',
+    'Math.Atan2(deltaX, deltaZ)',
+    'MathF.IEEERemainder(radians, 2f * MathF.PI)'
+) 'Pure movement-directed En Avant sampling policy'
+if ($movementDirectedEnAvantRules -match '\b(?:UseAction|UseActionLocation)\s*\(|\b(?:ActionManager|Dalamud|FFXIVClientStructs|IPlayerCharacter|IFramework|IObjectTable|IClientState|ICondition|IDutyState|CameraManager|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread|File|Directory|HttpClient|WebRequest|Socket)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static MovementDirectedEnAvantState Observe\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool TryCapture\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool MatchesCurrentIdentity\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool IsFreshSnapshot\s*\(').Count -ne 1 -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!sample\.IsValid\) return MovementDirectedEnAvantState\.Initial;.*?if \(!previous\.LastSample\.IsValid \|\| previous\.LastSample\.Fingerprint != sample\.Fingerprint\).*?return Baseline\(sample\);.*?if \(elapsed <= 0 \|\| elapsed > MaximumSampleGapMilliseconds\).*?return Baseline\(sample\);' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!double\.IsFinite\(distanceSquared\)\) return Baseline\(sample\);.*?if \(!double\.IsFinite\(distance\) \|\| distance > MaximumSegmentDistanceYalms\).*?return Baseline\(sample\);.*?if \(distance < MinimumSegmentDistanceYalms\).*?directionAge >= 0 && directionAge <= MaximumDirectionAgeMilliseconds \? previous with \{ LastSample = sample \} : Baseline\(sample\);' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'var heading = NormalizeRadians\(\(float\)Math\.Atan2\(deltaX, deltaZ\)\);.*?HeadingDistance\(previous\.HeadingRadians, heading\) <= MaximumSegmentHeadingDeltaRadians;.*?Math\.Min\( RequiredConsistentSegmentCount, previous\.ConsistentSegmentCount \+ 1\).*?Math\.Min\( MinimumConsistentDistanceYalms \+ MaximumSegmentDistanceYalms, previous\.ConsistentDistanceYalms \+ \(float\)distance\)' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'snapshot = default; if \(!state\.HasDirection \|\| !currentFingerprint\.IsValid \|\| state\.LastSample\.Fingerprint != currentFingerprint\).*?var age = nowMilliseconds - state\.LastMovementAtMilliseconds; if \(age < 0 \|\| age > MaximumDirectionAgeMilliseconds\) return false;.*?snapshot = new MovementDirectedEnAvantSnapshot\( currentFingerprint, state\.HeadingRadians, state\.LastMovementAtMilliseconds, state\.ConsistentSegmentCount, state\.ConsistentDistanceYalms\); return snapshot\.IsValid;' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'snapshot\.IsValid && snapshot\.Fingerprint == new MovementDirectedEnAvantFingerprint\( territoryId, localActorAddress, localGameObjectId, localEntityId, localJobId\);' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'public static bool IsFreshSnapshot\( MovementDirectedEnAvantSnapshot snapshot, long nowMilliseconds\).*?if \(!snapshot\.IsValid\) return false; var age = nowMilliseconds - snapshot\.ObservedAtMilliseconds; return age >= 0 && age <= MaximumDirectionAgeMilliseconds;') {
+    throw 'Movement-directed En Avant Core must remain a pure two-segment finite world-displacement policy with exact DNC identity, inclusive 150-ms freshness, no fallback direction, and no native, camera, target, clock-source, input, scheduler, persistence, or network dependency.'
+}
+
+Assert-Literals $movementDirectedEnAvantTracker @(
+    'internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable',
+    'configuration.EnableBackwardPanicShukuchiCommand',
+    'using FFXIVClientStructs.FFXIV.Client.Game.Control;',
+    'private static bool IsLocomotionInputActive()',
+    'InputManager.Instance()',
+    'InputManager.IsAutoRunning()',
+    'InputCode.MOVE_FORE',
+    'InputCode.MOVE_BACK',
+    'InputCode.MOVE_LEFT',
+    'InputCode.MOVE_STRIFE_L',
+    'InputCode.MOVE_RIGHT',
+    'InputCode.MOVE_STRIFE_R',
+    'framework.Update += OnFrameworkUpdate',
+    'framework.Update -= OnFrameworkUpdate',
+    'MovementDirectedEnAvantRules.TryCapture(',
+    'MovementDirectedEnAvantRules.Observe(state, sample)',
+    'condition[ConditionFlag.BetweenAreas]',
+    'condition[ConditionFlag.BetweenAreas51]',
+    'condition[ConditionFlag.BeingMoved]',
+    'condition[ConditionFlag.Mounted]',
+    'PanicShukuchiRules.IsSupportedContext(',
+    'local.ClassJob.RowId == BackwardDashRules.DancerJobId',
+    'new MovementDirectedEnAvantFingerprint(',
+    'Environment.TickCount64',
+    'state = MovementDirectedEnAvantState.Initial',
+    'Command refused: move consistently before using /seitonenavant.'
+) 'Read-only movement-directed En Avant tracker'
+if ($movementDirectedEnAvantTracker -match '\b(?:ActionManager|UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|IGameInteropProvider|SignatureAttribute|SigScanner|CameraManager|SetRotation|IKeyState|VirtualKey|GetDeviceControlData|InputDevice|GamepadInput|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|File|Directory|HttpClient|WebRequest|Socket|Task|Timer|Thread|Queue|Retry|Replay|PendingDispatch|BufferedDispatch)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bunsafe\b').Count -ne 1 -or
+    $movementDirectedEnAvantTracker -notmatch 'internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable' -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputManager\.Instance\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputManager\.IsAutoRunning\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, 'input->GetInputStatus\s*\(').Count -ne 6 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputCode\.').Count -ne 6 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bframework\.Update \+= OnFrameworkUpdate').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bframework\.Update -= OnFrameworkUpdate').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.Observe\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.TryCapture\s*\(').Count -ne 1 -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal void Start\(\).*?if \(started \|\| disposed\) return; started = true; framework\.Update \+= OnFrameworkUpdate;' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal MovementDirectedEnAvantSnapshot Capture\(\).*?if \(!started \|\| disposed \|\| !TryCaptureCurrentFingerprint\(out var fingerprint\)\).*?return default;.*?MovementDirectedEnAvantRules\.TryCapture\( state, fingerprint, Environment\.TickCount64, out var snapshot\).*?return default;.*?return snapshot;' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'private void OnFrameworkUpdate\(IFramework _\).*?if \(disposed\) return; try \{ ObserveCurrentMovement\(\); \} catch \{ Reset\("Tracking reset: movement sampling faulted closed\."\); \}' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'private void ObserveCurrentMovement\(\).*?if \(!TryCaptureCurrentFingerprint\(out var fingerprint\)\).*?Reset\(.*?var sample = new MovementDirectedEnAvantSample\( fingerprint, position\.X, position\.Z, Environment\.TickCount64\);.*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'if \(!configuration\.Enabled \|\| !configuration\.EnableBackwardPanicShukuchiCommand \|\| !IsLocomotionInputActive\(\) \|\| condition\[ConditionFlag\.BetweenAreas\] \|\| condition\[ConditionFlag\.BetweenAreas51\] \|\| condition\[ConditionFlag\.BeingMoved\] \|\| condition\[ConditionFlag\.Mounted\] \|\| !PanicShukuchiRules\.IsSupportedContext\( ResolveContext\(\), configuration\.EnableWolvesDenTesting\)\).*?if \(!HasValidDancerIdentity\(local\)\) return false;.*?new MovementDirectedEnAvantFingerprint\( clientState\.TerritoryType, \(ulong\)\(nuint\)local!\.Address, local\.GameObjectId, local\.EntityId, local\.ClassJob\.RowId\);' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'private static bool IsLocomotionInputActive\(\).*?try \{ var input = InputManager\.Instance\(\); if \(input == null\) return false; return InputManager\.IsAutoRunning\(\) \|\| input->GetInputStatus\(InputCode\.MOVE_FORE\) \|\| input->GetInputStatus\(InputCode\.MOVE_BACK\) \|\| input->GetInputStatus\(InputCode\.MOVE_LEFT\) \|\| input->GetInputStatus\(InputCode\.MOVE_STRIFE_L\) \|\| input->GetInputStatus\(InputCode\.MOVE_RIGHT\) \|\| input->GetInputStatus\(InputCode\.MOVE_STRIFE_R\); \} catch \{ return false; \}' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'public void Dispose\(\).*?if \(disposed\) return; disposed = true; if \(started\) framework\.Update -= OnFrameworkUpdate; started = false; Reset\("Disposed\."\);') {
+    throw 'Movement-directed En Avant tracking must remain one Plugin-owned framework sampler, gated by the shared default-off command option, exact live DNC/PvP identity, and only the six reviewed logical MOVE_* signals or autorun; it may own no action, camera, target, physical-key guess, hook, scheduler, persistence, network, retry, or replay boundary.'
+}
+
 Assert-Literals $panicShukuchiService @(
     'internal const string Command = "/panicshu"',
     'internal const string BackwardCameraCommand = "/seitonbw"',
-    'Executes the explicit /panicshu command and its default-off /seitonbw sister.',
+    'internal const string MovementEnAvantCommand = "/seitonenavant"',
+    'sisters /seitonbw and /seitonenavant.',
     'immediately makes at most one UseAction',
-    'Both branches have no',
+    'All branches have no',
     'private const ulong DefaultTargetSentinel = 0xE0000000UL',
     'private const float GroundProbeStartAboveYalms = 5f',
     'private const float GroundProbeMaximumDistanceYalms = 10f',
@@ -2366,9 +2470,13 @@ Assert-Literals $panicShukuchiService @(
     'internal void ExecuteBackwardCamera(string arguments)',
     'local.ClassJob.RowId == PanicShukuchiRules.NinjaJobId',
     'ExecuteImmediate(arguments, DestinationMode.CameraFacingBackward);',
-    'ExecuteBackwardDirectional(arguments);',
+    'ExecuteBackwardDirectional(arguments, movementSnapshot: null);',
+    'internal void ExecuteMovementEnAvant(',
+    'MovementDirectedEnAvantSnapshot movementSnapshot) =>',
+    'ExecuteBackwardDirectional(arguments, movementSnapshot);',
     'private unsafe void ExecuteImmediate(string arguments, DestinationMode mode)',
-    'private unsafe void ExecuteBackwardDirectional(string arguments)',
+    'private unsafe void ExecuteBackwardDirectional(',
+    'MovementDirectedEnAvantSnapshot? movementSnapshot)',
     'configuration.EnableBackwardPanicShukuchiCommand',
     'CameraManager.Instance()',
     'cameraManager->GetActiveCamera()',
@@ -2377,6 +2485,8 @@ Assert-Literals $panicShukuchiService @(
     'normalCamera->IsEventCameraAutoControl',
     'normalCamera->DirH',
     'BackwardPanicShukuchiRules.TryCreateBackwardCameraProbe(',
+    'MovementDirectedEnAvantRules.MatchesCurrentIdentity(',
+    'profile.ActionId != MovementDirectedEnAvantRules.ActionId',
     'PanicShukuchiRules.Evaluate(',
     'actionManager->GetAdjustedActionId(',
     'ClientActionAttemptBoundary.Capture(',
@@ -2423,9 +2533,9 @@ $panicImmediateMatch = [regex]::Match(
     '(?s)private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?(?=\r?\n    private unsafe void ExecuteBackwardDirectional)')
 $backwardDirectionalMatch = [regex]::Match(
     $panicShukuchiService,
-    '(?s)private unsafe void ExecuteBackwardDirectional\(string arguments\).*?(?=\r?\n    private static unsafe BackwardPanicShukuchiCameraObservation)')
+    '(?s)private unsafe void ExecuteBackwardDirectional\(\s*string arguments,\s*MovementDirectedEnAvantSnapshot\? movementSnapshot\).*?(?=\r?\n    private static unsafe BackwardPanicShukuchiCameraObservation)')
 if (-not $panicImmediateMatch.Success -or -not $backwardDirectionalMatch.Success) {
-    throw 'The NIN location and directional /seitonbw command boundaries could not be isolated.'
+    throw 'The NIN location and shared directional /seitonbw-/seitonenavant command boundaries could not be isolated.'
 }
 $panicImmediate = $panicImmediateMatch.Value
 $backwardDirectional = $backwardDirectionalMatch.Value
@@ -2439,18 +2549,19 @@ if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -n
     [regex]::Matches($panicShukuchiService, '\bHookFromAddress<GameObject\.Delegates\.SetRotation>\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bShouldOverrideRotation\s*\(').Count -ne 1 -or
     $panicShukuchiService -match '(?-i:\b(?:IFramework|IKeyState|VirtualKey|TargetPressureTracker|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|RetryAction|RetryDispatch|BufferedDispatch|PendingDispatch|QueueAction|ExecuteAction|SendAction|OnFrameworkUpdate|PanicShukuchiPending|MaximumPendingMilliseconds)\b)|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)|->(?:ActionQueued|QueuedActionId|QueuedTargetId|AnimationLock|CastActionId)\s*=(?!=|>)' -or
-    $panicShukuchiService -match '\b(?:Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $panicShukuchiService -match '\b(?:DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    [regex]::Matches($panicShukuchiService, '\bEnvironment\.TickCount64\b').Count -ne 2 -or
     $panicShukuchiService -match '\b(?:IChatGui|chatGui|PrintError)\b' -or
     $panicShukuchiService -match '->(?:DirH|DirV|ControlMode|ZoomMode|IsEventCameraAutoControl|ActiveCameraIndex)\s*=(?!=|>)' -or
     $panicShukuchiService -match '\b(?:for|foreach|while|do)\s*\(') {
-    throw 'The two explicit dash paths must remain chat-silent, loop-free, immediate one-call commands with no scheduler, input injection, target mutation, retry, or fallback search.'
+    throw 'The location path and generalized directional path must remain chat-silent, loop-free, immediate one-call commands with no scheduler, input injection, target mutation, retry, or fallback search.'
 }
 if ($normalizedPanicShukuchiService -notmatch 'private void SetRotationDetour\(GameObject\* actor, float requestedHeading\).*?var scope = Volatile\.Read\(ref directionalRotationOverride\);.*?BackwardDashRules\.ShouldOverrideRotation\( scope\.Lease, Environment\.CurrentManagedThreadId, \(ulong\)\(nuint\)actor, actor->EntityId\).*?effectiveHeading = scope\.Lease\.DesiredActorHeading;.*?setRotationHook!\.Original\(actor, effectiveHeading\);' -or
     $normalizedPanicShukuchiService -notmatch 'internal void Start\(\) \{ if \(started \|\| disposed\) return; started = true; \}.*?private bool EnsureDirectionalRotationHookEnabled\(\).*?if \(!started \|\| disposed \|\| setRotationHook is null\) return false;.*?if \(setRotationHook\.IsEnabled\) return true;.*?setRotationHook\.Enable\(\);.*?return setRotationHook\.IsEnabled;' -or
-    $normalizedPanicShukuchiService -notmatch 'actionBuffer\.CanDispatchExactExternalAction\( profile\.ActionId, adjustedActionId, out var compatibilityReason\).*?RecordRefused\(\$"/seitonbw foreign action ownership blocked: \{compatibilityReason\}"\);.*?EnterDirectionalRotationOverride\(' -or
+    $normalizedPanicShukuchiService -notmatch 'actionBuffer\.CanDispatchExactExternalAction\( profile\.ActionId, adjustedActionId, out var compatibilityReason\).*?RecordRefused\(\$"\{command\} foreign action ownership blocked: \{compatibilityReason\}"\);.*?EnterDirectionalRotationOverride\(' -or
     $normalizedPanicShukuchiService -notmatch 'private IDisposable EnterDirectionalRotationOverride\( GameObject\* local, uint localEntityId, uint actionId, float desiredActorHeading\).*?setRotationHook\?\.IsEnabled != true.*?new BackwardDashRotationOverrideLease\( Environment\.CurrentManagedThreadId, actionId, \(ulong\)\(nuint\)local, localEntityId, desiredActorHeading\).*?Interlocked\.CompareExchange\( ref directionalRotationOverride, scope, comparand: null\) is not null.*?return scope;' -or
     $normalizedPanicShukuchiService -notmatch 'public void Dispose\(\).*?Interlocked\.Exchange\(ref directionalRotationOverride, null\)\?\.Retire\(\); setRotationHook\?\.Dispose\(\);') {
-    throw 'Directional /seitonbw must own one exact same-lane local-actor rotation override only for its synchronous native action boundary, so later camera-relative hooks cannot rewrite it.'
+    throw 'The generalized /seitonbw and /seitonenavant path must own one exact same-lane local-actor rotation override only for its synchronous native action boundary, so later camera-relative hooks cannot rewrite it.'
 }
 if ([regex]::Matches($panicImmediate, '\bUseActionLocation\s*\(').Count -ne 1 -or
     [regex]::Matches($panicImmediate, '(?<!Location)\bUseAction\s*\(').Count -ne 0 -or
@@ -2459,8 +2570,12 @@ if ([regex]::Matches($panicImmediate, '\bUseActionLocation\s*\(').Count -ne 1 -o
 }
 if ([regex]::Matches($backwardDirectional, '(?<!Location)\bUseAction\s*\(').Count -ne 1 -or
     [regex]::Matches($backwardDirectional, '\bUseActionLocation\s*\(').Count -ne 0 -or
-    $normalizedBackwardDirectional -notmatch 'TryGetDirectionalProfile\(localJobId, out var profile\).*?backwardDashMetadata\.Contains\(profile\.ActionId\).*?TryCreateBackwardCameraProbe\(.*?TryResolveActorFacing\(.*?GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?EnterDirectionalRotationOverride\( nativeLocal, local\.EntityId, profile\.ActionId, desiredActorHeading\);.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
-    throw 'Directional /seitonbw must freeze one reviewed base action, positively verify readiness/charge/camera/facing, make one exact self-action call, and restore facing only on a proven clean rejection.'
+    [regex]::Matches($panicShukuchiService, '(?m)^\s*private unsafe void ExecuteBackwardDirectional\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiService, '\bExecuteBackwardDirectional\s*\(').Count -ne 3 -or
+    $normalizedBackwardDirectional -notmatch 'var movementDirected = movementSnapshot\.HasValue; var command = movementDirected \? MovementEnAvantCommand : BackwardCameraCommand;.*?TryGetDirectionalProfile\(localJobId, out var profile\).*?if \(movementDirected && \(profile\.JobId != BackwardDashRules\.DancerJobId \|\| profile\.ActionId != MovementDirectedEnAvantRules\.ActionId\)\).*?backwardDashMetadata\.Contains\(profile\.ActionId\)' -or
+    $normalizedBackwardDirectional -notmatch 'if \(movementDirected\).*?MovementDirectedEnAvantRules\.MatchesCurrentIdentity\( snapshot, clientState\.TerritoryType, \(ulong\)\(nuint\)local\.Address, local\.GameObjectId, local\.EntityId, localJobId\) \|\| !MovementDirectedEnAvantRules\.IsFreshSnapshot\( snapshot, Environment\.TickCount64\).*?requestedWorldHeading = snapshot\.HeadingRadians;.*?else.*?CaptureBackwardCameraObservation\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\( origin, cameraObservation, out requestedWorldHeading, out _\).*?BackwardDashRules\.TryResolveActorFacing\( requestedWorldHeading, profile\.MovementKind, out var desiredActorHeading\)' -or
+    $normalizedBackwardDirectional -notmatch 'GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?movementDirected && \(!MovementDirectedEnAvantRules\.MatchesCurrentIdentity\( movementSnapshot!\.Value, clientState\.TerritoryType, \(ulong\)\(nuint\)finalLocal\.Address, finalLocal\.GameObjectId, finalLocal\.EntityId, finalLocal\.ClassJob\.RowId\) \|\| !MovementDirectedEnAvantRules\.IsFreshSnapshot\( movementSnapshot\.Value, Environment\.TickCount64\)\).*?EnterDirectionalRotationOverride\( nativeLocal, local\.EntityId, profile\.ActionId, desiredActorHeading\);.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
+    throw 'The generalized directional boundary must freeze one reviewed base action, admit /seitonenavant only for an exact fresh identity-bound DNC En Avant snapshot, otherwise require the reviewed camera path, make exactly one shared self-action call, and restore facing only on a proven clean rejection.'
 }
 $panicDecisionIndex = $panicShukuchiService.IndexOf(
     'var decision = PanicShukuchiRules.Evaluate(',
@@ -2536,37 +2651,60 @@ Assert-Literals $panicShukuchiMetadata @(
 ) 'Independent best-effort Ninja Hidden status catalog'
 
 Assert-Literals $pluginSource @(
+    'private readonly MovementDirectedEnAvantTracker movementDirectedEnAvant',
     'private readonly PanicShukuchiService panicShukuchi',
     'private readonly bool backwardPanicShukuchiCommandRegistered',
+    'private readonly bool movementEnAvantCommandRegistered',
+    'movementDirectedEnAvant = new MovementDirectedEnAvantTracker(',
     'panicShukuchi = new PanicShukuchiService(',
+    'movementDirectedEnAvant.Start()',
     'panicShukuchi.Start()',
+    'movementDirectedEnAvant.Dispose()',
     'panicShukuchi.Dispose()',
     'new CommandInfo(OnPanicShukuchiCommand)',
     'new CommandInfo(OnBackwardPanicShukuchiCommand)',
+    'new CommandInfo(OnMovementEnAvantCommand)',
     'panicShukuchi.Execute(arguments)',
     'panicShukuchi.ExecuteBackwardCamera(arguments)',
+    'panicShukuchi.ExecuteMovementEnAvant(',
+    'movementDirectedEnAvant.Capture()',
     'commandManager.RemoveHandler(PanicShukuchiService.Command)',
     'commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand)',
+    'commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand)',
     'panic-shukuchi[cmd={panicShukuchiCommandRegistered}',
     'bw-cmd={backwardPanicShukuchiCommandRegistered}',
+    'enavant-cmd={movementEnAvantCommandRegistered}',
+    'movement-enavant[{enAvantMovement.ToChatLine()}]',
     '/seitonbw is the default-off camera-back escape for NIN, AST, DNC, DRG, RPR, and PCT.',
+    '/seitonenavant uses the same default-off option and immediately moves DNC En Avant along the',
     '/panicshu immediately makes one NIN-only Shukuchi attempt 19.5 yalms straight ahead'
-) 'Two command-only immediate explicit dash entry points'
-if ($normalizedPanicShukuchiPlugin -notmatch 'panicShukuchi = new PanicShukuchiService\( configuration, clientState, objectTable, dutyState, nearAssist, integratedInput, interop, log, metadata\);.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?backwardPanicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.BackwardCameraCommand, new CommandInfo\(OnBackwardPanicShukuchiCommand\).*?AllowedInMacros = true.*?integratedInput\.Start\(\); panicShukuchi\.Start\(\);.*?panicShukuchi\.Dispose\(\); nearAssist\.Dispose\(\);' -or
+) 'Three command-only immediate explicit dash entry points and movement sampler lifecycle'
+if ($normalizedPanicShukuchiPlugin -notmatch 'movementDirectedEnAvant = new MovementDirectedEnAvantTracker\( configuration, clientState, objectTable, framework, dutyState, condition\); panicShukuchi = new PanicShukuchiService\( configuration, clientState, objectTable, dutyState, nearAssist, integratedInput, interop, log, metadata\);.*?panicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.Command, new CommandInfo\(OnPanicShukuchiCommand\).*?AllowedInMacros = true.*?backwardPanicShukuchiCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.BackwardCameraCommand, new CommandInfo\(OnBackwardPanicShukuchiCommand\).*?AllowedInMacros = true.*?movementEnAvantCommandRegistered = commandManager\.AddHandler\( PanicShukuchiService\.MovementEnAvantCommand, new CommandInfo\(OnMovementEnAvantCommand\).*?AllowedInMacros = true.*?integratedInput\.Start\(\); movementDirectedEnAvant\.Start\(\); panicShukuchi\.Start\(\);.*?movementDirectedEnAvant\.Dispose\(\); panicShukuchi\.Dispose\(\); nearAssist\.Dispose\(\);' -or
     [regex]::Matches($pluginSource, '\bnew\s+PanicShukuchiService\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bnew\s+MovementDirectedEnAvantTracker\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.Command').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.BackwardCameraCommand').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bcommandManager\.AddHandler\(\s*PanicShukuchiService\.MovementEnAvantCommand').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.Execute\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.ExecuteBackwardCamera\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bpanicShukuchi\.ExecuteMovementEnAvant\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bmovementDirectedEnAvant\.Capture\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bmovementDirectedEnAvant\.Start\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bmovementDirectedEnAvant\.Dispose\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.Start\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bpanicShukuchi\.Dispose\s*\(').Count -ne 1 -or
     [regex]::Matches($pluginSource, '\bOnPanicShukuchiCommand\s*\(').Count -ne 1 -or
-    [regex]::Matches($pluginSource, '\bOnBackwardPanicShukuchiCommand\s*\(').Count -ne 1) {
-    throw 'Exactly one macro-allowed /panicshu and one /seitonbw handler may synchronously execute their immediate explicit path; only the directional rotation hook may have a Plugin-owned lifecycle.'
+    [regex]::Matches($pluginSource, '\bOnBackwardPanicShukuchiCommand\s*\(').Count -ne 1 -or
+    [regex]::Matches($pluginSource, '\bOnMovementEnAvantCommand\s*\(').Count -ne 1) {
+    throw 'Exactly one macro-allowed /panicshu, /seitonbw, and /seitonenavant handler may execute their explicit paths; the movement sampler and directional rotation hook must each retain exactly one Plugin-owned lifecycle.'
 }
 $panicServiceTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bPanicShukuchiService\b')
+$movementEnAvantTrackerTypeReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bMovementDirectedEnAvantTracker\b')
 if (@($panicServiceTypeReferences | Where-Object {
         $_.Path -notin @($pluginPath, $panicShukuchiServicePath)
+    }).Count -ne 0 -or
+    @($movementEnAvantTrackerTypeReferences | Where-Object {
+        $_.Path -notin @($pluginPath, $movementDirectedEnAvantTrackerPath)
     }).Count -ne 0 -or
     [regex]::Matches(($sourceFiles | ForEach-Object {
         Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
@@ -2574,21 +2712,62 @@ if (@($panicServiceTypeReferences | Where-Object {
     [regex]::Matches(($sourceFiles | ForEach-Object {
         Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
     }) -join "`n", '\bpanicShukuchi\.ExecuteBackwardCamera\s*\(').Count -ne 1 -or
+    [regex]::Matches(($sourceFiles | ForEach-Object {
+        Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+    }) -join "`n", '\bpanicShukuchi\.ExecuteMovementEnAvant\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiConfiguration, '\bEnableBackwardPanicShukuchiCommand\b').Count -ne 3 -or
+    $panicShukuchiConfiguration -match '(?m)^\s*public bool Enable(?:Movement|EnAvant).*\{ get; set; \}' -or
     ($panicShukuchiConfiguration -replace '\s+', ' ') -notmatch 'public bool EnableBackwardPanicShukuchiCommand \{ get; set; \} = false;.*?if \(Version < 44\).*?EnableBackwardPanicShukuchiCommand = false;.*?public void ResetToDefaults\(\).*?EnableBackwardPanicShukuchiCommand = false;') {
-    throw 'Both explicit dash variants must remain command-only with one Plugin.cs provenance each; only /seitonbw may have one default-off configuration gate, migration, and reset.'
+    throw 'All three explicit dash commands must retain one Plugin.cs provenance each; /seitonbw and /seitonenavant must share the single existing schema-44 default-off configuration gate, migration, and reset without adding a second toggle.'
 }
 
 Assert-Literals $panicShukuchiMacroUi @(
-    'Enable /seitonbw camera-back job dash',
+    'Enable directional dash macros (/seitonbw, /seitonenavant)',
     'configuration.EnableBackwardPanicShukuchiCommand',
-    'Camera-back dash — NIN / AST / DNC / DRG / RPR / PCT',
+    'Directional dashes — NIN / AST / DNC / DRG / RPR / PCT',
+    'Camera-back macro:',
     'ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbw")',
     'NIN Shukuchi, AST Epicycle, DNC En Avant, DRG Elusive Jump, RPR Hell''s Ingress, or PCT Smudge.',
     'It never rotates the camera and never reads, changes, or substitutes your hard target.',
     'Missing or non-finite camera',
-    'It has no queue, pending lease, retry, fallback, or later replay.'
-) 'Default-off /seitonbw setting and one-line macro help'
+    'It has no queue, pending lease, retry, fallback, or later replay.',
+    'DNC current-movement macro:',
+    'ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonenavant")',
+    'two recent consistent movement segments',
+    'Stationary, stale, discontinuous, forced,',
+    'or identity-changing movement fails closed with no camera direction, actor-facing, or target fallback.',
+    'The command shares /seitonbw''s exact readiness, compatibility, own-Guard, and one-call boundary.'
+) 'Shared default-off /seitonbw and /seitonenavant setting and macro help'
+if ([regex]::Matches($panicShukuchiMacroUi, '\bconfiguration\.EnableBackwardPanicShukuchiCommand\b').Count -ne 2 -or
+    [regex]::Matches($panicShukuchiMacroUi, '"/seitonenavant"').Count -ne 1) {
+    throw 'The Macro Helpers UI must expose /seitonbw and /seitonenavant under exactly one shared persisted default-off toggle and one movement-command copy block.'
+}
+
+Assert-Literals $normalizedPanicShukuchiReadme @(
+    '**Movement-direction En Avant macro:**',
+    '`/seitonenavant` is a DNC-only explicit command',
+    'two fresh, consistent local-position segments',
+    'One invocation reaches at most one exact En Avant `29430` call, with no queue, retry, or fallback.',
+    '## Movement-direction En Avant macro',
+    'reuses the existing default-off directional-dash Macro Helpers option used by `/seitonbw`',
+    'A processed locomotion direction or autorun must still be active',
+    'It will not read or write camera state and will not read, change, or substitute any hard, soft, Focus, or mouseover target.',
+    'There will be no stored intent, framework wait, queue, lease, retry, alternate action, replay, or fallback direction.',
+    '`/seitonenavant` - with that same default-off directional-dash',
+    'has only one exact En Avant `29430` call boundary'
+) 'README movement-directed En Avant scope and shared setting disclosure'
+Assert-Literals $normalizedPanicShukuchiPrivacy @(
+    'for one explicit `/seitonenavant` DNC invocation, three fresh finite local-player world positions forming two consecutive, directionally consistent movement segments',
+    'current processed locomotion-or-autorun state',
+    'the samples and derived heading will remain bounded transient local state and is never persisted or uploaded;',
+    '## Explicit movement-direction En Avant macro',
+    'reuses the existing default-off directional-dash option',
+    'will not have an automatic, enemy, pressure, status, held-key, or scheduler trigger.',
+    'Current processed locomotion or autorun must remain active;',
+    'The helper does not read, write, or derive direction from the gameplay camera',
+    'at most one native En Avant call and has no stored intent, queue, timer, framework wait, lease, retry, replay, alternate action, last-known direction, or fallback.',
+    'DNC-only `/seitonenavant` movement-direction macro also reuses'
+) 'Privacy movement sampling, no-fallback, no-persistence, and shared-toggle disclosure'
 
 $panicTestMethods = @(
     'ConstantsAndForwardAxesAreExact',
@@ -2642,6 +2821,29 @@ if ([regex]::Matches($backwardDashSelfTests, '(?m)^\s*public static void \w+\(\)
     $backwardDashSelfTests -notmatch 'lease with \{ ActionId = 41_507 \}' -or
     $backwardDashSelfTests -notmatch 'lease with \{ DesiredActorHeading = float\.NaN \}') {
     throw 'All three pure directional backward-dash catalog/heading tests and their exact Core registry entries must remain pinned.'
+}
+
+$movementDirectedEnAvantTestMethods = @(
+    'CardinalAndDiagonalWorldHeadingsAreExact',
+    'ExactlyTwoSegmentsAndFreshnessBoundaryAreRequired',
+    'StationaryStaleAndDiscontinuousSamplesFailClosed',
+    'TeleportAndNonFiniteSamplesFailClosed',
+    'FingerprintDriftInvalidatesDirectionAndSnapshot'
+)
+foreach ($method in $movementDirectedEnAvantTestMethods) {
+    Assert-Literals $movementDirectedEnAvantSelfTests @("public static void $method()") "Movement-directed En Avant test $method"
+    Assert-Literals $panicShukuchiProgram @("MovementDirectedEnAvantSelfTests.$method") "Movement-directed En Avant test registration $method"
+}
+if ([regex]::Matches($movementDirectedEnAvantSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 5 -or
+    [regex]::Matches($panicShukuchiProgram, '\bMovementDirectedEnAvantSelfTests\.\w+').Count -ne 5 -or
+    $movementDirectedEnAvantSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|Dalamud|FFXIVClientStructs|IPlayerCharacter|IFramework|IObjectTable|IClientState|ICondition|IDutyState|CameraManager|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'Equal\(29_430u, MovementDirectedEnAvantRules\.ActionId' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'Equal\(2, MovementDirectedEnAvantRules\.RequiredConsistentSegmentCount' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'Equal\(150L, MovementDirectedEnAvantRules\.MaximumSampleGapMilliseconds' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'Equal\(150L, MovementDirectedEnAvantRules\.MaximumDirectionAgeMilliseconds' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'MovementDirectedEnAvantRules\.IsFreshSnapshot\(snapshot, 1_450\)' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'MovementDirectedEnAvantRules\.IsFreshSnapshot\(snapshot, 1_451\)') {
+    throw 'All five pure movement-directed En Avant geometry, freshness, discontinuity, non-finite, and exact-identity tests and their registry entries must remain pinned exactly once.'
 }
 
 # The automatic NIN Guard-Shukuchi helper is deliberately separate from the
@@ -4555,8 +4757,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 8 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 539) {
-    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 539-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 544) {
+    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 544-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiZantetsukenTargetSelectionRules @(
     'public const float EffectRangeYalms = 5f;',
@@ -10812,17 +11014,17 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.7</Version>',
-    '<AssemblyVersion>0.42.0.7</AssemblyVersion>',
-    '<FileVersion>0.42.0.7</FileVersion>'
-) 'v0.42.0.7 project version'
+    '<Version>0.42.0.8</Version>',
+    '<AssemblyVersion>0.42.0.8</AssemblyVersion>',
+    '<FileVersion>0.42.0.8</FileVersion>'
+) 'v0.42.0.8 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.7";',
-    'Fixed the 0.42.0.6 update-load failure caused by an oversized What''s New list. Seiton Sense now loads normally instead of disappearing after an update.',
-    'Malformed or oversized release notes are now sanitized, capped at five bullets, and hidden safely when empty; they can no longer stop the gameplay plugin from starting.',
-    'Smart Buffer, Turbo, recovery helpers, Smart Action, and CC transition behavior are otherwise unchanged by this hotfix.',
-    'Configuration schema remains 48. Live current-client confirmation remains pending.'
-) 'v0.42.0.7 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.8";',
+    'Added /seitonenavant: DNC can make one immediate En Avant along the direction the character is currently moving.',
+    'The direction comes from two fresh world-movement segments, so strafe, diagonals, remapped controls, and Standard or Legacy movement share one path.',
+    'The command uses the existing directional-dash opt-in and exact En Avant boundary. It never changes camera or target and has no queue, retry, or guessed fallback.',
+    'Configuration schema remains 48. Automated source and package checks pass; live cardinal, diagonal, and controller confirmation remains pending.'
+) 'v0.42.0.8 version-acknowledged movement-directed En Avant What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -10875,19 +11077,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.7 plugin manifest metadata'
+) 'v0.42.0.8 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.7"',
-    'Startup hotfix: version 0.42.0.6 supplied six What''s New bullets to a window that permitted at most five',
-    'Release-note content is now bounded and non-fatal',
-    'Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior are otherwise unchanged.',
+    '"AssemblyVersion": "0.42.0.8"',
+    'Adds /seitonenavant for DNC: one explicit En Avant follows the character''s fresh world movement direction, including strafe and diagonals, without camera or target changes.',
+    'It reuses the existing default-off directional-dash option and exact one-call En Avant boundary;',
+    'stationary, stale, discontinuous, or identity-changing movement fails closed with no queue, retry, or fallback.',
     'Schema 48;',
-    'live current-client validation remains pending.',
+    'live cardinal and diagonal validation remains pending.',
     '"IsHide": false'
-) 'v0.42.0.7 custom-repository metadata'
+) 'v0.42.0.8 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11011,8 +11213,10 @@ Assert-Literals $normalizedPrivacy @(
     'Active casts wait; Auto-Seiton never requests cast cancellation.',
     'the frozen intent clears without spending the readiness epoch and a different exact actor may be selected on a later frame.',
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
-) 'v0.42.0.7 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
+) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.42.0.8 adds `/seitonenavant`, a DNC-only explicit macro that sends one ready PvP En Avant along the local character''s fresh world movement direction, including strafe and diagonals, without moving the camera or changing a target.',
+    'It reuses the existing default-off directional-dash option and audited one-call boundary; uncertain or stale movement fails closed without a retry or fallback.',
     'Version 0.42.0.7 fixes the 0.42.0.6 update-load failure where six What''s New bullets exceeded the window''s five-entry contract and aborted plugin construction after the prior version had already unloaded.',
     'Release-note content is now bounded and non-fatal, while Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior remain unchanged by the hotfix.',
     'Version 0.42.0.6 fixes automatic Zantetsuken firing from LB readiness alone.',
@@ -11136,7 +11340,7 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
-    'For the current source, the exact 580-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
+    'For the current source, the exact 585-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -11150,8 +11354,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.7 current README startup hotfix, retained required-Kuzushi Zantetsuken, and safety contract'
+) 'v0.42.0.8 current README movement-directed En Avant release, retained startup hotfix, required-Kuzushi Zantetsuken, and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.8',
+    'Added `/seitonenavant`, a DNC-only explicit macro command using the same default-off directional-dash option as `/seitonbw`.',
+    'three fresh finite local world positions forming two consecutive, directionally consistent segments.',
+    'Current processed locomotion or autorun must remain active, so releasing movement clears the observation instead of retaining the previous heading.',
+    'Stationary, stale, discontinuous, non-finite, forced, mounted, loading, or teleport-sized movement clears the observation and exposes no last-direction fallback.',
+    'Reused the audited non-NIN directional boundary:',
+    'one self-targeted native action request.',
+    'Configuration schema remains `48`. Source build and all `585` Core tests pass;',
     '## 0.42.0.7',
     'Fixed the `0.42.0.6` update-load failure.',
     'That release passed six What''s New bullets into a presentation window which allowed at most five, so Dalamud unloaded the previous plugin and the replacement constructor then threw.',
@@ -11296,7 +11508,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.7 release notes and retained v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.8 release notes and retained v0.42.0.7/v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -12807,4 +13019,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.7 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 580-test Core registry. Optional What's New content is normalized, capped, and non-fatal, while the current initializer is release-gated to three through five concise bullets. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.8 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 585-test Core registry. The explicit DNC /seitonenavant command reuses the existing default-off directional-dash toggle and generalized one-UseAction boundary, with two fresh consistent world-movement segments, logical MOVE_*/autorun corroboration, exact identity and 150-ms freshness revalidation, and no camera, target, queue, retry, or fallback. Optional What's New content is normalized, capped, and non-fatal, while the current initializer is release-gated to three through five concise bullets. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."

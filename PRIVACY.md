@@ -174,6 +174,13 @@ following data already available in the local FFXIV client:
   `/seitonbw` may write only local character facing immediately before and during
   one reviewed self-dash boundary, including replacing a later same-thread local
   facing rewrite; it never writes camera or target state;
+- for one explicit `/seitonenavant` DNC invocation, three fresh finite
+  local-player world positions forming two consecutive, directionally consistent
+  movement segments, plus the same exact local identity, job, PvP context, En
+  Avant `29430` identity/readiness, current processed locomotion-or-autorun state,
+  and clean one-call boundary. It does not read
+  or write camera or target state; the samples and derived heading will remain
+  bounded transient local state and is never persisted or uploaded;
 - when held DRK Shadowbringer is enabled, the exact local DRK identity, held-key
   ownership, HP, Dark Arts, exact Blackblood status-row presence, incoming
   pressure, own Guard/cast/queue/animation state, native Shadowbringer readiness,
@@ -833,6 +840,32 @@ checks cannot establish current-client terrain, line-of-sight, actor-facing
 application, or actual movement behavior. Four-direction testing for all six
 jobs plus NIN slope/wall/invalid-endpoint cases in Wolves' Den remains a live-
 validation boundary, and a Den result is not proof of CC behavior.
+
+## Explicit movement-direction En Avant macro
+
+`/seitonenavant` is a command-only, user-authored DNC macro action. It
+reuses the existing default-off directional-dash option and runs only in
+Crystalline Conflict or explicitly enabled Wolves' Den testing. It will not have
+an automatic, enemy, pressure, status, held-key, or scheduler trigger.
+
+For one invocation, the helper will observe three fresh, finite local-player
+world positions to form two consecutive movement segments. Both segments must
+be current and agree on direction for the same exact local DNC identity and PvP
+context. This position-based rule treats cardinal, diagonal, and remapped
+movement uniformly without reading a physical key binding. Controller uses the
+same processed locomotion status by design but remains live-test pending. Current processed locomotion or autorun must remain active;
+releasing movement clears the observation immediately. Stationary or insufficient movement, stale or inconsistent
+segments, non-finite coordinates, or actor, job, context, or action-identity drift
+discard the observation and make no action call.
+
+The proven world direction may align only local character facing for one exact
+PvP En Avant `29430` native action boundary. The helper does not read, write, or
+derive direction from the gameplay camera, and it will not read, change, or
+substitute a hard, soft, Focus, or mouseover target. Each invocation makes at
+most one native En Avant call and has no stored intent, queue, timer,
+framework wait, lease, retry, replay, alternate action, last-known direction, or
+fallback. The samples and derived direction will be transient local state only;
+they will not be persisted or uploaded.
 
 ## Shared held-action scheduler
 
@@ -1709,7 +1742,8 @@ acknowledgement version, the Monk
 Earth's Reply master/triggers/thresholds,
 the separate NIN Guard-Shukuchi held-key and automatic NIN Seiton opt-ins, the Scholar
 Critical Strategy, Astrologian held Near Help, and RDM fresh-Guard opt-ins, the
-RDM own-HP/MP thresholds, and the camera-back job dash command opt-in,
+RDM own-HP/MP thresholds, and the camera-back job dash command opt-in that the
+DNC-only `/seitonenavant` movement-direction macro also reuses,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer,
   nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,

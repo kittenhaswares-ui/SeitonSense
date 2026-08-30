@@ -2,7 +2,12 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.7 fixes the 0.42.0.6
+assistance, and target highlights. Version 0.42.0.8 adds `/seitonenavant`, a
+DNC-only explicit macro that sends one ready PvP En Avant along the local
+character's fresh world movement direction, including strafe and diagonals,
+without moving the camera or changing a target. It reuses the existing
+default-off directional-dash option and audited one-call boundary; uncertain or
+stale movement fails closed without a retry or fallback. Version 0.42.0.7 fixes the 0.42.0.6
 update-load failure where six What's New bullets exceeded the window's
 five-entry contract and aborted plugin construction after the prior version had
 already unloaded. Release-note content is now bounded and non-fatal, while
@@ -352,6 +357,15 @@ and Super Focus Glow into one configurable custom-repository plugin.
   The camera and targets never change. Unsupported/transformed/non-ready actions
   and unavailable or nonstandard camera state fail closed, with no queue,
   pending state, fallback, or retry.
+- **Movement-direction En Avant macro:** `/seitonenavant` is a
+  DNC-only explicit command that reuses the existing default-off directional-
+  dash option. It derives the current world movement direction only from two
+  fresh, consistent local-position segments, covering cardinal, diagonal, and
+  remapped movement without reading the camera or any target. Controller uses
+  the same processed-input path by design but remains live-test pending.
+  Stationary or stale samples and identity drift fail closed. One invocation
+  reaches at most one exact En Avant `29430` call, with no queue, retry, or
+  fallback.
 - **Held DRK Shadowbringer:** the separate default-off Dark Knight helper uses
   ordinary held-key consent. Its default-on **Preserve Blackblood** sub-option
   blocks both exact Dark Arts and the configurable high-HP/low-pressure fallback
@@ -1781,6 +1795,39 @@ that exact same-thread action boundary. Routine results stay chat-silent and are
 available through `/seiton debug`; exact live direction and acceptance remain
 in-game validation points.
 
+## Movement-direction En Avant macro
+
+`/seitonenavant` is a separate, explicit DNC-only macro command. It
+reuses the existing default-off directional-dash Macro Helpers option used by
+`/seitonbw`; it does not add or implicitly enable another action-helper setting.
+It runs only for exact PvP DNC in Crystalline Conflict, or in Wolves' Den
+while **Enable Wolves' Den testing** is explicitly on. Frontline, Rival Wings,
+other jobs, and other contexts will fail closed.
+
+```text
+/seitonenavant
+```
+
+The command infers current world movement from two consecutive,
+fresh, finite local-player position segments that agree on direction. This
+world-space observation is independent of the authored binding, so cardinal and
+diagonal keyboard movement and remapped controls use the same contract. The
+controller path uses the same processed locomotion status by design, but remains
+live-test pending. A processed locomotion direction or autorun must still be
+active, so releasing movement clears the observation instead of exposing an old
+heading. It will not read or write camera state and will not read,
+change, or substitute any hard, soft, Focus, or mouseover target. Only local
+character facing may be aligned to the proven movement direction for the exact
+action boundary.
+
+One invocation reaches at most one exact PvP En Avant `29430` native action
+call. A stationary player, released locomotion input, insufficient displacement, stale or inconsistent
+segments, non-finite coordinates, or any local actor, job, PvP-context, or action-
+identity drift will refuse the call. The direction will not be guessed from a
+key, stick axis, camera, target, or last-known movement. There will be no stored
+intent, framework wait, queue, lease, retry, alternate action, replay, or fallback
+direction. A later macro press will be a new explicit request.
+
 ## Optional Auto Low-MP Focus Target
 
 This separate local setter is disabled by default and supports only exact
@@ -1855,6 +1902,7 @@ focus module to avoid drawing both over the same actor.
 | Optional MNK held combo helper | Yes | Yes, for the exact reviewed current target when test mode is enabled | No |
 | Manual NIN Panic Shukuchi macro | Yes | Yes, when test mode is enabled | No |
 | Optional manual camera-back job dash macro (NIN/AST/DNC/DRG/RPR/PCT) | Yes | Yes, when test mode is enabled | No |
+| Explicit movement-direction En Avant macro (DNC) | Yes | Yes, only when test mode is enabled | No |
 | Optional RDM fresh-Guard held-key engage | Yes | Yes, for the exact current target when test mode is enabled | No |
 | Optional DRK Shadowbringer held-key helper | Yes, held Smart Action policy with one exact frozen actor | Yes, exact current duel/dummy target when test mode is enabled | No |
 | Optional DPS Smart Tab | Yes | No | No |
@@ -1978,8 +2026,10 @@ Reset Defaults configurations because it both initiates an action and may change
 the exact hard target after client acceptance. `/panicshu` remains command-only
 and uses the existing global plugin enable plus the existing Wolves' Den testing
 option; schema 44 adds the separate default-off `/seitonbw` command toggle, now
-shared by the closed NIN/AST/DNC/DRG/RPR/PCT camera-back dash catalog. The generic
-held-action cast-cancellation test and schema-46 automatic basic-shot permission
+shared by the closed NIN/AST/DNC/DRG/RPR/PCT camera-back dash catalog. The
+`/seitonenavant` DNC command reuses that same option and does not change the
+current configuration schema or defaults. The generic held-action cast-
+cancellation test and schema-46 automatic basic-shot permission
 are both explicitly off for fresh, reset, and migrated configurations. An older
 explicitly enabled NIN fresh-edge helper still traverses
 schema 29 and migrates to the retained compatibility-named opt-in; the obsolete
@@ -2036,6 +2086,9 @@ update through the same repository.
 - `/seitonbw` - when its default-off Macro Helpers option is enabled, make one
   immediate camera-back self-dash on NIN, AST, DNC, DRG, RPR, or PCT, without
   moving the camera or changing target
+- `/seitonenavant` - with that same default-off directional-dash
+  option, make one DNC En Avant attempt along two fresh, consistent world-
+  position movement segments, without using the camera or any target
 - `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -2084,7 +2137,11 @@ off participant in the shared physical-input scheduler and is bounded as
 described above. Panic Shukuchi instead has no automatic or held-key trigger:
 only a user-authored `/panicshu` command can make its one immediate forward
 attempt, while the default-off `/seitonbw` toggle permits one explicit reviewed
-camera-back self-dash on NIN, AST, DNC, DRG, RPR, or PCT. For one already incoming,
+camera-back self-dash on NIN, AST, DNC, DRG, RPR, or PCT. The explicit
+`/seitonenavant` DNC command reuses that toggle but derives direction only
+from two fresh, consistent local world-position segments; it does not use or
+mutate camera or target state and has only one exact En Avant `29430` call
+boundary, with no queue, retry, or fallback. For one already incoming,
 enabled CC action attempt
 against an exact protected enemy, the optional brake can return `false` without
 calling the downstream/original action function. The exact native selected target may
@@ -2310,7 +2367,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 580-test Core registry and source checks pin
+For the current source, the exact 585-test Core registry and source checks pin
 configuration schema 48, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
