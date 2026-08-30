@@ -542,7 +542,16 @@ internal static class MiracleProtectionEndSelfTests
         Equal(
             SamuraiZantetsukenRules.ActionId,
             ordinaryTarget.ActionId,
-            "automatic Zantetsuken does not require held input, Kuzushi, or zero shield");
+            "automatic Zantetsuken needs no held input after exact own Kuzushi");
+        Equal(
+            SamuraiZantetsukenDecisionKind.Cancelled,
+            SamuraiZantetsukenRules.Observe(
+                zantetsuken,
+                ZanObservation() with
+                {
+                    ExactOwnSourceKuzushiPresent = false,
+                }).Kind,
+            "automatic Zantetsuken cannot start from LB readiness alone");
         var hardProtected = SamuraiZantetsukenRules.Observe(
             zantetsuken,
             ZanObservation(executeBlockingProtectionCount: 1));
@@ -776,6 +785,7 @@ internal static class MiracleProtectionEndSelfTests
             HardReset: false,
             ExactTargetStillCurrent: true,
             TargetAliveAndTargetable: true,
+            ExactOwnSourceKuzushiPresent: true,
             ExecuteBlockingProtectionCount: executeBlockingProtectionCount,
             BoundPresent: false,
             ZantetsukenReady: true,

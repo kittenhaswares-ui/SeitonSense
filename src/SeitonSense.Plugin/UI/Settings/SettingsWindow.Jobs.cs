@@ -339,21 +339,25 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Samurai — Zantetsuken", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Automatically use your own SAM Zantetsuken on the best 5y enemy cluster",
+                "Automatically use SAM Zantetsuken on your own Kuzushi target's best 5y cluster",
                 configuration.EnableSamuraiZantetsukenOnHeldKey,
                 value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Samurai only; no held key is required. In Crystalline Conflict it selects the " +
-                "reachable canonical enemy whose target-centered 5y circle reaches the most vulnerable enemies. " +
-                "Covered, Hallowed Ground, and Undead Redemption are excluded; Guard and Chiten are allowed. Equal " +
-                "clusters prefer your own unshielded Kuzushi, then lower HP%, then stable S-slot. Wolves' Den testing " +
-                "uses only the exact current duel target or reviewed striking dummy.");
+                "Default off and PvP Samurai only; no held key is required. LB readiness alone does nothing. In " +
+                "Crystalline Conflict the selected primary must carry exactly one current Kuzushi applied by you; " +
+                "among those reachable primaries, its target-centered 5y circle must reach the best vulnerable enemy " +
+                "cluster. Nearby cluster members do not need Kuzushi. Covered, Hallowed Ground, and Undead Redemption " +
+                "are excluded; Guard, Chiten, and shields are allowed. Equal clusters prefer an unshielded primary, " +
+                "then lower HP%, then stable S-slot. Wolves' Den uses only the exact current duel target or reviewed " +
+                "striking dummy and requires the same own-source Kuzushi, so a dummy cannot bypass the gate.");
             ImGui.TextDisabled(
                 "Purify stays absolute priority. The separate SAM post-Purify/Guard Soten-to-Mineuchi option runs first; " +
                 "an accepted Soten reserves its bounded Mineuchi arrival window before Zantetsuken or any lower helper. " +
-                "The automatic target stays frozen through global animation/cast waits and explicit client rejections " +
-                "use the shared bounded retry throttle. Accepted or ambiguous outcomes close that LB-ready epoch.");
+                "The automatic target stays frozen through global animation/cast waits; its exact own-source Kuzushi " +
+                "is rechecked immediately before UseAction. A pre-request proc loss releases the target without spending " +
+                "the ready epoch. Explicit client rejections use the shared bounded retry throttle; accepted or " +
+                "ambiguous outcomes close that epoch.");
             ImGui.PopTextWrapPos();
         }
 

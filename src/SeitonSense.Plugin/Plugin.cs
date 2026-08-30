@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.5";
+    private const string CurrentReleaseVersion = "0.42.0.6";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -406,10 +406,12 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto-Zantetsuken is now fully automatic while armed and chooses the reachable target with the largest vulnerable enemy cluster inside its target-centered 5-yalm circle.",
-                "Auto-Seiton is now fully automatic while its command or movable tile is ON; base and Unsealed readiness are separate bounded action epochs.",
-                "Smart Action Ogi, Kaeshi: Namikiri, and Tendo no longer stall because an unrelated enemy has Guard, Cover, or LB invulnerability; both Namikiri actions still avoid Chiten intersecting their cone.",
-                "Configuration schema remains 48. All 579 Core tests and release gates pass; live current-client confirmation remains pending.",
+                "Auto-Zantetsuken no longer fires from LB readiness alone. While armed, it waits until its selected primary target has exact Kuzushi applied by you.",
+                "It still chooses the best vulnerable target-centered 5-yalm cluster, allows shields, and rechecks the same own-source Kuzushi immediately before the native action request.",
+                "Wolves' Den uses the same Kuzushi gate, so a striking dummy cannot bypass it. Auto-Seiton was audited and remains unchanged: exact adjusted readiness plus a target strictly below 50% HP.",
+                "Smart Action no longer stalls an entire AoE because an unrelated enemy has Guard, Cover, or LB invulnerability. Incidental Chiten remains protected.",
+                "Reviewed ordinary gap closers and disengages can now use a guarded enemy as their movement target; stun-focused Forked/Fleeting Raiju remain blocked by Guard.",
+                "Configuration schema remains 48. Live current-client confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

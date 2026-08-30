@@ -23,18 +23,18 @@ internal static class CcImmunityBrakeMetadataGuard
 {
     private static readonly ActionExpectation[] ActionExpectations =
     [
-        new(29_065, 19, "Intervene", 9_369, 20, 0, 1, 150, "Additional Effect: Stun"),
-        new(29_081, 21, "Blota", 9_590, 15, 0, 1, 160, "Additional Effect: Heavy +75%"),
-        new(29_395, 23, "Silent Nocturne", 9_627, 20, 0, 1, 200, "Silences target."),
-        new(29_399, 23, "Repelling Shot", 9_215, 10, 0, 1, 100, "Additional Effect: Bind"),
-        new(29_228, 24, "Miracle of Nature", 9_608, 10, 0, 1, 240, "Relentless Rush, Honing Dance"),
-        new(41_510, 25, "Lethargy", 9_054, 25, 0, 1, 150, "Additional Effect: Heavy +75%"),
-        new(29_510, 30, "Forked Raiju", 9_656, 20, 0, 1, 25, "Additional Effect: Stun"),
-        new(29_707, 30, "Fleeting Raiju", 9_693, 20, 0, 1, 25, "Additional Effect: Stun"),
-        new(29_407, 31, "Air Anchor", 9_392, 25, 0, 1, 100, "Additional Effect: Bind"),
-        new(29_244, 33, "Gravity II", 9_617, 25, 8, 2, 160, "Afflicts first target with Heavy +75%"),
-        new(29_248, 33, "Gravity II", 9_617, 25, 8, 2, 120, "When cast via Double Cast, Binds first target."),
-        new(29_535, 34, "Mineuchi", 9_665, 5, 0, 1, 160, "Additional Effect: Stun"),
+        new(29_065, 19, "Intervene", 9_369, 20, 0, 1, 150, true, "Additional Effect: Stun"),
+        new(29_081, 21, "Blota", 9_590, 15, 0, 1, 160, false, "Additional Effect: Heavy +75%"),
+        new(29_395, 23, "Silent Nocturne", 9_627, 20, 0, 1, 200, false, "Silences target."),
+        new(29_399, 23, "Repelling Shot", 9_215, 10, 0, 1, 100, true, "Additional Effect: Bind"),
+        new(29_228, 24, "Miracle of Nature", 9_608, 10, 0, 1, 240, false, "Relentless Rush, Honing Dance"),
+        new(41_510, 25, "Lethargy", 9_054, 25, 0, 1, 150, false, "Additional Effect: Heavy +75%"),
+        new(29_510, 30, "Forked Raiju", 9_656, 20, 0, 1, 25, true, "Additional Effect: Stun"),
+        new(29_707, 30, "Fleeting Raiju", 9_693, 20, 0, 1, 25, true, "Additional Effect: Stun"),
+        new(29_407, 31, "Air Anchor", 9_392, 25, 0, 1, 100, false, "Additional Effect: Bind"),
+        new(29_244, 33, "Gravity II", 9_617, 25, 8, 2, 160, false, "Afflicts first target with Heavy +75%"),
+        new(29_248, 33, "Gravity II", 9_617, 25, 8, 2, 120, false, "When cast via Double Cast, Binds first target."),
+        new(29_535, 34, "Mineuchi", 9_665, 5, 0, 1, 160, false, "Additional Effect: Stun"),
     ];
 
     private static readonly StatusExpectation[] StatusExpectations =
@@ -160,6 +160,7 @@ internal static class CcImmunityBrakeMetadataGuard
         action.EffectRange == expected.EffectRange &&
         action.CastType == expected.CastType &&
         action.Recast100ms == expected.Recast100ms &&
+        action.AffectsPosition == expected.AffectsPosition &&
         transient.Description.ExtractText().Contains(
             expected.DescriptionFragment,
             StringComparison.Ordinal);
@@ -178,6 +179,7 @@ internal static class CcImmunityBrakeMetadataGuard
         byte EffectRange,
         byte CastType,
         ushort Recast100ms,
+        bool AffectsPosition,
         string DescriptionFragment);
 
     private sealed record StatusExpectation(

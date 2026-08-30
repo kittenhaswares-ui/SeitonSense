@@ -2552,7 +2552,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             action.EffectRange,
             protectedActors,
             actionIgnoresGuard:
-                smartActionGuardBypassActions.Contains(resolvedActionId));
+                CanSmartActionTargetGuard(resolvedActionId, action));
         SetSmartActionSafetyEvent(
             safe
                 ? $"Safe exact generic buffer replay S{target.Slot}"
@@ -3114,7 +3114,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             exact,
             action.EffectRange,
             protectedActors,
-            smartActionGuardBypassActions.Contains(resolvedActionId));
+            CanSmartActionTargetGuard(resolvedActionId, action));
         var exactIdentity = new TargetPressureActorIdentity(
             exact.Player.GameObjectId,
             exact.Player.EntityId);
@@ -3257,7 +3257,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         var actionIgnoresGuard =
-            smartActionGuardBypassActions.Contains(resolvedActionId);
+            CanSmartActionTargetGuard(resolvedActionId, action);
 
         var candidates = new List<SmartTargetRuntimeCandidate>(5);
         foreach (var canonicalEnemy in canonicalEnemies)
@@ -4310,7 +4310,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 action.EffectRange,
                 protectedActors,
                 actionIgnoresGuard:
-                    smartActionGuardBypassActions.Contains(resolvedActionId));
+                    CanSmartActionTargetGuard(resolvedActionId, action));
             SetSmartActionSafetyEvent(
                 safe
                     ? $"Safe exact Smart Action fallback S{target.Slot}"
@@ -4363,6 +4363,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var protections = new List<SmartActionProtectedActor>(5);
         var occupiedGameObjectIds = new HashSet<ulong>();
         var occupiedEntityIds = new HashSet<uint>();
+        var occupiedActorIdentities = new HashSet<(ulong GameObjectId, uint EntityId)>();
 
         for (var slot = EnemySlotRules.FirstSlot; slot <= EnemySlotRules.LastSlot; slot++)
         {
@@ -4375,7 +4376,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             if (!occupiedGameObjectIds.Add(enemy.GameObjectId) ||
-                !occupiedEntityIds.Add(enemy.EntityId))
+                !occupiedEntityIds.Add(enemy.EntityId) ||
+                !occupiedActorIdentities.Add((enemy.GameObjectId, enemy.EntityId)))
             {
                 canonicalEnemies = [];
                 protectedActors = [];
@@ -4431,9 +4433,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return true;
         }
 
-        // The fixed native S-slot view must account for every currently live,
-        // targetable hostile player in the object table. Otherwise an omitted
-        // protected actor could sit inside an AoE without entering its geometry.
+        // Area safety now needs complete incidental geometry only for Chiten,
+        // the one reviewed protection which can retaliate against the caller.
+        // A transient object-table actor absent from S1-S5 therefore blocks
+        // only when it is a SAM, has unknown job metadata, or visibly carries
+        // Chiten. Unrelated non-SAM Guard/Cover/LB actors cannot be selected
+        // without a canonical slot and must not globally stall every AoE.
         var observedHostileGameObjectIds = new HashSet<ulong>();
         var observedHostileEntityIds = new HashSet<uint>();
         foreach (var player in objectTable.PlayerObjects.OfType<IPlayerCharacter>())
@@ -4446,19 +4451,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             }
 
             if (!observedHostileGameObjectIds.Add(player.GameObjectId) ||
-                !observedHostileEntityIds.Add(player.EntityId) ||
-                !occupiedGameObjectIds.Contains(player.GameObjectId) ||
-                !occupiedEntityIds.Contains(player.EntityId))
+                !observedHostileEntityIds.Add(player.EntityId))
             {
                 canonicalEnemies = [];
                 protectedActors = [];
                 return false;
             }
-        }
 
-        if (!observedHostileGameObjectIds.SetEquals(occupiedGameObjectIds) ||
-            !observedHostileEntityIds.SetEquals(occupiedEntityIds))
-        {
+            var accountedFor = occupiedActorIdentities.Contains(
+                (player.GameObjectId, player.EntityId));
+            if (accountedFor) continue;
+
+            var jobId = player.ClassJob.IsValid ? player.ClassJob.RowId : 0;
+            var couldCarryChiten =
+                jobId is 0 or EnemyCombatConstants.SamuraiJobId ||
+                player.StatusList.Any(status =>
+                    status.StatusId == SmartActionProtectionRules.ChitenStatusId);
+            if (!couldCarryChiten) continue;
+
             canonicalEnemies = [];
             protectedActors = [];
             return false;
@@ -4473,6 +4483,31 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionProtectionRules.ClassifyAttackShape(
             action.EffectRange,
             action.CastType);
+
+    /// <summary>
+    /// Guard may be selected either when the exact English action description
+    /// says its damage ignores Guard, or when the current exact PvP row is one
+    /// of the closed ordinary hostile-target movement actions. The movement
+    /// exception only preserves the gap close/disengage itself; Chiten, Cover,
+    /// and invulnerability remain blocking protections.
+    /// </summary>
+    private bool CanSmartActionTargetGuard(
+        uint resolvedActionId,
+        GameAction action) =>
+        !SmartActionMovementGuardBypassRules.IsGuardBlockedCcMovement(resolvedActionId) &&
+        (smartActionGuardBypassActions.Contains(resolvedActionId) ||
+         (action.RowId == resolvedActionId &&
+          action.ClassJob.IsValid &&
+          SmartActionMovementGuardBypassRules.AllowsGuardTarget(
+              action.ClassJob.RowId,
+              resolvedActionId) &&
+          action.ActionCategory.IsValid &&
+          action.ActionCategory.RowId is 3 or 4 &&
+          action.IsPvP &&
+          action.CanTargetHostile &&
+          !action.TargetArea &&
+          action.Range > 0 &&
+          action.AffectsPosition));
 
     private bool IsSmartActionProtectionSafe(
         uint resolvedActionId,

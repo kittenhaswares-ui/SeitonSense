@@ -175,6 +175,7 @@ public readonly record struct SamuraiZantetsukenObservation(
     bool HardReset,
     bool ExactTargetStillCurrent,
     bool TargetAliveAndTargetable,
+    bool ExactOwnSourceKuzushiPresent,
     int ExecuteBlockingProtectionCount,
     bool BoundPresent,
     bool ZantetsukenReady,
@@ -186,9 +187,10 @@ public readonly record struct SamuraiZantetsukenDecision(
     uint ActionId);
 
 /// <summary>
-/// One frozen automatic target and one native Zantetsuken boundary. Exact
-/// Covered, Hallowed Ground, or Undead Redemption presence cancels without a
-/// fallback at that boundary; Guard and Chiten deliberately remain eligible.
+/// One frozen automatic target and one native Zantetsuken boundary. The frozen
+/// primary target must retain exact own-source Kuzushi. Exact Covered, Hallowed
+/// Ground, or Undead Redemption presence cancels without a fallback at that
+/// boundary; Guard and Chiten deliberately remain eligible.
 /// </summary>
 public static class SamuraiZantetsukenRules
 {
@@ -219,6 +221,7 @@ public static class SamuraiZantetsukenRules
             !observation.Enabled ||
             !observation.ExactTargetStillCurrent ||
             !observation.TargetAliveAndTargetable ||
+            !observation.ExactOwnSourceKuzushiPresent ||
             observation.ExecuteBlockingProtectionCount != 0 ||
             !observation.HasNativeRangeAndLineOfSight)
         {

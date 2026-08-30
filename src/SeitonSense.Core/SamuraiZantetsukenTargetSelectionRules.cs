@@ -24,10 +24,12 @@ public readonly record struct SamuraiZantetsukenTargetCandidate(
 
 /// <summary>
 /// Ranks reachable Zantetsuken endpoints by the number of vulnerable enemy
-/// hitboxes reached by its reviewed 5-yalm target-centered circle. Guard and
-/// Chiten are intentionally not blocking protections. Exact Covered, Hallowed
-/// Ground, and Undead Redemption rows exclude an actor from both endpoint
-/// selection and useful-cluster scoring.
+/// hitboxes reached by its reviewed 5-yalm target-centered circle. The selected
+/// primary endpoint must carry exactly one own-source Kuzushi row; nearby
+/// vulnerable actors without Kuzushi still contribute to cluster size. Guard
+/// and Chiten are intentionally not blocking protections. Exact Covered,
+/// Hallowed Ground, and Undead Redemption rows exclude an actor from both
+/// endpoint selection and useful-cluster scoring.
 /// </summary>
 public static class SamuraiZantetsukenTargetSelectionRules
 {
@@ -92,6 +94,7 @@ public static class SamuraiZantetsukenTargetSelectionRules
     public static bool IsSelectableTarget(
         SamuraiZantetsukenTargetCandidate candidate) =>
         IsUsefulClusterMember(candidate) &&
+        candidate.OwnSourceKuzushiCount == 1 &&
         candidate.HasNativeRangeAndLineOfSight;
 
     public static bool IsUsefulClusterMember(
@@ -171,7 +174,7 @@ public static class SamuraiZantetsukenTargetSelectionRules
         candidate.ExactCanonicalIdentity &&
         candidate.MaximumHp > 0 &&
         candidate.CurrentHp <= candidate.MaximumHp &&
-        candidate.OwnSourceKuzushiCount >= 0 &&
+        candidate.OwnSourceKuzushiCount is >= 0 and <= 1 &&
         candidate.ExecuteBlockingProtectionCount >= 0 &&
         IsFinite(candidate.Position) &&
         float.IsFinite(candidate.HitboxRadius) &&

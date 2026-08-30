@@ -198,9 +198,11 @@ following data already available in the local FFXIV client:
   sequence data. Automatic Zantetsuken additionally reads its armed state,
   adjusted-action readiness epoch, exact canonical enemy life/targetability,
   HP, positions and hitboxes for the target-centered 5-yalm cluster, blocking
-  protection rows, optional own Kuzushi attribution, shield amount, native
+  protection rows, the selected primary's required exact own-source Kuzushi
+  attribution, shield amount for ranking but not as an execution gate, native
   range/line of sight, Bind, cast/queue/animation state, frozen actor, and
-  bounded request/retry outcome;
+  bounded request/retry outcome. The same Kuzushi requirement applies to the
+  exact Wolves' Den duel target or reviewed striking dummy;
 - when reactive counter-CC timing is learned, the exact plugin-owned action,
   target and nonzero source sequence are correlated transiently with the matching
   server status. Only the resulting action ID, landing delay, and target-edge
@@ -482,6 +484,14 @@ Nocturne `29395`, Repelling Shot `29399`, Wunder der Natur / Miracle of Nature
 Raiju `29510`, Fleeting Raiju `29707`, Air Anchor `29407`, Gravity II `29244`,
 its Double Cast form `29248`, and Mineuchi `29535`.
 
+The standard matrix makes one narrow movement exception: Intervene `29065` and
+Repelling Shot `29399` are not blocked by Guard `3054`/`3673`, so their gap-close
+or disengage movement remains usable. Forked Raiju `29510` and Fleeting Raiju
+`29707` remain blocked by Guard because their stun timing must not be consumed
+into it. Resilience, Warden's Paean, Inner Release, Meikyo Shisui, and Hardened
+Scales retain their existing action/job-specific blocks. This exception is not
+used by the plugin-owned predictive post-Guard counter-CC path.
+
 If the master, exact job, and exact action are enabled and the exact hostile
 target has verified protection against that action's CC, the plugin returns
 `false` for that one incoming call without invoking the downstream/original
@@ -581,8 +591,14 @@ requested; a live `S1` is not a plugin-side arm prerequisite.
 
 Only an exact non-ground-target PvP hostile action and unique live canonical
 `S1`-`S5` candidates may qualify. Active Chiten, Guard, Covered, Paladin LB
-Hallowed Ground, and Dark Knight LB Undead Redemption are protection blockers;
-unverified Chiten metadata conservatively blocks every Samurai. Candidates that
+Hallowed Ground, and Dark Knight LB Undead Redemption block the selected
+primary actor. Exact Guard-ignoring damage and a closed catalog of 16 ordinary
+hostile-target movement actions may still select Guard; this preserves their
+movement and does not claim their damage or CC bypasses Guard. Chiten, Cover,
+Hallowed Ground, and Undead Redemption remain blockers for those actions.
+Forked Raiju `29510` and Fleeting Raiju `29707` are intentionally absent from
+that movement catalog so their stun attempts remain blocked by Guard.
+Unverified Chiten metadata conservatively blocks every Samurai. Candidates that
 pass protection safety rank by native reach tier first (melee, gap closer, then
 ranged/other), followed by lowest HP, fresh positive team pressure, known
 Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity.
@@ -592,10 +608,14 @@ does not apply the generic melee/gap-closer prefilter; the exact incoming
 action's native range/line-of-sight probe is authoritative. Invalid geometry or
 an ambiguous identity set fails to the authored fallback. Distance changes after
 one actor is frozen cannot trigger a rerank.
-Target-centered circles also compare their effect radius with every protected
-actor's current position and hitbox. Other unreviewed AoE shapes do not redirect
-while any protected actor exists. Those area/unknown shapes require the complete
-hostile S-slot/object-table snapshot. A direct single-target action instead
+Target-centered circles compare their effect radius with every Chiten actor's
+current position and hitbox. An incidental Guard, Cover, Hallowed Ground, or
+Undead Redemption actor does not veto an otherwise safe primary target. Other
+unreviewed AoE shapes retain the conservative global Chiten veto, but unrelated
+non-retaliatory protections no longer stall the action. Their hostile
+S-slot/object-table proof fails closed only for an unaccounted Samurai, unknown
+job, or actor visibly carrying Chiten; a transient unaccounted non-Samurai with
+no Chiten does not globally cancel the macro. A direct single-target action instead
 requires exact protection evidence for its selected actor and does not require
 unrelated hostile object-table completeness.
 

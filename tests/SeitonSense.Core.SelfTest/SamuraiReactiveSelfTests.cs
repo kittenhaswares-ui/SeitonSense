@@ -378,7 +378,16 @@ internal static class SamuraiReactiveSelfTests
             SamuraiZantetsukenRules.Observe(
                 armed,
                 ZantetsukenObservation()).ActionId,
-            "automatic intent needs no key, Kuzushi, or zero shield");
+            "automatic intent needs no key but does require exact own Kuzushi");
+        Equal(
+            SamuraiZantetsukenDecisionKind.Cancelled,
+            SamuraiZantetsukenRules.Observe(
+                armed,
+                ZantetsukenObservation() with
+                {
+                    ExactOwnSourceKuzushiPresent = false,
+                }).Kind,
+            "missing exact own-source Kuzushi cancels before any native attempt");
         Equal(
             SamuraiZantetsukenDecisionKind.Cancelled,
             SamuraiZantetsukenRules.Observe(
@@ -403,6 +412,13 @@ internal static class SamuraiReactiveSelfTests
                     BoundPresent = true,
                 }).Kind,
             "Bind waits without spending the automatic intent");
+        True(
+            SamuraiZantetsukenTargetSelectionRules.IsSelectableTarget(
+                ZantetsukenCandidate(1, x: 0f) with
+                {
+                    ShieldPercentage = 100,
+                }),
+            "exact own Kuzushi is required but shield remains a ranking input, not a gate");
 
         False(
             NinjaSeitonProtectionStatusCatalog.IsExecuteBlockingStatus(
@@ -441,9 +457,15 @@ internal static class SamuraiReactiveSelfTests
     {
         var candidates = new[]
         {
-            ZantetsukenCandidate(1, x: 0f),
+            ZantetsukenCandidate(1, x: 0f) with
+            {
+                OwnSourceKuzushiCount = 0,
+            },
             ZantetsukenCandidate(2, x: 4f),
-            ZantetsukenCandidate(3, x: 8f),
+            ZantetsukenCandidate(3, x: 8f) with
+            {
+                OwnSourceKuzushiCount = 0,
+            },
         };
         Equal(
             1,
@@ -454,7 +476,7 @@ internal static class SamuraiReactiveSelfTests
             3,
             SamuraiZantetsukenTargetSelectionRules
                 .CountUsefulClusterMembers(candidates, 1),
-            "selected endpoint counts every intersected vulnerable hitbox");
+            "selected Kuzushi endpoint counts nearby non-Kuzushi hitboxes");
 
         var protectedMiddle = new[]
         {
@@ -552,6 +574,36 @@ internal static class SamuraiReactiveSelfTests
             SamuraiZantetsukenTargetSelectionRules
                 .SelectBestEligibleTargetIndex(invalidGeometry),
             "unknown geometry fails the complete snapshot closed");
+
+        var noKuzushi = new[]
+        {
+            ZantetsukenCandidate(1, x: 0f) with
+            {
+                OwnSourceKuzushiCount = 0,
+            },
+            ZantetsukenCandidate(2, x: 4f) with
+            {
+                OwnSourceKuzushiCount = 0,
+            },
+        };
+        Equal(
+            -1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectBestEligibleTargetIndex(noKuzushi),
+            "LB readiness without exact own Kuzushi has no automatic endpoint");
+
+        var duplicateOwnKuzushi = new[]
+        {
+            ZantetsukenCandidate(1, x: 0f) with
+            {
+                OwnSourceKuzushiCount = 2,
+            },
+        };
+        Equal(
+            -1,
+            SamuraiZantetsukenTargetSelectionRules
+                .SelectBestEligibleTargetIndex(duplicateOwnKuzushi),
+            "duplicate own-source Kuzushi rows fail closed");
     }
 
     private static SamuraiZantetsukenTargetCandidate ZantetsukenCandidate(
@@ -598,6 +650,7 @@ internal static class SamuraiReactiveSelfTests
         HardReset: false,
         ExactTargetStillCurrent: true,
         TargetAliveAndTargetable: true,
+        ExactOwnSourceKuzushiPresent: true,
         ExecuteBlockingProtectionCount: executeBlockingProtectionCount,
         BoundPresent: false,
         ZantetsukenReady: true,

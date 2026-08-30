@@ -21,7 +21,8 @@ internal sealed record SamuraiReactiveMetadataValidation(
     internal bool CounterCcVerified =>
         SotenVerified && MineuchiVerified && ProtectionSignalPrerequisitesVerified;
     internal bool ZantetsukenWorkflowVerified =>
-        ZantetsukenVerified && ZantetsukenProtectionStatusesVerified;
+        ZantetsukenVerified && KuzushiVerified &&
+        ZantetsukenProtectionStatusesVerified;
 
     internal static SamuraiReactiveMetadataValidation None { get; } = new(
         false,
@@ -247,7 +248,8 @@ internal static class SamuraiReactiveMetadataGuard
             if (!zantetsuken)
                 log.Warning("Seiton Sense disabled unverified SAM Zantetsuken runtime.");
             if (!kuzushi)
-                log.Warning("Seiton Sense disabled the unverified SAM Kuzushi tie-breaker.");
+                log.Warning(
+                    "Seiton Sense disabled automatic SAM Zantetsuken because the required Kuzushi debuff metadata drifted.");
             if (!zantetsukenProtectionStatuses)
             {
                 log.Warning(

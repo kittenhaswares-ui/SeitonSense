@@ -2,7 +2,17 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.5 makes the existing
+assistance, and target highlights. Version 0.42.0.6 fixes automatic
+Zantetsuken firing from LB readiness alone. While armed, it now waits for its
+selected primary target to carry exact Kuzushi applied by the local Samurai,
+then ranks the best vulnerable target-centered 5-yalm cluster and rechecks that
+same proc immediately before the native request. Shields do not block it, and
+Wolves' Den uses the same Kuzushi gate. NIN Auto-Seiton was audited and remains
+unchanged. The same hotfix removes Smart Action's unrelated-Guard AoE stall and
+allows a closed current list of ordinary hostile gap closers and disengages to
+use a guarded enemy as their movement target; Chiten and hard execute
+protections remain enforced, and the stun-focused Forked/Fleeting Raiju remain
+blocked by Guard. Version 0.42.0.5 makes the existing
 Auto-Zantetsuken and `/autoseiton` switches fully automatic while armed, without
 held-key consent or automatic cast cancellation. Zantetsuken now ranks the
 largest vulnerable target-centered 5-yalm cluster, while NIN base and Unsealed
@@ -82,7 +92,8 @@ catch-up bursts, and yields to Purify and every higher-priority held helper. Sma
 Action protection is rebuilt directly before a sole delayed replay, while
 audited ReAction/MOAction conflicts disable only that buffer opportunity. It
 retains v0.34.0.4's Chiten, Covered, Paladin-LB, Dark-Knight-LB, and
-target-circle safety, with Guard bypassed only by exact Guard-ignoring actions,
+target-circle safety, with Guard permitted only for exact Guard-ignoring damage
+or the closed ordinary hostile-movement catalog,
 plus v0.34.0.3's Smart Tab line-of-sight and ranked-cycle
 fixes. Confirmed Auto-Guard can show a card/sound and protects an accidental
 second Guard press for two seconds; provisional or rejected requests do not arm
@@ -1284,24 +1295,28 @@ or switching the selected target, choosing an alternate action/actor, or
 replaying. Only an explicit client rejection may retry that same frozen intent
 under the common bound.
 
-For fully automatic Auto-Zantetsuken in exact CC, every living, targetable,
-natively reachable canonical endpoint is evaluated without requiring Kuzushi or
-zero shield. Covered, Hallowed Ground, and Undead Redemption exclude an endpoint
-and an enemy from useful cluster membership; Guard and Chiten do not. The winner
-is the endpoint whose target-centered 5-yalm circle intersects the most useful
-enemy hitboxes. Equal clusters prefer one exact own-source Kuzushi with zero
-shield, then lower HP ratio, then stable S-slot. That Kuzushi/shield state is
-only a tie-breaker, never an execution gate.
+For fully automatic Auto-Zantetsuken in exact CC, LB readiness alone never
+authorizes a request. An eligible living, targetable, natively reachable
+canonical primary endpoint must carry exactly one current Kuzushi row whose
+source is the local Samurai. The helper then chooses, among those eligible
+primaries, the endpoint whose target-centered 5-yalm circle intersects the most
+useful vulnerable enemy hitboxes; nearby cluster members do not need Kuzushi.
+Covered, Hallowed Ground, and Undead Redemption exclude an endpoint and an enemy
+from useful cluster membership; Guard and Chiten do not. Shields are not an
+execution gate. Equal clusters still prefer an unshielded own-Kuzushi primary,
+then lower HP ratio, then stable S-slot.
 
-The endpoint and selected cluster evidence freeze for an intent. Casts and other
-temporary native blocks wait without automatic cast cancellation. Identity,
-life, blocking protection, Bind, readiness, range, and line of sight are checked
-again at the latest native boundary. If the endpoint becomes invalid before any
-native request, the still-ready LB epoch may rank again on the next frame. After
-a request, only the bounded explicit-rejection retry may reuse that same frozen
+The primary endpoint freezes for an intent. Casts and other temporary native
+blocks wait without automatic cast cancellation. Exact own-source Kuzushi,
+identity, life, blocking protection, Bind, readiness, range, and line of sight
+are checked again at the latest native boundary. If Kuzushi disappears or the
+endpoint otherwise becomes invalid before any native request, the intent is
+released and the still-ready LB epoch may rank again on a later frame. After a
+request, only the bounded explicit-rejection retry may reuse that same frozen
 endpoint; acceptance, ambiguity, exhaustion, or drift is terminal. Enabled
-Wolves' Den testing deliberately remains restricted to the exact current duel
-target or reviewed striking dummy, without Kuzushi or shield gates.
+Wolves' Den testing remains restricted to the exact current duel target or
+reviewed striking dummy and applies the same exact own-Kuzushi gate, so a dummy
+cannot bypass it.
 
 After an exact plugin-owned request lands, the matching nonzero source sequence,
 action, target, status, delay, and target-edge distance can contribute one

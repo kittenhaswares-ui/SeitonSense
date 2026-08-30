@@ -18,7 +18,8 @@ public enum SmartActionProtectionKind : byte
 
 /// <summary>
 /// Reviewed harmful-action geometry. Unsupported area shapes are deliberately
-/// distinct so callers can fail closed whenever any protected actor exists.
+/// distinct so callers retain the conservative global Chiten veto without
+/// treating unrelated non-retaliatory protections as a global action lock.
 /// </summary>
 public enum SmartActionAttackShape : byte
 {
@@ -85,7 +86,7 @@ public static class SmartActionProtectionRules
     /// <summary>
     /// Maps only reviewed Action-sheet geometry to a supported attack shape.
     /// Any new or drifting CastType/EffectRange combination remains an
-    /// unsupported area shape so protected actors make the action fail closed.
+    /// unsupported area shape with a conservative global Chiten veto.
     /// </summary>
     public static SmartActionAttackShape ClassifyAttackShape(byte effectRange, byte castType) =>
         (effectRange, castType) switch
@@ -126,9 +127,12 @@ public static class SmartActionProtectionRules
     }
 
     /// <summary>
-    /// A target-centered circle is blocked when the circle reaches any part of
-    /// a protected actor's hitbox. EffectRange is measured from the selected
-    /// target's center; the selected target's own hitbox does not enlarge it.
+    /// A target-centered circle may never select a protected primary actor.
+    /// Among incidental actors, only Chiten is dangerous to the caller and
+    /// therefore vetoes a candidate when the circle reaches its hitbox. Guard,
+    /// Cover, and invulnerability on an unrelated actor must not stall the
+    /// whole action. EffectRange is measured from the selected target's center;
+    /// the selected target's own hitbox does not enlarge it.
     /// </summary>
     public static bool IsTargetCenteredCircleSafe(
         SmartActionActorGeometry target,
@@ -142,11 +146,17 @@ public static class SmartActionProtectionRules
             return false;
         }
 
+        if (!IsDirectTargetSafe(target, actors, actionIgnoresGuard))
+            return false;
+
         foreach (var protectedActor in actors)
         {
-            if (!IsBlockingProtection(protectedActor.Kind, actionIgnoresGuard)) continue;
+            if ((protectedActor.Kind & SmartActionProtectionKind.Chiten) == 0)
+                continue;
+
             var protectedGeometry = protectedActor.Geometry;
-            if (SharesSlotOrEitherId(target, protectedGeometry)) return false;
+            if (SharesSlotOrEitherId(target, protectedGeometry))
+                continue;
 
             var deltaX = (double)target.Position.X - protectedGeometry.Position.X;
             var deltaZ = (double)target.Position.Z - protectedGeometry.Position.Z;
@@ -183,10 +193,32 @@ public static class SmartActionProtectionRules
                     actors,
                     actionIgnoresGuard),
             SmartActionAttackShape.UnsupportedAreaOfEffect =>
-                actors.All(actor =>
-                    !IsBlockingProtection(actor.Kind, actionIgnoresGuard)),
+                IsUnsupportedAreaCandidateSafe(
+                    target,
+                    actors,
+                    actionIgnoresGuard),
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Unknown current AoE geometry stays conservative around Chiten because
+    /// its actual footprint has not been reviewed. It is nevertheless
+    /// candidate-local for non-retaliatory protections: the selected actor must
+    /// be safe, but unrelated Guard, Cover, or invulnerability no longer makes
+    /// every target and the authored macro fallback inert.
+    /// </summary>
+    private static bool IsUnsupportedAreaCandidateSafe(
+        SmartActionActorGeometry target,
+        IReadOnlyList<SmartActionProtectedActor> actors,
+        bool actionIgnoresGuard)
+    {
+        if (!IsDirectTargetSafe(target, actors, actionIgnoresGuard))
+            return false;
+
+        return actors.All(actor =>
+            (actor.Kind & SmartActionProtectionKind.Chiten) == 0 ||
+            SharesSlotOrEitherId(target, actor.Geometry));
     }
 
     private static bool IsBlockingProtection(

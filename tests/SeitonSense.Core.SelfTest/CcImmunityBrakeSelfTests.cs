@@ -48,6 +48,76 @@ internal static class CcImmunityBrakeSelfTests
         Equal(1, CcImmunityBrakeActionCatalog.ForJob(25).Count, "BLM actions");
         Equal(0, CcImmunityBrakeActionCatalog.ForJob(1).Count, "unknown job");
 
+        var expectedMovement = new (uint Job, uint Action, string Name)[]
+        {
+            (19, 29_065, "Intervene"),
+            (21, 29_079, "Onslaught"),
+            (21, 29_084, "Primal Rend"),
+            (32, 29_092, "Plunge"),
+            (37, 29_123, "Rough Divide"),
+            (24, 29_229, "Seraph Strike"),
+            (40, 29_261, "Icarus"),
+            (23, 29_399, "Repelling Shot"),
+            (20, 29_484, "Thunderclap"),
+            (22, 29_493, "High Jump"),
+            (34, 29_532, "Hissatsu: Soten"),
+            (25, 29_660, "Aetherial Manipulation"),
+            (27, 29_667, "Crimson Cyclone"),
+            (35, 29_699, "Corps-a-corps"),
+            (35, 29_700, "Displacement"),
+            (41, 39_184, "Slither"),
+        };
+        Equal(expectedMovement.Length,
+            SmartActionMovementGuardBypassRules.Definitions.Count,
+            "ordinary hostile movement catalog size");
+        Equal(expectedMovement.Length,
+            SmartActionMovementGuardBypassRules.Definitions
+                .Select(static definition => definition.ActionId)
+                .Distinct()
+                .Count(),
+            "ordinary hostile movement action IDs are unique");
+        for (var index = 0; index < expectedMovement.Length; index++)
+        {
+            var actual = SmartActionMovementGuardBypassRules.Definitions[index];
+            Equal(expectedMovement[index].Job, actual.JobId, $"movement job at {index}");
+            Equal(expectedMovement[index].Action, actual.ActionId, $"movement action at {index}");
+            Equal(expectedMovement[index].Name, actual.DisplayName, $"movement name at {index}");
+            True(SmartActionMovementGuardBypassRules.IsReviewedAction(actual.ActionId),
+                $"movement action-only lookup at {index}");
+            True(SmartActionMovementGuardBypassRules.IsReviewedAction(actual.JobId, actual.ActionId),
+                $"movement exact lookup at {index}");
+            True(SmartActionMovementGuardBypassRules.AllowsGuardTarget(actual.JobId, actual.ActionId),
+                $"movement Guard-target policy at {index}");
+            False(SmartActionMovementGuardBypassRules.IsReviewedAction(actual.JobId + 1, actual.ActionId),
+                $"movement wrong-job lookup at {index}");
+        }
+
+        foreach (var excludedLimitBreak in new uint[] { 29_485, 29_515, 29_516, 29_537, 39_190 })
+            False(SmartActionMovementGuardBypassRules.IsReviewedAction(excludedLimitBreak),
+                $"movement LB {excludedLimitBreak} remains excluded");
+        foreach (var stunMovement in new uint[] { 29_510, 29_707 })
+        {
+            False(SmartActionMovementGuardBypassRules.IsReviewedAction(stunMovement),
+                $"Raiju stun movement {stunMovement} remains blocked by Guard");
+            True(SmartActionMovementGuardBypassRules.IsGuardBlockedCcMovement(stunMovement),
+                $"Raiju stun movement {stunMovement} has a categorical Guard deny");
+            False(SmartActionMovementGuardBypassRules.AllowsGuardTarget(30, stunMovement),
+                $"Raiju stun movement {stunMovement} cannot acquire movement Guard permission");
+        }
+        foreach (var ordinaryMovement in new uint[] { 29_065, 29_399, 29_699, 29_700 })
+            False(SmartActionMovementGuardBypassRules.IsGuardBlockedCcMovement(ordinaryMovement),
+                $"ordinary movement {ordinaryMovement} is not a Raiju stun deny");
+        False(SmartActionMovementGuardBypassRules.IsReviewedAction(0),
+            "zero is not a reviewed movement action");
+        False(SmartActionMovementGuardBypassRules.IsReviewedAction(uint.MaxValue),
+            "unknown action is not a reviewed movement action");
+        True(SmartActionMovementGuardBypassRules.IsGuardStatus(3_054),
+            "standard Guard row is exact");
+        True(SmartActionMovementGuardBypassRules.IsGuardStatus(3_673),
+            "large-scale Guard row is exact");
+        False(SmartActionMovementGuardBypassRules.IsGuardStatus(3_248),
+            "Purify Resilience is not reclassified as Guard");
+
         uint[] deliberatelyExcludedAreaActions =
         [
             29_084, // Primal Rend
@@ -66,50 +136,50 @@ internal static class CcImmunityBrakeSelfTests
 
     internal static void ToggleAndIdentityGatesPassWithoutMutation()
     {
-        var baseline = Evaluate(19, 29_065, [3_054]);
+        var baseline = Evaluate(21, 29_081, [3_054]);
         True(baseline.ShouldBlock, "enabled exact attempt blocks");
 
-        var masterOff = Evaluate(19, 29_065, [3_054], master: false);
+        var masterOff = Evaluate(21, 29_081, [3_054], master: false);
         Pass(masterOff, CcImmunityBrakeDecisionReason.MasterDisabled, "master off");
-        var jobOff = Evaluate(19, 29_065, [3_054], job: false);
+        var jobOff = Evaluate(21, 29_081, [3_054], job: false);
         Pass(jobOff, CcImmunityBrakeDecisionReason.JobDisabled, "job off");
-        var actionOff = Evaluate(19, 29_065, [3_054], action: false);
+        var actionOff = Evaluate(21, 29_081, [3_054], action: false);
         Pass(actionOff, CcImmunityBrakeDecisionReason.ActionDisabled, "action off");
 
-        var unknown = Evaluate(19, 123, [3_054]);
+        var unknown = Evaluate(21, 123, [3_054]);
         Pass(unknown, CcImmunityBrakeDecisionReason.ActionNotCataloged, "unknown action");
-        var wrongJob = Evaluate(21, 29_065, [3_054]);
+        var wrongJob = Evaluate(19, 29_081, [3_054]);
         Pass(wrongJob, CcImmunityBrakeDecisionReason.JobMismatch, "wrong job");
     }
 
     internal static void TargetMustBeExactValidAndMatchIncomingCall()
     {
-        var ambiguous = Evaluate(19, 29_065, [3_054], exactTarget: false);
+        var ambiguous = Evaluate(21, 29_081, [3_054], exactTarget: false);
         Pass(ambiguous, CcImmunityBrakeDecisionReason.TargetNotResolvedExactly, "ambiguous target");
 
         var invalidGameId = Evaluate(
-            19,
-            29_065,
+            21,
+            29_081,
             [3_054],
             resolvedTarget: ExactTarget with { GameObjectId = 0 });
         Pass(invalidGameId, CcImmunityBrakeDecisionReason.InvalidTargetIdentity, "missing game ID");
         var invalidEntityId = Evaluate(
-            19,
-            29_065,
+            21,
+            29_081,
             [3_054],
             resolvedTarget: ExactTarget with { EntityId = 0xE0000000 });
         Pass(invalidEntityId, CcImmunityBrakeDecisionReason.InvalidTargetIdentity, "invalid entity ID");
 
-        var invalidIncoming = Evaluate(19, 29_065, [3_054], incomingTargetId: 0xE0000000);
+        var invalidIncoming = Evaluate(21, 29_081, [3_054], incomingTargetId: 0xE0000000);
         Pass(invalidIncoming, CcImmunityBrakeDecisionReason.IncomingTargetMismatch, "invalid incoming target");
-        var otherIncoming = Evaluate(19, 29_065, [3_054], incomingTargetId: 999);
+        var otherIncoming = Evaluate(21, 29_081, [3_054], incomingTargetId: 999);
         Pass(otherIncoming, CcImmunityBrakeDecisionReason.IncomingTargetMismatch, "different incoming target");
 
         True(
-            Evaluate(19, 29_065, [3_054], incomingTargetId: ExactTarget.GameObjectId).ShouldBlock,
+            Evaluate(21, 29_081, [3_054], incomingTargetId: ExactTarget.GameObjectId).ShouldBlock,
             "game object ID identifies exact target");
         True(
-            Evaluate(19, 29_065, [3_054], incomingTargetId: ExactTarget.EntityId).ShouldBlock,
+            Evaluate(21, 29_081, [3_054], incomingTargetId: ExactTarget.EntityId).ShouldBlock,
             "entity ID identifies exact target");
     }
 
@@ -188,11 +258,29 @@ internal static class CcImmunityBrakeSelfTests
                      .Where(static definition =>
                          definition.BlockerFamily == CcImmunityBrakeBlockerFamily.StandardPurifyCc))
         {
-            foreach (var statusId in new uint[] { 3_054, 3_673, 3_248, 3_143 })
+            foreach (var statusId in new uint[] { 3_054, 3_673 })
+            {
+                var decision = Evaluate(definition.JobId, definition.ActionId, [statusId]);
+                if (SmartActionMovementGuardBypassRules.IsReviewedAction(
+                        definition.JobId,
+                        definition.ActionId))
+                {
+                    Pass(decision, CcImmunityBrakeDecisionReason.NoVerifiedBlocker,
+                        $"movement {definition.ActionId} remains usable through Guard {statusId}");
+                }
+                else
+                {
+                    True(decision.ShouldBlock, $"{definition.ActionId} blocked by {statusId}");
+                    Equal(statusId, decision.BlockerStatusId, "exact Guard blocker reported");
+                }
+            }
+
+            foreach (var statusId in new uint[] { 3_248, 3_143 })
             {
                 var decision = Evaluate(definition.JobId, definition.ActionId, [statusId]);
                 True(decision.ShouldBlock, $"{definition.ActionId} blocked by {statusId}");
-                Equal(statusId, decision.BlockerStatusId, "exact blocker reported");
+                Equal(statusId, decision.BlockerStatusId,
+                    "non-Guard immunity remains an exact blocker");
             }
 
             foreach (var statusId in new uint[] { 0, 1, 2_708, 3_086, 3_052, 3_162, 4_477, uint.MaxValue })
@@ -214,6 +302,16 @@ internal static class CcImmunityBrakeSelfTests
                     $"status {statusId} cannot protect job {wrongJob}");
             }
         }
+
+        EqualSequence(
+            new uint[] { 29_065, 29_399 },
+            CcImmunityBrakeActionCatalog.Definitions
+                .Where(definition => SmartActionMovementGuardBypassRules.IsReviewedAction(
+                    definition.JobId,
+                    definition.ActionId))
+                .Select(static definition => definition.ActionId)
+                .ToArray(),
+            "only two CC-brake actions receive the movement Guard exception");
     }
 
     internal static void MiracleBlockerMatrixIsExact()
@@ -285,17 +383,17 @@ internal static class CcImmunityBrakeSelfTests
 
     internal static void StatusOrderingIsStableAndRulesAreStateless()
     {
-        var first = Evaluate(19, 29_065, [3_143, 1_320, 3_054]);
-        var second = Evaluate(19, 29_065, [1_320, 3_054, 3_143, 3_054]);
+        var first = Evaluate(21, 29_081, [3_143, 1_320, 3_054]);
+        var second = Evaluate(21, 29_081, [1_320, 3_054, 3_143, 3_054]);
         Equal(3_054u, first.BlockerStatusId, "catalog order wins");
         Equal(first, second, "input order and duplicates do not change decision");
 
-        var repeated = Evaluate(19, 29_065, [3_054]);
+        var repeated = Evaluate(21, 29_081, [3_054]);
         Equal(first, repeated, "same event is evaluated without retained state");
 
-        var noStatuses = Evaluate(19, 29_065, null);
+        var noStatuses = Evaluate(21, 29_081, null);
         Pass(noStatuses, CcImmunityBrakeDecisionReason.NoVerifiedBlocker, "null observations");
-        var emptyStatuses = Evaluate(19, 29_065, []);
+        var emptyStatuses = Evaluate(21, 29_081, []);
         Pass(emptyStatuses, CcImmunityBrakeDecisionReason.NoVerifiedBlocker, "empty observations");
 
         False(

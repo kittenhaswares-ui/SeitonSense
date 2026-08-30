@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.42.0.6
+
+- Fixed the `0.42.0.5` Auto-Zantetsuken regression that allowed an armed helper
+  to fire as soon as limit-break action `29537` became ready. Readiness alone is
+  no longer sufficient: the selected primary target must carry exactly one
+  current Kuzushi `3202` whose source is the local Samurai.
+- Preserved the target-centered 5-yalm cluster strategy. Among reachable primary
+  targets with exact own-source Kuzushi, the helper chooses the endpoint whose
+  circle reaches the largest vulnerable enemy cluster; nearby vulnerable actors
+  do not need Kuzushi. A shield does not block selection or dispatch, although
+  an unshielded primary remains the first equal-cluster tie-breaker. Guard and
+  Chiten remain valid, while Covered, Hallowed Ground, and Undead Redemption are
+  excluded.
+- Revalidates the frozen primary's exact own-source Kuzushi directly before the
+  native action request. If the proc disappears before any request, the frozen
+  intent is released without spending the still-ready LB epoch. Wolves' Den now
+  applies the same gate to its exact current duel target or reviewed striking
+  dummy, so the dummy cannot bypass Kuzushi merely for test mode.
+- Audited NIN Auto-Seiton without changing its behavior. Base `29515` and
+  Unsealed `29516` retain their separate adjusted-action readiness epochs, exact
+  own follow-up status, strictly-below-50%-HP target gate, and final protection,
+  range, and line-of-sight checks.
+- Fixed Smart Action feeling blocked when an unrelated enemy elsewhere had
+  Guard, Cover, Hallowed Ground, or Undead Redemption. A protected primary is
+  still rejected, but incidental non-retaliatory protections no longer cancel
+  an entire target-circle or otherwise-unreviewed AoE. Incidental Chiten remains
+  conservative: circles test its real hitbox and an unreviewed AoE still vetoes
+  while any possible Chiten actor is present. A transient extra non-SAM actor
+  without Chiten can no longer invalidate the complete area snapshot.
+- Added a closed 16-action ordinary PvP movement catalog so reviewed hostile
+  gap closers and disengages can select an enemy through Guard. Chiten, Cover,
+  Hallowed Ground, and Undead Redemption remain blockers. The optional final
+  CC-immunity brake now also lets Intervene and Repelling Shot execute through
+  Guard while Resilience, Warden's Paean, and job-specific CC immunity still
+  block their CC component. Forked and Fleeting Raiju deliberately remain
+  blocked by Guard because their stun timing must not be consumed into it.
+  Purify/Resilience on an unrelated enemy remains irrelevant; the brake inspects
+  only the exact selected primary target.
+- Configuration schema remains `48`. Source build, all `579` Core tests, and
+  the source safety contract pass; package and live current-client confirmation
+  remain pending.
+
 ## 0.42.0.5
 
 - Changed the existing default-off Auto-Zantetsuken option from held-key consent

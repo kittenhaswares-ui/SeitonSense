@@ -68,6 +68,19 @@ internal static class SmartActionProtectionSelfTests
                 effectRange: 5f,
                 [peerOutside]),
             "circle just outside the protected hitbox is safe");
+        foreach (var incidentalNonRetaliatoryProtection in new[]
+                 {
+                     SmartActionProtectionKind.Guard,
+                     SmartActionProtectionKind.Covered,
+                     SmartActionProtectionKind.Invulnerability,
+                 })
+        {
+            True(SmartActionProtectionRules.IsTargetCenteredCircleSafe(
+                    target,
+                    effectRange: 5f,
+                    [peerAtBoundary with { Kind = incidentalNonRetaliatoryProtection }]),
+                $"incidental {incidentalNonRetaliatoryProtection} cannot globally stall a circle");
+        }
         False(SmartActionProtectionRules.IsTargetCenteredCircleSafe(
                 target,
                 effectRange: 5f,
@@ -117,12 +130,24 @@ internal static class SmartActionProtectionSelfTests
                 $"unreviewed geometry {effectRange}/{castType} fails closed");
         }
 
-        False(SmartActionProtectionRules.IsActionProtectionSafe(
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
                 SmartActionAttackShape.UnsupportedAreaOfEffect,
                 target,
                 effectRange: 20f,
                 [farProtected]),
-            "unsupported AoE is unsafe whenever any protected actor exists");
+            "an unrelated invulnerable actor cannot globally stall an unsupported AoE");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.UnsupportedAreaOfEffect,
+                target,
+                effectRange: 20f,
+                [farProtected with { Kind = SmartActionProtectionKind.Chiten }]),
+            "unsupported AoE conservatively keeps the global incidental Chiten veto");
+        False(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.UnsupportedAreaOfEffect,
+                target,
+                effectRange: 20f,
+                [farProtected with { Geometry = target }]),
+            "unsupported AoE cannot select its protected primary actor");
         True(SmartActionProtectionRules.IsActionProtectionSafe(
                 SmartActionAttackShape.UnsupportedAreaOfEffect,
                 target,
@@ -330,7 +355,7 @@ internal static class SmartActionProtectionSelfTests
                 [guardPeer],
                 actionIgnoresGuard: true),
             "a Guard-only peer inside a verified Guard-ignoring circle is safe");
-        False(SmartActionProtectionRules.IsActionProtectionSafe(
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
                 SmartActionAttackShape.TargetCenteredCircle,
                 target,
                 effectRange: 5f,
@@ -340,7 +365,7 @@ internal static class SmartActionProtectionSelfTests
                            SmartActionProtectionKind.Covered,
                 }],
                 actionIgnoresGuard: true),
-            "a covered peer touched by the same circle remains blocked");
+            "an incidental covered peer cannot stall the selected safe circle");
         True(SmartActionProtectionRules.IsActionProtectionSafe(
                 SmartActionAttackShape.UnsupportedAreaOfEffect,
                 target,

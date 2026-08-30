@@ -89,6 +89,21 @@ public static class CcImmunityBrakeRules
                     continue;
                 }
 
+                // Ordinary authored movement must remain usable against a
+                // guarded target. This exception is deliberately confined to
+                // the closed hostile-movement catalog and to the two exact
+                // Guard rows. Resilience, Paean, and job-specific CC immunity
+                // still stop the CC component. The predictive helper recheck
+                // below does not use this exception, so post-Guard timing
+                // remains strict for plugin-owned counter-CC.
+                if (SmartActionMovementGuardBypassRules.IsGuardStatus(statusId) &&
+                    SmartActionMovementGuardBypassRules.AllowsGuardTarget(
+                        action.JobId,
+                        action.ActionId))
+                {
+                    continue;
+                }
+
                 if (mayPermitOnePredictedStatus &&
                     statusId == permittedPredictiveBlockerStatusId)
                 {

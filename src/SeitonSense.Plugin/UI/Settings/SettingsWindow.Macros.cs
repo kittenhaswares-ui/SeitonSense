@@ -62,7 +62,9 @@ internal sealed partial class SettingsWindow
                 "Crystalline Conflict only. /smartaction or /seitonfar arms one 750 ms token and resolves the actual harmful PvP " +
                 "action on the next line. No selected target is required. Only living, targetable exact S1-S5 " +
                 "enemies inside that action's native range and line of sight are considered; blocking protection is excluded, " +
-                "while reviewed Guard-bypass actions may still target Guard.");
+                "while reviewed Guard-ignoring damage and the closed ordinary gap-closer/disengage catalog may still target Guard. " +
+                "Forked/Fleeting Raiju remain blocked by Guard so their stun is not consumed into it. An unrelated enemy's Guard, " +
+                "Cover, or LB invulnerability does not stall the whole AoE; Chiten remains protected.");
             ImGui.TextDisabled(
                 "Inside the relevant reach tier, ranking is lowest exact HP%, then highest fresh team pressure, " +
                 "observed Guard cooldown unavailable, lowest trusted MP%, and stable S-slot. Melee jobs first prefer " +

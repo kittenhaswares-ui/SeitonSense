@@ -77,8 +77,9 @@ internal sealed record SamuraiReactiveCounterCcProbeSnapshot(
 /// probe then requires live Resilience/Guard membership before it can remember
 /// the episode. Exact sequence-bound ActionEffects warm the optional two-stage
 /// Soten/Mineuchi timing; until then it waits for authoritative status absence.
-/// Zantetsuken is a separate automatic lane with an exact frozen target,
-/// reviewed hard-protection exclusions, and bounded native retries.
+/// Zantetsuken is a separate automatic lane which waits for exact own-source
+/// Kuzushi on its frozen primary target, retains reviewed hard-protection
+/// exclusions, and uses bounded native retries.
 /// </summary>
 internal sealed class SamuraiReactiveCounterCcProbe
 {
@@ -703,10 +704,16 @@ internal sealed class SamuraiReactiveCounterCcProbe
             }
 
             if (!zantetsukenState.IsActive || zantetsukenTarget is not { } frozen)
+            {
+                lastEvent =
+                    "Automatic Zantetsuken waiting for a reachable own-Kuzushi hit";
                 return PublishSnapshot();
+            }
 
             var target = ResolveFrozenTarget(localPlayer!, frozen);
             var exactTargetCurrent = target is not null;
+            var exactOwnKuzushiOnTarget = exactTargetCurrent &&
+                HasExactOwnSourceKuzushiOnFrozenTarget(localPlayer!, frozen);
             var executeBlockingProtectionCount = exactTargetCurrent
                 ? CountExecuteBlockingProtections(target!)
                 : -1;
@@ -721,6 +728,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     HardReset: false,
                     exactTargetCurrent,
                     exactTargetCurrent && IsLiveTarget(target!),
+                    exactOwnKuzushiOnTarget,
                     executeBlockingProtectionCount,
                     HasStatus(localPlayer!, EnemyCombatConstants.PvPBindStatusId),
                     actionReady,
@@ -734,7 +742,9 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 zantetsukenReadyEpochTerminal = nativeAttemptAlreadyMade;
                 lastEvent = executeBlockingProtectionCount > 0
                     ? "Frozen Zantetsuken intent cancelled by exact invulnerability/Cover"
-                    : "Frozen Zantetsuken intent released before native attempt";
+                    : !exactOwnKuzushiOnTarget
+                        ? "Frozen Zantetsuken intent released because own Kuzushi left its primary target"
+                        : "Frozen Zantetsuken intent released before native attempt";
                 return PublishSnapshot();
             }
 
@@ -1198,7 +1208,30 @@ internal sealed class SamuraiReactiveCounterCcProbe
 
         // Selection is deterministic and ends before the intent is frozen.
         // After this point actor drift never falls through to another S-slot.
-        var candidates = new List<ResolvedZantetsukenTargetCandidate>();
+        if (!TryBuildExactCcZantetsukenCandidates(localPlayer, out var candidates))
+            return false;
+
+        var selectedIndex = SamuraiZantetsukenTargetSelectionRules
+            .SelectBestEligibleTargetIndex(
+                candidates.Select(static candidate => candidate.Candidate).ToArray());
+        if (selectedIndex < 0) return false;
+
+        var selected = candidates[selectedIndex];
+        target = CreateFrozenTarget(
+            context,
+            selected.Candidate.EnemySlot,
+            selected.Player,
+            DarkKnightWolvesDenTargetKind.None);
+        return true;
+    }
+
+    private bool TryBuildExactCcZantetsukenCandidates(
+        IPlayerCharacter localPlayer,
+        out List<ResolvedZantetsukenTargetCandidate> candidates)
+    {
+        candidates = [];
+        if (!metadata.KuzushiVerified) return false;
+
         foreach (var enemy in executeTracker.Enemies
                      .Where(static enemy => EnemySlotRules.IsValidSlot(enemy.Slot))
                      .OrderBy(static enemy => enemy.Slot))
@@ -1225,9 +1258,8 @@ internal sealed class SamuraiReactiveCounterCcProbe
                     AliveAndTargetable: IsLiveTarget(player),
                     player.CurrentHp,
                     player.MaxHp,
-                    OwnSourceKuzushiCount: metadata.KuzushiVerified
-                        ? CountOwnSourceKuzushi(player, localPlayer.EntityId)
-                        : 0,
+                    OwnSourceKuzushiCount:
+                        CountOwnSourceKuzushi(player, localPlayer.EntityId),
                     player.ShieldPercentage,
                     ExecuteBlockingProtectionCount:
                         CountExecuteBlockingProtections(player),
@@ -1240,24 +1272,27 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 player));
         }
 
-        var selectedIndex = SamuraiZantetsukenTargetSelectionRules
-            .SelectBestEligibleTargetIndex(
-                candidates.Select(static candidate => candidate.Candidate).ToArray());
-        if (selectedIndex < 0) return false;
+        return candidates.Count > 0;
+    }
 
-        var selected = candidates[selectedIndex];
-        target = CreateFrozenTarget(
-            context,
-            selected.Candidate.EnemySlot,
-            selected.Player,
-            DarkKnightWolvesDenTargetKind.None);
-        return true;
+    private bool HasExactOwnSourceKuzushiOnFrozenTarget(
+        IPlayerCharacter localPlayer,
+        FrozenActionTarget frozen)
+    {
+        if (!metadata.KuzushiVerified) return false;
+        var current = ResolveFrozenTarget(localPlayer, frozen);
+        return current is not null &&
+               IsLiveTarget(current) &&
+               CountExecuteBlockingProtections(current) == 0 &&
+               CountOwnSourceKuzushi(current, localPlayer.EntityId) == 1;
     }
 
     private bool IsZantetsukenCandidate(
         IPlayerCharacter localPlayer,
         IBattleChara target) =>
         IsLiveTarget(target) &&
+        metadata.KuzushiVerified &&
+        CountOwnSourceKuzushi(target, localPlayer.EntityId) == 1 &&
         CountExecuteBlockingProtections(target) == 0 &&
         !HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId) &&
         IsActionSpecificReady(SamuraiZantetsukenRules.ActionId) &&
@@ -1550,6 +1585,7 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 var target = ResolveFrozenTarget(localPlayer, frozen);
                 if (target is null ||
                     !IsLiveTarget(target) ||
+                    !HasExactOwnSourceKuzushiOnFrozenTarget(localPlayer, frozen) ||
                     CountExecuteBlockingProtections(target) != 0 ||
                     HasStatus(localPlayer, EnemyCombatConstants.PvPBindStatusId) ||
                     !IsActionSpecificReady(SamuraiZantetsukenRules.ActionId) ||
