@@ -1678,12 +1678,27 @@ UI. There is no historical backfill, upload, telemetry, account, service query,
 or network request; maps remain `NO DATA` until an exact future local match is
 confirmed.
 
+If the separate instant-leave option is enabled, the same already-confirmed
+public-CC result may arm one transient in-memory leave intent even when local
+W/L recording is disabled. W/L persistence is attempted first when it is
+enabled. For at most ten seconds, the intent retains only the exact territory,
+local Content ID, monotonic result/expiry times, and one spent/requested state.
+It cancels if the plugin or option is disabled, the live PvP/territory/identity
+changes, an area transition begins, the result expires, or the native leave
+boundary cannot be queried. On the first native ready frame it reserves the
+intent and sends one normal non-forced leave request; the void request is never
+retried. No leave history is saved or uploaded, no UI confirmation is clicked,
+and the feature does not queue a match. Wolves' Den, custom CC, Frontline, and
+Rival Wings cannot arm it.
+
 The PvP range helper reads only the local player's current job, position, and
 hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten
+Configuration schema 48 is current. It adds the separate default-off instant
+public-CC leave setting without changing local W/L capture or any action-helper
+opt-in. Schema 47 added default-on, read-only SMN/Chiten
 danger warnings and separate experimental opponent LB bars that remain off by
 default pending live layout validation, while retaining the separate automatic
 basic-shot cast-cancel permission as default-off for every upgrade and Reset

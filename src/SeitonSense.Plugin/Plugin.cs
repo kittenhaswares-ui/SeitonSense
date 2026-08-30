@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.41.0.0";
+    private const string CurrentReleaseVersion = "0.42.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -50,6 +50,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IntegratedInputRuntime integratedInput;
     private readonly BufferLearningWindow bufferLearningWindow;
     private readonly CrystallineConflictMapStatisticsService crystallineConflictMapStatistics;
+    private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly WolvesDenRotationWindow wolvesDenRotationWindow;
     private readonly SmartTabTargetingService smartTabTargeting;
     private readonly PanicShukuchiService panicShukuchi;
@@ -356,8 +357,17 @@ public sealed class Plugin : IDalamudPlugin
             framework,
             interop,
             log,
-            () => configuration.Enabled &&
-                  configuration.EnableLocalCrystallineConflictMapStatisticsCapture);
+            () => configuration.Enabled,
+            () => configuration.EnableLocalCrystallineConflictMapStatisticsCapture,
+            () => configuration.EnableInstantLeaveAfterCrystallineConflict);
+        crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService(
+            configuration,
+            clientState,
+            playerState,
+            framework,
+            condition,
+            crystallineConflictMapStatistics,
+            log);
         wolvesDenRotationWindow = new WolvesDenRotationWindow(
             configuration,
             clientState,
@@ -392,10 +402,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Auto Purify and Auto Recuperate no longer give up after one briefly blocked frame. They recheck and retry only inside their original safety window.",
-                "High-pressure Stun Auto-Guard is now keyless. Its popup, sound, and press protection start only after Guard is truly active; one safe retry is allowed, and rejection cannot block manual Guard.",
-                "New exact enemy warnings cover SAM Chiten and SMN Bahamut/Phoenix LB. Chiten also appears above the Samurai nameplate with its confirmed countdown.",
-                "Experimental opponent LB-ready bars are available above the pressure display but stay off by default pending live layout validation. All 562 Core tests and release gates pass.",
+                "New opt-in: instantly leave after a fully confirmed public Crystalline Conflict result so the loading transition can begin sooner.",
+                "It reuses the exact 10-player result capture, records local W/L first when enabled, then waits for FFXIV's own leave-ready signal.",
+                "Only one normal non-forced leave request is sent. Wolves' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.",
+                "The request has a 10-second safety window and never retries after the native call. All 570 Core tests and release gates pass; the live transition still needs an in-game match test.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -414,6 +424,7 @@ public sealed class Plugin : IDalamudPlugin
             pressureTracker,
             isolationAwareness,
             pressureCounter,
+            crystallineConflictInstantLeave,
             bufferLearningWindow.ResetWindowPosition,
             wolvesDenRotationWindow.ResetWindowPosition,
             crystallineConflictMapStatistics.TryReset);
@@ -672,6 +683,7 @@ public sealed class Plugin : IDalamudPlugin
         if (pressureCommandRegistered) commandManager.RemoveHandler(PressureCommand);
         commandManager.RemoveHandler(Command);
         commandManager.RemoveHandler(AliasCommand);
+        crystallineConflictInstantLeave.Dispose();
         crystallineConflictMapStatistics.Dispose();
         combatLimitBreakRuntime.Dispose();
         integratedInput.Dispose();
@@ -848,6 +860,7 @@ public sealed class Plugin : IDalamudPlugin
                 var ccBrake = nearAssist.CcBrakeDiagnostics;
                 var smartPaean = nearAssist.SmartWardensPaeanDiagnostics;
                 var panic = panicShukuchi.Diagnostics;
+                var instantLeave = crystallineConflictInstantLeave.Diagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -931,6 +944,7 @@ public sealed class Plugin : IDalamudPlugin
                     $"{CcProtectionStatusCatalog.Definitions.Count}], " +
                     $"{opponentLimitBreakGauges.Diagnostics.ToChatLine()}");
                 chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
+                chatGui.Print($"[Seiton Sense] {instantLeave.ToChatLine()}");
                 chatGui.Print(
                     $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +
                     $"phase={astrologianOrbis.Phase},decision={astrologianOrbis.Decision}," +

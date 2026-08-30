@@ -29,6 +29,7 @@ $panicShukuchiRulesPath = Join-Path $coreRoot 'PanicShukuchiRules.cs'
 $panicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'PanicShukuchiSelfTests.cs'
 $crystallineConflictMapStatisticsServicePath = Join-Path $pluginServicesRoot 'CrystallineConflictMapStatisticsService.cs'
 $crystallineConflictMapResultPacketPath = Join-Path $pluginServicesRoot 'CrystallineConflictMapResultPacket.cs'
+$crystallineConflictInstantLeaveServicePath = Join-Path $pluginServicesRoot 'CrystallineConflictInstantLeaveService.cs'
 $backwardPanicShukuchiRulesPath = Join-Path $coreRoot 'BackwardPanicShukuchiRules.cs'
 $backwardPanicShukuchiSelfTestsPath = Join-Path $coreSelfTestRoot 'BackwardPanicShukuchiSelfTests.cs'
 $backwardDashRulesPath = Join-Path $coreRoot 'BackwardDashRules.cs'
@@ -270,6 +271,8 @@ $crystallineConflictRotationRulesPath = Join-Path $coreRoot 'CrystallineConflict
 $crystallineConflictRotationPresentationRulesPath = Join-Path $coreRoot 'CrystallineConflictRotationPresentationRules.cs'
 $crystallineConflictMapStatisticsRulesPath = Join-Path $coreRoot 'CrystallineConflictMapStatisticsRules.cs'
 $crystallineConflictMapStatisticsSelfTestsPath = Join-Path $coreSelfTestRoot 'CrystallineConflictMapStatisticsSelfTests.cs'
+$crystallineConflictInstantLeaveRulesPath = Join-Path $coreRoot 'CrystallineConflictInstantLeaveRules.cs'
+$crystallineConflictInstantLeaveSelfTestsPath = Join-Path $coreSelfTestRoot 'CrystallineConflictInstantLeaveSelfTests.cs'
 $pressureCounterPath = Join-Path $pluginUiRoot 'PressureCounterWindow.cs'
 $settingsPartsRoot = Join-Path $pluginUiRoot 'Settings'
 $settingsSourceFiles = @()
@@ -727,7 +730,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 562-test registry.
+# 570-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -747,11 +750,11 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 521 -or
+if ($staticIntegratedTestCount -ne 529 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 562 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 570 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
@@ -759,7 +762,7 @@ if ($staticIntegratedTestCount -ne 521 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 47 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 562-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 570-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -774,6 +777,9 @@ $crystallineConflictMapStatisticsRules = Read-RequiredSource $crystallineConflic
 $crystallineConflictMapStatisticsService = Read-RequiredSource $crystallineConflictMapStatisticsServicePath 'Crystalline Conflict map-statistics service'
 $crystallineConflictMapResultPacket = Read-RequiredSource $crystallineConflictMapResultPacketPath 'Crystalline Conflict result packet'
 $crystallineConflictMapStatisticsSelfTests = Read-RequiredSource $crystallineConflictMapStatisticsSelfTestsPath 'Crystalline Conflict map-statistics self-tests'
+$crystallineConflictInstantLeaveRules = Read-RequiredSource $crystallineConflictInstantLeaveRulesPath 'Crystalline Conflict instant-leave rules'
+$crystallineConflictInstantLeaveService = Read-RequiredSource $crystallineConflictInstantLeaveServicePath 'Crystalline Conflict instant-leave service'
+$crystallineConflictInstantLeaveSelfTests = Read-RequiredSource $crystallineConflictInstantLeaveSelfTestsPath 'Crystalline Conflict instant-leave self-tests'
 $wolvesDenRotationWindow = Read-RequiredSource $wolvesDenRotationWindowPath 'Wolves Den rotation window'
 Assert-Literals $pvpRangeHelperRules @(
     'public const float MeleeRangeYalms = 5f;',
@@ -855,6 +861,81 @@ if ([regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictMapStatis
     [regex]::Matches($crystallineConflictMapStatisticsSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6) {
     throw 'Local CC map statistics must retain all six pure fail-closed Core tests.'
 }
+Assert-Literals $crystallineConflictInstantLeaveRules @(
+    'public const long MaximumResultAgeMilliseconds = 10_000;',
+    'pluginEnabled && (mapStatisticsEnabled || instantLeaveEnabled);',
+    '!PvPMatchRules.IsPublicCrystallineConflictTerritory(capturedTerritoryId)',
+    'capturedLocalContentId == 0',
+    'capturedAtMilliseconds > long.MaxValue - MaximumResultAgeMilliseconds',
+    'nowMilliseconds - capturedAtMilliseconds > MaximumResultAgeMilliseconds',
+    'if (state.ContextSpent)',
+    'CrystallineConflictInstantLeaveDecision.DuplicateIgnored',
+    'CrystallineConflictInstantLeavePhase.WaitingForNativeBoundary',
+    'liveTerritoryId == state.TerritoryId',
+    'liveLocalContentId == state.LocalContentId',
+    'var confirmedContextExit =',
+    '(liveTerritoryId != 0 && liveTerritoryId != state.TerritoryId)',
+    '(liveLocalContentId != 0 && liveLocalContentId != state.LocalContentId)',
+    'if (betweenAreas)',
+    'if (nowMilliseconds > state.ExpiresAtMilliseconds)',
+    'if (!nativeBoundaryAvailable)',
+    'if (!canLeaveCurrentContent)',
+    'Phase = CrystallineConflictInstantLeavePhase.LeaveRequested',
+    'CrystallineConflictInstantLeaveDecision.RequestLeave',
+    'public static CrystallineConflictInstantLeaveState MarkNativeCallFailed('
+) 'Exact public-CC, ten-second, reserve-before-void instant-leave policy'
+$normalizedCrystallineConflictInstantLeaveRules =
+    $crystallineConflictInstantLeaveRules -replace '\s+', ' '
+if ($normalizedCrystallineConflictInstantLeaveRules -notmatch
+        'if \(!exactResultConfirmed \|\| !capturedIsPvpExcludingWolvesDen \|\| !PvPMatchRules\.IsPublicCrystallineConflictTerritory\(capturedTerritoryId\) \|\| capturedLocalContentId == 0 \|\| capturedAtMilliseconds < 0 \|\| capturedAtMilliseconds > long\.MaxValue - MaximumResultAgeMilliseconds \|\| capturedAtMilliseconds > nowMilliseconds \|\| nowMilliseconds - capturedAtMilliseconds > MaximumResultAgeMilliseconds\).*?InvalidResultBoundary.*?if \(state\.ContextSpent\).*?DuplicateIgnored.*?var armed = new CrystallineConflictInstantLeaveState\( CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary,.*?capturedAtMilliseconds \+ MaximumResultAgeMilliseconds, true\);.*?CrystallineConflictInstantLeaveDecision\.Armed' -or
+    $normalizedCrystallineConflictInstantLeaveRules -notmatch
+        'var confirmedContextExit = betweenAreas \|\| \(liveTerritoryId != 0 && liveTerritoryId != state\.TerritoryId\) \|\| \(liveLocalContentId != 0 && liveLocalContentId != state\.LocalContentId\); if \(state\.Phase == CrystallineConflictInstantLeavePhase\.LeaveRequested\) \{ if \(confirmedContextExit\).*?CrystallineConflictInstantLeaveDecision\.None, CrystallineConflictInstantLeaveReason\.LeaveReserved.*?if \(state\.Phase == CrystallineConflictInstantLeavePhase\.Cancelled\) \{ if \(confirmedContextExit\).*?CrystallineConflictInstantLeaveDecision\.ContextReset.*?if \(state\.Phase != CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary\).*?if \(!enabled\).*?FeatureDisabled.*?if \(betweenAreas\).*?TransitionStarted.*?if \(!exactLiveContext\).*?ContextDrift.*?if \(nowMilliseconds > state\.ExpiresAtMilliseconds\).*?ResultExpired.*?if \(!nativeBoundaryAvailable\).*?NativeBoundaryUnavailable.*?if \(!canLeaveCurrentContent\).*?CrystallineConflictInstantLeaveDecision\.Waiting.*?var reserved = state with.*?Phase = CrystallineConflictInstantLeavePhase\.LeaveRequested.*?CrystallineConflictInstantLeaveDecision\.RequestLeave') {
+    throw 'Instant CC leave must arm only from one exact fresh result, wait only inside the frozen ten-second context, reserve before the void request, preserve its spent latch across ambiguous zero/flicker telemetry, and never retry a requested or cancelled context.'
+}
+Assert-Literals $crystallineConflictInstantLeaveService @(
+    'resultCapture.ConfirmedResult += OnConfirmedResult;',
+    'resultCapture.ConfirmedResult -= OnConfirmedResult;',
+    'condition[ConditionFlag.BetweenAreas]',
+    'condition[ConditionFlag.BetweenAreas51]',
+    'PvPMatchRules.IsPublicCrystallineConflictTerritory(liveTerritory)',
+    'liveTerritory == state.TerritoryId',
+    'liveContentId == state.LocalContentId',
+    'EventFramework.CanLeaveCurrentContent();',
+    'state = transition.State;',
+    'case CrystallineConflictInstantLeaveDecision.RequestLeave:',
+    'EventFramework.LeaveCurrentContent(false);',
+    'state = CrystallineConflictInstantLeaveRules.MarkNativeCallFailed(state);',
+    'configuration.EnableInstantLeaveAfterCrystallineConflict;'
+) 'Framework-thread normal-leave service and exact live-context revalidation'
+$normalizedCrystallineConflictInstantLeaveService =
+    $crystallineConflictInstantLeaveService -replace '\s+', ' '
+if ([regex]::Matches($crystallineConflictInstantLeaveService, 'EventFramework\.CanLeaveCurrentContent\(\)').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictInstantLeaveService, 'EventFramework\.LeaveCurrentContent\(false\)').Count -ne 1 -or
+    $crystallineConflictInstantLeaveService -match 'LeaveCurrentContent\(true\)|(?i:/leave)|\b(DutyCompleted|ExecuteCommand|FireCallback|HookFromAddress|HookFromSignature|ScanText)\b' -or
+    $normalizedCrystallineConflictInstantLeaveService -notmatch
+        'if \(state\.Phase == CrystallineConflictInstantLeavePhase\.WaitingForNativeBoundary && enabled && exactLiveContext && !betweenAreas && now <= state\.ExpiresAtMilliseconds\).*?canLeaveCurrentContent = EventFramework\.CanLeaveCurrentContent\(\);.*?var transition = CrystallineConflictInstantLeaveRules\.Evaluate\(.*?state = transition\.State; switch \(transition\.Decision\).*?case CrystallineConflictInstantLeaveDecision\.RequestLeave:.*?EventFramework\.LeaveCurrentContent\(false\);.*?catch \(Exception exception\).*?state = CrystallineConflictInstantLeaveRules\.MarkNativeCallFailed\(state\);') {
+    throw 'Instant CC leave must query the reviewed native readiness API only inside the exact live lease, reserve policy state first, issue one non-forced request, and expose no forced/chat/UI/hook fallback.'
+}
+Assert-Literals $crystallineConflictInstantLeaveSelfTests @(
+    'public static void ExactResultReservesExactlyOneLeaveRequest()',
+    'public static void NativeNotReadyWaitsWithoutSpendingTheResult()',
+    'public static void DuplicateResultCannotRearmTheSameContext()',
+    'public static void InvalidResultBoundariesFailClosed()',
+    'public static void EveryLiveSafetyDriftCancelsBeforeNativeRequest()',
+    'public static void NativeUnavailableFaultAndExpiryAreTerminal()',
+    'public static void ContextExitConfirmsAndRearmsOnlyANewMatch()',
+    'public static void ResultObservationIsIndependentFromMapStatistics()'
+) 'Eight instant-leave state-machine self-tests'
+Assert-Literals $crystallineConflictInstantLeaveSelfTests @(
+    '"unknown telemetry preserves request latch"',
+    '"unknown telemetry cannot reopen the match context"',
+    '"unknown telemetry cannot permit a second request"',
+    '"context exit confirms"'
+) 'Ambiguous-zero latch retention and confirmed-context-exit tests'
+if ([regex]::Matches($crystallineConflictInstantLeaveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictInstantLeaveSelfTests\.\w+').Count -ne 8) {
+    throw 'Instant CC leave must retain exactly eight registered pure Core tests.'
+}
 Assert-Literals $crystallineConflictMapResultPacket @(
     '[FieldOffset(0x10)] public ushort MatchLength;',
     '[FieldOffset(0x3C)] public byte Result;',
@@ -877,16 +958,28 @@ Assert-Literals $crystallineConflictMapStatisticsService @(
     'interop.HookFromSignature<MatchEndDelegate>(',
     'matchEndHook!.Original(director, results, value, unknown);',
     'private readonly ConcurrentQueue<CapturedMapResultBoundary> pendingResults = new();',
+    'private readonly Func<bool> pluginEnabled;',
+    'private readonly Func<bool> captureEnabled;',
+    'private readonly Func<bool> instantLeaveEnabled;',
     'framework.Update += OnFrameworkUpdate;',
     'capturedIsPvpExcludingWolvesDen = clientState.IsPvPExcludingDen;',
     'capturedTerritoryId = clientState.TerritoryType;',
     'capturedLocalContentId = playerState.ContentId;',
+    'CrystallineConflictInstantLeaveRules.ShouldObserveResult(',
+    'Environment.TickCount64,',
     'capturedResetGeneration = Volatile.Read(ref resetGeneration);',
     'CrystallineConflictMapStatisticsRules.IsExactFrameworkDrainBoundary(',
     'internal bool TryReset()',
     'StorageAvailable = true;',
     'clientState.IsPvPExcludingDen,',
     'CrystallineConflictMapStatisticsRules.TryConfirmResult(',
+    'var shouldRecord = enabled && captureEnabled();',
+    'var shouldInstantLeave = enabled && instantLeaveEnabled();',
+    'if (shouldRecord)',
+    'store.TryRecord(sample);',
+    'A confirmed local CC result could not be persisted; independent consumers remain available.',
+    'internal event Action<ConfirmedCrystallineConflictResultBoundary>? ConfirmedResult;',
+    'ConfirmedResult?.Invoke(new ConfirmedCrystallineConflictResultBoundary(',
     'existing.Matches == long.MaxValue',
     'new HMACSHA256(salt);',
     'File.WriteAllText(temporaryPath, json);',
@@ -900,6 +993,14 @@ if ($normalizedCrystallineConflictMapStatisticsService -notmatch
     $normalizedCrystallineConflictMapStatisticsService -notmatch
         'if \(disposed \|\| !store\.TryReset\(\)\) return false; Interlocked\.Increment\(ref resetGeneration\); while \(pendingResults\.TryDequeue\(out _\)\)') {
     throw 'Local CC map statistics must freeze reset generation before packet/context copying and invalidate every queued pre-reset boundary only after a successful atomic reset.'
+}
+if ([regex]::Matches($crystallineConflictMapStatisticsService, 'HookFromSignature<MatchEndDelegate>').Count -ne 1 -or
+    $crystallineConflictMapStatisticsService -match '\bEventFramework\.(?:CanLeaveCurrentContent|LeaveCurrentContent)\b' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch
+        'CrystallineConflictInstantLeaveRules\.ShouldObserveResult\( pluginEnabled\(\), captureEnabled\(\), instantLeaveEnabled\(\)\).*?matchEndHook!\.Original\(director, results, value, unknown\); if \(captured is \{ \} result && !disposed\) Enqueue\(result\);' -or
+    $normalizedCrystallineConflictMapStatisticsService -notmatch
+        'var shouldRecord = enabled && captureEnabled\(\); var shouldInstantLeave = enabled && instantLeaveEnabled\(\); if \(!shouldRecord && !shouldInstantLeave\) continue;.*?CrystallineConflictMapStatisticsRules\.TryConfirmResult\(.*?if \(shouldRecord\) \{ try \{ store\.TryRecord\(sample\); \} catch \(Exception exception\) \{ log\.Error\( exception, "A confirmed local CC result could not be persisted; independent consumers remain available\."\); \} \} if \(!shouldInstantLeave\) continue;.*?ConfirmedResult\?\.Invoke\(new ConfirmedCrystallineConflictResultBoundary\(') {
+    throw 'The sole CC result hook must serve W-L and instant leave independently, call Original before framework delivery, validate once, attempt enabled W-L first without letting storage failure suppress leave, and only then publish the exact result boundary without owning the leave API.'
 }
 if ($crystallineConflictMapStatisticsService -match '\b(HttpClient|WebRequest|Socket|Dns|TcpClient|UdpClient)\b' -or
     $crystallineConflictMapStatisticsService -match '\b(CharacterName|PlayerName|HomeWorld|WorldName)\b') {
@@ -937,19 +1038,24 @@ Assert-Literals $pluginSource @(
     'localReachRings.Draw();',
     'crystallineConflictMapStatistics = new CrystallineConflictMapStatisticsService(',
     'configuration.EnableLocalCrystallineConflictMapStatisticsCapture',
+    'configuration.EnableInstantLeaveAfterCrystallineConflict',
+    'crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService(',
     'wolvesDenRotationWindow = new WolvesDenRotationWindow(',
     'playerState,',
     'gameGui,',
     'textureProvider,',
     'crystallineConflictMapStatistics);',
     'crystallineConflictMapStatistics.Dispose();',
+    'crystallineConflictInstantLeave.Dispose();',
     'windowSystem.AddWindow(wolvesDenRotationWindow);'
-) 'Local range, rotation deck, and map-result service wiring'
+) 'Local range, rotation deck, shared map-result capture, and instant-leave wiring'
 if ($normalizedPluginForIntegratedInput -notmatch
-        'new CrystallineConflictMapStatisticsService\(.*?\(\) => configuration\.Enabled && configuration\.EnableLocalCrystallineConflictMapStatisticsCapture\);' -or
+        'new CrystallineConflictMapStatisticsService\(.*?\(\) => configuration\.Enabled, \(\) => configuration\.EnableLocalCrystallineConflictMapStatisticsCapture, \(\) => configuration\.EnableInstantLeaveAfterCrystallineConflict\); crystallineConflictInstantLeave = new CrystallineConflictInstantLeaveService\(.*?crystallineConflictMapStatistics, log\);' -or
+    $normalizedPluginForIntegratedInput -notmatch
+        'crystallineConflictInstantLeave\.Dispose\(\); crystallineConflictMapStatistics\.Dispose\(\);' -or
     $normalizedPluginForIntegratedInput -match
         'new CrystallineConflictMapStatisticsService\(.*?\(\) => configuration\.Enabled && configuration\.ShowWolvesDenRotationPanel\);') {
-    throw 'Local CC W-L capture must use its own default-on configuration gate and remain independent of panel visibility.'
+    throw 'The shared CC result hook must retain separate global, default-on W-L, and default-off instant-leave gates; the leave consumer must dispose before its result publisher and remain independent of panel visibility.'
 }
 Assert-Literals $settingsWindow @(
     'Wolves'' Den CC map rotation',
@@ -962,6 +1068,15 @@ Assert-Literals $settingsWindow @(
     'The large seven-card deck stays visible',
     'ambiguous or unavailable results stay NO DATA.'
 ) 'Schema-42 overlay settings plus fail-closed local map-result disclosure'
+Assert-Literals $settingsWindow @(
+    'Post-match convenience',
+    'Immediately leave after a confirmed public CC match',
+    'Default off.',
+    'complete local 10-player result is confirmed',
+    'native leave-ready boundary',
+    'one normal, non-forced Leave Duty request',
+    'never Wolves'' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing.'
+) 'Default-off exact-public-CC instant-leave settings disclosure'
 if ($settingsWindow -match 'WolvesDenRotationPanelExpanded|Keep map order and calibration expanded') {
     throw 'The retired rotation-deck expansion switch must not remain in settings.'
 }
@@ -1315,8 +1430,8 @@ if ($smartTabConfiguration -notmatch '(?m)^\s*public bool EnableSmartTabTargetin
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*EnableNearAssistMacro\s*;').Count -ne 1 -or
     [regex]::Matches($smartTabConfiguration, '\bEnableSmartActionMacro\s*=\s*false\s*;').Count -ne 1 -or
     $normalizedSmartTabConfiguration -notmatch 'if \(Version < 33\) \{.*?EnableSmartTabTargeting = false; EnableSmartActionMacro = EnableNearAssistMacro; \}' -or
-    $normalizedSmartTabConfiguration -notmatch 'Version = 47;') {
-    throw 'Schema 47 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
+    $normalizedSmartTabConfiguration -notmatch 'Version = 48;') {
+    throw 'Schema 48 must preserve the schema-33 Smart Tab migration, keep Smart Tab false for upgrades/fresh/reset, and migrate only the prior explicit macro-helper choice to separate default-off Smart Action.'
 }
 
 $normalizedNearAssistForSmartAction = (Read-RequiredSource $nearAssistPath 'Smart Action shared redirector') -replace '\s+', ' '
@@ -4246,8 +4361,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 6 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 521) {
-    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 521-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 529) {
+    throw 'All four shared protection-end tests, all six SAM reactive tests, and the exact 529-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiReactiveProbe @(
     'MaximumRememberedTimingEffects = 128',
@@ -5091,8 +5206,8 @@ if ($castConfiguration -notmatch '(?m)^\s*public bool AllowHeldHelpersToCancelOw
     $castConfiguration -match '(?m)^\s*public bool AllowHeldHelpersToCancelOwnCast \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowHeldHelpersToCancelOwnCast\s*=\s*false\s*;').Count -ne 2 -or
     $normalizedCastConfiguration -notmatch 'if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?AllowHeldHelpersToCancelOwnCast = false;') {
-    throw 'Schema 47 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 48;.*?AllowHeldHelpersToCancelOwnCast = false;') {
+    throw 'Schema 48 must preserve held-helper cast cancellation as plain default-false, force it off for pre-30 upgrades, and restore it off on Reset Defaults.'
 }
 
 # Schema 45 introduces two genuinely automatic self-actions. Both are plain
@@ -5103,27 +5218,27 @@ Assert-Literals $castConfiguration @(
     'if (Version < 45)',
     'EnableAutomaticPurify = false;',
     'EnableAutomaticRecuperate = false;',
-    'Version = 47;'
+    'Version = 48;'
 ) 'Schema-45 default-off automatic Purify and Recuperate configuration'
 if ($castConfiguration -match '(?m)^\s*public bool EnableAutomatic(?:Purify|Recuperate) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticPurify\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($castConfiguration, '\bEnableAutomaticRecuperate\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 47;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
-    throw 'Schema 47 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 45\) \{.*?EnableAutomaticPurify = false; EnableAutomaticRecuperate = false; \}.*?Version = 48;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 48;.*?EnableSmartRecuperateOnHeldKey = false; EnableAutomaticRecuperate = false;.*?ExperimentalPurifyOnNextKey = false;.*?PurifyOnHeldGameplayKey = false; EnableAutomaticPurify = false;') {
+    throw 'Schema 48 must retain schema-45 default-off automatic Purify and Recuperate behavior without changing their separate held options.'
 }
 
 Assert-Literals $castConfiguration @(
     'public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }',
     'if (Version < 46)',
     'AllowAutomaticRecoveryToCancelBasicShotCasts = false;',
-    'Version = 47;'
+    'Version = 48;'
 ) 'Schema-46 separate default-off automatic recovery basic-shot cast-cancel permission'
 if ($castConfiguration -match '(?m)^\s*public bool AllowAutomaticRecoveryToCancelBasicShotCasts \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($castConfiguration, '\bAllowAutomaticRecoveryToCancelBasicShotCasts\s*=\s*false\s*;').Count -ne 2 -or
-    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 47;' -or
-    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 47;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
-    throw 'Schema 47 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
+    $normalizedCastConfiguration -notmatch 'if \(Version < 46\) \{.*?AllowAutomaticRecoveryToCancelBasicShotCasts = false; \}.*?Version = 48;' -or
+    $normalizedCastConfiguration -notmatch 'public void ResetToDefaults\(\).*?Version = 48;.*?AllowHeldHelpersToCancelOwnCast = false; AllowAutomaticRecoveryToCancelBasicShotCasts = false;') {
+    throw 'Schema 48 must keep automatic BRD/MCH basic-shot cancellation as a separate plain default-false permission for upgrades, fresh installs, and Reset Defaults.'
 }
 
 $settingsActionsPath = Join-Path $settingsPartsRoot 'SettingsWindow.Actions.cs'
@@ -10207,17 +10322,17 @@ $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\Se
 $pluginManifest = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.json') 'Plugin manifest'
 $repositoryIndex = Read-RequiredSource (Join-Path $resolvedRoot 'repo.json') 'Custom repository index'
 Assert-Literals $projectFile @(
-    '<Version>0.41.0.0</Version>',
-    '<AssemblyVersion>0.41.0.0</AssemblyVersion>',
-    '<FileVersion>0.41.0.0</FileVersion>'
-) 'v0.41.0.0 project version'
+    '<Version>0.42.0.0</Version>',
+    '<AssemblyVersion>0.42.0.0</AssemblyVersion>',
+    '<FileVersion>0.42.0.0</FileVersion>'
+) 'v0.42.0.0 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.41.0.0";',
-    'Auto Purify and Auto Recuperate no longer give up after one briefly blocked frame. They recheck and retry only inside their original safety window.',
-    'High-pressure Stun Auto-Guard is now keyless. Its popup, sound, and press protection start only after Guard is truly active; one safe retry is allowed, and rejection cannot block manual Guard.',
-    'New exact enemy warnings cover SAM Chiten and SMN Bahamut/Phoenix LB. Chiten also appears above the Samurai nameplate with its confirmed countdown.',
-    'Experimental opponent LB-ready bars are available above the pressure display but stay off by default pending live layout validation. All 562 Core tests and release gates pass.'
-) 'v0.41.0.0 version-acknowledged What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.0";',
+    'New opt-in: instantly leave after a fully confirmed public Crystalline Conflict result so the loading transition can begin sooner.',
+    'It reuses the exact 10-player result capture, records local W/L first when enabled, then waits for FFXIV''s own leave-ready signal.',
+    'Only one normal non-forced leave request is sent. Wolves'' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.',
+    'The request has a 10-second safety window and never retries after the native call. All 570 Core tests and release gates pass; the live transition still needs an in-game match test.'
+) 'v0.42.0.0 version-acknowledged What''s New content'
 Assert-Literals $pluginManifest @(
     'Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.',
     'exact native-nameplate cues',
@@ -10238,20 +10353,22 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.41.0.0 plugin manifest metadata'
+) 'v0.42.0.0 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.41.0.0"',
-    'Automatic Purify and Recuperate now retain exact episodes through temporary native blocks',
-    'High-pressure Stun Auto-Guard is keyless, permits one readiness-proven retry',
-    'arms its card, sound, and input protection only after exact live Guard confirmation',
-    'Added exact SAM Chiten and SMN Bahamut/Phoenix danger warnings.',
-    'Experimental opponent LB-ready bars are available above the pressure display but remain off by default pending live layout validation.',
-    'Configuration schema 47; all 562 Core tests and release gates pass.',
+    '"AssemblyVersion": "0.42.0.0"',
+    'Added a default-off instant-leave option for completed public Crystalline Conflict matches.',
+    'reuses the exact complete 10-player result capture',
+    'attempts local W/L persistence first when enabled',
+    'sends exactly one normal non-forced leave request.',
+    'never retries the void request.',
+    'Wolves'' Den, custom matches, Frontline, Rival Wings, and automatic re-queueing are excluded.',
+    'Configuration schema 48; all 570 Core tests and release gates pass.',
+    'current-client post-result transition remains live in-game validation.',
     '"IsHide": false'
-) 'v0.41.0.0 custom-repository metadata'
+) 'v0.42.0.0 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -10292,6 +10409,13 @@ Assert-Literals $normalizedPrivacy @(
     'The file contains a random salt, an HMAC-SHA256 per-character key, per-map win/loss totals, and at most 32 recent HMAC-SHA256 match fingerprints per character for duplicate suppression.',
     'If the existing document is malformed, Seiton Sense disables reading and writing it rather than guessing or overwriting it.',
     'maps remain `NO DATA` until an exact future local match is confirmed.',
+    'If the separate instant-leave option is enabled, the same already-confirmed public-CC result may arm one transient in-memory leave intent even when local W/L recording is disabled.',
+    'W/L persistence is attempted first when it is enabled.',
+    'For at most ten seconds, the intent retains only the exact territory, local Content ID, monotonic result/expiry times, and one spent/requested state.',
+    'It cancels if the plugin or option is disabled, the live PvP/territory/identity changes, an area transition begins, the result expires, or the native leave boundary cannot be queried.',
+    'On the first native ready frame it reserves the intent and sends one normal non-forced leave request; the void request is never retried.',
+    'No leave history is saved or uploaded, no UI confirmation is clicked, and the feature does not queue a match.',
+    'Wolves'' Den, custom CC, Frontline, and Rival Wings cannot arm it.',
     '## Explicit manual Panic Shukuchi and camera-back dash macros',
     '`/seitonbw` accepts only the closed current PvP self-dash mapping for NIN, AST, DNC, DRG, RPR, and PCT.',
     'AST Epicycle `41506`, DNC En Avant `29430`, DRG Elusive Jump `29494`, RPR Hell''s Ingress `29550`, and PCT Smudge `39210` set only local character facing',
@@ -10307,7 +10431,7 @@ Assert-Literals $normalizedPrivacy @(
     'The relevant keyless Purify `29056` or Recuperate `29711` intent must already be otherwise ready.',
     'A cancellation consumes that framework frame;',
     'Automatic observation does not retire a physical held-key generation.',
-    'Configuration schema 47 is current.',
+    'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave setting without changing local W/L capture or any action-helper opt-in.',
     'while retaining the separate automatic basic-shot cast-cancel permission as default-off for every upgrade and Reset Defaults',
     'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
     'exact Blackblood status-row presence',
@@ -10326,7 +10450,7 @@ Assert-Literals $normalizedPrivacy @(
     'An exact enemy SAM Chiten status episode may draw a large nameplate emblem/countdown and `DO NOT HIT` danger card.',
     'Their exact request observation and a client `true` return remain provisional and block no action.',
     'one retry may cross the native boundary only while exact readiness is proven and the original two-second post-Purify lease remains alive;',
-    'Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten danger warnings and separate experimental opponent LB bars that remain off by default pending live layout validation',
+    'Schema 47 added default-on, read-only SMN/Chiten danger warnings and separate experimental opponent LB bars that remain off by default pending live layout validation',
     '## Experimental Astrologian held Near Help',
     'Your own active or still-propagating Guard suppresses both action requests and is rechecked at the final action-hook and optional held-cast-cancel boundaries;',
     'this helper cannot remove or break Guard.',
@@ -10334,8 +10458,15 @@ Assert-Literals $normalizedPrivacy @(
     'Those area/unknown shapes require the complete hostile S-slot/object-table snapshot.',
     'A direct single-target action instead requires exact protection evidence for its selected actor and does not require unrelated hostile object-table completeness.',
     'shape-appropriate protection proof is rebuilt immediately before forwarding.'
-) 'v0.41.0.0 recovery, warning, experimental-LB, and retained safety/privacy disclosure'
+) 'v0.42.0.0 instant-leave, recovery, warning, experimental-LB, and retained safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.42.0.0 adds a separate default-off instant-leave option for completed public Crystalline Conflict matches.',
+    'reuses the exact complete 10-player result proof, attempts enabled local W/L persistence first, waits for FFXIV''s native leave-ready boundary, and sends one normal non-forced leave request within a ten-second safety window.',
+    'It never applies in Wolves'' Den, custom CC, Frontline, or Rival Wings and never queues a new match.',
+    '**Optional instant public-CC exit:** after one complete public 5v5 result with the exact local Content ID is confirmed',
+    'The intent expires after ten seconds and cancels on context, territory, identity, transition, toggle, or native-boundary drift; the void request is never retried.',
+    'Local W/L is attempted first when enabled.',
+    'There is no custom/Wolves'' Den/Frontline/Rival Wings path and no auto-queue.',
     'Version 0.41.0.0 makes automatic Purify and Recuperate retain their exact episode through temporary native blocks and retry only inside the original bounded window after every safety recheck.',
     'one readiness-proven retry may occur inside its original lease, while the card, sound, action suppression, and two-second Guard-reuse protection begin only after the exact live Guard status appears.',
     'Rejected requests therefore cannot create phantom protection or block manual Guard.',
@@ -10414,8 +10545,8 @@ Assert-Literals $normalizedReadme @(
     'Native input and Seiton''s separate Turbo path remain available.',
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
-    'Configuration schema 47 is current',
-    'For the current source, the exact 562-test Core registry and source checks pin configuration schema 47',
+    'Configuration schema 48 is current. It adds the separate default-off instant public-CC leave option without changing local W/L capture or any action-helper opt-in.',
+    'For the current source, the exact 570-test Core registry and source checks pin configuration schema 48, the default-off exact public-CC instant-leave state machine and its single non-forced native request',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
     'current-target-anchored ranked cycle with wrap',
@@ -10427,8 +10558,19 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.41.0.0 current README release and safety contract'
+) 'v0.42.0.0 current README release and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.0',
+    'Added a separate default-off **instant leave after public Crystalline Conflict** option.',
+    'It shares the existing post-match hook and arms only after the complete result passes the same public-territory, result, duration, ten-unique-player, 5v5-team, known-job, and exact local-Content-ID proof used by the local map W/L feature.',
+    'Wolves'' Den, custom CC, Frontline, Rival Wings, spectators, incomplete payloads, and identity/context drift fail closed.',
+    'The result hook still calls the game''s original function first and drains on the framework thread.',
+    'If local W/L capture is enabled, persistence is attempted before instant leave is signalled; instant leave remains available independently when W/L recording is disabled or its local storage is unavailable.',
+    'A confirmed result creates one in-memory intent lasting at most ten seconds.',
+    'FFXIV''s native `CanLeaveCurrentContent()` result.',
+    '`LeaveCurrentContent(false)` exactly once, and never retries that void request.',
+    'It does not press UI callbacks, use a chat command, force departure, or automatically queue another match.',
+    'Configuration schema is `48`. Source build, all `570` Core tests, safety, package parity, and release verification are automated.',
     '## 0.41.0.0',
     'Automatic Purify and Recuperate now retain their exact frozen episode through temporary native unavailability instead of retiring after one unlucky frame.',
     'The default-off high-pressure Stun Auto-Guard path is now keyless.',
@@ -10495,7 +10637,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.41.0.0 release notes and retained v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.0 release notes and retained v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -10622,7 +10764,7 @@ Assert-Literals $normalizedPrivacy @(
     'the shared frame is consumed only after this check so its own held-key evidence remains readable.',
     'The episode is marked spent before the native call.',
     'cannot retry, rerank, or select a fallback.',
-    'Configuration schema 47 is current.'
+    'Configuration schema 48 is current.'
 ) 'Emergency Teleport transient-data contract'
 Assert-Literals $normalizedReadme @(
     'polls FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier `39183` every active framework frame',
@@ -10751,7 +10893,7 @@ Assert-Literals $normalizedPrivacy @(
     'only the last command, origin/destination coordinates, bounded camera diagnostics, native acceptance outcome, and aggregate command counters may remain in plugin memory',
     'not persisted or uploaded',
     'Four-direction testing for all six jobs plus NIN slope/wall/invalid-endpoint cases in Wolves'' Den remains a live- validation boundary',
-    'Configuration schema 47 is current'
+    'Configuration schema 48 is current'
 ) 'Current explicit dash transient-data, immediate, own-Guard, no-target, and live-boundary privacy contract'
 Assert-Literals $normalizedChangelog @(
     '## 0.27.1.0',
@@ -10857,7 +10999,7 @@ Assert-Literals $normalizedPrivacy @(
     'current-patch stationary plus mobile BRD/MCH behavior still requires live validation',
     'only the current cast decision, the last requested helper/action/target/key/ intent and native request result, plus request/fault counts in memory',
     'none is persisted or uploaded',
-    'Configuration schema 47 is current',
+    'Configuration schema 48 is current',
     'Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key option off for upgrading configurations and left it off for fresh and Reset Defaults configurations',
     'generic held-action cast-cancellation test',
     'schema-46 automatic basic-shot permission remain explicitly off for fresh, reset, and migrated configurations'
@@ -11227,7 +11369,7 @@ Assert-Literals $normalizedPrivacy @(
     'live client race remains possible',
     'Nothing is persisted or uploaded',
     'separate Auto Low-MP Focus Target opt-in',
-    'Configuration schema 47 is current',
+    'Configuration schema 48 is current',
     'Fresh and reset configurations keep NIN Guard-Shukuchi, Smart Recuperate, Emergency Teleport, Hiebsprung, Smart Action/other macro helpers, and all other action-helper masters off',
     'An older explicitly enabled fresh-edge NIN Seiton option still traverses schema 29, migrates to the replacement held-key option',
     'clears the obsolete compatibility field',
@@ -11307,7 +11449,7 @@ Assert-Literals $privacy @(
     'Pressure is used only for that frozen selection and is not a',
     'Pressure drift neither reranks, switches, nor',
     'No drift can cause another selection, alternate',
-    'Configuration schema 47 is current'
+    'Configuration schema 48 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
     'The current action-request priority is **Purify > AST same-target heal chain > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Smart Recuperate > Emergency Teleport > generic Guard > pressure Sprint > event Kardia > event Monk**',
@@ -11377,7 +11519,7 @@ Assert-Literals $normalizedPrivacy @(
 $configuration = Read-RequiredSource $configurationPath 'Plugin configuration'
 $normalizedConfiguration = $configuration -replace '\s+', ' '
 Assert-Literals $configuration @(
-    'public int Version { get; set; } = 47',
+    'public int Version { get; set; } = 48',
     'public bool PurifyOnHeldGameplayKey { get; set; }',
     'if (Version < 6)',
     'PurifyOnHeldGameplayKey = false',
@@ -11544,7 +11686,10 @@ Assert-Literals $configuration @(
     'WarnSummonerLimitBreak = true;',
     'WarnEnemyChiten = true;',
     'ShowOpponentLimitBreakBars = false;',
-    'Version = 47',
+    'public bool EnableInstantLeaveAfterCrystallineConflict { get; set; }',
+    'if (Version < 48)',
+    'EnableInstantLeaveAfterCrystallineConflict = false;',
+    'Version = 48',
     'ApplyCombatFramesLayoutDefaults()',
     'ApplyCombatFramesCleanPreset()',
     'NormalizeCcBrakeSelections()',
@@ -11571,7 +11716,7 @@ Assert-Literals $configuration @(
     'MonkEarthReplyExpirySeconds,',
     '0.5f,',
     '2.5f,'
-) 'Schema-47 default-on read-only warnings/LB bars plus retained automatic recovery, RDM Guard engage, Blackblood preservation, rotation/range overlays, and compatibility fields'
+) 'Schema-48 default-off instant CC leave plus retained schema-47 warnings/LB bars, automatic recovery, RDM Guard engage, Blackblood preservation, rotation/range overlays, and compatibility fields'
 if ($configuration -notmatch '(?m)^\s*public bool EnableDefensiveUtilities \{ get; set; \}\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool DefensiveUtilitiesOnHeldKey \{ get; set; \} = true;\s*$' -or
     $configuration -notmatch '(?m)^\s*public bool GuardOnStunPressure \{ get; set; \} = true;\s*$' -or
@@ -11655,8 +11800,8 @@ if ($configuration -notmatch '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeld
     $configuration -match '(?m)^\s*public bool EnableNinjaGuardShukuchiOnHeldGameplayKey \{ get; set; \}\s*=\s*true;') {
     throw 'Schema 31 must keep the target-mutating NIN Guard-Shukuchi helper off for upgrades and ResetToDefaults, with a plain default-false property.'
 }
-if ([regex]::Matches($configuration, '\bVersion\s*=\s*47\s*;').Count -ne 2 -or
-    $normalizedConfiguration -notmatch 'if \(Version >= 47\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 47\).*?WarnSummonerLimitBreak = true;.*?WarnEnemyChiten = true;.*?ShowOpponentLimitBreakBars = false;.*?Version = 47;' -or
+if ([regex]::Matches($configuration, '\bVersion\s*=\s*48\s*;').Count -ne 2 -or
+    $normalizedConfiguration -notmatch 'if \(Version >= 48\).*?return;.*?if \(Version < 29\).*?EnableNinjaSeitonOnHeldGameplayKey = EnableNinjaSeitonOnFreshGameplayKey;.*?EnableNinjaSeitonOnFreshGameplayKey = false;.*?if \(Version < 30\).*?AllowHeldHelpersToCancelOwnCast = false;.*?if \(Version < 31\).*?EnableNinjaGuardShukuchiOnHeldGameplayKey = false;.*?if \(Version < 32\).*?ShowCombatFrames = false;.*?ShowEnemyLimitBreaksOnNameplates = true;.*?ShowLimitBreakActivationMessages = true;.*?ShowAllyLimitBreakDamageEvents = true;.*?PlayLocalMpWarningSounds = true;.*?if \(Version < 33\).*?EnableSmartTabTargeting = false;.*?EnableSmartActionMacro = EnableNearAssistMacro;.*?if \(Version < 34\).*?EnableViperSerpentTailOnHeldKey = false;.*?if \(Version < 35\).*?EnableEmergencyTeleportOnHeldKey = false;.*?if \(Version < 36\).*?ShowAutoGuardActivationNotification = true;.*?PlayAutoGuardActivationSound = true;.*?AutoGuardActivationSoundId = 3;.*?EnableGunbreakerContinuationOnHeldKey = false;.*?if \(Version < 37\).*?EnableDarkKnightShadowbringerOnHeldKey = false;.*?DarkKnightShadowbringerMinimumHpPercent = 85;.*?DarkKnightShadowbringerPressureLimitExclusive = 2;.*?ReactiveCcPaladinIntervene = false;.*?ReactiveCcRedMageResolution = false;.*?EnableSamuraiZantetsukenOnHeldKey = false;.*?EnableMonkHeldComboOnHeldKey = false;.*?if \(Version < 38\).*?ReactiveCcRedMageViceOfThorns = false;.*?ReactiveCcBlackMageFrostStar = false;.*?if \(Version < 39\).*?EnablePvpLatencyResponseHelper = false;.*?if \(Version < 40\).*?EnableSmartActionBuffer = true;.*?EnableNativeHotbarTurbo = false;.*?if \(Version < 41\).*?EnableAstrologianHarmonicOrbisOnHeldKey = false;.*?if \(Version < 42\).*?ShowWolvesDenRotationPanel = true;.*?ShowPvpRangeHelper = true;.*?if \(Version < 43\).*?DarkKnightShadowbringerPreserveBlackblood = true;.*?if \(Version < 44\).*?EnableRedMageGuardEngageOnHeldKey = false;.*?RedMageGuardEngageMinimumHpPercent = RedMageGuardEngageRules\.DefaultMinimumHpPercent;.*?RedMageGuardEngageMinimumMpPercent = RedMageGuardEngageRules\.DefaultMinimumMpPercent;.*?EnableLocalCrystallineConflictMapStatisticsCapture = true;.*?if \(Version < 45\).*?EnableAutomaticPurify = false;.*?EnableAutomaticRecuperate = false;.*?if \(Version < 46\).*?AllowAutomaticRecoveryToCancelBasicShotCasts = false;.*?if \(Version < 47\).*?WarnSummonerLimitBreak = true;.*?WarnEnemyChiten = true;.*?ShowOpponentLimitBreakBars = false;.*?if \(Version < 48\).*?EnableInstantLeaveAfterCrystallineConflict = false;.*?Version = 48;' -or
     $configuration -match '(?m)^\s*public bool (?:EnableRedMageGuardEngageOnHeldKey|EnableAstrologianHarmonicOrbisOnHeldKey|EnableViperSerpentTailOnHeldKey|EnableEmergencyTeleportOnHeldKey|EnableGunbreakerContinuationOnHeldKey|EnableDarkKnightShadowbringerOnHeldKey|EnableMonkHeldComboOnHeldKey|ReactiveCcPaladinIntervene|ReactiveCcRedMageResolution|ReactiveCcRedMageViceOfThorns|ReactiveCcBlackMageFrostStar|ReactiveCcSamuraiSotenMineuchi|EnableSamuraiZantetsukenOnHeldKey) \{ get; set; \}\s*=\s*true;' -or
     [regex]::Matches($configuration, '\bEnableAstrologianHarmonicOrbisOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableRedMageGuardEngageOnHeldKey\s*=\s*false\s*;').Count -ne 2 -or
@@ -11673,8 +11818,10 @@ if ([regex]::Matches($configuration, '\bVersion\s*=\s*47\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnablePvpLatencyResponseHelper\s*=\s*false\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bEnableLocalCrystallineConflictMapStatisticsCapture\s*=\s*true\s*;').Count -ne 2 -or
     [regex]::Matches($configuration, '\bShowOpponentLimitBreakBars\s*=\s*false\s*;').Count -ne 2 -or
+    [regex]::Matches($configuration, '\bEnableInstantLeaveAfterCrystallineConflict\s*=\s*false\s*;').Count -ne 2 -or
+    $configuration -match '(?m)^\s*public bool EnableInstantLeaveAfterCrystallineConflict \{ get; set; \}\s*=\s*true;' -or
     $configuration -match '(?m)^\s*public bool EnablePvpLatencyResponseHelper \{ get; set; \}\s*=\s*true;') {
-    throw 'Schema 47 must preserve every earlier opt-in/migration, add default-on read-only SMN/Chiten warnings, keep the unconfirmed opponent-LB observer experimental/default-off, retain default-off automatic recovery/cast-cancel and RDM Guard engage, and initialize local-only CC map W/L capture on for fresh, migrated, and reset configurations.'
+    throw 'Schema 48 must preserve every earlier opt-in/migration, add instant public-CC leave as a fresh/migrated/reset default-off side effect, retain default-on read-only SMN/Chiten warnings and experimental/default-off opponent LB bars, keep automatic recovery/cast-cancel and RDM Guard engage off, and initialize local-only CC map W/L capture on.'
 }
 Assert-Literals $configuration @(
     'public bool EnablePvpLatencyResponseHelper { get; set; }',
@@ -11999,4 +12146,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.41.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 47 and the exact 562-test Core registry. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Keyless high-pressure Stun Auto-Guard remains provisional until exact status confirmation, permits one bounded readiness-proven retry, and cannot arm input protection or block manual Guard from a rejected request. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. Smart Action and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."
+Write-Host "Seiton Sense v0.42.0.0 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 570-test Core registry. Default-off instant public-CC leave shares the sole exact result hook, attempts enabled W-L persistence first without coupling failures, preserves its spent latch across ambiguous telemetry, and reserves exactly one non-forced native request inside a ten-second frozen context. Automatic Purify and Recuperate retain exact episodes through pre-native waits, with recovery suppressed only by exact live Guard. Exact Chiten and SMN warnings are bounded and read-only; the unconfirmed opponent-LB observer remains experimental and default-off. Smart Action and all prior frozen-intent, protection, held-priority, Smart Tab, buffer, Turbo, cast-cancel, range-helper, and emergency safety contracts remain pinned."

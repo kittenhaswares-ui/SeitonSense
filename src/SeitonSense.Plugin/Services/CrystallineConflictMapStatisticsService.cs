@@ -22,7 +22,9 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
     private readonly IPlayerState playerState;
     private readonly IFramework framework;
     private readonly IPluginLog log;
+    private readonly Func<bool> pluginEnabled;
     private readonly Func<bool> captureEnabled;
+    private readonly Func<bool> instantLeaveEnabled;
     private readonly CrystallineConflictMapStatisticsStore store;
     private readonly ConcurrentQueue<CapturedMapResultBoundary> pendingResults = new();
     private Hook<MatchEndDelegate>? matchEndHook;
@@ -37,13 +39,17 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
         IFramework framework,
         IGameInteropProvider interop,
         IPluginLog log,
-        Func<bool> captureEnabled)
+        Func<bool> pluginEnabled,
+        Func<bool> captureEnabled,
+        Func<bool> instantLeaveEnabled)
     {
         this.clientState = clientState;
         this.playerState = playerState;
         this.framework = framework;
         this.log = log;
+        this.pluginEnabled = pluginEnabled;
         this.captureEnabled = captureEnabled;
+        this.instantLeaveEnabled = instantLeaveEnabled;
         store = new CrystallineConflictMapStatisticsStore(
             pluginInterface.GetPluginConfigDirectory(),
             log);
@@ -62,12 +68,13 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
             CaptureAvailable = false;
             log.Warning(
                 exception,
-                "Local CC map W/L capture is unavailable; existing local statistics remain readable.");
+                "The shared CC result capture is unavailable; local statistics remain readable and instant leave stays inactive.");
         }
     }
 
     internal bool CaptureAvailable { get; }
     internal bool StorageAvailable => store.StorageAvailable;
+    internal event Action<ConfirmedCrystallineConflictResultBoundary>? ConfirmedResult;
 
     internal bool TryGetStatistics(
         ulong localContentId,
@@ -90,6 +97,7 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
         disposed = true;
         framework.Update -= OnFrameworkUpdate;
         matchEndHook?.Dispose();
+        ConfirmedResult = null;
         while (pendingResults.TryDequeue(out _))
             Interlocked.Decrement(ref queuedResultCount);
     }
@@ -100,7 +108,10 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
         try
         {
             if (!disposed &&
-                captureEnabled() &&
+                CrystallineConflictInstantLeaveRules.ShouldObserveResult(
+                    pluginEnabled(),
+                    captureEnabled(),
+                    instantLeaveEnabled()) &&
                 results != nint.Zero)
             {
                 var capturedResetGeneration = Volatile.Read(ref resetGeneration);
@@ -136,6 +147,7 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
                     packet.AstraProgress,
                     packet.UmbraProgress,
                     DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    Environment.TickCount64,
                     capturedResetGeneration,
                     participants);
             }
@@ -171,7 +183,10 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
             Interlocked.Decrement(ref queuedResultCount);
             try
             {
-                if (!captureEnabled()) continue;
+                var enabled = pluginEnabled();
+                var shouldRecord = enabled && captureEnabled();
+                var shouldInstantLeave = enabled && instantLeaveEnabled();
+                if (!shouldRecord && !shouldInstantLeave) continue;
                 if (!CrystallineConflictMapStatisticsRules.IsExactFrameworkDrainBoundary(
                         result.ResetGeneration,
                         Volatile.Read(ref resetGeneration),
@@ -185,7 +200,7 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
                     continue;
                 }
 
-                store.TryRecord(new CapturedMapResult(
+                var sample = new CapturedMapResult(
                     result.IsPvpExcludingWolvesDen,
                     result.TerritoryId,
                     result.LocalContentId,
@@ -194,7 +209,54 @@ internal sealed class CrystallineConflictMapStatisticsService : IDisposable
                     result.AstraProgress,
                     result.UmbraProgress,
                     result.CapturedAtUnixSeconds,
-                    result.Participants));
+                    result.Participants);
+                var identities = sample.Participants
+                    .Select(static participant => new CrystallineConflictMapParticipantIdentity(
+                        participant.ContentId,
+                        participant.ClassJobId,
+                        participant.Team))
+                    .ToArray();
+                if (!CrystallineConflictMapStatisticsRules.TryConfirmResult(
+                        sample.IsPvpExcludingWolvesDen,
+                        sample.TerritoryId,
+                        sample.Result,
+                        sample.MatchLength,
+                        sample.LocalContentId,
+                        identities,
+                        out var confirmedResult))
+                {
+                    continue;
+                }
+
+                // Keep the local record causally ahead of the convenience leave.
+                if (shouldRecord)
+                {
+                    try
+                    {
+                        store.TryRecord(sample);
+                    }
+                    catch (Exception exception)
+                    {
+                        log.Error(
+                            exception,
+                            "A confirmed local CC result could not be persisted; independent consumers remain available.");
+                    }
+                }
+
+                if (!shouldInstantLeave) continue;
+
+                try
+                {
+                    ConfirmedResult?.Invoke(new ConfirmedCrystallineConflictResultBoundary(
+                        result.IsPvpExcludingWolvesDen,
+                        result.TerritoryId,
+                        result.LocalContentId,
+                        result.CapturedAtMilliseconds));
+                }
+                catch (Exception exception)
+                {
+                    log.Error(exception, "A confirmed CC result consumer failed closed.");
+                }
             }
             catch (Exception exception)
             {
@@ -225,8 +287,15 @@ internal readonly record struct CapturedMapResultBoundary(
     uint AstraProgress,
     uint UmbraProgress,
     long CapturedAtUnixSeconds,
+    long CapturedAtMilliseconds,
     long ResetGeneration,
     CapturedMapResultParticipant[] Participants);
+
+internal readonly record struct ConfirmedCrystallineConflictResultBoundary(
+    bool IsPvpExcludingWolvesDen,
+    uint TerritoryId,
+    ulong LocalContentId,
+    long CapturedAtMilliseconds);
 
 internal readonly record struct CapturedMapResult(
     bool IsPvpExcludingWolvesDen,

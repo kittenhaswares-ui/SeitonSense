@@ -16,6 +16,7 @@ internal sealed partial class SettingsWindow
             $"resource-anchors={overlay.ResourceAuraAnchorCount} " +
             $"(hotbar {overlay.ResourceAuraSelfHotbarCount}, party {overlay.ResourceAuraPartyRowCount}, " +
             $"CC rows {overlay.ResourceAuraCcRowCount})");
+        ImGui.TextWrapped(crystallineConflictInstantLeave.Diagnostics.ToChatLine());
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var pressureEscape = personalStatus.PressureEscapeDiagnostics;

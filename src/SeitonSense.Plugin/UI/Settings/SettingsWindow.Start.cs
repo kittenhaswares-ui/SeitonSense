@@ -36,6 +36,20 @@ internal sealed partial class SettingsWindow
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
+        ImGui.TextUnformatted("Post-match convenience");
+        changed |= Checkbox(
+            "Immediately leave after a confirmed public CC match",
+            configuration.EnableInstantLeaveAfterCrystallineConflict,
+            value => configuration.EnableInstantLeaveAfterCrystallineConflict = value);
+        ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
+        ImGui.TextDisabled(
+            "Default off. After the complete local 10-player result is confirmed, Seiton Sense waits for FFXIV's " +
+            "native leave-ready boundary and sends one normal, non-forced Leave Duty request. Public Crystalline " +
+            "Conflict only: never Wolves' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing.");
+        ImGui.TextDisabled(crystallineConflictInstantLeave.Diagnostics.ToChatLine());
+        ImGui.PopTextWrapPos();
+
+        ImGui.Separator();
         ImGui.TextUnformatted("Preview and reset");
         if (ImGui.Button(overlay.PreviewEnabled ? "Stop preview" : "Preview nameplate cues + center cards"))
         {

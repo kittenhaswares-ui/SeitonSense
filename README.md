@@ -2,7 +2,13 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.41.0.0 makes automatic Purify and
+assistance, and target highlights. Version 0.42.0.0 adds a separate default-off
+instant-leave option for completed public Crystalline Conflict matches. It
+reuses the exact complete 10-player result proof, attempts enabled local W/L
+persistence first, waits for FFXIV's native leave-ready boundary, and sends one
+normal non-forced leave request within a ten-second safety window. It never
+applies in Wolves' Den, custom CC, Frontline, or Rival Wings and never queues a
+new match. Version 0.41.0.0 makes automatic Purify and
 Recuperate retain their exact episode through temporary native blocks and retry
 only inside the original bounded window after every safety recheck. High-
 pressure Stun Auto-Guard is now keyless and confirmed-only: one readiness-proven
@@ -80,6 +86,13 @@ and Super Focus Glow into one configurable custom-repository plugin.
 
 ## Highlights
 
+- **Optional instant public-CC exit:** after one complete public 5v5 result with
+  the exact local Content ID is confirmed, the default-off helper waits for
+  FFXIV to report that the current content can be left and sends one normal,
+  non-forced leave request. The intent expires after ten seconds and cancels on
+  context, territory, identity, transition, toggle, or native-boundary drift;
+  the void request is never retried. Local W/L is attempted first when enabled.
+  There is no custom/Wolves' Den/Frontline/Rival Wings path and no auto-queue.
 - **Local CC rotation panel:** while in Wolves' Den Pier, one larger movable and
   lockable current-map card shows the Patch 7.5 map, live countdown, local FFXIV
   duty artwork, saved `<` / `>` phase calibration, and this exact local
@@ -1756,7 +1769,9 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 47 is current. It adds default-on, read-only SMN/Chiten
+Configuration schema 48 is current. It adds the separate default-off instant
+public-CC leave option without changing local W/L capture or any action-helper
+opt-in. Schema 47 added default-on, read-only SMN/Chiten
 danger warnings and separate experimental opponent LB bars that remain off by
 default pending live layout validation, while retaining the separate default-off automatic
 basic-shot cast-cancel permission without changing either automatic helper opt-in
@@ -2168,8 +2183,9 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 562-test Core registry and source checks pin
-configuration schema 47, the independent default-off automatic basic-shot
+For the current source, the exact 570-test Core registry and source checks pin
+configuration schema 48, the default-off exact public-CC instant-leave state
+machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
 automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
 deterministic local CC rotation and fail-closed

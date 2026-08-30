@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.42.0.0
+
+- Added a separate default-off **instant leave after public Crystalline
+  Conflict** option. It shares the existing post-match hook and arms only after
+  the complete result passes the same public-territory, result, duration,
+  ten-unique-player, 5v5-team, known-job, and exact local-Content-ID proof used
+  by the local map W/L feature. Wolves' Den, custom CC, Frontline, Rival Wings,
+  spectators, incomplete payloads, and identity/context drift fail closed.
+- The result hook still calls the game's original function first and drains on
+  the framework thread. If local W/L capture is enabled, persistence is
+  attempted before instant leave is signalled; instant leave remains available
+  independently when W/L recording is disabled or its local storage is
+  unavailable.
+- A confirmed result creates one in-memory intent lasting at most ten seconds.
+  It continuously requires the same public territory and local identity, no
+  area transition, and FFXIV's native `CanLeaveCurrentContent()` result. At the
+  first ready boundary it reserves the intent, calls
+  `LeaveCurrentContent(false)` exactly once, and never retries that void
+  request. It does not press UI callbacks, use a chat command, force departure,
+  or automatically queue another match.
+- Configuration schema is `48`. Source build, all `570` Core tests, safety,
+  package parity, and release verification are automated. The current-client
+  result-to-loading transition and practical queue-time improvement remain live
+  in-game validation boundaries.
+
 ## 0.41.0.0
 
 - Automatic Purify and Recuperate now retain their exact frozen episode through

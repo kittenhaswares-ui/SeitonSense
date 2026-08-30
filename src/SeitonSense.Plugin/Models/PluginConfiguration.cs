@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 47;
+    public int Version { get; set; } = 48;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -92,6 +92,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool BufferLearningWindowLocked { get; set; }
     public bool ShowWolvesDenRotationPanel { get; set; } = true;
     public bool EnableLocalCrystallineConflictMapStatisticsCapture { get; set; } = true;
+    public bool EnableInstantLeaveAfterCrystallineConflict { get; set; }
     public bool WolvesDenRotationPanelLocked { get; set; }
     public bool WolvesDenRotationPanelShowBackground { get; set; } = true;
     public float WolvesDenRotationPanelScale { get; set; } = 1f;
@@ -308,7 +309,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 47)
+        if (Version >= 48)
         {
             if (repaired) Save();
             return;
@@ -806,7 +807,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
             ShowOpponentLimitBreakBars = false;
         }
 
-        Version = 47;
+        if (Version < 48)
+        {
+            // Leaving content is a new automatic side effect. Existing users
+            // must opt in explicitly after reading its exact public-CC scope.
+            EnableInstantLeaveAfterCrystallineConflict = false;
+        }
+
+        Version = 48;
         ClampSettings();
         Save();
     }
@@ -815,7 +823,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 47;
+        Version = 48;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -861,6 +869,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         BufferLearningWindowLocked = false;
         ShowWolvesDenRotationPanel = true;
         EnableLocalCrystallineConflictMapStatisticsCapture = true;
+        EnableInstantLeaveAfterCrystallineConflict = false;
         WolvesDenRotationPanelLocked = false;
         WolvesDenRotationPanelShowBackground = true;
         WolvesDenRotationPanelScale = 1f;

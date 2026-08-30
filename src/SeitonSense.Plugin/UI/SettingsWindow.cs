@@ -16,6 +16,7 @@ internal sealed partial class SettingsWindow : Window
     private readonly TargetPressureTracker pressureTracker;
     private readonly IsolationAwarenessService isolationAwareness;
     private readonly PressureCounterWindow pressureCounter;
+    private readonly CrystallineConflictInstantLeaveService crystallineConflictInstantLeave;
     private readonly Action resetBufferLearningWindowPosition;
     private readonly Action resetWolvesDenRotationWindowPosition;
     private readonly Func<bool> resetCrystallineConflictMapStatistics;
@@ -32,6 +33,7 @@ internal sealed partial class SettingsWindow : Window
         TargetPressureTracker pressureTracker,
         IsolationAwarenessService isolationAwareness,
         PressureCounterWindow pressureCounter,
+        CrystallineConflictInstantLeaveService crystallineConflictInstantLeave,
         Action? resetBufferLearningWindowPosition = null,
         Action? resetWolvesDenRotationWindowPosition = null,
         Func<bool>? resetCrystallineConflictMapStatistics = null)
@@ -44,6 +46,7 @@ internal sealed partial class SettingsWindow : Window
         this.pressureTracker = pressureTracker;
         this.isolationAwareness = isolationAwareness;
         this.pressureCounter = pressureCounter;
+        this.crystallineConflictInstantLeave = crystallineConflictInstantLeave;
         this.resetBufferLearningWindowPosition =
             resetBufferLearningWindowPosition ?? (() => { });
         this.resetWolvesDenRotationWindowPosition =
