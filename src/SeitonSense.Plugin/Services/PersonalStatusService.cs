@@ -42,6 +42,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly NearAssistRedirector nearAssist;
     private readonly EmergencyActionInputCoordinator emergencyInput;
     private readonly CriticalUtilityCoordinationService criticalUtilityCoordination;
+    private readonly SeitonResponseClock responseClock;
     private readonly HeldCastCancellationService heldCastCancellation;
     private readonly EmergencyPurifyProbe emergencyPurify;
     private readonly AstrologianHarmonicOrbisProbe astrologianHarmonicOrbis;
@@ -105,6 +106,7 @@ internal sealed class PersonalStatusService : IDisposable
         PvPMetadataValidation metadata,
         SamuraiReactiveMetadataValidation samuraiReactiveMetadata,
         ReviewedPvpCommandDispatcher commands,
+        SeitonResponseClock responseClock,
         CriticalUtilityCoordinationService criticalUtilityCoordination)
     {
         this.clientState = clientState;
@@ -122,6 +124,7 @@ internal sealed class PersonalStatusService : IDisposable
             AstrologianHarmonicOrbisProbe.ValidateMetadata(dataManager, log);
         this.pressureTracker = pressureTracker;
         this.nearAssist = nearAssist;
+        this.responseClock = responseClock;
         this.criticalUtilityCoordination = criticalUtilityCoordination;
         emergencyInput = new EmergencyActionInputCoordinator(
             keyState,
@@ -337,16 +340,16 @@ internal sealed class PersonalStatusService : IDisposable
         machinistLimitBreakCapture.CaptureErrors,
         machinistLimitBreakCapture.DroppedWarnings,
         machinistLimitBreakThreat is { ExpiresAtMilliseconds: var expiresAt } &&
-        expiresAt > Environment.TickCount64);
+        expiresAt > responseClock.Capture().LegacyMilliseconds);
 
     internal bool PlayMachinistLimitBreakSoundPreview() =>
         machinistLimitBreakWarningSound.TryPlayPreview(
             Math.Clamp(configuration.MchLimitBreakSoundId, 1, 16),
-            Environment.TickCount64);
+            responseClock.Capture().LegacyMilliseconds);
 
     internal bool PlayAutoGuardActivationSoundPreview()
     {
-        var now = Environment.TickCount64;
+        var now = responseClock.Capture().LegacyMilliseconds;
         if (now < nextAutoGuardSoundPreviewAt) return false;
         nextAutoGuardSoundPreviewAt = SaturatingAdd(now, 350);
         return MachinistLimitBreakWarningSound.TryPlayShared(
@@ -395,7 +398,7 @@ internal sealed class PersonalStatusService : IDisposable
         guardianCommunication.TryClearOneExactOwnershipOnDispose(
             objectTable.LocalPlayer,
             ResolveSupportedPvPContext(),
-            Environment.TickCount64);
+            responseClock.Capture().LegacyMilliseconds);
         ResetRuntime();
         machinistLimitBreakCapture.Dispose();
     }
@@ -410,7 +413,7 @@ internal sealed class PersonalStatusService : IDisposable
         }
         catch (Exception exception)
         {
-            var now = Environment.TickCount64;
+            var now = responseClock.Capture().LegacyMilliseconds;
             alertStates = [];
             lastPresentations.Clear();
             pulseStartedAt.Clear();
@@ -458,7 +461,9 @@ internal sealed class PersonalStatusService : IDisposable
 
     private void UpdateSnapshot()
     {
-        var now = Environment.TickCount64;
+        var frameTime = responseClock.Capture();
+        var now = frameTime.LegacyMilliseconds;
+        var frameworkFrameId = frameTime.FrameEpoch;
         var localPlayer = objectTable.LocalPlayer;
         var localPlayerId = localPlayer?.GameObjectId ?? 0;
         var context = ResolveSupportedPvPContext();
@@ -929,6 +934,9 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.ExperimentalPurifyBufferMilliseconds,
             emergencyInputFrame,
             metadata.NinjaShukuchiHiddenStatuses,
+            configuration.EnableAdaptiveResponseEngine,
+            configuration.AllowCriticalRecoveryThroughNativeQueue,
+            frameworkFrameId,
             hardReset);
         // Self-Purify owns the scheduler while its exact enabled CC/key lease is
         // actionable or waiting at the global native boundary. It no longer
@@ -941,7 +949,7 @@ internal sealed class PersonalStatusService : IDisposable
             automaticRecoveryShotCastMetadata.IsVerified(
                 localJobId,
                 automaticRecoveryRawShotActionId);
-        now = Environment.TickCount64;
+        now = responseClock.Capture().LegacyMilliseconds;
         var recuperate = smartRecuperate.Observe(
             localPlayer,
             context,
@@ -957,6 +965,9 @@ internal sealed class PersonalStatusService : IDisposable
             emergencyInputFrame,
             now,
             metadata.NinjaShukuchiHiddenStatuses,
+            configuration.EnableAdaptiveResponseEngine,
+            configuration.AllowCriticalRecoveryThroughNativeQueue,
+            frameworkFrameId,
             hardReset);
         var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         var immediateRecoveryClaimedPriority = purifyClaimedPriority ||
@@ -964,7 +975,7 @@ internal sealed class PersonalStatusService : IDisposable
         // Generic Auto-Guard is the first non-recovery action. Its exact
         // post-Purify lease therefore gets the first legal native frame after
         // Purify and Recuperate, before any job helper or emergency movement.
-        now = Environment.TickCount64;
+        now = responseClock.Capture().LegacyMilliseconds;
         var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
             isCrystallineConflict,
@@ -974,13 +985,16 @@ internal sealed class PersonalStatusService : IDisposable
             pressureKnown,
             incomingEnemyCount,
             highPressureStunObserved,
-            purify.UseActionAttempted,
+            purify.UseActionAccepted,
             resilienceActive,
             hasPurifyRemovableCrowdControl,
             guardActive,
             immediateRecoveryClaimedPriority || emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
+            configuration.EnableAdaptiveResponseEngine,
+            configuration.AllowCriticalRecoveryThroughNativeQueue,
+            frameworkFrameId,
             hardReset,
             prioritizedGuardianPass: null);
         var defensiveUtilityClaimedPriority = guardDefense.InputClaimed;

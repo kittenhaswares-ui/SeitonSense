@@ -94,7 +94,11 @@ public readonly record struct SmartRecuperateObservation(
     bool ActionCooldownReady = true,
     long NowMilliseconds = 0,
     bool HeldModeEnabled = true,
-    bool AutomaticModeEnabled = false);
+    bool AutomaticModeEnabled = false,
+    bool EdgeDrivenRetriesEnabled = false,
+    long FrameworkFrameId = -1,
+    long LastNativeAttemptFrameId = -1,
+    bool RelevantNativeBoundaryEdge = false);
 
 public enum SmartRecuperateDecisionKind
 {
@@ -515,7 +519,11 @@ public static class SmartRecuperateRules
         }
         if (!CanAttemptFrozenRetryBudget(
                 previous.Retry,
-                observation.NowMilliseconds))
+                observation.NowMilliseconds,
+                observation.EdgeDrivenRetriesEnabled,
+                observation.FrameworkFrameId,
+                observation.LastNativeAttemptFrameId,
+                observation.RelevantNativeBoundaryEdge))
         {
             return Armed(
                 Stamp(previous, observation.NowMilliseconds),
@@ -803,12 +811,25 @@ public static class SmartRecuperateRules
 
     private static bool CanAttemptFrozenRetryBudget(
         HeldActionRetryState retry,
-        long nowMilliseconds) =>
+        long nowMilliseconds,
+        bool edgeDrivenRetriesEnabled,
+        long frameworkFrameId,
+        long lastNativeAttemptFrameId,
+        bool relevantNativeBoundaryEdge) =>
         (nowMilliseconds >= 0 &&
          retry.NativeAttemptCount == 0 &&
          retry.NextNativeAttemptAtMilliseconds == -1 &&
          HeldActionRetryRules.ResolveAttemptLimit(retry) > 0) ||
-        HeldActionRetryRules.CanAttemptFrozenIntent(retry, nowMilliseconds);
+        (edgeDrivenRetriesEnabled
+            ? HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+                retry,
+                nowMilliseconds,
+                frameworkFrameId,
+                lastNativeAttemptFrameId,
+                relevantNativeBoundaryEdge)
+            : HeldActionRetryRules.CanAttemptFrozenIntent(
+                retry,
+                nowMilliseconds));
 
     private static SmartRecuperateDecision Dispatch(
         SmartRecuperateState state,

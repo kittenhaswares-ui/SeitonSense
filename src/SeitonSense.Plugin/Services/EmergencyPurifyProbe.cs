@@ -59,6 +59,8 @@ internal sealed class EmergencyPurifyProbe
     private readonly Func<TargetPressureActorIdentity, bool>
         finalOwnGuardActiveOrPropagating;
     private EmergencyPurifyBufferState state = EmergencyPurifyBufferState.Initial;
+    private ClientActionAttemptFingerprint lastNativeBoundary;
+    private long lastNativeAttemptFrameId = -1;
     private long totalNativeAttempts;
     private long totalClientRejected;
     private long totalClientAccepted;
@@ -95,8 +97,16 @@ internal sealed class EmergencyPurifyProbe
         long bufferMilliseconds,
         EmergencyActionInputFrame inputFrame,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
+        bool adaptiveResponseEnabled,
+        bool allowOccupiedNativeQueue,
+        long frameworkFrameId,
         bool hardReset = false)
     {
+        if (hardReset)
+        {
+            lastNativeBoundary = default;
+            lastNativeAttemptFrameId = -1;
+        }
         var stealthSuppressed = automaticStatusTriggerEnabled
             ? NinjaShukuchiStealthGate.ShouldSuppressAutomaticRecovery(
                 localPlayer,
@@ -123,11 +133,21 @@ internal sealed class EmergencyPurifyProbe
 
         var actionStructurallyReady = false;
         var globalQueueReady = false;
+        var nativeBoundary = default(ClientActionAttemptFingerprint);
         var actionStateReadable = localPlayerIdentityValid &&
                                   TryGetPurifyActionState(
                                       localPlayer!,
                                       out actionStructurallyReady,
-                                      out globalQueueReady);
+                                      out globalQueueReady,
+                                      out nativeBoundary,
+                                      allowOccupiedNativeQueue);
+        var relevantNativeBoundaryEdge = adaptiveResponseEnabled &&
+                                         IsRelevantNativeBoundaryEdge(
+                                             lastNativeBoundary,
+                                             nativeBoundary,
+                                             EnemyCombatConstants.PurifyActionId,
+                                             allowOccupiedNativeQueue);
+        lastNativeBoundary = nativeBoundary;
         var locallyReady = !effectiveHardReset &&
                            effectiveConfigurationEnabled &&
                            isSupportedPvPContext &&
@@ -171,7 +191,11 @@ internal sealed class EmergencyPurifyProbe
                     ? 0
                     : (int)input.HeldGameplayKey,
                 frozenKeyStillDown,
-                AutomaticStatusTriggerEnabled: automaticStatusTriggerEnabled));
+                AutomaticStatusTriggerEnabled: automaticStatusTriggerEnabled,
+                EdgeDrivenRetriesEnabled: adaptiveResponseEnabled,
+                FrameworkFrameId: frameworkFrameId,
+                LastNativeAttemptFrameId: lastNativeAttemptFrameId,
+                RelevantNativeBoundaryEdge: relevantNativeBoundaryEdge));
 
         state = decision.NextState;
         // An active, exact removable self-CC owns scheduler priority even while
@@ -238,6 +262,7 @@ internal sealed class EmergencyPurifyProbe
                     state.FrozenInputTrigger,
                     frozenKeyCode,
                     ninjaShukuchiHiddenStatuses,
+                    allowOccupiedNativeQueue,
                     out attempted);
             }
             catch (Exception exception)
@@ -247,6 +272,7 @@ internal sealed class EmergencyPurifyProbe
             }
 
             if (attempted) Interlocked.Increment(ref totalNativeAttempts);
+            if (attempted) lastNativeAttemptFrameId = frameworkFrameId;
             if (nativeOutcome == ClientActionAttemptOutcome.ClientRejected)
                 Interlocked.Increment(ref totalClientRejected);
             if (nativeOutcome == ClientActionAttemptOutcome.ClientAccepted)
@@ -327,11 +353,15 @@ internal sealed class EmergencyPurifyProbe
     internal void Reset()
     {
         state = EmergencyPurifyBufferState.Initial;
+        lastNativeBoundary = default;
+        lastNativeAttemptFrameId = -1;
         lastEvent = "Reset";
     }
 
     internal EmergencyPurifyProbeSnapshot FailClosed(long nowMilliseconds)
     {
+        lastNativeBoundary = default;
+        lastNativeAttemptFrameId = -1;
         var decision = EmergencyPurifyBufferRules.Observe(
             state,
             new EmergencyPurifyBufferObservation(
@@ -389,6 +419,7 @@ internal sealed class EmergencyPurifyProbe
         EmergencyPurifyInputTrigger expectedInputTrigger,
         int expectedKeyCode,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
+        bool allowOccupiedNativeQueue,
         out bool attempted)
     {
         attempted = false;
@@ -427,14 +458,18 @@ internal sealed class EmergencyPurifyProbe
         {
             return ClientActionAttemptOutcome.SoftUnavailable;
         }
-        if (!ClientActionAttemptBoundary.IsExactActionReady(
-                actionManager,
-                EnemyCombatConstants.PurifyActionId) ||
+        var criticalBoundary = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.PurifyActionId);
+        if (!criticalBoundary.IsCriticalRecoveryActionReady(
+                EnemyCombatConstants.PurifyActionId,
+                allowOccupiedNativeQueue) ||
             !HeldActionRetryRules.IsNativeBoundaryNearQueueable(
                 actionManager->AnimationLock,
                 localPlayer.IsCasting,
                 actionManager->CastActionId,
-                actionManager->ActionQueued))
+                actionManager->ActionQueued,
+                allowOccupiedNativeQueue))
         {
             return ClientActionAttemptOutcome.SoftUnavailable;
         }
@@ -466,13 +501,14 @@ internal sealed class EmergencyPurifyProbe
             0,
             ActionManager.UseActionMode.None,
             0);
-        return ClientActionAttemptBoundaryRules.Classify(
+        return ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
             accepted,
             EnemyCombatConstants.PurifyActionId,
             boundaryBefore,
             ClientActionAttemptBoundary.Capture(
                 actionManager,
-                EnemyCombatConstants.PurifyActionId));
+                EnemyCombatConstants.PurifyActionId),
+            allowOccupiedNativeQueue);
     }
 
     private static unsafe bool TryGetTextInputState(out bool active)
@@ -499,10 +535,13 @@ internal sealed class EmergencyPurifyProbe
     private static unsafe bool TryGetPurifyActionState(
         IPlayerCharacter localPlayer,
         out bool actionStructurallyReady,
-        out bool globalQueueReady)
+        out bool globalQueueReady,
+        out ClientActionAttemptFingerprint boundary,
+        bool allowOccupiedNativeQueue)
     {
         actionStructurallyReady = false;
         globalQueueReady = false;
+        boundary = default;
         if (!HasValidLocalPlayer(localPlayer)) return false;
 
         var actionManager = ActionManager.Instance();
@@ -514,7 +553,7 @@ internal sealed class EmergencyPurifyProbe
             return false;
         }
 
-        var boundary = ClientActionAttemptBoundary.Capture(
+        boundary = ClientActionAttemptBoundary.Capture(
             actionManager,
             EnemyCombatConstants.PurifyActionId);
         actionStructurallyReady = boundary.Captured &&
@@ -531,9 +570,21 @@ internal sealed class EmergencyPurifyProbe
             boundary.AnimationLockSeconds,
             localPlayer.IsCasting,
             boundary.CastActionId,
-            boundary.ActionQueued);
+            boundary.ActionQueued,
+            allowOccupiedNativeQueue);
         return true;
     }
+
+    private static bool IsRelevantNativeBoundaryEdge(
+        ClientActionAttemptFingerprint previous,
+        ClientActionAttemptFingerprint current,
+        uint actionId,
+        bool allowOccupiedNativeQueue) =>
+        ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+            actionId,
+            previous,
+            current,
+            allowOccupiedNativeQueue);
 
     private static unsafe HeldCastCancellationRequest? BuildCastCancellationRequest(
         IPlayerCharacter? localPlayer,

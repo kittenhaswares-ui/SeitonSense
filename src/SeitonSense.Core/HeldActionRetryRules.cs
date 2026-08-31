@@ -128,12 +128,30 @@ public static class HeldActionRetryRules
         bool localPlayerIsCasting,
         uint castActionId,
         bool actionQueued) =>
+        IsNativeBoundaryNearQueueable(
+            animationLockSeconds,
+            localPlayerIsCasting,
+            castActionId,
+            actionQueued,
+            allowOccupiedQueue: false);
+
+    /// <summary>
+    /// Explicit critical-recovery boundary. Ordinary callers retain the strict
+    /// four-argument overload; only a reviewed recovery caller may opt into an
+    /// already occupied queue. Cast and animation-lock gates remain unchanged.
+    /// </summary>
+    public static bool IsNativeBoundaryNearQueueable(
+        float animationLockSeconds,
+        bool localPlayerIsCasting,
+        uint castActionId,
+        bool actionQueued,
+        bool allowOccupiedQueue) =>
         float.IsFinite(animationLockSeconds) &&
         animationLockSeconds >= 0f &&
         animationLockSeconds <= MaximumNearQueueableAnimationLockSeconds &&
         !localPlayerIsCasting &&
         castActionId == 0 &&
-        !actionQueued;
+        (allowOccupiedQueue || !actionQueued);
 
     public static bool CanAttempt(
         HeldActionRetryState state,
@@ -148,6 +166,56 @@ public static class HeldActionRetryRules
         state == HeldActionRetryState.Initial
             ? nowMilliseconds >= 0
             : CanAttempt(state, nowMilliseconds);
+
+    /// <summary>
+    /// Releases one proven-false retry on the first later framework frame when
+    /// either a relevant native-boundary edge was observed or the legacy
+    /// fallback throttle elapsed. The frame identity prevents two dispatches in
+    /// one framework frame; the edge may bypass only the timer, never validity,
+    /// exhaustion, or the frozen attempt budget.
+    /// </summary>
+    public static bool CanAttemptOnBoundaryEdgeOrThrottle(
+        HeldActionRetryState state,
+        long nowMilliseconds,
+        long currentFrameId,
+        long lastAttemptFrameId,
+        bool relevantBoundaryEdge) =>
+        nowMilliseconds >= 0 &&
+        currentFrameId >= 0 &&
+        lastAttemptFrameId >= -1 &&
+        currentFrameId != lastAttemptFrameId &&
+        state.IsPending &&
+        !IsRetryBudgetExhausted(state) &&
+        (relevantBoundaryEdge || CanAttempt(state, nowMilliseconds));
+
+    /// <summary>
+    /// Initial frozen intents dispatch on their first eligible framework frame;
+    /// proven-false retries use the edge-or-throttle rule above. This API does
+    /// not change the legacy retry behavior of existing callers.
+    /// </summary>
+    public static bool CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+        HeldActionRetryState state,
+        long nowMilliseconds,
+        long currentFrameId,
+        long lastAttemptFrameId,
+        bool relevantBoundaryEdge)
+    {
+        if (nowMilliseconds < 0 ||
+            currentFrameId < 0 ||
+            lastAttemptFrameId < -1 ||
+            currentFrameId == lastAttemptFrameId)
+        {
+            return false;
+        }
+
+        return state == HeldActionRetryState.Initial ||
+               CanAttemptOnBoundaryEdgeOrThrottle(
+                   state,
+                   nowMilliseconds,
+                   currentFrameId,
+                   lastAttemptFrameId,
+                   relevantBoundaryEdge);
+    }
 
     /// <summary>
     /// A still-valid frozen intent retains the current scheduler frame while it

@@ -3,10 +3,10 @@
     "Author": "kittenhaswares-ui",
     "Name": "Seiton Sense",
     "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
-    "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, public-CC medicine-kit cues, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
+    "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, Ping Helpers, public-CC medicine-kit cues, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
-    "AssemblyVersion": "0.42.0.10",
-    "Changelog": "Fixes an intermittent high-FPS /seitonenavant race: real movement samples that share one coarse clock timestamp now contribute to the direction instead of clearing it, while stationary samples and jitter remain rejected. /seiton debug now identifies the exact En Avant blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources. The command remains one immediate attempt with no wait, reservation, queue, or retry. Schema 48; exact live En Avant behavior remains pending in-game confirmation.",
+    "AssemblyVersion": "0.43.0.0",
+    "Changelog": "Big response update: adds a Ping Helpers page, shared monotonic frame clock, sampled readiness-edge retries, explicit Purify > Recuperate > Auto-Guard arbitration, optional occupied-queue recovery priority, and an exact held range/LoS chase lane inside the automatic one-shot action buffer. An accepted priority recovery may replace the queued action through FFXIV's normal boundary; rejected retries require an unchanged queue. No /buffer macro is required. No profiler, position/range/animation-lock manipulation, target substitution, or direct queue edit was added. Schema 49; all 599 Core tests pass, while exact live CC/chase confirmation remains pending.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788160086"
+    "LastUpdate": "1788192838"
   }
 ]

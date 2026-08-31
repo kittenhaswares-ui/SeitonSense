@@ -76,6 +76,8 @@ internal sealed unsafe class SmartRecuperateProbe
     private SmartRecuperateState state = SmartRecuperateState.Initial;
     private SmartRecuperateProbeSnapshot snapshot =
         SmartRecuperateProbeSnapshot.Initial;
+    private ClientActionAttemptFingerprint lastNativeBoundary;
+    private long lastNativeAttemptFrameId = -1;
     private long attemptCount;
     private long acceptedCount;
     private long rejectedCount;
@@ -115,8 +117,16 @@ internal sealed unsafe class SmartRecuperateProbe
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
+        bool adaptiveResponseEnabled,
+        bool allowOccupiedNativeQueue,
+        long frameworkFrameId,
         bool hardReset = false)
     {
+        if (hardReset)
+        {
+            lastNativeBoundary = default;
+            lastNativeAttemptFrameId = -1;
+        }
         var stealthSuppressed = NinjaShukuchiStealthGate.IsActive(
             localPlayer,
             ninjaShukuchiHiddenStatuses);
@@ -153,12 +163,22 @@ internal sealed unsafe class SmartRecuperateProbe
         var cooldownReady = false;
         var resourcesReady = false;
         var nativeBoundaryReady = false;
+        var nativeBoundary = default(ClientActionAttemptFingerprint);
         var actionStateReadable = localIdentityValid && TryGetActionState(
             localPlayer!,
             out resolvedActionId,
             out cooldownReady,
             out resourcesReady,
-            out nativeBoundaryReady);
+            out nativeBoundaryReady,
+            out nativeBoundary,
+            allowOccupiedNativeQueue);
+        var relevantNativeBoundaryEdge = adaptiveResponseEnabled &&
+                                         IsRelevantNativeBoundaryEdge(
+                                             lastNativeBoundary,
+                                             nativeBoundary,
+                                             SmartRecuperateRules.ActionId,
+                                             allowOccupiedNativeQueue);
+        lastNativeBoundary = nativeBoundary;
         var actionReady = actionStateReadable && cooldownReady && resourcesReady;
 
         var input = inputFrame.Snapshot;
@@ -201,7 +221,11 @@ internal sealed unsafe class SmartRecuperateProbe
                 ActionCooldownReady: actionStateReadable && cooldownReady,
                 NowMilliseconds: nowMilliseconds,
                 HeldModeEnabled: effectiveHeldModeEnabled,
-                AutomaticModeEnabled: effectiveAutomaticModeEnabled));
+                AutomaticModeEnabled: effectiveAutomaticModeEnabled,
+                EdgeDrivenRetriesEnabled: adaptiveResponseEnabled,
+                FrameworkFrameId: frameworkFrameId,
+                LastNativeAttemptFrameId: lastNativeAttemptFrameId,
+                RelevantNativeBoundaryEdge: relevantNativeBoundaryEdge));
         state = decision.NextState;
 
         var inputClaimed = decision.ShouldConsumeInputGeneration;
@@ -246,6 +270,7 @@ internal sealed unsafe class SmartRecuperateProbe
                     higherPriorityClaimed,
                     inputFrame,
                     ninjaShukuchiHiddenStatuses,
+                    allowOccupiedNativeQueue,
                     out attempted);
             }
             catch (Exception exception)
@@ -255,6 +280,7 @@ internal sealed unsafe class SmartRecuperateProbe
             }
 
             if (attempted) Interlocked.Increment(ref attemptCount);
+            if (attempted) lastNativeAttemptFrameId = frameworkFrameId;
             if (nativeOutcome == ClientActionAttemptOutcome.ClientAccepted)
                 Interlocked.Increment(ref acceptedCount);
             if (nativeOutcome == ClientActionAttemptOutcome.ClientRejected)
@@ -316,6 +342,8 @@ internal sealed unsafe class SmartRecuperateProbe
     internal void Reset()
     {
         state = SmartRecuperateState.Initial;
+        lastNativeBoundary = default;
+        lastNativeAttemptFrameId = -1;
         lastEvent = "Reset";
         Volatile.Write(ref snapshot, SmartRecuperateProbeSnapshot.Initial with
         {
@@ -331,6 +359,8 @@ internal sealed unsafe class SmartRecuperateProbe
     internal SmartRecuperateProbeSnapshot FailClosed()
     {
         state = SmartRecuperateState.Initial;
+        lastNativeBoundary = default;
+        lastNativeAttemptFrameId = -1;
         lastEvent = "Failed closed";
         var result = SmartRecuperateProbeSnapshot.Initial with
         {
@@ -357,6 +387,7 @@ internal sealed unsafe class SmartRecuperateProbe
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         NinjaShukuchiHiddenStatusCatalog ninjaShukuchiHiddenStatuses,
+        bool allowOccupiedNativeQueue,
         out bool attempted)
     {
         attempted = false;
@@ -382,7 +413,9 @@ internal sealed unsafe class SmartRecuperateProbe
             out var resolvedActionId,
             out var cooldownReady,
             out var resourcesReady,
-            out var nativeBoundaryReady);
+            out var nativeBoundaryReady,
+            out var nativeBoundary,
+            allowOccupiedNativeQueue);
         var currentIdentity = new TargetPressureActorIdentity(
             currentLocal.GameObjectId,
             currentLocal.EntityId);
@@ -424,9 +457,7 @@ internal sealed unsafe class SmartRecuperateProbe
         if (!cooldownReady || !resourcesReady || !nativeBoundaryReady)
             return ClientActionAttemptOutcome.SoftUnavailable;
 
-        var boundaryBefore = ClientActionAttemptBoundary.Capture(
-            actionManager,
-            intent.ActionId);
+        var boundaryBefore = nativeBoundary;
         attempted = true;
         var accepted = nearAssist.RunWithoutRedirect(() =>
             actionManager->UseAction(
@@ -436,11 +467,12 @@ internal sealed unsafe class SmartRecuperateProbe
                 0,
                 ActionManager.UseActionMode.None,
                 0));
-        return ClientActionAttemptBoundaryRules.Classify(
+        return ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
             accepted,
             intent.ActionId,
             boundaryBefore,
-            ClientActionAttemptBoundary.Capture(actionManager, intent.ActionId));
+            ClientActionAttemptBoundary.Capture(actionManager, intent.ActionId),
+            allowOccupiedNativeQueue);
     }
 
     private HeldCastCancellationRequest? BuildCastCancellationRequest(
@@ -642,12 +674,15 @@ internal sealed unsafe class SmartRecuperateProbe
         out uint resolvedActionId,
         out bool cooldownReady,
         out bool resourcesReady,
-        out bool nativeBoundaryReady)
+        out bool nativeBoundaryReady,
+        out ClientActionAttemptFingerprint boundary,
+        bool allowOccupiedNativeQueue)
     {
         resolvedActionId = 0;
         cooldownReady = false;
         resourcesReady = false;
         nativeBoundaryReady = false;
+        boundary = default;
         if (!localPlayer.ClassJob.IsValid ||
             localPlayer.ClassJob.RowId == 0 ||
             GetNativeObject(localPlayer) == null)
@@ -660,18 +695,30 @@ internal sealed unsafe class SmartRecuperateProbe
         resolvedActionId = actionManager->GetAdjustedActionId(
             SmartRecuperateRules.ActionId);
         if (resolvedActionId != SmartRecuperateRules.ActionId) return false;
-        var fingerprint = ClientActionAttemptBoundary.Capture(
+        boundary = ClientActionAttemptBoundary.Capture(
             actionManager,
             resolvedActionId);
-        cooldownReady = fingerprint.Captured && fingerprint.IsActionOffCooldown;
-        resourcesReady = fingerprint.Captured && fingerprint.ResourceStatus == 0;
+        cooldownReady = boundary.Captured && boundary.IsActionOffCooldown;
+        resourcesReady = boundary.Captured && boundary.ResourceStatus == 0;
         nativeBoundaryReady = HeldActionRetryRules.IsNativeBoundaryNearQueueable(
             actionManager->AnimationLock,
             localPlayer.IsCasting,
             actionManager->CastActionId,
-            actionManager->ActionQueued);
+            actionManager->ActionQueued,
+            allowOccupiedNativeQueue);
         return true;
     }
+
+    private static bool IsRelevantNativeBoundaryEdge(
+        ClientActionAttemptFingerprint previous,
+        ClientActionAttemptFingerprint current,
+        uint actionId,
+        bool allowOccupiedNativeQueue) =>
+        ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+            actionId,
+            previous,
+            current,
+            allowOccupiedNativeQueue);
 
     private static bool IsAlive(IPlayerCharacter? player) =>
         player is not null &&

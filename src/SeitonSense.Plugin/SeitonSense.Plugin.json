@@ -2,7 +2,7 @@
   "Author": "kittenhaswares-ui",
   "Name": "Seiton Sense",
   "Punchline": "Exact PvP cues, Smart Tab, reliable held helpers, and survival tools.",
-  "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, public-CC medicine-kit cues, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first held scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
+  "Description": "A local PvP HUD with exact native-nameplate cues, LB notifications, pressure and CC awareness, Ping Helpers, public-CC medicine-kit cues, PvP range rings, a Wolves' Den CC rotation panel, a bounded Purify-first scheduler, Smart Tab, Emergency Teleport, assist macros, local MP sounds, job tools, and target highlights.",
   "InternalName": "SeitonSense.Plugin",
   "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
   "ApplicableVersion": "any",

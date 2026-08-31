@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.43.0.0
+
+- Added a dedicated **Ping Helpers** settings page that groups the existing
+  adjustable retry window, automatic one-shot action buffer, native held-input
+  Turbo, and new adaptive response controls. The plugin uses one shared
+  monotonic high-resolution clock plus an exact framework-frame epoch for
+  response-sensitive ordering; it does not measure or alter network ping.
+- Made the shared survival order explicit: Purify, then Recuperate, then
+  Auto-Guard, then job helpers, then the generic buffer/Turbo lane. A sampled
+  transition from an unreadable/not-ready native boundary to ready may wake a
+  frozen critical recovery intent on the first later framework frame. Merely
+  decrementing an already-ready timer is not another edge; a clean client-false
+  result retains the 50-ms fallback and its bounded frozen retry budget.
+- Added an explicit critical-recovery path for Purify, Recuperate, and automatic
+  Guard. These actions may use FFXIV's normal action boundary while another
+  native queue entry exists. Seiton never edits queue fields directly. A false
+  result is retryable only when the complete pre-existing queue, action
+  sequence, action identity, readiness, and resources remain unchanged;
+  acceptance or any ambiguous mutation is terminal. An accepted recovery may
+  let FFXIV replace the queued action as the explicit priority override; users
+  can disable the option to retain the strict empty-queue rule. Ordinary
+  actions always retain the strict empty-queue rule.
+- Fixed post-Purify Guard ownership to arm only from a client-accepted Purify
+  request. Failed or ambiguous Purify calls can no longer create a speculative
+  Guard episode. Auto-Guard uses the same edge-driven and strict occupied-queue
+  recovery boundary while its existing status-first confirmation and one
+  bounded confirmation retry remain intact.
+- Added **Hold-to-land chase buffer** for certified physical standard-keyboard
+  hotbar input. If an instant harmful single-target action fails only native
+  range/line of sight while the same key remains held, Seiton freezes the exact
+  requested/resolved action, explicit actor, context, and press generation.
+  The first legal native range/LoS frame receives exactly one later request.
+  Release, another press, expiry, action/target/context/safety drift, Stun/forced
+  movement, action-blocking CC, death, zoning, queue/sequence movement, or any
+  non-spatial blocker cancels it. Heavy or Bind alone do not discard an
+  otherwise legal held action.
+- The ordinary one-shot buffer remains automatic and needs no `/buffer` macro.
+  Temporal and chase intents cannot coexist, both yield to critical utility,
+  and compatibility is revalidated at arm and dispatch. Chase is bounded by
+  the same adjustable 100-1500-ms buffer window. Input-release state is sampled
+  before buffer dispatch each framework frame and the exact physical control is
+  sampled once more at the final boundary, so a stale held observation cannot
+  dispatch the chase action.
+- Configuration schema is now `49`. Adaptive recovery, strict critical queue
+  crossing, and chase default on; the latency-response helper defaults on for
+  fresh/reset configurations while an existing upgrade opt-out is preserved.
+  No profiler, packet capture, position prediction, target substitution, real-
+  range extension, animation-lock write, or direct native-queue edit was added.
+  Build, Core, safety, package-parity, and exact live-game status are reported
+  separately; live CC and chase behavior require in-game confirmation.
+
 ## 0.42.0.10
 
 - Fixed an intermittent high-FPS `/seitonenavant` race. The movement sampler's

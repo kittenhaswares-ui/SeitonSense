@@ -144,6 +144,185 @@ internal static class HeldActionRetrySelfTests
             "missing baseline cannot prove rejection");
     }
 
+    internal static void CriticalRecoveryCanProveFalseAcrossAnUnchangedOccupiedQueue()
+    {
+        const uint recoveryActionId = 29_408;
+        var occupied = Fingerprint(recoveryActionId) with
+        {
+            ActionQueued = true,
+            QueuedActionType = 1,
+            QueuedActionId = 29_400,
+            QueuedTargetId = 0x1001,
+            QueuedExtraParam = 7,
+            QueueMode = 0,
+            QueuedComboRouteId = 3,
+        };
+
+        False(
+            occupied.IsExactActionReady(recoveryActionId),
+            "ordinary readiness remains strict with an occupied queue");
+        True(
+            occupied.IsCriticalRecoveryActionReady(
+                recoveryActionId,
+                allowOccupiedQueue: true),
+            "reviewed critical recovery may inspect an occupied queue");
+        False(
+            occupied.IsCriticalRecoveryActionReady(
+                recoveryActionId,
+                allowOccupiedQueue: false),
+            "critical classifier requires an explicit queue opt-in");
+        False(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+                0f,
+                localPlayerIsCasting: false,
+                castActionId: 0,
+                actionQueued: true),
+            "ordinary native boundary stays queue-exclusive");
+        True(
+            HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+                0f,
+                localPlayerIsCasting: false,
+                castActionId: 0,
+                actionQueued: true,
+                allowOccupiedQueue: true),
+            "critical recovery boundary explicitly tolerates the occupied queue");
+
+        Equal(
+            ClientActionAttemptOutcome.ClientRejected,
+            ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
+                clientReturnedAccepted: false,
+                recoveryActionId,
+                occupied,
+                occupied,
+                allowOccupiedQueue: true),
+            "unchanged occupied queue proves one clean critical-recovery false");
+        Equal(
+            ClientActionAttemptOutcome.AcceptanceUnknown,
+            ClientActionAttemptBoundaryRules.Classify(
+                clientReturnedAccepted: false,
+                recoveryActionId,
+                occupied,
+                occupied),
+            "ordinary classifier still rejects the occupied boundary");
+        Equal(
+            ClientActionAttemptOutcome.AcceptanceUnknown,
+            ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
+                clientReturnedAccepted: false,
+                recoveryActionId,
+                occupied,
+                occupied with { QueuedTargetId = 0x2002 },
+                allowOccupiedQueue: true),
+            "a mutated queue target is acceptance-ambiguous");
+        Equal(
+            ClientActionAttemptOutcome.AcceptanceUnknown,
+            ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
+                clientReturnedAccepted: false,
+                recoveryActionId,
+                occupied,
+                occupied with { ActionQueued = false },
+                allowOccupiedQueue: true),
+            "a cleared queue is acceptance-ambiguous");
+        Equal(
+            ClientActionAttemptOutcome.ClientAccepted,
+            ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
+                clientReturnedAccepted: true,
+                recoveryActionId,
+                occupied,
+                occupied with { ActionQueued = false },
+                allowOccupiedQueue: true),
+            "client true remains terminal acceptance even when the queue changes");
+
+        var blocked = occupied with { AnimationLockSeconds = 0.6f };
+        True(
+            ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+                recoveryActionId,
+                blocked,
+                occupied,
+                allowOccupiedQueue: true),
+            "not-ready to ready is one real recovery edge");
+        True(
+            ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+                recoveryActionId,
+                default,
+                occupied,
+                allowOccupiedQueue: true),
+            "unreadable to ready is one real recovery edge");
+        False(
+            ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+                recoveryActionId,
+                occupied with { AnimationLockSeconds = 0.05f },
+                occupied with { AnimationLockSeconds = 0.04f },
+                allowOccupiedQueue: true),
+            "timer movement while already ready is not another edge");
+    }
+
+    internal static void CriticalRecoveryRetryWakesOnAnEdgeOrFallbackFrameOnlyOnce()
+    {
+        var pending = HeldActionRetryRules.Complete(
+            HeldActionRetryState.Initial,
+            1_000,
+            ClientActionAttemptOutcome.ClientRejected).NextState;
+
+        False(
+            HeldActionRetryRules.CanAttemptOnBoundaryEdgeOrThrottle(
+                pending,
+                nowMilliseconds: 1_001,
+                currentFrameId: 11,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: false),
+            "a quiet frame before the fallback throttle does not retry");
+        True(
+            HeldActionRetryRules.CanAttemptOnBoundaryEdgeOrThrottle(
+                pending,
+                nowMilliseconds: 1_001,
+                currentFrameId: 11,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: true),
+            "a relevant boundary edge releases the retry before 50 ms");
+        False(
+            HeldActionRetryRules.CanAttemptOnBoundaryEdgeOrThrottle(
+                pending,
+                nowMilliseconds: 1_001,
+                currentFrameId: 10,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: true),
+            "the same framework frame cannot dispatch twice");
+        True(
+            HeldActionRetryRules.CanAttemptOnBoundaryEdgeOrThrottle(
+                pending,
+                nowMilliseconds: 1_050,
+                currentFrameId: 12,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: false),
+            "the legacy 50 ms fallback still guarantees progress without an edge");
+        True(
+            HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 1_000,
+                currentFrameId: 10,
+                lastAttemptFrameId: -1,
+                relevantBoundaryEdge: false),
+            "an initial frozen intent can use its first eligible frame");
+        False(
+            HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+                HeldActionRetryState.Initial,
+                nowMilliseconds: 1_000,
+                currentFrameId: 10,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: true),
+            "initial intent also obeys the one-attempt-per-frame boundary");
+        False(
+            HeldActionRetryRules.CanAttemptOnBoundaryEdgeOrThrottle(
+                new HeldActionRetryState(
+                    HeldActionRetryRules.MaximumNativeAttempts,
+                    1_000),
+                nowMilliseconds: 1_001,
+                currentFrameId: 11,
+                lastAttemptFrameId: 10,
+                relevantBoundaryEdge: true),
+            "an edge cannot revive an exhausted retry budget");
+    }
+
     internal static void AcceptedEpisodeDoesNotLatchAContinuousHeldKey()
     {
         False(

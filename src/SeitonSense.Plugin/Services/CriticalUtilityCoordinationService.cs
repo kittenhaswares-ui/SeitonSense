@@ -19,9 +19,10 @@ internal readonly record struct CriticalUtilityCoordinationSnapshot(
     string LastEvent);
 
 /// <summary>
-/// Publishes a read-only, frame-local claim for the existing shared held-action
-/// scheduler. A cooperating input plugin can yield while Seiton Sense owns one
-/// critical utility frame. This service does not own an action queue and never
+/// Publishes a read-only bounded claim for the existing shared held-action
+/// scheduler. Seiton's own input paths use exact framework-frame ownership;
+/// external IPC readers receive a short raw-clock lease so subscription order
+/// cannot hide the claim. This service does not own an action queue and never
 /// dispatches, retargets, or retries anything.
 /// </summary>
 internal sealed class CriticalUtilityCoordinationService : IDisposable
@@ -30,6 +31,7 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
     internal const long ClaimLeaseMilliseconds = 125;
 
     private readonly PluginConfiguration configuration;
+    private readonly SeitonResponseClock clock;
     private readonly IPluginLog log;
     private readonly ICallGateProvider<bool>? provider;
     private int providerAvailable;
@@ -38,7 +40,8 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
     private int integratedEligible;
     private int integratedClaimed;
     private int context;
-    private long claimExpiresAtMilliseconds = -1;
+    private long claimExpiresAtTimestamp = -1;
+    private long claimFrameEpoch = -1;
     private long claimCount;
     private long queryCount;
     private long positiveQueryCount;
@@ -48,9 +51,11 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
     internal CriticalUtilityCoordinationService(
         IDalamudPluginInterface pluginInterface,
         PluginConfiguration configuration,
+        SeitonResponseClock clock,
         IPluginLog log)
     {
         this.configuration = configuration;
+        this.clock = clock;
         this.log = log;
         try
         {
@@ -108,13 +113,16 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
         {
             Volatile.Write(ref claimed, 0);
             Volatile.Write(ref integratedClaimed, 0);
-            Volatile.Write(ref claimExpiresAtMilliseconds, -1);
+            Volatile.Write(ref claimExpiresAtTimestamp, -1);
+            Volatile.Write(ref claimFrameEpoch, -1);
             lastEvent = "Inactive";
         }
-        else if (!IsLeaseAlive())
+        else
         {
-            Volatile.Write(ref claimed, 0);
-            Volatile.Write(ref integratedClaimed, 0);
+            if (!IsInternalFrameClaimAlive())
+                Volatile.Write(ref integratedClaimed, 0);
+            if (!canPublish || !IsExternalLeaseAlive())
+                Volatile.Write(ref claimed, 0);
             lastEvent = "Integrated input eligible; waiting for an owned held frame";
         }
     }
@@ -122,12 +130,17 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
     internal void ClaimCurrentFrame()
     {
         if (Volatile.Read(ref integratedEligible) == 0 || disposed) return;
-        var now = Environment.TickCount64;
+        var now = clock.Capture();
+        if (!now.IsValid) return;
+        var deadline = AdaptiveResponseTimeRules.DeadlineAfterMilliseconds(
+            now.Timestamp,
+            ClaimLeaseMilliseconds,
+            clock.TimestampFrequency);
+        if (deadline < 0) return;
         Volatile.Write(
-            ref claimExpiresAtMilliseconds,
-            now > long.MaxValue - ClaimLeaseMilliseconds
-                ? long.MaxValue
-                : now + ClaimLeaseMilliseconds);
+            ref claimExpiresAtTimestamp,
+            deadline);
+        Volatile.Write(ref claimFrameEpoch, now.FrameEpoch);
         Interlocked.Exchange(ref integratedClaimed, 1);
         if (Volatile.Read(ref eligible) != 0 &&
             Interlocked.Exchange(ref claimed, 1) == 0)
@@ -146,13 +159,14 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
         configuration.Enabled &&
         Volatile.Read(ref integratedEligible) != 0 &&
         Volatile.Read(ref integratedClaimed) != 0 &&
-        IsLeaseAlive();
+        IsInternalFrameClaimAlive();
 
     internal void Clear(string reason = "Cleared")
     {
         Volatile.Write(ref claimed, 0);
         Volatile.Write(ref integratedClaimed, 0);
-        Volatile.Write(ref claimExpiresAtMilliseconds, -1);
+        Volatile.Write(ref claimExpiresAtTimestamp, -1);
+        Volatile.Write(ref claimFrameEpoch, -1);
         Volatile.Write(ref eligible, 0);
         Volatile.Write(ref integratedEligible, 0);
         Volatile.Write(ref context, (int)SupportedPvPContext.None);
@@ -197,12 +211,25 @@ internal sealed class CriticalUtilityCoordinationService : IDisposable
         Volatile.Read(ref providerAvailable) != 0 &&
         Volatile.Read(ref eligible) != 0 &&
         Volatile.Read(ref claimed) != 0 &&
-        IsLeaseAlive();
+        IsExternalLeaseAlive();
 
-    private bool IsLeaseAlive()
+    private bool IsInternalFrameClaimAlive()
     {
-        var expiresAt = Volatile.Read(ref claimExpiresAtMilliseconds);
-        var now = Environment.TickCount64;
-        return expiresAt > 0 && now >= 0 && now < expiresAt;
+        var expiresAt = Volatile.Read(ref claimExpiresAtTimestamp);
+        var claimedFrame = Volatile.Read(ref claimFrameEpoch);
+        var now = clock.Capture();
+        return now.IsValid &&
+               expiresAt >= 0 &&
+               claimedFrame == now.FrameEpoch &&
+               now.Timestamp < expiresAt;
+    }
+
+    private bool IsExternalLeaseAlive()
+    {
+        var expiresAt = Volatile.Read(ref claimExpiresAtTimestamp);
+        var now = clock.Capture();
+        return now.IsValid &&
+               expiresAt >= 0 &&
+               now.Timestamp < expiresAt;
     }
 }

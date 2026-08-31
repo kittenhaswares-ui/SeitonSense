@@ -93,6 +93,7 @@ internal sealed partial class SettingsWindow : Window
                 SettingsPage.Alerts => DrawAlertsPage(),
                 SettingsPage.HudAndNameplates => DrawHudAndNameplatesPage(),
                 SettingsPage.ActionHelpers => DrawActionHelpersPage(),
+                SettingsPage.PingHelpers => DrawPingHelpersPage(),
                 SettingsPage.JobTools => DrawJobToolsPage(),
                 SettingsPage.MacroHelpers => DrawMacroHelpersPage(),
                 SettingsPage.Targets => DrawTargetsPage(),
@@ -124,6 +125,7 @@ internal sealed partial class SettingsWindow : Window
         DrawPageChoice(SettingsPage.Alerts, "Alerts");
         DrawPageChoice(SettingsPage.HudAndNameplates, "HUD & Nameplates");
         DrawPageChoice(SettingsPage.ActionHelpers, "Action Helpers");
+        DrawPageChoice(SettingsPage.PingHelpers, "Ping Helpers");
         DrawPageChoice(SettingsPage.JobTools, "Job Tools");
         DrawPageChoice(SettingsPage.MacroHelpers, "Macro Helpers");
         DrawPageChoice(SettingsPage.Targets, "Targets");
@@ -150,6 +152,7 @@ internal sealed partial class SettingsWindow : Window
         Alerts,
         HudAndNameplates,
         ActionHelpers,
+        PingHelpers,
         JobTools,
         MacroHelpers,
         Targets,

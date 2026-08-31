@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 48;
+    public int Version { get; set; } = 49;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -83,10 +83,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool EnableMonkHeldComboOnHeldKey { get; set; }
     public bool AllowHeldHelpersToCancelOwnCast { get; set; }
     public bool AllowAutomaticRecoveryToCancelBasicShotCasts { get; set; }
-    public bool EnablePvpLatencyResponseHelper { get; set; }
+    public bool EnablePvpLatencyResponseHelper { get; set; } = true;
     public int PvpLatencyResponseWindowMilliseconds { get; set; } =
         HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
+    public bool EnableAdaptiveResponseEngine { get; set; } = true;
+    public bool AllowCriticalRecoveryThroughNativeQueue { get; set; } = true;
     public bool EnableSmartActionBuffer { get; set; } = true;
+    public bool EnableHoldToLandChaseBuffer { get; set; } = true;
     public int SmartActionBufferWindowMilliseconds { get; set; } =
         SmartActionBufferWindowRules.DefaultMilliseconds;
     public bool ShowBufferLearningWindow { get; set; } = true;
@@ -315,7 +318,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 48)
+        if (Version >= 49)
         {
             if (repaired) Save();
             return;
@@ -820,7 +823,20 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableInstantLeaveAfterCrystallineConflict = false;
         }
 
-        Version = 48;
+        if (Version < 49)
+        {
+            // The response core replaces fixed polling with frame/readiness-edge
+            // arbitration and makes the existing one-shot buffer available
+            // without a dedicated macro command. Critical self-recovery may use
+            // an already occupied native queue as an explicit priority override;
+            // only a rejected request requires an unchanged queue to retry. The automatic direct-action buffer and
+            // chase retain the same exact action/target as bounded one-shots.
+            EnableAdaptiveResponseEngine = true;
+            AllowCriticalRecoveryThroughNativeQueue = true;
+            EnableHoldToLandChaseBuffer = true;
+        }
+
+        Version = 49;
         ClampSettings();
         Save();
     }
@@ -829,7 +845,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 48;
+        Version = 49;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -865,10 +881,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
         EnableMonkHeldComboOnHeldKey = false;
         AllowHeldHelpersToCancelOwnCast = false;
         AllowAutomaticRecoveryToCancelBasicShotCasts = false;
-        EnablePvpLatencyResponseHelper = false;
+        EnablePvpLatencyResponseHelper = true;
         PvpLatencyResponseWindowMilliseconds =
             HeldActionRetryRules.DefaultLatencyResponseWindowMilliseconds;
+        EnableAdaptiveResponseEngine = true;
+        AllowCriticalRecoveryThroughNativeQueue = true;
         EnableSmartActionBuffer = true;
+        EnableHoldToLandChaseBuffer = true;
         SmartActionBufferWindowMilliseconds =
             SmartActionBufferWindowRules.DefaultMilliseconds;
         ShowBufferLearningWindow = true;

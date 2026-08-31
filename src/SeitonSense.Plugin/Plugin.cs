@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.10";
+    private const string CurrentReleaseVersion = "0.43.0.0";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -35,6 +35,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IChatGui chatGui;
     private readonly IPluginLog log;
     private readonly PluginConfiguration configuration;
+    private readonly SeitonResponseClock responseClock;
     private readonly WindowSystem windowSystem = new("SeitonSense");
     private readonly ExecuteTracker tracker;
     private readonly PersonalStatusService personalStatus;
@@ -65,6 +66,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly LimitBreakNotificationRenderer limitBreakNotifications;
     private readonly CombatLimitBreakRuntimeService combatLimitBreakRuntime;
     private readonly SettingsWindow settingsWindow;
+    private readonly MachinistLimitBreakCapture machinistLimitBreakCapture;
     private readonly bool nearAssistCommandRegistered;
     private readonly bool nearAssistAliasRegistered;
     private readonly bool smartTabCommandRegistered;
@@ -108,18 +110,22 @@ public sealed class Plugin : IDalamudPlugin
         this.chatGui = chatGui;
         this.log = log;
 
+        try
+        {
         configuration = pluginInterface.GetPluginConfig() as PluginConfiguration ?? new PluginConfiguration();
         configuration.Initialize(pluginInterface);
+        responseClock = new SeitonResponseClock(framework);
 
         var metadata = PvPMetadataGuard.Validate(dataManager, log);
         var samuraiReactiveMetadata = SamuraiReactiveMetadataGuard.Validate(
             dataManager,
             log);
         var combatLimitBreakMetadata = CombatLimitBreakMetadataGuard.Validate(dataManager, log);
-        var machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
+        machinistLimitBreakCapture = new MachinistLimitBreakCapture(interop, log);
         criticalUtilityCoordination = new CriticalUtilityCoordinationService(
             pluginInterface,
             configuration,
+            responseClock,
             log);
         tracker = new ExecuteTracker(
             clientState,
@@ -266,6 +272,7 @@ public sealed class Plugin : IDalamudPlugin
             metadata,
             samuraiReactiveMetadata,
             reviewedPvpCommands,
+            responseClock,
             criticalUtilityCoordination);
         integratedInput = new IntegratedInputRuntime(
             configuration,
@@ -422,10 +429,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed an intermittent high-FPS /seitonenavant race where several real movement frames could share one clock timestamp and erase the detected direction.",
-                "Real same-timestamp displacement now contributes to the heading, while stationary samples, jitter, stale movement, and identity changes remain blocked.",
-                "/seiton debug now names the exact En Avant readiness blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources.",
-                "The command remains one immediate En Avant attempt with no wait, reservation, queue, or retry. Live in-game confirmation remains pending.",
+                "New Ping Helpers page with one shared monotonic response clock, sampled readiness-edge recovery, the existing adjustable retry window, action buffer, Turbo, and chase controls.",
+                "Purify > Recuperate > Auto-Guard is now explicit. The optional occupied-queue recovery path is a deliberate priority override: an accepted recovery may replace the queued action; only an unchanged rejected call may retry.",
+                "The automatic one-shot action buffer needs no /buffer macro. Hold-to-land preserves one exact instant hostile action and actor until native range/line of sight becomes legal, then tries once.",
+                "No profiler, position prediction, range extension, target substitution, animation-lock write, or direct queue edit was added. Exact live CC and chase confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -693,23 +700,106 @@ public sealed class Plugin : IDalamudPlugin
                 "Disable it and reload Seiton Sense to avoid duplicate pressure overlays; integrated settings remain under /seiton.");
         }
 
-        pluginInterface.UiBuilder.Draw += Draw;
-        pluginInterface.UiBuilder.OpenMainUi += OpenSettings;
-        pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
-        namePlateAnchors.Start();
-        tracker.Start();
-        opponentLimitBreakGauges.Start();
-        pressureTracker.Start();
-        smartTabTargeting.Start();
-        autoEnemyFocusMark.Start();
-        autoLowMpFocusTarget.Start();
-        isolationAwareness.Start();
-        nearAssist.Start();
-        personalStatus.Start();
-        integratedInput.Start();
-        movementDirectedEnAvant.Start();
-        panicShukuchi.Start();
-        combatLimitBreakRuntime.Start();
+        try
+        {
+            pluginInterface.UiBuilder.Draw += Draw;
+            pluginInterface.UiBuilder.OpenMainUi += OpenSettings;
+            pluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
+            // Subscribe the shared clock first so every response-sensitive
+            // service observes the same framework epoch. If any later start
+            // fails, the complete partially-started plugin is rolled back.
+            responseClock.Start();
+            namePlateAnchors.Start();
+            tracker.Start();
+            opponentLimitBreakGauges.Start();
+            pressureTracker.Start();
+            smartTabTargeting.Start();
+            autoEnemyFocusMark.Start();
+            autoLowMpFocusTarget.Start();
+            isolationAwareness.Start();
+            nearAssist.Start();
+            personalStatus.Start();
+            integratedInput.Start();
+            movementDirectedEnAvant.Start();
+            panicShukuchi.Start();
+            combatLimitBreakRuntime.Start();
+        }
+        catch (Exception startException)
+        {
+            throw new InvalidOperationException(
+                "Seiton Sense failed while starting its runtime services.",
+                startException);
+        }
+        }
+        catch
+        {
+            RollBackFailedConstruction();
+            throw;
+        }
+    }
+
+    private void RollBackFailedConstruction()
+    {
+        void Safe(Action cleanup)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception exception)
+            {
+                log.Warning(
+                    exception,
+                    "Seiton Sense could not completely roll back a failed plugin construction step.");
+            }
+        }
+
+        Safe(() => pluginInterface.UiBuilder.Draw -= Draw);
+        Safe(() => pluginInterface.UiBuilder.OpenMainUi -= OpenSettings);
+        Safe(() => pluginInterface.UiBuilder.OpenConfigUi -= OpenSettings);
+        Safe(() => commandManager.RemoveHandler(Command));
+        Safe(() => commandManager.RemoveHandler(AliasCommand));
+        if (nearAssistCommandRegistered) Safe(() => commandManager.RemoveHandler(NearAssistCommand));
+        if (nearAssistAliasRegistered) Safe(() => commandManager.RemoveHandler(NearAssistAliasCommand));
+        if (smartTabCommandRegistered) Safe(() => commandManager.RemoveHandler(SmartTabCommand));
+        if (smartTabAliasRegistered) Safe(() => commandManager.RemoveHandler(SmartTabAliasCommand));
+        if (smartActionCommandRegistered) Safe(() => commandManager.RemoveHandler(SmartActionCommand));
+        if (smartActionAliasRegistered) Safe(() => commandManager.RemoveHandler(SmartActionAliasCommand));
+        if (seitonFarCommandRegistered) Safe(() => commandManager.RemoveHandler(SeitonFarCommand));
+        if (autoSeitonCommandRegistered) Safe(() => commandManager.RemoveHandler(AutoSeitonCommand));
+        if (nearHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(NearHelpCommand));
+        if (nearHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(NearHelpAliasCommand));
+        if (farHelpCommandRegistered) Safe(() => commandManager.RemoveHandler(FarHelpCommand));
+        if (farHelpAliasRegistered) Safe(() => commandManager.RemoveHandler(FarHelpAliasCommand));
+        if (panicShukuchiCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.Command));
+        if (backwardPanicShukuchiCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.BackwardCameraCommand));
+        if (movementEnAvantCommandRegistered) Safe(() => commandManager.RemoveHandler(PanicShukuchiService.MovementEnAvantCommand));
+        if (pressureCommandRegistered) Safe(() => commandManager.RemoveHandler(PressureCommand));
+
+        Safe(() => crystallineConflictInstantLeave?.Dispose());
+        Safe(() => crystallineConflictMapStatistics?.Dispose());
+        Safe(() => combatLimitBreakRuntime?.Dispose());
+        Safe(() => integratedInput?.Dispose());
+        Safe(() => personalStatus?.Dispose());
+        // PersonalStatus normally owns this shared capture. Keeping the field
+        // here closes the earlier-construction gap; Dispose is idempotent when
+        // PersonalStatus was already constructed and cleaned it first.
+        Safe(() => machinistLimitBreakCapture?.Dispose());
+        Safe(() => criticalUtilityCoordination?.Dispose());
+        Safe(() => smartTabTargeting?.Dispose());
+        Safe(() => movementDirectedEnAvant?.Dispose());
+        Safe(() => panicShukuchi?.Dispose());
+        Safe(() => nearAssist?.Dispose());
+        Safe(() => isolationAwareness?.Dispose());
+        Safe(() => autoLowMpFocusTarget?.Dispose());
+        Safe(() => autoEnemyFocusMark?.Dispose());
+        Safe(() => pressureTracker?.Dispose());
+        Safe(() => opponentLimitBreakGauges?.Dispose());
+        Safe(() => tracker?.Dispose());
+        Safe(() => namePlateAnchors?.Dispose());
+        Safe(() => pressureCounter?.Dispose());
+        Safe(() => windowSystem.RemoveAllWindows());
+        Safe(() => responseClock?.Dispose());
     }
 
     public void Dispose()
@@ -757,6 +847,7 @@ public sealed class Plugin : IDalamudPlugin
         namePlateAnchors.Dispose();
         pressureCounter.Dispose();
         windowSystem.RemoveAllWindows();
+        responseClock.Dispose();
     }
 
     private void Draw()
@@ -906,6 +997,7 @@ public sealed class Plugin : IDalamudPlugin
                 var castCancellation = personalStatus.HeldCastCancellationDiagnostics;
                 var criticalCoordination =
                     personalStatus.CriticalUtilityCoordinationDiagnostics;
+                var responseTime = responseClock.Capture();
                 var integrated = integratedInput.Diagnostics;
                 var nativeHotbar = integrated.HotbarInput;
                 var limitBreakRuntime = combatLimitBreakRuntime.Diagnostics;
@@ -933,6 +1025,9 @@ public sealed class Plugin : IDalamudPlugin
                     $"accepted={mchLimitBreak.AcceptedWarnings},active={mchLimitBreak.WarningActive}," +
                     $"shared-errors={mchLimitBreak.CaptureErrors},mch-drops={mchLimitBreak.DroppedWarnings}], " +
                     $"latency[enabled={configuration.EnablePvpLatencyResponseHelper}," +
+                    $"adaptive={configuration.EnableAdaptiveResponseEngine}," +
+                    $"occupied-q={configuration.AllowCriticalRecoveryThroughNativeQueue}," +
+                    $"frame/raw={responseTime.FrameEpoch}/{responseTime.Timestamp}," +
                     $"window={configuration.PvpLatencyResponseWindowMilliseconds}," +
                     $"new-intent-budget={HeldActionRetryRules.CurrentMaximumNativeAttempts}," +
                     $"ipc/eligible/claimed={criticalCoordination.ProviderAvailable}/" +
@@ -958,6 +1053,12 @@ public sealed class Plugin : IDalamudPlugin
                     $"{integrated.ActionBuffer.AcceptedDispatchCount}/" +
                     $"{integrated.ActionBuffer.RejectedDispatchCount}/" +
                     $"{integrated.ActionBuffer.CancelledCount}]," +
+                    $"chase[pending/action/armed/dispatched/cancelled=" +
+                    $"{integrated.ActionBuffer.ChasePending}/" +
+                    $"{integrated.ActionBuffer.ChaseResolvedActionId}/" +
+                    $"{integrated.ActionBuffer.ChaseArmedCount}/" +
+                    $"{integrated.ActionBuffer.ChaseDispatchedCount}/" +
+                    $"{integrated.ActionBuffer.ChaseCancelledCount}]," +
                     $"compat={integrated.ActionBuffer.Compatibility.BufferMutationAllowed}/" +
                     $"{integrated.ActionBuffer.Compatibility.ReActionProfile}/" +
                     $"{integrated.ActionBuffer.Compatibility.MOActionLoaded}/" +

@@ -98,7 +98,11 @@ public readonly record struct EmergencyPurifyBufferObservation(
     int FreshKeyCode = 0,
     int HeldKeyCode = 0,
     bool FrozenKeyStillDown = true,
-    bool AutomaticStatusTriggerEnabled = false);
+    bool AutomaticStatusTriggerEnabled = false,
+    bool EdgeDrivenRetriesEnabled = false,
+    long FrameworkFrameId = -1,
+    long LastNativeAttemptFrameId = -1,
+    bool RelevantNativeBoundaryEdge = false);
 
 public readonly record struct EmergencyPurifyBufferDecision(
     EmergencyPurifyBufferState NextState,
@@ -260,8 +264,28 @@ public static class EmergencyPurifyBufferRules
                     EmergencyPurifyBufferCancelReason.NativeRetryLimitReached);
             }
 
-            if (!observation.PurifyLocallyReady ||
-                observation.NowMilliseconds < current.NextNativeAttemptAtMilliseconds)
+            var retryState = new HeldActionRetryState(
+                current.NativeAttemptCount,
+                current.NextNativeAttemptAtMilliseconds,
+                current.NativeAttemptLimit);
+            var firstNativeAttemptReady =
+                current.NativeAttemptCount == 0 &&
+                current.NextNativeAttemptAtMilliseconds >= 0 &&
+                observation.NowMilliseconds >= current.NextNativeAttemptAtMilliseconds &&
+                (!observation.EdgeDrivenRetriesEnabled ||
+                 observation.FrameworkFrameId != observation.LastNativeAttemptFrameId);
+            var retryReady = firstNativeAttemptReady ||
+                (observation.EdgeDrivenRetriesEnabled
+                ? HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+                    retryState,
+                    observation.NowMilliseconds,
+                    observation.FrameworkFrameId,
+                    observation.LastNativeAttemptFrameId,
+                    observation.RelevantNativeBoundaryEdge)
+                : HeldActionRetryRules.CanAttemptFrozenIntent(
+                    retryState,
+                    observation.NowMilliseconds));
+            if (!observation.PurifyLocallyReady || !retryReady)
             {
                 return Armed(current);
             }

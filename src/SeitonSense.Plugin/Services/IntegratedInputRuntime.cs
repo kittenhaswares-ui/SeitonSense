@@ -101,6 +101,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             dataManager,
             log,
             () => IsInternalPriorityClaimedFailClosed(),
+            IsExactPhysicalPressStillHeld,
             DispatchBufferedAction);
 
         ArgumentNullException.ThrowIfNull(interop);
@@ -165,8 +166,11 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
     {
         if (disposed || Interlocked.CompareExchange(ref started, 1, 0) != 0) return;
 
-        ActionBuffer.Start();
+        // Refresh the current physical hold before the buffer evaluates each
+        // framework frame. This makes key release authoritative on the same
+        // frame and prevents a chase dispatch from observing stale held state.
         framework.Update += OnFrameworkUpdate;
+        ActionBuffer.Start();
         var slotHook = executeSlotHook;
         var slotByIdHook = executeSlotByIdHook;
         var input = hotbarInput;
@@ -561,6 +565,21 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 latestPhysicalPress = null;
             }
         }
+    }
+
+    private bool IsExactPhysicalPressStillHeld(IntegratedActionBufferHotbarRoot root)
+    {
+        IntegratedHotbarPress? latest;
+        lock (inputStateGate) latest = latestPhysicalPress;
+        if (latest is not { } press ||
+            press.PressId != root.PressGeneration ||
+            press.Binding.HotbarId != (uint)root.HotbarId ||
+            press.Binding.SlotId != (uint)root.SlotId)
+        {
+            return false;
+        }
+
+        return hotbarInput?.IsStillHeld(press) == true;
     }
 
     private void OnUnconsumedInjectedRepeat(IntegratedHotbarActivation activation)

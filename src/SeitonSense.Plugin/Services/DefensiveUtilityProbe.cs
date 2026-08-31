@@ -130,6 +130,8 @@ internal sealed class DefensiveUtilityProbe
         AutoGuardConfirmationState.Initial;
     private AcceptedAutoGuardianEpisode? lastAcceptedGuardianEpisode;
     private FrozenGuardRetry? frozenGuardRetry;
+    private ClientActionAttemptFingerprint lastGuardNativeBoundary;
+    private long lastGuardNativeAttemptFrameId = -1;
     private FrozenGuardianRetry? frozenGuardianRetry;
     private VirtualKey terminalGuardianKey = VirtualKey.NO_KEY;
     private long frozenIntentEpochToken;
@@ -189,13 +191,16 @@ internal sealed class DefensiveUtilityProbe
         bool pressureKnown,
         int incomingEnemyCount,
         bool highPressureStunObserved,
-        bool purifyUseActionAttempted,
+        bool purifyUseActionAccepted,
         bool resilienceActive,
         bool hasPurifyRemovableCrowdControl,
         bool guardActive,
         bool higherPriorityClaimed,
         EmergencyActionInputFrame inputFrame,
         long nowMilliseconds,
+        bool adaptiveResponseEnabled,
+        bool allowOccupiedNativeQueue,
+        long frameworkFrameId,
         bool hardReset = false,
         DefensiveUtilityProbeSnapshot? prioritizedGuardianPass = null)
     {
@@ -214,7 +219,7 @@ internal sealed class DefensiveUtilityProbe
             isCrystallineConflict &&
             enableGuardOnStunPressure,
             highPressureStunObserved,
-            purifyUseActionAttempted,
+            purifyUseActionAccepted,
             resilienceActive,
             hasPurifyRemovableCrowdControl,
             nowMilliseconds);
@@ -256,6 +261,13 @@ internal sealed class DefensiveUtilityProbe
                                            nearAssist.CanProtectAutomaticGuard &&
                                            IsActionSpecificallyReady(
                                                EnemyCombatConstants.GuardActionId);
+        var guardNativeBoundary = CaptureGuardNativeBoundary();
+        var relevantGuardNativeBoundaryEdge = adaptiveResponseEnabled &&
+                                              IsRelevantGuardNativeBoundaryEdge(
+                                                  lastGuardNativeBoundary,
+                                                  guardNativeBoundary,
+                                                  allowOccupiedNativeQueue);
+        lastGuardNativeBoundary = guardNativeBoundary;
         var currentIdentity = localIdentityValid
             ? new TargetPressureActorIdentity(
                 localPlayer!.GameObjectId,
@@ -269,7 +281,9 @@ internal sealed class DefensiveUtilityProbe
             var exactGuardActive = HasActiveGuard(localPlayer);
             var retryReadiness = higherPriorityClaimed || inputFrame.IsConsumed
                 ? AutoGuardRetryReadiness.NativeBoundaryBusy
-                : ObserveGuardRetryReadiness(localPlayer);
+                : ObserveGuardRetryReadiness(
+                    localPlayer,
+                    allowOccupiedNativeQueue);
             var confirmation = AutoGuardConfirmationRules.Observe(
                 autoGuardConfirmationState,
                 new AutoGuardConfirmationObservation(
@@ -303,11 +317,14 @@ internal sealed class DefensiveUtilityProbe
             {
                 inputClaimed = true;
                 inputFrame.Consume();
-                var retryResult = TryUseGuardOnce(localPlayer!);
+                var retryResult = TryUseGuardOnce(
+                    localPlayer!,
+                    allowOccupiedNativeQueue);
                 attempted = retryResult.Outcome is not
                     (ClientActionAttemptOutcome.NotInvoked or
                      ClientActionAttemptOutcome.SoftUnavailable);
                 accepted = retryResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                if (attempted) lastGuardNativeAttemptFrameId = frameworkFrameId;
                 if (accepted)
                 {
                     autoGuardConfirmationState = AutoGuardConfirmationRules.ArmProvisional(
@@ -376,24 +393,36 @@ internal sealed class DefensiveUtilityProbe
             {
                 inputClaimed = true;
                 inputFrame.Consume();
-                if (!IsNativeBoundaryNearQueueable(localPlayer!))
+                if (!IsCriticalGuardBoundaryNearQueueable(
+                        localPlayer!,
+                        allowOccupiedNativeQueue))
                 {
                     frozenGuardRetry = frozenGuard;
                     lastEvent = "Frozen post-Purify Guard waiting for global native boundary";
                 }
-                else if (!HeldActionRetryRules.CanAttemptFrozenIntent(
-                             frozenGuard.Retry,
-                             nowMilliseconds))
+                else if (!(adaptiveResponseEnabled
+                    ? HeldActionRetryRules.CanAttemptFrozenIntentOnBoundaryEdgeOrThrottle(
+                        frozenGuard.Retry,
+                        nowMilliseconds,
+                        frameworkFrameId,
+                        lastGuardNativeAttemptFrameId,
+                        relevantGuardNativeBoundaryEdge)
+                    : HeldActionRetryRules.CanAttemptFrozenIntent(
+                        frozenGuard.Retry,
+                        nowMilliseconds)))
                 {
                     lastEvent = "Frozen post-Purify Guard retaining retry throttle priority";
                 }
                 else
                 {
-                    var attemptResult = TryUseGuardOnce(localPlayer!);
+                    var attemptResult = TryUseGuardOnce(
+                        localPlayer!,
+                        allowOccupiedNativeQueue);
                     attempted = attemptResult.Outcome is not
                         (ClientActionAttemptOutcome.NotInvoked or
                          ClientActionAttemptOutcome.SoftUnavailable);
                     accepted = attemptResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                    if (attempted) lastGuardNativeAttemptFrameId = frameworkFrameId;
                     CompleteGuardAttempt(frozenGuard, attemptResult, nowMilliseconds);
 
                     lastEvent = DescribeAttempt(
@@ -421,18 +450,23 @@ internal sealed class DefensiveUtilityProbe
                 new TargetPressureActorIdentity(localPlayer!.GameObjectId, localPlayer.EntityId),
                 postPurifyGuardExpiresAt,
                 HeldActionRetryState.Initial);
-            if (!IsNativeBoundaryNearQueueable(localPlayer!))
+            if (!IsCriticalGuardBoundaryNearQueueable(
+                    localPlayer!,
+                    allowOccupiedNativeQueue))
             {
                 frozenGuardRetry = frozen;
                 lastEvent = "Frozen post-Purify Guard waiting for global native boundary";
             }
             else
             {
-                var attemptResult = TryUseGuardOnce(localPlayer!);
+                var attemptResult = TryUseGuardOnce(
+                    localPlayer!,
+                    allowOccupiedNativeQueue);
                 attempted = attemptResult.Outcome is not
                     (ClientActionAttemptOutcome.NotInvoked or
                      ClientActionAttemptOutcome.SoftUnavailable);
                 accepted = attemptResult.Outcome == ClientActionAttemptOutcome.ClientAccepted;
+                if (attempted) lastGuardNativeAttemptFrameId = frameworkFrameId;
                 CompleteGuardAttempt(frozen, attemptResult, nowMilliseconds);
 
                 lastEvent = accepted
@@ -977,7 +1011,7 @@ internal sealed class DefensiveUtilityProbe
     private void UpdatePostPurifyGuard(
         bool enabled,
         bool highPressureStunObserved,
-        bool purifyUseActionAttempted,
+        bool purifyUseActionAccepted,
         bool resilienceActive,
         bool hasPurifyRemovableCrowdControl,
         long nowMilliseconds)
@@ -989,7 +1023,7 @@ internal sealed class DefensiveUtilityProbe
             return;
         }
 
-        if (highPressureStunObserved && purifyUseActionAttempted)
+        if (highPressureStunObserved && purifyUseActionAccepted)
         {
             awaitingPostPurifyConfirmation = true;
             postPurifyGuardExpiresAt = SaturatingAdd(
@@ -1083,7 +1117,8 @@ internal sealed class DefensiveUtilityProbe
     }
 
     private unsafe GuardUseAttemptResult TryUseGuardOnce(
-        IPlayerCharacter localPlayer)
+        IPlayerCharacter localPlayer,
+        bool allowOccupiedNativeQueue)
     {
         if (!guardMetadataVerified ||
             !nearAssist.CanProtectAutomaticGuard ||
@@ -1101,10 +1136,16 @@ internal sealed class DefensiveUtilityProbe
             return GuardUseAttemptResult.NotInvoked;
         }
 
-        if (!ClientActionAttemptBoundary.IsExactActionReady(
+        var criticalBoundary = ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.GuardActionId);
+        if (!criticalBoundary.IsCriticalRecoveryActionReady(
+                EnemyCombatConstants.GuardActionId,
+                allowOccupiedNativeQueue) ||
+            !IsCriticalGuardBoundaryNearQueueable(
+                localPlayer,
                 actionManager,
-                EnemyCombatConstants.GuardActionId) ||
-            !IsNativeBoundaryNearQueueable(localPlayer, actionManager))
+                allowOccupiedNativeQueue))
         {
             return new GuardUseAttemptResult(
                 ClientActionAttemptOutcome.SoftUnavailable,
@@ -1125,13 +1166,14 @@ internal sealed class DefensiveUtilityProbe
                     0,
                     ActionManager.UseActionMode.None,
                     0));
-            var outcome = ClientActionAttemptBoundaryRules.Classify(
+            var outcome = ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
                 accepted,
                 EnemyCombatConstants.GuardActionId,
                 boundaryBefore,
                 ClientActionAttemptBoundary.Capture(
                     actionManager,
-                    EnemyCombatConstants.GuardActionId));
+                    EnemyCombatConstants.GuardActionId),
+                allowOccupiedNativeQueue);
             if (outcome == ClientActionAttemptOutcome.ClientRejected)
             {
                 nearAssist.TryRetractClientRejectedLocalGuardAttempt(
@@ -1161,7 +1203,8 @@ internal sealed class DefensiveUtilityProbe
     }
 
     private static unsafe AutoGuardRetryReadiness ObserveGuardRetryReadiness(
-        IPlayerCharacter? localPlayer)
+        IPlayerCharacter? localPlayer,
+        bool allowOccupiedNativeQueue)
     {
         if (!HasValidLocalPlayer(localPlayer) || HasActiveGuard(localPlayer))
             return AutoGuardRetryReadiness.Unknown;
@@ -1182,7 +1225,9 @@ internal sealed class DefensiveUtilityProbe
         if (!readiness.IsActionOffCooldown)
             return AutoGuardRetryReadiness.CooldownUnavailable;
 
-        return readiness.IsExactActionReady(EnemyCombatConstants.GuardActionId)
+        return readiness.IsCriticalRecoveryActionReady(
+                EnemyCombatConstants.GuardActionId,
+                allowOccupiedNativeQueue)
             ? AutoGuardRetryReadiness.Ready
             : AutoGuardRetryReadiness.NativeBoundaryBusy;
     }
@@ -1349,6 +1394,47 @@ internal sealed class DefensiveUtilityProbe
             localPlayer.IsCasting,
             actionManager->CastActionId,
             actionManager->ActionQueued);
+
+    private static unsafe bool IsCriticalGuardBoundaryNearQueueable(
+        IPlayerCharacter localPlayer,
+        bool allowOccupiedNativeQueue)
+    {
+        var actionManager = ActionManager.Instance();
+        return actionManager != null &&
+               IsCriticalGuardBoundaryNearQueueable(
+                   localPlayer,
+                   actionManager,
+                   allowOccupiedNativeQueue);
+    }
+
+    private static unsafe bool IsCriticalGuardBoundaryNearQueueable(
+        IPlayerCharacter localPlayer,
+        ActionManager* actionManager,
+        bool allowOccupiedNativeQueue) =>
+        HeldActionRetryRules.IsNativeBoundaryNearQueueable(
+            actionManager->AnimationLock,
+            localPlayer.IsCasting,
+            actionManager->CastActionId,
+            actionManager->ActionQueued,
+            allowOccupiedNativeQueue);
+
+    private static unsafe ClientActionAttemptFingerprint CaptureGuardNativeBoundary()
+    {
+        var actionManager = ActionManager.Instance();
+        return ClientActionAttemptBoundary.Capture(
+            actionManager,
+            EnemyCombatConstants.GuardActionId);
+    }
+
+    private static bool IsRelevantGuardNativeBoundaryEdge(
+        ClientActionAttemptFingerprint previous,
+        ClientActionAttemptFingerprint current,
+        bool allowOccupiedNativeQueue) =>
+        ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(
+            EnemyCombatConstants.GuardActionId,
+            previous,
+            current,
+            allowOccupiedNativeQueue);
 
     private static unsafe bool IsCastCancellationBoundaryReady(IPlayerCharacter localPlayer)
     {
@@ -1557,6 +1643,8 @@ internal sealed class DefensiveUtilityProbe
         awaitingPostPurifyConfirmation = false;
         postPurifyGuardExpiresAt = -1;
         frozenGuardRetry = null;
+        lastGuardNativeBoundary = default;
+        lastGuardNativeAttemptFrameId = -1;
         autoGuardConfirmationState = AutoGuardConfirmationState.Initial;
     }
 

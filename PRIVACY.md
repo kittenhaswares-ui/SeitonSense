@@ -930,14 +930,23 @@ Every helper freezes its exact action, actor/target, status or episode, and key.
 Guard-Shukuchi freezes the actor rather than a stale destination and revalidates
 that same actor's latest finite position immediately before its location call.
 The first structurally ready call is immediate. Known cooldown, resource, cast,
-occupied native queue, and blocking animation-lock states are soft waits and do
-not advance the native-attempt budget. Action-specific cooldown, resource, or
+and blocking animation-lock states are soft waits and do not advance the native-
+attempt budget. An occupied native queue remains a soft wait for ordinary
+actions. Only Purify, Recuperate, and automatic Guard may opt into FFXIV's
+normal action boundary while a different queue entry exists; Seiton never edits
+the queue fields directly. FFXIV may replace that queued action when it accepts
+the higher-priority recovery request; disabling the option restores the strict
+empty-queue gate. A client-false result is retryable only when the complete
+queue/action fingerprint is unchanged around that exact call. Action-
+specific cooldown, resource, or
 reachability waits can leave the scheduler frame to a usable lower helper;
-global cast, occupied-queue, blocking-animation-lock waits and the short explicit-
+global cast, ordinary occupied-queue, blocking-animation-lock waits and the short explicit-
 false throttle retain that frame. Only an explicit `false` return after final
-exact revalidation can retain the same intent for another call at least 50 ms
-later. The default legacy budget is eight calls. If the separate PvP latency-
-response option is enabled in CC or Wolves' Den, the exact intent freezes the
+exact revalidation can retain the same intent for another call. A sampled native
+not-ready-to-ready transition may wake it on the first later framework frame;
+ordinary timer movement cannot manufacture repeated edges, and 50 ms remains
+the quiet-boundary fallback. The default legacy budget is eight calls. The PvP
+latency-response option in CC or opted-in Wolves' Den freezes the
 selected 100-1500 ms clean-false budget (1000 ms = 21 calls; 1500 ms = 31).
 The same option registers the local Dalamud IPC function
 `SeitonSense.IsCriticalUtilityClaimed`. It returns only one boolean for a
@@ -1850,9 +1859,14 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 48 is current. It adds the separate default-off instant
-public-CC leave setting without changing local W/L capture or any action-helper
-opt-in. Schema 47 added default-on, read-only SMN/Chiten
+Configuration schema 49 is current. It enables the local adaptive response
+clock, sampled readiness-edge wakeups, unchanged-queue critical recovery, and
+exact held chase buffering. The latency-response helper defaults on for fresh/
+reset configurations while an existing opt-out is preserved on upgrade. These
+features are memory-only; there is no latency profiler, traffic capture, upload,
+position prediction, range extension, animation-lock write, or direct native-
+queue edit. Schema 48 added the separate default-off instant public-CC leave
+setting without changing local W/L capture or any action-helper opt-in. Schema 47 added default-on, read-only SMN/Chiten
 danger warnings and separate experimental opponent LB bars that remain off by
 default pending live layout validation, while retaining the separate automatic
 basic-shot cast-cancel permission as default-off for every upgrade and Reset
@@ -1893,8 +1907,12 @@ The integrated input path reads only the local standard-keyboard-hotbar binding,
 raw held/released state, exact slot identity, and the local action/target/context
 snapshot needed to prove one bounded attempt. The generic buffer stores one
 immutable in-memory action tuple until it succeeds, is cancelled, or expires;
-Turbo retains one current held-slot owner. A newer physical input replaces the
-old buffer/owner. No input history, action history, target history, timing data,
+the chase lane is limited to that same physically held direct action and waits
+only for the exact hostile actor's native range/line-of-sight result. Release,
+expiry, new input, identity/action/context/safety drift, or any non-spatial gate
+cancels it before a later one-shot call. Turbo retains one current held-slot
+owner. A newer physical input replaces the old buffer/owner. No input history,
+action history, target history, timing data,
 or learning-window state is uploaded. The learning window is a read-only view of
 the current in-memory key/slot, action, countdown, and held state. Neither path
 writes position, range, animation lock, cast state, or a visible target.

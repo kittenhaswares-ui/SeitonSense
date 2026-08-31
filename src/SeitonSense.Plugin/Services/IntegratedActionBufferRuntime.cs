@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Lumina.Excel.Sheets;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
@@ -100,7 +101,12 @@ internal readonly record struct IntegratedActionBufferDiagnostics(
     long RejectedDispatchCount,
     long CancelledCount,
     string LastEvent,
-    IntegratedActionBufferCompatibilityDiagnostics Compatibility);
+    IntegratedActionBufferCompatibilityDiagnostics Compatibility,
+    bool ChasePending,
+    uint ChaseResolvedActionId,
+    long ChaseArmedCount,
+    long ChaseDispatchedCount,
+    long ChaseCancelledCount);
 
 /// <summary>
 /// Hook-free runtime around <see cref="SmartActionBufferEngine"/>. It observes
@@ -128,13 +134,16 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
     private readonly IDataManager dataManager;
     private readonly IPluginLog log;
     private readonly SmartActionBufferEngine engine = new();
+    private readonly HeldChaseBufferEngine chaseEngine = new();
     private readonly IntegratedActionBufferCompatibilityService compatibility;
+    private readonly Func<IntegratedActionBufferHotbarRoot, bool>? exactHoldProbe;
     private readonly object gate = new();
 
     private Func<IntegratedActionBufferDispatchRequest, bool>? dispatcher;
     private Func<bool>? internalPriorityClaimed;
     private InFlightAttempt? inFlight;
     private BufferedRuntimeAction? pendingRuntime;
+    private HeldChaseRuntimeAction? pendingChase;
     private LearningInput? latestLearningInput;
     private long latestRootEpoch;
     private long observedRootCount;
@@ -143,6 +152,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
     private long acceptedDispatchCount;
     private long rejectedDispatchCount;
     private long cancelledCount;
+    private long chaseArmedCount;
+    private long chaseDispatchedCount;
+    private long chaseCancelledCount;
     private long nextErrorLogAt;
     private string lastEvent = "Not started";
     private bool started;
@@ -160,6 +172,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         IDataManager dataManager,
         IPluginLog log,
         Func<bool>? internalPriorityClaimed = null,
+        Func<IntegratedActionBufferHotbarRoot, bool>? exactHoldProbe = null,
         Func<IntegratedActionBufferDispatchRequest, bool>? dispatcher = null)
     {
         this.configuration = configuration;
@@ -172,6 +185,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         this.log = log;
         compatibility = new IntegratedActionBufferCompatibilityService(pluginInterface);
         this.internalPriorityClaimed = internalPriorityClaimed;
+        this.exactHoldProbe = exactHoldProbe;
         this.dispatcher = dispatcher;
     }
 
@@ -208,13 +222,17 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 return new IntegratedActionBufferDiagnostics(
                     started,
                     dispatcher is not null,
-                    pendingRuntime is not null,
+                    pendingRuntime is not null || pendingChase is not null,
                     dispatching,
-                    pendingRuntime?.Request.RequestedActionId ?? 0,
-                    pendingRuntime?.Request.ResolvedActionId ?? 0,
+                    pendingRuntime?.Request.RequestedActionId ??
+                    pendingChase?.Request.RequestedActionId ?? 0,
+                    pendingRuntime?.Request.ResolvedActionId ??
+                    pendingChase?.Request.ResolvedActionId ?? 0,
                     pendingRuntime is { } pending
                         ? RemainingMilliseconds(pending.ExpiresAtMilliseconds, now)
-                        : 0,
+                        : pendingChase is { } chase
+                            ? RemainingMilliseconds(chase.ExpiresAtMilliseconds, now)
+                            : 0,
                     observedRootCount,
                     armedCount,
                     dispatchedCount,
@@ -222,7 +240,12 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     rejectedDispatchCount,
                     cancelledCount,
                     lastEvent,
-                    compatibility.Diagnostics);
+                    compatibility.Diagnostics,
+                    pendingChase is not null,
+                    pendingChase?.Request.ResolvedActionId ?? 0,
+                    chaseArmedCount,
+                    chaseDispatchedCount,
+                    chaseCancelledCount);
             }
         }
     }
@@ -234,12 +257,12 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             lock (gate)
             {
                 var configured = CurrentBufferWindowMilliseconds;
-                var input = pendingRuntime?.Learning ?? latestLearningInput;
+                var input = pendingRuntime?.Learning ?? pendingChase?.Learning ?? latestLearningInput;
                 if (input is null)
                     return BufferLearningSnapshot.Empty(configured);
 
                 var now = Environment.TickCount64;
-                var pending = pendingRuntime is not null;
+                var pending = pendingRuntime is not null || pendingChase is not null;
                 return new BufferLearningSnapshot(
                     HasInput: true,
                     BufferPending: pending,
@@ -253,7 +276,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     ConfiguredBufferMilliseconds: configured,
                     RemainingBufferMilliseconds: pendingRuntime is { } runtime
                         ? RemainingMilliseconds(runtime.ExpiresAtMilliseconds, now)
-                        : 0,
+                        : pendingChase is { } chase
+                            ? RemainingMilliseconds(chase.ExpiresAtMilliseconds, now)
+                            : 0,
                     CapturedEarlyMilliseconds: pendingRuntime is { } captured
                         ? (int)Math.Clamp(
                             Math.Ceiling(captured.InitialTemporalRemainderMilliseconds),
@@ -329,6 +354,21 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     },
                 };
             }
+
+            if (pendingChase is { } chase &&
+                chase.Learning.HotbarRoot.PressGeneration == pressGeneration)
+            {
+                pendingChase = chase with
+                {
+                    Learning = chase.Learning with
+                    {
+                        HotbarRoot = chase.Learning.HotbarRoot with
+                        {
+                            InputHeld = inputHeld,
+                        },
+                    },
+                };
+            }
         }
     }
 
@@ -384,7 +424,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             CancelPendingLocked(
                 SmartActionBufferCancelReason.Replaced,
                 "Replaced by a newer physical standard-hotbar root",
-                countCancellation: pendingRuntime is not null);
+                countCancellation: pendingRuntime is not null || pendingChase is not null);
             inFlight = null;
 
             var resolvedActionId = ResolveActionId(
@@ -506,8 +546,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 nativeAfter.ResolvedActionId,
                 candidate.Snapshot.Target.IncludesResolverTargets);
 
-            SmartActionBufferIntent intent;
-            double temporalRemainder;
+            SmartActionBufferIntent? temporalIntent = null;
+            HeldChaseBufferArmInput? chaseArm = null;
+            var temporalRemainder = 0.0;
             var window = CurrentBufferWindowMilliseconds;
 
             lock (gate)
@@ -521,23 +562,34 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     return;
                 }
 
-                if (!IsProvenTemporalFalse(candidate, nativeAfter, snapshotAfter,
-                        out var failure, out temporalRemainder, out var reason))
+                if (IsProvenTemporalFalse(candidate, nativeAfter, snapshotAfter,
+                        out var failure, out temporalRemainder, out _))
                 {
-                    lastEvent = reason;
+                    var coreAction = new SmartActionBufferAction(
+                        candidate.Request.RequestedActionId,
+                        candidate.Request.ResolvedActionId,
+                        candidate.Snapshot.Target.Fingerprint,
+                        candidate.Snapshot.TerritoryId,
+                        candidate.Snapshot.InstanceFingerprint);
+                    temporalIntent = new SmartActionBufferIntent(
+                        coreAction,
+                        failure,
+                        IsEligibleForBuffering: true);
+                }
+                else if (TryCreateChaseArmInput(
+                             candidate,
+                             nativeAfter,
+                             snapshotAfter,
+                             out var preparedChase,
+                             out var chaseReason))
+                {
+                    chaseArm = preparedChase;
+                }
+                else
+                {
+                    lastEvent = chaseReason;
                     return;
                 }
-
-                var coreAction = new SmartActionBufferAction(
-                    candidate.Request.RequestedActionId,
-                    candidate.Request.ResolvedActionId,
-                    candidate.Snapshot.Target.Fingerprint,
-                    candidate.Snapshot.TerritoryId,
-                    candidate.Snapshot.InstanceFingerprint);
-                intent = new SmartActionBufferIntent(
-                    coreAction,
-                    failure,
-                    IsEligibleForBuffering: true);
             }
 
             // Foreign configuration reflection and MOAction IPC must never run
@@ -574,32 +626,73 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 if (disposed ||
                     candidate.Epoch != latestRootEpoch ||
                     pendingRuntime is not null ||
-                    !IsStableArmBoundaryAfterCompatibility(
-                        candidate,
-                        nativeAfterCompatibility,
-                        snapshotAfterCompatibility))
+                    pendingChase is not null)
                 {
                     lastEvent = "Buffer arm retired after compatibility revalidation";
                     return;
                 }
 
-                if (!engine.Arm(intent, candidate.CapturedAtMilliseconds, window))
+                if (temporalIntent is { } exactTemporalIntent)
                 {
-                    lastEvent = $"Core buffer declined action ({engine.LastCancelReason})";
+                    if (!IsStableArmBoundaryAfterCompatibility(
+                            candidate,
+                            nativeAfterCompatibility,
+                            snapshotAfterCompatibility))
+                    {
+                        lastEvent = "Buffer arm retired after compatibility revalidation";
+                        return;
+                    }
+
+                    if (!engine.Arm(
+                            exactTemporalIntent,
+                            candidate.CapturedAtMilliseconds,
+                            window))
+                    {
+                        lastEvent = $"Core buffer declined action ({engine.LastCancelReason})";
+                        return;
+                    }
+
+                    pendingRuntime = new BufferedRuntimeAction(
+                        candidate.Request,
+                        candidate.Snapshot,
+                        candidate.NativeBefore.LastUsedActionSequence,
+                        temporalRemainder,
+                        SaturatingAdd(candidate.CapturedAtMilliseconds, window),
+                        candidate.Learning);
+                    armedCount++;
+                    lastEvent =
+                        $"Buffered {candidate.Request.ResolvedActionId} " +
+                        $"{temporalRemainder:0} ms before local readiness";
                     return;
                 }
 
-                pendingRuntime = new BufferedRuntimeAction(
+                var revalidationReason = string.Empty;
+                if (chaseArm is not { } originalChase ||
+                    !TryCreateChaseArmInput(
+                        candidate,
+                        nativeAfterCompatibility,
+                        snapshotAfterCompatibility,
+                        out var revalidatedChase,
+                        out revalidationReason) ||
+                    revalidatedChase.Intent != originalChase.Intent ||
+                    !chaseEngine.Arm(revalidatedChase))
+                {
+                    lastEvent = string.IsNullOrWhiteSpace(revalidationReason)
+                        ? $"Core chase buffer declined action ({chaseEngine.LastCancelReason})"
+                        : revalidationReason;
+                    return;
+                }
+
+                pendingChase = new HeldChaseRuntimeAction(
                     candidate.Request,
                     candidate.Snapshot,
                     candidate.NativeBefore.LastUsedActionSequence,
-                    temporalRemainder,
                     SaturatingAdd(candidate.CapturedAtMilliseconds, window),
                     candidate.Learning);
-                armedCount++;
+                chaseArmedCount++;
                 lastEvent =
-                    $"Buffered {candidate.Request.ResolvedActionId} " +
-                    $"{temporalRemainder:0} ms before local readiness";
+                    $"Chase-buffered exact action {candidate.Request.ResolvedActionId} " +
+                    "until its held target enters native range and line of sight";
             }
         }
         catch (Exception exception)
@@ -626,6 +719,199 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         HasStableIdentity(candidate.Snapshot, snapshot) &&
         IsSafeSnapshot(snapshot) &&
         ExplicitTargetStillExists(candidate.Snapshot.Target);
+
+    private bool TryCreateChaseArmInput(
+        InFlightAttempt candidate,
+        NativeState after,
+        RuntimeSnapshot snapshotAfter,
+        out HeldChaseBufferArmInput arm,
+        out string reason)
+    {
+        arm = default;
+        reason = "Original false result was not an exact range/line-of-sight-only hold";
+
+        if (candidate.Request.Mode != ActionManager.UseActionMode.None ||
+            !candidate.Request.HotbarRoot.IsValid ||
+            !candidate.Learning.HotbarRoot.InputHeld ||
+            candidate.Request.TargetId is 0 or InvalidObjectId ||
+            candidate.Snapshot.Target.IncludesResolverTargets ||
+            candidate.Snapshot.Target.ExplicitTarget == IntegratedActionBufferActorIdentity.Empty ||
+            !TryGetEligibleChaseActionProfile(
+                candidate.Request.ActionType,
+                candidate.Request.ResolvedActionId,
+                candidate.Request.TargetId))
+        {
+            return false;
+        }
+
+        if (!after.Captured ||
+            candidate.NativeBefore.ActionQueued ||
+            after.ActionQueued ||
+            candidate.NativeBefore.LastUsedActionSequence != after.LastUsedActionSequence ||
+            after.ResolvedActionId != candidate.Request.ResolvedActionId ||
+            !HasStableIdentity(candidate.Snapshot, snapshotAfter) ||
+            !IsSafeSnapshot(snapshotAfter) ||
+            !ExplicitTargetStillExists(candidate.Snapshot.Target))
+        {
+            reason = "Chase arm rejected action, queue, sequence, target, or context drift";
+            return false;
+        }
+
+        if (!TryProbeExactHostileTargetRange(
+                snapshotAfter,
+                candidate.Request.ResolvedActionId,
+                out var rangeStatus,
+                out var hasRangeAndLineOfSight))
+        {
+            reason = "Chase arm could not prove one exact hostile target range/LoS probe";
+            return false;
+        }
+
+        var otherNativeGatesReady =
+            IsRangeOnlyNativeBoundary(
+                candidate.NativeBefore,
+                rangeStatus,
+                hasRangeAndLineOfSight) &&
+            IsRangeOnlyNativeBoundary(
+                after,
+                rangeStatus,
+                hasRangeAndLineOfSight);
+        var intent = new HeldChaseBufferIntent(
+            candidate.Request.RequestedActionId,
+            candidate.Request.ResolvedActionId,
+            candidate.Snapshot.Target.Fingerprint,
+            candidate.Snapshot.TerritoryId,
+            candidate.Snapshot.InstanceFingerprint,
+            candidate.Request.HotbarRoot.PressGeneration);
+        arm = new HeldChaseBufferArmInput(
+            intent,
+            Enabled: configuration.Enabled &&
+                     configuration.EnableSmartActionBuffer &&
+                     configuration.EnableHoldToLandChaseBuffer,
+            IsCertifiedPhysicalStandardHotbarRoot:
+                candidate.Request.HotbarRoot.IsCertifiedDirectStandardHotbarRoot,
+            InputHeld: candidate.Learning.HotbarRoot.InputHeld,
+            ActionEligible: true,
+            SafetyValid: true,
+            RangeProbeAvailable: true,
+            HasRangeAndLineOfSight: hasRangeAndLineOfSight,
+            OtherNativeGatesReady: otherNativeGatesReady);
+
+        var rejection = HeldChaseBufferRules.GetArmRejection(arm);
+        if (rejection == HeldChaseBufferCancelReason.None) return true;
+        reason = $"Chase arm declined ({rejection})";
+        return false;
+    }
+
+    private static bool IsRangeOnlyNativeBoundary(
+        NativeState native,
+        uint rangeStatus,
+        bool hasRangeAndLineOfSight)
+    {
+        if (!native.Captured ||
+            native.ActionQueued ||
+            !native.IsActionOffCooldown ||
+            native.ResourceStatus != 0 ||
+            native.CastActionId != 0 ||
+            !float.IsFinite(native.AnimationLockSeconds) ||
+            native.AnimationLockSeconds < 0f ||
+            native.AnimationLockSeconds > AnimationLockEpsilonSeconds)
+        {
+            return false;
+        }
+
+        if (hasRangeAndLineOfSight)
+        {
+            return native.StructuralStatus is 0 or SeitonRangeRules.NotFacingTarget &&
+                   native.FullStatus is 0 or SeitonRangeRules.NotFacingTarget;
+        }
+
+        return rangeStatus != SeitonRangeRules.Ready &&
+               rangeStatus != SeitonRangeRules.NotFacingTarget &&
+               (native.StructuralStatus == 0 || native.StructuralStatus == rangeStatus) &&
+               native.FullStatus == rangeStatus;
+    }
+
+    private bool TryGetEligibleChaseActionProfile(
+        ActionType actionType,
+        uint resolvedActionId,
+        ulong targetId)
+    {
+        if (!TryGetEligibleActionProfile(
+                actionType,
+                resolvedActionId,
+                targetId,
+                out var includeResolverTargets,
+                out _) ||
+            includeResolverTargets)
+        {
+            return false;
+        }
+
+        var actions = dataManager.GetExcelSheet<GameAction>();
+        return actions is not null &&
+               actions.TryGetRow(resolvedActionId, out var action) &&
+               action.RowId == resolvedActionId &&
+               action.CanTargetHostile &&
+               action.Range > 0 &&
+               action.EffectRange == 0 &&
+               !action.TargetArea &&
+               !action.AffectsPosition;
+    }
+
+    private bool TryProbeExactHostileTargetRange(
+        RuntimeSnapshot snapshot,
+        uint resolvedActionId,
+        out uint rangeStatus,
+        out bool hasRangeAndLineOfSight)
+    {
+        rangeStatus = uint.MaxValue;
+        hasRangeAndLineOfSight = false;
+        if (resolvedActionId == 0 ||
+            snapshot.Target.RawTargetId is 0 or InvalidObjectId ||
+            snapshot.Target.IncludesResolverTargets ||
+            snapshot.Target.ExplicitTarget == IntegratedActionBufferActorIdentity.Empty)
+        {
+            return false;
+        }
+
+        var local = objectTable.LocalPlayer;
+        if (local is null || ToActorIdentity(local) != snapshot.Local)
+            return false;
+
+        IGameObject? target = null;
+        foreach (var gameObject in objectTable)
+        {
+            if (ToActorIdentity(gameObject) == snapshot.Target.ExplicitTarget)
+            {
+                target = gameObject;
+                break;
+            }
+        }
+
+        if (target is not IBattleChara { IsDead: false, IsTargetable: true } ||
+            ToActorIdentity(target) == snapshot.Local)
+        {
+            return false;
+        }
+
+        var sourceObject = (GameObject*)local.Address;
+        var targetObject = (GameObject*)target.Address;
+        if (sourceObject == null || targetObject == null ||
+            sourceObject->EntityId != local.EntityId ||
+            targetObject->EntityId != target.EntityId)
+        {
+            return false;
+        }
+
+        rangeStatus = ActionManager.GetActionInRangeOrLoS(
+            resolvedActionId,
+            sourceObject,
+            targetObject);
+        hasRangeAndLineOfSight =
+            SeitonRangeRules.HasNativeRangeAndLineOfSight(rangeStatus);
+        return true;
+    }
 
     internal void Cancel(SmartActionBufferCancelReason reason, string detail)
     {
@@ -696,7 +982,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             {
                 lock (gate)
                 {
-                    if (pendingRuntime is not null)
+                    if (pendingRuntime is not null || pendingChase is not null)
                     {
                         CancelPendingLocked(
                             SmartActionBufferCancelReason.Conflict,
@@ -705,6 +991,17 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     }
                 }
 
+                return;
+            }
+
+            bool chasePending;
+            lock (gate) chasePending = pendingChase is not null;
+            if (chasePending)
+            {
+                // The chase lane is mutually exclusive with the temporal lane
+                // and owns this update until it waits, cancels, or consumes its
+                // exact one-shot.
+                OnHeldChaseFrameworkUpdate();
                 return;
             }
 
@@ -965,7 +1262,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             lock (gate)
             {
                 dispatching = false;
-                if (pendingRuntime is not null)
+                if (pendingRuntime is not null || pendingChase is not null)
                 {
                     CancelPendingLocked(
                         SmartActionBufferCancelReason.Explicit,
@@ -980,6 +1277,273 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
 
             LogFailure(exception, "Seiton Sense integrated action buffer failed closed.");
         }
+    }
+
+    private void OnHeldChaseFrameworkUpdate()
+    {
+        HeldChaseRuntimeAction candidate;
+        long dispatchRootEpoch;
+        lock (gate)
+        {
+            if (disposed || !started || pendingChase is not { } runtime)
+                return;
+
+            var now = Environment.TickCount64;
+
+            var actionManager = ActionManager.Instance();
+            if (actionManager == null)
+            {
+                CancelChaseLocked(
+                    HeldChaseBufferCancelReason.SafetyDrift,
+                    "Chase ended: ActionManager unavailable",
+                    countCancellation: true);
+                return;
+            }
+
+            var current = CaptureSnapshot(
+                runtime.Request.TargetId,
+                ResolveActionId(
+                    actionManager,
+                    runtime.Request.ActionType,
+                    runtime.Request.RequestedActionId),
+                includeResolverTargets: false);
+            var native = CaptureNativeState(
+                actionManager,
+                runtime.Request.ActionType,
+                runtime.Request.RequestedActionId,
+                runtime.Request.ResolvedActionId,
+                runtime.Request.TargetId);
+            var live = CreateChaseLiveInput(runtime, current, native, now);
+            var cancellation = HeldChaseBufferRules.GetLiveCancellation(
+                chaseEngine.Pending.GetValueOrDefault(),
+                live);
+            if (cancellation != HeldChaseBufferCancelReason.None)
+            {
+                CancelChaseLocked(
+                    cancellation,
+                    $"Chase ended: {cancellation}",
+                    countCancellation: true);
+                return;
+            }
+
+            if (!live.HasRangeAndLineOfSight)
+            {
+                _ = chaseEngine.Evaluate(live);
+                lastEvent = $"Chase waiting for native range/LoS on {runtime.Request.ResolvedActionId}";
+                return;
+            }
+
+            // Critical recovery owns the native boundary without consuming or
+            // weakening the chase intent. Every safety check above still ran.
+            if (dispatcher is null || IsInternalPriorityClaimed())
+                return;
+
+            candidate = runtime;
+            dispatchRootEpoch = latestRootEpoch;
+        }
+
+        if (!compatibility.CanMutateAction(
+                candidate.Request.RequestedActionId,
+                candidate.Request.ResolvedActionId,
+                IntegratedActionBufferCompatibilityCheck.Dispatch,
+                out var compatibilityReason))
+        {
+            lock (gate)
+            {
+                if (ReferenceEquals(pendingChase, candidate) &&
+                    dispatchRootEpoch == latestRootEpoch)
+                {
+                    CancelChaseLocked(
+                        HeldChaseBufferCancelReason.SafetyDrift,
+                        $"Chase compatibility blocked: {compatibilityReason}",
+                        countCancellation: true);
+                }
+            }
+
+            return;
+        }
+
+        Func<IntegratedActionBufferDispatchRequest, bool>? dispatch;
+        IntegratedActionBufferDispatchRequest request;
+        var finalActionManager = ActionManager.Instance();
+        if (finalActionManager == null)
+        {
+            lock (gate)
+            {
+                if (ReferenceEquals(pendingChase, candidate))
+                {
+                    CancelChaseLocked(
+                        HeldChaseBufferCancelReason.SafetyDrift,
+                        "Chase ended: ActionManager unavailable after compatibility check",
+                        countCancellation: true);
+                }
+            }
+
+            return;
+        }
+
+        var finalSnapshot = CaptureSnapshot(
+            candidate.Request.TargetId,
+            ResolveActionId(
+                finalActionManager,
+                candidate.Request.ActionType,
+                candidate.Request.RequestedActionId),
+            includeResolverTargets: false);
+        var finalNative = CaptureNativeState(
+            finalActionManager,
+            candidate.Request.ActionType,
+            candidate.Request.RequestedActionId,
+            candidate.Request.ResolvedActionId,
+            candidate.Request.TargetId);
+
+        // Re-sample the exact native physical control at the last practical
+        // boundary. The ordinary framework sample remains useful for early
+        // cancellation, but it cannot prove a key stayed down while the final
+        // compatibility and native probes were running.
+        if (exactHoldProbe?.Invoke(candidate.Request.HotbarRoot) != true)
+        {
+            lock (gate)
+            {
+                if (ReferenceEquals(pendingChase, candidate))
+                {
+                    CancelChaseLocked(
+                        HeldChaseBufferCancelReason.Released,
+                        "Chase ended: exact physical input was released before dispatch",
+                        countCancellation: true);
+                }
+            }
+
+            return;
+        }
+
+        lock (gate)
+        {
+            if (disposed ||
+                !started ||
+                dispatchRootEpoch != latestRootEpoch ||
+                !ReferenceEquals(pendingChase, candidate))
+            {
+                return;
+            }
+
+            var finalLive = CreateChaseLiveInput(
+                candidate,
+                finalSnapshot,
+                finalNative,
+                Environment.TickCount64);
+            var finalCancellation = HeldChaseBufferRules.GetLiveCancellation(
+                chaseEngine.Pending.GetValueOrDefault(),
+                finalLive);
+            if (finalCancellation != HeldChaseBufferCancelReason.None)
+            {
+                CancelChaseLocked(
+                    finalCancellation,
+                    $"Chase ended at final boundary: {finalCancellation}",
+                    countCancellation: true);
+                return;
+            }
+
+            if (!finalLive.HasRangeAndLineOfSight ||
+                IsInternalPriorityClaimed())
+            {
+                return;
+            }
+
+            var decision = chaseEngine.Evaluate(finalLive);
+            if (decision.Kind != HeldChaseBufferDecisionKind.Dispatch)
+                return;
+
+            // The engine consumed the token before this callback boundary.
+            pendingChase = null;
+            dispatching = true;
+            dispatch = dispatcher;
+            request = candidate.Request;
+            dispatchedCount++;
+            chaseDispatchedCount++;
+            lastEvent = $"Dispatching exact chase action {request.ResolvedActionId}";
+        }
+
+        if (dispatch is null) return;
+        var accepted = false;
+        try
+        {
+            accepted = dispatch(request);
+        }
+        finally
+        {
+            lock (gate)
+            {
+                dispatching = false;
+                if (accepted)
+                {
+                    acceptedDispatchCount++;
+                    lastEvent = $"Chase action {request.ResolvedActionId} accepted";
+                }
+                else
+                {
+                    rejectedDispatchCount++;
+                    lastEvent =
+                        $"Chase action {request.ResolvedActionId} was not accepted; one-shot ended";
+                }
+            }
+        }
+    }
+
+    private HeldChaseBufferLiveInput CreateChaseLiveInput(
+        HeldChaseRuntimeAction runtime,
+        RuntimeSnapshot current,
+        NativeState native,
+        long nowMilliseconds)
+    {
+        var actionEligible = TryGetEligibleChaseActionProfile(
+            runtime.Request.ActionType,
+            runtime.Request.ResolvedActionId,
+            runtime.Request.TargetId);
+        var rangeProbeAvailable = TryProbeExactHostileTargetRange(
+            current,
+            runtime.Request.ResolvedActionId,
+            out var rangeStatus,
+            out var hasRangeAndLineOfSight);
+        var identityStable =
+            HasStableIdentity(runtime.Snapshot, current) &&
+            ExplicitTargetStillExists(runtime.Snapshot.Target);
+        var sequenceStable =
+            native.Captured &&
+            !native.ActionQueued &&
+            native.LastUsedActionSequence == runtime.SequenceAtCapture &&
+            native.ResolvedActionId == runtime.Request.ResolvedActionId;
+        var safetyValid =
+            identityStable &&
+            IsSafeSnapshot(current) &&
+            sequenceStable;
+        var otherNativeGatesReady =
+            rangeProbeAvailable &&
+            IsRangeOnlyNativeBoundary(
+                native,
+                rangeStatus,
+                hasRangeAndLineOfSight);
+
+        return new HeldChaseBufferLiveInput(
+            Enabled: configuration.Enabled &&
+                     configuration.EnableSmartActionBuffer &&
+                     configuration.EnableHoldToLandChaseBuffer,
+            IsExactPhysicalStandardHotbarHold:
+                runtime.Request.HotbarRoot.IsValid &&
+                runtime.Request.HotbarRoot.IsCertifiedDirectStandardHotbarRoot,
+            InputHeld: runtime.Learning.HotbarRoot.InputHeld,
+            runtime.Request.HotbarRoot.PressGeneration,
+            runtime.Request.RequestedActionId,
+            current.ResolvedActionId,
+            current.Target.Fingerprint,
+            current.TerritoryId,
+            current.InstanceFingerprint,
+            ActionEligible: actionEligible,
+            SafetyValid: safetyValid,
+            RangeProbeAvailable: rangeProbeAvailable,
+            HasRangeAndLineOfSight: hasRangeAndLineOfSight,
+            OtherNativeGatesReady: otherNativeGatesReady,
+            WithinDeadline: nowMilliseconds >= 0 &&
+                            nowMilliseconds < runtime.ExpiresAtMilliseconds);
     }
 
     private bool IsProvenTemporalFalse(
@@ -1113,10 +1677,42 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         string detail,
         bool countCancellation)
     {
+        var hadTemporal = pendingRuntime is not null;
+        var hadChase = pendingChase is not null;
         if (engine.Pending is not null)
             engine.Cancel(reason);
         pendingRuntime = null;
-        if (countCancellation) cancelledCount++;
+        if (chaseEngine.Pending is not null)
+        {
+            chaseEngine.Cancel(
+                reason == SmartActionBufferCancelReason.Replaced
+                    ? HeldChaseBufferCancelReason.Replaced
+                    : HeldChaseBufferCancelReason.SafetyDrift);
+        }
+        pendingChase = null;
+        if (countCancellation && (hadTemporal || hadChase))
+        {
+            cancelledCount++;
+            if (hadChase) chaseCancelledCount++;
+        }
+        lastEvent = detail;
+    }
+
+    private void CancelChaseLocked(
+        HeldChaseBufferCancelReason reason,
+        string detail,
+        bool countCancellation)
+    {
+        var hadChase = pendingChase is not null;
+        if (chaseEngine.Pending is not null)
+            chaseEngine.Cancel(reason);
+        pendingChase = null;
+        if (countCancellation && hadChase)
+        {
+            cancelledCount++;
+            chaseCancelledCount++;
+        }
+
         lastEvent = detail;
     }
 
@@ -1574,6 +2170,13 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         RuntimeSnapshot Snapshot,
         ushort SequenceAtCapture,
         double InitialTemporalRemainderMilliseconds,
+        long ExpiresAtMilliseconds,
+        LearningInput Learning);
+
+    private sealed record HeldChaseRuntimeAction(
+        IntegratedActionBufferDispatchRequest Request,
+        RuntimeSnapshot Snapshot,
+        ushort SequenceAtCapture,
         long ExpiresAtMilliseconds,
         LearningInput Learning);
 

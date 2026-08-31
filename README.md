@@ -2,14 +2,23 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.10 fixes an intermittent
-high-FPS `/seitonenavant` race: real movement samples that share one coarse
-clock timestamp now contribute to the direction instead of clearing it, while
-stationary samples and positional jitter still fail closed. `/seiton debug`
-now names the exact En Avant readiness blocker and reports charges,
-cooldown/status, animation lock, cast, queue, and resources. The command remains
-one immediate attempt with no wait, reservation, queue, or retry; live En Avant
-behavior remains pending in-game confirmation. Version 0.42.0.9 improved slow
+assistance, and target highlights. Version 0.43.0.0 adds a shared adaptive
+response core and a dedicated **Ping Helpers** page. Purify, Recuperate, and
+Auto-Guard now use one explicit priority order, may wake on a sampled native
+not-ready-to-ready transition, and can use FFXIV's normal action boundary while
+a different native action is already queued. Seiton never edits that queue
+directly. When this priority override is enabled, an accepted recovery may let
+FFXIV replace the already queued action; disable it to require an empty queue.
+Only a client-false call with the complete pre-existing queue still unchanged
+can retry, while acceptance or any ambiguous transition is terminal.
+The existing automatic one-shot action buffer needs no `/buffer` macro. A new
+held chase mode preserves one exact instant hostile action and actor until
+native range/line of sight first becomes legal; release, new input, drift,
+expiry, Stun/forced movement, action-blocking CC, death, or zoning cancels it;
+Heavy or Bind alone do not discard an otherwise legal held action. The system does not change network
+ping, position, animation lock, target, real range, or line of sight. Exact live
+CC and chase behavior remain pending in-game confirmation. Version 0.42.0.10
+fixed an intermittent high-FPS `/seitonenavant` race. Version 0.42.0.9 improved slow
 analog sampling, ReAction coexistence, and added configurable public-CC
 medicine-kit cues. Version 0.42.0.8 originally
 added the DNC-only command and its audited one-call boundary without moving the
@@ -826,7 +835,7 @@ made: the frozen intent clears while the same unspent availability epoch may
 rank a new exact actor on the next frame. After any native request, that epoch
 never reranks. Only an explicit client rejection may call the same frozen intent
 again after 50 ms. The default legacy budget is eight native calls; the separate
-default-off PvP latency-response option freezes the configured 100-1500 ms
+PvP latency-response option (on for fresh/reset configurations) freezes the configured 100-1500 ms
 clean-false budget for that exact intent (1000 ms = 21 calls, 1500 ms = 31).
 Acceptance, ambiguity, exhaustion, or post-request drift is terminal. A genuine
 base-to-Unsealed adjusted-action transition can create a later distinct epoch,
@@ -977,7 +986,10 @@ status episode; it neither consumes nor retires the observed physical generation
 The original key is never swallowed, delayed, or replayed, and automatic mode
 does not retire its generation. Ready Purify has absolute priority while the
 exact enabled CC is active. Cooldown/resource shortage does not starve lower
-helpers; cast, queue, or animation-lock blocks wait without spending an attempt.
+helpers; cast or animation-lock blocks wait without spending an attempt. An
+occupied queue stays a wait unless the schema-49 critical-recovery option is
+enabled; then Purify may use only the normal native action boundary, and a
+rejected call can retry only if the complete existing queue remains unchanged.
 Automatic Purify does not inherit the generic held-helper cast-cancel toggle.
 Only the separate default-off automatic permission may request one cancellation,
 and only for exact metadata-verified BRD job 23 / Powerful Shot `29391` or MCH
@@ -985,8 +997,8 @@ job 31 / Blast Charge `29402` when the live job, cast, and adjusted raw-action
 identity agree. Every other, transformed, or uncertain cast waits. Purify may
 dispatch only after its complete preflight succeeds again on a later clear frame.
 Only an explicit client rejection may retry the same frozen self intent after 50 ms.
-The default remains eight native calls; the separate default-off PvP latency-
-response option can freeze a 100-1500 ms clean-false budget for that exact CC
+The default remains eight native calls; the separate PvP latency-response option
+(on for fresh/reset configurations) can freeze a 100-1500 ms clean-false budget for that exact CC
 episode. Acceptance or ambiguity ends it.
 ReAction Turbo repeat pulses do not create physical consent.
 
@@ -1977,8 +1989,8 @@ always-on pressure display by surprise.
 
 ## Settings and schema migration
 
-The sidebar order is Start, Alerts, HUD & Nameplates, Action Helpers, Job Tools,
-Macro Helpers, Targets, and Diagnostics. Enemy LB nameplate controls live under
+The sidebar order is Start, Alerts, HUD & Nameplates, Action Helpers, Ping
+Helpers, Job Tools, Macro Helpers, Targets, and Diagnostics. Enemy LB nameplate controls live under
 HUD & Nameplates; self/ally LB notifications and local MP sounds live under
 Alerts. Reactive defensive utilities, Smart Recuperate, and Emergency Teleport
 remain under Action Helpers; independent PLD Guardian, accepted-Eukrasia Smart
@@ -1987,7 +1999,13 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 48 is current. It adds the separate default-off instant
+Configuration schema 49 is current. It enables the adaptive response clock,
+sampled readiness-edge wakeups, strict critical-recovery occupied-queue path,
+and exact held chase buffer for fresh, upgraded, and Reset Defaults
+configurations. The latency-response helper defaults on for fresh/reset
+configurations while an existing opt-out is preserved during upgrade. Schema
+49 adds no profiler, traffic capture, position prediction, range extension, or
+direct native-queue write. Schema 48 added the separate default-off instant
 public-CC leave option without changing local W/L capture or any action-helper
 opt-in. Schema 47 added default-on, read-only SMN/Chiten
 danger warnings and separate experimental opponent LB bars that remain off by
@@ -2285,8 +2303,8 @@ refuse to cancel some actions. Generic held-helper stationary casts and the
 separately permitted automatic BRD/MCH mobile casts still require current-patch
 live validation. The ordinary
 clean-`false` action retry remains independent: calls stay at least 50 ms apart.
-Its legacy default is eight attempts; the separate default-off PvP latency-
-response option freezes the selected extended budget per exact intent, and
+Its legacy default is eight attempts; the separate PvP latency-response option
+(on for fresh/reset configurations) freezes the selected extended budget per exact intent, and
 acceptance or ambiguity remains terminal.
 
 Automatic Purify and Automatic Recuperate never inherit the generic held-helper
@@ -2420,16 +2438,18 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 585-test Core registry and source checks pin
-configuration schema 48, the default-off exact public-CC instant-leave state
+For the current source, the exact 599-test Core registry and source checks pin
+configuration schema 49, the shared monotonic response clock and framework
+epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
+the immutable one-shot held chase buffer, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
 automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
 deterministic local CC rotation and fail-closed
 per-character map W/L capture, the complete
 fail-closed 21-PvP-job range catalog, the default-off AST held Near Help sequence, the
-generic smart buffer and default-off native Turbo,
-the default-off PvP latency-response/coordination path,
+generic automatic smart buffer and default-off native Turbo,
+the PvP latency-response/coordination path,
 ranged Smart Tab, Wolves' Den Smart Recuperate testing,
 the default-off Viper, GNB, DRK Shadowbringer, Monk combo, SAM, PLD, RDM, and BLM
 paths and Emergency Teleport. Smart Tab checks retain the paired

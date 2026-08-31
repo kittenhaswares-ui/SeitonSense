@@ -22,19 +22,6 @@ internal sealed partial class SettingsWindow
             "frame. Kardia and Monk retain their separate event-driven origins.");
 
         if (ImGui.CollapsingHeader(
-                "General action buffer / native Turbo",
-                ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawGeneralActionBufferControls();
-
-        ImGui.Separator();
-
-        if (ImGui.CollapsingHeader(
-                "Held-helper latency response (experimental)",
-                ImGuiTreeNodeFlags.DefaultOpen))
-            changed |= DrawPvpLatencyResponseControls();
-
-        ImGui.Separator();
-        if (ImGui.CollapsingHeader(
                 "Cast cancellation (experimental)",
                 ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawHeldActionCastCancellationControls();
@@ -175,11 +162,11 @@ internal sealed partial class SettingsWindow
                 : "OFF — exact held-helper retries keep the legacy bounded budget.");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off. This keeps the existing one-queue Seiton scheduler and extends only the bounded clean-client-false " +
-            "budget for the same frozen action, target, key, context, and episode. The 50 ms cadence stays unchanged; " +
-            "the legacy eight-call budget is never reduced. Client acceptance or ambiguous acceptance remains terminal, " +
-            "and temporary native/GCD/animation waits spend no retry call. Action-specific Purify, Guard-end, and " +
-            "projectile-impact deadlines remain authoritative.");
+            "Default on for fresh/reset configurations; an existing opt-out is preserved on upgrade. A sampled native " +
+            "readiness edge can wake the same frozen action, target, key, context, and episode " +
+            "on the first later framework frame. A clean client rejection keeps the 50 ms fallback throttle; ordinary " +
+            "timer movement alone is not treated as a new edge. The existing bounded call budget remains authoritative, " +
+            "client acceptance or ambiguous acceptance is terminal, and native/GCD/animation waits spend no retry call.");
         ImGui.TextDisabled(
             "The integrated smart buffer and Turbo yield whenever Seiton's critical held scheduler owns the native " +
             "action boundary. This never writes position or animation lock, extends range, changes a target/action, " +
