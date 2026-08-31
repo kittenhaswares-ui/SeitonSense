@@ -130,12 +130,20 @@ internal static class SmartActionProtectionSelfTests
                 $"unreviewed geometry {effectRange}/{castType} fails closed");
         }
 
-        True(SmartActionProtectionRules.IsActionProtectionSafe(
-                SmartActionAttackShape.UnsupportedAreaOfEffect,
-                target,
-                effectRange: 20f,
-                [farProtected]),
-            "an unrelated invulnerable actor cannot globally stall an unsupported AoE");
+        foreach (var incidentalNonRetaliatoryProtection in new[]
+                 {
+                     SmartActionProtectionKind.Guard,
+                     SmartActionProtectionKind.Covered,
+                     SmartActionProtectionKind.Invulnerability,
+                 })
+        {
+            True(SmartActionProtectionRules.IsActionProtectionSafe(
+                    SmartActionAttackShape.UnsupportedAreaOfEffect,
+                    target,
+                    effectRange: 20f,
+                    [farProtected with { Kind = incidentalNonRetaliatoryProtection }]),
+                $"an unrelated {incidentalNonRetaliatoryProtection} actor cannot globally stall an unsupported AoE");
+        }
         False(SmartActionProtectionRules.IsActionProtectionSafe(
                 SmartActionAttackShape.UnsupportedAreaOfEffect,
                 target,
@@ -304,6 +312,24 @@ internal static class SmartActionProtectionSelfTests
         False(SmartActionGuardBypassRules.HasExactEnglishDescription(null),
             "missing ActionTransient metadata fails closed");
 
+        True(SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription(
+                $"Delivers an attack. {SmartActionGuardBypassRules.ExactEnglishGuardReductionSentence}"),
+            "the exact current English Guard-halving sentence is accepted");
+        foreach (var driftedReductionDescription in new[]
+                 {
+                     "Halves the defensive bonuses of Guard instead when targeting enemies under its effect.",
+                     "halves the defensive bonus of Guard instead when targeting enemies under its effect.",
+                     "Halves the defensive bonus of Guard instead when targeting enemies under its effect",
+                     string.Empty,
+                 })
+        {
+            False(SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription(
+                    driftedReductionDescription),
+                "partial, case, punctuation, or empty Guard-halving metadata drift fails closed");
+        }
+        False(SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription(null),
+            "missing Guard-halving ActionTransient metadata fails closed");
+
         var target = Geometry(1);
         var guard = Protected(target, SmartActionProtectionKind.Guard);
         False(SmartActionProtectionRules.IsActionProtectionSafe(
@@ -319,6 +345,21 @@ internal static class SmartActionProtectionSelfTests
                 [guard],
                 actionIgnoresGuard: true),
             "an exactly verified Guard-ignoring direct action may target Guard");
+
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.TargetCenteredCircle,
+                target,
+                effectRange: 5f,
+                [guard],
+                actionIgnoresGuard: true),
+            "an exactly verified Guard-targeting circle may select a Guard primary");
+        True(SmartActionProtectionRules.IsActionProtectionSafe(
+                SmartActionAttackShape.UnsupportedAreaOfEffect,
+                target,
+                effectRange: 20f,
+                [guard],
+                actionIgnoresGuard: true),
+            "an exactly verified Guard-targeting unsupported AoE may select a Guard primary");
 
         foreach (var hardProtection in new[]
                  {
@@ -343,6 +384,24 @@ internal static class SmartActionProtectionSelfTests
                         SmartActionProtectionKind.Guard | hardProtection)],
                     actionIgnoresGuard: true),
                 $"Guard combined with {hardProtection} remains blocked");
+            False(SmartActionProtectionRules.IsActionProtectionSafe(
+                    SmartActionAttackShape.TargetCenteredCircle,
+                    target,
+                    effectRange: 5f,
+                    [Protected(
+                        target,
+                        SmartActionProtectionKind.Guard | hardProtection)],
+                    actionIgnoresGuard: true),
+                $"a circle primary combining Guard with {hardProtection} remains blocked");
+            False(SmartActionProtectionRules.IsActionProtectionSafe(
+                    SmartActionAttackShape.UnsupportedAreaOfEffect,
+                    target,
+                    effectRange: 20f,
+                    [Protected(
+                        target,
+                        SmartActionProtectionKind.Guard | hardProtection)],
+                    actionIgnoresGuard: true),
+                $"an unsupported AoE primary combining Guard with {hardProtection} remains blocked");
         }
 
         var guardPeer = Protected(

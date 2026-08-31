@@ -510,22 +510,35 @@ internal static class DefensiveUtilitySelfTests
 
     public static void GuardianProactiveRiskRequiresExactHighPressure()
     {
-        var proactive = Candidate(10, hp: 35, maxHp: 100, pressure: 3);
+        var proactive = Candidate(10, hp: 50, maxHp: 100, pressure: 3);
         Equal(
             PaladinGuardianRiskTier.ProactiveHighPressure,
             DefensiveUtilityRules.ClassifyGuardianRisk(proactive),
-            "exactly 35 percent with exact 3+ pressure enters the proactive tier");
+            "exactly 50 percent with exact 3+ pressure enters the proactive tier");
         True(
             DefensiveUtilityRules.IsGuardianCandidate(proactive),
             "proactive risk remains subject to the ordinary exact actor and native reachability gates");
         Equal(
             PaladinGuardianRiskTier.None,
-            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { CurrentHp = 36 }),
-            "above 35 percent is not proactive");
+            DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { CurrentHp = 51 }),
+            "above 50 percent is not proactive");
         Equal(
             PaladinGuardianRiskTier.None,
             DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { IncomingEnemyCount = 2 }),
-            "two enemies do not raise the legacy threshold");
+            "two enemies cannot open the 50-percent tier");
+        var moderate = proactive with { CurrentHp = 40, IncomingEnemyCount = 2 };
+        Equal(
+            PaladinGuardianRiskTier.ProactiveHighPressure,
+            DefensiveUtilityRules.ClassifyGuardianRisk(moderate),
+            "exactly 40 percent with exact 2+ pressure enters the moderate tier");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(moderate with { CurrentHp = 41 }),
+            "two enemies cannot open the tier above 40 percent");
+        Equal(
+            PaladinGuardianRiskTier.None,
+            DefensiveUtilityRules.ClassifyGuardianRisk(moderate with { IncomingEnemyCount = 1 }),
+            "one enemy cannot open either proactive tier");
         Equal(
             PaladinGuardianRiskTier.None,
             DefensiveUtilityRules.ClassifyGuardianRisk(proactive with { IncomingEnemyCount = null }),

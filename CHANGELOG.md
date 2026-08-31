@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.43.0.4
+
+- Made **Paladin Guardian react earlier**. It now gets the first helper slot
+  after Purify, before Recuperate and automatic Guard. The unconditional
+  emergency boundary remains 20% HP; fresh exact focus opens the proactive
+  rescue at 40% for 2+ enemies and 50% for 3+. Generic Guard must still be
+  ready so the Paladin can protect themself after jumping in.
+- Smart Action can now deliberately select a guarded target for exact,
+  metadata-verified PLD Shield Smite / Schildhieb `41430` and SCH Chain
+  Stratagem / Kritische Strategie `29716`. Guard, Cover, PLD LB, and DRK LB
+  disqualify only the actor carrying them, so another safe target remains
+  usable. Only Chiten may veto an area action because it could retaliate from
+  an incidental hit.
+- Fixed **target-independent Smart Action Chase in Crystalline Conflict**. If
+  the normal safe `S1`-`S5` selection has no currently reachable winner,
+  `/smartaction` can now freeze the best safe enemy and the exact incoming
+  single-target ability for the configured Chase window. No selected target is
+  required.
+- The wait never reranks, changes the visible target, or substitutes another
+  action. It dispatches only when that exact actor gains native range and line
+  of sight. Another action, expiry, context/identity drift, Guard, crowd
+  control, death, action drift, or changed protection cancels it.
+- The macro's own following `<t>` line is suppressed only once and only for the
+  exact Smart Action generation and action. Queue and ordinary direct input are
+  not swallowed. Expired or context-drifted ownership is cleared before this
+  check.
+- A failed macro-tail classification now retires the older Chase reservation
+  before stopping the uncertain input, so an exception cannot leave a stale
+  action waiting. The player-facing priority text was also aligned with the
+  actual Purify → Guardian → Recuperate → Auto-Guard scheduler.
+- `/seitonfar` remains reachable-only. Enabled Wolves' Den testing remains
+  limited to the exact current duel opponent or reviewed dummy; it does not use
+  CC `S1`-`S5` ranking.
+- Automatic Zantetsuken now accepts Kuzushi only when exactly one current,
+  finite, positive row `3202` from the local Samurai is present. Build and
+  automated safety checks remain separate from live in-game confirmation.
+
 ## 0.43.0.3
 
 - Fixed **Smart Action tap-to-land**. FFXIV can report an authored macro action

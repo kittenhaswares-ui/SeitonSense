@@ -2,6 +2,64 @@ using SeitonSense.Core;
 
 internal static class SamuraiReactiveSelfTests
 {
+    public static void ZantetsukenKuzushiEvidenceRequiresFreshFiniteOwnStatus()
+    {
+        const uint localSamurai = 0x1000_1234;
+        True(
+            SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                SamuraiZantetsukenRules.KuzushiStatusId,
+                localSamurai,
+                4f,
+                localSamurai),
+            "fresh four-second own Kuzushi");
+        True(
+            SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                SamuraiZantetsukenRules.KuzushiStatusId,
+                localSamurai,
+                6f,
+                localSamurai),
+            "fresh extended six-second own Kuzushi");
+
+        foreach (var remaining in new[]
+                 {
+                     0f,
+                     -0.001f,
+                     float.NaN,
+                     float.PositiveInfinity,
+                 })
+        {
+            False(
+                SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                    SamuraiZantetsukenRules.KuzushiStatusId,
+                    localSamurai,
+                    remaining,
+                    localSamurai),
+                "expired or non-finite Kuzushi cannot authorize Zantetsuken");
+        }
+
+        False(
+            SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                SamuraiZantetsukenRules.KuzushiStatusId,
+                localSamurai + 1,
+                4f,
+                localSamurai),
+            "another Samurai's Kuzushi is not ours");
+        False(
+            SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                SamuraiZantetsukenRules.KuzushiStatusId + 1,
+                localSamurai,
+                4f,
+                localSamurai),
+            "another status is not Kuzushi");
+        False(
+            SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                SamuraiZantetsukenRules.KuzushiStatusId,
+                localSamurai,
+                4f,
+                0),
+            "invalid local identity fails closed");
+    }
+
     private const int HeldKey = 65;
     private static readonly SamuraiReactiveCounterCcTarget Enemy = new(
         GameObjectId: 0x2001,

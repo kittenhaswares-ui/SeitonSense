@@ -29,7 +29,8 @@ internal sealed partial class SettingsWindow
                 value => configuration.AllowCriticalRecoveryThroughNativeQueue = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Priority: Purify → Recuperate → Auto-Guard → job helpers. With queue override enabled, " +
+                "Priority: Purify → PLD Guardian → Recuperate → Auto-Guard → other job helpers. " +
+                "With queue override enabled, " +
                 "an accepted recovery can replace the action currently waiting in FFXIV. Turn it off if " +
                 "you want the queued action to win.");
             ImGui.PopTextWrapPos();

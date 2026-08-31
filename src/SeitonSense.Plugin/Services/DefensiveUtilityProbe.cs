@@ -538,7 +538,7 @@ internal sealed class DefensiveUtilityProbe
 
     /// <summary>
     /// Job-specific defensive pass. Paladin Guardian has its own feature and
-    /// held-key gates and is scheduled directly after reactive counter-CC.
+    /// held-key gates and is scheduled directly after Purify.
     /// </summary>
     internal unsafe DefensiveUtilityProbeSnapshot ObserveGuardian(
         IPlayerCharacter? localPlayer,
@@ -636,12 +636,12 @@ internal sealed class DefensiveUtilityProbe
                           inputEligible &&
                           !guardActive &&
                           !higherPriorityClaimed;
-        var guardianActionsSpecificallyReady = guardMetadataVerified &&
-                                               guardianMetadataVerified &&
-                                               IsActionSpecificallyReady(
-                                                   EnemyCombatConstants.GuardActionId) &&
-                                               IsActionSpecificallyReady(
-                                                   EnemyCombatConstants.GuardianActionId);
+        var guardianActionSpecificallyReady = guardMetadataVerified &&
+                                              guardianMetadataVerified &&
+                                              IsActionSpecificallyReady(
+                                                  EnemyCombatConstants.GuardActionId) &&
+                                              IsActionSpecificallyReady(
+                                                  EnemyCombatConstants.GuardianActionId);
         if (frozenGuardianRetry is { } frozenGuardian)
         {
             action = DefensiveUtilityActionKind.Guardian;
@@ -684,7 +684,7 @@ internal sealed class DefensiveUtilityProbe
                          frozenGuardian.Retry,
                          nowMilliseconds,
                          exactRetryContext,
-                         guardianActionsSpecificallyReady))
+                         guardianActionSpecificallyReady))
             {
                 inputClaimed = true;
                 inputFrame.Consume();
@@ -694,7 +694,7 @@ internal sealed class DefensiveUtilityProbe
                     castCancellationRequest = CreateGuardianCastCancellationRequest(
                         localPlayer!,
                         frozenGuardian,
-                        guardianActionsSpecificallyReady);
+                        guardianActionSpecificallyReady);
                     lastEvent = castCancellationRequest is not null
                         ? $"Frozen Guardian P{frozenGuardian.Intent.PartySlot} " +
                           $"({DescribeGuardianRisk(exactCandidate, guardianPressureAgeMilliseconds)}) " +
@@ -726,7 +726,7 @@ internal sealed class DefensiveUtilityProbe
                         castCancellationRequest = CreateGuardianCastCancellationRequest(
                             localPlayer!,
                             frozenGuardian,
-                            guardianActionsSpecificallyReady);
+                            guardianActionSpecificallyReady);
                     }
 
                     if (accepted)
@@ -750,7 +750,7 @@ internal sealed class DefensiveUtilityProbe
         }
         else if (terminalGuardianKey == VirtualKey.NO_KEY &&
             canDispatch &&
-            guardianActionsSpecificallyReady &&
+            guardianActionSpecificallyReady &&
             IsPaladin(localPlayer!) &&
             eligibleGuardianCandidateCount > 0)
         {
@@ -785,7 +785,7 @@ internal sealed class DefensiveUtilityProbe
                     castCancellationRequest = CreateGuardianCastCancellationRequest(
                         localPlayer!,
                         frozen,
-                        guardianActionsSpecificallyReady);
+                        guardianActionSpecificallyReady);
                     lastEvent = castCancellationRequest is not null
                         ? $"Frozen Guardian P{selected.PartySlot} " +
                           $"({DescribeGuardianRisk(selected, guardianPressureAgeMilliseconds)}) " +
@@ -808,7 +808,7 @@ internal sealed class DefensiveUtilityProbe
                         castCancellationRequest = CreateGuardianCastCancellationRequest(
                             localPlayer!,
                             frozen,
-                            guardianActionsSpecificallyReady);
+                            guardianActionSpecificallyReady);
                     }
 
                     if (attempted && accepted)
@@ -1260,7 +1260,6 @@ internal sealed class DefensiveUtilityProbe
             return ClientActionAttemptOutcome.NotInvoked;
         }
 
-
         if (!ClientActionAttemptBoundary.IsExactActionReady(
                 actionManager,
                 EnemyCombatConstants.GuardActionId) ||
@@ -1306,6 +1305,9 @@ internal sealed class DefensiveUtilityProbe
                 return ClientActionAttemptOutcome.NotInvoked;
 
             if (!ClientActionAttemptBoundary.IsExactActionReady(
+                    actionManager,
+                    EnemyCombatConstants.GuardActionId) ||
+                !ClientActionAttemptBoundary.IsExactActionReady(
                     actionManager,
                     EnemyCombatConstants.GuardianActionId))
             {

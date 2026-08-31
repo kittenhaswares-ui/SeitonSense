@@ -98,6 +98,69 @@ public static class SmartTargetSelectionRules
     }
 
     /// <summary>
+    /// Selects one exact protection-safe hostile actor for the spatial Chase
+    /// lane when no candidate is currently reachable. Native range/line of
+    /// sight is deliberately not an eligibility gate here: the caller freezes
+    /// this one action/actor tuple and may only wait for that exact tuple to
+    /// become reachable. All identity, life, targetability, and protection
+    /// requirements remain identical to normal Smart Target selection.
+    /// </summary>
+    public static bool TryCreateSpatialIntent(
+        uint resolvedActionId,
+        IReadOnlyList<SmartTargetSelectionCandidate>? candidates,
+        TargetPressureActorIdentity localPlayer,
+        out SmartTargetSelectionIntent intent)
+    {
+        intent = default;
+        if (resolvedActionId == 0 ||
+            !HasUnambiguousCandidateSet(candidates, localPlayer))
+        {
+            return false;
+        }
+
+        var bestIndex = -1;
+        for (var index = 0; index < candidates!.Count; index++)
+        {
+            var candidate = candidates[index];
+            if (!IsSpatiallyPendingCandidate(candidate, localPlayer)) continue;
+            if (bestIndex < 0 || Compare(candidate, candidates[bestIndex]) < 0)
+                bestIndex = index;
+        }
+
+        if (bestIndex < 0) return false;
+        var selected = candidates[bestIndex];
+        intent = new SmartTargetSelectionIntent(
+            resolvedActionId,
+            selected.EnemySlot,
+            selected.Actor);
+        return intent.IsValid;
+    }
+
+    public static bool TryCreateSpatialIntentAfterReachableMiss(
+        uint resolvedActionId,
+        IReadOnlyList<SmartTargetSelectionCandidate>? normalReachCandidates,
+        IReadOnlyList<SmartTargetSelectionCandidate>? spatialCandidates,
+        TargetPressureActorIdentity localPlayer,
+        out SmartTargetSelectionIntent intent)
+    {
+        intent = default;
+        if (TryCreateIntent(
+                resolvedActionId,
+                normalReachCandidates,
+                localPlayer,
+                out _))
+        {
+            return false;
+        }
+
+        return TryCreateSpatialIntent(
+            resolvedActionId,
+            spatialCandidates,
+            localPlayer,
+            out intent);
+    }
+
+    /// <summary>
     /// Final validation for only the frozen action/target tuple. A caller must
     /// cancel on false and must not select an alternate candidate.
     /// </summary>
@@ -111,6 +174,23 @@ public static class SmartTargetSelectionRules
         candidate.EnemySlot == intent.EnemySlot &&
         candidate.Actor == intent.Target &&
         IsEligibleCandidate(candidate, localPlayer);
+
+    /// <summary>
+    /// Final validation for a frozen spatial intent. Range may have changed in
+    /// either direction since selection; native Original decides whether it is
+    /// already usable, while Chase may reserve only a proven range/LoS-only
+    /// false result. No alternate actor is selected here.
+    /// </summary>
+    public static bool CanUseExactSpatialIntent(
+        SmartTargetSelectionIntent intent,
+        SmartTargetSelectionCandidate candidate,
+        TargetPressureActorIdentity localPlayer,
+        uint resolvedActionId) =>
+        intent.IsValid &&
+        resolvedActionId == intent.ResolvedActionId &&
+        candidate.EnemySlot == intent.EnemySlot &&
+        candidate.Actor == intent.Target &&
+        IsSpatiallyEligibleCandidate(candidate, localPlayer);
 
     public static bool HasUnambiguousCandidateSet(
         IReadOnlyList<SmartTargetSelectionCandidate>? candidates,
@@ -148,6 +228,24 @@ public static class SmartTargetSelectionRules
         candidate.HasValidActionTarget &&
         candidate.HasNativeRangeAndLineOfSight &&
         candidate.CallerProvenProtectionSafe;
+
+    public static bool IsSpatiallyEligibleCandidate(
+        SmartTargetSelectionCandidate candidate,
+        TargetPressureActorIdentity localPlayer) =>
+        IsStructurallyValid(candidate, localPlayer) &&
+        candidate.IsHostile &&
+        candidate.Alive &&
+        candidate.Targetable &&
+        candidate.CurrentHp > 0 &&
+        candidate.MaximumHp >= candidate.CurrentHp &&
+        candidate.HasValidActionTarget &&
+        candidate.CallerProvenProtectionSafe;
+
+    public static bool IsSpatiallyPendingCandidate(
+        SmartTargetSelectionCandidate candidate,
+        TargetPressureActorIdentity localPlayer) =>
+        IsSpatiallyEligibleCandidate(candidate, localPlayer) &&
+        !candidate.HasNativeRangeAndLineOfSight;
 
     private static bool IsStructurallyValid(
         SmartTargetSelectionCandidate candidate,

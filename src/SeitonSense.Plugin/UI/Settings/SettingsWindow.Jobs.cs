@@ -80,7 +80,7 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Guardian for a critical or 3+-pressure ally",
+                "Guardian for a critical or focused ally",
                 configuration.PaladinGuardianLowAlly,
                 value => configuration.PaladinGuardianLowAlly = value);
             changed |= Checkbox(
@@ -94,11 +94,12 @@ internal sealed partial class SettingsWindow
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
                 "Off by default and CC only. Guardian can save a reachable ally within 20 yalms at 20% HP or lower. " +
-                "At 21–35% HP, it requires at least three enemies focusing them. Critical HP wins first, then more " +
-                "enemy focus and lower HP.");
+                "At 21–40% HP it needs at least two enemies focusing them; at 41–50% it needs at least three. " +
+                "Critical HP wins first, then more enemy focus and lower HP.");
             ImGui.TextDisabled(
-                "Hold a gameplay key to allow the save. Purify remains first. Seiton keeps one ally during the attempt " +
-                "and does not visibly change your target. The activation card means FFXIV accepted the request, not " +
+                "Hold a gameplay key to allow the save. Purify remains first and Guardian is next. Your own Guard " +
+                "must be ready so the jump does not leave you without protection. Seiton keeps one ally during the attempt and does not visibly change your target. " +
+                "The activation card means FFXIV accepted the request, not " +
                 "that the ally was definitely saved.");
             ImGui.TextDisabled(
                 "The communication option sends the localized CC 'Cover target' Quick Chat and places paired Bind " +

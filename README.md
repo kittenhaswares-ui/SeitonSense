@@ -3,12 +3,24 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.43.0.3 fixes Smart Action tap-to-land. FFXIV may report a macro action
-as a normal action; Seiton now accepts either form only after it proves the
-exact Smart Action tap, ability, and visible target. The visible `<t>` fallback
-and supported casts can therefore keep the same out-of-range wait without
-changing targets or turning the character. Queue mode remains excluded, and a
-new action still cancels the wait.
+Version 0.43.0.4 fixes Smart Action Chase in Crystalline Conflict when you have
+no target selected. If no safe enemy is currently reachable, one
+`/smartaction` press remembers the best safe `S1`-`S5` enemy and the exact
+ability for the configured Chase time. It uses only that same ability and enemy
+when native range and line of sight become valid. It never reranks or changes
+your visible target. `/seitonfar` remains reachable-only. Auto-Zantetsuken now
+requires one current, finite Kuzushi applied by your own Samurai. PLD Guardian
+now runs directly after Purify and reacts at 40% HP under fresh exact 2+-enemy
+focus or 50% under 3+. Generic Guard must still be ready for the Paladin's own
+safety. Smart Action now lets PLD Schildhieb / Shield Smite and SCH Kritische
+Strategie / Chain Stratagem deliberately select Guard while other protected
+candidates remain excluded.
+
+Version 0.43.0.3 fixed the visible-target and cast forms of Smart Action
+tap-to-land. FFXIV may report a macro action as a normal action; Seiton accepts
+either form only after it proves the exact Smart Action tap, ability, and
+visible target. Queue mode remains excluded, and a new action still cancels the
+wait.
 
 Version 0.43.0.2 fixes active PvP Sprint protection. The active Sprint buff is
 a permanent toggle without a useful duration, so Seiton now uses exact buff
@@ -449,9 +461,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   generation, so it cannot block manual Guard or higher-priority recovery.
 - **Experimental Paladin Guardian job tool:** an independent default-off held-key
   option can attempt Guardian on one exact reachable ally. The original critical
-  boundary remains unconditional at 20% HP; a fresh exact current hard/cast-
-  target count of at least three enemies may trigger the same frozen rescue
-  earlier, at 35% HP or lower. A
+  boundary remains unconditional at 20% HP. A fresh exact current hard/cast-
+  target count may trigger the same frozen rescue earlier: two enemies at 40%
+  HP or lower, or three enemies at 50% or lower. Guardian gets the first helper
+  slot after Purify, while generic Guard must remain ready for self-protection. A
   separate default-off communication option can follow only a client-accepted
   automatic Guardian with localized CC Quick Chat row 35 and an ownership-safe
   Bind2-ally/Bind1-self pair.
@@ -796,8 +809,9 @@ readback mismatch never changes the selected target. Own Guard and its bounded
 propagation latch block this automatic helper; only the explicit `/panicshu` and
 enabled `/seitonbw` commands are own-Guard exceptions. A continuing hold may authorize a later Shukuchi only after
 the cooldown was positively observed unavailable and then ready again. It runs
-after PLD Guardian and before SCH Critical Strategy; NIN Seiton has already had
-its higher-priority opportunity immediately after Purify.
+after NIN Auto-Seiton and Ally Rescue, and before SCH Critical Strategy. The
+first four scheduler slots are Purify, PLD Guardian, Smart Recuperate, then
+automatic Guard.
 
 ## Ninja Seiton cues
 
@@ -837,10 +851,10 @@ and a metadata mismatch disables automated Seiton fail-closed; manual Seiton is
 never intercepted. Auto-Seiton waits through active casts and never requests
 cast cancellation.
 
-Ninja Seiton follows only Purify. It precedes reactive counter-CC, Ally Rescue,
-PLD Guardian, NIN Guard-Shukuchi, SCH Critical Strategy, DRK Hiebsprung, Smart
-Recuperate, Emergency Teleport, generic Guard, pressure Sprint, event Kardia,
-and event Monk.
+Ninja Seiton follows Purify, PLD Guardian, Smart Recuperate, automatic Guard,
+AST, RDM, and SAM. It precedes VPR, GNB, reactive counter-CC, Ally Rescue, NIN
+Guard-Shukuchi, SCH Critical Strategy, DRK helpers, Monk, Emergency Teleport,
+pressure Sprint, event Kardia, and event Monk.
 Active own
 Guard and the bounded post-request Guard-propagation gate suppress the Ninja
 helper. One exact adjusted-action availability epoch freezes one target. Known
@@ -885,11 +899,11 @@ lowest exact HP ratio. Stable S-slot, entity ID, and game-object ID resolve
 remaining ties. Pressure is used only for this one selection and is not a final
 dispatch requirement.
 
-The current request order before Scholar Critical Strategy is Purify, Smart
-Recuperate, automatic Guard, AST same-target healing, RDM fresh-Guard
-Corps-a-corps, SAM reactive actions or automatic Zantetsuken, NIN Auto-Seiton,
-VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, PLD
-Guardian, then NIN Guard-Shukuchi. DRK Dark Arts Shadowbringer, Hiebsprung, the
+The current request order before Scholar Critical Strategy is Purify, PLD
+Guardian, Smart Recuperate, automatic Guard, AST same-target healing, RDM
+fresh-Guard Corps-a-corps, SAM reactive actions or automatic Zantetsuken, NIN
+Auto-Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally
+Rescue, then NIN Guard-Shukuchi. DRK Dark Arts Shadowbringer, Hiebsprung, the
 safe Shadowbringer fallback, and held Monk combo follow Scholar before
 Emergency Teleport and the remaining generic or event helpers. Continuous held
 consent can produce a frozen Critical Strategy intent for a distinct eligible
@@ -924,10 +938,10 @@ recast can therefore create another proven ready epoch; a reset wholly missed
 between framework samples is not guessed. Each epoch can use only the common
 bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
   target, with no visible target change, alternate, rerank, or replay. The current
-  order is **Purify > Smart Recuperate > automatic Guard > AST same-target heal
+  order is **Purify > PLD Guardian > Smart Recuperate > automatic Guard > AST same-target heal
   chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN Seiton > VPR
-Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD
-  Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
+Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > NIN
+  Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
   Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo >
   Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia
 > event Monk**.
@@ -1214,14 +1228,16 @@ The independent **Paladin Guardian job tool** is separately default-off under
 Job Tools and does not depend on the reactive defensive-utilities master.
 Continuous held consent can create one frozen Guardian `29066` intent for an
 exact living, targetable, non-self party member at or below 20% HP, or at or
-below 35% HP only while a fresh exact incoming-pressure view shows at least
-three unique enemies currently hard-targeting or casting at that ally. Unknown,
-stale, malformed, or lower pressure cannot raise the original 20% boundary.
+below 40% HP while a fresh exact incoming-pressure view shows at least two
+unique enemies currently hard-targeting or casting at that ally, or at or below
+50% with at least three. Unknown, stale, malformed, or lower pressure cannot
+raise the original 20% boundary.
 FFXIV's native 20-yalm action-range and line-of-sight check must also accept the target. There is
 no custom center-distance cap: native reachability remains authoritative and
 hitbox-aware. After the jump, Guardian's protection requires the Paladin to
 remain within 10 yalms of the protected member. Both your own Guard and Guardian
-must be available. Unconditional critical candidates always precede proactive
+must be available. Guardian now runs directly after Purify so lower helpers
+cannot starve the rescue. Unconditional critical candidates always precede proactive
 high-pressure candidates. Critical candidates retain lowest exact HP first;
 proactive candidates rank by higher exact pressure, then lower HP, distance, and
 stable party identity. One atomic pressure publication is used for the whole
@@ -1420,10 +1436,10 @@ generation without substitution. Only an explicit
 client rejection may retry the same intent under the common bound; acceptance
 or ambiguity is terminal.
 
-The current request order is **Purify > Smart Recuperate > automatic Guard > AST
+The current request order is **Purify > PLD Guardian > Smart Recuperate > automatic Guard > AST
 same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / Zantetsuken > NIN
 Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally
-Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
+Rescue > NIN Guard-Shukuchi > SCH Critical Strategy > DRK
 Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) >
 Monk combo > Emergency Teleport > pressure
 Sprint > event Kardia > event Monk**. The job-specific helpers use
@@ -1592,13 +1608,14 @@ Smart Action selection described below.
 
 No selected target is required. Arming performs no `S1`-`S5` scan and has no
 hard-target or live-`S1` prerequisite; `<t>` is only the user-authored fallback
-when the carrier is deliberately invalidated. At action time, Smart Action resolves
-the actual non-ground-target hostile action and its native range/line-of-sight
-result. It considers only unique, living, targetable exact canonical `S1`-`S5`
+when the carrier is deliberately invalidated. At action time, Smart Action
+resolves the actual non-ground-target hostile action. It considers only unique,
+living, targetable exact canonical `S1`-`S5`
 enemies. Active Chiten, Covered, Paladin LB Hallowed Ground, and Dark Knight LB
 Undead Redemption make an actor protection-blocked. Active Guard does too unless
-the exact resolved action's current English description explicitly says its
-damage ignores Guard. This is action-specific, so transformed combo steps are
+strict current metadata proves that the exact resolved action ignores Guard,
+reduces Guard like PLD Shield Smite `41430` or SCH Chain Stratagem `29716`, or
+is one reviewed hostile movement action. This is action-specific, so transformed combo steps are
 classified after adjustment rather than by the raw hotbar carrier or job. A
 protected candidate is skipped and the next safe Smart Target remains eligible. If Chiten
 metadata cannot be verified, every Samurai (and any unknown-job actor) is
@@ -1610,16 +1627,28 @@ the general tier. Within a tier the order is lowest exact HP ratio, highest
 positive fresh team pressure, observed Guard-cooldown unavailability, lowest
 trusted MP ratio, then stable S-slot.
 
+Normal Smart Action selection still chooses only a candidate that currently
+passes the action's native range and line-of-sight result. If none does and
+tap-to-land Chase is enabled, `/smartaction` may instead freeze the best safe
+candidate from the same ranking together with the exact incoming single-target
+ability. It does not need or change a visible target, does not rerank during the
+wait, and can act only when that same actor later passes native range and line
+of sight inside the configured window. A new action or any identity, context,
+action, protection, Guard, CC, life, or expiry change cancels it.
+
 `/seitonfar` uses the same candidate and protection snapshot but replaces only
 that ranking step with farthest finite hitbox-edge distance, then stable S-slot.
 An out-of-range, line-of-sight-blocked, protected, ambiguous, or non-finite actor
 cannot win. After one endpoint is chosen, distance changes cannot cause a rerank.
+It deliberately does not use the target-independent Chase selection.
 
 For a target-centered circle, protection safety includes the exact effect radius
-plus each protected actor's hitbox. A verified Guard-ignoring action ignores only
-Guard-only actors in that geometry; Chiten, Covered, and LB invulnerability still
-block, including when combined with Guard. An unreviewed line, cone, or other AoE
-shape is not redirected while any non-bypassed protected enemy exists. Direct
+plus each protected actor's hitbox. Guard, Cover, Paladin LB, and Dark Knight LB
+disqualify only the selected actor; an incidental carrier of those protections
+does not stall the action. Chiten still vetoes a circle when its hitbox would be
+hit, and it is the only global veto for an unreviewed line, cone, or other AoE.
+A verified Guard-targeting action opens only Guard on its selected actor; Guard
+combined with Chiten, Cover, or LB invulnerability remains blocked. Direct
 single-target actions need the selected actor's exact protection evidence but
 do not require unrelated hostile object-table completeness; target-circle and
 unknown area shapes retain that complete-world comparison. The one-shot token is
@@ -1630,7 +1659,9 @@ forwarded with the exact canonical enemy ID, never a mutable selected-target
 carrier. Drift cancels that carrier without reranking, retrying, dispatching a
 generated action, or changing the visible target. A short exact-action lease
 keeps the authored `<t>` fallback under the same protection check after a native
-rejection. Equivalent raw action carriers for the same resolved skill stay
+rejection. When a ranked Smart Action call has already armed Chase, only its one
+exact following macro line may be suppressed; Queue and ordinary direct input
+are never claimed. Equivalent raw action carriers for the same resolved skill stay
 inside the lease; an unresolved exact raw fallback is blocked. Unrelated actions
 with a resolved identity are untouched. If resolution is unavailable and an
 `Action`/`PvPAction` alias cannot be disproved, supported macro calls stay blocked
@@ -1641,6 +1672,9 @@ queued/cast action was accepted, or during projectile/travel time, cannot be
 recalled by the target-rewrite hook.
 Smart Action has its own explicit opt-in; Near Assist, Near Help, and Far Help
 continue to share their existing macro-helper option.
+With the separate Wolves' Den testing option enabled, `/smartaction` uses only
+the exact current hostile duel opponent or reviewed dummy. It does not run CC
+`S1`-`S5` ranking there.
 
 ## One-shot Near Assist macro
 
@@ -2249,10 +2283,10 @@ armed, already incoming macro action. Smart Tab is separate: while enabled it
 may replace only an owned native forward world-target cycle with one exact hard-
 target write. Near Help may choose the local player only when the exact resolved action
 supports self and passes native target/range/line-of-sight validation. Optional
-action helpers use this current request priority: **Purify > Smart Recuperate >
+action helpers use this current request priority: **Purify > PLD Guardian > Smart Recuperate >
 automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-
 CC / Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation >
-reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH
+reactive counter-CC > Ally Rescue > NIN Guard-Shukuchi > SCH
 Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK
 Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint
 > event Kardia > event Monk**. The
@@ -2457,7 +2491,7 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 605-test Core registry and source checks pin
+For the current source, the exact 611-test Core registry and source checks pin
 configuration schema 50, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
 the immutable release-independent tap-to-land buffer, active-Sprint repeat
@@ -2504,9 +2538,9 @@ source control flow and contracts, not current-client targeting, action
 acceptance, range/line-of-sight behavior, or server effects; live exact-CC and
 enabled-Den testing remains required.
 
-Current scheduler verification uses **Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC /
+Current scheduler verification uses **Purify > PLD Guardian > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC /
 Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
-counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
+counter-CC > Ally Rescue > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
 (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia
 > event Monk**. Twenty physical-hold

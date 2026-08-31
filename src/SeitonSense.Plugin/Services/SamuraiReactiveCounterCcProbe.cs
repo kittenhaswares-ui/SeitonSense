@@ -1792,6 +1792,8 @@ internal sealed class SamuraiReactiveCounterCcProbe
         IBattleChara target,
         uint localEntityId)
     {
+        if (localEntityId is 0 or 0xE0000000 or uint.MaxValue) return -1;
+
         var count = 0;
         foreach (var status in target.StatusList)
         {
@@ -1801,8 +1803,19 @@ internal sealed class SamuraiReactiveCounterCcProbe
                 continue;
             }
 
+            if (!SamuraiZantetsukenRules.IsExactCurrentOwnSourceKuzushi(
+                    status.StatusId,
+                    status.SourceId,
+                    status.RemainingTime,
+                    localEntityId))
+            {
+                // A stale, expired, or malformed own-source row invalidates
+                // this snapshot instead of masquerading as a fresh proc.
+                return -1;
+            }
+
             count++;
-            if (count > 1) return count;
+            if (count > 1) return -1;
         }
 
         return count;

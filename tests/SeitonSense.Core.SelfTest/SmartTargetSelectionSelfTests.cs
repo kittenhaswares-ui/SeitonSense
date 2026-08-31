@@ -208,6 +208,86 @@ internal static class SmartTargetSelectionSelfTests
             "invalid action identity cannot freeze an intent");
     }
 
+    public static void SpatialChaseFreezesOneSafeUnreachableActor()
+    {
+        const uint actionId = 29_391;
+        var lowerHealth = Candidate(4, hp: 20, pressure: 1) with
+        {
+            HasNativeRangeAndLineOfSight = false,
+        };
+        var higherPressure = Candidate(2, hp: 30, pressure: 5) with
+        {
+            HasNativeRangeAndLineOfSight = false,
+        };
+
+        False(SmartTargetSelectionRules.TryCreateIntent(
+                actionId,
+                [higherPressure, lowerHealth],
+                LocalPlayer,
+                out _),
+            "normal Smart Target still requires present native reach");
+        True(SmartTargetSelectionRules.TryCreateSpatialIntent(
+                actionId,
+                [higherPressure, lowerHealth],
+                LocalPlayer,
+                out var intent),
+            "spatial Chase can freeze one unreachable safe actor");
+        Equal(4, intent.EnemySlot,
+            "the usual HP-first ranking chooses the frozen future target");
+        False(SmartTargetSelectionRules.TryCreateSpatialIntentAfterReachableMiss(
+                actionId,
+                [Candidate(1, hp: 99)],
+                [higherPressure, lowerHealth],
+                LocalPlayer,
+                out _),
+            "an ordinary reachable winner always prevents spatial fallback");
+        True(SmartTargetSelectionRules.TryCreateSpatialIntentAfterReachableMiss(
+                actionId,
+                Array.Empty<SmartTargetSelectionCandidate>(),
+                [higherPressure, lowerHealth],
+                LocalPlayer,
+                out var afterMissIntent),
+            "spatial selection runs only after the normal candidate view misses");
+        Equal(intent, afterMissIntent,
+            "the post-miss spatial path freezes the same deterministic actor");
+        True(SmartTargetSelectionRules.CanUseExactSpatialIntent(
+                intent,
+                lowerHealth,
+                LocalPlayer,
+                actionId),
+            "the exact unreachable actor remains valid while waiting");
+        True(SmartTargetSelectionRules.CanUseExactSpatialIntent(
+                intent,
+                lowerHealth with { HasNativeRangeAndLineOfSight = true },
+                LocalPlayer,
+                actionId),
+            "the same frozen actor remains valid on the first reachable edge");
+        False(SmartTargetSelectionRules.CanUseExactSpatialIntent(
+                intent,
+                higherPressure,
+                LocalPlayer,
+                actionId),
+            "a later alternate can never replace the frozen actor");
+        False(SmartTargetSelectionRules.CanUseExactSpatialIntent(
+                intent,
+                lowerHealth with { CallerProvenProtectionSafe = false },
+                LocalPlayer,
+                actionId),
+            "protection drift cancels the exact frozen actor");
+
+        var reachableOutsideNormalEnvelope = Candidate(5, hp: 1) with
+        {
+            ReachTier = SmartTargetReachTier.RangedOrOther,
+            HasNativeRangeAndLineOfSight = true,
+        };
+        False(SmartTargetSelectionRules.TryCreateSpatialIntent(
+                actionId,
+                [reachableOutsideNormalEnvelope],
+                LocalPlayer,
+                out _),
+            "the spatial fallback never expands ordinary reachable targeting policy");
+    }
+
     public static void FarthestModeRanksOnlyEligibleSmartActionCandidates()
     {
         var candidates = new[]

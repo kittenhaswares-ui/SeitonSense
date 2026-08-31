@@ -54,6 +54,18 @@ public static class SmartActionSafetyLeaseRules
 {
     public const long DefaultLifetimeMilliseconds = 750;
 
+    public static bool IsCurrent(
+        SmartActionSafetyLeaseState state,
+        uint territoryId,
+        TargetPressureActorIdentity localPlayer,
+        long nowMilliseconds) =>
+        state.Token is { } token &&
+        token.IsValid &&
+        nowMilliseconds >= token.ArmedAtMilliseconds &&
+        nowMilliseconds < token.ExpiresAtMilliseconds &&
+        territoryId == token.TerritoryId &&
+        localPlayer == token.LocalPlayer;
+
     public static SmartActionSafetyLeaseState Arm(
         uint territoryId,
         TargetPressureActorIdentity localPlayer,
@@ -87,11 +99,7 @@ public static class SmartActionSafetyLeaseRules
     {
         if (previous.Token is not { } token)
             return PassThrough();
-        if (!token.IsValid ||
-            nowMilliseconds < token.ArmedAtMilliseconds ||
-            nowMilliseconds >= token.ExpiresAtMilliseconds ||
-            territoryId != token.TerritoryId ||
-            localPlayer != token.LocalPlayer)
+        if (!IsCurrent(previous, territoryId, localPlayer, nowMilliseconds))
         {
             return Cleared();
         }

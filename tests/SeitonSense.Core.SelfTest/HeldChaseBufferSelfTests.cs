@@ -291,6 +291,73 @@ internal static class HeldChaseBufferSelfTests
         }
     }
 
+    internal static void SmartActionMacroTailIsExactAndGenerationBound()
+    {
+        var ranked = new SmartActionChaseMacroTailObservation(
+            PendingChase: true,
+            TailBudgetAvailable: true,
+            CertifiedSmartActionMacroRoot: true,
+            FrozenTapGeneration: 9,
+            SafetyLeaseTapGeneration: 9,
+            FrozenActionType: 11,
+            IncomingActionType: 11,
+            FrozenRequestedActionId: 10_001,
+            IncomingRequestedActionId: 10_001,
+            FrozenResolvedActionId: 10_002,
+            IncomingResolvedActionId: 10_002,
+            CapturedVisibleGameObjectId: 0,
+            CapturedVisibleEntityId: 0,
+            IncomingTargetId: 0,
+            IsMacroCarrier: true,
+            IsQueueCarrier: false);
+        True(SmartActionChaseMacroTailRules.ShouldSuppress(ranked),
+            "ranked hidden target suppresses only its generation-bound authored macro tail");
+        True(SmartActionChaseMacroTailRules.ShouldSuppress(
+                ranked with { IncomingTargetId = 0xE0000000 }),
+            "missing authored target accepts the native invalid carrier sentinel");
+        False(SmartActionChaseMacroTailRules.ShouldSuppress(
+                ranked with { IncomingTargetId = 0x999 }),
+            "an unrelated visible target is never mistaken for the authored tail");
+
+        var visibleFallback = ranked with
+        {
+            CapturedVisibleGameObjectId = 0x700,
+            CapturedVisibleEntityId = 0x701,
+            IncomingTargetId = 0x700,
+        };
+        True(SmartActionChaseMacroTailRules.ShouldSuppress(visibleFallback),
+            "visible fallback requires the exact frozen target");
+        True(SmartActionChaseMacroTailRules.ShouldSuppress(
+                visibleFallback with { IncomingTargetId = 0x701 }),
+            "either exact native identity form can carry the authored target");
+        False(SmartActionChaseMacroTailRules.ShouldSuppress(
+                visibleFallback with { IncomingTargetId = 0x999 }),
+            "another visible target is never swallowed");
+        False(SmartActionChaseMacroTailRules.ShouldSuppress(
+                visibleFallback with { CapturedVisibleGameObjectId = 0 }),
+            "a partial visible identity fails closed");
+        False(SmartActionChaseMacroTailRules.ShouldSuppress(
+                visibleFallback with { CapturedVisibleEntityId = 0xE0000000 }),
+            "an invalid visible identity sentinel fails closed");
+
+        foreach (var drift in new[]
+                 {
+                     ranked with { PendingChase = false },
+                     ranked with { TailBudgetAvailable = false },
+                     ranked with { CertifiedSmartActionMacroRoot = false },
+                     ranked with { SafetyLeaseTapGeneration = 10 },
+                     ranked with { IncomingActionType = 12 },
+                     ranked with { IncomingRequestedActionId = 10_003 },
+                     ranked with { IncomingResolvedActionId = 10_004 },
+                     ranked with { IsMacroCarrier = false },
+                     ranked with { IsQueueCarrier = true },
+                 })
+        {
+            False(SmartActionChaseMacroTailRules.ShouldSuppress(drift),
+                "tail ownership drift preserves newer or unrelated input");
+        }
+    }
+
     private static HeldChaseBufferEngine Armed(
         int windowMilliseconds = HeldChaseBufferWindowRules.DefaultMilliseconds)
     {

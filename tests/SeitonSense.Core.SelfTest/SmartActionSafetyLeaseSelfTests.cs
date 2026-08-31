@@ -124,6 +124,19 @@ internal static class SmartActionSafetyLeaseSelfTests
 
     public static void DriftAndExpiryClearFailClosedOwnership()
     {
+        True(SmartActionSafetyLeaseRules.IsCurrent(Arm(), 250, Local, 1_749),
+            "the safety lease remains current immediately before its deadline");
+        False(SmartActionSafetyLeaseRules.IsCurrent(Arm(), 250, Local, 1_750),
+            "the exact safety lease deadline is exclusive");
+        False(SmartActionSafetyLeaseRules.IsCurrent(Arm(), 251, Local, 1_001),
+            "territory drift is never current");
+        False(SmartActionSafetyLeaseRules.IsCurrent(
+                Arm(),
+                250,
+                new TargetPressureActorIdentity(0x101, 0x101),
+                1_001),
+            "local-player identity drift is never current");
+
         var territoryDrift = SmartActionSafetyLeaseRules.Observe(
             Arm(),
             251,
@@ -172,6 +185,9 @@ internal static class SmartActionSafetyLeaseSelfTests
     {
         if (!condition) throw new InvalidOperationException($"Expected true: {label}");
     }
+
+    private static void False(bool condition, string label) =>
+        True(!condition, label);
 
     private static void Equal<T>(T expected, T actual, string label)
         where T : notnull

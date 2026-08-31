@@ -1,8 +1,9 @@
 namespace SeitonSense.Plugin.Services;
 
 /// <summary>
-/// Immutable startup snapshot of exact resolved PvP action rows whose current
-/// English ActionTransient description explicitly says their damage ignores
+/// Immutable startup snapshot of exact resolved PvP action rows which may
+/// intentionally select a Guarded primary target. Generic members explicitly
+/// ignore Guard damage; individually verified members may instead reduce
 /// Guard. Unknown or drifted rows are deliberately absent.
 /// </summary>
 internal sealed class SmartActionGuardBypassCatalog
@@ -27,6 +28,10 @@ internal sealed class SmartActionGuardBypassCatalog
             .Distinct()
             .OrderBy(actionId => actionId)
             .ToArray());
+
+    internal SmartActionGuardBypassCatalog WithVerified(
+        params uint[] verifiedActionIds) => Create(
+        actionIds.Concat(verifiedActionIds ?? []));
 
     internal bool Contains(uint resolvedActionId) =>
         resolvedActionId != 0 &&

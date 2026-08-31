@@ -374,7 +374,7 @@ internal sealed partial class SettingsWindow
             "Smart Action, Near Assist, Near Help, and Far Help may replace only " +
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
-            "The current request order is Purify > Recuperate > automatic Guard > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
+            "The current request order is Purify > PLD Guardian > Recuperate > automatic Guard > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > NIN Guard-Shukuchi > " +
             "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event " +
             "Kardia > event Monk. The job-specific helpers use that deterministic order; Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent. AST runs directly after automatic recovery and Guard, then RDM and SAM, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +

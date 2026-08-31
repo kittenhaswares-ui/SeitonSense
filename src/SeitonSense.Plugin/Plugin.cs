@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.3";
+    private const string CurrentReleaseVersion = "0.43.0.4";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -240,6 +240,7 @@ public sealed class Plugin : IDalamudPlugin
             metadata.SmartActionGuardBypassActions,
             samuraiReactiveMetadata.SmartActionCastsVerified,
             samuraiReactiveMetadata.ChitenVerified,
+            samuraiReactiveMetadata.WolvesDenStrikingDummyVerified,
             log);
         smartTabTargeting = new SmartTabTargetingService(
             configuration,
@@ -429,9 +430,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed Smart Action tap-to-land. Its visible <t> fallback can now wait when the target is out of range.",
-                "This also covers supported casts without changing your target or turning your character.",
-                "The wait keeps the same action and target. Queue mode stays excluded, and a new action still cancels it.",
+                "Smart Action Chase now works without a selected target in CC and remembers the best safe S1-S5 enemy.",
+                "It keeps that exact ability and enemy until they enter range. It never reranks or changes your visible target.",
+                "Seiton Far stays reachable-only. Auto-Zantetsuken now requires your own current Kuzushi debuff.",
+                "PLD Guardian now runs after Purify: 2+ focus at 40%, 3+ at 50%. Your own Guard must remain ready.",
+                "Smart Action can use PLD Shield Smite and SCH Chain Stratagem on Guard. Other protected targets are skipped; only incidental Chiten can veto an AoE.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

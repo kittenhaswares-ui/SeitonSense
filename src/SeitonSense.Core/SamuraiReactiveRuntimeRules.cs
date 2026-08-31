@@ -198,6 +198,22 @@ public static class SamuraiZantetsukenRules
     public const uint KuzushiStatusId = 3_202;
     public const float MaximumRangeYalms = 20f;
 
+    /// <summary>
+    /// Live Kuzushi ownership evidence. A status slot which is already expired
+    /// or carries a non-finite timer is not a current proc even if the client
+    /// has not removed row 3202 from the actor yet.
+    /// </summary>
+    public static bool IsExactCurrentOwnSourceKuzushi(
+        uint statusId,
+        uint sourceEntityId,
+        float remainingSeconds,
+        uint localSamuraiEntityId) =>
+        statusId == KuzushiStatusId &&
+        localSamuraiEntityId is not 0 and not 0xE0000000 and not uint.MaxValue &&
+        sourceEntityId == localSamuraiEntityId &&
+        float.IsFinite(remainingSeconds) &&
+        remainingSeconds > 0f;
+
     public static SamuraiZantetsukenState Arm(
         SamuraiReactiveCounterCcTarget target,
         long nowMilliseconds,

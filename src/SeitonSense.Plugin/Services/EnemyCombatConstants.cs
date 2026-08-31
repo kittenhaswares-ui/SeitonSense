@@ -15,6 +15,12 @@ internal static class EnemyCombatConstants
     internal const ushort GuardianRecast100ms = 300;
     internal const int GuardianSheetRange = 20;
 
+    internal const uint ShieldSmiteActionId = 41430;
+    internal const uint ShieldSmiteIconId = 9762;
+    internal const ushort ShieldSmiteRecast100ms = 240;
+    internal const int ShieldSmiteSheetRange = 8;
+    internal const int ShieldSmiteEffectRange = 8;
+
     internal const uint ScholarCriticalStrategyActionId = 29716;
     internal const uint ScholarCriticalStrategyIconId = 9284;
     internal const uint ScholarJobId = 28;

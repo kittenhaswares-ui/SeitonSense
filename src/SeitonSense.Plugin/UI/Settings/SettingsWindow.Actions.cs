@@ -14,7 +14,7 @@ internal sealed partial class SettingsWindow
         ImGui.Spacing();
         ImGui.TextWrapped(
             "Turn on only the helpers you want. If several things become possible together, Seiton uses " +
-            "Purify first, then Recuperate, Auto-Guard, and your job helpers. It sends only one of its own " +
+            "Purify first, then PLD Guardian, Recuperate, Auto-Guard, and the other job helpers. It sends only one of its own " +
             "actions at a time, then checks again immediately for the next one.");
 
         if (ImGui.CollapsingHeader(
@@ -334,7 +334,7 @@ internal sealed partial class SettingsWindow
             "Wolves' Den needs the separate testing option. The optional BRD/MCH setting above can interrupt only " +
             "their basic shots for this emergency heal.");
         ImGui.TextDisabled(
-            "Purify is the only helper above Recuperate. Active Guard and Ninja stealth block it. If Recuperate is " +
+            "Only Purify and PLD Guardian are above Recuperate. Active Guard and Ninja stealth block it. If Recuperate is " +
             "temporarily unavailable, lower helpers can still run. Seiton waits for the emergency to end before " +
             "starting a new heal attempt.");
         ImGui.PopTextWrapPos();

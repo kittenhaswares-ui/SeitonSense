@@ -374,10 +374,10 @@ or replays the key.
 The native request result is diagnostic only and does not prove that Sprint was
 accepted or applied by the server.
 
-The current action-request priority is **Purify > Smart Recuperate > automatic
+The current action-request priority is **Purify > PLD Guardian > Smart Recuperate > automatic
 Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged
 counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
-counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
+counter-CC > Ally Rescue > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
 (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event
 Kardia > event Monk**. The job-specific helpers use that deterministic urgency
@@ -595,8 +595,10 @@ is no persisted input or upload.
 
 ## One-shot Smart Action
 
-Smart Action has its own default-off macro-helper switch and runs only in exact
-Crystalline Conflict. `/smartaction`, `/ssaction`, or `/seitonfar` creates one local token lasting
+Smart Action has its own default-off macro-helper switch. It runs in exact
+Crystalline Conflict and can use the exact-current-target-only test path in
+Wolves' Den when that separate test option is enabled. `/smartaction`,
+`/ssaction`, or `/seitonfar` creates one local token lasting
 at most 750 ms. The authored macro then supplies the harmful action first with
 `<e1>` as a carrier and again with `<t>` as its sole vanilla fallback. The plugin
 does not read or retain the macro text and does not require a current target.
@@ -613,10 +615,20 @@ movement and does not claim their damage or CC bypasses Guard. Chiten, Cover,
 Hallowed Ground, and Undead Redemption remain blockers for those actions.
 Forked Raiju `29510` and Fleeting Raiju `29707` are intentionally absent from
 that movement catalog so their stun attempts remain blocked by Guard.
+Strictly verified PLD Shield Smite `41430` and SCH Chain Stratagem `29716` may
+also select a Guarded primary actor because their current English metadata says
+they halve Guard's defensive bonus. This permission opens only Guard on that
+candidate; it never opens Chiten, Cover, Hallowed Ground, or Undead Redemption.
 Unverified Chiten metadata conservatively blocks every Samurai. Candidates that
 pass protection safety rank by native reach tier first (melee, gap closer, then
 ranged/other), followed by lowest HP, fresh positive team pressure, known
-Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity.
+Guard-cooldown unavailability, trusted MP ratio, and stable S-slot/identity. In
+Crystalline Conflict, when the normal selection has no currently reachable
+candidate and tap-to-land Chase is enabled, the same order may freeze one
+protection-safe but presently out-of-range/line-of-sight actor. That frozen
+action/actor tuple cannot rerank. Only a proven native range/line-of-sight
+failure may arm the bounded wait; every other blocker keeps its existing
+action-boundary behavior.
 `/seitonfar` uses the same complete candidate/protection snapshot but ranks only
 eligible actors by descending finite hitbox-edge distance and stable S-slot. It
 does not apply the generic melee/gap-closer prefilter; the exact incoming
@@ -651,7 +663,9 @@ lease because an `Action`/`PvPAction` alias cannot be disproved. Protection that
 appears only after native acceptance or during later cast/projectile travel is
 outside this local pre-dispatch boundary. The plugin creates no action, changes
 no selected target, stores no input, and persists or uploads none of these
-observations.
+observations. In enabled Wolves' Den testing, Smart Action uses only the exact
+current hostile duel opponent or reviewed dummy and never performs CC
+`S1`-`S5` ranking. `/seitonfar` remains reachable-only in every context.
 
 An action with a proven adjusted or exact base cast time is normally never
 invisibly retargeted by Smart Action, Near Assist, or Near Help. If its authored
@@ -1284,18 +1298,18 @@ Guardian range/line-of-sight result. It does not depend on the reactive-Guard
 module's master setting.
 
 An exact living, targetable, non-self party member at or below 20% HP is a
-critical candidate without a pressure requirement. From 21% through 35% HP, a
-candidate is proactive-only and requires at least three exact incoming hard/cast
-targets from a publication no older than 250 ms. A critical candidate always
+critical candidate without a pressure requirement. From 21% through 40% HP, a
+candidate is proactive-only and requires at least two exact incoming hard/cast
+targets from a publication no older than 250 ms; from 41% through 50%, it
+requires at least three. A critical candidate always
 beats a proactive candidate; proactive ties rank higher pressure first, then
 lower exact HP, before deterministic identity tie-breakers. The frozen winner
 must pass FFXIV's native 20-yalm Guardian range/line-of-sight check and remain
 exact. No custom center-distance cap is applied; the 10-yalm condition governs
-staying close enough for protection after the jump. Purify, AST same-target healing, SAM reactive actions,
-NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, and
-Ally Rescue keep priority. Guardian precedes NIN Guard-
-Shukuchi, SCH Critical Strategy, DRK, Smart Recuperate, Emergency Teleport,
-generic Guard, and pressure Sprint.
+staying close enough for protection after the jump. Purify keeps priority.
+Guardian is next, before Smart Recuperate, automatic Guard, and every other job
+helper. Both generic Guard and Guardian must be metadata-verified, adjusted to
+their exact actions, and ready; active own Guard also suppresses the request.
 Guardian freezes the selected ally and may use only the common bounded exact-
 intent retry before a direct native `29066` request is accepted. It does not
 change the visible target, select an alternate action/ally, or replay input.
@@ -1570,8 +1584,8 @@ protection-end deadline measured from its original release, so one ordinary
 and retry never restart or extend that deadline. An unbound opportunity still
 expires at the strict 500-ms acquisition boundary.
 
-The helper observes held gameplay-key state immediately after Purify and before
-every other job-specific helper. An urgent startup may bind the first current
+The helper observes the shared held gameplay-key state in its reactive counter-
+CC scheduler slot, after the higher-priority recovery and job-helper lanes. An urgent startup may bind the first current
 eligible held/fresh generation only inside that startup's original short event
 lease. Expired or disabled leases retire, and its exact local job, action, and
 enemy are revalidated before new packets are compared.
@@ -1646,9 +1660,10 @@ the character or that Shukuchi reached the intended location.
 
 The local player's own Guard and bounded post-request Guard-propagation latch
 block this automatic helper. The explicit manual `/panicshu` and enabled
-`/seitonbw` commands remain the sole own-Guard exceptions. In the shared scheduler and optional cast-cancel order,
-Guard-Shukuchi runs after PLD Guardian and before SCH Critical Strategy; NIN
-Seiton has already had its higher-priority opportunity immediately after Purify. After an accepted
+`/seitonbw` commands remain the sole own-Guard exceptions. In the shared
+scheduler and optional cast-cancel order, Guard-Shukuchi runs after NIN
+Auto-Seiton and Ally Rescue, and before SCH Critical Strategy. The first four
+slots are Purify, PLD Guardian, Smart Recuperate, then automatic Guard. After an accepted
 request, the same continuously held physical key can authorize another Guard-
 Shukuchi only after the cooldown is positively observed unavailable and then
 ready again; an unknown state or a missed transition between framework samples
@@ -1684,10 +1699,10 @@ text is used at runtime.
 
 The only allowed actions are the metadata-verified base Seiton Tenchu `29515`
 and its Unsealed follow-up `29516`; each has a distinct availability epoch.
-Purify, Smart Recuperate, automatic Guard, AST, RDM, and the SAM helper tier
-precede NIN Auto-Seiton in the current request order. NIN Auto-Seiton precedes
-VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, PLD
-Guardian, Guard-Shukuchi, SCH Critical Strategy, DRK, Monk combo, Emergency
+Purify, PLD Guardian, Smart Recuperate, automatic Guard, AST, RDM, and the SAM
+helper tier precede NIN Auto-Seiton in the current request order. NIN Auto-Seiton
+precedes VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally
+Rescue, Guard-Shukuchi, SCH Critical Strategy, DRK, Monk combo, Emergency
 Teleport, pressure Sprint, event Kardia, and event Monk. Active own Guard and
 the bounded post-request Guard-propagation state suppress the helper. The
 helper never changes the visible hard, soft, or focus target.
@@ -1918,14 +1933,17 @@ The integrated input path reads only the local standard-keyboard-hotbar binding,
 raw press/release state, exact slot identity, and the local action/target/context
 snapshot needed to prove one bounded attempt. The generic buffer stores one
 immutable in-memory action tuple until it succeeds, is cancelled, or expires;
-the tap-to-land lane is limited to the same physically pressed direct action or
-the exact lease/generation-backed Smart Action visible-target fallback and waits
-only for the exact hostile actor's native range/line-of-sight result.
+the tap-to-land lane is limited to the same physically pressed direct action,
+the exact lease/generation-backed Smart Action visible-target fallback, or the
+target-independent exact Smart Action `S1`-`S5` winner in Crystalline Conflict.
+It waits only for the frozen hostile actor's native range/line-of-sight result.
 Releasing the key does not cancel it. Expiry, new action input, Guard, identity/
 action/context/safety drift, or an unsafe queue/cast boundary cancels it before
-a later call. Supported single-target casts also require the visible hard target
-to remain the frozen actor, so a delayed cast cannot turn toward an actor the
-user switched away from. Turbo retains one current held-slot
+a later call. Supported visible-target single-target casts also require the
+visible hard target to remain the frozen actor, so a delayed cast cannot turn
+toward an actor the user switched away from. A ranked Smart Action Chase target
+is deliberately independent of an unrelated visible hard target and never
+writes that target. Turbo retains one current held-slot
 owner. A newer physical input replaces the old buffer/owner. No input history,
 action history, target history, timing data,
 or learning-window state is uploaded. The learning window is a read-only view of

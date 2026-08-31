@@ -315,12 +315,67 @@ internal static class PvPMetadataGuard
                    description.Contains("Cannot be executed while bound", StringComparison.Ordinal);
         });
 
+        var shieldSmiteVerified = ValidateFeature("Paladin Shield Smite", log, () =>
+        {
+            var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
+            var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+            if (!actions.TryGetRow(EnemyCombatConstants.ShieldSmiteActionId, out var action) ||
+                !descriptions.TryGetRow(EnemyCombatConstants.ShieldSmiteActionId, out var transient) ||
+                transient.RowId != EnemyCombatConstants.ShieldSmiteActionId)
+            {
+                return false;
+            }
+
+            var description = transient.Description.ToString();
+            return action.Name.ToString() == "Shield Smite" &&
+                   action.Icon == EnemyCombatConstants.ShieldSmiteIconId &&
+                   action.IsPvP &&
+                   action.IsPlayerAction &&
+                   !action.IsRoleAction &&
+                   !action.CanUseWhileMounted &&
+                   action.ClassJob.IsValid &&
+                   action.ClassJob.RowId == EnemyCombatConstants.PaladinJobId &&
+                   action.ClassJobCategory.IsValid &&
+                   action.ClassJobCategory.RowId == 20 &&
+                   action.ActionCategory.IsValid &&
+                   action.ActionCategory.RowId == 3 &&
+                   action.Range == EnemyCombatConstants.ShieldSmiteSheetRange &&
+                   action.EffectRange == EnemyCombatConstants.ShieldSmiteEffectRange &&
+                   action.Cast100ms == 0 &&
+                   action.Recast100ms == EnemyCombatConstants.ShieldSmiteRecast100ms &&
+                   action.PrimaryCostType == 0 &&
+                   action.PrimaryCostValue == 0 &&
+                   action.SecondaryCostType == 0 &&
+                   action.SecondaryCostValue.RowId == 0 &&
+                   action.CooldownGroup == 1 &&
+                   action.AdditionalCooldownGroup == 58 &&
+                   action.MaxCharges == 0 &&
+                   !action.CanTargetSelf &&
+                   !action.CanTargetParty &&
+                   !action.CanTargetAlliance &&
+                   action.CanTargetHostile &&
+                   !action.CanTargetAlly &&
+                   !action.CanTargetOwnPet &&
+                   !action.CanTargetPartyPet &&
+                   !action.TargetArea &&
+                   action.RequiresLineOfSight &&
+                   action.NeedToFaceTarget &&
+                   action.PreservesCombo &&
+                   !action.AffectsPosition &&
+                   action.CastType == 3 &&
+                   action.DeadTargetBehaviour == 0 &&
+                   action.StatusGainSelf.RowId == 0 &&
+                   SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription(
+                       description);
+        });
+
         var scholarCriticalStrategyVerified = ValidateFeature("Scholar Critical Strategy", log, () =>
         {
             var actions = dataManager.GetExcelSheet<ActionSheet>(ClientLanguage.English);
             var descriptions = dataManager.GetExcelSheet<ActionTransient>(ClientLanguage.English);
             if (!actions.TryGetRow(EnemyCombatConstants.ScholarCriticalStrategyActionId, out var action) ||
-                !descriptions.TryGetRow(EnemyCombatConstants.ScholarCriticalStrategyActionId, out var transient))
+                !descriptions.TryGetRow(EnemyCombatConstants.ScholarCriticalStrategyActionId, out var transient) ||
+                transient.RowId != EnemyCombatConstants.ScholarCriticalStrategyActionId)
             {
                 return false;
             }
@@ -330,6 +385,8 @@ internal static class PvPMetadataGuard
                    action.Icon == EnemyCombatConstants.ScholarCriticalStrategyIconId &&
                    action.IsPvP &&
                    action.IsPlayerAction &&
+                   !action.IsRoleAction &&
+                   !action.CanUseWhileMounted &&
                    action.ClassJob.IsValid &&
                    action.ClassJob.RowId == EnemyCombatConstants.ScholarJobId &&
                    action.ClassJobCategory.IsValid &&
@@ -342,7 +399,10 @@ internal static class PvPMetadataGuard
                    action.Recast100ms == EnemyCombatConstants.ScholarCriticalStrategyRecast100ms &&
                    action.PrimaryCostType == 0 &&
                    action.PrimaryCostValue == 0 &&
+                   action.SecondaryCostType == 0 &&
+                   action.SecondaryCostValue.RowId == 0 &&
                    action.CooldownGroup == 3 &&
+                   action.AdditionalCooldownGroup == 0 &&
                    action.MaxCharges == 0 &&
                    !action.CanTargetSelf &&
                    !action.CanTargetParty &&
@@ -354,13 +414,21 @@ internal static class PvPMetadataGuard
                    !action.TargetArea &&
                    action.RequiresLineOfSight &&
                    action.NeedToFaceTarget &&
+                   action.PreservesCombo &&
                    !action.AffectsPosition &&
                    action.CastType == 1 &&
+                   action.DeadTargetBehaviour == 0 &&
+                   action.StatusGainSelf.RowId == 0 &&
                    description.Contains("Increases target's damage taken by 10%", StringComparison.Ordinal) &&
-                   description.Contains(
-                       "Halves the defensive bonus of Guard instead when targeting enemies under its effect.",
-                       StringComparison.Ordinal);
+                   SmartActionGuardBypassRules.HasExactEnglishGuardReductionDescription(
+                       description);
         });
+
+        smartActionGuardBypassActions = smartActionGuardBypassActions.WithVerified(
+            shieldSmiteVerified ? EnemyCombatConstants.ShieldSmiteActionId : 0,
+            scholarCriticalStrategyVerified
+                ? EnemyCombatConstants.ScholarCriticalStrategyActionId
+                : 0);
 
         var emergencyTeleportMonkVerified = ValidateFeature(
             "Emergency Teleport: Monk",

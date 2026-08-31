@@ -24,7 +24,15 @@ if ($sourceManifest.InternalName -ne $entry.InternalName) { throw 'Source and re
 if ([int]$entry.DalamudApiLevel -ne 15 -or [int]$sourceManifest.DalamudApiLevel -ne 15) {
     throw 'Dalamud API level must be 15.'
 }
-if ($entry.DownloadLinkInstall -notmatch '/dist/latest\.zip$') { throw 'Install link must target dist/latest.zip.' }
+$expectedDownloadLink = 'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip'
+if ($entry.DownloadLinkInstall -ne $expectedDownloadLink -or
+    $entry.DownloadLinkUpdate -ne $expectedDownloadLink -or
+    $entry.DownloadLinkTesting -ne $expectedDownloadLink) {
+    throw 'Install, update, and testing links must all target the canonical main/dist/latest.zip artifact.'
+}
+if ([bool]$entry.IsHide -or [bool]$entry.IsTestingExclusive) {
+    throw 'The public release must be visible and available outside testing mode.'
+}
 if (-not (Test-Path -LiteralPath $resolvedFingerprintPath -PathType Leaf)) { throw 'Source fingerprint is missing beside the archive.' }
 
 $expectedSourceFingerprint = (Get-Content -LiteralPath $resolvedFingerprintPath -Raw).Trim().ToLowerInvariant()

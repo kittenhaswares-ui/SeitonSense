@@ -93,7 +93,9 @@ internal readonly record struct IntegratedActionBufferDispatchRequest(
     uint LocalEntityId,
     IntegratedActionBufferTargetSnapshot TargetSnapshot,
     IntegratedActionBufferHotbarRoot HotbarRoot,
-    bool RequiresSmartActionProtectionRecheck);
+    bool RequiresSmartActionProtectionRecheck,
+    bool RequiresVisibleHardTargetBinding,
+    IntegratedActionBufferActorIdentity VisibleHardTargetAtCapture);
 
 /// <summary>
 /// Exact result of one delayed replay. A false return is retryable only when
@@ -542,7 +544,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 snapshot.Local.EntityId,
                 snapshot.Target,
                 hotbarRoot,
-                requiresSmartActionProtectionRecheck);
+                requiresSmartActionProtectionRecheck,
+                RequiresVisibleHardTargetBinding: true,
+                VisibleHardTargetAtCapture: ToActorIdentity(targetManager.Target));
             inFlight = new InFlightAttempt(
                 latestRootEpoch,
                 Environment.TickCount64,
@@ -571,7 +575,56 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         uint extraParam,
         ActionManager.UseActionMode sourceMode,
         uint comboRouteId,
-        long tapGeneration)
+        long tapGeneration) =>
+        BeginExactSmartActionMacroTap(
+            actionManager,
+            actionType,
+            requestedActionId,
+            visibleTargetId,
+            extraParam,
+            sourceMode,
+            comboRouteId,
+            tapGeneration,
+            requiresVisibleHardTargetStability: true,
+            logicalInputName: "Smart Action fallback");
+
+    /// <summary>
+    /// Observes one exact canonical S-slot selected by Smart Action without
+    /// requiring it to become the player's visible hard target. The caller has
+    /// already consumed the tap token and protection-checked this frozen actor.
+    /// </summary>
+    internal IntegratedActionBufferAttempt BeginExactSmartActionRankedTarget(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint requestedActionId,
+        ulong selectedTargetId,
+        uint extraParam,
+        ActionManager.UseActionMode sourceMode,
+        uint comboRouteId,
+        long tapGeneration) =>
+        BeginExactSmartActionMacroTap(
+            actionManager,
+            actionType,
+            requestedActionId,
+            selectedTargetId,
+            extraParam,
+            sourceMode,
+            comboRouteId,
+            tapGeneration,
+            requiresVisibleHardTargetStability: false,
+            logicalInputName: "Smart Action ranked target");
+
+    private IntegratedActionBufferAttempt BeginExactSmartActionMacroTap(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint requestedActionId,
+        ulong selectedTargetId,
+        uint extraParam,
+        ActionManager.UseActionMode sourceMode,
+        uint comboRouteId,
+        long tapGeneration,
+        bool requiresVisibleHardTargetStability,
+        string logicalInputName)
     {
         lock (gate)
         {
@@ -598,7 +651,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 HotbarId: -1,
                 SlotId: -1,
                 InputLabel: "/smartaction",
-                LogicalInputName: "Smart Action fallback",
+                LogicalInputName: logicalInputName,
                 InputHeld: false,
                 IsCertifiedSmartActionMacroFallback: true);
             if (!macroRoot.IsCertifiedExactTapRoot)
@@ -611,7 +664,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             observedRootCount++;
             CancelPendingLocked(
                 SmartActionBufferCancelReason.Replaced,
-                "Replaced by a newer certified Smart Action fallback",
+                $"Replaced by a newer certified {logicalInputName}",
                 countCancellation: pendingRuntime is not null || pendingChase is not null);
             inFlight = null;
 
@@ -634,27 +687,30 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 actionType is not (ActionType.Action or ActionType.PvPAction) ||
                 requestedActionId == 0 ||
                 resolvedActionId == 0 ||
-                visibleTargetId is 0 or InvalidObjectId ||
+                selectedTargetId is 0 or InvalidObjectId ||
                 !TryGetEligibleChaseActionProfile(
                     actionType,
                     resolvedActionId,
-                    visibleTargetId,
+                    selectedTargetId,
                     out var chaseProfile))
             {
-                lastEvent = "Smart Action fallback is outside the tap-to-land scope";
+                lastEvent = $"{logicalInputName} is outside the tap-to-land scope";
                 return token;
             }
 
             var snapshot = CaptureSnapshot(
-                visibleTargetId,
+                selectedTargetId,
                 resolvedActionId,
                 includeResolverTargets: false);
             var visibleHardTarget = ToActorIdentity(targetManager.Target);
             if (!IsSafeSnapshot(snapshot) ||
                 snapshot.Target.ExplicitTarget == IntegratedActionBufferActorIdentity.Empty ||
-                visibleHardTarget != snapshot.Target.ExplicitTarget)
+                (requiresVisibleHardTargetStability &&
+                 visibleHardTarget != snapshot.Target.ExplicitTarget))
             {
-                lastEvent = "Smart Action fallback did not have one unchanged visible hard target";
+                lastEvent = requiresVisibleHardTargetStability
+                    ? $"{logicalInputName} did not have one unchanged visible hard target"
+                    : $"{logicalInputName} did not resolve one exact selected target";
                 return token;
             }
 
@@ -663,10 +719,10 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 actionType,
                 requestedActionId,
                 resolvedActionId,
-                visibleTargetId);
+                selectedTargetId);
             if (!nativeBefore.Captured || nativeBefore.ActionQueued)
             {
-                lastEvent = "Smart Action fallback already had native queue ownership";
+                lastEvent = $"{logicalInputName} already had native queue ownership";
                 return token;
             }
 
@@ -676,7 +732,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 actionType,
                 requestedActionId,
                 resolvedActionId,
-                visibleTargetId,
+                selectedTargetId,
                 extraParam,
                 ActionManager.UseActionMode.None,
                 comboRouteId,
@@ -686,7 +742,10 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 snapshot.Local.EntityId,
                 snapshot.Target,
                 macroRoot,
-                RequiresSmartActionProtectionRecheck: true);
+                RequiresSmartActionProtectionRecheck: true,
+                RequiresVisibleHardTargetBinding:
+                    requiresVisibleHardTargetStability,
+                VisibleHardTargetAtCapture: visibleHardTarget);
             inFlight = new InFlightAttempt(
                 latestRootEpoch,
                 Environment.TickCount64,
@@ -697,7 +756,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                 ChaseProfile: chaseProfile,
                 Learning: learning);
             lastEvent =
-                $"Observed exact Smart Action fallback {requestedActionId}->{resolvedActionId}";
+                $"Observed exact {logicalInputName} {requestedActionId}->{resolvedActionId}";
             return new IntegratedActionBufferAttempt(latestRootEpoch, Eligible: true);
         }
     }
@@ -886,6 +945,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     SaturatingAdd(candidate.CapturedAtMilliseconds, chaseWindow),
                     revalidatedChase.Profile,
                     revalidatedChase.VisibleHardTarget,
+                    MacroTailSuppressed: false,
                     candidate.Learning);
                 chaseArmedCount++;
                 lastEvent =
@@ -957,7 +1017,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         }
 
         var visibleHardTarget = ToActorIdentity(targetManager.Target);
-        if (visibleHardTarget != candidate.Snapshot.Target.ExplicitTarget)
+        if (candidate.Request.RequiresVisibleHardTargetBinding &&
+            (visibleHardTarget != candidate.Request.VisibleHardTargetAtCapture ||
+             visibleHardTarget != candidate.Snapshot.Target.ExplicitTarget))
         {
             reason = "Tap-to-land action rejected hidden or changed visible hard target";
             return false;
@@ -1044,15 +1106,39 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                native.FullStatus == rangeStatus;
     }
 
+    internal bool IsEligibleSmartActionChaseAction(
+        ActionType actionType,
+        uint resolvedActionId) =>
+        TryGetEligibleChaseActionProfile(
+            actionType,
+            resolvedActionId,
+            out _);
+
     private bool TryGetEligibleChaseActionProfile(
         ActionType actionType,
         uint resolvedActionId,
         ulong targetId,
         out ChaseActionProfile profile)
     {
+        if (targetId is 0 or InvalidObjectId)
+        {
+            profile = default;
+            return false;
+        }
+
+        return TryGetEligibleChaseActionProfile(
+            actionType,
+            resolvedActionId,
+            out profile);
+    }
+
+    private bool TryGetEligibleChaseActionProfile(
+        ActionType actionType,
+        uint resolvedActionId,
+        out ChaseActionProfile profile)
+    {
         profile = default;
         if (resolvedActionId == 0 ||
-            targetId is 0 or InvalidObjectId ||
             actionType is not (ActionType.Action or ActionType.PvPAction))
         {
             return false;
@@ -1154,38 +1240,56 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
     }
 
     /// <summary>
-    /// Suppresses only a later line from the same certified Smart Action tap
-    /// after its exact authored-target fallback has been reserved. This never
-    /// claims an unrelated macro, direct hotbar action, target, or generation.
+    /// Suppresses only a later macro line from the same certified Smart Action
+    /// tap after its exact target has been reserved. A visible-target fallback
+    /// must still name that exact target; a ranked hidden S-target instead owns
+    /// the generation/action tuple and keeps the player's unchanged hard target.
+    /// Mode-None/direct input is never claimed.
     /// </summary>
     internal bool ShouldSuppressOwnedSmartActionMacroTail(
         ActionType actionType,
         uint requestedActionId,
         uint resolvedActionId,
-        ulong canonicalVisibleTargetId,
+        ulong incomingTargetId,
         ActionManager.UseActionMode sourceMode,
         long tapGeneration)
     {
-        // A mode-None call may be a new manual mouse/direct action with the
-        // same tuple. Suppressing it as a macro tail would erase newer intent.
-        var macroMode = sourceMode == ActionManager.UseActionMode.Macro ||
-                        (uint)sourceMode == 100;
-        if (!macroMode || sourceMode == ActionManager.UseActionMode.Queue)
-            return false;
-
         lock (gate)
         {
-            if (disposed ||
-                pendingChase is not { } runtime ||
-                !runtime.Request.HotbarRoot.IsCertifiedSmartActionMacroFallback ||
-                runtime.Request.HotbarRoot.PressGeneration != tapGeneration ||
-                actionType != runtime.Request.ActionType ||
-                requestedActionId != runtime.Request.RequestedActionId ||
-                resolvedActionId != runtime.Request.ResolvedActionId ||
-                canonicalVisibleTargetId != runtime.Request.TargetId)
+            if (disposed || pendingChase is not { } runtime)
             {
                 return false;
             }
+
+            // A mode-None call may be a new manual mouse/direct action with the
+            // same tuple. The pure rule admits only Macro/raw-100 carriers.
+            var suppress = SmartActionChaseMacroTailRules.ShouldSuppress(
+                new SmartActionChaseMacroTailObservation(
+                    PendingChase: true,
+                    TailBudgetAvailable: !runtime.MacroTailSuppressed,
+                    CertifiedSmartActionMacroRoot:
+                        runtime.Request.HotbarRoot.IsCertifiedSmartActionMacroFallback,
+                    runtime.Request.HotbarRoot.PressGeneration,
+                    tapGeneration,
+                    (uint)runtime.Request.ActionType,
+                    (uint)actionType,
+                    runtime.Request.RequestedActionId,
+                    requestedActionId,
+                    runtime.Request.ResolvedActionId,
+                    resolvedActionId,
+                    runtime.VisibleHardTarget.GameObjectId,
+                    runtime.VisibleHardTarget.EntityId,
+                    incomingTargetId,
+                    IsMacroCarrier:
+                        sourceMode == ActionManager.UseActionMode.Macro ||
+                        (uint)sourceMode == 100,
+                    IsQueueCarrier:
+                        sourceMode == ActionManager.UseActionMode.Queue));
+            if (!suppress) return false;
+
+            // This exact macro owns one following authored target line. After
+            // that single consume, any later macro call is newer intent.
+            pendingChase = runtime with { MacroTailSuppressed = true };
 
             lastEvent =
                 $"Suppressed duplicate Smart Action macro tail for reserved action {resolvedActionId}";
@@ -1881,6 +1985,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             native.LastUsedActionSequence == runtime.SequenceAtCapture &&
             native.ResolvedActionId == runtime.Request.ResolvedActionId;
         var visibleTargetStable =
+            !runtime.Request.RequiresVisibleHardTargetBinding ||
             runtime.VisibleHardTarget != IntegratedActionBufferActorIdentity.Empty &&
             runtime.VisibleHardTarget == runtime.Snapshot.Target.ExplicitTarget &&
             ToActorIdentity(targetManager.Target) == runtime.VisibleHardTarget;
@@ -2567,6 +2672,7 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         long ExpiresAtMilliseconds,
         ChaseActionProfile Profile,
         IntegratedActionBufferActorIdentity VisibleHardTarget,
+        bool MacroTailSuppressed,
         LearningInput Learning);
 
     private readonly record struct ChaseActionProfile(

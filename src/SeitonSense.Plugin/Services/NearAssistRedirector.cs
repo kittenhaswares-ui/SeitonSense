@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
@@ -241,6 +242,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool samuraiSmartActionCastsMetadataVerified;
     private readonly bool chitenMetadataVerified;
+    private readonly bool wolvesDenStrikingDummyMetadataVerified;
     private readonly bool pvpSprintMetadataVerified;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
@@ -317,6 +319,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartActionGuardBypassCatalog smartActionGuardBypassActions,
         bool samuraiSmartActionCastsMetadataVerified,
         bool chitenMetadataVerified,
+        bool wolvesDenStrikingDummyMetadataVerified,
         IPluginLog log)
     {
         this.configuration = configuration;
@@ -335,6 +338,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         this.samuraiSmartActionCastsMetadataVerified =
             samuraiSmartActionCastsMetadataVerified;
         this.chitenMetadataVerified = chitenMetadataVerified;
+        this.wolvesDenStrikingDummyMetadataVerified =
+            wolvesDenStrikingDummyMetadataVerified;
         this.log = log;
         pvpSprintMetadataVerified =
             PressureEscapeSprintProbe.ValidateMetadata(dataManager, log);
@@ -735,11 +740,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ActionManager.UseActionMode.None,
             hardTargetId,
             token,
-            heldActionSelection: true,
-            out var rewritten,
-            out var smartWinnerSelected,
-            out var selectedSlot,
-            out var selectionReason);
+             heldActionSelection: true,
+             out var rewritten,
+             out var smartWinnerSelected,
+             out var selectedSlot,
+             out var selectionReason);
 
         if (rewritten &&
             TryResolveExactHeldSmartActionTargetIdentity(
@@ -1284,10 +1289,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 NearAssistArmOutcome.FailedClosed,
                 $"{displayName} arm failed closed: protection metadata unverified");
         var context = ResolveContext();
-        if (context != SupportedPvPContext.CrystallineConflict)
+        var contextSupported = SmartActionContextRules.IsSupported(
+                                   context,
+                                   configuration.EnableWolvesDenTesting) &&
+                               (context != SupportedPvPContext.WolvesDen ||
+                                selectionMode == SmartTargetRedirectMode.CombatPriority);
+        if (!contextSupported)
             return SmartTargetArmFailure(
                 NearAssistArmOutcome.NotCrystallineConflict,
-                $"{displayName} arm ignored: not in Crystalline Conflict");
+                $"{displayName} arm ignored: unsupported PvP context");
 
         var localPlayer = objectTable.LocalPlayer;
         if (!IsLivePlayer(localPlayer))
@@ -1618,6 +1628,47 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var bypassRedirect = internalRedirectBypassDepth > 0;
         var integratedRuntime = integratedInputRuntime;
+        // A ranked Smart Action target may be invisible to <t>. When its first
+        // macro line cleanly arms Chase, suppress the following authored <t>
+        // line by exact macro mode, action, and tap generation before that line
+        // can fail the selected-target safety lease or cancel the reservation
+        // as newer input. Direct Mode-None presses are never claimed here.
+        if (!bypassRedirect &&
+            integratedRuntime is not null &&
+            TryGetSmartActionFallbackTapGeneration(out var earlyTailGeneration))
+        {
+            try
+            {
+                var earlyTailResolvedActionId = ResolveActionId(
+                    thisPtr,
+                    actionType,
+                    actionId);
+                if (earlyTailResolvedActionId != 0 &&
+                    integratedRuntime.ActionBuffer.ShouldSuppressOwnedSmartActionMacroTail(
+                        actionType,
+                        actionId,
+                        earlyTailResolvedActionId,
+                        targetId,
+                        mode,
+                        earlyTailGeneration))
+                {
+                    SetSmartActionSafetyEvent(
+                        "Suppressed owned Smart Action macro tail behind Chase reservation");
+                    return false;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogFailure(
+                    exception,
+                    "Seiton Sense early Smart Action macro-tail classification failed closed.");
+                integratedRuntime.ActionBuffer.Cancel(
+                    SmartActionBufferCancelReason.Replaced,
+                    "Replaced by a newer external action request");
+                return false;
+            }
+        }
+
         var inspectedSmartActionTargetId = targetId;
         var smartActionSafetyInspection = !bypassRedirect
             ? InspectSmartActionSafetyLease(
@@ -1661,6 +1712,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 LogFailure(
                     exception,
                     "Seiton Sense Smart Action macro-tail classification failed closed.");
+                integratedRuntime.ActionBuffer.Cancel(
+                    SmartActionBufferCancelReason.Replaced,
+                    "Replaced by a newer external action request");
                 return false;
             }
         }
@@ -1881,12 +1935,43 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     mode,
                     targetId,
                     smartToken,
-                    heldActionSelection: false,
-                    out var rewritten,
-                    out var smartWinnerSelected,
-                    out var selectedSlot,
-                    out var reason);
-                if (!rewritten)
+                     heldActionSelection: false,
+                     out var rewritten,
+                     out var smartWinnerSelected,
+                     out var selectedSlot,
+                     out var reason);
+                var exactWolvesDenVisibleFallback =
+                    SmartActionContextRules.CanUseSameCallVisibleTargetFallback(
+                        ResolveContext(),
+                        configuration.EnableWolvesDenTesting,
+                        smartToken.SelectionMode ==
+                            SmartTargetRedirectMode.CombatPriority,
+                        rewritten,
+                        smartWinnerSelected,
+                        IsExactCurrentHardTarget(targetId));
+                if (exactWolvesDenVisibleFallback)
+                {
+                    smartActionSafetyInspection = InspectSmartActionSafetyLease(
+                        thisPtr,
+                        actionType,
+                        actionId,
+                        targetId,
+                        mode,
+                        out inspectedSmartActionTargetId);
+                    if (smartActionSafetyInspection !=
+                        SmartActionSafetyInspectionOutcome.Safe)
+                    {
+                        return false;
+                    }
+
+                    // Wolves' Den has no reliable <e1> carrier. Its first
+                    // incoming call may already be the authored visible <t>
+                    // line, so this exact call must be allowed to enter Chase.
+                    forwardedTargetId = inspectedSmartActionTargetId;
+                    handlingSmartTarget = false;
+                    handlingSmartTargetToken = null;
+                }
+                else if (!rewritten)
                 {
                     forwardedTargetId = InvalidCarrierTargetId;
                     targetSuppressedByRedirect = true;
@@ -1897,8 +1982,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 {
                     smartActionFallbackTapGeneration =
                         smartToken.SelectionMode == SmartTargetRedirectMode.CombatPriority &&
-                        !rewritten &&
-                        !smartWinnerSelected &&
+                        ((!rewritten && !smartWinnerSelected) ||
+                         rewritten) &&
                         smartToken.TapGeneration > 0
                             ? smartToken.TapGeneration
                             : 0;
@@ -2331,6 +2416,40 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
         else if (!bypassRedirect &&
                  integratedRuntime is not null &&
+                 handlingSmartTarget &&
+                 smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
+                 handlingSmartTargetToken is { TapGeneration: > 0 } rankedSmartTargetToken &&
+                 rankedSmartTargetToken.SelectionMode ==
+                     SmartTargetRedirectMode.CombatPriority &&
+                 IsCertifiedSmartActionTapInvocationMode(mode))
+        {
+            try
+            {
+                // Smart Action owns one exact canonical S-slot without changing
+                // the visible target. Observe that frozen tuple even when it is
+                // currently unreachable; only a proven range/LoS-only native
+                // false result may become a Chase reservation.
+                integratedAttempt =
+                    integratedRuntime.ActionBuffer.BeginExactSmartActionRankedTarget(
+                        thisPtr,
+                        actionType,
+                        actionId,
+                        forwardedTargetId,
+                        extraParam,
+                        mode,
+                        comboRouteId,
+                        rankedSmartTargetToken.TapGeneration);
+            }
+            catch (Exception exception)
+            {
+                LogFailure(
+                    exception,
+                    "Seiton Sense ranked Smart Action Chase preflight failed open for the incoming action.");
+                integratedAttempt = IntegratedActionBufferAttempt.None;
+            }
+        }
+        else if (!bypassRedirect &&
+                 integratedRuntime is not null &&
                  !handlingSmartTarget &&
                  smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
                  IsCertifiedSmartActionTapInvocationMode(mode) &&
@@ -2640,7 +2759,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var localPlayer = objectTable.LocalPlayer;
         if (!configuration.Enabled ||
             !clientState.IsLoggedIn ||
-            ResolveContext() != SupportedPvPContext.CrystallineConflict ||
             !IsLivePlayer(localPlayer))
         {
             return false;
@@ -2649,16 +2767,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var now = Environment.TickCount64;
         var territoryId = clientState.TerritoryType;
         var local = localPlayer!;
+        var context = ResolveContext();
         return claim.Owner switch
         {
             CastedMacroRedirectOwner.SmartAction =>
                 configuration.EnableSmartActionMacro &&
+                SmartActionContextRules.IsSupported(
+                    context,
+                    configuration.EnableWolvesDenTesting) &&
+                (context != SupportedPvPContext.WolvesDen ||
+                 claim.SmartTarget.SelectionMode ==
+                     SmartTargetRedirectMode.CombatPriority) &&
                 claim.SmartTarget.ExpiresAtMilliseconds > now &&
                 claim.SmartTarget.TerritoryId == territoryId &&
                 claim.SmartTarget.LocalEntityId == local.EntityId &&
                 claim.SmartTarget.LocalGameObjectId == local.GameObjectId,
             CastedMacroRedirectOwner.NearAssist =>
                 configuration.EnableNearAssistMacro &&
+                context == SupportedPvPContext.CrystallineConflict &&
                 claim.NearAssistState.IsArmed &&
                 claim.NearAssist.ExpiresAtMilliseconds > now &&
                 claim.NearAssist.TerritoryId == territoryId &&
@@ -2666,6 +2792,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 claim.NearAssist.LocalGameObjectId == local.GameObjectId,
             CastedMacroRedirectOwner.NearHelp =>
                 configuration.EnableNearAssistMacro &&
+                context == SupportedPvPContext.CrystallineConflict &&
                 claim.NearHelpState.IsArmed &&
                 claim.NearHelp.ExpiresAtMilliseconds > now &&
                 claim.NearHelp.TerritoryId == territoryId &&
@@ -2824,18 +2951,18 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         if (!IsNetworkObjectId(hardTargetId)) return false;
         if (hardTargetId == authoredTargetId) return true;
 
-        var hardTarget = ResolvePlayerByNativeId(hardTargetId);
-        var authoredTarget = ResolvePlayerByNativeId(authoredTargetId);
+        var hardTarget = ResolveGameObjectByNativeId(hardTargetId);
+        var authoredTarget = ResolveGameObjectByNativeId(authoredTargetId);
         return HasSameNativeIdentity(hardTarget, authoredTarget);
     }
 
-    private IPlayerCharacter? ResolvePlayerByNativeId(ulong nativeId)
+    private IGameObject? ResolveGameObjectByNativeId(ulong nativeId)
     {
         if (!IsNetworkObjectId(nativeId)) return null;
 
-        var byObjectId = objectTable.SearchById(nativeId) as IPlayerCharacter;
+        var byObjectId = objectTable.SearchById(nativeId);
         var byEntityId = nativeId <= uint.MaxValue
-            ? objectTable.SearchByEntityId((uint)nativeId) as IPlayerCharacter
+            ? objectTable.SearchByEntityId((uint)nativeId)
             : null;
         if (byObjectId is not null && byEntityId is not null &&
             !HasSameNativeIdentity(byObjectId, byEntityId))
@@ -2946,45 +3073,165 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
-        var attackShape = ClassifySmartActionAttackShape(action);
-        if (!TryBuildSmartActionProtectionSnapshot(
+        if (!TryEvaluateExactSmartActionTargetProtection(
+                resolvedActionId,
                 local!,
-                GetPartyEntityIds(),
+                action,
+                frozenTargetId,
+                out var canonicalTargetId,
+                out var targetLabel) ||
+            canonicalTargetId != frozenTargetId)
+        {
+            SetSmartActionSafetyEvent(
+                "Blocked generic buffer replay: exact target was unsafe or ambiguous");
+            return false;
+        }
+
+        SetSmartActionSafetyEvent($"Safe exact generic buffer replay {targetLabel}");
+        return true;
+    }
+
+    private bool TryEvaluateExactSmartActionTargetProtection(
+        uint resolvedActionId,
+        IPlayerCharacter localPlayer,
+        GameAction action,
+        ulong requestedTargetId,
+        out ulong canonicalTargetId,
+        out string targetLabel)
+    {
+        canonicalTargetId = requestedTargetId;
+        targetLabel = "unknown target";
+        var context = ResolveContext();
+        var attackShape = ClassifySmartActionAttackShape(action);
+
+        if (context == SupportedPvPContext.CrystallineConflict)
+        {
+            if (!TryBuildSmartActionProtectionSnapshot(
+                    localPlayer,
+                    GetPartyEntityIds(),
+                    attackShape,
+                    out var canonicalEnemies,
+                    out var ccProtectedActors))
+            {
+                return false;
+            }
+
+            var exactMatches = canonicalEnemies
+                .Where(enemy =>
+                    enemy.Player.GameObjectId == requestedTargetId ||
+                    enemy.Player.EntityId == requestedTargetId)
+                .Take(2)
+                .ToArray();
+            if (exactMatches.Length != 1) return false;
+
+            var target = exactMatches[0];
+            var safe = IsSmartActionProtectionSafe(
+                resolvedActionId,
+                localPlayer,
                 attackShape,
-                out var canonicalEnemies,
-                out var protectedActors))
+                target,
+                action.EffectRange,
+                ccProtectedActors,
+                actionIgnoresGuard:
+                    CanSmartActionTargetGuard(resolvedActionId, action));
+            if (!safe) return false;
+
+            canonicalTargetId = target.Player.GameObjectId;
+            targetLabel = $"S{target.Slot}";
+            return true;
+        }
+
+        if (!SmartActionContextRules.CanUseExactVisibleTargetTestFallback(
+                context,
+                configuration.EnableWolvesDenTesting,
+                combatPriorityMode: true) ||
+            attackShape != SmartActionAttackShape.DirectSingleTarget ||
+            !DarkKnightWolvesDenCurrentTargetResolver.TryResolveExactCurrentHardTarget(
+                objectTable,
+                wolvesDenStrikingDummyMetadataVerified,
+                localPlayer,
+                out var wolvesTarget,
+                out var wolvesIdentity,
+                out var wolvesKind,
+                out var nativeHardTargetId) ||
+            wolvesTarget is null)
         {
-            SetSmartActionSafetyEvent(
-                "Blocked generic buffer replay: protection snapshot was ambiguous");
             return false;
         }
 
-        var exactMatches = canonicalEnemies
-            .Where(enemy => enemy.Player.GameObjectId == frozenTargetId)
-            .Take(2)
-            .ToArray();
-        if (exactMatches.Length != 1)
+        var effectiveTargetId = requestedTargetId is 0 or InvalidObjectId
+            ? nativeHardTargetId
+            : requestedTargetId;
+        if (!ActorIdMatches(effectiveTargetId, wolvesTarget) ||
+            !TryClassifyExactWolvesDenTargetProtection(
+                wolvesTarget,
+                out var protectionKind))
         {
-            SetSmartActionSafetyEvent(
-                "Blocked generic buffer replay: frozen target was not one canonical enemy");
             return false;
         }
 
-        var target = exactMatches[0];
-        var safe = IsSmartActionProtectionSafe(
+        var targetGeometry = new SmartActionActorGeometry(
+            EnemySlotRules.FirstSlot,
+            wolvesIdentity,
+            ExactCanonicalIdentity: true,
+            wolvesTarget.Position,
+            wolvesTarget.HitboxRadius);
+        SmartActionProtectedActor[] wolvesProtectedActors =
+            protectionKind == SmartActionProtectionKind.None
+                ? []
+                : [new SmartActionProtectedActor(targetGeometry, protectionKind)];
+        var wolvesSafe = IsSmartActionProtectionSafe(
             resolvedActionId,
-            local!,
+            localPlayer,
             attackShape,
-            target,
+            targetGeometry,
             action.EffectRange,
-            protectedActors,
+            wolvesProtectedActors,
             actionIgnoresGuard:
                 CanSmartActionTargetGuard(resolvedActionId, action));
-        SetSmartActionSafetyEvent(
-            safe
-                ? $"Safe exact generic buffer replay S{target.Slot}"
-                : $"Blocked protected generic buffer replay S{target.Slot}");
-        return safe;
+        if (!wolvesSafe) return false;
+
+        canonicalTargetId = wolvesTarget.GameObjectId;
+        targetLabel = wolvesKind == DarkKnightWolvesDenTargetKind.StrikingDummy
+            ? "Wolves' Den dummy <t>"
+            : "Wolves' Den duel <t>";
+        return true;
+    }
+
+    private bool TryClassifyExactWolvesDenTargetProtection(
+        IBattleChara target,
+        out SmartActionProtectionKind protectionKind)
+    {
+        protectionKind = SmartActionProtectionKind.None;
+        var player = target as IPlayerCharacter;
+        var jobId = player?.ClassJob.IsValid == true
+            ? player.ClassJob.RowId
+            : 0u;
+        if (player is not null &&
+            !chitenMetadataVerified &&
+            jobId is 0 or EnemyCombatConstants.SamuraiJobId)
+        {
+            protectionKind |= SmartActionProtectionKind.Chiten;
+        }
+
+        foreach (var status in target.StatusList)
+        {
+            var exactKind = SmartActionProtectionRules.ClassifyExactStatus(
+                status.StatusId);
+            if (exactKind == SmartActionProtectionKind.None) continue;
+            if (exactKind == SmartActionProtectionKind.Chiten &&
+                (player is null ||
+                 jobId != EnemyCombatConstants.SamuraiJobId &&
+                 !(!chitenMetadataVerified && jobId == 0)))
+            {
+                return false;
+            }
+
+            protectionKind |= exactKind;
+        }
+
+        return protectionKind == SmartActionProtectionKind.None ||
+               SmartActionProtectionRules.IsExactProtectionKind(protectionKind);
     }
 
     private bool UseActionLocationDetour(
@@ -3634,11 +3881,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var localIdentityValid = IsLivePlayer(localPlayer) &&
                                  localPlayer!.EntityId == token.LocalEntityId &&
                                  localPlayer.GameObjectId == token.LocalGameObjectId;
+        var context = ResolveContext();
         var supportedContext = configuration.Enabled &&
                                (heldActionSelection ||
-                                configuration.EnableSmartActionMacro) &&
+                                 configuration.EnableSmartActionMacro) &&
                                clientState.TerritoryType == token.TerritoryId &&
-                               ResolveContext() == SupportedPvPContext.CrystallineConflict &&
+                               (heldActionSelection
+                                   ? context == SupportedPvPContext.CrystallineConflict
+                                   : SmartActionContextRules.IsSupported(
+                                         context,
+                                         configuration.EnableWolvesDenTesting) &&
+                                     (context != SupportedPvPContext.WolvesDen ||
+                                      token.SelectionMode ==
+                                          SmartTargetRedirectMode.CombatPriority)) &&
                                localIdentityValid;
         var supportedMode = heldActionSelection
             ? mode == ActionManager.UseActionMode.None
@@ -3667,6 +3922,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 actionId,
                 resolvedActionId,
                 now);
+        }
+
+        if (!heldActionSelection &&
+            SmartActionContextRules.CanUseExactVisibleTargetTestFallback(
+                context,
+                configuration.EnableWolvesDenTesting,
+                token.SelectionMode == SmartTargetRedirectMode.CombatPriority))
+        {
+            reason = "Wolves' Den exact visible-target test fallback";
+            return originalTargetId;
         }
 
         if (resolvedActionId == 0)
@@ -3709,17 +3974,37 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
         var actionIgnoresGuard =
             CanSmartActionTargetGuard(resolvedActionId, action);
+        var spatialChaseEnabled =
+            !heldActionSelection &&
+            token.SelectionMode == SmartTargetRedirectMode.CombatPriority &&
+            configuration.EnableSmartActionBuffer &&
+            configuration.EnableHoldToLandChaseBuffer &&
+            HeldChaseBufferWindowRules.Normalize(
+                configuration.TapToLandReservationMilliseconds) > 0 &&
+            integratedInputRuntime?.ActionBuffer.IsEligibleSmartActionChaseAction(
+                actionType,
+                resolvedActionId) == true;
 
         var candidates = new List<SmartTargetRuntimeCandidate>(5);
+        var normalReachCandidates = new List<SmartTargetRuntimeCandidate>(5);
         foreach (var canonicalEnemy in canonicalEnemies)
         {
             var slot = canonicalEnemy.Slot;
             var enemy = canonicalEnemy.Player;
             var reachTier = SmartTargetReachTier.RangedOrOther;
+            var normalReachEligible = true;
             if (!farthestReachable &&
                 !TryResolveSmartTargetReachTier(local, enemy, out reachTier))
             {
-                continue;
+                normalReachEligible = false;
+                if (!spatialChaseEnabled ||
+                    !TryResolveSmartTargetChaseReachTier(
+                        local,
+                        enemy,
+                        out reachTier))
+                {
+                    continue;
+                }
             }
 
             var edgeDistanceYalms = float.NaN;
@@ -3798,17 +4083,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 currentMp,
                 maximumMp,
                 CallerProvenProtectionSafe: protectionSafe);
-            candidates.Add(new SmartTargetRuntimeCandidate(
+            var runtimeCandidate = new SmartTargetRuntimeCandidate(
                 enemy,
                 selection,
-                edgeDistanceYalms));
+                edgeDistanceYalms);
+            candidates.Add(runtimeCandidate);
+            if (normalReachEligible)
+                normalReachCandidates.Add(runtimeCandidate);
         }
 
-        var selectionCandidates = candidates.Select(static candidate => candidate.Selection).ToArray();
+        var selectionCandidates = normalReachCandidates
+            .Select(static candidate => candidate.Selection)
+            .ToArray();
+        var spatialSelectionCandidates = candidates
+            .Select(static candidate => candidate.Selection)
+            .ToArray();
+        var spatialChaseSelection = false;
         var selectedIntent = farthestReachable
             ? SmartTargetFarthestSelectionRules.TryCreateIntent(
                 resolvedActionId,
-                candidates
+                normalReachCandidates
                     .Select(static candidate => new SmartTargetFarthestCandidate(
                         candidate.Selection,
                         candidate.EdgeDistanceYalms))
@@ -3820,6 +4114,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 selectionCandidates,
                 localActor,
                 out intent);
+        if (!selectedIntent &&
+            !farthestReachable &&
+            spatialChaseEnabled)
+        {
+            selectedIntent = SmartTargetSelectionRules
+                .TryCreateSpatialIntentAfterReachableMiss(
+                resolvedActionId,
+                selectionCandidates,
+                spatialSelectionCandidates,
+                localActor,
+                out intent);
+            spatialChaseSelection = selectedIntent;
+        }
         if (!selectedIntent)
         {
             reason = farthestReachable
@@ -3877,11 +4184,33 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 SeitonRangeRules.HasNativeRangeAndLineOfSight(finalRange),
             CallerProvenProtectionSafe = finalProtectionSafe,
         };
-        if (!SmartTargetSelectionRules.CanUseExactIntent(
+        var frozenIntentStillValid = spatialChaseSelection
+            ? SmartTargetSelectionRules.CanUseExactSpatialIntent(
+                intent,
+                finalCandidate,
+                localActor,
+                resolvedActionId)
+            : SmartTargetSelectionRules.CanUseExactIntent(
+                intent,
+                finalCandidate,
+                localActor,
+                resolvedActionId);
+        if (!frozenIntentStillValid &&
+            !spatialChaseSelection &&
+            spatialChaseEnabled &&
+            SmartTargetSelectionRules.CanUseExactSpatialIntent(
                 intent,
                 finalCandidate,
                 localActor,
                 resolvedActionId))
+        {
+            // The already selected exact actor crossed the range/LoS edge
+            // between ranking and the final boundary. Preserve that tuple for
+            // Chase; never rerun ranking or substitute another enemy.
+            spatialChaseSelection = true;
+            frozenIntentStillValid = true;
+        }
+        if (!frozenIntentStillValid)
         {
             reason = "Smart Action fallback: frozen actor/range changed";
             return originalTargetId;
@@ -3892,7 +4221,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         reason = farthestReachable
             ? $"Seiton Far redirected S{selectedSlot}, resolved={resolvedActionId}, " +
               $"distance={selected.EdgeDistanceYalms:F1}, range={finalRange}"
-            : $"Smart Action redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
+            : spatialChaseSelection
+                ? $"Smart Action froze S{selectedSlot} for Chase, resolved={resolvedActionId}, range={finalRange}"
+                : $"Smart Action redirected S{selectedSlot}, resolved={resolvedActionId}, range={finalRange}";
         return intent.Target.GameObjectId;
     }
 
@@ -4424,36 +4755,51 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return;
         }
 
-        var shouldClear = !configuration.Enabled ||
+        var context = ResolveContext();
+        var baseInvalid = !configuration.Enabled ||
                           !clientState.IsLoggedIn ||
-                          ResolveContext() != SupportedPvPContext.CrystallineConflict ||
                           !IsLivePlayer(objectTable.LocalPlayer);
+        var shouldClear = baseInvalid;
         lock (tokenGate)
         {
             if (armedTarget is { } token)
             {
+                shouldClear |= context != SupportedPvPContext.CrystallineConflict;
                 shouldClear |= !configuration.EnableNearAssistMacro;
                 shouldClear |= token.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
             if (armedSmartTarget is { } smartTargetToken)
             {
+                shouldClear |= !SmartActionContextRules.IsSupported(
+                    context,
+                    configuration.EnableWolvesDenTesting);
+                shouldClear |= context == SupportedPvPContext.WolvesDen &&
+                               smartTargetToken.SelectionMode !=
+                                   SmartTargetRedirectMode.CombatPriority;
                 shouldClear |= !configuration.EnableSmartActionMacro;
                 shouldClear |= smartTargetToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
-            if (smartActionSafetyLeaseState.Token is { } safetyToken &&
-                safetyToken.ExpiresAtMilliseconds <= Environment.TickCount64)
+            if (smartActionSafetyLeaseState.Token is { } safetyToken)
             {
-                smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
-                smartActionSafetyTapGeneration = 0;
-                smartActionFallbackTapGeneration = 0;
+                shouldClear |= !SmartActionContextRules.IsSupported(
+                    context,
+                    configuration.EnableWolvesDenTesting);
+                if (safetyToken.ExpiresAtMilliseconds <= Environment.TickCount64)
+                {
+                    smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+                    smartActionSafetyTapGeneration = 0;
+                    smartActionFallbackTapGeneration = 0;
+                }
             }
             if (armedHelpTarget is { } helpToken)
             {
+                shouldClear |= context != SupportedPvPContext.CrystallineConflict;
                 shouldClear |= !configuration.EnableNearAssistMacro;
                 shouldClear |= helpToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
             if (armedFarHelpTarget is { } farHelpToken)
             {
+                shouldClear |= context != SupportedPvPContext.CrystallineConflict;
                 shouldClear |= !configuration.EnableNearAssistMacro;
                 shouldClear |= farHelpToken.ExpiresAtMilliseconds <= Environment.TickCount64;
             }
@@ -4609,12 +4955,50 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     private bool TryGetSmartActionFallbackTapGeneration(out long generation)
     {
-        lock (tokenGate)
+        generation = 0;
+        try
         {
-            generation = smartActionFallbackTapGeneration;
-            return smartActionSafetyLeaseState.IsArmed &&
-                   generation > 0 &&
-                   generation == smartActionSafetyTapGeneration;
+            var now = Environment.TickCount64;
+            var local = objectTable.LocalPlayer;
+            var localActor = IsLivePlayer(local)
+                ? new TargetPressureActorIdentity(
+                    local!.GameObjectId,
+                    local.EntityId)
+                : default;
+            var territoryId = clientState.TerritoryType;
+
+            lock (tokenGate)
+            {
+                if (!SmartActionSafetyLeaseRules.IsCurrent(
+                        smartActionSafetyLeaseState,
+                        territoryId,
+                        localActor,
+                        now))
+                {
+                    smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+                    smartActionSafetyTapGeneration = 0;
+                    smartActionFallbackTapGeneration = 0;
+                    return false;
+                }
+
+                var candidate = smartActionFallbackTapGeneration;
+                if (candidate <= 0 || candidate != smartActionSafetyTapGeneration)
+                    return false;
+
+                generation = candidate;
+                return true;
+            }
+        }
+        catch
+        {
+            lock (tokenGate)
+            {
+                smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+                smartActionSafetyTapGeneration = 0;
+                smartActionFallbackTapGeneration = 0;
+            }
+
+            return false;
         }
     }
 
@@ -4821,55 +5205,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 return SmartActionSafetyInspectionOutcome.Unsafe;
             }
 
-            var partyEntityIds = GetPartyEntityIds();
-            var attackShape = ClassifySmartActionAttackShape(action);
-            if (!TryBuildSmartActionProtectionSnapshot(
-                    local,
-                    partyEntityIds,
-                    attackShape,
-                    out var canonicalEnemies,
-                    out var protectedActors))
-            {
-                SetSmartActionSafetyEvent(
-                    "Blocked exact Smart Action fallback: protection snapshot ambiguous");
-                return SmartActionSafetyInspectionOutcome.Unsafe;
-            }
-
             var effectiveTargetId = incomingTargetId is 0 or InvalidObjectId
                 ? GetNativeHardTargetId(local)
                 : incomingTargetId;
-            var exactMatches = canonicalEnemies
-                .Where(enemy =>
-                    enemy.Player.GameObjectId == effectiveTargetId ||
-                    enemy.Player.EntityId == effectiveTargetId)
-                .Take(2)
-                .ToArray();
-            if (exactMatches.Length != 1)
+            if (!TryEvaluateExactSmartActionTargetProtection(
+                    resolvedActionId,
+                    local,
+                    action,
+                    effectiveTargetId,
+                    out var exactCanonicalTargetId,
+                    out var targetLabel))
             {
                 SetSmartActionSafetyEvent(
-                    "Blocked exact Smart Action fallback: target was not one canonical enemy");
+                    "Blocked exact Smart Action fallback: target was unsafe or ambiguous");
                 return SmartActionSafetyInspectionOutcome.Unsafe;
             }
 
-            var target = exactMatches[0];
-            var safe = IsSmartActionProtectionSafe(
-                resolvedActionId,
-                local,
-                attackShape,
-                target,
-                action.EffectRange,
-                protectedActors,
-                actionIgnoresGuard:
-                    CanSmartActionTargetGuard(resolvedActionId, action));
+            canonicalTargetId = exactCanonicalTargetId;
             SetSmartActionSafetyEvent(
-                safe
-                    ? $"Safe exact Smart Action fallback S{target.Slot}"
-                    : $"Blocked protected Smart Action fallback S{target.Slot}");
-            if (safe)
-                canonicalTargetId = target.Player.GameObjectId;
-            return safe
-                ? SmartActionSafetyInspectionOutcome.Safe
-                : SmartActionSafetyInspectionOutcome.Unsafe;
+                $"Safe exact Smart Action fallback {targetLabel}");
+            return SmartActionSafetyInspectionOutcome.Safe;
         }
         catch (Exception exception)
         {
@@ -5035,11 +5390,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             action.CastType);
 
     /// <summary>
-    /// Guard may be selected either when the exact English action description
-    /// says its damage ignores Guard, or when the current exact PvP row is one
-    /// of the closed ordinary hostile-target movement actions. The movement
-    /// exception only preserves the gap close/disengage itself; Chiten, Cover,
-    /// and invulnerability remain blocking protections.
+    /// Guard may be selected when strict startup metadata proves that the
+    /// action ignores/reduces Guard, or when the current exact PvP row is one
+    /// of the closed ordinary hostile-target movement actions. This permission
+    /// applies only to the selected actor's Guard; Chiten, Cover, and
+    /// invulnerability remain blocking protections on that candidate.
     /// </summary>
     private bool CanSmartActionTargetGuard(
         uint resolvedActionId,
@@ -5067,8 +5422,24 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         float effectRange,
         IReadOnlyList<SmartActionProtectedActor> protectedActors,
         bool actionIgnoresGuard)
+        => IsSmartActionProtectionSafe(
+            resolvedActionId,
+            localPlayer,
+            attackShape,
+            CreateSmartActionActorGeometry(target),
+            effectRange,
+            protectedActors,
+            actionIgnoresGuard);
+
+    private bool IsSmartActionProtectionSafe(
+        uint resolvedActionId,
+        IPlayerCharacter localPlayer,
+        SmartActionAttackShape attackShape,
+        SmartActionActorGeometry targetGeometry,
+        float effectRange,
+        IReadOnlyList<SmartActionProtectedActor> protectedActors,
+        bool actionIgnoresGuard)
     {
-        var targetGeometry = CreateSmartActionActorGeometry(target);
         if (SamuraiSmartActionCastRules.IsOgiNamikiriConeAction(resolvedActionId) &&
             samuraiSmartActionCastsMetadataVerified)
         {
@@ -5300,7 +5671,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         return PvPMatchRules.ResolveSupportedContext(
             clientState.IsPvP,
             clientState.IsPvPExcludingDen,
-            includeWolvesDenTesting: false,
+            includeWolvesDenTesting: configuration.EnableWolvesDenTesting,
             clientState.TerritoryType,
             conditionValid,
             conditionValid && condition.Value.PvP,
@@ -5829,6 +6200,28 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             out tier);
     }
 
+    private static bool TryResolveSmartTargetChaseReachTier(
+        IPlayerCharacter localPlayer,
+        IPlayerCharacter enemy,
+        out SmartTargetReachTier tier)
+    {
+        tier = SmartTargetReachTier.RangedOrOther;
+        var localJobId = localPlayer.ClassJob.IsValid ? localPlayer.ClassJob.RowId : 0;
+        if (NearAssistSelectionRules.ClassifyPlayableJob(localJobId) !=
+            NearAssistAllyRole.MeleeDamage)
+        {
+            return true;
+        }
+
+        return SmartTargetReachRules.TryResolveChaseReachTier(
+            localJobId,
+            localPlayer.Position,
+            localPlayer.HitboxRadius,
+            enemy.Position,
+            enemy.HitboxRadius,
+            out tier);
+    }
+
     private static bool HasActiveGuardStatus(IPlayerCharacter player)
     {
         foreach (var status in player.StatusList)
@@ -5867,8 +6260,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         player.MaxHp >= player.CurrentHp;
 
     private static bool HasSameNativeIdentity(
-        IPlayerCharacter? left,
-        IPlayerCharacter? right) =>
+        IGameObject? left,
+        IGameObject? right) =>
         left is not null &&
         right is not null &&
         left.Address != 0 &&
@@ -5876,6 +6269,10 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         left.Address == right.Address &&
         left.GameObjectId == right.GameObjectId &&
         left.EntityId == right.EntityId;
+
+    private static bool ActorIdMatches(ulong actorId, IGameObject actor) =>
+        actorId == actor.GameObjectId ||
+        actorId <= uint.MaxValue && (uint)actorId == actor.EntityId;
 
     private static bool IsNetworkEntityId(uint entityId) =>
         entityId is not 0 and not 0xE0000000;

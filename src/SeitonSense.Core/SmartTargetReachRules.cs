@@ -92,6 +92,46 @@ public static class SmartTargetReachRules
         return true;
     }
 
+    /// <summary>
+    /// Spatial Chase keeps an exact future target even when it is presently
+    /// beyond the reviewed gap-closer envelope. Melee and gap tiers retain
+    /// their normal priority; farther actors use the final ranged/other tier
+    /// and still have to pass the exact native action range/LoS probe later.
+    /// </summary>
+    public static bool TryResolveChaseReachTier(
+        uint localJobId,
+        Vector3 localPosition,
+        float localHitboxRadius,
+        Vector3 enemyPosition,
+        float enemyHitboxRadius,
+        out SmartTargetReachTier tier)
+    {
+        tier = SmartTargetReachTier.RangedOrOther;
+        var gapCloserRange = GetReviewedGapCloserRangeYalms(localJobId);
+        if (gapCloserRange <= 0f ||
+            !IsFinite(localPosition) ||
+            !IsFinite(enemyPosition) ||
+            !float.IsFinite(localHitboxRadius) ||
+            !float.IsFinite(enemyHitboxRadius) ||
+            localHitboxRadius < 0f ||
+            enemyHitboxRadius < 0f)
+        {
+            return false;
+        }
+
+        var centerDistance = Vector3.Distance(localPosition, enemyPosition);
+        if (!float.IsFinite(centerDistance)) return false;
+        var edgeDistance = MathF.Max(
+            0f,
+            centerDistance - localHitboxRadius - enemyHitboxRadius);
+        tier = edgeDistance <= MeleeRangeYalms
+            ? SmartTargetReachTier.Melee
+            : edgeDistance <= gapCloserRange
+                ? SmartTargetReachTier.GapCloser
+                : SmartTargetReachTier.RangedOrOther;
+        return true;
+    }
+
     private static bool IsFinite(Vector3 value) =>
         float.IsFinite(value.X) &&
         float.IsFinite(value.Y) &&

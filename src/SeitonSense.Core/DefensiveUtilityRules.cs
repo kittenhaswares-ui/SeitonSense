@@ -109,8 +109,10 @@ public readonly record struct DefensiveUtilityFrameAggregation(
 public static class DefensiveUtilityRules
 {
     public const int RequiredIncomingEnemyCount = 3;
+    public const int GuardianModerateIncomingEnemyCount = 2;
     public const int GuardianAllyHpPercent = 20;
-    public const int GuardianProactiveAllyHpPercent = 35;
+    public const int GuardianModerateAllyHpPercent = 40;
+    public const int GuardianProactiveAllyHpPercent = 50;
     public const long GuardianMaximumPressureAgeMilliseconds = 250;
     public const long GuardianTriggerPopupDurationMilliseconds = 1_500;
     public const long AutoGuardTriggerPopupDurationMilliseconds =
@@ -312,9 +314,9 @@ public static class DefensiveUtilityRules
 
     /// <summary>
     /// Preserves the original unconditional critical rescue boundary while
-    /// allowing a bounded earlier rescue only from a trusted exact 3+ incoming
-    /// pressure observation. Runtime owns freshness and represents unknown or
-    /// stale pressure as null.
+    /// allowing earlier, pressure-scaled rescue only from a trusted exact
+    /// incoming-pressure observation: 2+ at 40%, or 3+ at 50%. Runtime owns
+    /// freshness and represents unknown or stale pressure as null.
     /// </summary>
     public static PaladinGuardianRiskTier ClassifyGuardianRisk(
         PaladinGuardianCandidate candidate)
@@ -327,12 +329,22 @@ public static class DefensiveUtilityRules
             return PaladinGuardianRiskTier.Critical;
         }
 
-        return IsTrustedIncomingEnemyCount(candidate.IncomingEnemyCount) &&
-               candidate.IncomingEnemyCount >= RequiredIncomingEnemyCount &&
-               IsAtOrBelowHpPercent(
-                   candidate.CurrentHp,
-                   candidate.MaximumHp,
-                   GuardianProactiveAllyHpPercent)
+        if (!IsTrustedIncomingEnemyCount(candidate.IncomingEnemyCount))
+            return PaladinGuardianRiskTier.None;
+
+        var incomingEnemyCount = candidate.IncomingEnemyCount!.Value;
+        var pressureScaledRisk =
+            (incomingEnemyCount >= RequiredIncomingEnemyCount &&
+             IsAtOrBelowHpPercent(
+                 candidate.CurrentHp,
+                 candidate.MaximumHp,
+                 GuardianProactiveAllyHpPercent)) ||
+            (incomingEnemyCount >= GuardianModerateIncomingEnemyCount &&
+             IsAtOrBelowHpPercent(
+                 candidate.CurrentHp,
+                 candidate.MaximumHp,
+                 GuardianModerateAllyHpPercent));
+        return pressureScaledRisk
             ? PaladinGuardianRiskTier.ProactiveHighPressure
             : PaladinGuardianRiskTier.None;
     }

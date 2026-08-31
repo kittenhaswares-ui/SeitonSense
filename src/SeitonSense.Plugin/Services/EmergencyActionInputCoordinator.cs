@@ -5,11 +5,12 @@ namespace SeitonSense.Plugin.Services;
 
 /// <summary>
 /// One framework-frame view of the shared physical gameplay-key generations.
-/// Canonical order is Purify, AST same-target healing, RDM Guard engage, SAM reactive actions, Ninja Seiton, VPR Serpent's
-/// Tail, GNB Continuation, reactive counter-CC, Ally Rescue, PLD Guardian, NIN
+/// Canonical order starts Purify, PLD Guardian, Recuperate, and Auto-Guard,
+/// followed by AST same-target healing, RDM Guard engage, SAM reactive actions,
+/// Ninja Seiton, VPR Serpent's Tail, GNB Continuation, reactive counter-CC, Ally Rescue, NIN
 /// Guard-Shukuchi, Scholar Critical Strategy, DRK Dark-Arts Shadowbringer, DRK
-/// Hiebsprung, DRK safe-fallback Shadowbringer, held Monk combo, Smart
-/// Recuperate, Emergency Teleport, reactive Guard, then high-pressure Sprint.
+/// Hiebsprung, DRK safe-fallback Shadowbringer, held Monk combo, Emergency
+/// Teleport, then high-pressure Sprint.
 /// Accepted-Eukrasia Kardia and Monk Earth's Reply follow as event lanes.
 /// Consumption is deliberately frame-local: one helper can own the current
 /// framework frame without destroying the still-held physical consent needed

@@ -961,6 +961,32 @@ internal sealed class PersonalStatusService : IDisposable
         // actionable or waiting at the global native boundary. It no longer
         // consumes that physical hold through release.
         var purifyClaimedPriority = purify.InputClaimed;
+        // PLD Guardian is the first job-specific rescue. It runs immediately
+        // after Purify so a dying ally is not starved behind self recovery,
+        // damage helpers, or counter-CC. Generic Guard readiness remains a
+        // deliberate self-survival gate before Guardian jumps into danger.
+        now = responseClock.Capture().LegacyMilliseconds;
+        var guardianPass = defensiveUtility.ObserveGuardian(
+            localPlayer,
+            isCrystallineConflict,
+            paladinGuardianConfigurationEnabled,
+            configuration.PaladinGuardianOnHeldKey,
+            guardActive,
+            purifyClaimedPriority || emergencyInputFrame.IsConsumed,
+            emergencyInputFrame,
+            now,
+            hardReset,
+            beginsFrame: true);
+        // Guardian may return client-accepted after the frame timestamp was
+        // captured. Refresh before the communication consumer observes it.
+        now = Math.Max(now, Environment.TickCount64);
+        guardianCommunication.Observe(
+            localPlayer,
+            context,
+            guardianPass.LastAcceptedGuardianEpisode,
+            now,
+            hardReset);
+        var guardianClaimedPriority = guardianPass.InputClaimed;
         var automaticRecoveryBasicShotMetadataVerified =
             AutomaticRecoveryShotCastRules.TryGetRawActionId(
                 localJobId,
@@ -980,6 +1006,7 @@ internal sealed class PersonalStatusService : IDisposable
             exactGuardActive,
             hasPurifyRemovableCrowdControl ||
             purifyClaimedPriority ||
+            guardianClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             emergencyInputFrame,
             now,
@@ -990,10 +1017,11 @@ internal sealed class PersonalStatusService : IDisposable
             hardReset);
         var smartRecuperateClaimedPriority = recuperate.InputClaimed;
         var immediateRecoveryClaimedPriority = purifyClaimedPriority ||
+                                               guardianClaimedPriority ||
                                                smartRecuperateClaimedPriority;
-        // Generic Auto-Guard is the first non-recovery action. Its exact
-        // post-Purify lease therefore gets the first legal native frame after
-        // Purify and Recuperate, before any job helper or emergency movement.
+        // Generic Auto-Guard follows Purify, Guardian, and Recuperate. Merge
+        // the earlier Guardian pass so this frame publishes one monotonic
+        // defensive snapshot without rerunning or losing the rescue result.
         now = responseClock.Capture().LegacyMilliseconds;
         var guardDefense = defensiveUtility.ObserveGuard(
             localPlayer,
@@ -1014,8 +1042,8 @@ internal sealed class PersonalStatusService : IDisposable
             configuration.EnableAdaptiveResponseEngine,
             configuration.AllowCriticalRecoveryThroughNativeQueue,
             frameworkFrameId,
-            hardReset,
-            prioritizedGuardianPass: null);
+            hardReset: false,
+            prioritizedGuardianPass: guardianPass);
         var defensiveUtilityClaimedPriority = guardDefense.InputClaimed;
         var immediateDefenseClaimedPriority = immediateRecoveryClaimedPriority ||
                                               defensiveUtilityClaimedPriority;
@@ -1101,7 +1129,7 @@ internal sealed class PersonalStatusService : IDisposable
                                      samurai.InputClaimed;
         // The scheduler is ordered by the next action which may be
         // client-accepted, not by ownership of the whole physical hold.
-        // Purify is absolute, Recuperate is second, and automatic Guard follows.
+        // Purify is absolute; PLD Guardian, Recuperate, and automatic Guard follow.
         // AST, RDM, SAM, then Auto-Seiton are the next action-level priorities;
         // once it claims this frame, every later held helper observes that
         // claim and stays armed for a later free frame.
@@ -1215,36 +1243,6 @@ internal sealed class PersonalStatusService : IDisposable
                 !miracle.InputClaimed &&
                 !emergencyInputFrame.IsConsumed);
         var allyRescueClaimedPriority = rescue.InputClaimed;
-        var defense = defensiveUtility.ObserveGuardian(
-            localPlayer,
-            isCrystallineConflict,
-            paladinGuardianConfigurationEnabled,
-            configuration.PaladinGuardianOnHeldKey,
-            guardActive,
-            immediateDefenseClaimedPriority ||
-            samuraiClaimedPriority ||
-            ninja.InputClaimed ||
-            viper.InputClaimed ||
-            gunbreaker.InputClaimed ||
-            allyRescueClaimedPriority ||
-            miracle.InputClaimed ||
-            emergencyInputFrame.IsConsumed,
-            emergencyInputFrame,
-            now,
-            hardReset: false,
-            beginsFrame: false);
-        // Guardian may return client-accepted a millisecond after this frame's
-        // original timestamp. Refresh before handing the exact episode to the
-        // same-frame communication consumer so it is never misclassified as a
-        // future event.
-        now = Math.Max(now, Environment.TickCount64);
-        guardianCommunication.Observe(
-            localPlayer,
-            context,
-            defense.LastAcceptedGuardianEpisode,
-            now,
-            hardReset);
-        var guardianClaimedPriority = defense.InputClaimed;
         now = Environment.TickCount64;
         var guardShukuchi = ninjaGuardShukuchi.Observe(
             localPlayer,
@@ -1498,6 +1496,9 @@ internal sealed class PersonalStatusService : IDisposable
                 purify.InputClaimed,
                 purify.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
+                guardianPass.InputClaimed,
+                guardianPass.CastCancellationRequest) ??
+            ClaimedCastCancellationRequest(
                 recuperate.InputClaimed,
                 recuperate.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
@@ -1518,9 +1519,6 @@ internal sealed class PersonalStatusService : IDisposable
             ClaimedCastCancellationRequest(
                 rescue.InputClaimed,
                 rescue.CastCancellationRequest) ??
-            ClaimedCastCancellationRequest(
-                defense.InputClaimed,
-                defense.CastCancellationRequest) ??
             ClaimedCastCancellationRequest(
                 guardShukuchi.InputClaimed,
                 guardShukuchi.CastCancellationRequest) ??

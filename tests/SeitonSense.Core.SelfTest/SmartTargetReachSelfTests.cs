@@ -102,6 +102,59 @@ internal static class SmartTargetReachSelfTests
             "negative hitbox fails closed");
     }
 
+    public static void ChaseKeepsFarMeleeActorsInTheLastTier()
+    {
+        True(SmartTargetReachRules.TryResolveChaseReachTier(
+                30,
+                Vector3.Zero,
+                0.5f,
+                new Vector3(5f, 0f, 0f),
+                0.5f,
+                out var melee),
+            "finite reviewed NIN geometry is accepted");
+        Equal(SmartTargetReachTier.Melee, melee,
+            "current melee reach keeps first priority");
+
+        True(SmartTargetReachRules.TryResolveChaseReachTier(
+                30,
+                Vector3.Zero,
+                0.5f,
+                new Vector3(15f, 0f, 0f),
+                0.5f,
+                out var gap),
+            "current gap envelope remains classified");
+        Equal(SmartTargetReachTier.GapCloser, gap,
+            "gap reach stays ahead of a farther future target");
+
+        True(SmartTargetReachRules.TryResolveChaseReachTier(
+                30,
+                Vector3.Zero,
+                0.5f,
+                new Vector3(40f, 0f, 0f),
+                0.5f,
+                out var future),
+            "a far exact S actor may be remembered for the bounded Chase window");
+        Equal(SmartTargetReachTier.RangedOrOther, future,
+            "far actors use only the final priority tier");
+
+        False(SmartTargetReachRules.TryResolveChaseReachTier(
+                24,
+                Vector3.Zero,
+                0.5f,
+                new Vector3(5f, 0f, 0f),
+                0.5f,
+                out _),
+            "unknown/non-melee jobs do not gain an invented Chase envelope");
+        False(SmartTargetReachRules.TryResolveChaseReachTier(
+                30,
+                new Vector3(float.NaN, 0f, 0f),
+                0.5f,
+                Vector3.Zero,
+                0.5f,
+                out _),
+            "invalid Chase geometry fails closed");
+    }
+
     private static bool Try(uint job, float enemyCenterX, out SmartTargetReachTier tier) =>
         SmartTargetReachRules.TryResolveReachTier(
             job,
