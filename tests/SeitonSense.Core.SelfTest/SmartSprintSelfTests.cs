@@ -4,6 +4,7 @@ internal static class SmartSprintSelfTests
 {
     public static void ExactIdsDefaultsAndBoundsArePinned()
     {
+        Equal(3U, SmartSprintRules.BaseSprintActionId, "base Sprint action carrier");
         Equal(29057U, SmartSprintRules.PvPSprintActionId, "PvP Sprint action");
         Equal(1342U, SmartSprintRules.PvPSprintStatusId, "PvP Sprint status");
         True(SmartSprintRules.RepeatProtectionDefaultEnabled, "repeat protection default");
@@ -21,8 +22,8 @@ internal static class SmartSprintSelfTests
         var valid = new SprintRepeatProtectionObservation(
             Enabled: true,
             IsActionRequest: true,
-            RequestedActionId: SmartSprintRules.PvPSprintActionId,
-            AdjustedActionId: SmartSprintRules.PvPSprintActionId,
+            SprintCarrierVerified: true,
+            ResolvedActionId: SmartSprintRules.PvPSprintActionId,
             SprintMetadataVerified: true,
             SprintStatusKnown: true,
             ActiveSprintStatusId: SmartSprintRules.PvPSprintStatusId,
@@ -31,8 +32,8 @@ internal static class SmartSprintSelfTests
         True(SmartSprintRules.ShouldBlockRepeatPress(valid), "exact active Sprint re-press");
         False(SmartSprintRules.ShouldBlockRepeatPress(valid with { Enabled = false }), "toggle off");
         False(SmartSprintRules.ShouldBlockRepeatPress(valid with { IsActionRequest = false }), "non-action call");
-        False(SmartSprintRules.ShouldBlockRepeatPress(valid with { RequestedActionId = 3 }), "different raw action");
-        False(SmartSprintRules.ShouldBlockRepeatPress(valid with { AdjustedActionId = 3 }), "different adjusted action");
+        False(SmartSprintRules.ShouldBlockRepeatPress(valid with { SprintCarrierVerified = false }), "unverified raw carrier");
+        False(SmartSprintRules.ShouldBlockRepeatPress(valid with { ResolvedActionId = 3 }), "different resolved action");
         False(SmartSprintRules.ShouldBlockRepeatPress(valid with { SprintMetadataVerified = false }), "metadata uncertainty");
         False(SmartSprintRules.ShouldBlockRepeatPress(valid with { SprintStatusKnown = false }), "status uncertainty");
         False(SmartSprintRules.ShouldBlockRepeatPress(valid with { ActiveSprintStatusId = 50 }), "different active status");

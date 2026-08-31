@@ -3,7 +3,14 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
-Version 0.43.0.1 makes early action presses more forgiving. Tap-to-land can
+Version 0.43.0.2 fixes active PvP Sprint protection. The active Sprint buff is
+a permanent toggle without a useful duration, so Seiton now uses exact buff
+presence and stops a repeated Sprint press before direct hotbar execution and
+at both native action boundaries. An alternate ordinary-Sprint carrier is
+accepted only when the game resolves it exactly to PvP Sprint. Other actions
+still end Sprint normally.
+
+Version 0.43.0.1 made early action presses more forgiving. Tap-to-land can
 remember one supported out-of-range attack for 0–3000 ms (2200 ms by default),
 even after you release the key. It keeps the same action and target, supports
 safe single-target casts, and also covers the visible `<t>` fallback of
@@ -11,8 +18,7 @@ safe single-target casts, and also covers the visible `<t>` fallback of
 Guard, become crowd-controlled, die, or change area. It does not increase range
 or move your character.
 
-PvP Sprint is also safer: pressing Sprint again no longer turns an active
-Sprint off by default. A separate optional Smart Sprint can use Sprint once
+A separate optional Smart Sprint can use Sprint once
 after 3–5 seconds without action-bar input while you keep a gameplay key held.
 Only action-bar input resets that timer; the action does not have to succeed.
 Running, camera movement, and target changes do not reset it.

@@ -3,8 +3,8 @@ namespace SeitonSense.Core;
 public readonly record struct SprintRepeatProtectionObservation(
     bool Enabled,
     bool IsActionRequest,
-    uint RequestedActionId,
-    uint AdjustedActionId,
+    bool SprintCarrierVerified,
+    uint ResolvedActionId,
     bool SprintMetadataVerified,
     bool SprintStatusKnown,
     uint ActiveSprintStatusId,
@@ -52,6 +52,7 @@ public readonly record struct SmartSprintIdleDecision(
 /// </summary>
 public static class SmartSprintRules
 {
+    public const uint BaseSprintActionId = 3;
     public const uint PvPSprintActionId = 29057;
     public const uint PvPSprintStatusId = 1342;
 
@@ -71,8 +72,8 @@ public static class SmartSprintRules
         SprintRepeatProtectionObservation observation) =>
         observation.Enabled &&
         observation.IsActionRequest &&
-        observation.RequestedActionId == PvPSprintActionId &&
-        observation.AdjustedActionId == PvPSprintActionId &&
+        observation.SprintCarrierVerified &&
+        observation.ResolvedActionId == PvPSprintActionId &&
         observation.SprintMetadataVerified &&
         observation.SprintStatusKnown &&
         observation.ActiveSprintStatusId == PvPSprintStatusId &&

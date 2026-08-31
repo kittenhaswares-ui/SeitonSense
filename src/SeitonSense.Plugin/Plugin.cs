@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.1";
+    private const string CurrentReleaseVersion = "0.43.0.2";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -429,11 +429,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Tap-to-land now remembers a supported out-of-range attack after you release the key. It also works for the visible <t> fallback of /smartaction. Choose 0–3000 ms; the default is 2200 ms.",
-                "Supported single-target spells can wait too. Changing target, using Guard, starting another action, or becoming unable to act cancels the wait.",
-                "Pressing Sprint again no longer cancels an active PvP Sprint by default. Every other action still ends Sprint normally.",
-                "Optional Smart Sprint can use Sprint once after 3–5 seconds without action-bar input while you keep a gameplay key held. Any action-bar press resets the timer; WASD, camera movement, and targeting do not.",
-                "Settings and update notes now use shorter player-friendly explanations. Live in-game confirmation is still separate from the completed build checks.",
+                "Fixed active PvP Sprint protection. Pressing Sprint again while it is active is now ignored.",
+                "The fix now catches the normal PvP hotbar button and the exact Sprint action path.",
+                "Other actions still end Sprint normally. Smart Sprint and all other helpers are unchanged.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

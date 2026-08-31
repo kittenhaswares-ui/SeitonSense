@@ -342,6 +342,7 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             }
 
             if (ShouldSuppress(activation)) return 0;
+            if (ShouldSuppressActiveSprintRepeat(slot)) return 0;
             nativeTurboPulse = activation is
             {
                 Kind: IntegratedHotbarActivationKind.InjectedRepeat,
@@ -412,13 +413,13 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 activation = observed;
             }
 
+            var slot = thisPtr == null ? null : thisPtr->GetSlotById(hotbarId, slotId);
             if (ShouldSuppress(activation)) return 0;
+            if (ShouldSuppressActiveSprintRepeat(slot)) return 0;
             nativeTurboPulse = activation is
             {
                 Kind: IntegratedHotbarActivationKind.InjectedRepeat,
             };
-
-            var slot = thisPtr == null ? null : thisPtr->GetSlotById(hotbarId, slotId);
             if (nativeTurboPulse &&
                 activation is { } turboActivation &&
                 slot != null &&
@@ -458,6 +459,26 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             hotbarExecutionDepth--;
             if (ownsRoot) activeBufferRoot = previousRoot;
         }
+    }
+
+    private bool ShouldSuppressActiveSprintRepeat(
+        RaptureHotbarModule.HotbarSlot* slot)
+    {
+        if (slot == null ||
+            (uint)slot->CommandType != DirectActionHotbarSlotType ||
+            slot->CommandId == 0 ||
+            !nearAssist.ShouldBlockActiveSprintRepeatPress(
+                ActionType.Action,
+                slot->CommandId))
+        {
+            return false;
+        }
+
+        // Stop the exact direct-hotbar repeat before another hook or the game
+        // can interpret it as Sprint's toggle-off request. Macro and other
+        // request paths remain covered by the shared UseAction boundary.
+        SetLastEvent("Blocked an active PvP Sprint repeat before hotbar execution");
+        return true;
     }
 
     private bool ShouldSuppress(IntegratedHotbarActivation? activation)

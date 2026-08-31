@@ -1510,14 +1510,23 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             !configuration.ProtectActiveSprintFromRepeatPress ||
             !pvpSprintMetadataVerified ||
             actionManager == null ||
-            actionType is not (ActionType.Action or ActionType.PvPAction) ||
-            requestedActionId != SmartSprintRules.PvPSprintActionId)
+            actionType is not (ActionType.Action or ActionType.PvPAction))
         {
             return false;
         }
 
         try
         {
+            // An adjusted action path may keep ordinary Sprint row 3 as its
+            // carrier before resolving to PvP Sprint 29057. Admit only those
+            // two reviewed Action carriers, then require exact resolution.
+            if (actionType == ActionType.Action &&
+                requestedActionId is not (SmartSprintRules.BaseSprintActionId or
+                    SmartSprintRules.PvPSprintActionId))
+            {
+                return false;
+            }
+
             var adjustedActionId = ResolveActionId(
                 actionManager,
                 actionType,
@@ -1534,11 +1543,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 if (status.StatusId != SmartSprintRules.PvPSprintStatusId)
                     continue;
 
-                // Sprint is a finite status. An unreadable or already expired
-                // row is not positive evidence and therefore fails open.
-                if (!float.IsFinite(status.RemainingTime) || status.RemainingTime <= 0f)
-                    return false;
-
+                // PvP Sprint is a permanent/toggle status row. Its remaining
+                // time is not a duration signal; exact presence is the native
+                // active-state proof.
                 sprintActive = true;
                 break;
             }
@@ -1547,8 +1554,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 new SprintRepeatProtectionObservation(
                     Enabled: true,
                     IsActionRequest: true,
-                    requestedActionId,
-                    adjustedActionId,
+                    SprintCarrierVerified: true,
+                    ResolvedActionId: adjustedActionId,
                     SprintMetadataVerified: true,
                     SprintStatusKnown: true,
                     ActiveSprintStatusId: sprintActive
@@ -1564,6 +1571,14 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
     }
+
+    internal bool ShouldBlockActiveSprintRepeatPress(
+        ActionType actionType,
+        uint requestedActionId) =>
+        ShouldBlockActiveSprintRepeatPress(
+            ActionManager.Instance(),
+            actionType,
+            requestedActionId);
 
     internal void RecordActionBarActivity()
     {
@@ -2942,6 +2957,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 SmartActionBufferCancelReason.Replaced,
                 "Replaced by a newer external location action request");
         }
+
+        // UseActionLocation is also a terminal native execution boundary and
+        // can be called directly with an already adjusted action ID.
+        if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
+            return false;
 
         if (TryConsumeExplicitAutoGuardBreak(
                 actionType,

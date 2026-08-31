@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.43.0.2
+
+- Fixed the active PvP Sprint protection released in `0.43.0.1`. An alternate
+  ordinary-Sprint carrier `3` is now accepted only when the game resolves it
+  exactly to PvP Sprint `29057`.
+- Exact Sprint status `1342` presence is now the active proof. It is a permanent
+  toggle status, so its remaining-time field is not treated as a duration.
+- A direct hotbar repeat is stopped before hotbar execution. Both native action
+  boundaries also reject the exact active-Sprint reuse for macros, adjusted
+  calls, and other request paths. Other actions still end Sprint normally.
+  Smart Sprint and all other helpers are unchanged.
+- Build and automated safety checks remain separate from live in-game
+  confirmation.
+
 ## 0.43.0.1
 
 - **Tap-to-land no longer needs the key to stay held.** Press a supported attack

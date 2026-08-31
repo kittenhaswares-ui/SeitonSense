@@ -720,14 +720,15 @@ $turboLearningObservationMatch = [regex]::Match(
 if ([regex]::Matches($integratedInputRuntime, '\bCancelAndRequireRelease\s*\(').Count -ne 1 -or
     [regex]::Matches($integratedInputRuntime, '\bTryConsumeActivation\s*\(').Count -ne 2 -or
     [regex]::Matches($integratedInputRuntime, '\bif \(ShouldSuppress\(activation\)\) return 0;').Count -ne 2 -or
+    [regex]::Matches($integratedInputRuntime, '\bif \(ShouldSuppressActiveSprintRepeat\(slot\)\) return 0;').Count -ne 2 -or
     [regex]::Matches($integratedInputRuntime, '\bvar nativeTurboPulse = false;').Count -ne 2 -or
     [regex]::Matches($integratedInputRuntime, '\bif \(nativeTurboPulse\)').Count -ne 2 -or
     [regex]::Matches($integratedInputRuntime, '\bInterlocked\.Increment\(ref injectedRepeatsDispatched\);').Count -ne 2 -or
     [regex]::Matches($integratedInputRuntime, '\bActionBuffer\.ObserveCertifiedDirectHotbarInput\s*\(').Count -ne 2 -or
     [regex]::Matches($integratedActionBufferRuntime, '\binternal void ObserveCertifiedDirectHotbarInput\s*\(').Count -ne 1 -or
     $integratedInputRuntime -match '\binjectedRepeatDispatchDepth\b' -or
-    $normalizedIntegratedInputRuntime -notmatch 'private byte ExecuteSlotDetour\(.*?var nativeTurboPulse = false;.*?TryConsumeActivation\( thisPtr, slot, NowMilliseconds, out var observed\).*?if \(ShouldSuppress\(activation\)\) return 0; nativeTurboPulse = activation is \{ Kind: IntegratedHotbarActivationKind\.InjectedRepeat, \};.*?var result = hook\.Original\(thisPtr, slot\); if \(nativeTurboPulse\) \{ Interlocked\.Increment\(ref injectedRepeatsDispatched\); SetLastEvent\("Native hotbar scanner consumed an exact Turbo input"\);.*?ObserveNativeTurboLearningInput\(turboActivation, nativeTurboActionId\); \} return result;' -or
-    $normalizedIntegratedInputRuntime -notmatch 'private byte ExecuteSlotByIdDetour\(.*?var nativeTurboPulse = false;.*?TryConsumeActivation\( hotbarId, slotId, NowMilliseconds, out var observed\).*?if \(ShouldSuppress\(activation\)\) return 0; nativeTurboPulse = activation is \{ Kind: IntegratedHotbarActivationKind\.InjectedRepeat, \};.*?var result = hook\.Original\(thisPtr, hotbarId, slotId\); if \(nativeTurboPulse\) \{ Interlocked\.Increment\(ref injectedRepeatsDispatched\); SetLastEvent\("Native hotbar scanner consumed an exact Turbo input"\);.*?ObserveNativeTurboLearningInput\(turboActivation, nativeTurboActionId\); \} return result;' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private byte ExecuteSlotDetour\(.*?var nativeTurboPulse = false;.*?TryConsumeActivation\( thisPtr, slot, NowMilliseconds, out var observed\).*?if \(ShouldSuppress\(activation\)\) return 0; if \(ShouldSuppressActiveSprintRepeat\(slot\)\) return 0; nativeTurboPulse = activation is \{ Kind: IntegratedHotbarActivationKind\.InjectedRepeat, \};.*?var result = hook\.Original\(thisPtr, slot\); if \(nativeTurboPulse\) \{ Interlocked\.Increment\(ref injectedRepeatsDispatched\); SetLastEvent\("Native hotbar scanner consumed an exact Turbo input"\);.*?ObserveNativeTurboLearningInput\(turboActivation, nativeTurboActionId\); \} return result;' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private byte ExecuteSlotByIdDetour\(.*?var nativeTurboPulse = false;.*?TryConsumeActivation\( hotbarId, slotId, NowMilliseconds, out var observed\).*?var slot = thisPtr == null \? null : thisPtr->GetSlotById\(hotbarId, slotId\); if \(ShouldSuppress\(activation\)\) return 0; if \(ShouldSuppressActiveSprintRepeat\(slot\)\) return 0; nativeTurboPulse = activation is \{ Kind: IntegratedHotbarActivationKind\.InjectedRepeat, \};.*?var result = hook\.Original\(thisPtr, hotbarId, slotId\); if \(nativeTurboPulse\) \{ Interlocked\.Increment\(ref injectedRepeatsDispatched\); SetLastEvent\("Native hotbar scanner consumed an exact Turbo input"\);.*?ObserveNativeTurboLearningInput\(turboActivation, nativeTurboActionId\); \} return result;' -or
     -not $unconsumedTurboHandlerMatch.Success -or
     $unconsumedTurboHandlerMatch.Value -notmatch 'Interlocked\.Increment\(ref injectedRepeatsRejected\);' -or
     $unconsumedTurboHandlerMatch.Value -notmatch 'SetLastEvent\("Native hotbar scanner did not consume the exact due Turbo input"\);' -or
@@ -11363,6 +11364,7 @@ foreach ($method in @('OnlyRangeOrLineOfSightCanArm','ReleaseNewInputAndFrozenId
 # client-rejected presses. Movement, camera, and targeting input stay outside
 # that activity boundary, and the helper's own Sprint may never re-arm itself.
 Assert-Literals $smartSprintRules @(
+    'public const uint BaseSprintActionId = 3;',
     'public const uint PvPSprintActionId = 29057;',
     'public const uint PvPSprintStatusId = 1342;',
     'public const bool RepeatProtectionDefaultEnabled = true;',
@@ -11370,8 +11372,8 @@ Assert-Literals $smartSprintRules @(
     'public const int MinimumInactivityMilliseconds = 3_000;',
     'public const int MaximumInactivityMilliseconds = 5_000;',
     'public const int DefaultInactivityMilliseconds = 4_000;',
-    'observation.RequestedActionId == PvPSprintActionId &&',
-    'observation.AdjustedActionId == PvPSprintActionId &&',
+    'observation.SprintCarrierVerified &&',
+    'observation.ResolvedActionId == PvPSprintActionId &&',
     'observation.SprintMetadataVerified &&',
     'observation.SprintStatusKnown &&',
     'observation.ActiveSprintStatusId == PvPSprintStatusId &&',
@@ -11388,7 +11390,7 @@ Assert-Literals $smartSprintRules @(
     'observation.SprintLocallyReady;',
     'previous with { IdleEpisodeSpent = true }'
 ) 'Exact Sprint repeat protection and attempted-action-bar idle Sprint policy'
-if ($normalizedSmartSprintRules -notmatch 'observation\.Enabled && observation\.IsActionRequest && observation\.RequestedActionId == PvPSprintActionId && observation\.AdjustedActionId == PvPSprintActionId && observation\.SprintMetadataVerified && observation\.SprintStatusKnown && observation\.ActiveSprintStatusId == PvPSprintStatusId && observation\.SprintActive;' -or
+if ($normalizedSmartSprintRules -notmatch 'observation\.Enabled && observation\.IsActionRequest && observation\.SprintCarrierVerified && observation\.ResolvedActionId == PvPSprintActionId && observation\.SprintMetadataVerified && observation\.SprintStatusKnown && observation\.ActiveSprintStatusId == PvPSprintStatusId && observation\.SprintActive;' -or
     $normalizedSmartSprintRules -notmatch 'if \(observation\.HardReset \|\| !observation\.Enabled \|\| !observation\.IsSupportedPvpContext \|\| !observation\.IsLocalPlayerValidAndAlive \|\| !observation\.ActionBarActivityKnown \|\| observation\.NowMilliseconds < 0\).*?SmartSprintIdleState\.Initial' -or
     $normalizedSmartSprintRules -notmatch 'var baselineInvalid = !previous\.HasActionBarActivityBaseline \|\| previous\.LastActionBarActivityAtMilliseconds < 0 \|\| previous\.LastActionBarActivityAtMilliseconds > observation\.NowMilliseconds; var activityChanged = previous\.HasActionBarActivityBaseline && previous\.ActionBarActivityToken != observation\.ActionBarActivityToken; if \(baselineInvalid \|\| activityChanged\).*?HasActionBarActivityBaseline: true, observation\.ActionBarActivityToken, observation\.NowMilliseconds, IdleEpisodeSpent: false' -or
     $normalizedSmartSprintRules -notmatch 'var eligible = observation\.HeldGameplayKeyEligible && observation\.GuardStateKnown && !observation\.GuardActive && observation\.IncapacitationStateKnown && !observation\.Incapacitated && !observation\.HigherPriorityClaimed && observation\.SprintMetadataVerified && observation\.SprintStatusKnown && !observation\.SprintActive && observation\.SprintLocallyReady; if \(!eligible\).*?new SmartSprintIdleDecision\( previous, ShouldDispatch: false, ActionBarActivityChanged: false, IdleThresholdReached: true\);.*?previous with \{ IdleEpisodeSpent = true \}, ShouldDispatch: true' -or
@@ -11446,22 +11448,30 @@ $actionBarActivityReferences = @(Select-String -LiteralPath $sourceFiles.FullNam
 $unexpectedActionBarActivityReferences = @($actionBarActivityReferences | Where-Object {
     $_.Path -notin @($nearAssistPath, $integratedInputRuntimePath)
 })
-if ($normalizedNearAssistForIntegratedInput -notmatch 'private bool ShouldBlockActiveSprintRepeatPress\(.*?configuration\.ProtectActiveSprintFromRepeatPress.*?pvpSprintMetadataVerified.*?requestedActionId != SmartSprintRules\.PvPSprintActionId.*?adjustedActionId != SmartSprintRules\.PvPSprintActionId.*?status\.StatusId != SmartSprintRules\.PvPSprintStatusId.*?!float\.IsFinite\(status\.RemainingTime\) \|\| status\.RemainingTime <= 0f.*?SmartSprintRules\.ShouldBlockRepeatPress\(' -or
+$sprintRepeatProtectionMethod = [regex]::Match(
+    $normalizedNearAssistForIntegratedInput,
+    'private bool ShouldBlockActiveSprintRepeatPress\(.*?(?= internal bool ShouldBlockActiveSprintRepeatPress\()')
+if (-not $sprintRepeatProtectionMethod.Success -or
+    $sprintRepeatProtectionMethod.Value -match '\bRemainingTime\b|\bUseActionMode\b|\bmode\b' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool ShouldBlockActiveSprintRepeatPress\(.*?configuration\.ProtectActiveSprintFromRepeatPress.*?pvpSprintMetadataVerified.*?actionType == ActionType\.Action && requestedActionId is not \(SmartSprintRules\.BaseSprintActionId or SmartSprintRules\.PvPSprintActionId\).*?adjustedActionId != SmartSprintRules\.PvPSprintActionId.*?status\.StatusId != SmartSprintRules\.PvPSprintStatusId.*?sprintActive = true;.*?SmartSprintRules\.ShouldBlockRepeatPress\(.*?SprintCarrierVerified: true, ResolvedActionId: adjustedActionId' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'if \(!configuration\.Enabled \|\| !configuration\.ProtectActiveSprintFromRepeatPress' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'var token = Volatile\.Read\(ref actionBarActivityToken\); return new ActionBarActivitySnapshot\( Known: Volatile\.Read\(ref started\) && !disposed && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true && integratedInputRuntime\?\.CanObserveCompleteActionBarActivity == true, Token: token > 0 \? \(ulong\)token : 0\);' -or
     $normalizedIntegratedInputRuntime -notmatch 'internal bool CanObserveCompleteActionBarActivity => !disposed && Volatile\.Read\(ref available\) != 0 && Volatile\.Read\(ref started\) != 0 && executeSlotHook\?\.IsEnabled == true && executeSlotByIdHook\?\.IsEnabled == true && hotbarInput\?\.IsOperational == true;' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private bool ShouldSuppressActiveSprintRepeat\( RaptureHotbarModule\.HotbarSlot\* slot\).*?\(uint\)slot->CommandType != DirectActionHotbarSlotType.*?nearAssist\.ShouldBlockActiveSprintRepeatPress\( ActionType\.Action, slot->CommandId\).*?SetLastEvent\("Blocked an active PvP Sprint repeat before hotbar execution"\); return true;' -or
     $normalizedIntegratedHotbarInputSource -notmatch 'internal bool IsOperational => started && !disposed && pressedHook\.IsEnabled && checkHotbarBindingsHook\.IsEnabled;' -or
     $normalizedUseActionDetour -notmatch 'if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(ShouldBlockActiveSprintRepeatPress\(thisPtr, actionType, actionId\)\) return false;.*?clientAccepted = useActionHook!\.Original\(' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool UseActionLocationDetour\(.*?RecordActionBarActivity\(\);.*?integratedRuntime\.ActionBuffer\.Cancel\(.*?if \(ShouldBlockActiveSprintRepeatPress\(thisPtr, actionType, actionId\)\) return false;.*?return useActionLocationHook!\.Original\(' -or
     $normalizedIntegratedInputRuntime -notmatch 'private void OnCertifiedPhysicalPress\(IntegratedHotbarPress press\).*?nearAssist\.RecordActionBarActivity\(\);.*?ActionBuffer\.Cancel\(' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'internal T RunWithoutRedirect<T>\( Func<T> action, PredictiveCcBrakeBypassIntent\? predictiveCcBrakeBypass = null\).*?actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ return action\(\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; predictiveCcBrakeBypassScope = previousPredictiveScope; \}' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'internal IDisposable EnterUserAuthoredActionWithoutRedirect\(\) \{ var scope = new UserAuthoredActionBypassScope\(this\); RecordActionBarActivity\(\); integratedInputRuntime\?\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer explicit command action"\); actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; return scope; \} private void ReleaseUserAuthoredActionBypass\(\) \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; \}' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'internal ExactAutomaticActionBoundaryResult RunExactAutomaticActionWithoutRedirect\( ExactAutomaticActionBoundaryIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| useActionHook is null \|\| !useActionHook\.IsEnabled \|\| exactAutomaticActionBoundaryScope is not null \|\| integratedBufferedReplayScope is not null\).*?var scope = new ExactAutomaticActionBoundaryScope\(this, intent\); exactAutomaticActionBoundaryScope = scope; actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new ExactAutomaticActionBoundaryResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; exactAutomaticActionBoundaryScope = previousScope; \}' -or
     [regex]::Matches($normalizedNearAssistForIntegratedInput, 'RecordActionBarActivity\(\);').Count -ne 3 -or
+    [regex]::Matches($normalizedNearAssistForIntegratedInput, 'if \(ShouldBlockActiveSprintRepeatPress\(thisPtr, actionType, actionId\)\) return false;').Count -ne 2 -or
     [regex]::Matches($normalizedIntegratedInputRuntime, 'nearAssist\.RecordActionBarActivity\(\);').Count -ne 1 -or
     $actionBarActivityReferences.Count -ne 5 -or
     $unexpectedActionBarActivityReferences.Count -ne 0) {
     $locations = $unexpectedActionBarActivityReferences | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
-    throw "Sprint repeat protection must require the enabled master plus exact positive metadata, adjusted action, and live finite status evidence; external Action/PvPAction, location, certified-hotbar, and explicit command intent must advance exactly once through the reviewed boundaries, while automatic helpers and replay suppress their own activity: $($locations -join ', ')"
+    throw "Sprint repeat protection must require the enabled master plus exact positive metadata, a reviewed carrier resolving to PvP Sprint, and exact permanent-status presence; both action boundaries and both direct-hotbar paths must veto every invocation mode before Original, while automatic helpers and replay suppress their own activity: $($locations -join ', ')"
 }
 Assert-Literals $nearAssist @(
     'internal readonly record struct ExactAutomaticActionBoundaryIntent(',
@@ -11511,18 +11521,16 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.1</Version>',
-    '<AssemblyVersion>0.43.0.1</AssemblyVersion>',
-    '<FileVersion>0.43.0.1</FileVersion>'
-) 'v0.43.0.1 project version'
+    '<Version>0.43.0.2</Version>',
+    '<AssemblyVersion>0.43.0.2</AssemblyVersion>',
+    '<FileVersion>0.43.0.2</FileVersion>'
+) 'v0.43.0.2 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.1";',
-    'Tap-to-land now remembers a supported out-of-range attack after you release the key.',
-    'the default is 2200 ms.',
-    'Supported single-target spells can wait too. Changing target, using Guard, starting another action, or becoming unable to act cancels the wait.',
-    'Pressing Sprint again no longer cancels an active PvP Sprint by default. Every other action still ends Sprint normally.',
-    'Settings and update notes now use shorter player-friendly explanations. Live in-game confirmation is still separate from the completed build checks.'
-) 'v0.43.0.1 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.2";',
+    'Fixed active PvP Sprint protection. Pressing Sprint again while it is active is now ignored.',
+    'The fix now catches the normal PvP hotbar button and the exact Sprint action path.',
+    'Other actions still end Sprint normally. Smart Sprint and all other helpers are unchanged.'
+) 'v0.43.0.2 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11575,22 +11583,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.1 plugin manifest metadata'
+) 'v0.43.0.2 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.1"',
-    'Tap-to-land remembers one supported out-of-range attack after you release the key for up to 3000 ms',
-    '2200 ms by default',
-    'including supported single-target casts and the visible <t> fallback of /smartaction.',
-    'It keeps the same action and target and stops on a new action, target change, Guard, crowd control, death, or area change.',
-    'Pressing Sprint again no longer cancels active PvP Sprint by default.',
-    'Optional Smart Sprint',
-    'Any action-bar press resets that timer; movement, camera, and targeting do not.',
+    '"AssemblyVersion": "0.43.0.2"',
+    'Fixed active PvP Sprint protection.',
+    'permanent toggle without a useful duration',
+    'blocks repeat presses before direct hotbar execution plus at both native action boundaries.',
+    'accepted only when the game resolves it exactly to PvP Sprint.',
+    'Smart Sprint and all other helpers are unchanged.',
     'Live in-game confirmation remains separate from build checks.',
     '"IsHide": false'
-) 'v0.43.0.1 custom-repository metadata'
+) 'v0.43.0.2 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11725,7 +11731,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.43.0.1 makes early action presses more forgiving.',
+    'Version 0.43.0.2 fixes active PvP Sprint protection.',
+    'The active Sprint buff is a permanent toggle without a useful duration,',
+    'stops a repeated Sprint press before direct hotbar execution and at both native action boundaries.',
+    'accepted only when the game resolves it exactly to PvP Sprint.',
+    'Other actions still end Sprint normally.',
+    'Version 0.43.0.1 made early action presses more forgiving.',
     'Tap-to-land can remember one supported out-of-range attack',
     '2200 ms by default',
     'even after you release the key.',
@@ -11733,7 +11744,6 @@ Assert-Literals $normalizedReadme @(
     'and also covers the visible `<t>` fallback of `/smartaction`.',
     'It stops when you press something else, change target, use Guard, become crowd-controlled, die, or change area.',
     'It does not increase range or move your character.',
-    'PvP Sprint is also safer: pressing Sprint again no longer turns an active Sprint off by default.',
     'A separate optional Smart Sprint can use Sprint once',
     'without action-bar input while you keep a gameplay key held.',
     'Only action-bar input resets that timer; the action does not have to succeed.',
@@ -11883,8 +11893,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.1 tap-to-land/Smart Sprint release plus retained history and safety contract'
+) 'v0.43.0.2 Sprint hotfix plus retained tap-to-land/Smart Sprint history and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.43.0.2',
+    'Fixed the active PvP Sprint protection released in `0.43.0.1`.',
+    'ordinary-Sprint carrier `3` is now accepted only when the game resolves it exactly to PvP Sprint `29057`.',
+    'Exact Sprint status `1342` presence is now the active proof.',
+    'It is a permanent toggle status, so its remaining-time field is not treated as a duration.',
+    'A direct hotbar repeat is stopped before hotbar execution.',
+    'Both native action boundaries also reject the exact active-Sprint reuse',
+    'Smart Sprint and all other helpers are unchanged.',
     '## 0.43.0.1',
     '**Tap-to-land no longer needs the key to stay held.**',
     'adjustable from 0 to 3000 ms;',
