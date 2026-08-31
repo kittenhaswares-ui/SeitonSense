@@ -53,6 +53,21 @@ public static class HeldChaseBufferWindowRules
     }
 }
 
+/// <summary>
+/// FFXIV can surface one authored macro action either as an explicit macro
+/// carrier or as a normal direct carrier. Queue mode is never an authored tap.
+/// The runtime still has to prove the exact Smart Action lease, generation,
+/// action, and visible target independently before using this admission rule.
+/// </summary>
+public static class SmartActionFallbackInvocationRules
+{
+    public static bool IsSupportedCarrier(
+        bool explicitMacroCarrier,
+        bool directCarrier,
+        bool queueCarrier) =>
+        !queueCarrier && (explicitMacroCarrier || directCarrier);
+}
+
 public readonly record struct HeldChaseBufferRetryState(
     int NativeAttemptCount,
     long NextNativeAttemptAtMilliseconds,

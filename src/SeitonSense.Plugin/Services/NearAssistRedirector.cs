@@ -1734,13 +1734,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             var smartTargetTokenConsumed = false;
             var smartTargetOwnershipChanged = false;
             var smartToken = default(ArmedSmartTarget);
+            ArmedSmartTarget? consumedCastedSmartActionToken = null;
+            var consumedCastedSmartActionGeneration = 0UL;
             var castRedirectDecision = !bypassRedirect
                 ? TryConsumeCastedMacroRedirect(
                     thisPtr,
                     actionType,
                     actionId,
                     targetId,
-                    mode)
+                    mode,
+                    out consumedCastedSmartActionToken,
+                    out consumedCastedSmartActionGeneration)
                 : CastedMacroRedirectDecision.NotApplicable;
             var passingThroughWithoutRedirect =
                 CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
@@ -1752,6 +1756,45 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 !continuingReviewedSmartActionCast)
             {
                 helperTokenConsumed = true;
+                var castFallbackLeaseArmed =
+                    consumedCastedSmartActionToken is { } castSmartActionToken &&
+                    CastedMacroRedirectRules
+                        .ShouldTransferExactSmartActionFallbackLease(
+                            exactSmartActionTokenConsumed: true,
+                            castRedirectDecision) &&
+                    TryArmSmartActionFallbackSafetyLease(
+                        thisPtr,
+                        actionType,
+                        actionId,
+                        castSmartActionToken,
+                        consumedCastedSmartActionGeneration);
+                if (castFallbackLeaseArmed &&
+                    castRedirectDecision ==
+                        CastedMacroRedirectDecision.PreserveAuthoredTarget)
+                {
+                    // This exact visible-target cast is already the authored
+                    // fallback. Inspect it now so the same call can enter the
+                    // tap-to-land path without re-running Smart Target or
+                    // changing native facing.
+                    smartActionSafetyInspection = InspectSmartActionSafetyLease(
+                        thisPtr,
+                        actionType,
+                        actionId,
+                        targetId,
+                        mode,
+                        out inspectedSmartActionTargetId);
+                    if (smartActionSafetyInspection ==
+                        SmartActionSafetyInspectionOutcome.Unsafe)
+                    {
+                        return false;
+                    }
+
+                    if (smartActionSafetyInspection ==
+                        SmartActionSafetyInspectionOutcome.Safe)
+                    {
+                        forwardedTargetId = inspectedSmartActionTargetId;
+                    }
+                }
                 potentialSmartTargetToken = null;
                 if (castRedirectDecision is
                     CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget or
@@ -2290,7 +2333,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                  integratedRuntime is not null &&
                  !handlingSmartTarget &&
                  smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
-                 IsCertifiedSmartActionTapMacroMode(mode) &&
+                 IsCertifiedSmartActionTapInvocationMode(mode) &&
                  IsExactCurrentHardTarget(forwardedTargetId) &&
                  TryGetSmartActionFallbackTapGeneration(out var macroTapGeneration))
         {
@@ -2456,8 +2499,12 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         ActionType actionType,
         uint actionId,
         ulong authoredTargetId,
-        ActionManager.UseActionMode mode)
+        ActionManager.UseActionMode mode,
+        out ArmedSmartTarget? consumedSmartActionToken,
+        out ulong consumedSmartActionGeneration)
     {
+        consumedSmartActionToken = null;
+        consumedSmartActionGeneration = 0;
         var claim = CaptureCastedMacroRedirectClaim();
         if (!claim.IsValid)
             return CastedMacroRedirectDecision.NotApplicable;
@@ -2525,9 +2572,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 return decision;
             }
 
-            return TryConsumeCastedMacroRedirectClaim(claim, decision)
-                ? decision
-                : CastedMacroRedirectDecision.SuppressStaleOwnership;
+            if (!TryConsumeCastedMacroRedirectClaim(claim, decision))
+                return CastedMacroRedirectDecision.SuppressStaleOwnership;
+
+            if (claim.Owner == CastedMacroRedirectOwner.SmartAction &&
+                decision is
+                    CastedMacroRedirectDecision.PreserveAuthoredTarget or
+                    CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget)
+            {
+                consumedSmartActionToken = claim.SmartTarget;
+                consumedSmartActionGeneration = claim.Generation;
+            }
+
+            return decision;
         }
         catch (Exception exception)
         {
@@ -4610,6 +4667,76 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
     }
 
+    private bool TryArmSmartActionFallbackSafetyLease(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint rawActionId,
+        ArmedSmartTarget exactToken,
+        ulong exactRedirectGeneration)
+    {
+        try
+        {
+            var now = Environment.TickCount64;
+            var local = objectTable.LocalPlayer;
+            if (!IsLivePlayer(local) ||
+                actionManager == null ||
+                !IsSupportedActionType(actionType) ||
+                rawActionId == 0 ||
+                exactRedirectGeneration == 0 ||
+                exactToken.TapGeneration <= 0 ||
+                exactToken.ExpiresAtMilliseconds <= now ||
+                exactToken.TerritoryId != clientState.TerritoryType ||
+                local!.EntityId != exactToken.LocalEntityId ||
+                local.GameObjectId != exactToken.LocalGameObjectId)
+            {
+                return false;
+            }
+
+            var resolvedActionId = ResolveActionId(
+                actionManager,
+                actionType,
+                rawActionId);
+            if (resolvedActionId == 0)
+                return false;
+
+            var nextSafetyLease = SmartActionSafetyLeaseRules.Arm(
+                exactToken.TerritoryId,
+                new TargetPressureActorIdentity(local.GameObjectId, local.EntityId),
+                (uint)actionType,
+                rawActionId,
+                resolvedActionId,
+                now,
+                now + SmartActionSafetyLeaseRules.DefaultLifetimeMilliseconds);
+            if (!nextSafetyLease.IsArmed)
+                return false;
+
+            lock (tokenGate)
+            {
+                if (!CastedMacroRedirectRules
+                        .CanCommitExactSmartActionFallbackLease(
+                            exactRedirectGeneration,
+                            castedMacroRedirectGeneration,
+                            newerSmartActionTokenArmed:
+                                armedSmartTarget is not null))
+                {
+                    return false;
+                }
+
+                smartActionSafetyLeaseState = nextSafetyLease;
+                smartActionSafetyTapGeneration = exactToken.TapGeneration;
+                smartActionFallbackTapGeneration = exactToken.TapGeneration;
+                return true;
+            }
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense cast-time Smart Action fallback lease failed closed.");
+            return false;
+        }
+    }
+
     private SmartActionSafetyInspectionOutcome InspectSmartActionSafetyLease(
         ActionManager* actionManager,
         ActionType actionType,
@@ -5478,14 +5605,16 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         mode == ActionManager.UseActionMode.None ||
         (uint)mode == 100;
 
-    // Tap-to-land retains an action after the originating call returns. Mode
-    // None cannot prove that a later identical call is another line from that
-    // macro rather than newer manual mouse/direct intent, so it is deliberately
-    // excluded from this narrower ownership contract.
-    private static bool IsCertifiedSmartActionTapMacroMode(
+    // The exact safety lease, tap generation, action, and visible hard target
+    // prove ownership before this mode gate runs. FFXIV may surface an authored
+    // /pvpac macro line as Macro/raw-100 or as None; Queue is never admitted.
+    private static bool IsCertifiedSmartActionTapInvocationMode(
         ActionManager.UseActionMode mode) =>
-        mode == ActionManager.UseActionMode.Macro ||
-        (uint)mode == 100;
+        SmartActionFallbackInvocationRules.IsSupportedCarrier(
+            explicitMacroCarrier:
+                mode == ActionManager.UseActionMode.Macro || (uint)mode == 100,
+            directCarrier: mode == ActionManager.UseActionMode.None,
+            queueCarrier: mode == ActionManager.UseActionMode.Queue);
 
     private static bool IsSupportedActionType(ActionType actionType) =>
         actionType is ActionType.Action or ActionType.PvPAction;

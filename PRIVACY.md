@@ -657,8 +657,13 @@ An action with a proven adjusted or exact base cast time is normally never
 invisibly retargeted by Smart Action, Near Assist, or Near Help. If its authored
 target is the exact current visible hard target, the incoming call passes through
 unchanged; otherwise the hidden or missing carrier is suppressed and its one-shot
-token is consumed so the following authored `<t>` line remains the ordinary game
-path. The only exception is the exact local-SAM Smart Action pair Ogi Namikiri
+token is consumed so the following authored `<t>` line remains the visible-target
+game path. If tap-to-land is enabled, the exact consumed Smart Action generation,
+action, local identity, and visible target may transfer into one bounded fallback
+reservation; FFXIV Macro/raw-100 and normal carriers are accepted, while Queue is
+rejected. A cast already aimed at the visible target may enter that same exact
+reservation in its current call. The only retargeting exception remains the exact
+local-SAM Smart Action pair Ogi Namikiri
 `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`, after
 strict current English action metadata verifies the cast, range, hostile target,
 job, and action identity. These two casts use the existing canonical ranking,
@@ -1913,8 +1918,9 @@ The integrated input path reads only the local standard-keyboard-hotbar binding,
 raw press/release state, exact slot identity, and the local action/target/context
 snapshot needed to prove one bounded attempt. The generic buffer stores one
 immutable in-memory action tuple until it succeeds, is cancelled, or expires;
-the tap-to-land lane is limited to the same physically pressed direct action and
-waits only for the exact hostile actor's native range/line-of-sight result.
+the tap-to-land lane is limited to the same physically pressed direct action or
+the exact lease/generation-backed Smart Action visible-target fallback and waits
+only for the exact hostile actor's native range/line-of-sight result.
 Releasing the key does not cancel it. Expiry, new action input, Guard, identity/
 action/context/safety drift, or an unsafe queue/cast boundary cancels it before
 a later call. Supported single-target casts also require the visible hard target

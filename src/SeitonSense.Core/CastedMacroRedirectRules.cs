@@ -26,6 +26,22 @@ public static class CastedMacroRedirectRules
             CastedMacroRedirectDecision.PreserveAuthoredTarget or
             CastedMacroRedirectDecision.PassThroughStaleLifecycle;
 
+    public static bool ShouldTransferExactSmartActionFallbackLease(
+        bool exactSmartActionTokenConsumed,
+        CastedMacroRedirectDecision decision) =>
+        exactSmartActionTokenConsumed &&
+        decision is
+            CastedMacroRedirectDecision.PreserveAuthoredTarget or
+            CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget;
+
+    public static bool CanCommitExactSmartActionFallbackLease(
+        ulong consumedGeneration,
+        ulong currentGeneration,
+        bool newerSmartActionTokenArmed) =>
+        consumedGeneration != 0 &&
+        consumedGeneration == currentGeneration &&
+        !newerSmartActionTokenArmed;
+
     public static CastedMacroRedirectDecision Evaluate(
         bool redirectTokenArmed,
         bool supportedActionType,

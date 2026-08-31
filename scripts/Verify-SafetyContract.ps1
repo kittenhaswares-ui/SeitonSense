@@ -803,7 +803,7 @@ Assert-Literals $integratedActionBufferRuntime @(
     'dispatching = true;'
 ) 'Immutable action, target/resolver, territory, instance, and one-shot dispatch freeze'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'var integratedAttempt = IntegratedActionBufferAttempt\.None; if \(mode == ActionManager\.UseActionMode\.None && integratedRuntime\?\.TryGetActiveBufferRoot\( actionType, actionId, out var integratedHotbarRoot\) == true\).*?integratedAttempt = integratedRuntime\.ActionBuffer\.BeginExactStandardHotbarRoot\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, integratedHotbarRoot, handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapMacroMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, targetId, extraParam, mode, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, hotbarRoot, requiresSmartActionProtectionRecheck\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, visibleTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var visibleHardTarget = ToActorIdentity\(targetManager\.Target\); if \(!IsSafeSnapshot\(snapshot\) \|\| snapshot\.Target\.ExplicitTarget == IntegratedActionBufferActorIdentity\.Empty \|\| visibleHardTarget != snapshot\.Target\.ExplicitTarget\)' -or
@@ -811,11 +811,17 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'var integratedAttempt = I
     throw 'The generic buffer and exact Smart Action fallback must freeze the final visible target at the sole Original boundary, retain every resolver/local/instance identity, normalize fallback replay to one protected direct action, and cancel rather than retarget or substitute.'
 }
 
-if ($normalizedNearAssistForIntegratedInput -notmatch 'private static bool IsCertifiedSmartActionTapMacroMode\( ActionManager\.UseActionMode mode\) => mode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)mode == 100;' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'internal IntegratedActionBufferAttempt BeginExactSmartActionMacroFallback\(.*?var macroMode = sourceMode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)sourceMode == 100; if \(!macroMode \|\| sourceMode == ActionManager\.UseActionMode\.Queue\) return IntegratedActionBufferAttempt\.None;' -or
+if ($normalizedNearAssistForIntegratedInput -notmatch 'private static bool IsCertifiedSmartActionTapInvocationMode\( ActionManager\.UseActionMode mode\) => SmartActionFallbackInvocationRules\.IsSupportedCarrier\( explicitMacroCarrier: mode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)mode == 100, directCarrier: mode == ActionManager\.UseActionMode\.None, queueCarrier: mode == ActionManager\.UseActionMode\.Queue\);' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'internal IntegratedActionBufferAttempt BeginExactSmartActionMacroFallback\(.*?SmartActionFallbackInvocationRules\.IsSupportedCarrier\( explicitMacroCarrier: sourceMode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)sourceMode == 100, directCarrier: sourceMode == ActionManager\.UseActionMode\.None, queueCarrier: sourceMode == ActionManager\.UseActionMode\.Queue\).*?return IntegratedActionBufferAttempt\.None;' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'internal bool ShouldSuppressOwnedSmartActionMacroTail\(.*?var macroMode = sourceMode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)sourceMode == 100; if \(!macroMode \|\| sourceMode == ActionManager\.UseActionMode\.Queue\) return false;' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'ShouldSuppressOwnedSmartActionMacroTail\( actionType, actionId, resolvedTailActionId, inspectedSmartActionTargetId, mode, safetyTapGeneration\)') {
-    throw 'Tap-to-land Smart Action ownership must require explicit Macro/raw-100 provenance at admission and tail suppression; mode None cannot reserve or suppress and therefore falls through to the newer-external-action cancellation path.'
+    throw 'Tap-to-land Smart Action admission must accept Macro/raw-100 and FFXIV normal-mode carriers only after the exact safety lease, generation, action, and visible target were proven; Queue remains rejected, while duplicate-tail suppression stays explicit-Macro-only so a later manual normal-mode action cannot be swallowed.'
+}
+
+if ($normalizedNearAssistForIntegratedInput -notmatch 'TryConsumeCastedMacroRedirect\( thisPtr, actionType, actionId, targetId, mode, out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\).*?var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\( exactSmartActionTokenConsumed: true, castRedirectDecision\) && TryArmSmartActionFallbackSafetyLease\( thisPtr, actionType, actionId, castSmartActionToken, consumedCastedSmartActionGeneration\);.*?castRedirectDecision == CastedMacroRedirectDecision\.PreserveAuthoredTarget.*?smartActionSafetyInspection = InspectSmartActionSafetyLease\( thisPtr, actionType, actionId, targetId, mode, out inspectedSmartActionTargetId\);.*?forwardedTargetId = inspectedSmartActionTargetId;' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect\(.*?out ArmedSmartTarget\? consumedSmartActionToken, out ulong consumedSmartActionGeneration\).*?consumedSmartActionToken = null; consumedSmartActionGeneration = 0;.*?if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?claim\.Owner == CastedMacroRedirectOwner\.SmartAction && decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget.*?consumedSmartActionToken = claim\.SmartTarget; consumedSmartActionGeneration = claim\.Generation;.*?catch \(Exception exception\).*?return consumed \? CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget : CastedMacroRedirectDecision\.SuppressStaleOwnership;' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'private bool TryArmSmartActionFallbackSafetyLease\(.*?ulong exactRedirectGeneration\).*?exactRedirectGeneration == 0 \|\| exactToken\.TapGeneration <= 0 \|\| exactToken\.ExpiresAtMilliseconds <= now \|\| exactToken\.TerritoryId != clientState\.TerritoryType \|\| local!\.EntityId != exactToken\.LocalEntityId \|\| local\.GameObjectId != exactToken\.LocalGameObjectId.*?resolvedActionId == 0.*?var nextSafetyLease = SmartActionSafetyLeaseRules\.Arm\( exactToken\.TerritoryId, new TargetPressureActorIdentity\(local\.GameObjectId, local\.EntityId\), \(uint\)actionType, rawActionId, resolvedActionId, now, now \+ SmartActionSafetyLeaseRules\.DefaultLifetimeMilliseconds\);.*?!nextSafetyLease\.IsArmed.*?lock \(tokenGate\).*?CanCommitExactSmartActionFallbackLease\( exactRedirectGeneration, castedMacroRedirectGeneration, newerSmartActionTokenArmed: armedSmartTarget is not null\).*?smartActionSafetyLeaseState = nextSafetyLease; smartActionSafetyTapGeneration = exactToken\.TapGeneration; smartActionFallbackTapGeneration = exactToken\.TapGeneration; return true;') {
+    throw 'Cast-time Smart Action must transfer only a successfully consumed exact token into the fallback lease: hidden carriers reserve the later visible fallback, already-visible casts are protection-inspected in the same call, and stale, faulted, expired, unresolved, or identity-drifted claims cannot arm chase.'
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
@@ -8503,6 +8509,11 @@ Assert-Literals $castedMacroRedirectRules @(
     'PassThroughStaleLifecycle',
     'SuppressHiddenOrMissingTarget',
     'SuppressStaleOwnership',
+    'ShouldTransferExactSmartActionFallbackLease(',
+    'exactSmartActionTokenConsumed &&',
+    'CanCommitExactSmartActionFallbackLease(',
+    'consumedGeneration == currentGeneration',
+    '!newerSmartActionTokenArmed;',
     'public static bool ShouldPassThroughWithoutRedirect(',
     'adjustedCastTimeMilliseconds > 0',
     'exactActionMetadata && baseCastTime100Milliseconds > 0',
@@ -8513,6 +8524,10 @@ Assert-Literals $castedMacroRedirectRules @(
 $normalizedCastedMacroRedirectRules = $castedMacroRedirectRules -replace '\s+', ' '
 if ($normalizedCastedMacroRedirectRules -notmatch
         'ShouldPassThroughWithoutRedirect\( CastedMacroRedirectDecision decision\) => decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
+        'ShouldTransferExactSmartActionFallbackLease\( bool exactSmartActionTokenConsumed, CastedMacroRedirectDecision decision\) => exactSmartActionTokenConsumed && decision is CastedMacroRedirectDecision\.PreserveAuthoredTarget or CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
+    $normalizedCastedMacroRedirectRules -notmatch
+        'CanCommitExactSmartActionFallbackLease\( ulong consumedGeneration, ulong currentGeneration, bool newerSmartActionTokenArmed\) => consumedGeneration != 0 && consumedGeneration == currentGeneration && !newerSmartActionTokenArmed;' -or
     $normalizedCastedMacroRedirectRules -notmatch
         'if \(!redirectTokenArmed \|\| !supportedActionType\) return CastedMacroRedirectDecision\.NotApplicable; var castTimeProven = adjustedCastTimeMilliseconds > 0 \|\| \(exactActionMetadata && baseCastTime100Milliseconds > 0\); if \(!castTimeProven\) return CastedMacroRedirectDecision\.NotApplicable; if \(allowReviewedSmartActionCastRedirect\) return CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; return authoredTargetMatchesVisibleTarget \? CastedMacroRedirectDecision\.PreserveAuthoredTarget : CastedMacroRedirectDecision\.SuppressHiddenOrMissingTarget;' -or
     $castedMacroRedirectRules -match '\b(ActionManager|TargetManager|UseAction|SetTarget|SetRotation|FaceTarget|ObjectTable|IClientState)\b') {
@@ -8604,7 +8619,7 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     [regex]::Matches($nearAssist, '\bActionManager\.GetAdjustedCastTime\s*\(').Count -ne 1 -or
     [regex]::Matches($nearAssist, 'castedMacroRedirectGeneration\+\+;').Count -ne 5 -or
     $normalizedNearAssist -notmatch
-        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingReviewedSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingReviewedSmartActionCast\).*?helperTokenConsumed = true; potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
+        'var castRedirectDecision = !bypassRedirect \? TryConsumeCastedMacroRedirect\(.*?out consumedCastedSmartActionToken, out consumedCastedSmartActionGeneration\) : CastedMacroRedirectDecision\.NotApplicable; var passingThroughWithoutRedirect = CastedMacroRedirectRules\.ShouldPassThroughWithoutRedirect\( castRedirectDecision\); var continuingReviewedSmartActionCast = castRedirectDecision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast; if \(castRedirectDecision != CastedMacroRedirectDecision\.NotApplicable && !continuingReviewedSmartActionCast\).*?helperTokenConsumed = true; var castFallbackLeaseArmed = consumedCastedSmartActionToken is \{ \} castSmartActionToken && CastedMacroRedirectRules \.ShouldTransferExactSmartActionFallbackLease\(.*?castRedirectDecision\).*?TryArmSmartActionFallbackSafetyLease\(.*?castSmartActionToken, consumedCastedSmartActionGeneration\);.*?potentialSmartTargetToken = null;.*?SuppressHiddenOrMissingTarget or CastedMacroRedirectDecision\.SuppressStaleOwnership.*?return false;.*?if \(!passingThroughWithoutRedirect && potentialSmartTargetToken is not null\).*?if \(passingThroughWithoutRedirect\).*?Keep every action argument bit-for-bit.*?lifecycle claim cannot consume a newer helper generation.*?else if \(smartTargetOwnershipChanged\)' -or
     $normalizedNearAssist -notmatch
         'if \(!IsLiveCastedMacroRedirectClaim\(claim\)\).*?TryConsumeCastedMacroRedirectClaim\( claim, CastedMacroRedirectDecision\.PassThroughStaleLifecycle\);.*?return CastedMacroRedirectDecision\.PassThroughStaleLifecycle;' -or
     $normalizedNearAssist -notmatch
@@ -8614,7 +8629,7 @@ if ([regex]::Matches($nearAssist, '\bTryConsumeCastedMacroRedirect\s*\(').Count 
     $normalizedNearAssist -notmatch
         'private bool IsReviewedSamuraiSmartActionCast\(.*?claim\.Owner != CastedMacroRedirectOwner\.SmartAction.*?!samuraiSmartActionCastsMetadataVerified.*?actionType != ActionType\.Action.*?!exactMetadata.*?action\.RowId != resolvedActionId.*?!action\.IsPvP.*?action\.ClassJob\.RowId != SamuraiSmartActionCastRules\.SamuraiJobId.*?action\.Cast100ms != 15.*?!action\.CanTargetHostile.*?action\.TargetArea.*?action\.Range != 8.*?!SamuraiSmartActionCastRules\.IsReviewedBaseCastPair\( rawActionId, resolvedActionId\).*?local\.ClassJob\.RowId == SamuraiSmartActionCastRules\.SamuraiJobId;' -or
     $normalizedNearAssist -notmatch
-        'if \(decision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast\) \{ return decision; \} return TryConsumeCastedMacroRedirectClaim\(claim, decision\)' -or
+        'if \(decision == CastedMacroRedirectDecision\.RedirectReviewedSmartActionCast\) \{ return decision; \} if \(!TryConsumeCastedMacroRedirectClaim\(claim, decision\)\) return CastedMacroRedirectDecision\.SuppressStaleOwnership;.*?consumedSmartActionToken = claim\.SmartTarget;.*?return decision;' -or
     $normalizedNearAssist -notmatch
         'private bool IsExactCurrentHardTarget\(.*?if \(hardTargetId == authoredTargetId\) return true;.*?ResolvePlayerByNativeId\(hardTargetId\).*?ResolvePlayerByNativeId\(authoredTargetId\).*?HasSameNativeIdentity\(hardTarget, authoredTarget\)') {
     throw 'Casted macro actions must validate and consume only the exact live route-owned generation, suppress hidden/missing or stale carriers, preserve newer arms, preserve the exact visible hard target, and leave instant redirects unchanged.'
@@ -8632,7 +8647,15 @@ Assert-Literals $nearAssistOneShotSelfTests @(
     '"visible authored cast bypasses every legacy redirect"',
     '"not-applicable cast classification keeps the normal redirect path"',
     '"hidden cast suppression never passes through"',
-    '"stale ownership suppression never passes through"'
+    '"stale ownership suppression never passes through"',
+    '"visible Smart Action cast transfers its exact fallback lease"',
+    '"hidden Smart Action cast transfers its exact later-fallback lease"',
+    '"unconsumed or foreign cast cannot transfer a Smart Action lease"',
+    '"stale Smart Action cast ownership cannot transfer a lease"',
+    '"same consumed cast generation can commit its fallback lease"',
+    '"newer redirect generation rejects the older cast lease"',
+    '"a newly armed Smart Action token rejects the older cast lease"',
+    '"zero cast generation cannot commit a fallback lease"'
 ) 'Pure cast redirect classification self-tests'
 $nearAssistSelection = Read-RequiredSource (Join-Path $coreRoot 'NearAssistSelectionRules.cs') 'Near Assist smart selection rules'
 Assert-Literals $nearAssistSelection @(
@@ -8975,9 +8998,9 @@ if (-not $consumeState.Success -or -not $originalCall.Success -or $consumeState.
 if ($nearAssist -match '\bCanUseActionOnTarget\s*\(') {
     throw 'Near Assist must not restore the transient target-usability prefilter that defeats native macro queuing.'
 }
-if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.None').Count -ne 5 -or
+if ([regex]::Matches($nearAssist, '\bmode\s*==\s*ActionManager\.UseActionMode\.None').Count -ne 6 -or
     [regex]::Matches($nearAssist, '\bmode\s*!=\s*ActionManager\.UseActionMode\.Queue').Count -lt 2) {
-    throw 'Near Assist may recognize normal-mode calls only in its two reviewed public gates, the exact one-call plugin-helper scope, the held VPR Smart Action selector, and the certified physical-buffer provenance gate; Queue must remain rejected.'
+    throw 'Near Assist may recognize normal-mode calls only in its reviewed public gates, exact one-call plugin-helper scope, held VPR Smart Action selector, certified physical-buffer provenance gate, and exact lease/generation-backed Smart Action fallback gate; Queue must remain rejected.'
 }
 if ($nearAssist -match 'RaptureShellModule|MacroLocked|MacroCurrentLine|MacroLineText') {
     throw 'Near Assist must not restore the live macro-line timing dependency that caused valid Turbo calls to be missed.'
@@ -11254,6 +11277,9 @@ Assert-Literals $heldChaseBufferRules @(
     'public const int MaximumMilliseconds = 3_000;',
     'HeldActionRetryRules.NativeRetryThrottleMilliseconds;',
     'public const int MaximumNativeAttempts =',
+    'public static class SmartActionFallbackInvocationRules',
+    'public static bool IsSupportedCarrier(',
+    '!queueCarrier && (explicitMacroCarrier || directCarrier);',
     'ReservationWindowMilliseconds =',
     'bool WithinDeadline = true,',
     'long NowMilliseconds = 0);',
@@ -11279,6 +11305,7 @@ Assert-Literals $heldChaseBufferRules @(
     '_ => HeldActionRetryDisposition.CancelledTerminal,'
 ) 'Immutable release-independent exact tap-to-land intent, exclusive origin, and clean-false-only retry policy'
 if ([regex]::Matches($heldChaseBufferRules, 'HeldChaseBufferDecisionKind\.Dispatch').Count -ne 1 -or
+    $normalizedHeldChaseBufferRules -notmatch 'public static class SmartActionFallbackInvocationRules \{ public static bool IsSupportedCarrier\( bool explicitMacroCarrier, bool directCarrier, bool queueCarrier\) => !queueCarrier && \(explicitMacroCarrier \|\| directCarrier\); \}' -or
     $normalizedHeldChaseBufferRules -notmatch 'public bool IsValid => RequestedActionId != 0 && ResolvedActionId != 0 && TargetFingerprint != 0 && TerritoryId != 0 && InstanceFingerprint != 0 && PressGeneration > 0;' -or
     $normalizedHeldChaseBufferRules -notmatch 'if \(input\.IsCertifiedPhysicalStandardHotbarRoot && input\.IsCertifiedSmartActionMacroFallback\).*?HeldChaseBufferCancelReason\.AmbiguousInputOrigin;.*?if \(!input\.IsCertifiedPhysicalStandardHotbarRoot && !input\.IsCertifiedSmartActionMacroFallback\).*?HeldChaseBufferCancelReason\.NotPhysicalStandardHotbar;' -or
     $normalizedHeldChaseBufferRules -notmatch 'if \(reason == HeldChaseBufferCancelReason\.Released\) return;.*?lock \(gate\).*?ClearPending\(\); LastCancelReason = reason;' -or
@@ -11289,6 +11316,10 @@ if ([regex]::Matches($heldChaseBufferRules, 'HeldChaseBufferDecisionKind\.Dispat
     throw 'Tap-to-land Core must retain exactly one immutable action/visible-target/context generation, ignore release, admit exactly one of direct-hotbar or certified Smart Action fallback provenance, retry only clean native false, and terminate every accepted, ambiguous, or cancelled outcome without native, target, facing, clock, or held-key ownership.'
 }
 Assert-Literals $heldChaseBufferSelfTests @(
+    '"explicit Smart Action macro carrier is admitted"',
+    '"normal-mode Smart Action macro carrier is admitted after exact ownership proof"',
+    '"queued Smart Action carrier is rejected"',
+    '"unknown Smart Action carrier is rejected"',
     'Equal(0, HeldChaseBufferWindowRules.Normalize(0), "zero window disables");',
     'Equal(2_200, HeldChaseBufferWindowRules.Normalize(2_200), "default window remains exact");',
     'Equal(3_000, HeldChaseBufferWindowRules.Normalize(9_000), "window is capped");',
@@ -11521,16 +11552,16 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.43.0.2</Version>',
-    '<AssemblyVersion>0.43.0.2</AssemblyVersion>',
-    '<FileVersion>0.43.0.2</FileVersion>'
-) 'v0.43.0.2 project version'
+    '<Version>0.43.0.3</Version>',
+    '<AssemblyVersion>0.43.0.3</AssemblyVersion>',
+    '<FileVersion>0.43.0.3</FileVersion>'
+) 'v0.43.0.3 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.43.0.2";',
-    'Fixed active PvP Sprint protection. Pressing Sprint again while it is active is now ignored.',
-    'The fix now catches the normal PvP hotbar button and the exact Sprint action path.',
-    'Other actions still end Sprint normally. Smart Sprint and all other helpers are unchanged.'
-) 'v0.43.0.2 version-acknowledged player-facing What''s New content'
+    'private const string CurrentReleaseVersion = "0.43.0.3";',
+    'Fixed Smart Action tap-to-land. Its visible <t> fallback can now wait when the target is out of range.',
+    'This also covers supported casts without changing your target or turning your character.',
+    'The wait keeps the same action and target. Queue mode stays excluded, and a new action still cancels it.'
+) 'v0.43.0.3 version-acknowledged player-facing What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11583,20 +11614,19 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.43.0.2 plugin manifest metadata'
+) 'v0.43.0.3 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.43.0.2"',
-    'Fixed active PvP Sprint protection.',
-    'permanent toggle without a useful duration',
-    'blocks repeat presses before direct hotbar execution plus at both native action boundaries.',
-    'accepted only when the game resolves it exactly to PvP Sprint.',
-    'Smart Sprint and all other helpers are unchanged.',
+    '"AssemblyVersion": "0.43.0.3"',
+    'Fixed Smart Action tap-to-land.',
+    'exact Smart Action generation, ability, and visible target are proven.',
+    'Supported visible-target casts and the hidden-carrier-to-<t> cast fallback',
+    'Queue mode remains excluded, another action still cancels the wait',
     'Live in-game confirmation remains separate from build checks.',
     '"IsHide": false'
-) 'v0.43.0.2 custom-repository metadata'
+) 'v0.43.0.3 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11667,6 +11697,8 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic observation does not retire a physical held-key generation.',
     'Acceptance starts an exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is retained when visible, but after that floor current positive readiness may rearm without requiring the brief negative frame, preventing an indefinite latch.',
     'Configuration schema 50 is current. It replaces held-only chase behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
+    'the tap-to-land lane is limited to the same physically pressed direct action or the exact lease/generation-backed Smart Action visible-target fallback',
+    'waits only for the exact hostile actor''s native range/line-of-sight result.',
     'adds default-on exact active-Sprint repeat protection, and adds a separate default-off 3000-5000 ms idle Smart Sprint option.',
     'Smart Sprint retains only a monotonic action-bar activity token and its local time baseline; rejected',
     'action-bar requests still count, while movement, camera, and target input are',
@@ -11699,8 +11731,11 @@ Assert-Literals $normalizedPrivacy @(
     'this helper cannot remove or break Guard.',
     'Arming reads no enemy slot and stores only the current territory, exact local identity, expiry, and whether combat-priority or farthest-reachable ranking was requested; a live `S1` is not a plugin-side arm prerequisite.',
     'An action with a proven adjusted or exact base cast time is normally never invisibly retargeted by Smart Action, Near Assist, or Near Help.',
-    'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the ordinary game path.',
-    'The only exception is the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
+    'the hidden or missing carrier is suppressed and its one-shot token is consumed so the following authored `<t>` line remains the visible-target game path.',
+    'the exact consumed Smart Action generation, action, local identity, and visible target may transfer into one bounded fallback reservation;',
+    'FFXIV Macro/raw-100 and normal carriers are accepted, while Queue is rejected.',
+    'A cast already aimed at the visible target may enter that same exact reservation in its current call.',
+    'The only retargeting exception remains the exact local-SAM Smart Action pair Ogi Namikiri `29530 -> 29530` and Tendo Setsugekka `29536 -> 41454` or `41454 -> 41454`',
     'Instant Kaeshi: Namikiri `29531` uses the same cone policy after its separate icon `9664`, 8-yalm range/effect range, and cast-type-`3` metadata pin.',
     'The instant Kaeshi actions `29531` and `41455` are not cast exceptions.',
     'Near Assist, Near Help, every unreviewed cast, and metadata drift retain the visible-target path.',
@@ -11731,6 +11766,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
+    'Version 0.43.0.3 fixes Smart Action tap-to-land.',
+    'FFXIV may report a macro action as a normal action;',
+    'exact Smart Action tap, ability, and visible target.',
+    'The visible `<t>` fallback and supported casts can therefore keep the same out-of-range wait',
+    'without changing targets or turning the character.',
+    'Queue mode remains excluded, and a new action still cancels the wait.',
     'Version 0.43.0.2 fixes active PvP Sprint protection.',
     'The active Sprint buff is a permanent toggle without a useful duration,',
     'stops a repeated Sprint press before direct hotbar execution and at both native action boundaries.',
@@ -11850,7 +11891,8 @@ Assert-Literals $normalizedReadme @(
     'paired handler/helper hooks preserve the game''s own binding and UI/input gates',
     '`/smartaction` (`/ssaction`) behind its own default-off setting',
     'Cast-time actions are deliberately not invisibly redirected by default.',
-    'Seiton consumes and suppresses that carrier so the following `<t>` line executes normally.',
+    'Seiton consumes and suppresses that carrier so the following `<t>` line keeps the visible target.',
+    'When tap-to-land is enabled, either exact visible-target path may reserve the same cast after a range-only native failure.',
     'The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka (`29536 -> 41454`, or direct `41454`).',
     'Protection is now checked for each candidate rather than globally: an unrelated enemy elsewhere with Guard, Cover, Hallowed Ground, or Undead Redemption cannot stall either cast.',
     'Instant Kaeshi: Namikiri `29531` uses that same candidate-local cone policy, with separately pinned icon `9664`, 8-yalm range/effect range, and cast type `3`.',
@@ -11893,8 +11935,16 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.43.0.2 Sprint hotfix plus retained tap-to-land/Smart Sprint history and safety contract'
+) 'v0.43.0.3 Smart Action chase fix plus retained Sprint/tap-to-land history and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.43.0.3',
+    'Fixed **Smart Action tap-to-land**.',
+    'the visible `<t>` fallback can now enter the chase wait in either form.',
+    'Seiton first proves the exact Smart Action generation, ability, and current visible target.',
+    'Queue mode remains excluded, and another action still cancels the reservation.',
+    'Supported casts now transfer the same exact reservation from the suppressed hidden carrier to the visible `<t>` fallback.',
+    'Neither path changes the selected target nor adds auto-facing.',
+    'Replay remains the same action against the same target and rechecks current Smart Action protections.',
     '## 0.43.0.2',
     'Fixed the active PvP Sprint protection released in `0.43.0.1`.',
     'ordinary-Sprint carrier `3` is now accepted only when the game resolves it exactly to PvP Sprint `29057`.',
@@ -13635,4 +13685,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 605-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, Recuperate, then Auto-Guard own priority in that order. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-visible-target reservation from either a certified direct standard hotbar press or the Macro/raw-100-certified /smartaction visible-<t> fallback. Release cannot cancel it; new action, target, context, Guard, CC, identity, or action drift does, only a post-revalidated clean native false may retry, accepted or ambiguous outcomes are terminal, and it writes no target or facing. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 605-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, Recuperate, then Auto-Guard own priority in that order. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-visible-target reservation from either a certified direct standard hotbar press or the exact lease/generation-backed /smartaction visible-<t> fallback surfaced as Macro, raw-100, or normal mode. Queue stays rejected. Release cannot cancel it; new action, target, context, Guard, CC, identity, or action drift does, only a post-revalidated clean native false may retry, accepted or ambiguous outcomes are terminal, and it writes no target or facing. Supported Smart Action casts transfer only an exactly consumed live token into that same fallback reservation; hidden carriers reserve the later visible fallback and already-visible casts are inspected in the same call. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not reset it, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

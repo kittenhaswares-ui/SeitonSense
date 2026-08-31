@@ -12,6 +12,31 @@ internal static class HeldChaseBufferSelfTests
 
     internal static void OnlyRangeOrLineOfSightCanArm()
     {
+        True(
+            SmartActionFallbackInvocationRules.IsSupportedCarrier(
+                explicitMacroCarrier: true,
+                directCarrier: false,
+                queueCarrier: false),
+            "explicit Smart Action macro carrier is admitted");
+        True(
+            SmartActionFallbackInvocationRules.IsSupportedCarrier(
+                explicitMacroCarrier: false,
+                directCarrier: true,
+                queueCarrier: false),
+            "normal-mode Smart Action macro carrier is admitted after exact ownership proof");
+        False(
+            SmartActionFallbackInvocationRules.IsSupportedCarrier(
+                explicitMacroCarrier: true,
+                directCarrier: true,
+                queueCarrier: true),
+            "queued Smart Action carrier is rejected");
+        False(
+            SmartActionFallbackInvocationRules.IsSupportedCarrier(
+                explicitMacroCarrier: false,
+                directCarrier: false,
+                queueCarrier: false),
+            "unknown Smart Action carrier is rejected");
+
         Equal(2_200, HeldChaseBufferWindowRules.DefaultMilliseconds, "default reservation window");
         Equal(0, HeldChaseBufferWindowRules.Normalize(-1), "negative window disables");
         Equal(0, HeldChaseBufferWindowRules.Normalize(0), "zero window disables");

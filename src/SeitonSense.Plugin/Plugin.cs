@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.2";
+    private const string CurrentReleaseVersion = "0.43.0.3";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -429,9 +429,9 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed active PvP Sprint protection. Pressing Sprint again while it is active is now ignored.",
-                "The fix now catches the normal PvP hotbar button and the exact Sprint action path.",
-                "Other actions still end Sprint normally. Smart Sprint and all other helpers are unchanged.",
+                "Fixed Smart Action tap-to-land. Its visible <t> fallback can now wait when the target is out of range.",
+                "This also covers supported casts without changing your target or turning your character.",
+                "The wait keeps the same action and target. Queue mode stays excluded, and a new action still cancels it.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

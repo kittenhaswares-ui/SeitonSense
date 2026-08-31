@@ -3,6 +3,13 @@
 Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
 cues, warnings, job helpers, Smart Action, and target highlights.
 
+Version 0.43.0.3 fixes Smart Action tap-to-land. FFXIV may report a macro action
+as a normal action; Seiton now accepts either form only after it proves the
+exact Smart Action tap, ability, and visible target. The visible `<t>` fallback
+and supported casts can therefore keep the same out-of-range wait without
+changing targets or turning the character. Queue mode remains excluded, and a
+new action still cancels the wait.
+
 Version 0.43.0.2 fixes active PvP Sprint protection. The active Sprint buff is
 a permanent toggle without a useful duration, so Seiton now uses exact buff
 presence and stops a repeated Sprint press before direct hotbar execution and
@@ -1557,10 +1564,11 @@ cast, frozen-target, fallback, and final-revalidation rule below remains shared.
 Cast-time actions are deliberately not invisibly redirected by default. If the
 first `<e1>` carrier has a proven adjusted or base cast time and is not the exact
 current visible hard target, Seiton consumes and suppresses that carrier so the
-following `<t>` line executes normally. A direct `<t>` cast already matching the
-current hard target passes through unchanged. This avoids FFXIV's delayed native
-auto-face turning the character toward a stale hidden target after a fast manual
-target switch.
+following `<t>` line keeps the visible target. A direct `<t>` cast already
+matching the current hard target also keeps that target. When tap-to-land is
+enabled, either exact visible-target path may reserve the same cast after a
+range-only native failure. This avoids FFXIV's delayed native auto-face turning
+the character toward a stale hidden target after a fast manual target switch.
 
 The only reviewed cast exception is SAM Ogi Namikiri `29530` and Tendo Setsugekka
 (`29536 -> 41454`, or direct `41454`). With exact startup metadata and local SAM

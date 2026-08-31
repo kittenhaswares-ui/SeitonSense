@@ -136,6 +136,50 @@ internal static class NearAssistOneShotSelfTests
             CastedMacroRedirectRules.ShouldPassThroughWithoutRedirect(
                 CastedMacroRedirectDecision.SuppressStaleOwnership),
             "stale ownership suppression never passes through");
+        True(
+            CastedMacroRedirectRules.ShouldTransferExactSmartActionFallbackLease(
+                true,
+                CastedMacroRedirectDecision.PreserveAuthoredTarget),
+            "visible Smart Action cast transfers its exact fallback lease");
+        True(
+            CastedMacroRedirectRules.ShouldTransferExactSmartActionFallbackLease(
+                true,
+                CastedMacroRedirectDecision.SuppressHiddenOrMissingTarget),
+            "hidden Smart Action cast transfers its exact later-fallback lease");
+        False(
+            CastedMacroRedirectRules.ShouldTransferExactSmartActionFallbackLease(
+                false,
+                CastedMacroRedirectDecision.PreserveAuthoredTarget),
+            "unconsumed or foreign cast cannot transfer a Smart Action lease");
+        False(
+            CastedMacroRedirectRules.ShouldTransferExactSmartActionFallbackLease(
+                true,
+                CastedMacroRedirectDecision.SuppressStaleOwnership),
+            "stale Smart Action cast ownership cannot transfer a lease");
+        True(
+            CastedMacroRedirectRules.CanCommitExactSmartActionFallbackLease(
+                consumedGeneration: 7,
+                currentGeneration: 7,
+                newerSmartActionTokenArmed: false),
+            "same consumed cast generation can commit its fallback lease");
+        False(
+            CastedMacroRedirectRules.CanCommitExactSmartActionFallbackLease(
+                consumedGeneration: 7,
+                currentGeneration: 8,
+                newerSmartActionTokenArmed: false),
+            "newer redirect generation rejects the older cast lease");
+        False(
+            CastedMacroRedirectRules.CanCommitExactSmartActionFallbackLease(
+                consumedGeneration: 7,
+                currentGeneration: 7,
+                newerSmartActionTokenArmed: true),
+            "a newly armed Smart Action token rejects the older cast lease");
+        False(
+            CastedMacroRedirectRules.CanCommitExactSmartActionFallbackLease(
+                consumedGeneration: 0,
+                currentGeneration: 0,
+                newerSmartActionTokenArmed: false),
+            "zero cast generation cannot commit a fallback lease");
     }
 
     public static void NonMacroCallsDoNotStealTheToken()

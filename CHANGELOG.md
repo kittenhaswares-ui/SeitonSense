@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.43.0.3
+
+- Fixed **Smart Action tap-to-land**. FFXIV can report an authored macro action
+  as a normal action instead of macro mode; the visible `<t>` fallback can now
+  enter the chase wait in either form.
+- Normal-mode admission is still narrow: Seiton first proves the exact Smart
+  Action generation, ability, and current visible target. Queue mode remains
+  excluded, and another action still cancels the reservation.
+- Supported casts now transfer the same exact reservation from the suppressed
+  hidden carrier to the visible `<t>` fallback. A cast already aimed at the
+  visible target can enter the wait in the same call. Neither path changes the
+  selected target nor adds auto-facing.
+- Replay remains the same action against the same target and rechecks current
+  Smart Action protections. Build and automated safety checks remain separate
+  from live in-game confirmation.
+
 ## 0.43.0.2
 
 - Fixed the active PvP Sprint protection released in `0.43.0.1`. An alternate

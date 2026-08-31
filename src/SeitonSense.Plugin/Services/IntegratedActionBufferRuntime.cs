@@ -578,13 +578,19 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             if (disposed || dispatching || tapGeneration <= 0)
                 return IntegratedActionBufferAttempt.None;
 
-            // None is indistinguishable from a fresh manual mouse/direct
-            // UseAction call. It cannot certify ownership of the preceding
-            // /smartaction tap, so only explicit macro carriers are admitted.
-            var macroMode = sourceMode == ActionManager.UseActionMode.Macro ||
-                            (uint)sourceMode == 100;
-            if (!macroMode || sourceMode == ActionManager.UseActionMode.Queue)
+            // The caller has already proven the exact Smart Action safety
+            // lease, tap generation, action, and visible hard target. FFXIV
+            // may surface that authored macro line as either Macro/raw-100 or
+            // None, so mode is only the final non-queue carrier check here.
+            if (!SmartActionFallbackInvocationRules.IsSupportedCarrier(
+                    explicitMacroCarrier:
+                        sourceMode == ActionManager.UseActionMode.Macro ||
+                        (uint)sourceMode == 100,
+                    directCarrier: sourceMode == ActionManager.UseActionMode.None,
+                    queueCarrier: sourceMode == ActionManager.UseActionMode.Queue))
+            {
                 return IntegratedActionBufferAttempt.None;
+            }
 
             var macroRoot = new IntegratedActionBufferHotbarRoot(
                 IsCertifiedDirectStandardHotbarRoot: false,
