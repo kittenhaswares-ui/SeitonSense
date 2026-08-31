@@ -43,7 +43,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
         29535, // Mineuchi
     ];
 
-    public int Version { get; set; } = 49;
+    public int Version { get; set; } = 50;
     public string LastSeenReleaseNotesVersion { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool EnableWolvesDenTesting { get; set; } = true;
@@ -90,6 +90,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool AllowCriticalRecoveryThroughNativeQueue { get; set; } = true;
     public bool EnableSmartActionBuffer { get; set; } = true;
     public bool EnableHoldToLandChaseBuffer { get; set; } = true;
+    public int TapToLandReservationMilliseconds { get; set; } =
+        HeldChaseBufferWindowRules.DefaultMilliseconds;
     public int SmartActionBufferWindowMilliseconds { get; set; } =
         SmartActionBufferWindowRules.DefaultMilliseconds;
     public bool ShowBufferLearningWindow { get; set; } = true;
@@ -150,6 +152,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool PlayHighPressureWarningSound { get; set; }
     public int HighPressureWarningSoundId { get; set; } = 6;
     public bool EnablePressureEscapeSprintOnHeldKey { get; set; }
+    public bool ProtectActiveSprintFromRepeatPress { get; set; } =
+        SmartSprintRules.RepeatProtectionDefaultEnabled;
+    public bool EnableIdleSmartSprintOnHeldKey { get; set; } =
+        SmartSprintRules.IdleSprintDefaultEnabled;
+    public int SmartSprintInactivityMilliseconds { get; set; } =
+        SmartSprintRules.DefaultInactivityMilliseconds;
     public float MarksmanSpiteWarningScale { get; set; } = 1.45f;
     public bool MchLimitBreakSoundEnabled { get; set; } = true;
     public int MchLimitBreakSoundId { get; set; } = 6;
@@ -318,7 +326,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     {
         pluginInterface = value;
         var repaired = ClampSettings();
-        if (Version >= 49)
+        if (Version >= 50)
         {
             if (repaired) Save();
             return;
@@ -836,7 +844,22 @@ public sealed class PluginConfiguration : IPluginConfiguration
             EnableHoldToLandChaseBuffer = true;
         }
 
-        Version = 49;
+        if (Version < 50)
+        {
+            // Key release no longer ends the exact range reservation. Preserve
+            // the existing enable/disable choice and start at the requested
+            // 2.2-second window; zero remains an explicit disable value.
+            TapToLandReservationMilliseconds =
+                HeldChaseBufferWindowRules.DefaultMilliseconds;
+            ProtectActiveSprintFromRepeatPress =
+                SmartSprintRules.RepeatProtectionDefaultEnabled;
+            EnableIdleSmartSprintOnHeldKey =
+                SmartSprintRules.IdleSprintDefaultEnabled;
+            SmartSprintInactivityMilliseconds =
+                SmartSprintRules.DefaultInactivityMilliseconds;
+        }
+
+        Version = 50;
         ClampSettings();
         Save();
     }
@@ -845,7 +868,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
 
     public void ResetToDefaults()
     {
-        Version = 49;
+        Version = 50;
         Enabled = true;
         EnableWolvesDenTesting = true;
         ShowNameplateSeiton = true;
@@ -888,6 +911,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
         AllowCriticalRecoveryThroughNativeQueue = true;
         EnableSmartActionBuffer = true;
         EnableHoldToLandChaseBuffer = true;
+        TapToLandReservationMilliseconds =
+            HeldChaseBufferWindowRules.DefaultMilliseconds;
         SmartActionBufferWindowMilliseconds =
             SmartActionBufferWindowRules.DefaultMilliseconds;
         ShowBufferLearningWindow = true;
@@ -948,6 +973,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
         PlayHighPressureWarningSound = false;
         HighPressureWarningSoundId = 6;
         EnablePressureEscapeSprintOnHeldKey = false;
+        ProtectActiveSprintFromRepeatPress =
+            SmartSprintRules.RepeatProtectionDefaultEnabled;
+        EnableIdleSmartSprintOnHeldKey =
+            SmartSprintRules.IdleSprintDefaultEnabled;
+        SmartSprintInactivityMilliseconds =
+            SmartSprintRules.DefaultInactivityMilliseconds;
         MarksmanSpiteWarningScale = 1.45f;
         MchLimitBreakSoundEnabled = true;
         MchLimitBreakSoundId = 6;
@@ -1344,6 +1375,28 @@ public sealed class PluginConfiguration : IPluginConfiguration
         {
             SmartActionBufferWindowMilliseconds =
                 smartActionBufferWindowMilliseconds;
+            changed = true;
+        }
+
+        var tapToLandReservationMilliseconds =
+            HeldChaseBufferWindowRules.Normalize(
+                TapToLandReservationMilliseconds);
+        if (tapToLandReservationMilliseconds !=
+            TapToLandReservationMilliseconds)
+        {
+            TapToLandReservationMilliseconds =
+                tapToLandReservationMilliseconds;
+            changed = true;
+        }
+
+        var smartSprintInactivityMilliseconds =
+            SmartSprintRules.NormalizeInactivityMilliseconds(
+                SmartSprintInactivityMilliseconds);
+        if (smartSprintInactivityMilliseconds !=
+            SmartSprintInactivityMilliseconds)
+        {
+            SmartSprintInactivityMilliseconds =
+                smartSprintInactivityMilliseconds;
             changed = true;
         }
 

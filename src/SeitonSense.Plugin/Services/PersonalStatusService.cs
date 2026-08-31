@@ -51,6 +51,7 @@ internal sealed class PersonalStatusService : IDisposable
     private readonly SmartRecuperateProbe smartRecuperate;
     private readonly EmergencyTeleportProbe emergencyTeleport;
     private readonly PressureEscapeSprintProbe pressureEscapeSprint;
+    private readonly SmartSprintProbe smartSprint;
     private readonly GuardianCommunicationService guardianCommunication;
     private readonly AllyRescueProbe allyRescue;
     private readonly MiracleInterceptProbe miracleIntercept;
@@ -169,6 +170,14 @@ internal sealed class PersonalStatusService : IDisposable
             objectTable,
             dataManager,
             pressureTracker,
+            nearAssist,
+            defensiveUtility,
+            log);
+        smartSprint = new SmartSprintProbe(
+            clientState,
+            dutyState,
+            objectTable,
+            configuration,
             nearAssist,
             defensiveUtility,
             log);
@@ -295,6 +304,7 @@ internal sealed class PersonalStatusService : IDisposable
         emergencyTeleport.Snapshot;
     internal PressureEscapeSprintProbeSnapshot PressureEscapeDiagnostics =>
         pressureEscapeSprint.Snapshot;
+    internal SmartSprintProbeSnapshot SmartSprintDiagnostics => smartSprint.Snapshot;
     internal GuardianCommunicationDiagnostics GuardianCommunicationDiagnostics =>
         guardianCommunication.Diagnostics;
     internal AllyRescueProbeSnapshot AllyRescueDiagnostics => allyRescue.Snapshot;
@@ -433,6 +443,7 @@ internal sealed class PersonalStatusService : IDisposable
             smartRecuperate.FailClosed();
             emergencyTeleport.FailClosed();
             pressureEscapeSprint.FailClosed(now, exception);
+            smartSprint.FailClosed(now, exception);
             guardianCommunication.FailClosed(now, exception);
             allyRescue.FailClosed(now, exception);
             miracleIntercept.FailClosed(now, exception);
@@ -484,6 +495,7 @@ internal sealed class PersonalStatusService : IDisposable
             smartRecuperate.Reset();
             emergencyTeleport.Reset();
             pressureEscapeSprint.Reset();
+            smartSprint.Reset();
             guardianCommunication.Reset();
             allyRescue.Reset();
             miracleIntercept.Reset();
@@ -812,6 +824,9 @@ internal sealed class PersonalStatusService : IDisposable
         var pressureEscapeSprintHeldInputEnabled = configuration.Enabled &&
                                                    configuration.EnablePressureEscapeSprintOnHeldKey &&
                                                    isCrystallineConflict;
+        var smartSprintHeldInputEnabled = configuration.Enabled &&
+                                          configuration.EnableIdleSmartSprintOnHeldKey &&
+                                          isSupportedPvPContext;
         var darkKnightPlungeHeldInputEnabled = darkKnightPlungeConfigurationEnabled &&
                                                isCrystallineConflict &&
                                                metadata.DarkKnightPlungeVerified &&
@@ -870,6 +885,7 @@ internal sealed class PersonalStatusService : IDisposable
                                              scholarCriticalStrategyHeldInputEnabled ||
                                              emergencyTeleportHeldInputEnabled ||
                                              pressureEscapeSprintHeldInputEnabled ||
+                                             smartSprintHeldInputEnabled ||
                                             darkKnightPlungeHeldInputEnabled ||
                                             ninjaGuardShukuchiHeldInputEnabled ||
                                             viperSerpentTailHeldInputEnabled ||
@@ -898,6 +914,7 @@ internal sealed class PersonalStatusService : IDisposable
              emergencyTeleportHeldInputEnabled ||
              smartRecuperateHeldInputEnabled ||
               pressureEscapeSprintHeldInputEnabled ||
+              smartSprintHeldInputEnabled ||
               darkKnightPlungeHeldInputEnabled ||
               astrologianHarmonicOrbisHeldInputEnabled ||
               redMageGuardEngageHeldInputEnabled),
@@ -920,7 +937,8 @@ internal sealed class PersonalStatusService : IDisposable
              samuraiCounterCcHeldEnabled: samuraiCounterCcHeldInputEnabled,
              samuraiZantetsukenHeldEnabled: false,
              astrologianHarmonicOrbisHeldEnabled: astrologianHarmonicOrbisHeldInputEnabled,
-             redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled);
+             redMageGuardEngageHeldEnabled: redMageGuardEngageHeldInputEnabled,
+             smartSprintHeldEnabled: smartSprintHeldInputEnabled);
         var purify = emergencyPurify.Observe(
             localPlayer,
             isSupportedPvPContext,
@@ -1417,6 +1435,21 @@ internal sealed class PersonalStatusService : IDisposable
             now,
             hardReset || !alive);
         var pressureEscapeClaimedPriority = pressureEscape.InputClaimed;
+        now = Environment.TickCount64;
+        var idleSprint = smartSprint.Observe(
+            localPlayer,
+            context,
+            smartSprintHeldInputEnabled,
+            configuration.SmartSprintInactivityMilliseconds,
+            immediateDefenseClaimedPriority ||
+            jobSpecificHeldClaimedPriority ||
+            emergencyTeleportClaimedPriority ||
+            defensiveUtilityClaimedPriority ||
+            pressureEscapeClaimedPriority,
+            emergencyInputFrame,
+            now,
+            hardReset || !alive);
+        var smartSprintClaimedPriority = idleSprint.InputClaimed;
         var kardia = smartKardia.Observe(
             localPlayer,
             isCrystallineConflict,
@@ -1428,6 +1461,7 @@ internal sealed class PersonalStatusService : IDisposable
              emergencyTeleportClaimedPriority ||
              defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
+            smartSprintClaimedPriority ||
             emergencyInputFrame.IsConsumed,
             now,
             hardReset);
@@ -1448,6 +1482,7 @@ internal sealed class PersonalStatusService : IDisposable
              emergencyTeleportClaimedPriority ||
              defensiveUtilityClaimedPriority ||
             pressureEscapeClaimedPriority ||
+            smartSprintClaimedPriority ||
             kardia.UseActionAttempted ||
             emergencyInputFrame.IsConsumed,
             now,
@@ -1906,6 +1941,7 @@ internal sealed class PersonalStatusService : IDisposable
         smartRecuperate.Reset();
         emergencyTeleport.Reset();
         pressureEscapeSprint.Reset();
+        smartSprint.Reset();
         guardianCommunication.Reset();
         allyRescue.Reset();
         miracleIntercept.Reset();

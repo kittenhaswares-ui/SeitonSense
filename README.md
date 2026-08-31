@@ -1,24 +1,25 @@
 # Seiton Sense
 
-Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
-stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.43.0.0 adds a shared adaptive
-response core and a dedicated **Ping Helpers** page. Purify, Recuperate, and
-Auto-Guard now use one explicit priority order, may wake on a sampled native
-not-ready-to-ready transition, and can use FFXIV's normal action boundary while
-a different native action is already queued. Seiton never edits that queue
-directly. When this priority override is enabled, an accepted recovery may let
-FFXIV replace the already queued action; disable it to require an empty queue.
-Only a client-false call with the complete pre-existing queue still unchanged
-can retry, while acceptance or any ambiguous transition is terminal.
-The existing automatic one-shot action buffer needs no `/buffer` macro. A new
-held chase mode preserves one exact instant hostile action and actor until
-native range/line of sight first becomes legal; release, new input, drift,
-expiry, Stun/forced movement, action-blocking CC, death, or zoning cancels it;
-Heavy or Bind alone do not discard an otherwise legal held action. The system does not change network
-ping, position, animation lock, target, real range, or line of sight. Exact live
-CC and chase behavior remain pending in-game confirmation. Version 0.42.0.10
-fixed an intermittent high-FPS `/seitonenavant` race. Version 0.42.0.9 improved slow
+Seiton Sense is a local PvP awareness HUD with pressure tracking, nameplate
+cues, warnings, job helpers, Smart Action, and target highlights.
+
+Version 0.43.0.1 makes early action presses more forgiving. Tap-to-land can
+remember one supported out-of-range attack for 0–3000 ms (2200 ms by default),
+even after you release the key. It keeps the same action and target, supports
+safe single-target casts, and stops when you press something else, change
+target, use Guard, become crowd-controlled, die, or change area. It does not
+increase range or move your character.
+
+PvP Sprint is also safer: pressing Sprint again no longer turns an active
+Sprint off by default. A separate optional Smart Sprint can use Sprint once
+after 3–5 seconds without action-bar input while you keep a gameplay key held.
+Only action-bar input resets that timer; the action does not have to succeed.
+Running, camera movement, and target changes do not reset it.
+Settings and update notes now use shorter player-friendly explanations.
+
+Version 0.43.0.0 introduced the Ping Helpers page and the clear recovery order
+Purify → Recuperate → Auto-Guard → job helpers. Version 0.42.0.10 fixed an
+intermittent high-FPS `/seitonenavant` race. Version 0.42.0.9 improved slow
 analog sampling, ReAction coexistence, and added configurable public-CC
 medicine-kit cues. Version 0.42.0.8 originally
 added the DNC-only command and its audited one-call boundary without moving the

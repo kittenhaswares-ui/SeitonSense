@@ -12,10 +12,9 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Job-specific PvP cues and helpers. Purify stays first; Smart Recuperate and automatic Guard run before the job-helper tier. " +
-            "That tier uses deterministic urgency order: AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > " +
-            "NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo. AST runs directly after recovery and Guard, then RDM and SAM; " +
-            "Auto-Zantetsuken and Auto-Seiton need no key while the other held helpers keep their explicit consent. Reactive counter-CC remains first for BRD/WHM. Cross-job survival and counter-CC controls are grouped under Action Helpers.");
+            "Optional PvP helpers for each job. Emergency recovery stays above job attacks. Auto-Zantetsuken and " +
+            "Auto-Seiton work while switched on; the other action helpers still need a held gameplay key. General " +
+            "survival and counter-CC settings are under Action Helpers.");
 
         if (ImGui.CollapsingHeader("Astrologian — Harmonischer Orbis", ImGuiTreeNodeFlags.DefaultOpen))
         {
@@ -25,25 +24,17 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableAstrologianHarmonicOrbisOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Astrologian only. While an eligible gameplay key remains held, this uses the " +
-                "same exact friendly selection as /nearhelp, restricted to living self/party players at exactly " +
-                "60% HP or lower. Lowest exact HP is the anchor; the shared Near Help pressure preference may refine " +
-                "only its existing narrow health window. Every candidate must pass the action's native range and " +
-                "line-of-sight check. No hard, soft, focus, or mouseover target is changed.");
+                "Off by default and AST only. While you hold a gameplay key, Seiton uses Harmonischer Orbis on a " +
+                "reachable party member at 60% HP or lower. It uses the same choice as /nearhelp and does not change " +
+                "your selected or mouseover target.");
             ImGui.TextDisabled(
-                "The helper freezes one exact player and uses Harmonischer Orbis / Aspected Benefic (29243). If and " +
-                "only if Zweifacher Zauber was already locally available before that Orbis, a client-accepted Orbis " +
-                "reserves the next clear scheduler frame for the same player. It invokes the raw Double Cast carrier " +
-                "(29245) only while that carrier resolves exactly to the adjusted Orbis repeat (29247). The heal may " +
-                "raise the player above 60%; that does not rerank or cancel the planned repeat. " +
-                "If Double Cast was not ready, the sequence deliberately ends after Orbis.");
+                "If Double Cast was ready before Orbis, Seiton uses the second heal on the same player as soon as it " +
+                "can. If Double Cast was not ready, it stops after Orbis. The second heal keeps the original player " +
+                "even if the first heal raises them above 60%.");
             ImGui.TextDisabled(
-                "Purify remains absolute priority. Your own Guard suppresses the full sequence and cannot be " +
-                "cancelled by this helper or its optional cast-cancel path. Exact actor identity, held key, English action metadata, native " +
-                "readiness, range, line of sight, and the 29245-to-29247 Double Cast adjustment are revalidated. A " +
-                "clean client rejection may retry only the same frozen action/target; ambiguity, drift, expiry, or " +
-                "release ends the sequence without an alternate. The global held-helper cast-cancel test can cancel " +
-                "your current cast only for an otherwise-ready frozen Orbis intent.");
+                "Purify stays first, and your Guard blocks the whole sequence. Seiton keeps the same player during the " +
+                "attempt and stops if they become invalid or unreachable. The global held-helper option may cancel your " +
+                "current cast only when Orbis is otherwise ready.");
             ImGui.PopTextWrapPos();
         }
 
@@ -71,24 +62,16 @@ internal sealed partial class SettingsWindow
                 "%d%%");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Red Mage only. While any eligible gameplay key remains held, Corps-a-corps " +
-                "(29699) can engage one exact enemy whose Guard has just begun. The helper requires the unspent " +
-                "melee-combo starter Riposte (41488) exactly; later Zwerchhau/Redoublement forms are deliberately " +
-                "not treated as a ready starter. Own HP and MP thresholds are inclusive and default to 80% / 50%. " +
-                "Your own Guard, death, untargetability, Bind, or other reviewed target protection blocks it.");
+                "Off by default and RDM only. While you hold a gameplay key, Corps-a-corps can engage an enemy during " +
+                "the first second of their Guard. It requires the Riposte start of your melee combo and your configured " +
+                "HP/MP minimums. Your own Guard, Bind, death, or enemy immunity blocks it.");
             ImGui.TextDisabled(
-                "Only an exact absent-to-active Guard edge opens one episode. The client-reported Guard remaining " +
-                "time must be above 3.0 and no more than 4.25 seconds, and the bounded lease can never survive past " +
-                "the first one second of that Guard. A target first seen already guarded is considered pre-existing, " +
-                "not fresh. Missing unrelated CC enemy slots do not block independently exact S1-S5 targets; duplicate " +
-                "or ambiguous identities fail closed. Wolves' Den testing uses only your exact current target.");
+                "It reacts only when Seiton sees Guard begin; an enemy who was already guarded does not count. The " +
+                "chance ends after the first second. Wolves' Den testing uses only your current target.");
             ImGui.TextDisabled(
-                "The selected actor, action, context, Guard episode, and physical key are frozen. Corps-a-corps uses " +
-                "its exact native 25-yalm range, line of sight, readiness, and target status with no target redirect. " +
-                "Only after the client accepts Corps-a-corps is that same revalidated actor hard-targeted once. There " +
-                "is no automatic melee follow-up, fallback target, or rerank. A clean client rejection may retry only " +
-                "inside the same one-second Guard window; ambiguity ends the episode. The optional global cast-cancel " +
-                "test cannot extend that window.");
+                "Corps-a-corps uses its normal 25-yalm range. After FFXIV accepts the dash, Seiton selects that same " +
+                "enemy once so you can continue the combo. It does not perform the melee combo for you or switch to " +
+                "another enemy.");
             ImGui.PopTextWrapPos();
         }
 
@@ -97,7 +80,7 @@ internal sealed partial class SettingsWindow
         if (ImGui.CollapsingHeader("Paladin — Guardian rescue", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Guardian for an exact critical or 3+-pressure ally",
+                "Guardian for a critical or 3+-pressure ally",
                 configuration.PaladinGuardianLowAlly,
                 value => configuration.PaladinGuardianLowAlly = value);
             changed |= Checkbox(
@@ -110,21 +93,16 @@ internal sealed partial class SettingsWindow
                 value => configuration.PaladinGuardianAnnounceAndMark = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and exact Crystalline Conflict only. The exact non-self party ally must be alive, " +
-                "targetable, and accepted by FFXIV's native 20-yalm range/line-of-sight check. The original 20% HP " +
-                "boundary is unconditional; 21-35% HP is eligible only with a fresh exact current hard/cast-target " +
-                "count of at least three enemies. Critical targets always precede proactive targets; proactive ties " +
-                "rank by higher pressure, then lower exact HP. Both Guard and Guardian readiness are revalidated.");
+                "Off by default and CC only. Guardian can save a reachable ally within 20 yalms at 20% HP or lower. " +
+                "At 21–35% HP, it requires at least three enemies focusing them. Critical HP wins first, then more " +
+                "enemy focus and lower HP.");
             ImGui.TextDisabled(
-                "Purify keeps global priority. On PLD, Guardian follows the unavailable NIN/reactive/cleanse paths and wins before SCH, DRK, " +
-                "Smart Recuperate, Emergency Teleport, generic Guard, and pressure Sprint. Continuous " +
-                "held consent freezes one exact Guardian intent; only a clean client rejection may use the common " +
-                "bounded same-intent retry. There is no selected-target change, alternate, fallback, or replay. " +
-                "CLIENT ACCEPTED and the 1.5-second card do not prove server-side protection.");
+                "Hold a gameplay key to allow the save. Purify remains first. Seiton keeps one ally during the attempt " +
+                "and does not visibly change your target. The activation card means FFXIV accepted the request, not " +
+                "that the ally was definitely saved.");
             ImGui.TextDisabled(
-                "The separate communication opt-in uses localized CC Quick Chat row 35 for the frozen party slot, " +
-                "then attempts Bind2 on that ally and Bind1 on self with exact ownership checks and bounded cleanup. " +
-                "Occupied, unknown, or drifting marker state is relinquished rather than overwritten or cleared.");
+                "The communication option sends the localized CC 'Cover target' Quick Chat and places paired Bind " +
+                "markers on the ally and you. Existing or changed markers are left alone.");
             ImGui.PopTextWrapPos();
         }
 
@@ -138,21 +116,12 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableDarkKnightPlungeOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off, PvP Dark Knight, and exact Crystalline Conflict only. Hiebsprung / Plunge (29092) " +
-                "considers living, targetable canonical S1-S5 enemies at an exact 30% HP or lower. The nearest " +
-                "native action may reach 20 yalms, but this helper adds a strict 10-yalm center-distance cap and " +
-                "still requires FFXIV's native range and line of sight. Lowest exact HP ratio wins, then S-slot " +
-                "and stable actor identity. Your own Bind, either side's Guard, your recent Guard propagation latch, " +
-                "animation lock, typing, metadata uncertainty, or identity drift blocks the request.");
+                "Off by default, DRK only, and CC only. While you hold a gameplay key, Plunge can jump to the " +
+                "lowest-HP enemy at 30% or lower within 10 yalms. Bind, either side's Guard, typing, or an obstructed " +
+                "target blocks it.");
             ImGui.TextDisabled(
-                "The first eligible epoch freezes one target. After a " +
-                "client-accepted request, the same physical key may stay held: each later attempt requires a " +
-                "separately observed not-ready to ready cooldown epoch, such as a proven KO reset or the natural " +
-                "12-second recast. Every epoch uses final revalidation and only the common bounded explicit-false " +
-                "retry, with no target change, alternate, rerank, or replay. A reset that happens entirely between " +
-                "two framework frames is deliberately " +
-                "missed rather than guessed. Dark Arts Shadowbringer runs before Hiebsprung; the safe HP-cost " +
-                "Shadowbringer fallback runs after it, followed by held Monk combo and the cross-job survival helpers.");
+                "It can trigger again while the key stays held only after FFXIV shows that Plunge became ready again, " +
+                "including a KO reset. Each attempt keeps one enemy and will not switch targets halfway through.");
 
             ImGui.Spacing();
             changed |= Checkbox(
@@ -178,30 +147,20 @@ internal sealed partial class SettingsWindow
                 value => configuration.DarkKnightShadowbringerPressureLimitExclusive = value,
                 "%d");
             ImGui.TextDisabled(
-                "An exact own Dark Arts proc from a broken Blackest Night always gets the first DRK opportunity and " +
-                "does not pay HP or use the configured HP/pressure thresholds. Without Dark Arts, base Shadowbringer is allowed only strictly above the configured " +
-                "HP threshold and with a fresh known incoming-pressure count strictly below the configured limit. " +
-                "Dark Arts runs before Hiebsprung; the HP-cost fallback runs after Hiebsprung. Unknown pressure blocks " +
-                "only the HP-cost fallback. Wolves' Den testing treats self pressure as known zero while retaining the " +
-                "configured HP gate, exact current target, range, and line of sight.");
+                "A Dark Arts proc from The Blackest Night always allows the free Shadowbringer first, even when your " +
+                "normal HP/pressure limits would block it. Without Dark Arts, you must be above the HP setting and " +
+                "below the enemy-focus limit. Wolves' Den treats focus as zero but still uses your HP limit.");
             ImGui.TextDisabled(
-                "Blackblood preservation is on by default. Exact status 3033 blocks both automatic Shadowbringer " +
-                "paths, including an already-active manual or Eventide buff. After an automatic request, the helper " +
-                "waits for the native status to appear and rearms after stable disappearance through an enhanced " +
-                "weaponskill or natural expiry. If the complete short lifecycle falls between samples, a 1.5-second " +
-                "grace plus one later absent sample avoids a permanent lock. Turning this off removes only the " +
-                "Blackblood wait; the shared cadence remains.");
+                "Preserve Blackblood is on by default. After Shadowbringer gives you Blackblood, Seiton waits until you " +
+                "spend it on the stronger combo attack or let it expire before using Shadowbringer again. Turning this " +
+                "off removes only that wait.");
             ImGui.TextDisabled(
-                "Both automatic Shadowbringer paths share a fixed 1.8-second cadence. Accepted or ambiguous native " +
-                "boundaries start it; explicit false and soft-unavailable results do not. Continuous safe HP/pressure " +
-                "conditions can open one new base Shadowbringer generation when the cadence finishes; Dark Arts still " +
-                "wins whenever both paths are ready.");
+                "Automatic Shadowbringer can run at most once every 1.8 seconds. Dark Arts still wins when both the " +
+                "free and HP-cost versions are possible.");
             ImGui.TextDisabled(
-                "Default off. In Crystalline Conflict, Auto Shadowbringer internally uses the Smart Action target policy " +
-                "without requiring the /smartaction macro toggle and without changing the visible target. The selected " +
-                "actor is frozen for that episode. Because Shadowbringer is a line attack, any protected enemy in its " +
-                "area blocks the request. Wolves' Den testing uses only the current exact duel opponent or reviewed " +
-                "striking dummy; explicit client-false is the only retryable result.");
+                "Off by default. In CC, Shadowbringer uses Smart Action's enemy choice without requiring the macro and " +
+                "without changing your visible target. Because it is a line attack, any protected enemy in the line " +
+                "blocks it. Wolves' Den uses only your duel target or a supported dummy.");
             ImGui.PopTextWrapPos();
         }
 
@@ -215,19 +174,14 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableNinjaGuardShukuchiOnHeldGameplayKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off, PvP Ninja, and exact Crystalline Conflict only. An independently resolved exact S1-S5 " +
-                "enemy must be alive, targetable, strictly below 20% HP, and currently have live Guard / Wehr. " +
-                "Shukuchi (29513) uses that same actor's current finite ground position within the native 20-yalm " +
-                "range. Missing unrelated enemy slots and missing pressure never block an otherwise exact target.");
+                "Off by default, Ninja only, and CC only. While you hold a gameplay key, Shukuchi can jump to a " +
+                "guarded enemy below 20% HP within its normal 20-yalm range.");
             ImGui.TextDisabled(
-                "Known positive team pressure is only a ranking bonus; otherwise the lowest exact HP ratio wins, then " +
-                "stable S-slot and actor identity. The helper freezes one actor and never substitutes or reranks. " +
-                "Only a proven client-false result may use the common bounded same-actor retry. Own Guard and its " +
-                "propagation latch block this automatic helper; the explicit /panicshu command remains separate.");
+                "It prefers team focus, then lower HP. Each attempt keeps one enemy and will not switch halfway through. " +
+                "Your own Guard blocks this helper; /panicshu remains separate.");
             ImGui.TextDisabled(
-                "Only after Shukuchi returns client-accepted does Seiton Sense re-resolve and hard-target that exact " +
-                "same living enemy once. Rejection, unknown acceptance, identity drift, or target readback failure never " +
-                "changes your target. Enabled Auto-Seiton may independently use a later free framework frame.");
+                "After FFXIV accepts Shukuchi, Seiton selects that same living enemy once. If the jump fails or the enemy " +
+                "changes, your target stays untouched. Auto-Seiton may act afterward if enabled.");
             ImGui.PopTextWrapPos();
 
             ImGui.Spacing();
@@ -237,27 +191,13 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableNinjaSeitonOnHeldGameplayKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off. On PvP Ninja, the persistent arm automatically requests " +
-                "the currently adjusted Seiton Tenchu (29515 or Unsealed follow-up 29516). It considers " +
-                "exact canonical S1-S5 enemies in Crystalline Conflict, or only the exact current target in the enabled " +
-                "Wolves' Den test context. A candidate must be living, targetable, below 50% HP, and accepted by FFXIV's native " +
-                "range/line-of-sight check. A target with Guardian's Covered status, a Paladin's Phalanx self-" +
-                "invulnerability, or a Dark Knight's Eventide invulnerability is excluded; Guard itself remains valid. " +
-                "The lowest exact HP ratio wins, then stable slot/actor identity. Own Guard or " +
-                "its bounded propagation gate blocks the helper. On Ninja, Auto-Seiton is the earliest NIN automatic job " +
-                "helper after Purify and can claim before the later NIN/reactive helpers in that framework frame.");
+                "Off by default. While Auto-Seiton is armed, Ninja automatically uses the current base or Unsealed " +
+                "Seiton on a reachable enemy below 50% HP. It prefers the lowest HP. Covered, Paladin LB, Dark Knight " +
+                "LB, and your own Guard block it; enemy Guard does not. Wolves' Den uses only your current target.");
             ImGui.TextDisabled(
-                "Each exact locally-ready adjusted-action availability epoch freezes one actor. An explicit client " +
-                "rejection may retry only that same intent after a short delay while every gate remains valid; client " +
-                "acceptance or ambiguous acceptance retires the epoch immediately. A later genuine 29515-to-29516 " +
-                "follow-up is a separate epoch, but a " +
-                "rejected base action is never replaced by the follow-up. After any native request, Seiton Sense never " +
-                "selects again inside that epoch, chooses an alternate, falls back, or replays. If the frozen actor drifts " +
-                "before any native request, no call was made and the still-open epoch may choose a new exact actor on the next frame. The actor and its HP are " +
-                "read again at the latest safe point before every request; exactly 50% or higher or newly observed " +
-                "Covered/LB invulnerability cancels the intent. Active casts and native animation lock are waited out; " +
-                "automatic Seiton does not require or swallow a gameplay key. A client-accepted return is dispatch feedback only, not " +
-                "proof that Seiton landed or killed the target; the final client-to-server race cannot be removed.");
+                "Each ready Seiton keeps one enemy and checks their HP and protection again before use. If they return " +
+                "to 50% HP or gain immunity, it stops. The Unsealed follow-up is a new chance. Active casts and animation " +
+                "lock are waited out, and no gameplay key is required.");
             ImGui.TextDisabled(
                 "Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF. The tile " +
                 "shows separate ON/OFF icons and sparkles when the resolved Seiton action is ready. ON is fully automatic " +
@@ -266,7 +206,7 @@ internal sealed partial class SettingsWindow
 
             ImGui.Spacing();
             changed |= Checkbox(
-                "Seiton-ready icon + S-slot (NIN)",
+                "Seiton-ready icon + enemy slot (NIN)",
                 configuration.ShowNameplateSeiton,
                 value => configuration.ShowNameplateSeiton = value);
 
@@ -344,20 +284,13 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableSamuraiZantetsukenOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Samurai only; no held key is required. LB readiness alone does nothing. In " +
-                "Crystalline Conflict the selected primary must carry exactly one current Kuzushi applied by you; " +
-                "among those reachable primaries, its target-centered 5y circle must reach the best vulnerable enemy " +
-                "cluster. Nearby cluster members do not need Kuzushi. Covered, Hallowed Ground, and Undead Redemption " +
-                "are excluded; Guard, Chiten, and shields are allowed. Equal clusters prefer an unshielded primary, " +
-                "then lower HP%, then stable S-slot. Wolves' Den uses only the exact current duel target or reviewed " +
-                "striking dummy and requires the same own-source Kuzushi, so a dummy cannot bypass the gate.");
+                "Off by default and Samurai only; no held key is required. It waits for your Kuzushi debuff, then uses " +
+                "Zantetsuken on the reachable target whose 5-yalm circle hits the most vulnerable enemies. Covered, " +
+                "Paladin LB, and Dark Knight LB are skipped; Guard, Chiten, and shields are allowed. Wolves' Den uses " +
+                "only your duel target or a supported dummy and still requires your Kuzushi.");
             ImGui.TextDisabled(
-                "Purify stays absolute priority. The separate SAM post-Purify/Guard Soten-to-Mineuchi option runs first; " +
-                "an accepted Soten reserves its bounded Mineuchi arrival window before Zantetsuken or any lower helper. " +
-                "The automatic target stays frozen through global animation/cast waits; its exact own-source Kuzushi " +
-                "is rechecked immediately before UseAction. A pre-request proc loss releases the target without spending " +
-                "the ready epoch. Explicit client rejections use the shared bounded retry throttle; accepted or " +
-                "ambiguous outcomes close that epoch.");
+                "Purify and the SAM Soten → Mineuchi counter come first. Seiton keeps the same Zantetsuken target while " +
+                "waiting for casts or animation lock and checks Kuzushi again just before use.");
             ImGui.PopTextWrapPos();
         }
 
@@ -370,31 +303,15 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableViperSerpentTailOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Viper only. While any eligible gameplay key, including WASD, remains held, " +
-                "Seiton Sense checks FFXIV's currently transformed Serpent's Tail / Serpentiner Geist carrier (39183) " +
-                "each frame. When FFXIV exposes one reviewed follow-up (39174-39182), the helper may use that exact " +
-                "action on the shared Smart Action winner in exact CC. It ranks only reachable canonical enemies by " +
-                "reach tier, HP, fresh team pressure, unavailable Guard, trusted MP, and stable slot order; a fully " +
-                "safe exact current hard target is only the final fallback. The transformed carrier is the complete " +
-                "opportunity signal: Seiton Sense does not record, require, or try to prove a preceding Viper action. " +
-                "Carrier 39183 itself is never dispatched. The action, held key, and chosen target freeze for the " +
-                "exact attempt/retry episode. Later target or protection drift retires that exposure instead of " +
-                "reranking. The helper never visibly changes a selected target or substitutes a different follow-up.");
+                "Off by default and Viper only. While you hold a gameplay key, Seiton uses the currently available " +
+                "Serpent's Tail follow-up on Smart Action's best reachable enemy. It prefers range, low HP, team focus, " +
+                "unavailable Guard, and low MP. Your visible target does not change.");
             ImGui.TextDisabled(
-                "Purify keeps absolute priority; this is Viper's earliest held job helper. Own Guard blocks it, " +
-                "while enemy Guard may be bypassed only because these exact follow-ups natively ignore Guard when " +
-                "dealing damage. Chiten, Covered, Paladin LB, Dark Knight LB, or incomplete protection evidence still " +
-                "blocks selection. " +
-                "Action, resource, target-status, or reach waits yield the frame to a usable lower helper; only an " +
-                "otherwise-ready native-boundary or retry-throttle wait keeps Viper's priority. Cast cancellation is " +
-                "deliberately unavailable. A clean client rejection may only use the shared bounded same-intent retry " +
-                "while the exact key, adjusted action, target, range, and line of sight stay valid. Ambiguity or retry " +
-                "exhaustion requires releasing that frozen key before another Viper episode.");
+                "Purify stays first. Your Guard, Chiten, Covered, Paladin LB, or Dark Knight LB blocks it. Enemy Guard " +
+                "is allowed only for follow-ups that naturally deal damage through Guard. This helper never cancels " +
+                "your cast and keeps the same action and enemy for each attempt.");
             ImGui.TextDisabled(
-                "Available in exact Crystalline Conflict. With the separate Wolves' Den testing toggle, testing is " +
-                "restricted to your exact current hard target (<t>): the live hostile duel opponent or the reviewed " +
-                "striking dummy (NameId 541). Arbitrary NPCs and synthetic enemy slots are rejected. Client acceptance " +
-                "is not proof of a server-side hit.");
+                "Works in CC. Wolves' Den testing uses only your current duel target or a supported striking dummy.");
             ImGui.PopTextWrapPos();
         }
 
@@ -407,15 +324,12 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableGunbreakerContinuationOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off and PvP Gunbreaker only. The native Continuation carrier plus the exact own proc status " +
-                "must expose Hypervelocity, Jugular Rip, Abdomen Tear, Eye Gouge, or Fated Brand. One transformed proc " +
-                "can authorize exactly one call while a gameplay key remains held. CC chooses the lowest-HP reachable " +
-                "canonical S1-S5 enemy; Wolves' Den uses only the exact current target. Fated Brand is self-centered " +
-                "and requires that frozen enemy inside its exact 6-yalm effect radius.");
+                "Off by default and Gunbreaker only. While you hold a gameplay key, Seiton uses an available " +
+                "Continuation follow-up once on the lowest-HP reachable enemy. Wolves' Den uses only your current " +
+                "target. Fated Brand requires that enemy within its 6-yalm area.");
             ImGui.TextDisabled(
-                "Purify and earlier job-specific work keep priority. The action, proc, key, context, and actor freeze " +
-                "before any bounded explicit-false retry. It never cancels casts, changes target, substitutes a follow-up, " +
-                "or treats client acceptance as proof of a hit.");
+                "Purify and earlier job helpers stay first. It keeps the same proc and enemy, never cancels your cast, " +
+                "and does not visibly change your target.");
             ImGui.PopTextWrapPos();
         }
 
@@ -428,27 +342,17 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableScholarCriticalStrategyOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off, PvP Scholar, and exact Crystalline Conflict only. Continuous held physical gameplay-key " +
-                "consent may request Critical Strategy (29716) only against a living, targetable exact canonical " +
-                "S1-S5 enemy with live Guard (3054 or 3673), verified readiness, and FFXIV's native 25-yalm range/line " +
-                "of sight. It is never spent as the ordinary 10% damage-taken debuff: on Guard, the current official " +
-                "effect instead halves Guard's defensive bonus for 10 seconds.");
+                "Off by default, Scholar only, and CC only. While you hold a gameplay key, Critical Strategy can target " +
+                "a guarded enemy within its normal 25-yalm range. On Guard, it halves Guard's defensive bonus for 10 " +
+                "seconds instead of applying its normal damage-taken effect.");
             ImGui.TextDisabled(
-                "Selection requires the complete unique S1-S5 set. If every eligible guarded candidate has one active, " +
-                "exact, non-negative team-pressure count and any count is positive, highest team pressure wins, then " +
-                "lowest exact HP ratio. Any unknown/negative pressure, or all-zero pressure, makes the entire selection " +
-                "HP-first. Stable S-slot, entity ID, and game-object ID break exact ties. Pressure is selection-only and " +
-                "is not revalidated as a final dispatch gate.");
+                "When pressure data is clear, it prefers the guarded enemy under the most team focus, then lower HP. " +
+                "If pressure is unclear or zero, lower HP wins.");
             ImGui.TextDisabled(
-                "The frozen intent is revalidated before every possible bounded call for exact identity, action " +
-                "readiness, live Guard, and native range/line of sight. Only an explicit client rejection may retry " +
-                "that same target. It " +
-                "never changes a hard, soft, focus, or mouseover target, reranks, selects an alternate after drift, " +
-                "substitutes another action, falls back, or replays. The original key is not swallowed, and " +
-                "client acceptance does not prove that Critical Strategy landed or changed Guard.");
+                "Each attempt keeps one enemy and checks Guard, range, and line of sight again before use. It never " +
+                "changes your selected, focus, soft, or mouseover target.");
             ImGui.TextDisabled(
-                "Purify, AST, SAM, NIN Seiton, VPR Serpentiner Geist, GNB Continuation, reactive counter-CC, Ally Rescue, Guardian, and Guard-Shukuchi precede SCH. " +
-                "DRK Dark Arts, Hiebsprung, the safe DRK fallback, and held Monk combo follow before the cross-job survival helpers.");
+                "Shorter emergency windows, counter-CC, rescue, and Guardian run before this helper.");
             ImGui.PopTextWrapPos();
         }
 
@@ -473,12 +377,10 @@ internal sealed partial class SettingsWindow
                 value => configuration.EnableMonkHeldComboOnHeldKey = value);
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Default off. CC first prefers reachable melee enemies, then lowest exact HP; Wolves' Den uses only " +
-                "the exact current duel opponent or reviewed dummy. The helper follows the native seven-step combo " +
-                "carrier exactly and uses Wind's Reply only as the reviewed ranged fallback. It keeps one Rising " +
-                "Phoenix charge reserved for the deliberate Pressure Point → Thunderclap when needed → Rising Phoenix " +
-                "→ Fire Resonance → Phantom Rush finish. Every proof, range edge, action, actor, and held key is frozen " +
-                "and revalidated; it never changes target or guesses a missing combo/status transition.");
+                "Off by default. While you hold a gameplay key, Seiton follows Monk's normal PvP combo on a reachable " +
+                "low-HP enemy. It uses Wind's Reply in melee and as the ranged backup, and saves one Rising Phoenix for " +
+                "the planned Pressure Point → Thunderclap → Rising Phoenix → Fire Resonance → Phantom Rush finish. " +
+                "It never visibly changes your target or guesses a missing combo step.");
             ImGui.PopTextWrapPos();
             ImGui.Spacing();
             changed |= DrawMonkEarthReplyControls();
@@ -495,23 +397,14 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableSageKardiaAfterEukrasia = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off, PvP Sage, and exact Crystalline Conflict only. Seiton never alters or suppresses the " +
-            "incoming Eukrasia (29258) call. Only after that call is client-accepted and a real local Eukrasia " +
-            "charge/status transition is observed does one short-lived Kardia opportunity open. Kardia waits for " +
-            "animation lock to clear instead of being fired unreliably inside the Eukrasia call.");
+            "Off by default, Sage only, and CC only. After FFXIV accepts Eukrasia and its status appears, Seiton gets " +
+            "one short chance to use Kardia. It waits for Eukrasia's animation to finish first.");
         ImGui.TextDisabled(
-            "A fresh complete exact five-player party/pressure publication selects living, targetable candidates at " +
-            "2+ direct pressure by highest pressure, then lowest exact HP ratio and stable party/actor identity. If " +
-            "nobody qualifies, the exact local Sage is the sole initial self fallback. A non-self target must also " +
-            "pass native 30-yalm range and line of sight. An unknown or already-own Kardion state on the selected " +
-            "actor ends the opportunity; it never falls through to another ally or self.");
+            "It prefers a reachable party member focused by at least two enemies, then more focus and lower HP. If " +
+            "nobody qualifies, it can choose you. A player who already has your Kardion is skipped.");
         ImGui.TextDisabled(
-            "The opportunity and frozen actor are spent before at most one direct-GOID Kardia request. Urgent " +
-            "physical-hold helpers through pressure Sprint still win the frame; event Kardia precedes only event Monk. " +
-            "Kardia never changes a hard, soft, focus, or mouseover " +
-            "target, reranks after commitment, selects an alternate, replays, or retries. 'Incoming Eukrasia' may " +
-            "include another plugin's or Turbo's call because the native hook cannot prove a physical origin. Client " +
-            "acceptance does not prove that Kardia or Kardion applied.");
+            "It tries once and never changes your selected, focus, soft, or mouseover target. Eukrasia from Turbo or " +
+            "another plugin may also open the chance.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -524,19 +417,12 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableBardWardensPaeanPressureRedirect = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off and exact Crystalline Conflict only. This never casts Paean by itself. It only examines an " +
-            "already incoming The Warden's Paean (29400) ability call from the normal action path or a downstream " +
-            "Turbo pulse. A complete, unique, stable exact party view is required. Eligible non-self allies must be " +
-            "living, targetable, without the live Paean ward (3143), accepted by native 30-yalm range/line of sight, " +
-            "and have a trusted current count of at least three unique enemies hard-targeting or casting at them. " +
-            "Highest pressure wins, then lowest exact HP ratio, party slot, entity ID, and game-object ID. An unknown " +
-            "count excludes only that ally. No exact known 3+ candidate leaves the original call vanilla.");
+            "Off by default and CC only. This does not press Paean for you. When you or Turbo uses Paean, Seiton can " +
+            "redirect it to a reachable ally without the ward who is focused by at least three enemies. More focus " +
+            "wins, then lower HP. If nobody qualifies, your original Paean target is used.");
         ImGui.TextDisabled(
-            "Once a redirect is frozen, final identity, job, exact resolved action/metadata, life, HP, Paean ward, " +
-            "native range/line-of-sight, or pressure drift suppresses that one call instead of using the original " +
-            "target or another ally. There is deliberately no cooldown/readiness gate. It never changes a selected " +
-            "target, creates or substitutes an action, replays, or retries. A later Turbo pulse is a separate call. " +
-            "Client acceptance does not prove that Paean applied or removed or nullified CC.");
+            "Once redirected, it keeps that ally. If they become invalid before use, that Paean press is stopped " +
+            "instead of switching again. Your visible target does not change.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -573,10 +459,8 @@ internal sealed partial class SettingsWindow
             "%.2f s");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "PvP MNK only and disabled by default. This detonates the already-active Earth's Reply / Echo der Erde " +
-            "at the enabled low-HP threshold or before the 8-second Earth Resonance timer is lost. It never starts " +
-            "Riddle of Earth / Steinernes Enigma, changes your target, or retries a rejected action. Event Monk is " +
-            "last in the request order.");
+            "Off by default and Monk only. Uses Earth's Reply while Earth Resonance is active at your chosen low-HP " +
+            "limit or shortly before the effect expires. It never starts Riddle of Earth or changes your target.");
         ImGui.PopTextWrapPos();
         return changed;
     }

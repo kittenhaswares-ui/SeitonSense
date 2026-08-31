@@ -165,6 +165,10 @@ internal readonly record struct IntegratedBufferedReplayIntent(
          TargetId is not (0 or 0xE0000000));
 }
 
+internal readonly record struct IntegratedBufferedReplayResult(
+    bool NativeBoundaryInvoked,
+    bool ClientReturnedAccepted);
+
 /// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist,
 /// /smartaction, /nearhelp, and /farhelp macro lines.
@@ -178,6 +182,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 {
     [ThreadStatic]
     private static int internalRedirectBypassDepth;
+
+    [ThreadStatic]
+    private static int actionBarActivitySuppressionDepth;
 
     [ThreadStatic]
     private static int integratedBufferReplayDepth;
@@ -214,6 +221,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private readonly SmartActionGuardBypassCatalog smartActionGuardBypassActions;
     private readonly bool samuraiSmartActionCastsMetadataVerified;
     private readonly bool chitenMetadataVerified;
+    private readonly bool pvpSprintMetadataVerified;
     private readonly object tokenGate = new();
     private readonly object guardAttemptGate = new();
     private readonly object smartKardiaTriggerGate = new();
@@ -227,6 +235,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private ArmedSmartTarget? armedSmartTarget;
     private SmartActionSafetyLeaseState smartActionSafetyLeaseState =
         SmartActionSafetyLeaseState.Initial;
+    private long smartActionTapGeneration;
+    private long smartActionSafetyTapGeneration;
+    private long smartActionFallbackTapGeneration;
     private ArmedNearHelpTarget? armedHelpTarget;
     private NearHelpOneShotState nearHelpState = NearHelpOneShotState.Initial;
     private ulong castedMacroRedirectGeneration;
@@ -264,6 +275,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private float farHelpLastDistance;
     private string farHelpLastEvent = "Not started";
     private long nextErrorLogAt;
+    private long actionBarActivityToken;
     private string lastEvent = "Not started";
     private bool started;
     private bool disposed;
@@ -304,6 +316,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             samuraiSmartActionCastsMetadataVerified;
         this.chitenMetadataVerified = chitenMetadataVerified;
         this.log = log;
+        pvpSprintMetadataVerified =
+            PressureEscapeSprintProbe.ValidateMetadata(dataManager, log);
         observedTerritory = clientState.TerritoryType;
 
         try
@@ -410,6 +424,19 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     internal CcImmunityBrakeDiagnostics CcBrakeDiagnostics => ccImmunityBrake.Diagnostics;
     internal SmartWardensPaeanDiagnostics SmartWardensPaeanDiagnostics =>
         smartWardensPaean.Diagnostics;
+    internal ActionBarActivitySnapshot ActionBarActivitySnapshot
+    {
+        get
+        {
+            var token = Volatile.Read(ref actionBarActivityToken);
+            return new ActionBarActivitySnapshot(
+                Known: Volatile.Read(ref started) &&
+                       !disposed &&
+                       useActionHook?.IsEnabled == true,
+                Token: token > 0 ? (ulong)token : 0);
+        }
+    }
+    internal bool PvPSprintMetadataVerified => pvpSprintMetadataVerified;
     internal IReadOnlySet<uint> VerifiedCcBrakeStatusIds => ccImmunityBrake.VerifiedStatusIds;
     internal IReadOnlySet<uint> VerifiedCcBrakeActionIds => ccImmunityBrake.VerifiedActionIds;
 
@@ -578,6 +605,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     }
 
     /// <summary>
+    /// Runs the optional idle-Sprint request without treating that automatic
+    /// request as fresh player activity. Otherwise Smart Sprint would re-arm
+    /// its own idle episode after every accepted Sprint.
+    /// </summary>
+    internal T RunWithoutRedirectAndWithoutActionBarActivity<T>(Func<T> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        actionBarActivitySuppressionDepth++;
+        try
+        {
+            return RunWithoutRedirect(action);
+        }
+        finally
+        {
+            actionBarActivitySuppressionDepth--;
+        }
+    }
+
+    /// <summary>
     /// Resolves one already concrete held-action target through the same CC
     /// Smart Action ranking and protection policy as /smartaction. The held
     /// helper's own opt-in is authoritative, so the macro toggle is deliberately
@@ -736,21 +782,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     /// Smart Kardia. The caller must provide the exact previously validated
     /// action and post-Smart-Action target tuple.
     /// </summary>
-    internal T RunExactBufferedReplay<T>(
+    internal IntegratedBufferedReplayResult RunExactBufferedReplay(
         IntegratedBufferedReplayIntent intent,
-        Func<T> action)
+        Func<bool> action)
     {
         ArgumentNullException.ThrowIfNull(action);
         if (!intent.IsValid || integratedBufferedReplayScope is not null)
-            return default!;
+            return default;
 
         var previousScope = integratedBufferedReplayScope;
-        integratedBufferedReplayScope = new IntegratedBufferedReplayScope(this, intent);
+        var scope = new IntegratedBufferedReplayScope(this, intent);
+        integratedBufferedReplayScope = scope;
         integratedBufferReplayDepth++;
         internalRedirectBypassDepth++;
         try
         {
-            return action();
+            var clientReturnedAccepted = action();
+            return new IntegratedBufferedReplayResult(
+                scope.NativeBoundaryInvoked,
+                clientReturnedAccepted);
         }
         finally
         {
@@ -1148,6 +1198,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         SmartTargetRedirectMode selectionMode,
         string displayName)
     {
+        // The command itself is a newer authored action intent, even when the
+        // following macro never reaches an eligible fallback line.
+        integratedInputRuntime?.ActionBuffer.Cancel(
+            SmartActionBufferCancelReason.Replaced,
+            "Replaced by a new Smart Action macro tap");
         ClearToken("Replaced or cleared by a new Smart Action arm request");
 
         if (disposed || !started || !configuration.Enabled || !configuration.EnableSmartActionMacro)
@@ -1173,16 +1228,20 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         try
         {
             var now = Environment.TickCount64;
-            var token = new ArmedSmartTarget(
-                clientState.TerritoryType,
-                localPlayer!.EntityId,
-                localPlayer.GameObjectId,
-                now + TokenLifetimeMilliseconds) with
-            {
-                SelectionMode = selectionMode,
-            };
             lock (tokenGate)
             {
+                smartActionTapGeneration = smartActionTapGeneration == long.MaxValue
+                    ? 1
+                    : smartActionTapGeneration + 1;
+                var token = new ArmedSmartTarget(
+                    clientState.TerritoryType,
+                    localPlayer!.EntityId,
+                    localPlayer.GameObjectId,
+                    now + TokenLifetimeMilliseconds) with
+                {
+                    SelectionMode = selectionMode,
+                    TapGeneration = smartActionTapGeneration,
+                };
                 castedMacroRedirectGeneration++;
                 armedSmartTarget = token;
                 smartTargetArmedCount++;
@@ -1372,6 +1431,86 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         useActionLocationHook?.Dispose();
     }
 
+    private bool ShouldBlockActiveSprintRepeatPress(
+        ActionManager* actionManager,
+        ActionType actionType,
+        uint requestedActionId)
+    {
+        if (!configuration.Enabled ||
+            !configuration.ProtectActiveSprintFromRepeatPress ||
+            !pvpSprintMetadataVerified ||
+            actionManager == null ||
+            actionType is not (ActionType.Action or ActionType.PvPAction) ||
+            requestedActionId != SmartSprintRules.PvPSprintActionId)
+        {
+            return false;
+        }
+
+        try
+        {
+            var adjustedActionId = ResolveActionId(
+                actionManager,
+                actionType,
+                requestedActionId);
+            if (adjustedActionId != SmartSprintRules.PvPSprintActionId)
+                return false;
+
+            var localPlayer = objectTable.LocalPlayer;
+            if (!IsLivePlayer(localPlayer)) return false;
+
+            var sprintActive = false;
+            foreach (var status in localPlayer!.StatusList)
+            {
+                if (status.StatusId != SmartSprintRules.PvPSprintStatusId)
+                    continue;
+
+                // Sprint is a finite status. An unreadable or already expired
+                // row is not positive evidence and therefore fails open.
+                if (!float.IsFinite(status.RemainingTime) || status.RemainingTime <= 0f)
+                    return false;
+
+                sprintActive = true;
+                break;
+            }
+
+            return SmartSprintRules.ShouldBlockRepeatPress(
+                new SprintRepeatProtectionObservation(
+                    Enabled: true,
+                    IsActionRequest: true,
+                    requestedActionId,
+                    adjustedActionId,
+                    SprintMetadataVerified: true,
+                    SprintStatusKnown: true,
+                    ActiveSprintStatusId: sprintActive
+                        ? SmartSprintRules.PvPSprintStatusId
+                        : 0,
+                    sprintActive));
+        }
+        catch (Exception exception)
+        {
+            LogFailure(
+                exception,
+                "Seiton Sense active Sprint repeat protection failed open.");
+            return false;
+        }
+    }
+
+    internal void RecordActionBarActivity()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref actionBarActivityToken);
+            if (current == long.MaxValue) return;
+            if (Interlocked.CompareExchange(
+                    ref actionBarActivityToken,
+                    current + 1,
+                    current) == current)
+            {
+                return;
+            }
+        }
+    }
+
     private bool UseActionDetour(
         ActionManager* thisPtr,
         ActionType actionType,
@@ -1382,6 +1521,23 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint comboRouteId,
         bool* outOptAreaTargeted)
     {
+        // Count the action request itself, not only a successful result. This
+        // includes rejected mouse/hotbar presses and macro lines, while the
+        // separate physical-hotbar token also covers a slot that emits no
+        // action at all. WASD, camera, and target input never enter here.
+        if (actionBarActivitySuppressionDepth == 0 &&
+            actionType is (ActionType.Action or ActionType.PvPAction))
+        {
+            RecordActionBarActivity();
+        }
+
+        // Protect the exact PvP Sprint press before any redirect, helper token,
+        // or automatic-Guard work can observe it. Metadata, adjusted ID, local
+        // identity, and the live status must all be positively known; every
+        // uncertainty deliberately preserves the native call.
+        if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
+            return false;
+
         // This runs before any redirect/token work. A random action cannot both
         // cancel an automatically owned Guard and consume a macro one-shot.
         if (TryConsumeExplicitAutoGuardBreak(
@@ -1397,6 +1553,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         }
 
         var bypassRedirect = internalRedirectBypassDepth > 0;
+        var integratedRuntime = integratedInputRuntime;
         var inspectedSmartActionTargetId = targetId;
         var smartActionSafetyInspection = !bypassRedirect
             ? InspectSmartActionSafetyLease(
@@ -1409,6 +1566,43 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             : SmartActionSafetyInspectionOutcome.NotApplicable;
         if (smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Unsafe)
             return false;
+
+        // Once the exact authored <t> fallback has become a tap-to-land
+        // reservation, later lines from that same /smartaction invocation must
+        // not reach native Original a second time. This check has no generic
+        // macro scope: action, adjusted action, visible target, and tap
+        // generation must all remain exact.
+        if (!bypassRedirect &&
+            smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
+            integratedRuntime is not null &&
+            IsExactCurrentHardTarget(inspectedSmartActionTargetId) &&
+            TryGetSmartActionFallbackTapGeneration(out var safetyTapGeneration))
+        {
+            try
+            {
+                var resolvedTailActionId = ResolveActionId(thisPtr, actionType, actionId);
+                if (resolvedTailActionId != 0 &&
+                    integratedRuntime.ActionBuffer.ShouldSuppressOwnedSmartActionMacroTail(
+                        actionType,
+                        actionId,
+                        resolvedTailActionId,
+                        inspectedSmartActionTargetId,
+                        mode,
+                        safetyTapGeneration))
+                {
+                    SetSmartActionSafetyEvent(
+                        "Suppressed duplicate Smart Action macro tail behind tap reservation");
+                    return false;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogFailure(
+                    exception,
+                    "Seiton Sense Smart Action macro-tail classification failed closed.");
+                return false;
+            }
+        }
 
         // Native zero/default carriers are mutable references to the selected
         // target. Once an exact Smart Action fallback is proven safe, freeze it
@@ -1547,7 +1741,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     smartToken,
                     heldActionSelection: false,
                     out var rewritten,
-                    out _,
+                    out var smartWinnerSelected,
                     out var selectedSlot,
                     out var reason);
                 if (!rewritten)
@@ -1559,6 +1753,13 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
                 lock (tokenGate)
                 {
+                    smartActionFallbackTapGeneration =
+                        smartToken.SelectionMode == SmartTargetRedirectMode.CombatPriority &&
+                        !rewritten &&
+                        !smartWinnerSelected &&
+                        smartToken.TapGeneration > 0
+                            ? smartToken.TapGeneration
+                            : 0;
                     if (rewritten)
                     {
                         smartTargetRedirectedCount++;
@@ -1953,7 +2154,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
-        var integratedRuntime = integratedInputRuntime;
         var integratedAttempt = IntegratedActionBufferAttempt.None;
         if (mode == ActionManager.UseActionMode.None &&
             integratedRuntime?.TryGetActiveBufferRoot(
@@ -1987,6 +2187,41 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 integratedAttempt = IntegratedActionBufferAttempt.None;
             }
         }
+        else if (!bypassRedirect &&
+                 integratedRuntime is not null &&
+                 !handlingSmartTarget &&
+                 smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
+                 IsCertifiedMacroInvocationMode(mode) &&
+                 IsExactCurrentHardTarget(forwardedTargetId) &&
+                 TryGetSmartActionFallbackTapGeneration(out var macroTapGeneration))
+        {
+            try
+            {
+                // This is only the authored, currently visible <t> fallback
+                // after the target-independent Smart Action carrier found no
+                // reachable winner. The selected-winner redirect lane remains
+                // one-shot and is deliberately not spatially replayed.
+                integratedAttempt =
+                    integratedRuntime.ActionBuffer.BeginExactSmartActionMacroFallback(
+                        thisPtr,
+                        actionType,
+                        actionId,
+                        forwardedTargetId,
+                        extraParam,
+                        mode,
+                        comboRouteId,
+                        macroTapGeneration);
+            }
+            catch (Exception exception)
+            {
+                // Optional observation must never turn the authored fallback
+                // into an input error.
+                LogFailure(
+                    exception,
+                    "Seiton Sense Smart Action tap-to-land preflight failed open for the authored fallback.");
+                integratedAttempt = IntegratedActionBufferAttempt.None;
+            }
+        }
 
         if (ShouldVetoAstrologianOwnGuardAtFinalBoundary(
                 thisPtr,
@@ -2008,6 +2243,17 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             thisPtr,
             actionType,
             actionId);
+
+        // Report the exact transition into native Original to the delayed
+        // replay owner. A false result before this line (for example current
+        // Smart Action protection or owned Auto-Guard) is not a clean client
+        // rejection and must never be retried.
+        if (integratedBufferReplayDepth == 1 &&
+            integratedBufferedReplayScope is { Consumed: true } replayScope &&
+            ReferenceEquals(replayScope.Owner, this))
+        {
+            replayScope.NativeBoundaryInvoked = true;
+        }
 
         bool clientAccepted;
         try
@@ -3993,6 +4239,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 safetyToken.ExpiresAtMilliseconds <= Environment.TickCount64)
             {
                 smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+                smartActionSafetyTapGeneration = 0;
+                smartActionFallbackTapGeneration = 0;
             }
             if (armedHelpTarget is { } helpToken)
             {
@@ -4121,7 +4369,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
     private void ClearSmartActionSafetyLease()
     {
         lock (tokenGate)
+        {
             smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+            smartActionSafetyTapGeneration = 0;
+            smartActionFallbackTapGeneration = 0;
+        }
     }
 
     private void ArmSmartActionSafetyLease(
@@ -4140,7 +4392,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             resolvedActionId,
             nowMilliseconds,
             nowMilliseconds + SmartActionSafetyLeaseRules.DefaultLifetimeMilliseconds);
-        lock (tokenGate) smartActionSafetyLeaseState = next;
+        lock (tokenGate)
+        {
+            smartActionSafetyLeaseState = next;
+            smartActionSafetyTapGeneration = next.IsArmed
+                ? token.TapGeneration
+                : 0;
+            smartActionFallbackTapGeneration = 0;
+        }
+    }
+
+    private bool TryGetSmartActionFallbackTapGeneration(out long generation)
+    {
+        lock (tokenGate)
+        {
+            generation = smartActionFallbackTapGeneration;
+            return smartActionSafetyLeaseState.IsArmed &&
+                   generation > 0 &&
+                   generation == smartActionSafetyTapGeneration;
+        }
     }
 
     private void EnsureSmartActionSafetyLeaseAfterFailure(
@@ -4248,6 +4518,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     resolvedActionId,
                     now);
                 smartActionSafetyLeaseState = decision.NextState;
+                if (!smartActionSafetyLeaseState.IsArmed)
+                {
+                    smartActionSafetyTapGeneration = 0;
+                    smartActionFallbackTapGeneration = 0;
+                }
             }
 
             if (!decision.ShouldInspect)
@@ -4957,6 +5232,8 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             oneShotState = NearAssistOneShotState.Initial;
             armedSmartTarget = null;
             smartActionSafetyLeaseState = SmartActionSafetyLeaseState.Initial;
+            smartActionSafetyTapGeneration = 0;
+            smartActionFallbackTapGeneration = 0;
             armedHelpTarget = null;
             nearHelpState = NearHelpOneShotState.Initial;
             armedFarHelpTarget = null;
@@ -5396,6 +5673,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         internal NearAssistRedirector Owner { get; } = owner;
         internal IntegratedBufferedReplayIntent Intent { get; } = intent;
         internal bool Consumed { get; set; }
+        internal bool NativeBoundaryInvoked { get; set; }
     }
 
     private static NearAssistAllyRole GetRolePreference(IPlayerCharacter player)
@@ -5452,6 +5730,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         long ExpiresAtMilliseconds)
     {
         internal SmartTargetRedirectMode SelectionMode { get; init; }
+        internal long TapGeneration { get; init; }
     }
 
     private readonly record struct SmartTargetRuntimeCandidate(

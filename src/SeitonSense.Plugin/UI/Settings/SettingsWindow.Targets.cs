@@ -10,9 +10,8 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Focus Glow renders FFXIV's native Focus Target. Current Target reads only your manually selected hard " +
-            "target. Smart Tab and the separate low-MP Focus helper are the only opt-ins on this page that may set " +
-            "a local target.");
+            "Focus Glow follows your normal Focus Target. Current Target follows the enemy you selected. Only Smart " +
+            "Tab and the low-MP Focus helper can choose a local target from this page.");
 
         ImGui.TextColored(new Vector4(0.35f, 0.88f, 1f, 1f), "SMART TAB (OPT-IN)");
         changed |= Checkbox(
@@ -21,50 +20,38 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableSmartTabTargeting = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Toggle ON replaces FFXIV's normal forward-target command in exact Crystalline Conflict on reviewed " +
-            "melee and ranged DPS jobs. Your usual Tab key and any remapped forward-target binding use Smart Targeting directly. " +
-            "Toggle OFF is fully vanilla. Shift+Tab/reverse targeting, chat/UI Tab input, other targeting commands, " +
-            "unsupported jobs, and all other content remain unchanged. /smarttab and /sstarget toggle this option.");
+            "In Crystalline Conflict, this replaces forward Tab on supported DPS jobs. Your normal Tab binding keeps " +
+            "working; it simply uses Seiton's target order. Turn it off for normal FFXIV targeting. Reverse Tab, chat " +
+            "input, unsupported jobs, and other content are unchanged. /smarttab and /sstarget also toggle it.");
         ImGui.TextDisabled(
-            "The ranked cycle first considers enemies within 5 yalms of hitbox-edge melee reach, then only enemies inside " +
-            "the reviewed range of that melee job's gap closer. Inside the first non-empty tier it ranks lowest HP%, " +
-            "highest fresh team pressure, observed Wehr cooldown unavailable, lowest trusted MP%, then stable S-slot. " +
-            "An enemy with live Wehr is excluded.");
+            "Melee jobs first search melee range, then their gap-closer range. Ranged jobs use their normal attack range. " +
+            "Inside that range, Seiton prefers low HP, team focus, unavailable Guard, and low MP. Enemies currently in " +
+            "Guard are skipped.");
         ImGui.TextDisabled(
-            "On BRD, MCH, BLM, SMN, RDM, and PCT, one 25-yalm tier uses the same ranking without melee preference. " +
-            "DNC uses its 15-yalm Cascade/Fountain range. Only living, targetable canonical enemies inside that exact " +
-            "hitbox-edge range are considered.");
+            "BRD, MCH, BLM, SMN, RDM, and PCT use 25 yalms. DNC uses 15 yalms. Dead, untargetable, out-of-range, " +
+            "or obstructed enemies are skipped.");
         ImGui.TextDisabled(
-            "Every geometrically admitted enemy must also pass a metadata-verified native FFXIV range/line-of-sight " +
-            "probe. If the current target is in the reachable ranked list, the next forward Tab advances to its " +
-            "successor and wraps; otherwise it starts at the best-ranked enemy. Manual targeting automatically " +
-            "re-anchors this stateless cycle. The chosen exact S1-S5 actor is revalidated, including line of sight, " +
-            "then set once with exact readback. There is no combat action, retry, rerank, or alternate target.");
+            "Pressing Tab again moves to the next valid enemy and wraps around. Manually choosing a target starts the " +
+            "cycle from there. Smart Tab changes only your target; it never uses an action.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
 
         ImGui.TextColored(new Vector4(1f, 0.72f, 0.3f, 1f), "NATIVE FOCUS TARGET SETTER (OPT-IN)");
         changed |= Checkbox(
-            "Set an empty Focus Target to an exact enemy at 2,000 MP or lower",
+            "Set an empty Focus Target to an enemy at 2,000 MP or lower",
             configuration.EnableAutoLowMpFocusTarget,
             value => configuration.EnableAutoLowMpFocusTarget = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off and exact Crystalline Conflict only. It requires a complete unique native S1-S5 view, " +
-            "150 ms of trusted MP at 2,000 or lower, and FFXIV's native 20-yalm range/line-of-sight result. The " +
-            "low-MP wave clears only after 150 ms at 2,300 MP or higher. If several enemies qualify, lowest MP " +
-            "ratio wins, then lowest HP ratio and stable S-slot/identity.");
+            "Off by default and CC only. If your Focus Target is empty, Seiton can set it to a visible enemy within " +
+            "20 yalms who has 2,000 MP or less. It prefers lower MP, then lower HP.");
         ImGui.TextDisabled(
-            "It can fill only an empty native Focus Target and never clears, replaces, restores, or retries one. " +
-            "An occupied or manually changed Focus always wins. Any confirmed external change or clear after a " +
-            "plugin-set Focus latches the manual override until the option is toggled off/on or a new exact match " +
-            "lifetime begins.");
+            "It never replaces or clears an existing Focus Target. If you change or clear the Focus yourself, Seiton " +
+            "leaves it alone until the next match or until you turn this option off and on again.");
         ImGui.TextDisabled(
-            "This local Focus Target feeds FFXIV's Focus Target HUD and <f>. It is independent of the party-visible " +
-            "Attack1 sign and never changes your hard or soft target. FFXIV exposes no atomic compare-and-set API, " +
-            "so the immediately adjacent empty-check/set/readback boundary still requires a live current-patch CC " +
-            "A/B test.");
+            "This uses FFXIV's normal Focus Target and <f>. It does not change your selected target or the shared " +
+            "Attack1 team marker.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
@@ -123,9 +110,8 @@ internal sealed partial class SettingsWindow
             value => configuration.ShowCurrentTargetInfoHud = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "The target-information HUD is a separate fixed card. PvP-only, foreground, and target color are shared " +
-            "with the world highlight. Restoring the shared preset preserves the HUD's enable, position, and scale, " +
-            "but restores those shared visual settings. Nothing is attached to nameplates or native health bars.");
+            "This is a separate movable target card. PvP-only, foreground, and color settings are shared with the " +
+            "world highlight. Restoring the preset keeps the card enabled and keeps its position and size.");
         ImGui.PopTextWrapPos();
         changed |= Slider(
             "Target HUD horizontal position",

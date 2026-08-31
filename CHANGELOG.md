@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.43.0.1
+
+- **Tap-to-land no longer needs the key to stay held.** Press a supported attack
+  while its target is out of range, release the key, and Seiton keeps that same
+  action and target for a short time. The time is adjustable from 0 to 3000 ms;
+  the default is 2200 ms and 0 disables it.
+- Supported single-target spells can wait as well. Seiton will not cancel your
+  current cast, change your target, or turn you toward a target you switched
+  away from. A new action, target change, Guard, crowd control, death, or area
+  change cancels the wait.
+- If FFXIV rejects the try, Seiton may repeat that same action briefly. It stops
+  as soon as the action might have gone through, so it will not deliberately
+  send it twice.
+- **Active PvP Sprint is protected by default.** Pressing Sprint again while it
+  is already active is ignored; using another action still ends Sprint normally.
+- Added a separate optional **Smart Sprint**. After 3–5 seconds without
+  action-bar input, holding a gameplay key can use Sprint once. Any action-bar
+  press resets the timer even if that action fails; WASD, camera movement, and
+  target changes do not.
+- Rewrote the main Settings and What's New explanations in shorter, player-
+  friendly language. Diagnostics remain detailed for testing.
+- Saved settings now use schema `50`. Automated tests and packaging are checked
+  separately from live in-game confirmation.
+
 ## 0.43.0.0
 
 - Added a dedicated **Ping Helpers** settings page that groups the existing

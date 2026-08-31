@@ -131,7 +131,7 @@ internal sealed class WolvesDenRotationWindow : Window
             "The current card changes automatically; when expanded, all seven cards reorder at the hourly rollover.");
         ImGui.TextUnformatted(
             mapStatistics.CaptureAvailable && mapStatistics.StorageAvailable
-                ? "W/L counts only future, exact local public-CC result packets."
+                ? "W/L starts counting new public CC results from this point on."
                 : "New W/L capture is unavailable; no result is guessed or counted.");
         ImGui.TextUnformatted(configuration.WolvesDenRotationPanelLocked
             ? "Position locked; the panel controls remain clickable."

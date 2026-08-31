@@ -10,11 +10,11 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Seiton Sense combines pressure awareness, personal alerts, native-nameplate cues, target clarity, " +
-            "Limit Break activation cues, macro helpers, and explicitly enabled PvP target/action helpers.");
+            "Seiton Sense adds PvP warnings, pressure and nameplate information, clearer targets, Limit Break cues, " +
+            "and optional action helpers.");
         ImGui.TextWrapped(
-            "Crystalline Conflict is supported directly. Wolves' Den support is an explicit testing option; " +
-            "Frontline and Rival Wings remain excluded from the original Seiton slot tracker.");
+            "Crystalline Conflict is the main supported mode. Wolves' Den helpers are for testing only. Frontline and Rival " +
+            "Wings are not supported by the enemy-slot features.");
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Testing scope");
@@ -28,11 +28,8 @@ internal sealed partial class SettingsWindow
             value => configuration.PressureIncludeWolvesDen = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "These are independent test scopes. Each feature still requires its own opt-in and keeps its own strict " +
-            "target rules. Seiton uses the exact hostile duel opponent as synthetic S1, including party-member duels. " +
-            "Smart Recuperate is self-only. Supported held job helpers use only your exact current hard target in " +
-            "Wolves' Den; they never scan e-slots or silently substitute another actor. " +
-            "The pressure option controls only the counter.");
+            "These two testing switches are separate. Job helpers in Wolves' Den use only your current duel target; " +
+            "they do not search for a different enemy. The pressure switch changes only the pressure counter.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
@@ -43,12 +40,9 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableInstantLeaveAfterCrystallineConflict = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off. After the complete local 10-player result is confirmed, Seiton Sense waits for FFXIV's " +
-            "native leave-ready boundary and sends one normal, non-forced Leave Duty request. Public Crystalline " +
-            "Conflict only: never Wolves' Den, custom matches, Frontline, Rival Wings, or automatic re-queueing. " +
-            "The intent waits up to 30 seconds. A later exact public-CC duty start rearms the helper, including on " +
-            "the same map.");
-        ImGui.TextDisabled(crystallineConflictInstantLeave.Diagnostics.ToChatLine());
+            "Off by default. After a completed public CC match, Seiton waits until FFXIV allows leaving and sends one " +
+            "normal Leave Duty request. It does not work in custom matches or other PvP modes and never queues again " +
+            "for you. If leaving is not available within 30 seconds, it gives up.");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();

@@ -32,7 +32,7 @@ internal sealed partial class SettingsWindow
             changed |= DrawGeneralResourceNameplateControls();
             ImGui.Spacing();
             changed |= Checkbox(
-                "Show visible CC protection above native nameplates",
+                "Show visible CC protection above enemy nameplates",
                 configuration.ShowCcProtection,
                 value => configuration.ShowCcProtection = value);
             ImGui.SameLine();
@@ -58,15 +58,15 @@ internal sealed partial class SettingsWindow
             }
 
             ImGui.TextDisabled(
-                "A large static crossed-CC emblem is anchored above the native job icon for Guard, Resilience, " +
-                "SAM, WAR, VPR, and large-scale PvP immunity. Ambiguous one-hit wards are not labelled as full immunity.");
+                "Shows a crossed-CC icon above the job icon for confirmed Guard, Resilience, and other full CC " +
+                "immunities. Single-hit wards are not shown as full immunity.");
         }
 
         ImGui.Separator();
         if (ImGui.CollapsingHeader("Enemy Limit Break activations", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Checkbox(
-                "Show active enemy LB icons above exact native nameplates",
+                "Show active enemy LB icons above enemy nameplates",
                 configuration.ShowEnemyLimitBreaksOnNameplates,
                 value => configuration.ShowEnemyLimitBreaksOnNameplates = value);
             changed |= Slider(
@@ -77,8 +77,8 @@ internal sealed partial class SettingsWindow
                 value => configuration.LimitBreakNameplateScale = value,
                 "%.2f x");
             ImGui.TextDisabled(
-                "Duration LBs keep their verified countdown. Instant LBs flash briefly. Exact actor identity and a " +
-                "fresh native nameplate are required; unknown duration is never guessed.");
+                "Long Limit Breaks show their countdown; instant LBs flash briefly. If Seiton cannot confirm the enemy " +
+                "or duration, it shows nothing instead of guessing.");
         }
 
         ImGui.Separator();
@@ -86,7 +86,7 @@ internal sealed partial class SettingsWindow
             changed |= DrawResourceAuraControls();
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Shared native-nameplate appearance", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Shared nameplate appearance", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= Slider(
                 "Extra icon size",
@@ -94,7 +94,7 @@ internal sealed partial class SettingsWindow
                 0.55f,
                 1.5f,
                 value => configuration.NameplateIconScale = value,
-                "%.2f x native");
+                "%.2f x");
             changed |= Slider(
                 "Extra icon spacing",
                 configuration.NameplateIconSpacing,
@@ -133,10 +133,9 @@ internal sealed partial class SettingsWindow
             value => configuration.CrystallineConflictMedicineKitOverlayScale = value,
             "%.2f x");
         ImGui.TextDisabled(
-            "Public Crystalline Conflict only. The opening countdown follows the native 5:00 match timer. " +
-            "Localized ready-to-draw medicine-kit objects are checked only in Dalamud's bounded event-object slices " +
-            "at 10 Hz; the foreground beacon stays visible through terrain and never targets or uses anything. " +
-            "The exact live object fingerprint and claimable state still require one in-match validation.");
+            "Public CC only. The opening countdown follows the 5:00 match timer. Ready medicine kits get a green " +
+            "screen beacon when Seiton can identify them. The beacon can stay visible through terrain, but it does not " +
+            "target, move, or use the kit for you. Detection still needs live in-match confirmation.");
         return changed;
     }
 
@@ -186,9 +185,11 @@ internal sealed partial class SettingsWindow
         }
 
         ImGui.TextDisabled(
-            "PvP and Wolves' Den only: inner ring = 5y melee; outer ring = this job's furthest reviewed hostile non-LB action, including gap closers.");
+            "PvP and Wolves' Den only. Inner ring: 5-yalm melee range. Outer ring: this job's farthest supported attack " +
+            "or gap closer, excluding Limit Breaks.");
         ImGui.TextDisabled(
-            "The flat visual guide does not claim line of sight, cooldown readiness, terrain reach, or target hitbox overlap and never changes a target or action.");
+            "This is only a flat distance guide. It cannot show line of sight, terrain, cooldowns, or exact hitboxes and " +
+            "never changes your target or action.");
         return changed;
     }
 
@@ -255,13 +256,13 @@ internal sealed partial class SettingsWindow
         if (ImGui.Button("Reset rotation panel position"))
             resetWolvesDenRotationWindowPosition();
         ImGui.TextDisabled(
-            "Local/offline schedule: official Patch 7.5 order and hourly interval with a locally adjustable community-reference phase.");
+            "Uses the Patch 7.5 hourly map order and your locally saved phase adjustment. It works offline.");
         ImGui.TextDisabled(
-            "Panel visibility and local W/L capture are independent. Capture accepts only exact public-CC post-match results and never uploads data.");
+            "Showing the panel and saving your local W/L are separate options. Results are never uploaded.");
         ImGui.TextDisabled(
-            "The large seven-card deck stays visible, reorders itself each hour, and keeps saved < / > phase calibration available.");
+            "The seven map cards reorder themselves each hour. Use < / > only if your in-game map does not match.");
         ImGui.TextDisabled(
-            "Per-map W/L counts only future, exact local public-CC results; ambiguous or unavailable results stay NO DATA.");
+            "Per-map W/L starts counting after you enable it. Unclear or missing results stay NO DATA.");
         return changed;
     }
 
@@ -270,8 +271,8 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "Incoming pressure counts enemies currently committed to you. Team pressure shows how many allies " +
-            "are hard-targeting each enemy. Recent harmful actions are kept briefly so the counter stays readable.");
+            "Incoming pressure shows enemies targeting or casting at you. Team pressure shows allies targeting each " +
+            "enemy. Recent attacks stay visible briefly so the numbers do not flicker.");
 
         changed |= Checkbox(
             "Show incoming-pressure counter",
@@ -309,9 +310,8 @@ internal sealed partial class SettingsWindow
             configuration.ShowOpponentLimitBreakBars,
             value => configuration.ShowOpponentLimitBreakBars = value);
         ImGui.TextDisabled(
-            "Default off; CC only. Current-client GaugeBar node semantics still need live confirmation. All S1-S5 " +
-            "bars hide together unless row names, actor slots, direct values, and the same-frame local LB controller " +
-            "cross-check are stable. No charge-time estimate is used.");
+            "Off by default and CC only. This still needs live confirmation for the current game patch. If Seiton " +
+            "cannot read every enemy LB bar safely, it hides all of them instead of guessing.");
         ImGui.Separator();
         ImGui.TextUnformatted("Counter appearance");
         changed |= Slider(
@@ -368,15 +368,11 @@ internal sealed partial class SettingsWindow
             configuration.ShowTeamPressureOnNameplates,
             value => configuration.ShowTeamPressureOnNameplates = value);
         ImGui.TextDisabled(
-            "Hard-target/cast pressure and recent-action pressure are displayed as distinct states; neither " +
-            "changes your selected target.");
+            "Current targeting/casts and recent attacks use different styles. Neither changes your target.");
         if (ImGui.Button(pressureCounter.PreviewEnabled ? "Stop counter preview" : "Preview counter"))
             pressureCounter.PreviewEnabled = !pressureCounter.PreviewEnabled;
         ImGui.SameLine();
         if (ImGui.Button("Reset counter position")) pressureCounter.ResetWindowPosition();
-        ImGui.TextDisabled(pressureTracker.Diagnostics.ToChatLine());
-        ImGui.TextDisabled(pressureCounter.LimitBreakGaugeDiagnostics);
-
         return changed;
     }
 
@@ -397,8 +393,7 @@ internal sealed partial class SettingsWindow
             configuration.ShowLowMp,
             value => configuration.ShowLowMp = value);
         ImGui.TextDisabled(
-            "Guard appears only after this client observed the enemy use it; low MP requires a trusted value. " +
-            "Unknown cooldowns or resources are never guessed.");
+            "Guard cooldown and low MP appear only when Seiton has reliable information. Unknown values are not guessed.");
         return changed;
     }
 
@@ -461,9 +456,8 @@ internal sealed partial class SettingsWindow
         }
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Red means low HP, blue means trusted low MP, and purple means both. The module draws a read-only " +
-            "aura around native action hotbars and the selected team-list rows; it never changes a bar, target, or action. " +
-            "Each surface can be disabled independently. Unknown MP never produces a blue warning.");
+            "Red means low HP, blue means low MP, and purple means both. The glow is visual only; it never changes a " +
+            "hotbar, team row, target, or action. Each place can be switched off separately. Unknown MP stays unmarked.");
         ImGui.PopTextWrapPos();
         return changed;
     }

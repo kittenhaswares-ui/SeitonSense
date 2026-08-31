@@ -13,13 +13,9 @@ internal sealed partial class SettingsWindow
         var changed = false;
         ImGui.Spacing();
         ImGui.TextWrapped(
-            "All action-initiating helpers are opt-in. The current request priority is: " +
-            "Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > " +
-            "DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk. " +
-            "The job-specific helpers use this deterministic order; Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent. Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, RDM follows AST, and SAM follows RDM; " +
-            "on BRD/WHM, reactive counter-CC remains ahead of ally cleanse because its windows are shorter. A continuously held " +
-            "key remains consent for later distinct exact episodes, with at most one held native boundary per framework " +
-            "frame. Kardia and Monk retain their separate event-driven origins.");
+            "Turn on only the helpers you want. If several things become possible together, Seiton uses " +
+            "Purify first, then Recuperate, Auto-Guard, and your job helpers. It sends only one of its own " +
+            "actions at a time, then checks again immediately for the next one.");
 
         if (ImGui.CollapsingHeader(
                 "Cast cancellation (experimental)",
@@ -63,6 +59,10 @@ internal sealed partial class SettingsWindow
             changed |= DrawPressureEscapeSprintControls();
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("Smart Sprint", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawSmartSprintControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("CC-immunity action brake", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawCcImmunityBrakeControls();
 
@@ -76,7 +76,7 @@ internal sealed partial class SettingsWindow
     private bool DrawGeneralActionBufferControls()
     {
         var changed = Checkbox(
-            "Enable the one-shot smart action buffer",
+            "Enable automatic action buffer",
             configuration.EnableSmartActionBuffer,
             value => configuration.EnableSmartActionBuffer = value);
         changed |= SliderInt(
@@ -87,29 +87,26 @@ internal sealed partial class SettingsWindow
             value => configuration.SmartActionBufferWindowMilliseconds = value,
             "%d ms");
         ImGui.TextDisabled(
-            "Default 1000 ms, maximum 1500 ms. The buffer is generic: it is available in PvE, PvP, " +
-            "Crystalline Conflict, the Wolves' Den, and ordinary duty/open-world contexts. It has no PvP-only gate.");
-        ImGui.TextDisabled(
-            "Current scope is instant, non-ground, non-movement actions on standard keyboard hotbars. " +
-            "Cast-time spells, ground targeting, movement actions, mouse clicks, and cross-hotbar/controller input are excluded.");
+            "Works in PvE and PvP. It supports instant actions on standard keyboard hotbars. Ground-targeted " +
+            "skills, movement skills, mouse clicks, controllers, and cross hotbars are not supported here.");
 
         changed |= Checkbox(
-            "Show the live buffer learning window",
+            "Show buffer timing helper",
             configuration.ShowBufferLearningWindow,
             value => configuration.ShowBufferLearningWindow = value);
         changed |= Checkbox(
-            "Lock the learning window position",
+            "Lock the timing helper position",
             configuration.BufferLearningWindowLocked,
             value => configuration.BufferLearningWindowLocked = value);
-        if (ImGui.Button("Reset learning window position"))
+        if (ImGui.Button("Reset timing helper position"))
             resetBufferLearningWindowPosition();
         ImGui.TextDisabled(
-            "The movable panel shows the observed key or standard-hotbar slot, resolved action, and live buffer countdown.");
+            "Shows the key or hotbar slot, the remembered action, and the remaining buffer time.");
 
         ImGui.Spacing();
-        ImGui.TextUnformatted("Native held-input Turbo (standard keyboard hotbars)");
+        ImGui.TextUnformatted("Hold a hotbar key to repeat");
         changed |= Checkbox(
-            "Enable native held-input Turbo",
+            "Enable hold-to-repeat (Turbo)",
             configuration.EnableNativeHotbarTurbo,
             value => configuration.EnableNativeHotbarTurbo = value);
         changed |= SliderInt(
@@ -131,11 +128,8 @@ internal sealed partial class SettingsWindow
             configuration.TurboOutsideCombat,
             value => configuration.TurboOutsideCombat = value);
         ImGui.TextDisabled(
-            "Turbo is opt-in. In combat it is not territory-gated and can be used in PvE, PvP, and the Wolves' Den. " +
-            "Outside-combat repeating requires the separate option above.");
-        ImGui.TextDisabled(
-            "Current scope is held logical inputs on standard keyboard hotbars. Cross-hotbar/controller input and " +
-            "direct mouse clicks do not provide a supported held input in this version.");
+            "Works while holding a standard keyboard-hotbar key. Turn on the extra option above if you also " +
+            "want to test it outside combat. Mouse clicks, controllers, and cross hotbars are not supported.");
         return changed;
     }
 
@@ -146,7 +140,7 @@ internal sealed partial class SettingsWindow
             configuration.EnablePvpLatencyResponseHelper,
             value => configuration.EnablePvpLatencyResponseHelper = value);
         changed |= SliderInt(
-            "Exact held-intent retry window",
+            "Held-helper retry time",
             configuration.PvpLatencyResponseWindowMilliseconds,
             HeldActionRetryRules.MinimumLatencyResponseWindowMilliseconds,
             HeldActionRetryRules.MaximumLatencyResponseWindowMilliseconds,
@@ -158,21 +152,15 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnablePvpLatencyResponseHelper
-                ? "ON — exact held-helper retries use the configured bounded window."
-                : "OFF — exact held-helper retries keep the legacy bounded budget.");
+                ? "ON — held helpers get the selected retry time."
+                : "OFF — held helpers use the older short retry time.");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default on for fresh/reset configurations; an existing opt-out is preserved on upgrade. A sampled native " +
-            "readiness edge can wake the same frozen action, target, key, context, and episode " +
-            "on the first later framework frame. A clean client rejection keeps the 50 ms fallback throttle; ordinary " +
-            "timer movement alone is not treated as a new edge. The existing bounded call budget remains authoritative, " +
-            "client acceptance or ambiguous acceptance is terminal, and native/GCD/animation waits spend no retry call.");
+            "When a held helper is almost ready, Seiton keeps its action and target for this long and uses it " +
+            "as soon as FFXIV allows it.");
         ImGui.TextDisabled(
-            "The integrated smart buffer and Turbo yield whenever Seiton's critical held scheduler owns the native " +
-            "action boundary. This never writes position or animation lock, extends range, changes a target/action, " +
-            "or creates a second queue. Held-helper retry expansion itself works in exact Crystalline Conflict and in " +
-            "Wolves' Den only when the separate Wolves' Den testing option is enabled; the generic buffer remains " +
-            "available in PvE as described above.");
+            "It does not increase range, move your character, or change the chosen action or target. The held-helper " +
+            "extension works in Crystalline Conflict and in the Wolves' Den when testing is enabled.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -185,24 +173,16 @@ internal sealed partial class SettingsWindow
             value => configuration.AllowHeldHelpersToCancelOwnCast = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off. When the highest-priority held helper has already frozen an exact valid intent and your " +
-            "own cast is the remaining shared native-boundary blocker, Seiton Sense may request FFXIV's native cast " +
-            "cancel exactly once for that observed cast. It never synthesizes movement or Escape, clears a queued " +
-            "action, changes a target, or combines cancel and UseAction in the same framework frame. The frozen " +
-            "helper revalidates normally on a later frame. This is intended to cover stationary casts and mobile " +
-            "BRD Powerful Shot / MCH Blast Charge, but current-patch in-game behavior still needs live testing; an " +
-            "action the client refuses to cancel simply continues. Enabling this can deliberately sacrifice your " +
-            "current cast for the held helper.");
+            "Default off. If a ready held helper is more important than your current cast, Seiton may cancel that " +
+            "cast once and use the helper on the next moment it is allowed. It never moves you, changes your target, " +
+            "or removes a queued action. This can deliberately sacrifice the cast you were doing.");
         changed |= Checkbox(
-            "Allow Auto Purify / Recuperate to cancel verified BRD/MCH basic shots",
+            "Allow Auto Purify / Recuperate to cancel BRD/MCH basic shots",
             configuration.AllowAutomaticRecoveryToCancelBasicShotCasts,
             value => configuration.AllowAutomaticRecoveryToCancelBasicShotCasts = value);
         ImGui.TextDisabled(
-            "Default off and independent from the held-helper option. When the corresponding automatic helper is " +
-            "enabled, only an exact BRD Powerful Shot (29391) or MCH Blast Charge (29402) may be cancelled. The " +
-            "current job, active cast, unchanged adjusted action, and startup metadata must all match; transformed " +
-            "or uncertain actions wait. Cancellation owns one framework frame, and Purify or Recuperate revalidates " +
-            "normally before acting on a later clear-cast frame.");
+            "Default off. Auto Purify or Recuperate may cancel only BRD Powerful Shot or MCH Blast Charge. " +
+            "If Seiton is not completely sure which cast is active, it waits instead.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -214,11 +194,37 @@ internal sealed partial class SettingsWindow
             configuration.EnablePressureEscapeSprintOnHeldKey,
             value => configuration.EnablePressureEscapeSprintOnHeldKey = value);
         ImGui.TextDisabled(
-            "Exact current hard/cast targets only; recent hits do not count. This option is independent from the " +
-            "visual and sound. It listens only to held WASD/arrow movement keys and does not swallow that key. " +
-            "Purify, Smart Recuperate, automatic Guard, the job-specific tier, and Emergency Teleport keep priority. Known " +
-            "unavailability waits for free; only an explicit client rejection may retry the same exact Sprint " +
-            "episode. Any later manual action ends FFXIV's native PvP Sprint.");
+            "When at least three enemies are currently targeting you, holding WASD or an arrow key can use " +
+            "Sprint once. It does not block movement. Survival actions and job helpers still take priority. " +
+            "Using another action ends PvP Sprint as usual.");
+        return changed;
+    }
+
+    private bool DrawSmartSprintControls()
+    {
+        var changed = Checkbox(
+            "Do not cancel active Sprint by pressing Sprint again",
+            configuration.ProtectActiveSprintFromRepeatPress,
+            value => configuration.ProtectActiveSprintFromRepeatPress = value);
+        ImGui.TextDisabled(
+            "Default on. A second Sprint press is ignored while Sprint is already active. Other actions " +
+            "still end PvP Sprint normally.");
+
+        changed |= Checkbox(
+            "Use Sprint after I stop using actions while holding a gameplay key",
+            configuration.EnableIdleSmartSprintOnHeldKey,
+            value => configuration.EnableIdleSmartSprintOnHeldKey = value);
+        changed |= SliderInt(
+            "Action-bar inactivity",
+            configuration.SmartSprintInactivityMilliseconds,
+            SmartSprintRules.MinimumInactivityMilliseconds,
+            SmartSprintRules.MaximumInactivityMilliseconds,
+            value => configuration.SmartSprintInactivityMilliseconds = value,
+            "%d ms");
+        ImGui.TextDisabled(
+            "Optional; default 4000 ms. Only action-bar input resets this timer; the action does not have to succeed. " +
+            "Running, WASD, camera movement, and target changes do not. Keep any gameplay key held and Seiton uses Sprint " +
+            "once after the selected quiet time. Guard, crowd control, and survival helpers still win.");
         return changed;
     }
 
@@ -256,20 +262,10 @@ internal sealed partial class SettingsWindow
             value => configuration.PurifyOnMiracleOfNature = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Only the exact enabled debuff types can trigger this. Automatic mode freezes the real live CC instance and " +
-            "exact self, then gives ready Purify absolute priority without consuming a physical hold generation. It " +
-            "normally waits for a clear cast; with the separate automatic-recovery cast-cancel toggle it may cancel " +
-            "only a verified BRD/MCH basic-shot cast. Purify is sent only on a later clear-cast " +
-            "frame. Cooldown or resource " +
-            "unavailability does not starve lower helpers; queue and animation-lock waits retain priority without " +
-            "spending an attempt. Guard, text input, Resilience, and NIN Shukuchi Hidden suppress it. The legacy mode " +
-            "still accepts a fresh physical key after CC, optionally including a key already held at status entry. " +
-            "If both modes are enabled for the same debuff, automatic consent wins that status episode and leaves the " +
-            "physical key generation untouched. " +
-            "Only an explicit client rejection may retry the same frozen self intent after 50 ms. The default is eight " +
-            "native calls; the separate PvP latency-response option can freeze its extended budget for that exact CC " +
-            "episode. Acceptance or ambiguity ends it. Disable " +
-            "rules in other plugins that rewrite Purify or its target while testing.");
+            "Only the debuffs selected above can trigger Purify. Automatic mode needs no key and has the highest " +
+            "priority. Guard, Resilience, Ninja stealth, typing, or an unavailable Purify will stop or delay it. " +
+            "The legacy options keep the older fresh/held-key behavior. If both modes are enabled, automatic mode wins. " +
+            "The optional BRD/MCH cast setting above can interrupt only their basic shots for emergency recovery.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -286,10 +282,10 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableDefensiveUtilities
-                ? "ON — the exact reactive chain runs automatically in CC; no held key is required."
-                : "OFF — this group adds no pressure-triggered Purify or later Guard request.");
+                ? "ON — the Purify → Guard chain runs automatically in CC; no key is required."
+                : "OFF — this option will not use Purify or Guard for high-pressure Stun.");
         changed |= Checkbox(
-            "At exact 3+ incoming enemies and Stun: auto-Purify, then auto-Guard after Resilience",
+            "At 3+ incoming enemies and Stun: auto-Purify, then auto-Guard after Resilience",
             configuration.GuardOnStunPressure,
             value => configuration.GuardOnStunPressure = value);
         changed |= Checkbox(
@@ -311,20 +307,11 @@ internal sealed partial class SettingsWindow
             personalStatus.PlayAutoGuardActivationSoundPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Crystalline Conflict only and disabled by default. If high-pressure Stun triggers Purify, Guard is " +
-            "allowed only after live Resilience confirms the cleanse and the removable CC is gone. Both requests " +
-            "are keyless; enabled per-status Purify rules still apply. Client acceptance of Purify remains terminal " +
-            "for the Purify episode. The former speculative 50%-HP " +
-            "pre-Guard rule has been removed. While Guard is active, and during its bounded propagation interval, " +
-            "every Seiton Sense action-request helper is blocked so none can cancel it. A client-true Guard request " +
-            "is provisional: it creates no card, sound, or native input shield until exact live Guard is visible. " +
-            "If status confirmation times out while Guard is still exactly ready, one bounded retry is allowed " +
-            "inside the original lease. Once confirmed, ordinary Action/PvPAction presses are ignored through the " +
-            "exact live Guard status. A second Guard press is also ignored for two seconds from confirmation, then becomes the " +
-            "deliberate release path again. Manual Guard is never owned, the explicit /panicshu emergency-location " +
-            "command remains an intentional override, and stale " +
-            "ownership expires after six seconds. Auto-Guard waits instead of dispatching if the protection hook is " +
-            "unavailable.");
+            "Crystalline Conflict only and off by default. At 3+ enemies, Seiton can Purify a selected Stun and use " +
+            "Guard after Resilience confirms the cleanse. The card, sound, and press protection start only after Guard " +
+            "is visibly active. While it is active, Seiton blocks its other automatic actions so they cannot cancel it. " +
+            "A second Guard press is ignored for two seconds; after that you can end Guard normally. /panicshu remains " +
+            "an intentional emergency override.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -342,27 +329,14 @@ internal sealed partial class SettingsWindow
             value => configuration.EnableSmartRecuperateOnHeldKey = value);
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off. Available in exact Crystalline Conflict and, only with the separate Wolves' Den testing " +
-            "toggle, in Wolves' Den for controlled testing. Automatic mode wins when both options are enabled and uses " +
-            "no physical-key generation. Held mode listens to the shared continuous gameplay-key consent, including " +
-            "WASD. At exactly 16,000 or more missing HP and at least 2,000 observed MP, the selected mode may request one " +
-            "self-targeted PvP Recuperate (29711). Automatic Recuperate normally waits for a clear native boundary. " +
-            "With the separate automatic-recovery cast-cancel toggle, it may cancel only a verified BRD Powerful Shot " +
-            "or MCH Blast Charge, then revalidates and acts on a later frame. If MP or the action is not ready, it does " +
-            "not block a usable lower-priority helper.");
+            "Off by default. At 16,000+ missing HP and at least 2,000 MP, Seiton can use Recuperate on you. " +
+            "Automatic mode needs no key and wins if both modes are enabled; held mode also accepts WASD. " +
+            "Wolves' Den needs the separate testing option. The optional BRD/MCH setting above can interrupt only " +
+            "their basic shots for this emergency heal.");
         ImGui.TextDisabled(
-            "Only Purify keeps priority over Smart Recuperate. Its current-frame claim is propagated first to " +
-            "automatic Guard, then every later job helper, Emergency Teleport, and pressure Sprint. Exact active " +
-            "Guard blocks Recuperate; the provisional propagation latch is kept only for later helpers, so a rejected " +
-            "Guard request cannot suppress higher-priority recovery. The " +
-            "exact self epoch is revalidated before every call. A clean client rejection may retry after 50 ms up " +
-            "to the budget frozen from the current PvP latency-response setting (eight calls by default). Pre-native " +
-            "validation drift and temporary readiness/MP, higher-priority, or Guard states wait without spending " +
-            "a call; dropping below the HP threshold cancels the current intent. Acceptance starts an exact verified " +
-            "1.0-second anti-duplicate recast; after it elapses, current positive readiness may rearm even if the brief " +
-            "cooldown-unavailable frame was missed. NIN Shukuchi Hidden suppresses " +
-            "both modes. Retry exhaustion or an ambiguous outcome remains latched until automatic danger ends or the " +
-            "held mode's frozen key is released.");
+            "Purify is the only helper above Recuperate. Active Guard and Ninja stealth block it. If Recuperate is " +
+            "temporarily unavailable, lower helpers can still run. Seiton waits for the emergency to end before " +
+            "starting a new heal attempt.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -418,25 +392,15 @@ internal sealed partial class SettingsWindow
             "%d");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Default off. In exact Crystalline Conflict (or Wolves' Den with the explicit test toggle), on MNK, " +
-             "BLM, SGE, or VPR, a continuously held physical gameplay key " +
-             "including WASD may create one escape episode after Smart Recuperate. Own HP and MP must both be " +
-             "strictly below the configured limits, and fresh direct enemy hard/cast targeting must meet the " +
-             "focus count. It uses Thunderclap, Aetherial Manipulation, Icarus, or Slither on one exact non-self " +
-             "party member without visibly changing your target. An MP limit of 0 can never pass the strict below " +
-             "check; turn the helper off instead when you do not want it.");
+            "Off by default. On MNK, BLM, SGE, or VPR, holding a gameplay key can jump to a safer ally when your HP, " +
+            "MP, and enemy-focus settings are met. It runs after Recuperate and never visibly changes your target. " +
+            "Wolves' Den needs the separate testing option.");
         ImGui.TextDisabled(
-            "Destinations must pass the action's native target-specific usability, range and line of sight, the " +
-            "minimum real hitbox-edge travel distance, and a complete exact enemy-safety snapshot. Duplicate party " +
-            "identity fails closed. Fewest nearby enemies wins, then the " +
-            "farthest ally and greatest enemy clearance. With the default maximum of zero, no enemy may stand " +
-            "inside the configured destination radius; if no safe ally exists, nothing happens.");
+            "It chooses the reachable ally with the fewest nearby enemies, then prefers more travel distance and " +
+            "more space from enemies. If no ally passes your safety settings, nothing happens.");
         ImGui.TextDisabled(
-            "One danger episode makes at most one native action call: accepted, rejected, ambiguous, or thrown " +
-            "outcomes all stop it. There is no target fallback and no retry. The episode rearms only after the " +
-            "danger condition has clearly ended. Purify and the job-specific tier remain above Recup; Emergency " +
-            "Teleport is directly after Recup and before generic Guard/Sprint. Optional held-cast cancellation " +
-            "applies to this frozen emergency intent.");
+            "It tries once per danger moment and does not fall back to an unsafe target. The cast-cancel option can " +
+            "interrupt your current cast only when this escape is otherwise ready.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -455,18 +419,9 @@ internal sealed partial class SettingsWindow
         ImGui.TextUnformatted("Exact ally triggers: Stun, Silence, Deep Freeze, Miracle of Nature");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "CC-only and self-excluding. BRD uses The Warden's Paean; WHM uses Aquaveil, independent of client " +
-            "language. The target must be an exact party member in the action's native range and line of sight. " +
-            "Priority is lowest HP%, then highest current incoming enemy pressure, then lowest trusted MP%, then " +
-            "distance and stable party order. Purify wins globally; on BRD/WHM, reactive counter-CC wins before Ally " +
-            "Rescue then wins before Guardian, NIN, SCH, DRK, Recuperate, Guard, and Sprint. " +
-            "Known action-specific cooldown, resource, and reachability blocks wait in the background without " +
-            "starving a usable lower helper. Global cast, occupied-queue, blocking-animation-lock waits and the " +
-            "brief explicit-false throttle retain the scheduler frame; none spends the retry budget. A clean client " +
-            "rejection may retry only the frozen " +
-            "actor/status intent after 50 ms, up to eight calls; acceptance is terminal. A blue CLEANSED card and the counters advance only for the exact server " +
-            "RecoveredFromStatusEffect result (effect type 0x10). Heavy and Bind intentionally do not trigger this " +
-            "experiment.");
+            "Crystalline Conflict only. BRD uses The Warden's Paean and WHM uses Aquaveil on a reachable controlled " +
+            "ally. It prefers lower HP, then more enemy focus, lower MP, and shorter distance. Heavy and Bind do not " +
+            "trigger it. The blue CLEANSED card appears only when FFXIV confirms that the effect was removed.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -479,7 +434,7 @@ internal sealed partial class SettingsWindow
 
         ImGui.TextColored(new Vector4(0.34f, 0.82f, 1f, 1f), "ALLY RESCUE RESULTS");
         ImGui.TextUnformatted(
-            $"Session: {rescue.AttemptCount} attempts  •  {rescue.AcceptedCount} client accepted  •  " +
+            $"Session: {rescue.AttemptCount} attempts  •  {rescue.AcceptedCount} FFXIV accepted  •  " +
             $"{session.TotalConfirmed} confirmed cleanses");
         ImGui.TextUnformatted($"This CC: {match.TotalConfirmed} confirmed cleanses");
         ImGui.TextDisabled(
@@ -500,7 +455,7 @@ internal sealed partial class SettingsWindow
         ImGui.SameLine();
         if (ImGui.Button("Preview CLEANSED popup"))
             overlay.TriggerAllyRescueConfirmationPreview();
-        ImGui.TextDisabled("Confirmed means the exact server 0x10 status-removal result was captured.");
+        ImGui.TextDisabled("Confirmed means FFXIV reported that the status was removed.");
     }
 
     private bool DrawReactiveCcControls()
@@ -519,10 +474,8 @@ internal sealed partial class SettingsWindow
                 ? new Vector4(0.35f, 0.9f, 1f, 1f)
                 : new Vector4(0.7f, 0.72f, 0.78f, 1f),
             configuration.EnableReactiveCcUtilities
-                ? "ON — enabled WHM Miracle, BRD Silent Nocturne, NIN Raiju, PLD Intervene, RDM Resolution/Vice of Thorns, BLM Frost Star, or SAM Soten/Mineuchi " +
-                  "may schedule one frozen exact-target intent " +
-                  "for an eligible CC opportunity."
-                : "OFF — threat capture is inactive and no counter-CC attempt can occur.");
+                ? "ON — the enabled job action can react to a matching threat or protection ending."
+                : "OFF — reactive counter-CC is disabled.");
 
         ImGui.TextUnformatted("Shared protection-end triggers:");
         changed |= Checkbox(
@@ -530,11 +483,11 @@ internal sealed partial class SettingsWindow
             configuration.ReactiveCcDancerLimitBreak,
             value => configuration.ReactiveCcDancerLimitBreak = value);
         changed |= Checkbox(
-            "After enemy Purify: all six removable CC types, ranked exact release",
+            "After enemy Purify: react when protection ends",
             configuration.ReactiveCcAfterEnemyPurify,
             value => configuration.ReactiveCcAfterEnemyPurify = value);
         changed |= Checkbox(
-            "After enemy Guard ends: ranked exact release",
+            "After enemy Guard: react when protection ends",
             configuration.ReactiveCcAfterEnemyGuard,
             value => configuration.ReactiveCcAfterEnemyGuard = value);
 
@@ -592,61 +545,23 @@ internal sealed partial class SettingsWindow
             overlay.TriggerMiracleInterceptConfirmationPreview();
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Experimental and disabled by default. Exact Crystalline Conflict is supported; the separate Wolves' Den " +
-            "testing toggle uses only the exact current hard target. WHM Wunder der Natur / Miracle of Nature uses its " +
-            "native 10-yalm range; BRD Stumme Nocturne / Silent Nocturne and both NIN Raiju stun variants use " +
-            "their native 20-yalm range. The enemy " +
-            "must remain the exact canonical opponent, " +
-            "alive, targetable, in native range and line of sight, and free of verified protection for that counter. " +
-            "The enemy-SAM trigger here is separate from your own automatic Samurai Zantetsuken helper under Job Tools. " +
-            "MCH, SAM, VPR, and Contradance each use their existing exact bounded startup signal. The post-Purify rule " +
-            "accepts an exact enemy self-Purify action packet with or without an exposed Stun, Heavy, Bind, Silence, Deep " +
-            "Freeze, or Miracle of Nature recovery tuple, observes real Resilience and remembers the exact enemy episode " +
-            "without binding a key. A validated duration is only a wake-up hint. It binds the current eligible held/fresh " +
-            "generation only at authoritative protection end or inside the original 500-ms release opportunity. " +
-            "At or after the expected end, the first absent frame is " +
-            "eligible immediately; an early or untimed absence keeps the 150-ms anti-flicker check. It uses " +
-            "the exact S1-S5 actor directly, does not require that actor to be your selected target, and never changes " +
-            "your target. There is no minimum team-pressure count, and distinct S-slots are tracked independently. " +
-            "Viper waits until Hardened Scales is actually absent.");
+            "Experimental and off by default. In CC, hold a gameplay key and Seiton can use the enabled job action " +
+            "when an enemy starts a selected threat or when their Purify/Guard protection ends. It uses each skill's " +
+            "normal range and line of sight and never visibly changes your target. Wolves' Den testing uses only your " +
+            "current target. Viper waits until Hardened Scales is gone.");
         ImGui.TextDisabled(
-            "For simultaneous post-Purify or post-Guard releases, candidates are evaluated before pressure ranking. " +
-            "Native blocker, range, and line-of-sight eligibility " +
-            "is checked before ranking. Only fresh exact team pressure above zero earns a " +
-            "ranking bonus, highest-first. Zero, unknown, or stale pressure is neutral and never gates a candidate. " +
-            "Lowest HP ratio follows, then lowest trusted MP ratio and stable S-slot identity. Exactly one winner is " +
-            "selected; simultaneous losers " +
-            "are terminal and never become fallback attempts. Post-Guard binds an exact S1-S5 actor only after Guard " +
-            "3054/3673 was observed present and then verified absent. Early Guard cancellation releases immediately. " +
-            "Ordinary protection-end held episodes retain the shared 3-second lease. A true main-GCD counter that is busy at its learned ideal request frame reserves only that exact action, actor, and protection episode for at most 1000 ms from that frozen frame; it never claims input or cancels your cast while waiting. " +
-            "PLD uses the configured Intervene cap up to its native 20 yalms; RDM Resolution, the exact Forte-to-Vice proc, and the exact Soul Resonance-to-Frost Star proc use native 25-yalm targeting. " +
-            "Each exact action learns only from exact source-sequence server ActionEffect timing at its measured edge distance. Prediction needs five safe current-or-nearer samples including at least one from the current runtime session; otherwise it waits for authoritative protection absence. Learned attempts may request early so impact aims just after natural expiry. Early Guard cancellation remains immediate. " +
-            "In enabled Wolves' Den testing, these helpers act only on the exact current hard target matching the observed episode.");
+            "If several enemies become available together, Seiton first checks whether each action can actually reach. " +
+            "It then prefers team pressure, low HP, and low MP. Pressure helps the choice but is never required. " +
+            "Actions with travel time learn when to start so their effect can land just after protection ends. Until " +
+            "enough safe timing samples exist, Seiton waits for the protection icon to disappear.");
         ImGui.TextDisabled(
-            "SAM's separate staged option mirrors the exact enemy self-Purify/Guard packet from the same shared hook, " +
-            "requires the matching live Resilience/Guard status, the complete verified Mineuchi blocker family, and " +
-            "freezes that exact actor, status, end time, and held-key generation. It first learns exact sequence-bound " +
-            "Soten arrival and Mineuchi ActionEffect timing. After warm-up it may start Soten early and requests Mineuchi " +
-            "only inside its measured final window so the stun lands just after protection expires; without enough safe " +
-            "samples it conservatively waits for authoritative absence. Early Guard cancellation remains immediate. " +
-            "Inside 5 yalms it uses Mineuchi directly; otherwise it may use Soten once up to the configured cap. A " +
-            "client-accepted Soten commits only that actor/episode's Mineuchi completion even if the initiating key is " +
-            "released or changed; text input still cancels it. It never changes target, reranks, substitutes, or retries " +
-            "a completed native boundary. Wolves' Den requires the observed actor to be the exact current duel target or " +
-            "the reviewed current striking dummy.");
+            "SAM uses Mineuchi directly inside 5 yalms or Soten first from farther away. It learns the travel timing " +
+            "before trying to land the stun just after Purify or Guard ends. Once Soten starts, it keeps that same enemy " +
+            "for Mineuchi even if you release the key. Typing cancels the sequence.");
         ImGui.TextDisabled(
-            "While a gameplay key remains held, each selected exact startup or protection-end episode keeps one " +
-            "frozen target intent. A later distinct episode may authorize another action without a key release; no " +
-            "simultaneous loser can. Purify remains first; AST, SAM, NIN Seiton, and VPR Serpentiner Geist follow in the documented job-gated order, while reactive counter-CC leads " +
-            "the BRD/WHM helpers because its LB and protection-end windows are shorter. Known action-specific " +
-            "unavailability waits without blocking a usable lower helper; only a clean client rejection may retry " +
-            "that same intent after 50 ms, up to eight calls. Acceptance is terminal. There is no selected-target " +
-            "change, alternate, fallback, or replay. The blue AUTO CC " +
-            "LANDED flash appears " +
-            "only after the matching Miracle, Silence, or Stun status is captured on that exact pending enemy with the " +
-            "same source sequence created by the plugin request; a manual use cannot claim it. It confirms " +
-            "the counter-CC landed, not conclusively that Contradance, another LB, or its damage was interrupted. In " +
-            "particular, an instant LB already accepted by the server may be too late to stop even when Silence lands.");
+            "Purify always stays first. Each reaction keeps one action and enemy; it will not switch to another target " +
+            "mid-attempt. The blue AUTO CC LANDED flash appears only when FFXIV confirms that Seiton's own Silence, " +
+            "Miracle, or Stun landed. It does not guarantee that an instant Limit Break was stopped in time.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -655,7 +570,7 @@ internal sealed partial class SettingsWindow
     {
         var changed = false;
         changed |= Checkbox(
-            "Brake selected CC actions against verified immunity",
+            "Block selected CC actions against confirmed immunity",
             configuration.EnableCcImmunityBrake,
             value => configuration.EnableCcImmunityBrake = value);
         ImGui.TextColored(
@@ -690,19 +605,12 @@ internal sealed partial class SettingsWindow
 
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Crystalline Conflict only. This works directly from a hotbar; no macro is required. For the reviewed " +
-            "single/primary-target list above, an enabled action aimed at an exactly identified enemy with verified " +
-            "protection against that exact CC is stopped before the downstream game action for that one incoming " +
-            "attempt. Wunder der Natur / Miracle of Nature uses its own verified matrix, including VPR-only Hardened " +
-            "Scales. The action, target and " +
-            "input are never stored, replayed, changed to an alternative, or retried by Seiton Sense.");
+            "Crystalline Conflict only; no macro is needed. If the chosen enemy is currently immune to the selected " +
+            "action's crowd control, Seiton blocks that press. It does not save or repeat the blocked action.");
         ImGui.TextDisabled(
-            "A later real press or Turbo Hotbar pulse is checked again and can pass as soon as protection is gone. " +
-            "Vanilla key holding does not generate repeats by itself. The brake blocks the whole selected action, " +
-            "including any damage or movement attached to it, so disable individual actions to taste. Broad cone, " +
-            "ground and ambiguous multi-target CC is deliberately excluded. A downstream plugin that rewrites the " +
-            "target after Seiton Sense can override this safety boundary; test plugin order before relying on it. " +
-            "Unknown or ambiguous state passes through unchanged.");
+            "Press again after protection ends. The whole action is blocked, including any damage or movement it also " +
+            "does, so enable only the actions you want. Broad cones, ground attacks, and unclear area attacks are not " +
+            "covered. Unknown immunity information lets the action pass.");
         ImGui.PopTextWrapPos();
         return changed;
     }
@@ -747,16 +655,12 @@ internal sealed partial class SettingsWindow
                 : "OFF — no party-visible enemy sign command is issued.");
         ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
         ImGui.TextDisabled(
-            "Exact Crystalline Conflict only and disabled by default. A target is eligible only when this client " +
-            "observed its Guard on cooldown and it is at 50% HP or lower and/or has trusted low MP. The MP state enters " +
-            "after 150 ms below 2,000 and clears after 150 ms at or above 2,300 to prevent threshold flicker. Priority is " +
-            "both resources low, then HP-only, then MP-only; ties use lowest HP%, lowest trusted MP%, highest known " +
-            "team-target count, and stable enemy slot. This sends the normal /mk attack1 <eN> command and never changes " +
-            "your target.");
+            "Crystalline Conflict only and off by default. It marks an enemy whose Guard is unavailable and who has " +
+            "50% HP or less, low MP, or both. It prefers both resources low, then lower HP/MP and more team focus. " +
+            "This uses the normal shared Attack1 marker and never changes your target.");
         ImGui.TextDisabled(
-            "An existing Attack1 sign is never overwritten. Seiton Sense clears only a sign whose empty-to-exact-target " +
-            "transition it confirmed and whose enemy identity and marker timestamp are still unchanged. If ownership " +
-            "cannot be proven, it deliberately leaves the sign alone.");
+            "An existing Attack1 marker is never overwritten. Seiton clears only the marker it placed itself; if that " +
+            "cannot be confirmed, it leaves the marker alone.");
         ImGui.PopTextWrapPos();
         return changed;
     }

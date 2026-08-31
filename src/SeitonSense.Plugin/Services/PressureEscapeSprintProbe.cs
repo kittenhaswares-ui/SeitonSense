@@ -671,7 +671,7 @@ internal sealed class PressureEscapeSprintProbe
         return request.IsValid ? request : null;
     }
 
-    private static bool ValidateMetadata(IDataManager dataManager, IPluginLog log)
+    internal static bool ValidateMetadata(IDataManager dataManager, IPluginLog log)
     {
         try
         {

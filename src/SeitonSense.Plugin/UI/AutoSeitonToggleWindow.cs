@@ -153,7 +153,7 @@ internal sealed class AutoSeitonToggleWindow : Window
         ImGui.TextUnformatted(enabled ? "Automatic dispatch armed" : "Automatic dispatch disarmed");
         ImGui.Separator();
         if (!currentOptions.MetadataVerified)
-            ImGui.TextUnformatted("Seiton metadata is not verified");
+            ImGui.TextUnformatted("Seiton is unavailable for this game version");
         else if (ready)
             ImGui.TextUnformatted($"Ready now ({resolvedActionId})");
         else

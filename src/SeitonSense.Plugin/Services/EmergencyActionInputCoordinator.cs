@@ -90,6 +90,7 @@ internal sealed class EmergencyActionInputCoordinator
     private bool astrologianHarmonicOrbisHeldWasEnabled;
     private bool redMageGuardEngageHeldWasEnabled;
     private bool pressureEscapeHeldWasEnabled;
+    private bool smartSprintHeldWasEnabled;
     private bool darkKnightPlungeHeldWasEnabled;
     private bool ninjaGuardShukuchiHeldWasEnabled;
     private bool ninjaSeitonHeldWasEnabled;
@@ -129,7 +130,8 @@ internal sealed class EmergencyActionInputCoordinator
         bool samuraiCounterCcHeldEnabled = false,
         bool samuraiZantetsukenHeldEnabled = false,
         bool astrologianHarmonicOrbisHeldEnabled = false,
-        bool redMageGuardEngageHeldEnabled = false)
+        bool redMageGuardEngageHeldEnabled = false,
+        bool smartSprintHeldEnabled = false)
     {
         if (!shouldObserve)
         {
@@ -153,6 +155,7 @@ internal sealed class EmergencyActionInputCoordinator
             (redMageGuardEngageHeldEnabled && !redMageGuardEngageHeldWasEnabled) ||
             (emergencyTeleportHeldEnabled && !emergencyTeleportHeldWasEnabled) ||
             (pressureEscapeHeldEnabled && !pressureEscapeHeldWasEnabled) ||
+            (smartSprintHeldEnabled && !smartSprintHeldWasEnabled) ||
             (darkKnightPlungeHeldEnabled && !darkKnightPlungeHeldWasEnabled) ||
             (ninjaGuardShukuchiHeldEnabled && !ninjaGuardShukuchiHeldWasEnabled) ||
             (ninjaSeitonHeldEnabled && !ninjaSeitonHeldWasEnabled) ||
@@ -173,6 +176,7 @@ internal sealed class EmergencyActionInputCoordinator
         redMageGuardEngageHeldWasEnabled = redMageGuardEngageHeldEnabled;
         emergencyTeleportHeldWasEnabled = emergencyTeleportHeldEnabled;
         pressureEscapeHeldWasEnabled = pressureEscapeHeldEnabled;
+        smartSprintHeldWasEnabled = smartSprintHeldEnabled;
         darkKnightPlungeHeldWasEnabled = darkKnightPlungeHeldEnabled;
         ninjaGuardShukuchiHeldWasEnabled = ninjaGuardShukuchiHeldEnabled;
         ninjaSeitonHeldWasEnabled = ninjaSeitonHeldEnabled;
@@ -230,6 +234,7 @@ internal sealed class EmergencyActionInputCoordinator
         redMageGuardEngageHeldWasEnabled = false;
         emergencyTeleportHeldWasEnabled = false;
         pressureEscapeHeldWasEnabled = false;
+        smartSprintHeldWasEnabled = false;
         darkKnightPlungeHeldWasEnabled = false;
         ninjaGuardShukuchiHeldWasEnabled = false;
         ninjaSeitonHeldWasEnabled = false;

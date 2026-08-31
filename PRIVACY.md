@@ -1859,9 +1859,14 @@ hitbox radius plus the game's world-to-screen projection. It draws two fixed
 sampled rings and does not scan other actors, retain movement history, raycast
 terrain, change a target, or issue/suppress an action.
 
-Configuration schema 49 is current. It enables the local adaptive response
-clock, sampled readiness-edge wakeups, unchanged-queue critical recovery, and
-exact held chase buffering. The latency-response helper defaults on for fresh/
+Configuration schema 50 is current. It replaces held-only chase behavior with
+one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),
+adds default-on exact active-Sprint repeat protection, and adds a separate
+default-off 3000-5000 ms idle Smart Sprint option. Smart Sprint retains only a
+monotonic accepted-action activity token and its local time baseline; movement,
+camera, and target input are not stored as activity. Schema 49 enabled the local
+adaptive response clock, sampled readiness-edge wakeups, unchanged-queue
+critical recovery, and the original held chase buffer. The latency-response helper defaults on for fresh/
 reset configurations while an existing opt-out is preserved on upgrade. These
 features are memory-only; there is no latency profiler, traffic capture, upload,
 position prediction, range extension, animation-lock write, or direct native-
@@ -1904,17 +1909,20 @@ Teleport are all off for fresh and reset configurations;
 unrelated existing opt-ins are preserved.
 
 The integrated input path reads only the local standard-keyboard-hotbar binding,
-raw held/released state, exact slot identity, and the local action/target/context
+raw press/release state, exact slot identity, and the local action/target/context
 snapshot needed to prove one bounded attempt. The generic buffer stores one
 immutable in-memory action tuple until it succeeds, is cancelled, or expires;
-the chase lane is limited to that same physically held direct action and waits
-only for the exact hostile actor's native range/line-of-sight result. Release,
-expiry, new input, identity/action/context/safety drift, or any non-spatial gate
-cancels it before a later one-shot call. Turbo retains one current held-slot
+the tap-to-land lane is limited to the same physically pressed direct action and
+waits only for the exact hostile actor's native range/line-of-sight result.
+Releasing the key does not cancel it. Expiry, new action input, Guard, identity/
+action/context/safety drift, or an unsafe queue/cast boundary cancels it before
+a later call. Supported single-target casts also require the visible hard target
+to remain the frozen actor, so a delayed cast cannot turn toward an actor the
+user switched away from. Turbo retains one current held-slot
 owner. A newer physical input replaces the old buffer/owner. No input history,
 action history, target history, timing data,
 or learning-window state is uploaded. The learning window is a read-only view of
-the current in-memory key/slot, action, countdown, and held state. Neither path
+the current in-memory key/slot, action, and countdown. Neither path
 writes position, range, animation lock, cast state, or a visible target.
 
 For buffer and explicit directional-self-action compatibility, Seiton reads

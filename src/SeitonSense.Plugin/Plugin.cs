@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.43.0.0";
+    private const string CurrentReleaseVersion = "0.43.0.1";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -429,10 +429,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "New Ping Helpers page with one shared monotonic response clock, sampled readiness-edge recovery, the existing adjustable retry window, action buffer, Turbo, and chase controls.",
-                "Purify > Recuperate > Auto-Guard is now explicit. The optional occupied-queue recovery path is a deliberate priority override: an accepted recovery may replace the queued action; only an unchanged rejected call may retry.",
-                "The automatic one-shot action buffer needs no /buffer macro. Hold-to-land preserves one exact instant hostile action and actor until native range/line of sight becomes legal, then tries once.",
-                "No profiler, position prediction, range extension, target substitution, animation-lock write, or direct queue edit was added. Exact live CC and chase confirmation remains pending.",
+                "Tap-to-land now remembers a supported out-of-range attack after you release the key. Choose 0–3000 ms; the default is 2200 ms.",
+                "Supported single-target spells can wait too. Changing target, using Guard, starting another action, or becoming unable to act cancels the wait.",
+                "Pressing Sprint again no longer cancels an active PvP Sprint by default. Every other action still ends Sprint normally.",
+                "Optional Smart Sprint can use Sprint once after 3–5 seconds without action-bar input while you keep a gameplay key held. Any action-bar press resets the timer; WASD, camera movement, and targeting do not.",
+                "Settings and update notes now use shorter player-friendly explanations. Live in-game confirmation is still separate from the completed build checks.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

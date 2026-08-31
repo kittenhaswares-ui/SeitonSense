@@ -101,7 +101,6 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
             dataManager,
             log,
             () => IsInternalPriorityClaimedFailClosed(),
-            IsExactPhysicalPressStillHeld,
             DispatchBufferedAction);
 
         ArgumentNullException.ThrowIfNull(interop);
@@ -536,6 +535,11 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
 
     private void OnCertifiedPhysicalPress(IntegratedHotbarPress press)
     {
+        // Every physical action-bar press resets Smart Sprint's inactivity
+        // clock, even when the game later rejects the requested action. WASD,
+        // camera, and targeting input never enter this hotbar boundary.
+        nearAssist.RecordActionBarActivity();
+
         // A new physical edge is newer intent even when its slot is empty,
         // macro, movement, cast-time, or otherwise outside buffer eligibility.
         ActionBuffer.Cancel(
@@ -565,21 +569,6 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                 latestPhysicalPress = null;
             }
         }
-    }
-
-    private bool IsExactPhysicalPressStillHeld(IntegratedActionBufferHotbarRoot root)
-    {
-        IntegratedHotbarPress? latest;
-        lock (inputStateGate) latest = latestPhysicalPress;
-        if (latest is not { } press ||
-            press.PressId != root.PressGeneration ||
-            press.Binding.HotbarId != (uint)root.HotbarId ||
-            press.Binding.SlotId != (uint)root.SlotId)
-        {
-            return false;
-        }
-
-        return hotbarInput?.IsStillHeld(press) == true;
     }
 
     private void OnUnconsumedInjectedRepeat(IntegratedHotbarActivation activation)
@@ -673,30 +662,37 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
         }
     }
 
-    private bool DispatchBufferedAction(IntegratedActionBufferDispatchRequest request)
+    private IntegratedActionBufferDispatchResult DispatchBufferedAction(
+        IntegratedActionBufferDispatchRequest request)
     {
         if (disposed ||
             Volatile.Read(ref started) == 0 ||
             IsInternalPriorityClaimedFailClosed())
         {
-            return false;
+            return IntegratedActionBufferDispatchResult.NotInvoked;
         }
 
         try
         {
             var actionManager = ActionManager.Instance();
-            if (actionManager == null) return false;
+            if (actionManager == null)
+                return IntegratedActionBufferDispatchResult.NotInvoked;
 
-            // The runtime already revalidated the immutable tuple and consumed
-            // its one-shot before this callback. Run it once through the sole
-            // UseAction owner with redirect/token rewriting disabled.
+            var boundaryBefore = CaptureBufferedActionBoundary(
+                actionManager,
+                request);
+
+            // The runtime already revalidated the immutable tuple and reserved
+            // one native attempt. Run it through the sole UseAction owner with
+            // redirect/token rewriting disabled. NearAssist reports whether its
+            // exact protection scope actually reached native Original.
             var replayIntent = new IntegratedBufferedReplayIntent(
                 request.ActionType,
                 request.RequestedActionId,
                 request.ResolvedActionId,
                 request.TargetId,
                 request.RequiresSmartActionProtectionRecheck);
-            return nearAssist.RunExactBufferedReplay(
+            var replay = nearAssist.RunExactBufferedReplay(
                 replayIntent,
                 () => actionManager->UseAction(
                     request.ActionType,
@@ -705,12 +701,61 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
                     request.ExtraParam,
                     request.Mode,
                     request.ComboRouteId));
+            if (!replay.NativeBoundaryInvoked)
+                return IntegratedActionBufferDispatchResult.NotInvoked;
+
+            var boundaryAfter = CaptureBufferedActionBoundary(
+                actionManager,
+                request);
+            var outcome = ClientActionAttemptBoundaryRules.Classify(
+                replay.ClientReturnedAccepted,
+                request.ResolvedActionId,
+                boundaryBefore,
+                boundaryAfter);
+            return new IntegratedActionBufferDispatchResult(
+                NativeBoundaryInvoked: true,
+                outcome);
         }
         catch (Exception exception)
         {
             LogFailure(exception, "Seiton Sense exact buffered dispatch failed closed.");
-            return false;
+            return IntegratedActionBufferDispatchResult.AcceptanceUnknown;
         }
+    }
+
+    private static ClientActionAttemptFingerprint CaptureBufferedActionBoundary(
+        ActionManager* actionManager,
+        IntegratedActionBufferDispatchRequest request)
+    {
+        if (actionManager == null ||
+            request.RequestedActionId == 0 ||
+            request.ResolvedActionId == 0)
+        {
+            return default;
+        }
+
+        var adjustedActionId = request.ActionType == ActionType.Action
+            ? actionManager->GetAdjustedActionId(request.RequestedActionId)
+            : request.ResolvedActionId;
+        return new ClientActionAttemptFingerprint(
+            Captured: true,
+            actionManager->ActionQueued,
+            (uint)actionManager->QueuedActionType,
+            actionManager->QueuedActionId,
+            (ulong)actionManager->QueuedTargetId,
+            actionManager->QueuedExtraParam,
+            (uint)actionManager->QueueType,
+            actionManager->QueuedComboRouteId,
+            actionManager->LastUsedActionSequence,
+            actionManager->AnimationLock,
+            actionManager->CastActionId,
+            adjustedActionId,
+            actionManager->IsActionOffCooldown(
+                request.ActionType,
+                request.ResolvedActionId),
+            actionManager->CheckActionResources(
+                request.ActionType,
+                request.ResolvedActionId));
     }
 
     private IntegratedActionBufferHotbarRoot CreateBufferRoot(

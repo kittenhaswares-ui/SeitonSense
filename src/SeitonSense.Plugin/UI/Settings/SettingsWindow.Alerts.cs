@@ -55,10 +55,9 @@ internal sealed partial class SettingsWindow
             value => configuration.PersonalWarningBackgroundOpacity = value,
             "%.2f");
         ImGui.TextDisabled(
-            "These controls move and scale ordinary personal warning cards, including the MCH LB card, plus CLEANSED, " +
-            "AUTO CC LANDED, and GUARDIAN TRIGGERED feedback. The DRG airborne card stays in its separate top-center " +
-            "lane but shares warning scale and background opacity. They do not move the top-center focus alert or the " +
-            "top-left isolation alert. At 0 opacity, text, icons, and borders remain visible.");
+            "Moves and scales your normal warning cards, including MCH LB, CLEANSED, AUTO CC LANDED, and GUARDIAN. " +
+            "The DRG air warning keeps its own top position but uses the same size and background. Focus and isolation " +
+            "warnings have their own positions.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Your MP");
@@ -85,8 +84,8 @@ internal sealed partial class SettingsWindow
         if (ImGui.Button("Test 2,000 MP sound"))
             personalStatus.PlayLocalMpWarning2000SoundPreview();
         ImGui.TextDisabled(
-            "Local player only. Each cue plays once when your trusted 10,000-MP value crosses downward through the " +
-            "threshold, then rearms after recovery. A direct drop through both thresholds plays only the urgent 2,000-MP cue.");
+            "These sounds are only for your MP. Each plays once when you fall below its limit. If you cross both limits " +
+            "at once, only the urgent 2,000 MP sound plays.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Limit Break activations");
@@ -104,9 +103,8 @@ internal sealed partial class SettingsWindow
             configuration.LimitBreakFeedShowNames,
             value => configuration.LimitBreakFeedShowNames = value);
         ImGui.TextDisabled(
-            "Duration LBs keep the banner, icon, and verified timer until they end. Instant LBs flash briefly. " +
-            "Ally damage cards show player -> enemy and the captured damage. The banner uses a separate top-center " +
-            "lane and never replaces or covers the removed combat-frame HP/MP panel.");
+            "Long Limit Breaks show their icon and timer until they end; instant LBs flash briefly. Ally cards show " +
+            "who hit whom and the damage seen by the plugin.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Focused by several enemies");
@@ -135,9 +133,8 @@ internal sealed partial class SettingsWindow
             overlay.HighPressureWarningPreviewEnabled = !overlay.HighPressureWarningPreviewEnabled;
         }
         ImGui.TextDisabled(
-            "Exact current hard/cast targets only; recent hits do not count. The sound is independent from the " +
-            "visual and is one-shot per focus episode. The alert stays top-center; isolation remains top-left " +
-            "unless a narrow work area requires non-overlapping vertical stacking.");
+            "Counts enemies currently targeting or casting at you; old hits do not count. The sound plays once when " +
+            "the focus begins and can be enabled separately from the warning.");
 
         ImGui.Separator();
         ImGui.TextUnformatted("Spatial awareness");
@@ -160,10 +157,8 @@ internal sealed partial class SettingsWindow
             overlay.IsolationWarningPreviewEnabled = !overlay.IsolationWarningPreviewEnabled;
         }
         ImGui.TextDisabled(
-            "CC only. Requires an exact five-player party and FFXIV's native 20y range/line-of-sight result. " +
-            "Unknown data stays silent.");
-        ImGui.TextDisabled(isolationAwareness.Diagnostics.ToChatLine());
-
+            "CC only. Warns when no party member is within 20 yalms and visible to you. If the party data is unclear, " +
+            "it stays silent.");
         ImGui.Separator();
         ImGui.TextUnformatted("Dangerous enemy Limit Breaks");
         changed |= Checkbox(
@@ -186,7 +181,7 @@ internal sealed partial class SettingsWindow
             value => configuration.MarksmanSpiteWarningScale = value,
             "%.2f x");
         changed |= Checkbox(
-            "Play a sound for verified enemy danger warnings",
+            "Play a sound for confirmed enemy danger warnings",
             configuration.MchLimitBreakSoundEnabled,
             value => configuration.MchLimitBreakSoundEnabled = value);
         changed |= SliderInt(
@@ -199,9 +194,8 @@ internal sealed partial class SettingsWindow
         if (ImGui.Button("Test dangerous LB warning sound"))
             personalStatus.PlayMachinistLimitBreakSoundPreview();
         ImGui.TextDisabled(
-            "MCH requires its exact early marker on you; DRG, SMN, and Chiten require exact activation/status evidence. " +
-            "Chiten also draws its verified timer above the Samurai's native nameplate. Sound is one-shot per episode; " +
-            "none of these warnings presses Guard or another action.");
+            "Shows only dangers Seiton can confirm. Chiten also gets a timer above the Samurai's nameplate. The sound " +
+            "plays once per danger, and these warnings never press an action for you.");
 
         return changed;
     }

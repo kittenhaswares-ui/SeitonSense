@@ -35,8 +35,7 @@ internal sealed partial class SettingsWindow
             configuration.NearAssistPreferTeamPressure,
             value => configuration.NearAssistPreferTeamPressure = value);
         ImGui.TextDisabled(
-            "Team-pressure preference is independent and opt-in. If no valid pressure candidate exists, the " +
-            "normal smart/nearest selection and then your original <t> target remain the fallback.");
+            "If no useful team-focus target exists, Near Assist uses its normal nearest choice and finally your <t> target.");
 
         ImGui.TextUnformatted("Near Help survival preference");
         changed |= Checkbox(
@@ -44,14 +43,13 @@ internal sealed partial class SettingsWindow
             configuration.NearHelpPreferIncomingPressure,
             value => configuration.NearHelpPreferIncomingPressure = value);
         ImGui.TextDisabled(
-            "Lowest exact HP is the anchor and always wins at 25% HP or lower. Otherwise, a trusted live pressure " +
-            "view may prefer the highest incoming enemy count only within 10 HP percentage points of that anchor; " +
-            "lower HP and distance break ties. Missing data inside that window falls back to lowest HP.");
+            "Near Help normally chooses the lowest-HP ally. Below 25% HP, that always wins. Above that, this option " +
+            "may prefer a nearby ally under more enemy focus when their HP is within 10 percentage points.");
 
         ImGui.Separator();
-        if (ImGui.CollapsingHeader("Smart Action macro — optional harmful-action redirect", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Smart Action macro — choose a better enemy", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.TextUnformatted("Smart target first, current <t> only as the authored fallback:");
+            ImGui.TextUnformatted("Smart Action chooses a safe enemy for your next attack. If it cannot find one, the macro uses your normal <t> target.");
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/mlock");
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/smartaction");
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <e1>");
@@ -59,27 +57,12 @@ internal sealed partial class SettingsWindow
             ImGui.TextUnformatted("Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Crystalline Conflict only. /smartaction or /seitonfar arms one 750 ms token and resolves the actual harmful PvP " +
-                "action on the next line. No selected target is required. Only living, targetable exact S1-S5 " +
-                "enemies inside that action's native range and line of sight are considered; blocking protection is excluded, " +
-                "while reviewed Guard-ignoring damage and the closed ordinary gap-closer/disengage catalog may still target Guard. " +
-                "Forked/Fleeting Raiju remain blocked by Guard so their stun is not consumed into it. An unrelated enemy's Guard, " +
-                "Cover, or LB invulnerability does not stall the whole AoE; Chiten remains protected.");
+                "Crystalline Conflict only. Seiton chooses a living, reachable, safe enemy. It prefers low HP, team " +
+                "focus, unavailable Guard, and low MP. Melee jobs prefer melee range first. /seitonfar chooses the " +
+                "farthest safe enemy instead. Your visible target does not change. /ssaction is an alias.");
             ImGui.TextDisabled(
-                "Inside the relevant reach tier, ranking is lowest exact HP%, then highest fresh team pressure, " +
-                "observed Guard cooldown unavailable, lowest trusted MP%, and stable S-slot. Melee jobs first prefer " +
-                "5-yalm melee reach, then enemies no farther than that job's own reviewed gap-closer range. /seitonfar " +
-                "instead ranks every action-reachable safe enemy by farthest hitbox-edge distance, then stable S-slot. " +
-                "The <e1> line is only a carrier. When no exact smart target survives final revalidation, Seiton " +
-                "invalidates that carrier and leaves the following <t> line as the only fallback. It never visibly " +
-                "changes your target, retries, reranks after commitment, or sends an action by itself. /ssaction is " +
-                "the collision-free alias.");
-            ImGui.TextDisabled(
-                "Generic cast-time actions are never invisibly redirected. A hidden <e1>/<2> carrier is suppressed, consumes " +
-                "the one-shot token, and lets the following authored <t> fallback use your visible target; a direct " +
-                "<t> cast remains vanilla. Instant actions keep Smart Action targeting. The only reviewed exception is " +
-                "SAM Ogi Namikiri/Tendo Setsugekka. This avoids FFXIV's delayed native auto-face turning you toward a " +
-                "hidden target after you manually switch targets.");
+                "Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly. Instant " +
+                "attacks use Smart Action. Ogi Namikiri and Tendo Setsugekka are the supported cast exceptions.");
             ImGui.PopTextWrapPos();
         }
 
@@ -93,19 +76,9 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Crystalline Conflict only. /nearassist arms one 750 ms token for the immediately following hostile " +
-                "macro action. Smart preference considers only allies whose distance from you is at most the nearest " +
-                "valid candidate's distance plus 8 yalms, then favors ranged/caster DPS, melee DPS, and finally support; " +
-                "disabling it uses strict nearest distance. Only that ally's exact native <e1>-<e5> hard target is " +
-                "considered. The chosen enemy and native range/line-of-sight are checked for the actual action. The <e1> " +
-                "line is only a reliable carrier: Seiton replaces its target with the selected ally's exact e-slot. If no " +
-                "redirect is possible, only that carrier attempt is invalidated and the following vanilla <t> line remains " +
-                "your fallback. This also works when you started without an own target. " +
-                "The compact two-line /nearassist + <t> form remains supported when you already have a target. /mlock " +
-                "prevents Turbo Hotbar from restarting this macro before its fallback line. Turbo Hotbar " +
-                "may repeat the authored macro, but Seiton adds no repeat or retry " +
-                "of its own. It never visibly changes your selected target or sends an action by itself. Disable the " +
-                "standalone NearAssist plugin before using this command; /ssassist remains the collision-free alias.");
+                "Crystalline Conflict only. This attack follows a nearby ally's target. If that is not possible, the " +
+                "<t> line uses your target. Your visible target does not change. Keep /mlock at the top, disable the " +
+                "separate NearAssist plugin, and use /ssassist if you prefer the alias.");
             ImGui.PopTextWrapPos();
         }
 
@@ -119,13 +92,9 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Ability\" <t>");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Near Help resolves the actual friendly PvP action first. It considers exact live party members and may " +
-                "also consider you only when that resolved action explicitly supports self-targeting and its native " +
-                "target/range/line-of-sight check succeeds. The pressure option uses the bounded survival ranking above. " +
-                "The <2> line is only a carrier. If no valid target exists, Seiton invalidates that carrier so the " +
-                "authored <t> line remains the normal fallback. /mlock prevents Turbo Hotbar from restarting the macro " +
-                "before its fallback line. Near Help redirects only that one incoming action; it does not invent an " +
-                "action, visibly change your target, try an alternate candidate, or retry.");
+                "Near Help sends this action to the reachable party member who needs it most, which may include you. " +
+                "If nobody is valid, the <t> line uses your normal target. Your visible target does not change. Keep " +
+                "/mlock at the top so Turbo does not restart the macro.");
             ImGui.PopTextWrapPos();
         }
 
@@ -138,23 +107,11 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.85f, 0.9f, 1f, 1f), "/pvpac \"Mobility Ability\" <me>");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "Far Help accepts only the reviewed PvP movement actions Guardian, Icarus, Thunderclap, " +
-                "Aetherial Manipulation, and Slither. It checks the actual action's native range and line of sight. " +
-                "At action time all five exact native <e1>-<e5> enemy slots must be valid and unique. Confirmed dead " +
-                "enemies are ignored for clearance; live enemies count even while untargetable. A destination must have " +
-                "strictly more than 10 yalms of horizontal hitbox-edge clearance from every live enemy to enter the preferred " +
-                "backline group. The farthest member of that group wins. If none can be certified, or enemy data is missing, " +
-                "ambiguous, invalid, or has no live enemy, Far Help instead uses the farthest otherwise valid reachable ally. " +
-                "Only an exact distance tie prefers healer, then physical/magical ranged or caster, then every other job. " +
-                "This map-agnostic preference cannot guarantee tactical safety. Guardian uses FFXIV's native, hitbox-aware " +
-                "20-yalm action range and line of sight with no custom center-distance cap; its 10-yalm condition is the " +
-                "protection leash after the jump. " +
-                "Use exactly the three lines shown: there is deliberately no <t> fallback. All five actions cannot " +
-                "target self, so <me> stays intrinsically invalid without a valid redirect, even if no token or hook is " +
-                "available. Only no valid reachable ally means no movement; Far Help never uses your selected target or self " +
-                "instead. One immediately following legacy same-action <t> call is suppressed for migration; remove that " +
-                "old fourth line. /mlock prevents Turbo Hotbar from restarting the held macro. No visible target change, " +
-                "direct action, or retry is added. /ssfar is the collision-free alias.");
+                "Works with Guardian, Icarus, Thunderclap, Aetherial Manipulation, and Slither. Far Help prefers the " +
+                "farthest reachable ally with more than 10 yalms of space from every living enemy. If enemy data is " +
+                "unclear, it falls back to the farthest reachable ally. This cannot guarantee that a position is safe. " +
+                "Use exactly the three lines above: there is no <t> fallback, and no valid ally means no movement. " +
+                "Your visible target does not change. Keep /mlock at the top; /ssfar is an alias.");
             ImGui.PopTextWrapPos();
         }
 
@@ -166,20 +123,14 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/panicshu");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "This is an explicit NIN-only macro command, never an automatic, proc-driven, or held-key helper. " +
-                "Each command computes the terrain point 19.5 yalms along your character's current facing and immediately " +
-                "tries Shukuchi exactly once. It neither " +
-                "opens or moves the ground cursor nor reads, changes, or substitutes a target.");
+                "Ninja only. Each press tries Shukuchi once, 19.5 yalms straight ahead of your character. It does not " +
+                "open the ground cursor or read/change a target.");
             ImGui.TextDisabled(
-                "Exact Crystalline Conflict is supported directly. Wolves' Den additionally requires the existing " +
-                "Start-page testing option. Frontline and Rival Wings remain blocked. The command is intentionally allowed " +
-                "from your own Guard so Shukuchi may break it. Three Mudra changing Shukuchi into Doton still rejects the command.");
+                "Works in CC. Wolves' Den needs the testing option; Frontline and Rival Wings are blocked. It can break " +
+                "your own Guard. It does nothing while Three Mudra turns Shukuchi into Doton.");
             ImGui.TextDisabled(
-                "There is no pending state, 500-ms lease, wait, expiry, scheduler priority, or automatic retry. The command " +
-                "first requires Shukuchi's exact native recast to be positively ready, preventing a predicted startup that the " +
-                "server would roll back. FFXIV then accepts or rejects that one request in the current Guard/cast/queue/animation state. " +
-                "Normal results stay out of chat and remain visible in /seiton debug. A wall or invalid terrain never causes " +
-                "a shorter fallback, new point, alternate action, or later jump.");
+                "The command first checks that Shukuchi is really ready, then sends one request. It does not wait or " +
+                "retry. A wall or invalid ground means no jump. Technical results remain available in /seiton debug.");
             ImGui.PopTextWrapPos();
         }
 
@@ -194,34 +145,23 @@ internal sealed partial class SettingsWindow
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonbw");
             ImGui.PushTextWrapPos(ImGui.GetContentRegionAvail().X);
             ImGui.TextDisabled(
-                "This default-off command makes one immediate camera-back escape with the current job's reviewed PvP " +
-                "self dash: NIN Shukuchi, AST Epicycle, DNC En Avant, DRG Elusive Jump, RPR Hell's Ingress, or PCT Smudge. " +
-                "It never rotates the camera and never reads, changes, or substitutes your hard target.");
+                "Off by default. Uses the current job's supported dash once toward the back of your camera without " +
+                "turning the camera or changing your target. Supports NIN, AST, DNC, DRG, RPR, and PCT.");
             ImGui.TextDisabled(
-                "Normal first-person and regular third-person camera modes are supported. Missing or non-finite camera " +
-                "data, a cutscene/event, spectator, aiming, or lock-on camera, an unreviewed job, transformed action, " +
-                "occupied action boundary, or non-ready native charge ends that command without an action.");
+                "Works with normal first- and third-person cameras. It does nothing in lock-on/aiming mode, events, " +
+                "spectator mode, on unsupported jobs, or when the dash is not ready.");
             ImGui.TextDisabled(
-                "Crystalline Conflict is supported directly; Wolves' Den still requires the Start-page testing option. " +
-                "The command may deliberately break your own Guard and makes at most one immediate native request. NIN " +
-                "keeps its exact 19.5-yalm ground point; the other jobs briefly align only character facing so their native " +
-                "forward/backward dash travels screen-back. During that one request, the frozen facing also wins over a " +
-                "later camera-relative dash rewrite from another plugin. That local-facing boundary activates only on " +
-                "your first enabled non-NIN command. ReAction camera-relative behavior, Auto Target, and unrelated " +
-                "Action Stacks are allowed; wildcard/exact stack selectors or MOAction ownership of the dash fail closed. " +
-                "It has no queue, pending lease, retry, fallback, or later replay.");
+                "Works in CC; Wolves' Den needs the testing option. It may break your Guard and tries only once. NIN " +
+                "jumps 19.5 yalms to the ground point; other jobs briefly turn only the character so the dash travels " +
+                "screen-back. If another plugin owns or rewrites that dash unsafely, Seiton does nothing.");
             ImGui.Spacing();
             ImGui.TextUnformatted("DNC current-movement macro:");
             ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonenavant");
             ImGui.TextDisabled(
-                "DNC-only. While your character is already moving, this makes one immediate En Avant along the " +
-                "fresh world-space path you are actually running: forward, backward, strafe, or diagonal. It uses " +
-                "fresh actual character displacement instead of requiring a MOVE signal on the exact macro frame. " +
-                "Slow analog movement can accumulate into a real heading, while tiny positional jitter is rejected. " +
-                "Keyboard remaps and Standard/Legacy movement therefore need no physical-key guesses. Controller " +
-                "and autorun behavior remain live-test pending. Stationary, stale, discontinuous, forced, " +
-                "or identity-changing movement fails closed with no camera direction, actor-facing, or target fallback. " +
-                "The command shares /seitonbw's exact readiness, compatibility, own-Guard, and one-call boundary.");
+                "Dancer only. While you are already moving, this uses En Avant once in the direction your character is " +
+                "actually traveling: forward, backward, sideways, or diagonal. It works with keyboard remaps and both " +
+                "movement modes. If Seiton cannot read a clear current movement direction, it does nothing. Controller " +
+                "and autorun behavior still need live testing.");
             ImGui.PopTextWrapPos();
         }
 

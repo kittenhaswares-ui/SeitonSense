@@ -162,7 +162,7 @@ internal sealed class BufferLearningWindow : Window
             : "Drag this panel to move it");
         ImGui.TextUnformatted("Available in PvE, PvP, and the Wolves' Den.");
         ImGui.TextUnformatted(
-            "A certified key is shown when available; otherwise the exact standard-hotbar slot is shown.");
+            "Shows your key when possible; otherwise it shows the matching standard-hotbar slot.");
         ImGui.TextUnformatted(
             "Buffers only clean local GCD, cooldown, or animation timing; never range, line of sight, resources, or server rejections.");
         ImGui.EndTooltip();

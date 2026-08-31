@@ -1,9 +1,9 @@
 namespace SeitonSense.Core;
 
 /// <summary>
-/// Immutable identity of one exact action which originated at a certified
-/// physical standard-hotbar press. The chase buffer never substitutes any
-/// action, target, context, or physical-press generation.
+/// Immutable identity of one exact action which originated at one certified
+/// tap root. The tap reservation never substitutes any action, target, context,
+/// or root generation.
 /// </summary>
 public readonly record struct HeldChaseBufferIntent(
     uint RequestedActionId,
@@ -23,29 +23,97 @@ public readonly record struct HeldChaseBufferIntent(
 }
 
 /// <summary>
-/// Facts captured around the original physical action call. Arming is allowed
-/// only when native range/line of sight is the sole unavailable boundary.
+/// Bounds for the release-independent tap-to-land reservation. This is a
+/// separate window from the ordinary timing buffer because it deliberately
+/// survives key release while the player closes a spatial gap.
+/// </summary>
+public static class HeldChaseBufferWindowRules
+{
+    public const int DefaultMilliseconds = 2_200;
+    public const int MinimumMilliseconds = 0;
+    public const int MaximumMilliseconds = 3_000;
+    public const long NativeRetryThrottleMilliseconds =
+        HeldActionRetryRules.NativeRetryThrottleMilliseconds;
+    public const int MaximumNativeAttempts =
+        1 + (MaximumMilliseconds / (int)NativeRetryThrottleMilliseconds);
+
+    public static int Normalize(int configuredMilliseconds) =>
+        Math.Clamp(
+            configuredMilliseconds,
+            MinimumMilliseconds,
+            MaximumMilliseconds);
+
+    public static int ResolveNativeAttemptLimit(int configuredMilliseconds)
+    {
+        var window = Normalize(configuredMilliseconds);
+        if (window == 0) return 0;
+        return 1 +
+               (int)Math.Ceiling(
+                   window / (double)NativeRetryThrottleMilliseconds);
+    }
+}
+
+public readonly record struct HeldChaseBufferRetryState(
+    int NativeAttemptCount,
+    long NextNativeAttemptAtMilliseconds,
+    int NativeAttemptLimit)
+{
+    public static HeldChaseBufferRetryState None => new(0, -1, 0);
+
+    public bool IsValid =>
+        NativeAttemptCount >= 0 &&
+        NativeAttemptCount <= NativeAttemptLimit &&
+        NextNativeAttemptAtMilliseconds >= -1 &&
+        NativeAttemptLimit >= 1 &&
+        NativeAttemptLimit <= HeldChaseBufferWindowRules.MaximumNativeAttempts;
+
+    public bool IsPending =>
+        IsValid &&
+        NativeAttemptCount > 0 &&
+        NativeAttemptCount < NativeAttemptLimit &&
+        NextNativeAttemptAtMilliseconds >= 0;
+}
+
+public readonly record struct HeldChaseBufferAttemptDecision(
+    HeldChaseBufferRetryState NextState,
+    HeldActionRetryDisposition Disposition)
+{
+    public bool RetryScheduled =>
+        Disposition == HeldActionRetryDisposition.RetryScheduled;
+
+    public bool IsTerminal => Disposition is
+        HeldActionRetryDisposition.AcceptedTerminal or
+        HeldActionRetryDisposition.RejectedTerminal or
+        HeldActionRetryDisposition.AmbiguousTerminal or
+        HeldActionRetryDisposition.CancelledTerminal;
+}
+
+/// <summary>
+/// Facts captured around the original action call. Arming is allowed only when
+/// exactly one reviewed root owns the action and native range/line of sight is
+/// the sole unavailable boundary.
 /// </summary>
 public readonly record struct HeldChaseBufferArmInput(
     HeldChaseBufferIntent Intent,
     bool Enabled,
     bool IsCertifiedPhysicalStandardHotbarRoot,
-    bool InputHeld,
     bool ActionEligible,
     bool SafetyValid,
     bool RangeProbeAvailable,
     bool HasRangeAndLineOfSight,
-    bool OtherNativeGatesReady);
+    bool OtherNativeGatesReady,
+    int ReservationWindowMilliseconds =
+        HeldChaseBufferWindowRules.DefaultMilliseconds,
+    bool IsCertifiedSmartActionMacroFallback = false);
 
 /// <summary>
 /// Current facts for the already-frozen intent. The runtime supplies native
 /// range/LoS and all non-spatial gates independently so spatial waiting cannot
-/// hide a later action, target, context, input, or safety change.
+/// hide a later action, target, context, input, or safety change. Key-up is
+/// intentionally absent: releasing the original key does not revoke the tap.
 /// </summary>
 public readonly record struct HeldChaseBufferLiveInput(
     bool Enabled,
-    bool IsExactPhysicalStandardHotbarHold,
-    bool InputHeld,
     long PressGeneration,
     uint RequestedActionId,
     uint ResolvedActionId,
@@ -57,7 +125,8 @@ public readonly record struct HeldChaseBufferLiveInput(
     bool RangeProbeAvailable,
     bool HasRangeAndLineOfSight,
     bool OtherNativeGatesReady,
-    bool WithinDeadline = true);
+    bool WithinDeadline = true,
+    long NowMilliseconds = 0);
 
 public enum HeldChaseBufferCancelReason : byte
 {
@@ -77,6 +146,11 @@ public enum HeldChaseBufferCancelReason : byte
     OtherNativeGateUnavailable = 13,
     Dispatched = 14,
     Expired = 15,
+    NativeAttemptOutstanding = 16,
+    NativeRetryLimitReached = 17,
+    AcceptanceAmbiguous = 18,
+    NativeAttemptCancelled = 19,
+    AmbiguousInputOrigin = 20,
 }
 
 public enum HeldChaseBufferDecisionKind : byte
@@ -84,7 +158,9 @@ public enum HeldChaseBufferDecisionKind : byte
     None = 0,
     WaitingForRange = 1,
     Dispatch = 2,
-    Cancelled = 3,
+    WaitingForNativeOutcome = 3,
+    WaitingForRetry = 4,
+    Cancelled = 5,
 }
 
 public readonly record struct HeldChaseBufferDecision(
@@ -99,20 +175,41 @@ public readonly record struct HeldChaseBufferDecision(
 }
 
 /// <summary>
-/// Thread-safe one-shot state machine for a held, exact, range-blocked action.
-/// It never retries a native rejection: it only waits before the first later
-/// native request, and consumes the intent before returning Dispatch.
+/// Thread-safe state machine for an exact, range-blocked certified tap. Release
+/// does not cancel the frozen intent. At most one native attempt may be in
+/// flight, and only a proven clean client false may schedule a bounded retry.
+/// Acceptance, ambiguity, pre-boundary cancellation, and every identity or
+/// safety drift are terminal for the exact reservation.
 /// </summary>
 public sealed class HeldChaseBufferEngine
 {
     private readonly object gate = new();
     private HeldChaseBufferIntent? pending;
+    private HeldChaseBufferRetryState retryState =
+        HeldChaseBufferRetryState.None;
+    private bool nativeAttemptOutstanding;
 
     public HeldChaseBufferIntent? Pending
     {
         get
         {
             lock (gate) return pending;
+        }
+    }
+
+    public HeldChaseBufferRetryState RetryState
+    {
+        get
+        {
+            lock (gate) return retryState;
+        }
+    }
+
+    public bool NativeAttemptOutstanding
+    {
+        get
+        {
+            lock (gate) return nativeAttemptOutstanding;
         }
     }
 
@@ -124,7 +221,7 @@ public sealed class HeldChaseBufferEngine
         {
             if (pending is not null)
             {
-                pending = null;
+                ClearPending();
                 LastCancelReason = HeldChaseBufferCancelReason.Replaced;
             }
 
@@ -136,6 +233,13 @@ public sealed class HeldChaseBufferEngine
             }
 
             pending = input.Intent;
+            retryState = new HeldChaseBufferRetryState(
+                NativeAttemptCount: 0,
+                NextNativeAttemptAtMilliseconds: -1,
+                NativeAttemptLimit:
+                    HeldChaseBufferWindowRules.ResolveNativeAttemptLimit(
+                        input.ReservationWindowMilliseconds));
+            nativeAttemptOutstanding = false;
             LastCancelReason = HeldChaseBufferCancelReason.None;
             return true;
         }
@@ -143,6 +247,12 @@ public sealed class HeldChaseBufferEngine
 
     public void Cancel(HeldChaseBufferCancelReason reason)
     {
+        // Key-up is no longer a cancellation fact. Keep this legacy enum value
+        // fail-open so an older runtime callback cannot silently reintroduce
+        // held-only semantics while the tap reservation is pending.
+        if (reason == HeldChaseBufferCancelReason.Released)
+            return;
+
         if (reason is HeldChaseBufferCancelReason.None or
             HeldChaseBufferCancelReason.Dispatched)
         {
@@ -151,7 +261,7 @@ public sealed class HeldChaseBufferEngine
 
         lock (gate)
         {
-            pending = null;
+            ClearPending();
             LastCancelReason = reason;
         }
     }
@@ -166,12 +276,20 @@ public sealed class HeldChaseBufferEngine
             var cancellation = HeldChaseBufferRules.GetLiveCancellation(intent, input);
             if (cancellation != HeldChaseBufferCancelReason.None)
             {
-                pending = null;
+                ClearPending();
                 LastCancelReason = cancellation;
                 return new HeldChaseBufferDecision(
                     HeldChaseBufferDecisionKind.Cancelled,
                     null,
                     cancellation);
+            }
+
+            if (nativeAttemptOutstanding)
+            {
+                return new HeldChaseBufferDecision(
+                    HeldChaseBufferDecisionKind.WaitingForNativeOutcome,
+                    intent,
+                    HeldChaseBufferCancelReason.NativeAttemptOutstanding);
             }
 
             if (!input.HasRangeAndLineOfSight)
@@ -182,15 +300,128 @@ public sealed class HeldChaseBufferEngine
                     HeldChaseBufferCancelReason.None);
             }
 
-            // Consume before returning so concurrent or re-entrant evaluation
-            // cannot dispatch the same frozen intent twice.
-            pending = null;
-            LastCancelReason = HeldChaseBufferCancelReason.Dispatched;
+            if (retryState.NativeAttemptCount > 0 &&
+                (!retryState.IsPending ||
+                 input.NowMilliseconds <
+                 retryState.NextNativeAttemptAtMilliseconds))
+            {
+                return new HeldChaseBufferDecision(
+                    HeldChaseBufferDecisionKind.WaitingForRetry,
+                    intent,
+                    HeldChaseBufferCancelReason.None);
+            }
+
+            // Reserve the boundary before returning so concurrent or re-entrant
+            // evaluation cannot dispatch the frozen intent twice. Completion
+            // decides whether a clean false may retain it for a bounded retry.
+            nativeAttemptOutstanding = true;
             return new HeldChaseBufferDecision(
                 HeldChaseBufferDecisionKind.Dispatch,
                 intent,
-                HeldChaseBufferCancelReason.Dispatched);
+                HeldChaseBufferCancelReason.None);
         }
+    }
+
+    /// <summary>
+    /// Completes the exact outstanding native boundary. Only an explicit
+    /// <see cref="ClientActionAttemptOutcome.ClientRejected"/> retains the
+    /// frozen reservation, subject to the shared bounded retry policy.
+    /// </summary>
+    public HeldChaseBufferAttemptDecision CompleteNativeAttempt(
+        HeldChaseBufferIntent intent,
+        long nowMilliseconds,
+        ClientActionAttemptOutcome outcome)
+    {
+        lock (gate)
+        {
+            if (pending != intent || !nativeAttemptOutstanding)
+            {
+                return new HeldChaseBufferAttemptDecision(
+                    HeldChaseBufferRetryState.None,
+                    HeldActionRetryDisposition.CancelledTerminal);
+            }
+
+            nativeAttemptOutstanding = false;
+            var completion = CompleteAttempt(
+                retryState,
+                nowMilliseconds,
+                outcome);
+
+            if (completion.RetryScheduled)
+            {
+                retryState = completion.NextState;
+                LastCancelReason = HeldChaseBufferCancelReason.None;
+                return completion;
+            }
+
+            ClearPending();
+            LastCancelReason = completion.Disposition switch
+            {
+                HeldActionRetryDisposition.AcceptedTerminal =>
+                    HeldChaseBufferCancelReason.Dispatched,
+                HeldActionRetryDisposition.RejectedTerminal =>
+                    HeldChaseBufferCancelReason.NativeRetryLimitReached,
+                HeldActionRetryDisposition.AmbiguousTerminal =>
+                    HeldChaseBufferCancelReason.AcceptanceAmbiguous,
+                _ => HeldChaseBufferCancelReason.NativeAttemptCancelled,
+            };
+            return completion;
+        }
+    }
+
+    private static HeldChaseBufferAttemptDecision CompleteAttempt(
+        HeldChaseBufferRetryState previous,
+        long nowMilliseconds,
+        ClientActionAttemptOutcome outcome)
+    {
+        if (!previous.IsValid || nowMilliseconds < 0)
+        {
+            return TerminalAttempt(
+                HeldActionRetryDisposition.AmbiguousTerminal);
+        }
+
+        if (outcome == ClientActionAttemptOutcome.ClientRejected)
+        {
+            var attemptCount = previous.NativeAttemptCount + 1;
+            if (attemptCount >= previous.NativeAttemptLimit)
+            {
+                return TerminalAttempt(
+                    HeldActionRetryDisposition.RejectedTerminal);
+            }
+
+            return new HeldChaseBufferAttemptDecision(
+                previous with
+                {
+                    NativeAttemptCount = attemptCount,
+                    NextNativeAttemptAtMilliseconds = SaturatingAdd(
+                        nowMilliseconds,
+                        HeldChaseBufferWindowRules.NativeRetryThrottleMilliseconds),
+                },
+                HeldActionRetryDisposition.RetryScheduled);
+        }
+
+        return TerminalAttempt(outcome switch
+        {
+            ClientActionAttemptOutcome.ClientAccepted =>
+                HeldActionRetryDisposition.AcceptedTerminal,
+            ClientActionAttemptOutcome.AcceptanceUnknown =>
+                HeldActionRetryDisposition.AmbiguousTerminal,
+            _ => HeldActionRetryDisposition.CancelledTerminal,
+        });
+    }
+
+    private static HeldChaseBufferAttemptDecision TerminalAttempt(
+        HeldActionRetryDisposition disposition) =>
+        new(HeldChaseBufferRetryState.None, disposition);
+
+    private static long SaturatingAdd(long left, long right) =>
+        left > long.MaxValue - right ? long.MaxValue : left + right;
+
+    private void ClearPending()
+    {
+        pending = null;
+        retryState = HeldChaseBufferRetryState.None;
+        nativeAttemptOutstanding = false;
     }
 }
 
@@ -203,10 +434,21 @@ public static class HeldChaseBufferRules
             return HeldChaseBufferCancelReason.InvalidIntent;
         if (!input.Enabled)
             return HeldChaseBufferCancelReason.Disabled;
-        if (!input.IsCertifiedPhysicalStandardHotbarRoot)
+        if (HeldChaseBufferWindowRules.Normalize(
+                input.ReservationWindowMilliseconds) == 0)
+        {
+            return HeldChaseBufferCancelReason.Disabled;
+        }
+        if (input.IsCertifiedPhysicalStandardHotbarRoot &&
+            input.IsCertifiedSmartActionMacroFallback)
+        {
+            return HeldChaseBufferCancelReason.AmbiguousInputOrigin;
+        }
+        if (!input.IsCertifiedPhysicalStandardHotbarRoot &&
+            !input.IsCertifiedSmartActionMacroFallback)
+        {
             return HeldChaseBufferCancelReason.NotPhysicalStandardHotbar;
-        if (!input.InputHeld)
-            return HeldChaseBufferCancelReason.Released;
+        }
         if (!input.ActionEligible)
             return HeldChaseBufferCancelReason.Ineligible;
         if (!input.SafetyValid)
@@ -230,10 +472,6 @@ public static class HeldChaseBufferRules
             return HeldChaseBufferCancelReason.Disabled;
         if (!input.WithinDeadline)
             return HeldChaseBufferCancelReason.Expired;
-        if (!input.InputHeld)
-            return HeldChaseBufferCancelReason.Released;
-        if (!input.IsExactPhysicalStandardHotbarHold)
-            return HeldChaseBufferCancelReason.NotPhysicalStandardHotbar;
         if (input.PressGeneration != intent.PressGeneration)
             return HeldChaseBufferCancelReason.Replaced;
         if (input.RequestedActionId != intent.RequestedActionId ||
