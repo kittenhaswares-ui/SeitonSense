@@ -75,8 +75,10 @@ public readonly record struct MovementDirectedEnAvantSnapshot(
 /// <summary>
 /// Pure world-displacement policy for /seitonenavant. It deliberately uses
 /// the character's recent actual horizontal path rather than camera facing,
-/// actor facing, hard-coded keys, or a target. Two consecutive frame segments
-/// must agree before a direction becomes available. Stale, stationary,
+/// actor facing, hard-coded keys, or a target. Two consecutive meaningful
+/// displacement segments must agree before a direction becomes available;
+/// finite sub-threshold frame deltas accumulate against the last meaningful
+/// anchor. Stale, stationary,
 /// discontinuous, teleport-sized, non-finite, or cross-identity observations
 /// expose no fallback direction.
 /// </summary>
@@ -121,15 +123,28 @@ public static class MovementDirectedEnAvantRules
         {
             var directionAge = sample.ObservedAtMilliseconds -
                                previous.LastMovementAtMilliseconds;
+            var isCleanBaseline =
+                previous.ConsistentSegmentCount == 0 &&
+                previous.ConsistentDistanceYalms == 0f &&
+                !float.IsFinite(previous.HeadingRadians) &&
+                previous.LastMovementAtMilliseconds < 0;
             var hasFreshPartialDirection =
                 previous.ConsistentSegmentCount > 0 &&
                 float.IsFinite(previous.HeadingRadians) &&
                 previous.LastMovementAtMilliseconds >= 0;
-            return hasFreshPartialDirection &&
-                   directionAge >= 0 &&
-                   directionAge <= MaximumDirectionAgeMilliseconds
-                ? previous with { LastSample = sample }
-                : Baseline(sample);
+            if (isCleanBaseline ||
+                (hasFreshPartialDirection &&
+                 directionAge >= 0 &&
+                 directionAge <= MaximumDirectionAgeMilliseconds))
+            {
+                // Keep the last meaningful displacement anchor. Replacing it
+                // on every tiny frame delta would make slow analog movement
+                // permanently invisible instead of allowing finite movement
+                // to accumulate into one reviewed segment.
+                return previous;
+            }
+
+            return Baseline(sample);
         }
 
         var heading = NormalizeRadians((float)Math.Atan2(deltaX, deltaZ));

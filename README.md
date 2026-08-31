@@ -2,12 +2,19 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.8 adds `/seitonenavant`, a
-DNC-only explicit macro that sends one ready PvP En Avant along the local
-character's fresh world movement direction, including strafe and diagonals,
-without moving the camera or changing a target. It reuses the existing
-default-off directional-dash option and audited one-call boundary; uncertain or
-stale movement fails closed without a retry or fallback. Version 0.42.0.7 fixes the 0.42.0.6
+assistance, and target highlights. Version 0.42.0.9 fixes `/seitonenavant` so
+one explicit DNC macro press uses fresh actual character displacement instead
+of requiring a MOVE signal on that exact frame. Slow analog movement now
+accumulates into a real heading while positional jitter still fails closed. It
+also stops unrelated ReAction Auto Target or Action Stack settings from
+silently refusing the exact reviewed self dash; only a stack that can actually
+own the requested dash remains a hard block. It
+also adds configurable public-CC medicine-kit cues: an opening first-spawn
+countdown and read-only green foreground beacons for bounded localized
+event-object matches. Exact current-client runtime-object detection and live En
+Avant behavior remain pending in-game confirmation. Version 0.42.0.8 originally
+added the DNC-only command and its audited one-call boundary without moving the
+camera or changing a target. Version 0.42.0.7 fixes the 0.42.0.6
 update-load failure where six What's New bullets exceeded the window's
 five-entry contract and aborted plugin construction after the prior version had
 already unloaded. Release-note content is now bounded and non-fatal, while
@@ -148,6 +155,14 @@ and Super Focus Glow into one configurable custom-repository plugin.
   corrupt storage count nothing. The local file stores only salted HMAC keys,
   per-map totals, and bounded hashed deduplication records—never names or raw
   Content IDs. The panel downloads no artwork and uses no network endpoint.
+- **Public-CC medicine-kit cues:** separate default-on toggles show an opening
+  countdown to the assumed 30-second first spawn and green foreground beacons
+  for currently detected medicine kits. The beacon scan is limited to Dalamud's
+  event-object and reaction-event-object slices at 10 Hz, uses narrow localized
+  names plus an in-session territory/BaseId hint, and never targets, navigates,
+  presses, or consumes anything. Overlay scale is configurable. Current-client
+  runtime object names/BaseIds and the exact first-spawn boundary remain live-
+  test pending; uncertain detection draws no beacon.
 - **PvP range helper:** two flat world-space rings follow the local player in PvP
   and Wolves' Den. The inner ring marks nominal 5-yalm melee reach; the outer
   ring marks the current combat job's furthest reviewed hostile non-LB action,
@@ -361,8 +376,10 @@ and Super Focus Glow into one configurable custom-repository plugin.
   DNC-only explicit command that reuses the existing default-off directional-
   dash option. It derives the current world movement direction only from two
   fresh, consistent local-position segments, covering cardinal, diagonal, and
-  remapped movement without reading the camera or any target. Controller uses
-  the same processed-input path by design but remains live-test pending.
+  remapped movement without reading the camera or any target. Fresh actual
+  displacement is sampled again inside the command, and slow analog movement
+  accumulates against the last meaningful anchor instead of depending on an
+  exact-frame MOVE flag. Controller and autorun behavior remain live-test pending.
   Stationary or stale samples and identity drift fail closed. One invocation
   reaches at most one exact En Avant `29430` call, with no queue, retry, or
   fallback.
@@ -1775,10 +1792,11 @@ facing boundary keeps that frozen direction from being replaced by a later
 camera-relative dash hook during the single request. The camera never moves and
 no hard, soft, Focus, or mouseover target is read, changed, or substituted. An
 inactive command installs no active facing detour: the boundary is enabled only
-on the first opted-in non-NIN `/seitonbw` attempt. The existing audited
-ReAction/MOAction ownership check also runs immediately before that exact call;
-camera-relative rotation alone is allowed, while Auto Target, Action Stacks, or
-MOAction ownership of either action ID refuses the attempt. An
+on the first opted-in non-NIN `/seitonbw` attempt. The audited ReAction/MOAction
+ownership check also runs immediately before that exact call. Camera-relative
+rotation, Auto Target, and Action Stacks unrelated to the requested reviewed
+self dash are allowed; a wildcard, exact, or adjusted stack selector that can
+own the dash, or MOAction ownership of either action ID, refuses the attempt. An
 accepted or acceptance-ambiguous directional request keeps the authored facing
 so an immediate restore cannot race movement startup; normal movement input can
 then update facing. A proven clean client rejection restores the prior facing.
@@ -1812,21 +1830,56 @@ The command infers current world movement from two consecutive,
 fresh, finite local-player position segments that agree on direction. This
 world-space observation is independent of the authored binding, so cardinal and
 diagonal keyboard movement and remapped controls use the same contract. The
-controller path uses the same processed locomotion status by design, but remains
-live-test pending. A processed locomotion direction or autorun must still be
-active, so releasing movement clears the observation instead of exposing an old
-heading. It will not read or write camera state and will not read,
+command synchronously folds in the current local position before resolving the
+heading; it does not require a processed MOVE or autorun flag to be true on that
+exact callback frame. Finite movement below the per-frame threshold accumulates
+against the last meaningful anchor until it forms a real segment, while tiny
+jitter does not manufacture one. Controller and autorun behavior remain live-
+test pending. It will not read or write camera state and will not read,
 change, or substitute any hard, soft, Focus, or mouseover target. Only local
 character facing may be aligned to the proven movement direction for the exact
 action boundary.
 
 One invocation reaches at most one exact PvP En Avant `29430` native action
-call. A stationary player, released locomotion input, insufficient displacement, stale or inconsistent
+call. A stationary player, insufficient displacement, stale or inconsistent
 segments, non-finite coordinates, or any local actor, job, PvP-context, or action-
 identity drift will refuse the call. The direction will not be guessed from a
 key, stick axis, camera, target, or last-known movement. There will be no stored
 intent, framework wait, queue, lease, retry, alternate action, replay, or fallback
 direction. A later macro press will be a new explicit request.
+
+Immediately before the call, the supported ReAction profile is checked against
+the exact dash rather than treated as one global on/off conflict. Unrelated Auto
+Target and unrelated Action Stacks are allowed; a wildcard, raw, or currently
+adjusted stack selector that can own En Avant refuses the request. Unknown
+ReAction builds, configuration drift, and exact MOAction ownership still fail
+closed.
+
+## Public-CC medicine-kit countdown and beacons
+
+The **HUD & Nameplates > CC medicine kits** controls separately enable the
+opening countdown and detected-kit beacons and adjust their shared scale from
+`0.60x` to `2.00x`. They run only in supported public Crystalline Conflict,
+never in Wolves' Den, custom matches, Frontline, or Rival Wings.
+
+The countdown reads the native content timer only in the opening part of the
+five-minute match and counts toward the assumed first-kit spawn 30 seconds after
+the match begins. The separate 0:30 preparation value and a still-frozen 5:00
+content timer are rejected; the exact current-client timer transition remains a
+live-validation point. The beacon path checks only Dalamud's bounded `EventObjects` and
+`ReactionEventObjects` views at 10 Hz. A localized medicine-kit name can teach
+one BaseId hint for that territory for the rest of the current plugin session;
+only ready-to-draw matches receive a green vertical foreground beam, distance
+label, or off-screen edge marker. Foreground drawing keeps the cue visible
+through terrain, but it is not a pathfinder and does not prove that the kit is
+reachable or safe.
+
+Both paths are read-only. They do not target, navigate, move, press an action,
+reserve, pick up, or consume a kit, and no timer/object observation is written
+to disk or uploaded. Current-client localized names, BaseIds, ready-to-draw
+behavior, and the exact 30-second first-spawn boundary remain live-game
+validation points. If the runtime object cannot be identified narrowly, Seiton
+draws no beacon rather than guessing.
 
 ## Optional Auto Low-MP Focus Target
 
@@ -2087,8 +2140,8 @@ update through the same repository.
   immediate camera-back self-dash on NIN, AST, DNC, DRG, RPR, or PCT, without
   moving the camera or changing target
 - `/seitonenavant` - with that same default-off directional-dash
-  option, make one DNC En Avant attempt along two fresh, consistent world-
-  position movement segments, without using the camera or any target
+  option, make one DNC En Avant attempt from fresh actual world displacement,
+  including accumulated slow analog motion, without using the camera or any target
 - `/seiton show` / `/seiton hide` - enable or disable the entire plugin
 - `/seiton preview` - preview nameplate indicators
 - `/seiton flash` - preview the Seiton popup
@@ -2139,7 +2192,8 @@ only a user-authored `/panicshu` command can make its one immediate forward
 attempt, while the default-off `/seitonbw` toggle permits one explicit reviewed
 camera-back self-dash on NIN, AST, DNC, DRG, RPR, or PCT. The explicit
 `/seitonenavant` DNC command reuses that toggle but derives direction only
-from two fresh, consistent local world-position segments; it does not use or
+from fresh, consistent local world-position displacement, accumulating slow
+analog motion without requiring an exact-frame MOVE signal; it does not use or
 mutate camera or target state and has only one exact En Avant `29430` call
 boundary, with no queue, retry, or fallback. For one already incoming,
 enabled CC action attempt

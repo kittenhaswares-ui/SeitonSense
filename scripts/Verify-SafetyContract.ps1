@@ -38,6 +38,9 @@ $backwardDashMetadataCatalogPath = Join-Path $pluginServicesRoot 'BackwardDashMe
 $movementDirectedEnAvantRulesPath = Join-Path $coreRoot 'MovementDirectedEnAvantRules.cs'
 $movementDirectedEnAvantTrackerPath = Join-Path $pluginServicesRoot 'MovementDirectedEnAvantTracker.cs'
 $movementDirectedEnAvantSelfTestsPath = Join-Path $coreSelfTestRoot 'MovementDirectedEnAvantSelfTests.cs'
+$crystallineConflictMedicineKitRulesPath = Join-Path $coreRoot 'CrystallineConflictMedicineKitRules.cs'
+$crystallineConflictMedicineKitRendererPath = Join-Path $pluginUiRoot 'CrystallineConflictMedicineKitRenderer.cs'
+$crystallineConflictMedicineKitSelfTestsPath = Join-Path $coreSelfTestRoot 'CrystallineConflictMedicineKitSelfTests.cs'
 $ninjaGuardShukuchiProbePath = Join-Path $pluginServicesRoot 'NinjaGuardShukuchiProbe.cs'
 $redMageGuardEngageProbePath = Join-Path $pluginServicesRoot 'RedMageGuardEngageProbe.cs'
 $ninjaGuardShukuchiRulesPath = Join-Path $coreRoot 'NinjaGuardShukuchiRules.cs'
@@ -364,17 +367,18 @@ $allowedUnsafe = @(
     $ccImmunityBrakeServicePath,
     $autoLowMpFocusTargetServicePath,
     $panicShukuchiServicePath,
-    $movementDirectedEnAvantTrackerPath,
     $ninjaGuardShukuchiProbePath,
     $redMageGuardEngageProbePath,
     $darkKnightPlungeProbePath,
     $combatLimitBreakCaptureBufferPath,
     $smartTabTargetingServicePath,
     $integratedActionBufferRuntimePath,
+    $integratedActionBufferCompatibilityServicePath,
     $integratedHotbarInputSourcePath,
     $integratedInputRuntimePath,
     $crystallineConflictMapStatisticsServicePath,
     $crystallineConflictMapResultPacketPath,
+    $crystallineConflictMedicineKitRendererPath,
     $opponentLimitBreakGaugeServicePath
 )
 
@@ -394,7 +398,9 @@ if ($unexpectedUnsafe.Count -gt 0) {
 # value-only activation/damage records to the bounded Combat LB buffer. The map
 # statistics service owns one separately pinned post-match result hook. Explicit
 # directional /seitonbw owns one same-lane local-facing preservation hook. The
-# movement En Avant tracker uses only the reviewed logical MOVE_* / autorun reads.
+# movement En Avant tracker uses only managed finite world-displacement samples.
+# The medicine-kit renderer owns only its separately pinned read-only native
+# content-timer and ready-to-draw reads.
 # Plugin.cs only constructor-injects interop and the signature scanner.
 $interopMatches = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\b(IGameInteropProvider|Hook<|HookFromAddress)\b')
 $unexpectedInterop = @($interopMatches | Where-Object {
@@ -453,13 +459,21 @@ Assert-Literals $smartActionBufferCompatibilityRules @(
     'SmartActionBufferReActionProfile.NotLoaded or',
     'SmartActionBufferReActionProfile.AuditedSafe &&',
     '(!input.MOActionLoaded || input.MOActionOwnershipPublished);',
+    'public static bool AllowsExactReviewedSelfAction(',
+    'SmartActionBufferReActionProfile.AuditedMutationActive &&',
+    '!reActionOwnsExactAction &&',
     'public static bool SignatureChanged(',
     'public static int MarkChanged(int remainingCleanFrames) =>',
     'public static int ConsumeCleanFrameworkFrame(int remainingCleanFrames) =>'
-) 'Pure generic-buffer compatibility policy'
+) 'Pure generic-buffer and exact reviewed-self-action compatibility policies'
+if ($normalizedSmartActionBufferCompatibilityRules -notmatch 'public static bool AllowsMutation\(SmartActionBufferCompatibilityInput input\) => input\.AssessmentAvailable && !input\.Quarantined && input\.ReActionProfile is SmartActionBufferReActionProfile\.NotLoaded or SmartActionBufferReActionProfile\.AuditedSafe && \(!input\.MOActionLoaded \|\| input\.MOActionOwnershipPublished\);' -or
+    $normalizedSmartActionBufferCompatibilityRules -notmatch 'public static bool AllowsExactReviewedSelfAction\( SmartActionBufferCompatibilityInput input, bool reActionOwnsExactAction\) => input\.AssessmentAvailable && !input\.Quarantined && input\.ReActionProfile is SmartActionBufferReActionProfile\.NotLoaded or SmartActionBufferReActionProfile\.AuditedSafe or SmartActionBufferReActionProfile\.AuditedMutationActive && !reActionOwnsExactAction && \(!input\.MOActionLoaded \|\| input\.MOActionOwnershipPublished\);') {
+    throw 'Generic synthetic replay must still require a fully non-mutating profile, while the exact reviewed self-action exception may admit audited unrelated ReAction mutation only after exact ownership is disproven; unavailable, quarantined, unknown, exact-owned, or unreadable-MOAction states remain blocked.'
+}
 Assert-Literals $integratedActionBufferCompatibilityService @(
     'private const string MOActionRetargetedActionsIpc = "MOAction.RetargetedActions";',
     'private const int RefreshIntervalMilliseconds = 5_000;',
+    'private const int MaximumReActionStackSelectors = 8_192;',
     'private static readonly Version SupportedReActionVersion = new(1, 3, 5, 1);',
     'private static readonly Version SupportedMOActionVersion = new(4, 10, 1, 0);',
     'pluginInterface.ActivePluginsChanged += OnActivePluginsChanged;',
@@ -467,6 +481,19 @@ Assert-Literals $integratedActionBufferCompatibilityService @(
     'refresh = dirty || now >= nextRefreshAt;',
     'nextRefreshAt = SaturatingAdd(now, RefreshIntervalMilliseconds);',
     'internal bool CanMutateAction(',
+    'internal bool CanDispatchExactReviewedSelfAction(',
+    'private static bool TryCaptureLiveReActionExactProfile(',
+    'private static bool TryReadReActionActionStackSelectors(',
+    'private static unsafe bool TryDetermineReActionExactSelfActionOwnership(',
+    '"ReAction.Configuration+ActionStack"',
+    '"ReAction.Configuration+Action"',
+    '"UseAdjustedID"',
+    'selector.ActionId == 0',
+    'selector.ActionId is 1 or 2',
+    'actionManager->GetAdjustedActionId(',
+    'private readonly record struct ReActionActionSelector(',
+    'string ActionSelectorSignature,',
+    'ReActionActionSelector[] ActionSelectors);',
     'internal bool IsCachedMutationAllowed(out string reason)',
     'private void OnActivePluginsChanged(IActivePluginsChangedEventArgs _)',
     'Interlocked.Exchange(ref topologyDirty, 1);',
@@ -482,13 +509,25 @@ if (-not $cachedCompatibilityGateMatch.Success -or
     [regex]::Matches($integratedActionBufferCompatibilityService, '\bActivePluginsChanged\b').Count -ne 2 -or
     [regex]::Matches($integratedActionBufferCompatibilityService, '\bInstalledPlugins\b').Count -ne 1 -or
     [regex]::Matches($integratedActionBufferCompatibilityService, '\bGetIpcSubscriber<uint\[\]>\s*\(').Count -ne 2 -or
-    $integratedActionBufferCompatibilityService -match '\b(?:System\.IO|File\.|Directory\.|Hook<|HookFromAddress|ActionManager|UseAction|LogicalHotbarRepeatEngine|IntegratedHotbarInputSource|EnableNativeHotbarTurbo)\b' -or
+    $integratedActionBufferCompatibilityService -match '\b(?:System\.IO|File\.|Directory\.|Hook<|HookFromAddress|UseAction|LogicalHotbarRepeatEngine|IntegratedHotbarInputSource|EnableNativeHotbarTurbo)\b' -or
+    [regex]::Matches($integratedActionBufferCompatibilityService, '\bunsafe\b').Count -ne 1 -or
+    [regex]::Matches($integratedActionBufferCompatibilityService, '\bActionManager\.Instance\s*\(').Count -ne 1 -or
+    [regex]::Matches($integratedActionBufferCompatibilityService, '\bactionManager->GetAdjustedActionId\s*\(').Count -ne 1 -or
+    [regex]::Matches($integratedActionBufferCompatibilityService, '(?m)^\s*internal bool CanDispatchExactReviewedSelfAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($integratedActionBufferCompatibilityService, '(?m)^\s*private static unsafe bool TryDetermineReActionExactSelfActionOwnership\s*\(').Count -ne 1 -or
+    $normalizedIntegratedActionBufferCompatibilityService -notmatch 'private static bool TryReadReActionActionStackSelectors\(.*?stackCollection\.Count > MaximumReActionStackSelectors.*?\+\+actionStackCount > MaximumReActionStackSelectors.*?"ReAction\.Configuration\+ActionStack".*?captured\.Count >= MaximumReActionStackSelectors.*?"ReAction\.Configuration\+Action".*?"ID".*?"UseAdjustedID".*?captured\.Add\(new ReActionActionSelector\( actionStackCount - 1, actionId, useAdjustedActionId\)\);.*?exactCollection\.Count != actionStackCount.*?selectors = captured\.ToArray\(\); selectorSignature = CreateReActionActionSelectorSignature\( actionStackCount, selectors\); return true;' -or
+    $normalizedIntegratedActionBufferCompatibilityService -notmatch 'private static unsafe bool TryDetermineReActionExactSelfActionOwnership\(.*?if \(configuration is null\) return true;.*?foreach \(var selector in configuration\.ActionSelectors\).*?if \(selector\.ActionId == 0\).*?ownsExactAction = true; return true;.*?if \(selector\.ActionId is 1 or 2\) continue;.*?if \(selector\.UseAdjustedActionId\).*?ActionManager\.Instance\(\).*?actionManager->GetAdjustedActionId\( selector\.ActionId\).*?if \(selectedActionId != requestedActionId && selectedActionId != resolvedActionId\).*?continue;.*?ownsExactAction = true; return true;.*?catch.*?reason = "ReAction exact action ownership became unreadable"; return false;' -or
+    $normalizedIntegratedActionBufferCompatibilityService -notmatch 'private static bool TryReadReActionConfigurationObject\(.*?try.*?TryReadReActionActionStackSelectors\(.*?configuration = new ReActionConfigurationSnapshot\( actionStackCount, autoTargetEnabled, selectorSignature, actionSelectors\); return true;.*?catch.*?configuration = null!; return false;' -or
+    $normalizedIntegratedActionBufferCompatibilityService -notmatch 'internal bool CanDispatchExactReviewedSelfAction\(.*?expected = assessment; expectedReAction = auditedReActionConfiguration; weakReAction = liveReActionConfiguration; generation = assessmentGeneration;.*?AllowsExactReviewedSelfAction\( profileInput, reActionOwnsExactAction: false\).*?TryReadMOActionOwnership\( requestedActionId, resolvedActionId, expected\.MOActionOwnershipSignature, out actionIsUnowned, out var ownershipReason\).*?expected\.MOActionLoaded && !actionIsUnowned.*?TryCaptureLiveReActionExactProfile\( expectedReAction, weakReAction, out var currentReAction\).*?TryDetermineReActionExactSelfActionOwnership\( currentReAction, requestedActionId, resolvedActionId, out var reActionOwnsExactAction, out var reActionReason\).*?AllowsExactReviewedSelfAction\( exactInput, reActionOwnsExactAction\).*?generation == assessmentGeneration && Volatile\.Read\(ref topologyDirty\) == 0 && !quarantinedThisFrame && SmartActionBufferCompatibilityRules\.AllowsExactReviewedSelfAction\( stableInput, reActionOwnsExactAction\).*?return true;' -or
     $integratedActionBufferCompatibilityService -match '\.SetValue\s*\(' -or
     $integratedInputRuntime -match '\b(?:IntegratedActionBufferCompatibilityService|SmartActionBufferCompatibilityRules)\b' -or
     $integratedHotbarInputSource -match '\b(?:IntegratedActionBufferCompatibilityService|SmartActionBufferCompatibilityRules)\b') {
-    throw 'Compatibility must remain a read-only, cached, buffer-only boundary: no file scan, action/input hook, Turbo gate, or per-frame foreign reflection/IPC is allowed.'
+    throw 'Compatibility must remain read-only: generic buffering uses the cached/live non-mutation checks, while the exact reviewed self-action boundary alone may re-read bounded ReAction selectors plus MOAction ownership and resolve adjusted IDs without action use, target/input mutation, file scan, hook, Turbo gate, retry, or per-frame foreign reflection/IPC.'
 }
 if ($normalizedIntegratedActionBufferRuntime -notmatch 'compatibility = new IntegratedActionBufferCompatibilityService\(pluginInterface\);.*?compatibility\.Start\(\); framework\.Update \+= OnFrameworkUpdate;' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'internal bool CanDispatchExactReviewedSelfAction\( uint requestedActionId, uint resolvedActionId, out string reason\) => compatibility\.CanDispatchExactReviewedSelfAction\( requestedActionId, resolvedActionId, out reason\);' -or
+    [regex]::Matches($integratedActionBufferRuntime, '(?m)^\s*internal bool CanDispatchExactReviewedSelfAction\s*\(').Count -ne 1 -or
+    $integratedActionBufferRuntime -match '\bCanDispatchExactExternalAction\b' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'private void OnFrameworkUpdate\(IFramework _\).*?compatibility\.OnFrameworkBoundary\(\);.*?if \(!compatibility\.IsCachedMutationAllowed\(out var cachedCompatibilityReason\)\).*?CancelPendingLocked\( SmartActionBufferCancelReason\.Conflict,.*?countCancellation: true\);.*?return;' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'CompleteExactStandardHotbarRoot\(.*?compatibility\.CanMutateAction\( candidate\.Request\.RequestedActionId, candidate\.Request\.ResolvedActionId, IntegratedActionBufferCompatibilityCheck\.Arm, out var compatibilityReason\).*?nativeAfterCompatibility = CaptureNativeState\(.*?snapshotAfterCompatibility = CaptureSnapshot\(.*?IsStableArmBoundaryAfterCompatibility\( candidate, nativeAfterCompatibility, snapshotAfterCompatibility\).*?engine\.Arm\(intent, candidate\.CapturedAtMilliseconds, window\)' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'compatibility\.CanMutateAction\( candidate\.Request\.RequestedActionId, candidate\.Request\.ResolvedActionId, IntegratedActionBufferCompatibilityCheck\.Dispatch, out var compatibilityReason\).*?finalActionManager = ActionManager\.Instance\(\);.*?finalSnapshot = CaptureSnapshot\(.*?finalNative = CaptureNativeState\(.*?pendingRuntime = null; dispatching = true; dispatch = dispatcher; request = candidate\.Request;.*?accepted = dispatch\(request\);' -or
@@ -745,7 +784,7 @@ if ($normalizedNearAssistForIntegratedInput -notmatch 'forwardedTargetId = final
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
-# 585-test registry.
+# 589-test registry.
 $integratedCoreTestProgram = Read-RequiredSource (Join-Path $coreSelfTestRoot 'Program.cs') 'Integrated Core self-test registry'
 $smartActionBufferSelfTests = Read-RequiredSource $smartActionBufferSelfTestsPath 'Smart action-buffer self-tests'
 $logicalHotbarRepeatSelfTests = Read-RequiredSource $logicalHotbarRepeatSelfTestsPath 'Logical hotbar repeat self-tests'
@@ -761,23 +800,27 @@ Assert-Literals $smartActionBufferCompatibilitySelfTests @(
     'internal static void UnreadableMOActionOwnershipFailsClosed()',
     'internal static void QuarantineConsumesExactlyOneCleanFrame()',
     'internal static void InitialSignatureIsBaselineAndLaterDriftIsDetected()',
+    'internal static void ExactReviewedSelfActionAllowsOnlyUnownedAuditedProfiles()',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(unknown), "unknown ReAction");',
     'False(SmartActionBufferCompatibilityRules.AllowsMutation(mutating), "mutating ReAction");',
-    'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");'
+    'False(SmartActionBufferCompatibilityRules.AllowsMutation(input), "unreadable MOAction IPC");',
+    'SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(',
+    'reActionOwnsExactAction: false)',
+    'reActionOwnsExactAction: true)'
 ) 'Generic-buffer compatibility self-tests'
-if ($staticIntegratedTestCount -ne 544 -or
+if ($staticIntegratedTestCount -ne 548 -or
     $logicalRepeatTestCount -ne 31 -or
     $physicalLatchTestCount -ne 6 -or
     $repeatPolicyTestCount -ne 4 -or
-    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 585 -or
+    ($staticIntegratedTestCount + $logicalRepeatTestCount + $physicalLatchTestCount + $repeatPolicyTestCount) -ne 589 -or
     [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferSelfTests\.\w+').Count -ne 7 -or
     [regex]::Matches($smartActionBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 7 -or
-    [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 5 -or
-    [regex]::Matches($smartActionBufferCompatibilitySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 5 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bSmartActionBufferCompatibilitySelfTests\.\w+').Count -ne 6 -or
+    [regex]::Matches($smartActionBufferCompatibilitySelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 6 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(PhysicalHoldLatchSelfTests\.All\(\)\)').Count -ne 1 -or
     [regex]::Matches($integratedCoreTestProgram, '\.Concat\(LogicalHotbarRepeatPolicySelfTests\.All\(\)\)').Count -ne 1) {
-    throw 'Schema 48 must retain seven smart-buffer tests, five compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 585-test combined Core registry.'
+    throw 'Schema 48 must retain seven smart-buffer tests, six compatibility tests, 31 logical-repeat tests, six physical-latch tests, four repeat-policy tests, and the exact 589-test combined Core registry.'
 }
 
 # Pin the two schema-42 visual overlays and the fail-closed local map-result
@@ -795,7 +838,71 @@ $crystallineConflictMapStatisticsSelfTests = Read-RequiredSource $crystallineCon
 $crystallineConflictInstantLeaveRules = Read-RequiredSource $crystallineConflictInstantLeaveRulesPath 'Crystalline Conflict instant-leave rules'
 $crystallineConflictInstantLeaveService = Read-RequiredSource $crystallineConflictInstantLeaveServicePath 'Crystalline Conflict instant-leave service'
 $crystallineConflictInstantLeaveSelfTests = Read-RequiredSource $crystallineConflictInstantLeaveSelfTestsPath 'Crystalline Conflict instant-leave self-tests'
+$crystallineConflictMedicineKitRules = Read-RequiredSource $crystallineConflictMedicineKitRulesPath 'Crystalline Conflict medicine-kit rules'
+$crystallineConflictMedicineKitRenderer = Read-RequiredSource $crystallineConflictMedicineKitRendererPath 'Crystalline Conflict medicine-kit renderer'
+$crystallineConflictMedicineKitSelfTests = Read-RequiredSource $crystallineConflictMedicineKitSelfTestsPath 'Crystalline Conflict medicine-kit self-tests'
 $wolvesDenRotationWindow = Read-RequiredSource $wolvesDenRotationWindowPath 'Wolves Den rotation window'
+$normalizedCrystallineConflictMedicineKitRules = $crystallineConflictMedicineKitRules -replace '\s+', ' '
+$normalizedCrystallineConflictMedicineKitRenderer = $crystallineConflictMedicineKitRenderer -replace '\s+', ' '
+
+Assert-Literals $crystallineConflictMedicineKitRules @(
+    'public const float MatchDurationSeconds = 300f;',
+    'public const float FirstSpawnElapsedSeconds = 30f;',
+    'public const float FirstSpawnAtContentTimeLeftSeconds =',
+    'public static bool TryGetFirstSpawnCountdown(',
+    'contentTimeLeftSeconds <= FirstSpawnAtContentTimeLeftSeconds',
+    'contentTimeLeftSeconds >= MatchDurationSeconds',
+    'contentTimeLeftSeconds - FirstSpawnAtContentTimeLeftSeconds'
+) 'Pure first-spawn timing policy'
+if ($crystallineConflictMedicineKitRules -match '\b(?:UseAction|UseActionLocation|ActionManager|Dalamud|FFXIVClientStructs|IObjectTable|IClientState|EventFramework|GameObject|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Thread|File|Directory|HttpClient|WebRequest|Socket)\b|\bSystem\.(?:Timers?|Threading\.Timer)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($crystallineConflictMedicineKitRules, '(?m)^\s*public static bool TryGetFirstSpawnCountdown\s*\(').Count -ne 1 -or
+    $normalizedCrystallineConflictMedicineKitRules -notmatch 'remainingSeconds = 0f; if \(!float\.IsFinite\(contentTimeLeftSeconds\) \|\| contentTimeLeftSeconds <= FirstSpawnAtContentTimeLeftSeconds \|\| contentTimeLeftSeconds >= MatchDurationSeconds\).*?return false;.*?remainingSeconds = Math\.Clamp\( contentTimeLeftSeconds - FirstSpawnAtContentTimeLeftSeconds, 0f, FirstSpawnElapsedSeconds\); return remainingSeconds > 0f;') {
+    throw 'CC medicine-kit countdown timing must remain pure, finite, opening-thirty-second-only, and independent of native, action, targeting, persistence, or network APIs; runtime object identity remains live-test pending.'
+}
+
+Assert-Literals $crystallineConflictMedicineKitRenderer @(
+    'internal sealed class CrystallineConflictMedicineKitRenderer',
+    'private const int ScanIntervalMilliseconds = 100;',
+    'clientState.IsPvPExcludingDen &&',
+    'PvPMatchRules.IsPublicCrystallineConflictTerritory(clientState.TerritoryType);',
+    'EventFramework.Instance();',
+    'eventFramework->GetContentDirector();',
+    'director->ContentTimeLeft',
+    'now >= nextScanAtMilliseconds',
+    'nextScanAtMilliseconds = SaturatingAdd(now, ScanIntervalMilliseconds);',
+    'ScanObjectSlice(objectTable.EventObjects, territoryId, learnedBaseIds, found, seen, ref scanned);',
+    'ScanObjectSlice(objectTable.ReactionEventObjects, territoryId, learnedBaseIds, found, seen, ref scanned);',
+    'ImGui.GetForegroundDrawList();'
+) 'Read-only exact-public-CC native-timer and bounded foreground medicine-kit overlay path'
+if ($crystallineConflictMedicineKitRenderer -match '\b(?:UseAction|UseActionLocation|ExecuteAction|SendAction|ActionManager|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|Hook<|HookFromAddress|IGameInteropProvider|SignatureAttribute|SigScanner|File|Directory|FileStream|StreamWriter|IPluginLog|PluginLog|HttpClient|WebRequest|Socket|Task|Thread|Queue|Retry|Replay|PendingDispatch|BufferedDispatch)\b|\bSystem\.(?:Timers?|Threading\.Timer)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    [regex]::Matches($crystallineConflictMedicineKitRenderer, '\bobjectTable\.EventObjects\b').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictMedicineKitRenderer, '\bobjectTable\.ReactionEventObjects\b').Count -ne 1 -or
+    [regex]::Matches($crystallineConflictMedicineKitRenderer, '(?m)^\s*foreach \(var gameObject in objects\)').Count -ne 1 -or
+    $crystallineConflictMedicineKitRenderer -match '\bforeach\s*\([^\)]*\bobjectTable\b' -or
+    $normalizedCrystallineConflictMedicineKitRenderer -notmatch 'private bool IsExactContext => clientState\.IsPvPExcludingDen && PvPMatchRules\.IsPublicCrystallineConflictTerritory\(clientState\.TerritoryType\);' -or
+    $normalizedCrystallineConflictMedicineKitRenderer -notmatch 'private unsafe void ReadNativeTimer\(\).*?EventFramework\.Instance\(\).*?eventFramework->GetContentDirector\(\).*?director == null \|\| !float\.IsFinite\(director->ContentTimeLeft\).*?nativeTimerAvailable = true; contentTimeLeftSeconds = director->ContentTimeLeft; CrystallineConflictMedicineKitRules\.TryGetFirstSpawnCountdown\(' -or
+    $normalizedCrystallineConflictMedicineKitRenderer -notmatch 'if \(now >= nextScanAtMilliseconds\).*?ReadNativeTimer\(\); if \(configuration\.ShowCrystallineConflictMedicineKitBeacons\).*?ScanVisibleMedicineKits\(\);.*?else.*?anchors = \[\]; scannedObjectCount = 0;.*?nextScanAtMilliseconds = SaturatingAdd\(now, ScanIntervalMilliseconds\);' -or
+    $normalizedCrystallineConflictMedicineKitRenderer -notmatch 'ScanObjectSlice\(objectTable\.EventObjects, territoryId, learnedBaseIds, found, seen, ref scanned\); ScanObjectSlice\(objectTable\.ReactionEventObjects, territoryId, learnedBaseIds, found, seen, ref scanned\);.*?anchors = found\.ToArray\(\); scannedObjectCount = scanned;' -or
+    $normalizedCrystallineConflictMedicineKitRenderer -notmatch 'var draw = ImGui\.GetForegroundDrawList\(\);.*?DrawFirstSpawnCountdown\(draw, viewport\);.*?foreach \(var anchor in anchors\) DrawBeacon\(draw, viewport, anchor\);') {
+    throw 'The CC medicine-kit overlay must remain read-only and public-CC-only, use the finite native content timer, scan only the two bounded event-object slices at 10 Hz, render only on the foreground draw list, and own no action, target, input, hook, log, file, network, queue, retry, or replay path. Runtime fingerprint and claimable-kit lifecycle remain live-test pending.'
+}
+
+Assert-Literals $crystallineConflictMedicineKitSelfTests @(
+    'public static void FirstSpawnCountdownUsesOnlyTheOpeningThirtySeconds()',
+    'public static void LocalizedMedicineKitNamesAreNarrow()',
+    'TryGetFirstSpawnCountdown(300f, out _)',
+    'TryGetFirstSpawnCountdown(299.9f, out var start)',
+    'TryGetFirstSpawnCountdown(270f, out _)',
+    'TryGetFirstSpawnCountdown(30f, out _)',
+    'TryGetFirstSpawnCountdown(float.NaN, out _)',
+    'TryGetFirstSpawnCountdown(302f, out _)',
+    'IsMedicineKitName("Unused Medicine Kit Marker")'
+) 'Medicine-kit countdown boundaries plus registered runtime-name unit coverage'
+if ([regex]::Matches($crystallineConflictMedicineKitSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 2 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bCrystallineConflictMedicineKitSelfTests\.\w+').Count -ne 2 -or
+    $crystallineConflictMedicineKitSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|Dalamud|FFXIVClientStructs|IObjectTable|IClientState|EventFramework|GameObject|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Thread|File|Directory|HttpClient|WebRequest|Socket)\b|\bSystem\.(?:Timers?|Threading\.Timer)\b') {
+    throw 'Both pure medicine-kit rule tests and their registry entries must remain present exactly once; they do not establish the live runtime object fingerprint or claimable lifecycle.'
+}
 Assert-Literals $pvpRangeHelperRules @(
     'public const float MeleeRangeYalms = 5f;',
     'including hostile gap closers.',
@@ -2397,29 +2504,22 @@ if ($movementDirectedEnAvantRules -match '\b(?:UseAction|UseActionLocation)\s*\(
     [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool MatchesCurrentIdentity\s*\(').Count -ne 1 -or
     [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool IsFreshSnapshot\s*\(').Count -ne 1 -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!sample\.IsValid\) return MovementDirectedEnAvantState\.Initial;.*?if \(!previous\.LastSample\.IsValid \|\| previous\.LastSample\.Fingerprint != sample\.Fingerprint\).*?return Baseline\(sample\);.*?if \(elapsed <= 0 \|\| elapsed > MaximumSampleGapMilliseconds\).*?return Baseline\(sample\);' -or
-    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!double\.IsFinite\(distanceSquared\)\) return Baseline\(sample\);.*?if \(!double\.IsFinite\(distance\) \|\| distance > MaximumSegmentDistanceYalms\).*?return Baseline\(sample\);.*?if \(distance < MinimumSegmentDistanceYalms\).*?directionAge >= 0 && directionAge <= MaximumDirectionAgeMilliseconds \? previous with \{ LastSample = sample \} : Baseline\(sample\);' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!double\.IsFinite\(distanceSquared\)\) return Baseline\(sample\);.*?if \(!double\.IsFinite\(distance\) \|\| distance > MaximumSegmentDistanceYalms\).*?return Baseline\(sample\);.*?if \(distance < MinimumSegmentDistanceYalms\).*?var directionAge = sample\.ObservedAtMilliseconds - previous\.LastMovementAtMilliseconds;.*?var isCleanBaseline = previous\.ConsistentSegmentCount == 0 && previous\.ConsistentDistanceYalms == 0f && !float\.IsFinite\(previous\.HeadingRadians\) && previous\.LastMovementAtMilliseconds < 0;.*?var hasFreshPartialDirection = previous\.ConsistentSegmentCount > 0 && float\.IsFinite\(previous\.HeadingRadians\) && previous\.LastMovementAtMilliseconds >= 0;.*?if \(isCleanBaseline \|\| \(hasFreshPartialDirection && directionAge >= 0 && directionAge <= MaximumDirectionAgeMilliseconds\)\).*?return previous;.*?return Baseline\(sample\);' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'var heading = NormalizeRadians\(\(float\)Math\.Atan2\(deltaX, deltaZ\)\);.*?HeadingDistance\(previous\.HeadingRadians, heading\) <= MaximumSegmentHeadingDeltaRadians;.*?Math\.Min\( RequiredConsistentSegmentCount, previous\.ConsistentSegmentCount \+ 1\).*?Math\.Min\( MinimumConsistentDistanceYalms \+ MaximumSegmentDistanceYalms, previous\.ConsistentDistanceYalms \+ \(float\)distance\)' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'snapshot = default; if \(!state\.HasDirection \|\| !currentFingerprint\.IsValid \|\| state\.LastSample\.Fingerprint != currentFingerprint\).*?var age = nowMilliseconds - state\.LastMovementAtMilliseconds; if \(age < 0 \|\| age > MaximumDirectionAgeMilliseconds\) return false;.*?snapshot = new MovementDirectedEnAvantSnapshot\( currentFingerprint, state\.HeadingRadians, state\.LastMovementAtMilliseconds, state\.ConsistentSegmentCount, state\.ConsistentDistanceYalms\); return snapshot\.IsValid;' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'snapshot\.IsValid && snapshot\.Fingerprint == new MovementDirectedEnAvantFingerprint\( territoryId, localActorAddress, localGameObjectId, localEntityId, localJobId\);' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'public static bool IsFreshSnapshot\( MovementDirectedEnAvantSnapshot snapshot, long nowMilliseconds\).*?if \(!snapshot\.IsValid\) return false; var age = nowMilliseconds - snapshot\.ObservedAtMilliseconds; return age >= 0 && age <= MaximumDirectionAgeMilliseconds;') {
-    throw 'Movement-directed En Avant Core must remain a pure two-segment finite world-displacement policy with exact DNC identity, inclusive 150-ms freshness, no fallback direction, and no native, camera, target, clock-source, input, scheduler, persistence, or network dependency.'
+    throw 'Movement-directed En Avant Core must remain a pure two-segment finite world-displacement policy with exact DNC identity, inclusive 150-ms freshness, a retained meaningful anchor for slow analog accumulation, no jitter-made or stale fallback direction, and no native, camera, target, clock-source, input, scheduler, persistence, or network dependency.'
 }
 
 Assert-Literals $movementDirectedEnAvantTracker @(
-    'internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable',
+    'internal sealed class MovementDirectedEnAvantTracker : IDisposable',
     'configuration.EnableBackwardPanicShukuchiCommand',
-    'using FFXIVClientStructs.FFXIV.Client.Game.Control;',
-    'private static bool IsLocomotionInputActive()',
-    'InputManager.Instance()',
-    'InputManager.IsAutoRunning()',
-    'InputCode.MOVE_FORE',
-    'InputCode.MOVE_BACK',
-    'InputCode.MOVE_LEFT',
-    'InputCode.MOVE_STRIFE_L',
-    'InputCode.MOVE_RIGHT',
-    'InputCode.MOVE_STRIFE_R',
     'framework.Update += OnFrameworkUpdate',
     'framework.Update -= OnFrameworkUpdate',
+    'private bool TryCreateCurrentSample(out MovementDirectedEnAvantSample sample)',
+    'if (!started || disposed || !TryCreateCurrentSample(out var sample))',
+    'sample.ObservedAtMilliseconds > state.LastSample.ObservedAtMilliseconds',
     'MovementDirectedEnAvantRules.TryCapture(',
     'MovementDirectedEnAvantRules.Observe(state, sample)',
     'condition[ConditionFlag.BetweenAreas]',
@@ -2433,25 +2533,20 @@ Assert-Literals $movementDirectedEnAvantTracker @(
     'state = MovementDirectedEnAvantState.Initial',
     'Command refused: move consistently before using /seitonenavant.'
 ) 'Read-only movement-directed En Avant tracker'
-if ($movementDirectedEnAvantTracker -match '\b(?:ActionManager|UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|IGameInteropProvider|SignatureAttribute|SigScanner|CameraManager|SetRotation|IKeyState|VirtualKey|GetDeviceControlData|InputDevice|GamepadInput|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|File|Directory|HttpClient|WebRequest|Socket|Task|Timer|Thread|Queue|Retry|Replay|PendingDispatch|BufferedDispatch)\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
-    [regex]::Matches($movementDirectedEnAvantTracker, '\bunsafe\b').Count -ne 1 -or
-    $movementDirectedEnAvantTracker -notmatch 'internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable' -or
-    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputManager\.Instance\s*\(').Count -ne 1 -or
-    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputManager\.IsAutoRunning\s*\(').Count -ne 1 -or
-    [regex]::Matches($movementDirectedEnAvantTracker, 'input->GetInputStatus\s*\(').Count -ne 6 -or
-    [regex]::Matches($movementDirectedEnAvantTracker, '\bInputCode\.').Count -ne 6 -or
+if ($movementDirectedEnAvantTracker -match '\b(?:ActionManager|UseAction|UseActionLocation|ExecuteAction|SendAction|Hook<|HookFromAddress|IGameInteropProvider|SignatureAttribute|SigScanner|CameraManager|SetRotation|InputManager|InputCode|IsLocomotionInputActive|GetInputStatus|IKeyState|VirtualKey|GetDeviceControlData|InputDevice|GamepadInput|ITargetManager|TargetManager|SetTarget|SendInput|keybd_event|mouse_event|File|Directory|HttpClient|WebRequest|Socket|Task|Timer|Thread|Queue|Retry|Replay|PendingDispatch|BufferedDispatch)\b|\bunsafe\b|\.(?:Target|FocusTarget|SoftTarget|MouseOverTarget|MouseOverNameplateTarget|GPoseTarget)\s*=(?!=|>)' -or
+    $movementDirectedEnAvantTracker -notmatch 'internal sealed class MovementDirectedEnAvantTracker : IDisposable' -or
     [regex]::Matches($movementDirectedEnAvantTracker, '\bframework\.Update \+= OnFrameworkUpdate').Count -ne 1 -or
     [regex]::Matches($movementDirectedEnAvantTracker, '\bframework\.Update -= OnFrameworkUpdate').Count -ne 1 -or
-    [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.Observe\s*\(').Count -ne 1 -or
+    [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.Observe\s*\(').Count -ne 2 -or
     [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.TryCapture\s*\(').Count -ne 1 -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'internal void Start\(\).*?if \(started \|\| disposed\) return; started = true; framework\.Update \+= OnFrameworkUpdate;' -or
-    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal MovementDirectedEnAvantSnapshot Capture\(\).*?if \(!started \|\| disposed \|\| !TryCaptureCurrentFingerprint\(out var fingerprint\)\).*?return default;.*?MovementDirectedEnAvantRules\.TryCapture\( state, fingerprint, Environment\.TickCount64, out var snapshot\).*?return default;.*?return snapshot;' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal MovementDirectedEnAvantSnapshot Capture\(\).*?if \(!started \|\| disposed \|\| !TryCreateCurrentSample\(out var sample\)\).*?return default;.*?if \(!state\.LastSample\.IsValid \|\| state\.LastSample\.Fingerprint != sample\.Fingerprint \|\| sample\.ObservedAtMilliseconds > state\.LastSample\.ObservedAtMilliseconds\).*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);.*?MovementDirectedEnAvantRules\.TryCapture\( state, sample\.Fingerprint, Environment\.TickCount64, out var snapshot\).*?return default;.*?return snapshot;' -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'private void OnFrameworkUpdate\(IFramework _\).*?if \(disposed\) return; try \{ ObserveCurrentMovement\(\); \} catch \{ Reset\("Tracking reset: movement sampling faulted closed\."\); \}' -or
-    $normalizedMovementDirectedEnAvantTracker -notmatch 'private void ObserveCurrentMovement\(\).*?if \(!TryCaptureCurrentFingerprint\(out var fingerprint\)\).*?Reset\(.*?var sample = new MovementDirectedEnAvantSample\( fingerprint, position\.X, position\.Z, Environment\.TickCount64\);.*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);' -or
-    $normalizedMovementDirectedEnAvantTracker -notmatch 'if \(!configuration\.Enabled \|\| !configuration\.EnableBackwardPanicShukuchiCommand \|\| !IsLocomotionInputActive\(\) \|\| condition\[ConditionFlag\.BetweenAreas\] \|\| condition\[ConditionFlag\.BetweenAreas51\] \|\| condition\[ConditionFlag\.BeingMoved\] \|\| condition\[ConditionFlag\.Mounted\] \|\| !PanicShukuchiRules\.IsSupportedContext\( ResolveContext\(\), configuration\.EnableWolvesDenTesting\)\).*?if \(!HasValidDancerIdentity\(local\)\) return false;.*?new MovementDirectedEnAvantFingerprint\( clientState\.TerritoryType, \(ulong\)\(nuint\)local!\.Address, local\.GameObjectId, local\.EntityId, local\.ClassJob\.RowId\);' -or
-    $normalizedMovementDirectedEnAvantTracker -notmatch 'private static bool IsLocomotionInputActive\(\).*?try \{ var input = InputManager\.Instance\(\); if \(input == null\) return false; return InputManager\.IsAutoRunning\(\) \|\| input->GetInputStatus\(InputCode\.MOVE_FORE\) \|\| input->GetInputStatus\(InputCode\.MOVE_BACK\) \|\| input->GetInputStatus\(InputCode\.MOVE_LEFT\) \|\| input->GetInputStatus\(InputCode\.MOVE_STRIFE_L\) \|\| input->GetInputStatus\(InputCode\.MOVE_RIGHT\) \|\| input->GetInputStatus\(InputCode\.MOVE_STRIFE_R\); \} catch \{ return false; \}' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'private void ObserveCurrentMovement\(\).*?if \(!TryCreateCurrentSample\(out var sample\)\).*?Reset\(.*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'private bool TryCreateCurrentSample\(out MovementDirectedEnAvantSample sample\).*?sample = default; if \(!TryCaptureCurrentFingerprint\(out var fingerprint\)\) return false; var local = objectTable\.LocalPlayer; if \(local is null\) return false; var position = local\.Position; sample = new MovementDirectedEnAvantSample\( fingerprint, position\.X, position\.Z, Environment\.TickCount64\); return sample\.IsValid;' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'if \(!configuration\.Enabled \|\| !configuration\.EnableBackwardPanicShukuchiCommand \|\| condition\[ConditionFlag\.BetweenAreas\] \|\| condition\[ConditionFlag\.BetweenAreas51\] \|\| condition\[ConditionFlag\.BeingMoved\] \|\| condition\[ConditionFlag\.Mounted\] \|\| !PanicShukuchiRules\.IsSupportedContext\( ResolveContext\(\), configuration\.EnableWolvesDenTesting\)\).*?if \(!HasValidDancerIdentity\(local\)\) return false;.*?new MovementDirectedEnAvantFingerprint\( clientState\.TerritoryType, \(ulong\)\(nuint\)local!\.Address, local\.GameObjectId, local\.EntityId, local\.ClassJob\.RowId\);' -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'public void Dispose\(\).*?if \(disposed\) return; disposed = true; if \(started\) framework\.Update -= OnFrameworkUpdate; started = false; Reset\("Disposed\."\);') {
-    throw 'Movement-directed En Avant tracking must remain one Plugin-owned framework sampler, gated by the shared default-off command option, exact live DNC/PvP identity, and only the six reviewed logical MOVE_* signals or autorun; it may own no action, camera, target, physical-key guess, hook, scheduler, persistence, network, retry, or replay boundary.'
+    throw 'Movement-directed En Avant tracking must remain one Plugin-owned framework sampler, gated by the shared default-off command option and exact live DNC/PvP identity, synchronously fold the command-frame position into actual finite displacement, and own no native-input flag, action, camera, target, physical-key guess, hook, scheduler, persistence, network, retry, or replay boundary.'
 }
 
 Assert-Literals $panicShukuchiService @(
@@ -2513,7 +2608,7 @@ Assert-Literals $panicShukuchiService @(
     'Environment.CurrentManagedThreadId',
     'EnterDirectionalRotationOverride(',
     'EnsureDirectionalRotationHookEnabled()',
-    'actionBuffer.CanDispatchExactExternalAction(',
+    'actionBuffer.CanDispatchExactReviewedSelfAction(',
     'BackwardDashRules.TryResolveActorFacing(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'ExplicitAutoGuardBreakBoundary.StandardAction',
@@ -2558,7 +2653,8 @@ if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -n
 }
 if ($normalizedPanicShukuchiService -notmatch 'private void SetRotationDetour\(GameObject\* actor, float requestedHeading\).*?var scope = Volatile\.Read\(ref directionalRotationOverride\);.*?BackwardDashRules\.ShouldOverrideRotation\( scope\.Lease, Environment\.CurrentManagedThreadId, \(ulong\)\(nuint\)actor, actor->EntityId\).*?effectiveHeading = scope\.Lease\.DesiredActorHeading;.*?setRotationHook!\.Original\(actor, effectiveHeading\);' -or
     $normalizedPanicShukuchiService -notmatch 'internal void Start\(\) \{ if \(started \|\| disposed\) return; started = true; \}.*?private bool EnsureDirectionalRotationHookEnabled\(\).*?if \(!started \|\| disposed \|\| setRotationHook is null\) return false;.*?if \(setRotationHook\.IsEnabled\) return true;.*?setRotationHook\.Enable\(\);.*?return setRotationHook\.IsEnabled;' -or
-    $normalizedPanicShukuchiService -notmatch 'actionBuffer\.CanDispatchExactExternalAction\( profile\.ActionId, adjustedActionId, out var compatibilityReason\).*?RecordRefused\(\$"\{command\} foreign action ownership blocked: \{compatibilityReason\}"\);.*?EnterDirectionalRotationOverride\(' -or
+    $normalizedPanicShukuchiService -notmatch 'using var rotationOverride = EnterDirectionalRotationOverride\(.*?using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\(.*?actionBuffer\.CanDispatchExactReviewedSelfAction\( profile\.ActionId, adjustedActionId, out compatibilityReason\).*?accepted = false;.*?nativeBoundaryEntered = true; accepted = nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?\)\);.*?if \(!compatibilityPassed\).*?RecordRefused\(\$"\{command\} foreign action ownership blocked: \{compatibilityReason\}"\);' -or
+    $panicShukuchiService -match '\bCanDispatchExactExternalAction\b' -or
     $normalizedPanicShukuchiService -notmatch 'private IDisposable EnterDirectionalRotationOverride\( GameObject\* local, uint localEntityId, uint actionId, float desiredActorHeading\).*?setRotationHook\?\.IsEnabled != true.*?new BackwardDashRotationOverrideLease\( Environment\.CurrentManagedThreadId, actionId, \(ulong\)\(nuint\)local, localEntityId, desiredActorHeading\).*?Interlocked\.CompareExchange\( ref directionalRotationOverride, scope, comparand: null\) is not null.*?return scope;' -or
     $normalizedPanicShukuchiService -notmatch 'public void Dispose\(\).*?Interlocked\.Exchange\(ref directionalRotationOverride, null\)\?\.Retire\(\); setRotationHook\?\.Dispose\(\);') {
     throw 'The generalized /seitonbw and /seitonenavant path must own one exact same-lane local-actor rotation override only for its synchronous native action boundary, so later camera-relative hooks cannot rewrite it.'
@@ -2733,7 +2829,8 @@ Assert-Literals $panicShukuchiMacroUi @(
     'It has no queue, pending lease, retry, fallback, or later replay.',
     'DNC current-movement macro:',
     'ImGui.TextColored(new Vector4(0.5f, 1f, 0.65f, 1f), "/seitonenavant")',
-    'two recent consistent movement segments',
+    'fresh actual character displacement instead of requiring a MOVE signal on the exact macro frame.',
+    'Slow analog movement can accumulate into a real heading, while tiny positional jitter is rejected.',
     'Stationary, stale, discontinuous, forced,',
     'or identity-changing movement fails closed with no camera direction, actor-facing, or target fallback.',
     'The command shares /seitonbw''s exact readiness, compatibility, own-Guard, and one-call boundary.'
@@ -2750,7 +2847,9 @@ Assert-Literals $normalizedPanicShukuchiReadme @(
     'One invocation reaches at most one exact En Avant `29430` call, with no queue, retry, or fallback.',
     '## Movement-direction En Avant macro',
     'reuses the existing default-off directional-dash Macro Helpers option used by `/seitonbw`',
-    'A processed locomotion direction or autorun must still be active',
+    'The command synchronously folds in the current local position before resolving the heading;',
+    'it does not require a processed MOVE or autorun flag to be true on that exact callback frame.',
+    'Finite movement below the per-frame threshold accumulates against the last meaningful anchor',
     'It will not read or write camera state and will not read, change, or substitute any hard, soft, Focus, or mouseover target.',
     'There will be no stored intent, framework wait, queue, lease, retry, alternate action, replay, or fallback direction.',
     '`/seitonenavant` - with that same default-off directional-dash',
@@ -2758,12 +2857,13 @@ Assert-Literals $normalizedPanicShukuchiReadme @(
 ) 'README movement-directed En Avant scope and shared setting disclosure'
 Assert-Literals $normalizedPanicShukuchiPrivacy @(
     'for one explicit `/seitonenavant` DNC invocation, three fresh finite local-player world positions forming two consecutive, directionally consistent movement segments',
-    'current processed locomotion-or-autorun state',
-    'the samples and derived heading will remain bounded transient local state and is never persisted or uploaded;',
+    'A fresh current sample is folded in synchronously, and finite sub-threshold displacement may accumulate against the last meaningful anchor without reading an exact-frame processed MOVE/autorun flag.',
+    'the samples and derived heading will remain bounded transient local state and are never persisted or uploaded;',
     '## Explicit movement-direction En Avant macro',
     'reuses the existing default-off directional-dash option',
     'will not have an automatic, enemy, pressure, status, held-key, or scheduler trigger.',
-    'Current processed locomotion or autorun must remain active;',
+    'it does not require a processed MOVE or autorun flag on that exact callback frame.',
+    'Finite sub-threshold displacement may accumulate against the last meaningful anchor until it proves movement, while tiny jitter remains insufficient.',
     'The helper does not read, write, or derive direction from the gameplay camera',
     'at most one native En Avant call and has no stored intent, queue, timer, framework wait, lease, retry, replay, alternate action, last-known direction, or fallback.',
     'DNC-only `/seitonenavant` movement-direction macro also reuses'
@@ -2827,6 +2927,7 @@ $movementDirectedEnAvantTestMethods = @(
     'CardinalAndDiagonalWorldHeadingsAreExact',
     'ExactlyTwoSegmentsAndFreshnessBoundaryAreRequired',
     'StationaryStaleAndDiscontinuousSamplesFailClosed',
+    'SubThresholdAnalogFramesAccumulateWithoutManufacturingJitter',
     'TeleportAndNonFiniteSamplesFailClosed',
     'FingerprintDriftInvalidatesDirectionAndSnapshot'
 )
@@ -2834,16 +2935,20 @@ foreach ($method in $movementDirectedEnAvantTestMethods) {
     Assert-Literals $movementDirectedEnAvantSelfTests @("public static void $method()") "Movement-directed En Avant test $method"
     Assert-Literals $panicShukuchiProgram @("MovementDirectedEnAvantSelfTests.$method") "Movement-directed En Avant test registration $method"
 }
-if ([regex]::Matches($movementDirectedEnAvantSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 5 -or
-    [regex]::Matches($panicShukuchiProgram, '\bMovementDirectedEnAvantSelfTests\.\w+').Count -ne 5 -or
+if ([regex]::Matches($movementDirectedEnAvantSelfTests, '(?m)^\s*public static void \w+\(\)').Count -ne 6 -or
+    [regex]::Matches($panicShukuchiProgram, '\bMovementDirectedEnAvantSelfTests\.\w+').Count -ne 6 -or
     $movementDirectedEnAvantSelfTests -match '\b(?:UseAction|UseActionLocation|ActionManager|Dalamud|FFXIVClientStructs|IPlayerCharacter|IFramework|IObjectTable|IClientState|ICondition|IDutyState|CameraManager|ITargetManager|TargetManager|SetTarget|Environment\.TickCount64|DateTime|Stopwatch|Task|Timer|Thread)\b' -or
     $movementDirectedEnAvantSelfTests -notmatch 'Equal\(29_430u, MovementDirectedEnAvantRules\.ActionId' -or
     $movementDirectedEnAvantSelfTests -notmatch 'Equal\(2, MovementDirectedEnAvantRules\.RequiredConsistentSegmentCount' -or
     $movementDirectedEnAvantSelfTests -notmatch 'Equal\(150L, MovementDirectedEnAvantRules\.MaximumSampleGapMilliseconds' -or
     $movementDirectedEnAvantSelfTests -notmatch 'Equal\(150L, MovementDirectedEnAvantRules\.MaximumDirectionAgeMilliseconds' -or
     $movementDirectedEnAvantSelfTests -notmatch 'MovementDirectedEnAvantRules\.IsFreshSnapshot\(snapshot, 1_450\)' -or
-    $movementDirectedEnAvantSelfTests -notmatch 'MovementDirectedEnAvantRules\.IsFreshSnapshot\(snapshot, 1_451\)') {
-    throw 'All five pure movement-directed En Avant geometry, freshness, discontinuity, non-finite, and exact-identity tests and their registry entries must remain pinned exactly once.'
+    $movementDirectedEnAvantSelfTests -notmatch 'MovementDirectedEnAvantRules\.IsFreshSnapshot\(snapshot, 1_451\)' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'index \* 0\.004f' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'slow finite analog motion eventually proves a direction' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'var jitterPositions = new\[\] \{ 0\.004f, 0f, -0\.004f, 0f, 0\.004f, 0f, -0\.004f, 0f \};' -or
+    $movementDirectedEnAvantSelfTests -notmatch 'bounded jitter exposes no dash direction') {
+    throw 'All six pure movement-directed En Avant geometry, freshness, slow-analog accumulation, jitter rejection, discontinuity, non-finite, and exact-identity tests and their registry entries must remain pinned exactly once.'
 }
 
 # The automatic NIN Guard-Shukuchi helper is deliberately separate from the
@@ -4757,8 +4862,8 @@ if ([regex]::Matches($miracleProtectionEndSelfTests, '\binternal static void\s+\
     [regex]::Matches($miracleGuardProgram, '\bMiracleProtectionEndSelfTests\.\w+').Count -ne 4 -or
     [regex]::Matches($samuraiReactiveSelfTests, '\bpublic static void\s+\w+\s*\(').Count -ne 8 -or
     [regex]::Matches($miracleGuardProgram, '\bSamuraiReactiveSelfTests\.\w+').Count -ne 8 -or
-    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 544) {
-    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 544-test static Core registry before the appended repeat-policy suites must remain pinned.'
+    [regex]::Matches($miracleGuardProgram, '(?m)^\s*\("').Count -ne 548) {
+    throw 'All four shared protection-end tests, all eight SAM reactive tests, and the exact 548-test static Core registry before the appended repeat-policy suites must remain pinned.'
 }
 Assert-Literals $samuraiZantetsukenTargetSelectionRules @(
     'public const float EffectRangeYalms = 5f;',
@@ -11014,17 +11119,18 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.8</Version>',
-    '<AssemblyVersion>0.42.0.8</AssemblyVersion>',
-    '<FileVersion>0.42.0.8</FileVersion>'
-) 'v0.42.0.8 project version'
+    '<Version>0.42.0.9</Version>',
+    '<AssemblyVersion>0.42.0.9</AssemblyVersion>',
+    '<FileVersion>0.42.0.9</FileVersion>'
+) 'v0.42.0.9 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.8";',
-    'Added /seitonenavant: DNC can make one immediate En Avant along the direction the character is currently moving.',
-    'The direction comes from two fresh world-movement segments, so strafe, diagonals, remapped controls, and Standard or Legacy movement share one path.',
-    'The command uses the existing directional-dash opt-in and exact En Avant boundary. It never changes camera or target and has no queue, retry, or guessed fallback.',
-    'Configuration schema remains 48. Automated source and package checks pass; live cardinal, diagonal, and controller confirmation remains pending.'
-) 'v0.42.0.8 version-acknowledged movement-directed En Avant What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.9";',
+    'Fixed /seitonenavant so the command captures fresh actual character displacement instead of depending on a MOVE signal on the exact macro frame.',
+    'Slow controller or analog movement now accumulates until it forms a real heading; tiny positional jitter still produces no dash.',
+    'Unrelated ReAction Auto Target or Action Stacks no longer block a reviewed self dash; exact or wildcard ownership still fails closed.',
+    'Added public-CC medicine-kit cues: a first-spawn countdown plus optional green through-terrain beacons, with separate visibility toggles and scale.',
+    'The medicine-kit scan is read-only and bounded. Live confirmation of the current client''s localized runtime objects and the En Avant paths remains pending.'
+) 'v0.42.0.9 version-acknowledged En Avant and medicine-kit What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11077,19 +11183,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.8 plugin manifest metadata'
+) 'v0.42.0.9 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.8"',
-    'Adds /seitonenavant for DNC: one explicit En Avant follows the character''s fresh world movement direction, including strafe and diagonals, without camera or target changes.',
-    'It reuses the existing default-off directional-dash option and exact one-call En Avant boundary;',
-    'stationary, stale, discontinuous, or identity-changing movement fails closed with no queue, retry, or fallback.',
+    '"AssemblyVersion": "0.42.0.9"',
+    'Fixes /seitonenavant by deriving its heading from fresh actual character displacement instead of requiring a MOVE signal on the exact macro frame;',
+    'slow analog movement accumulates while positional jitter remains rejected.',
+    'Unrelated ReAction Auto Target or Action Stacks no longer block reviewed self dashes, while exact/wildcard ownership still fails closed.',
+    'Adds configurable public-CC medicine-kit cues: an opening first-spawn countdown and read-only bounded event-object green beacons visible through terrain.',
     'Schema 48;',
-    'live cardinal and diagonal validation remains pending.',
+    'exact live En Avant behavior and current-client medicine-kit runtime-object detection remain pending in-game confirmation.',
     '"IsHide": false'
-) 'v0.42.0.8 custom-repository metadata'
+) 'v0.42.0.9 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11119,9 +11226,10 @@ Assert-Literals $normalizedPrivacy @(
     'No persistent cursor is retained, so manual target changes re-anchor the cycle.',
     'including a second native spatial query immediately before the setter.',
     'The spatial probe does not execute an action.',
-    'For buffer-only compatibility, Seiton reads Dalamud''s in-memory installed-plugin list, the audited ReAction action-mutation settings, and MOAction''s published retargeted-action IPC list.',
-    'This check runs on plugin-list changes, at a bounded five-second cadence, when an eligible buffer is armed, and immediately before its sole replay.',
-    'Unknown or unreadable compatibility state disables only that buffer opportunity; native input and the separate Turbo path remain unchanged.',
+    'For buffer and explicit directional-self-action compatibility, Seiton reads Dalamud''s in-memory installed-plugin list, the audited ReAction action-mutation settings, its configured action-selector IDs/adjusted-ID flags, and MOAction''s published retargeted-action IPC list.',
+    'The broad buffer profile is refreshed on plugin-list changes and at a bounded five-second cadence, then checked when an eligible buffer arms and immediately before its sole replay.',
+    'A directional dash also re-reads the selector signature immediately before its one call so unrelated stacks do not become a global block.',
+    'Unknown or unreadable compatibility state disables only the affected buffer/command opportunity; native input and the separate Turbo path remain unchanged.',
     'The Wolves'' Den rotation panel calculates the published arena order from local UTC time, the current PvP / territory flags, and an optional saved whole-map phase correction.',
     'Its compact current card and optional expanded deck request the same seven reviewed duty-artwork icons from the local game installation;',
     'Confirmation requires result `1` or `2`, duration from 10 through 1,800 seconds, one known public-CC territory, exactly ten unique nonzero Content IDs, known jobs, five players on each valid team, and exactly one match for the local nonzero Content ID.',
@@ -11215,8 +11323,12 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.8 adds `/seitonenavant`, a DNC-only explicit macro that sends one ready PvP En Avant along the local character''s fresh world movement direction, including strafe and diagonals, without moving the camera or changing a target.',
-    'It reuses the existing default-off directional-dash option and audited one-call boundary; uncertain or stale movement fails closed without a retry or fallback.',
+    'Version 0.42.0.9 fixes `/seitonenavant` so one explicit DNC macro press uses fresh actual character displacement instead of requiring a MOVE signal on that exact frame.',
+    'Slow analog movement now accumulates into a real heading while positional jitter still fails closed.',
+    'It also stops unrelated ReAction Auto Target or Action Stack settings from silently refusing the exact reviewed self dash; only a stack that can actually own the requested dash remains a hard block.',
+    'It also adds configurable public-CC medicine-kit cues: an opening first-spawn countdown and read-only green foreground beacons for bounded localized event-object matches.',
+    'Exact current-client runtime-object detection and live En Avant behavior remain pending in-game confirmation.',
+    'Version 0.42.0.8 originally added the DNC-only command and its audited one-call boundary without moving the camera or changing a target.',
     'Version 0.42.0.7 fixes the 0.42.0.6 update-load failure where six What''s New bullets exceeded the window''s five-entry contract and aborted plugin construction after the prior version had already unloaded.',
     'Release-note content is now bounded and non-fatal, while Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior remain unchanged by the hotfix.',
     'Version 0.42.0.6 fixes automatic Zantetsuken firing from LB readiness alone.',
@@ -11354,8 +11466,18 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.8 current README movement-directed En Avant release, retained startup hotfix, required-Kuzushi Zantetsuken, and safety contract'
+) 'v0.42.0.9 current README En Avant/medicine-kit release plus retained history and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.9',
+    'Fixed `/seitonenavant` input sampling.',
+    'It folds one fresh local-position sample into the existing world-displacement observation before resolving the heading',
+    'Finite sub-threshold displacement accumulates against the last meaningful anchor until it proves a direction;',
+    'Fixed the second silent refusal path around ReAction.',
+    'a wildcard, exact, or adjusted selector that can own the requested dash still blocks it.',
+    'Added public Crystalline Conflict medicine-kit cues.',
+    'checks only Dalamud''s bounded event-object and reaction-event-object slices at 10 Hz',
+    'The overlay is read-only:',
+    'Exact En Avant behavior, the 30-second boundary, and current-client runtime medicine-kit object names/BaseIds remain pending live-game confirmation;',
     '## 0.42.0.8',
     'Added `/seitonenavant`, a DNC-only explicit macro command using the same default-off directional-dash option as `/seitonbw`.',
     'three fresh finite local world positions forming two consecutive, directionally consistent segments.',
@@ -11508,7 +11630,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.8 release notes and retained v0.42.0.7/v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.9 release notes and retained v0.42.0.8/v0.42.0.7/v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',
@@ -13019,4 +13141,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense v0.42.0.8 source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 585-test Core registry. The explicit DNC /seitonenavant command reuses the existing default-off directional-dash toggle and generalized one-UseAction boundary, with two fresh consistent world-movement segments, logical MOVE_*/autorun corroboration, exact identity and 150-ms freshness revalidation, and no camera, target, queue, retry, or fallback. Optional What's New content is normalized, capped, and non-fatal, while the current initializer is release-gated to three through five concise bullets. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 48 and the exact 589-test Core registry. The explicit DNC /seitonenavant command reuses the existing default-off directional-dash toggle and generalized one-UseAction boundary, with two fresh consistent world-displacement segments, slow analog accumulation against the last meaningful anchor, a synchronous command-frame sample, exact identity and 150-ms freshness revalidation, and no native-input flag, camera, target, queue, retry, jitter-made, stale, or fallback direction. Its exact reviewed-self-action compatibility exception admits unrelated audited ReAction mutation only after live selector and MOAction ownership checks prove the requested/resolved dash unowned; generic buffer replay stays strict. The read-only public-CC medicine-kit overlay uses the finite native content timer plus only Dalamud's bounded EventObjects and ReactionEventObjects slices at 10 Hz, renders on the foreground list, and owns no action, target, file, log, network, queue, retry, or replay path; runtime fingerprint and claimable-kit lifecycle remain live-test pending. Optional What's New content is normalized, capped, and non-fatal, while the current initializer is release-gated to three through five concise bullets. Armed Auto-Zantetsuken is keyless but LB readiness alone is insufficient: its selected primary endpoint must carry exactly one current own-source Kuzushi, while nearby vulnerable non-Kuzushi actors still count toward the target-centered 5-yalm cluster. The same Kuzushi gate applies in Wolves' Den, remains frozen and revalidated at the final native boundary, and a pre-native loss releases the intent without spending the ready epoch. Shields remain an equal-cluster preference rather than an execution gate; Guard/Chiten remain valid while Covered/Hallowed/Undead are blocked. Auto-Seiton remains unchanged. Smart Action now treats unrelated Guard/Cover/invulnerability as candidate-local for AoE while retaining conservative incidental Chiten protection. The closed 16-action ordinary movement catalog may select Guard, and the exact two intersecting CC-brake actions skip only Guard; Forked/Fleeting Raiju remain blocked while every other CC immunity stays strict. Ogi and Kaeshi: Namikiri retain candidate-local 8-yalm cone protection; Tendo remains direct-target. Every HP, MP, Purify, Guard, Hidden, cast, queue, resource, identity, range/line-of-sight, and PvP-context gate remains exact. Auto Recuperate, instant public-CC leave, warning, Smart Tab, buffer, Turbo, held-cast-cancel, range-helper, and emergency contracts remain pinned."

@@ -88,6 +88,12 @@ following data already available in the local FFXIV client:
   context and territory, a nonzero local Content ID, ten unique nonzero Content
   IDs, known jobs, and exactly five members on each valid team must all agree.
   Character names and name fallback are never read by this path;
+- when either public-CC medicine-kit cue is enabled, exact public PvP context
+  and territory plus the native content time remaining; the beacon path also
+  checks only Dalamud's bounded event-object and reaction-event-object slices
+  at 10 Hz for localized object name, BaseId, ready-to-draw state, and finite
+  position. A localized match may teach one territory/BaseId hint in memory for
+  the current plugin session; no object identity or timer history is persisted;
 - when Auto Low-MP Focus is enabled, the native Focus Target's empty/occupied
   state, the complete exact canonical `S1`-`S5` set, trusted HP/MP samples and
   low-MP latches, local identity/text-input state, and FFXIV's native 20-yalm
@@ -177,10 +183,12 @@ following data already available in the local FFXIV client:
 - for one explicit `/seitonenavant` DNC invocation, three fresh finite
   local-player world positions forming two consecutive, directionally consistent
   movement segments, plus the same exact local identity, job, PvP context, En
-  Avant `29430` identity/readiness, current processed locomotion-or-autorun state,
-  and clean one-call boundary. It does not read
+  Avant `29430` identity/readiness, and clean one-call boundary. A fresh current
+  sample is folded in synchronously, and finite sub-threshold displacement may
+  accumulate against the last meaningful anchor without reading an exact-frame
+  processed MOVE/autorun flag. It does not read
   or write camera or target state; the samples and derived heading will remain
-  bounded transient local state and is never persisted or uploaded;
+  bounded transient local state and are never persisted or uploaded;
 - when held DRK Shadowbringer is enabled, the exact local DRK identity, held-key
   ownership, HP, Dark Arts, exact Blackblood status-row presence, incoming
   pressure, own Guard/cast/queue/animation state, native Shadowbringer readiness,
@@ -810,8 +818,10 @@ PCT Smudge `39210` set only local character facing immediately before their one
 native self-action. The camera and targets are never written. The local-facing
 hook remains inactive until the first enabled non-NIN invocation. Immediately
 before the exact action boundary, the shared audited ReAction/MOAction check
-refuses action/target mutation or action ownership; a camera-relative-only
-ReAction profile remains allowed. Unavailable or
+reads the supported ReAction profile's current action selectors and refuses a
+wildcard, exact, or adjusted selector that can own the requested self dash.
+Unrelated Auto Target/Action Stacks and camera-relative rotation remain allowed;
+exact MOAction ownership is refused. Unavailable or
 non-finite data and event/cutscene, spectator, aiming, or lock-on camera modes
 refuse the command. One invocation makes at most one matching native location
 or standard-action call in the same command callback. It stores no pending
@@ -852,9 +862,13 @@ For one invocation, the helper will observe three fresh, finite local-player
 world positions to form two consecutive movement segments. Both segments must
 be current and agree on direction for the same exact local DNC identity and PvP
 context. This position-based rule treats cardinal, diagonal, and remapped
-movement uniformly without reading a physical key binding. Controller uses the
-same processed locomotion status by design but remains live-test pending. Current processed locomotion or autorun must remain active;
-releasing movement clears the observation immediately. Stationary or insufficient movement, stale or inconsistent
+movement uniformly without reading a physical key binding. The command folds a
+fresh current-position sample into the observation before resolving the
+heading; it does not require a processed MOVE or autorun flag on that exact
+callback frame. Finite sub-threshold displacement may accumulate against the
+last meaningful anchor until it proves movement, while tiny jitter remains
+insufficient. Controller and autorun behavior remain live-test pending.
+Stationary or insufficient movement, stale or inconsistent
 segments, non-finite coordinates, or actor, job, context, or action-identity drift
 discard the observation and make no action call.
 
@@ -866,6 +880,31 @@ most one native En Avant call and has no stored intent, queue, timer,
 framework wait, lease, retry, replay, alternate action, last-known direction, or
 fallback. The samples and derived direction will be transient local state only;
 they will not be persisted or uploaded.
+
+## Public-CC medicine-kit countdown and beacons
+
+The two medicine-kit overlays are visual-only and run only in supported public
+Crystalline Conflict. The first-spawn countdown reads the native content time
+remaining during the opening of the five-minute match and does not treat the
+separate 0:30 preparation value or a still-frozen 5:00 content timer as active
+match time. Its assumed 30-second first-spawn boundary and exact current-client
+timer transition remain subject to live-game confirmation.
+
+When beacons are enabled, the plugin checks only Dalamud's bounded event-object
+and reaction-event-object views at 10 Hz. It reads localized object name,
+BaseId, ready-to-draw state, and finite position. A narrow localized name match
+may teach one BaseId hint for that territory in memory until plugin unload.
+Ready matches may receive a green foreground beam, distance label, or off-screen
+edge marker; foreground rendering makes the cue visible through terrain but
+does not establish reachability, safety, or a route.
+
+The feature never writes an object, target, camera, marker, map, path, action,
+movement, or pickup state. It cannot reserve or consume a kit. Timer and object
+observations, learned BaseId hints, and beacon positions are not persisted,
+logged as continuous history, transmitted, or uploaded. Exact localized runtime
+names/BaseIds and ready-to-draw behavior remain current-client live-validation
+points. Missing, ambiguous, or changed runtime identification fails closed by
+hiding the beacon.
 
 ## Shared held-action scheduler
 
@@ -1744,6 +1783,7 @@ the separate NIN Guard-Shukuchi held-key and automatic NIN Seiton opt-ins, the S
 Critical Strategy, Astrologian held Near Help, and RDM fresh-Guard opt-ins, the
 RDM own-HP/MP thresholds, and the camera-back job dash command opt-in that the
 DNC-only `/seitonenavant` movement-direction macro also reuses,
+  the public-CC medicine-kit countdown/beacon toggles and overlay scale,
   the Sage accepted-Eukrasia Smart Kardia opt-in, the Viper Serpentiner-Geist,
   GNB Continuation, and Monk combo held-key opt-ins, the DRK Shadowbringer,
   nested Blackblood-preservation, and separate DRK Hiebsprung held-key options,
@@ -1859,14 +1899,17 @@ or learning-window state is uploaded. The learning window is a read-only view of
 the current in-memory key/slot, action, countdown, and held state. Neither path
 writes position, range, animation lock, cast state, or a visible target.
 
-For buffer-only compatibility, Seiton reads Dalamud's in-memory installed-plugin
-list, the audited ReAction action-mutation settings, and MOAction's published
-retargeted-action IPC list. This check runs on plugin-list changes, at a bounded
-five-second cadence, when an eligible buffer is armed, and immediately before
-its sole replay. It does not inspect plugin files, retain historical profiles,
-or upload compatibility data. Unknown or unreadable compatibility state disables
-only that buffer opportunity; native input and the separate Turbo path remain
-unchanged.
+For buffer and explicit directional-self-action compatibility, Seiton reads
+Dalamud's in-memory installed-plugin list, the audited ReAction action-mutation
+settings, its configured action-selector IDs/adjusted-ID flags, and MOAction's
+published retargeted-action IPC list. The broad buffer profile is refreshed on
+plugin-list changes and at a bounded five-second cadence, then checked when an
+eligible buffer arms and immediately before its sole replay. A directional dash
+also re-reads the selector signature immediately before its one call so
+unrelated stacks do not become a global block. It does not inspect plugin files,
+retain historical profiles, or upload compatibility data. Unknown or unreadable
+compatibility state disables only the affected buffer/command opportunity;
+native input and the separate Turbo path remain unchanged.
 
 Historical v0.30.0.0 baseline: schema 32 forced the NIN Guard-Shukuchi held-key
 option off for upgrading configurations and left it off for fresh

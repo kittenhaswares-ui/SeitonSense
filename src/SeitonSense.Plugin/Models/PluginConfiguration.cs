@@ -94,6 +94,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowWolvesDenRotationPanel { get; set; } = true;
     public bool EnableLocalCrystallineConflictMapStatisticsCapture { get; set; } = true;
     public bool EnableInstantLeaveAfterCrystallineConflict { get; set; }
+    public bool ShowCrystallineConflictMedicineKitCountdown { get; set; } = true;
+    public bool ShowCrystallineConflictMedicineKitBeacons { get; set; } = true;
+    public float CrystallineConflictMedicineKitOverlayScale { get; set; } = 1f;
     public bool WolvesDenRotationPanelLocked { get; set; }
     public bool WolvesDenRotationPanelShowBackground { get; set; } = true;
     public float WolvesDenRotationPanelScale { get; set; } = 1f;
@@ -873,6 +876,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
         ShowWolvesDenRotationPanel = true;
         EnableLocalCrystallineConflictMapStatisticsCapture = true;
         EnableInstantLeaveAfterCrystallineConflict = false;
+        ShowCrystallineConflictMedicineKitCountdown = true;
+        ShowCrystallineConflictMedicineKitBeacons = true;
+        CrystallineConflictMedicineKitOverlayScale = 1f;
         WolvesDenRotationPanelLocked = false;
         WolvesDenRotationPanelShowBackground = true;
         WolvesDenRotationPanelScale = 1f;
@@ -1183,6 +1189,12 @@ public sealed class PluginConfiguration : IPluginConfiguration
             1f,
             0.88f,
             value => WolvesDenRotationPanelBackgroundOpacity = value);
+        changed |= Clamp(
+            CrystallineConflictMedicineKitOverlayScale,
+            0.6f,
+            2f,
+            1f,
+            value => CrystallineConflictMedicineKitOverlayScale = value);
         var rotationOffsetSlots = Math.Clamp(
             WolvesDenRotationOffsetSlots,
             -(CrystallineConflictRotationRules.ArenaCount / 2),

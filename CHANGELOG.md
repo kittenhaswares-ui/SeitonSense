@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.42.0.9
+
+- Fixed `/seitonenavant` input sampling. The explicit DNC command no longer
+  depends on FFXIV reporting a processed MOVE/autorun signal on the exact macro
+  callback frame. It folds one fresh local-position sample into the existing
+  world-displacement observation before resolving the heading, so an otherwise
+  valid moving command is not lost to a one-frame input-status gap.
+- Preserved the two-segment, identity-bound movement proof while making slow
+  analog movement practical. Finite sub-threshold displacement accumulates
+  against the last meaningful anchor until it proves a direction; tiny
+  positional jitter, stationary, stale, inconsistent, teleport-sized, or
+  identity-changing samples still fail closed. The command remains one exact
+  En Avant `29430` request with no camera/target mutation, queue, or retry.
+- Fixed the second silent refusal path around ReAction. The explicit reviewed
+  self-dash boundary now permits unrelated Auto Target settings and unrelated
+  Action Stacks, while a wildcard, exact, or adjusted selector that can own the
+  requested dash still blocks it. Unknown ReAction builds and exact MOAction
+  ownership remain fail-closed.
+- Added public Crystalline Conflict medicine-kit cues. During the opening of a
+  five-minute match, an optional foreground countdown shows the assumed first
+  spawn at 30 seconds. A separate optional overlay checks only Dalamud's bounded
+  event-object and reaction-event-object slices at 10 Hz and draws green
+  through-terrain beacons and edge markers for localized, ready-to-draw
+  medicine-kit objects.
+- Added separate countdown and beacon toggles plus a `0.60x`-`2.00x` overlay
+  scale under **HUD & Nameplates > CC medicine kits**. The overlay is read-only:
+  it does not target, move, navigate, press, reserve, or consume anything, and
+  its learned territory/BaseId hints exist only for the current plugin session.
+- Configuration schema remains `48`. Pure tests cover movement accumulation,
+  jitter rejection, timer boundaries, and narrow localized-name matching.
+  Exact En Avant behavior, the 30-second boundary, and current-client runtime
+  medicine-kit object names/BaseIds remain pending live-game confirmation; a
+  missing or changed runtime fingerprint therefore hides beacons rather than
+  guessing.
+
 ## 0.42.0.8
 
 - Added `/seitonenavant`, a DNC-only explicit macro command using the same

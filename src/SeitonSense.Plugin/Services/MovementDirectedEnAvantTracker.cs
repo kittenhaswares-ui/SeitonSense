@@ -1,7 +1,6 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using SeitonSense.Core;
 using SeitonSense.Plugin.Models;
 
@@ -26,11 +25,14 @@ internal readonly record struct MovementDirectedEnAvantDiagnostics(
 /// <summary>
 /// Samples only the local DNC's recent world-space movement. This preserves
 /// diagonals, remapped controls, controller input, Standard/Legacy modes, and
-/// autorun without reading or guessing physical keys. It never invokes an
+/// autorun without reading or guessing physical keys. Eligibility remains
+/// stable while a command key is pressed; actual displacement and freshness,
+/// rather than a one-frame native MOVE flag, prove that the player is moving.
+/// It never invokes an
 /// action; it can only expose one fresh identity-bound heading snapshot to the
 /// explicit /seitonenavant command.
 /// </summary>
-internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
+internal sealed class MovementDirectedEnAvantTracker : IDisposable
 {
     private readonly object gate = new();
     private readonly PluginConfiguration configuration;
@@ -95,7 +97,7 @@ internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
 
     internal MovementDirectedEnAvantSnapshot Capture()
     {
-        if (!started || disposed || !TryCaptureCurrentFingerprint(out var fingerprint))
+        if (!started || disposed || !TryCreateCurrentSample(out var sample))
         {
             lock (gate) lastEvent = "Command refused: current DNC movement identity unavailable.";
             return default;
@@ -103,9 +105,19 @@ internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
 
         lock (gate)
         {
+            // The macro callback can land between framework samples. Fold in
+            // the current position once so the command never depends on the
+            // previous frame having observed the final movement segment.
+            if (!state.LastSample.IsValid ||
+                state.LastSample.Fingerprint != sample.Fingerprint ||
+                sample.ObservedAtMilliseconds > state.LastSample.ObservedAtMilliseconds)
+            {
+                state = MovementDirectedEnAvantRules.Observe(state, sample);
+            }
+
             if (!MovementDirectedEnAvantRules.TryCapture(
                     state,
-                    fingerprint,
+                    sample.Fingerprint,
                     Environment.TickCount64,
                     out var snapshot))
             {
@@ -134,26 +146,12 @@ internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
 
     private void ObserveCurrentMovement()
     {
-
-        if (!TryCaptureCurrentFingerprint(out var fingerprint))
+        if (!TryCreateCurrentSample(out var sample))
         {
             Reset("Tracking reset: DNC movement context unavailable.");
             return;
         }
 
-        var local = objectTable.LocalPlayer;
-        if (local is null)
-        {
-            Reset("Tracking reset: local player unavailable.");
-            return;
-        }
-
-        var position = local.Position;
-        var sample = new MovementDirectedEnAvantSample(
-            fingerprint,
-            position.X,
-            position.Z,
-            Environment.TickCount64);
         lock (gate)
         {
             state = MovementDirectedEnAvantRules.Observe(state, sample);
@@ -163,13 +161,29 @@ internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
         }
     }
 
+    private bool TryCreateCurrentSample(out MovementDirectedEnAvantSample sample)
+    {
+        sample = default;
+        if (!TryCaptureCurrentFingerprint(out var fingerprint)) return false;
+
+        var local = objectTable.LocalPlayer;
+        if (local is null) return false;
+
+        var position = local.Position;
+        sample = new MovementDirectedEnAvantSample(
+            fingerprint,
+            position.X,
+            position.Z,
+            Environment.TickCount64);
+        return sample.IsValid;
+    }
+
     private bool TryCaptureCurrentFingerprint(
         out MovementDirectedEnAvantFingerprint fingerprint)
     {
         fingerprint = default;
         if (!configuration.Enabled ||
             !configuration.EnableBackwardPanicShukuchiCommand ||
-            !IsLocomotionInputActive() ||
             condition[ConditionFlag.BetweenAreas] ||
             condition[ConditionFlag.BetweenAreas51] ||
             condition[ConditionFlag.BeingMoved] ||
@@ -191,27 +205,6 @@ internal sealed unsafe class MovementDirectedEnAvantTracker : IDisposable
             local.EntityId,
             local.ClassJob.RowId);
         return fingerprint.IsValid;
-    }
-
-    private static bool IsLocomotionInputActive()
-    {
-        try
-        {
-            var input = InputManager.Instance();
-            if (input == null) return false;
-
-            return InputManager.IsAutoRunning() ||
-                   input->GetInputStatus(InputCode.MOVE_FORE) ||
-                   input->GetInputStatus(InputCode.MOVE_BACK) ||
-                   input->GetInputStatus(InputCode.MOVE_LEFT) ||
-                   input->GetInputStatus(InputCode.MOVE_STRIFE_L) ||
-                   input->GetInputStatus(InputCode.MOVE_RIGHT) ||
-                   input->GetInputStatus(InputCode.MOVE_STRIFE_R);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private SupportedPvPContext ResolveContext()

@@ -78,6 +78,50 @@ internal static class SmartActionBufferCompatibilitySelfTests
             "drift");
     }
 
+    internal static void ExactReviewedSelfActionAllowsOnlyUnownedAuditedProfiles()
+    {
+        var mutating = new SmartActionBufferCompatibilityInput(
+            SmartActionBufferReActionProfile.AuditedMutationActive,
+            MOActionLoaded: true,
+            MOActionOwnershipPublished: true,
+            AssessmentAvailable: true,
+            Quarantined: false);
+
+        True(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating,
+                reActionOwnsExactAction: false),
+            "unrelated audited ReAction mutation");
+        False(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating,
+                reActionOwnsExactAction: true),
+            "exact ReAction ownership");
+        False(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating with { Quarantined = true },
+                reActionOwnsExactAction: false),
+            "quarantine");
+        False(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating with
+                {
+                    ReActionProfile = SmartActionBufferReActionProfile.LoadedUnknown,
+                },
+                reActionOwnsExactAction: false),
+            "unknown ReAction");
+        False(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating with { ReActionProfile = (SmartActionBufferReActionProfile)99 },
+                reActionOwnsExactAction: false),
+            "future unreviewed ReAction profile");
+        False(
+            SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                mutating with { MOActionOwnershipPublished = false },
+                reActionOwnsExactAction: false),
+            "unreadable MOAction ownership");
+    }
+
     private static void True(bool condition, string label)
     {
         if (!condition) throw new InvalidOperationException($"Expected true: {label}");

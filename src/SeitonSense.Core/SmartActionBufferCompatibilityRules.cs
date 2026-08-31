@@ -37,6 +37,26 @@ public static class SmartActionBufferCompatibilityRules
             SmartActionBufferReActionProfile.AuditedSafe &&
         (!input.MOActionLoaded || input.MOActionOwnershipPublished);
 
+    /// <summary>
+    /// Narrower policy for one synchronously validated self-only action. An
+    /// audited ReAction installation may have unrelated Auto Target or Action
+    /// Stacks enabled; those settings are admissible only after the live
+    /// configuration proves that no stack can select this exact self action.
+    /// Unknown ReAction builds and unreadable MOAction ownership still fail
+    /// closed exactly like the generic buffer boundary.
+    /// </summary>
+    public static bool AllowsExactReviewedSelfAction(
+        SmartActionBufferCompatibilityInput input,
+        bool reActionOwnsExactAction) =>
+        input.AssessmentAvailable &&
+        !input.Quarantined &&
+        input.ReActionProfile is
+            SmartActionBufferReActionProfile.NotLoaded or
+            SmartActionBufferReActionProfile.AuditedSafe or
+            SmartActionBufferReActionProfile.AuditedMutationActive &&
+        !reActionOwnsExactAction &&
+        (!input.MOActionLoaded || input.MOActionOwnershipPublished);
+
     public static bool SignatureChanged(
         bool hasPreviousAssessment,
         string previousSignature,

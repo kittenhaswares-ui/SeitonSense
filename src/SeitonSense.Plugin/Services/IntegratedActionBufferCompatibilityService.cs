@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using SeitonSense.Core;
 
 namespace SeitonSense.Plugin.Services;
@@ -42,6 +43,7 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
     private const string SignatureFormat = "seiton-buffer-compat-v1";
     private const int RefreshIntervalMilliseconds = 5_000;
     private const int MaximumPublishedActionIds = 4_096;
+    private const int MaximumReActionStackSelectors = 8_192;
     private const int MaximumDiagnosticLength = 180;
 
     private static readonly Version SupportedReActionVersion = new(1, 3, 5, 1);
@@ -252,6 +254,121 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
     }
 
     /// <summary>
+    /// Compatibility boundary for one synchronously validated, self-targeted
+    /// action. Unlike generic replay, unrelated ReAction Auto Target or Action
+    /// Stacks do not block it. The exact live stack selectors are re-read and
+    /// the call fails closed if a wildcard or requested/resolved selector can
+    /// own this action. Unknown plugin versions, profile drift, quarantine and
+    /// unreadable MOAction ownership remain hard blocks.
+    /// </summary>
+    internal bool CanDispatchExactReviewedSelfAction(
+        uint requestedActionId,
+        uint resolvedActionId,
+        out string reason)
+    {
+        reason = string.Empty;
+        CompatibilityAssessment expected;
+        ReActionConfigurationSnapshot? expectedReAction;
+        WeakReference<object>? weakReAction;
+        long generation;
+
+        lock (gate)
+        {
+            dispatchCheckCount++;
+            expected = assessment;
+            expectedReAction = auditedReActionConfiguration;
+            weakReAction = liveReActionConfiguration;
+            generation = assessmentGeneration;
+
+            var profileInput = ToRulesInput(
+                expected,
+                quarantinedThisFrame || Volatile.Read(ref topologyDirty) != 0);
+            if (!started || disposed || requestedActionId == 0 || resolvedActionId == 0 ||
+                !SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                    profileInput,
+                    reActionOwnsExactAction: false))
+            {
+                reason = DescribeExactSelfActionBlock(profileInput, false);
+                RecordBlockedLocked(reason);
+                return false;
+            }
+        }
+
+        var actionIsUnowned = true;
+        if (expected.MOActionLoaded &&
+            !TryReadMOActionOwnership(
+                requestedActionId,
+                resolvedActionId,
+                expected.MOActionOwnershipSignature,
+                out actionIsUnowned,
+                out var ownershipReason))
+        {
+            reason = ownershipReason;
+            MarkProfileDirty(reason);
+            return false;
+        }
+
+        if (expected.MOActionLoaded && !actionIsUnowned)
+        {
+            reason = "MOAction owns the requested or resolved action";
+            lock (gate) RecordBlockedLocked(reason);
+            return false;
+        }
+
+        if (!TryCaptureLiveReActionExactProfile(
+                expectedReAction,
+                weakReAction,
+                out var currentReAction))
+        {
+            reason = "ReAction safety settings changed or became unreadable";
+            MarkProfileDirty(reason);
+            return false;
+        }
+
+        if (!TryDetermineReActionExactSelfActionOwnership(
+                currentReAction,
+                requestedActionId,
+                resolvedActionId,
+                out var reActionOwnsExactAction,
+                out var reActionReason))
+        {
+            reason = reActionReason;
+            MarkProfileDirty(reason);
+            return false;
+        }
+
+        var exactInput = ToRulesInput(expected, quarantined: false);
+        if (!SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                exactInput,
+                reActionOwnsExactAction))
+        {
+            reason = DescribeExactSelfActionBlock(exactInput, reActionOwnsExactAction);
+            lock (gate) RecordBlockedLocked(reason);
+            return false;
+        }
+
+        lock (gate)
+        {
+            var stableInput = ToRulesInput(assessment, quarantinedThisFrame);
+            var stable = generation == assessmentGeneration &&
+                Volatile.Read(ref topologyDirty) == 0 &&
+                !quarantinedThisFrame &&
+                SmartActionBufferCompatibilityRules.AllowsExactReviewedSelfAction(
+                    stableInput,
+                    reActionOwnsExactAction);
+            if (!stable)
+            {
+                reason = "Compatibility profile changed during exact self-action validation";
+                RecordBlockedLocked(reason);
+                return false;
+            }
+
+            lastEvent = "Exact reviewed self-action compatibility check passed";
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Cheap cached gate for per-frame validation. It never reflects foreign
     /// assemblies and never invokes IPC; live checks remain arm/dispatch only.
     /// </summary>
@@ -401,7 +518,8 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
                 : SmartActionBufferReActionProfile.AuditedSafe;
             reActionSignature =
                 $"{reActionMatches[0].Version}:{configuration.AutoTargetEnabled}:" +
-                $"{configuration.ActionStackCount}";
+                $"{configuration.ActionStackCount}:" +
+                configuration.ActionSelectorSignature;
         }
 
         var moActionMatches = loadedPlugins
@@ -455,7 +573,7 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         out ReActionConfigurationSnapshot configuration,
         out object liveConfiguration)
     {
-        configuration = default;
+        configuration = null!;
         liveConfiguration = null!;
 
         try
@@ -519,7 +637,7 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         }
         catch
         {
-            configuration = default;
+            configuration = null!;
             liveConfiguration = null!;
             return false;
         }
@@ -529,7 +647,50 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         object config,
         out ReActionConfigurationSnapshot configuration)
     {
-        configuration = default;
+        configuration = null!;
+        try
+        {
+            if (!string.Equals(
+                    config.GetType().FullName,
+                    "ReAction.Configuration",
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var type = config.GetType();
+            if (!TryReadReActionActionStackSelectors(
+                    type,
+                    config,
+                    out var actionStackCount,
+                    out var actionSelectors,
+                    out var selectorSignature) ||
+                !TryReadBoolean(type, config, "EnableAutoTarget", out var autoTargetEnabled))
+            {
+                return false;
+            }
+
+            configuration = new ReActionConfigurationSnapshot(
+                actionStackCount,
+                autoTargetEnabled,
+                selectorSignature,
+                actionSelectors);
+            return true;
+        }
+        catch
+        {
+            configuration = null!;
+            return false;
+        }
+    }
+
+    private static bool TryReadReActionConfigurationHeader(
+        object config,
+        out int actionStackCount,
+        out bool autoTargetEnabled)
+    {
+        actionStackCount = 0;
+        autoTargetEnabled = false;
         if (!string.Equals(
                 config.GetType().FullName,
                 "ReAction.Configuration",
@@ -539,16 +700,8 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         }
 
         var type = config.GetType();
-        if (!TryReadCollectionCount(type, config, "ActionStacks", out var actionStackCount) ||
-            !TryReadBoolean(type, config, "EnableAutoTarget", out var autoTargetEnabled))
-        {
-            return false;
-        }
-
-        configuration = new ReActionConfigurationSnapshot(
-            actionStackCount,
-            autoTargetEnabled);
-        return true;
+        return TryReadCollectionCount(type, config, "ActionStacks", out actionStackCount) &&
+               TryReadBoolean(type, config, "EnableAutoTarget", out autoTargetEnabled);
     }
 
     private static bool IsLiveReActionProfileCurrent(
@@ -558,8 +711,36 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         if (expected is null) return true;
         return weak is not null &&
             weak.TryGetTarget(out var configuration) &&
-            TryReadReActionConfigurationObject(configuration, out var current) &&
-            current == expected.Value;
+            TryReadReActionConfigurationHeader(
+                configuration,
+                out var actionStackCount,
+                out var autoTargetEnabled) &&
+            actionStackCount == expected.ActionStackCount &&
+            autoTargetEnabled == expected.AutoTargetEnabled;
+    }
+
+    private static bool TryCaptureLiveReActionExactProfile(
+        ReActionConfigurationSnapshot? expected,
+        WeakReference<object>? weak,
+        out ReActionConfigurationSnapshot? current)
+    {
+        current = null;
+        if (expected is null) return true;
+        if (weak is null ||
+            !weak.TryGetTarget(out var configuration) ||
+            !TryReadReActionConfigurationObject(configuration, out var captured) ||
+            captured.ActionStackCount != expected.ActionStackCount ||
+            captured.AutoTargetEnabled != expected.AutoTargetEnabled ||
+            !string.Equals(
+                captured.ActionSelectorSignature,
+                expected.ActionSelectorSignature,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        current = captured;
+        return true;
     }
 
     private bool TryCaptureMOActionOwnership(
@@ -637,6 +818,93 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         }
     }
 
+    private static bool TryReadReActionActionStackSelectors(
+        Type configType,
+        object config,
+        out int actionStackCount,
+        out ReActionActionSelector[] selectors,
+        out string selectorSignature)
+    {
+        actionStackCount = 0;
+        selectors = [];
+        selectorSignature = string.Empty;
+        var field = configType.GetField(
+            "ActionStacks",
+            BindingFlags.Public | BindingFlags.Instance);
+        if (field?.GetValue(config) is not IEnumerable stacks) return false;
+
+        if (stacks is ICollection stackCollection &&
+            stackCollection.Count > MaximumReActionStackSelectors)
+        {
+            return false;
+        }
+
+        var captured = new List<ReActionActionSelector>();
+        foreach (var stack in stacks)
+        {
+            if (stack is null ||
+                ++actionStackCount > MaximumReActionStackSelectors ||
+                !string.Equals(
+                    stack.GetType().FullName,
+                    "ReAction.Configuration+ActionStack",
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var actionsField = stack.GetType().GetField(
+                "Actions",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (actionsField?.GetValue(stack) is not IEnumerable actions)
+                return false;
+
+            foreach (var action in actions)
+            {
+                if (action is null ||
+                    captured.Count >= MaximumReActionStackSelectors ||
+                    !string.Equals(
+                        action.GetType().FullName,
+                        "ReAction.Configuration+Action",
+                        StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var actionType = action.GetType();
+                var idField = actionType.GetField(
+                    "ID",
+                    BindingFlags.Public | BindingFlags.Instance);
+                var adjustedField = actionType.GetField(
+                    "UseAdjustedID",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (idField?.FieldType != typeof(uint) ||
+                    idField.GetValue(action) is not uint actionId ||
+                    adjustedField?.FieldType != typeof(bool) ||
+                    adjustedField.GetValue(action) is not bool useAdjustedActionId)
+                {
+                    return false;
+                }
+
+                captured.Add(new ReActionActionSelector(
+                    actionStackCount - 1,
+                    actionId,
+                    useAdjustedActionId));
+            }
+        }
+
+        if (stacks is ICollection exactCollection &&
+            exactCollection.Count != actionStackCount)
+        {
+            return false;
+        }
+
+        selectors = captured.ToArray();
+        selectorSignature = CreateReActionActionSelectorSignature(
+            actionStackCount,
+            selectors);
+        return true;
+    }
+
     private static bool TryReadCollectionCount(
         Type configType,
         object config,
@@ -671,6 +939,74 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
             return false;
         count = typedCount;
         return true;
+    }
+
+    private static unsafe bool TryDetermineReActionExactSelfActionOwnership(
+        ReActionConfigurationSnapshot? configuration,
+        uint requestedActionId,
+        uint resolvedActionId,
+        out bool ownsExactAction,
+        out string reason)
+    {
+        ownsExactAction = false;
+        reason = string.Empty;
+        if (configuration is null) return true;
+
+        try
+        {
+            ActionManager* actionManager = null;
+            foreach (var selector in configuration.ActionSelectors)
+            {
+                // ReAction uses zero as its explicit all-actions selector.
+                if (selector.ActionId == 0)
+                {
+                    ownsExactAction = true;
+                    return true;
+                }
+
+                // ReAction's 1/2 selectors cover hostile and party/alliance
+                // target actions respectively. This boundary is callable only
+                // for reviewed self-only movement actions, so neither category
+                // can select the action.
+                if (selector.ActionId is 1 or 2) continue;
+
+                var selectedActionId = selector.ActionId;
+                if (selector.UseAdjustedActionId)
+                {
+                    if (actionManager == null)
+                        actionManager = ActionManager.Instance();
+                    if (actionManager == null)
+                    {
+                        reason = "Native adjusted-action lookup is unavailable";
+                        return false;
+                    }
+
+                    selectedActionId = actionManager->GetAdjustedActionId(
+                        selector.ActionId);
+                    if (selectedActionId == 0)
+                    {
+                        reason = "A ReAction adjusted action selector could not be resolved";
+                        return false;
+                    }
+                }
+
+                if (selectedActionId != requestedActionId &&
+                    selectedActionId != resolvedActionId)
+                {
+                    continue;
+                }
+
+                ownsExactAction = true;
+                return true;
+            }
+
+            return true;
+        }
+        catch
+        {
+            reason = "ReAction exact action ownership became unreadable";
+            return false;
+        }
     }
 
     private static bool TryReadBoolean(
@@ -736,6 +1072,21 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         return "Compatibility profile blocks generic buffer replay";
     }
 
+    private static string DescribeExactSelfActionBlock(
+        SmartActionBufferCompatibilityInput input,
+        bool reActionOwnsExactAction)
+    {
+        if (!input.AssessmentAvailable) return "Compatibility assessment unavailable";
+        if (input.Quarantined) return "Compatibility profile is in one-frame quarantine";
+        if (input.ReActionProfile == SmartActionBufferReActionProfile.LoadedUnknown)
+            return "Loaded ReAction profile is not audited";
+        if (reActionOwnsExactAction)
+            return "A ReAction Action Stack owns the exact self action";
+        if (input.MOActionLoaded && !input.MOActionOwnershipPublished)
+            return "MOAction ownership IPC is unavailable or unaudited";
+        return "Compatibility profile blocks the exact reviewed self action";
+    }
+
     private static string DescribeAssessment(CompatibilityAssessment current)
     {
         var allowed = SmartActionBufferCompatibilityRules.AllowsMutation(
@@ -775,6 +1126,31 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
+    private static string CreateReActionActionSelectorSignature(
+        int actionStackCount,
+        ReActionActionSelector[] selectors)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> countBytes = stackalloc byte[sizeof(int)];
+        BitConverter.TryWriteBytes(countBytes, actionStackCount);
+        hash.AppendData(countBytes);
+
+        Span<byte> selectorBytes = stackalloc byte[(sizeof(int) * 2) + 1];
+        foreach (var selector in selectors)
+        {
+            BitConverter.TryWriteBytes(
+                selectorBytes[..sizeof(int)],
+                selector.StackIndex);
+            BitConverter.TryWriteBytes(
+                selectorBytes.Slice(sizeof(int), sizeof(uint)),
+                selector.ActionId);
+            selectorBytes[^1] = selector.UseAdjustedActionId ? (byte)1 : (byte)0;
+            hash.AppendData(selectorBytes);
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
     private static string Bound(string value) =>
         string.IsNullOrWhiteSpace(value)
             ? "No compatibility detail"
@@ -785,9 +1161,16 @@ internal sealed class IntegratedActionBufferCompatibilityService : IDisposable
     private static long SaturatingAdd(long left, int right) =>
         left > long.MaxValue - right ? long.MaxValue : left + right;
 
-    private readonly record struct ReActionConfigurationSnapshot(
+    private readonly record struct ReActionActionSelector(
+        int StackIndex,
+        uint ActionId,
+        bool UseAdjustedActionId);
+
+    private sealed record ReActionConfigurationSnapshot(
         int ActionStackCount,
-        bool AutoTargetEnabled);
+        bool AutoTargetEnabled,
+        string ActionSelectorSignature,
+        ReActionActionSelector[] ActionSelectors);
 
     private readonly record struct CompatibilityAssessment(
         bool Available,

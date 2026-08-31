@@ -759,20 +759,9 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 return;
             }
 
-            if (!actionBuffer.CanDispatchExactExternalAction(
-                    profile.ActionId,
-                    adjustedActionId,
-                    out var compatibilityReason))
-            {
-                TryRestoreHeading(nativeLocal, originalHeading);
-                facingWritten = false;
-                RecordRefused($"{command} foreign action ownership blocked: {compatibilityReason}");
-                return;
-            }
-
-            lock (diagnosticsGate) lastDirectionalCompatibilityPassed = true;
-
             bool accepted;
+            var compatibilityPassed = false;
+            var compatibilityReason = string.Empty;
             try
             {
                 using var rotationOverride = EnterDirectionalRotationOverride(
@@ -783,16 +772,32 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(
                     profile.ActionId,
                     ExplicitAutoGuardBreakBoundary.StandardAction);
-                lock (diagnosticsGate) attemptCount++;
-                nativeBoundaryEntered = true;
-                accepted = nearAssist.RunWithoutRedirect(() =>
-                    actionManager->UseAction(
+                if (!actionBuffer.CanDispatchExactReviewedSelfAction(
+                        profile.ActionId,
+                        adjustedActionId,
+                        out compatibilityReason))
+                {
+                    accepted = false;
+                }
+                else
+                {
+                    compatibilityPassed = true;
+                    lock (diagnosticsGate)
+                    {
+                        lastDirectionalCompatibilityPassed = true;
+                        attemptCount++;
+                    }
+
+                    nativeBoundaryEntered = true;
+                    accepted = nearAssist.RunWithoutRedirect(() =>
+                        actionManager->UseAction(
                         ActionType.Action,
                         profile.ActionId,
                         local.GameObjectId,
                         0,
                         ActionManager.UseActionMode.None,
                         0));
+                }
             }
             catch (Exception exception)
             {
@@ -825,6 +830,14 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                     "Seiton Sense immediate {Command} {ActionName} native call failed.",
                     command,
                     profile.Name);
+                return;
+            }
+
+            if (!compatibilityPassed)
+            {
+                TryRestoreHeading(nativeLocal, originalHeading);
+                facingWritten = false;
+                RecordRefused($"{command} foreign action ownership blocked: {compatibilityReason}");
                 return;
             }
 

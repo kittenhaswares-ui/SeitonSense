@@ -207,8 +207,8 @@ internal sealed partial class SettingsWindow
                 "keeps its exact 19.5-yalm ground point; the other jobs briefly align only character facing so their native " +
                 "forward/backward dash travels screen-back. During that one request, the frozen facing also wins over a " +
                 "later camera-relative dash rewrite from another plugin. That local-facing boundary activates only on " +
-                "your first enabled non-NIN command. ReAction camera-relative-only is allowed; ReAction action/target " +
-                "rewrites or MOAction ownership of the dash fail closed. " +
+                "your first enabled non-NIN command. ReAction camera-relative behavior, Auto Target, and unrelated " +
+                "Action Stacks are allowed; wildcard/exact stack selectors or MOAction ownership of the dash fail closed. " +
                 "It has no queue, pending lease, retry, fallback, or later replay.");
             ImGui.Spacing();
             ImGui.TextUnformatted("DNC current-movement macro:");
@@ -216,9 +216,10 @@ internal sealed partial class SettingsWindow
             ImGui.TextDisabled(
                 "DNC-only. While your character is already moving, this makes one immediate En Avant along the " +
                 "fresh world-space path you are actually running: forward, backward, strafe, or diagonal. It uses " +
-                "two recent consistent movement segments and processed locomotion state, so keyboard remaps, " +
-                "Standard/Legacy movement, and autorun do not need physical-key guesses. The controller path uses " +
-                "the same processed status but remains live-test pending. Stationary, stale, discontinuous, forced, " +
+                "fresh actual character displacement instead of requiring a MOVE signal on the exact macro frame. " +
+                "Slow analog movement can accumulate into a real heading, while tiny positional jitter is rejected. " +
+                "Keyboard remaps and Standard/Legacy movement therefore need no physical-key guesses. Controller " +
+                "and autorun behavior remain live-test pending. Stationary, stale, discontinuous, forced, " +
                 "or identity-changing movement fails closed with no camera direction, actor-facing, or target fallback. " +
                 "The command shares /seitonbw's exact readiness, compatibility, own-Guard, and one-call boundary.");
             ImGui.PopTextWrapPos();

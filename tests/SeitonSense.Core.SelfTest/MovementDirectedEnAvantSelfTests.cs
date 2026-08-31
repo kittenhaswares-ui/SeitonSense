@@ -150,6 +150,49 @@ internal static class MovementDirectedEnAvantSelfTests
         False(regressedClock.HasDirection, "regressed observation time breaks continuity");
     }
 
+    public static void SubThresholdAnalogFramesAccumulateWithoutManufacturingJitter()
+    {
+        var fingerprint = Fingerprint();
+        var state = MovementDirectedEnAvantRules.Observe(
+            MovementDirectedEnAvantState.Initial,
+            Sample(0f, 0f, 1_000));
+
+        for (var index = 1; index <= 7; index++)
+        {
+            state = MovementDirectedEnAvantRules.Observe(
+                state,
+                Sample(0f, index * 0.004f, 1_000 + (index * 16)));
+            False(
+                state.HasDirection,
+                "sub-threshold analog frames stay gated until enough reviewed distance accumulates");
+        }
+
+        state = MovementDirectedEnAvantRules.Observe(
+            state,
+            Sample(0f, 0.032f, 1_128));
+        True(state.HasDirection, "slow finite analog motion eventually proves a direction");
+        True(
+            MovementDirectedEnAvantRules.TryCapture(state, fingerprint, 1_128, out var snapshot),
+            "the accumulated analog direction is immediately capturable");
+        AngleNear(0f, snapshot.HeadingRadians, 0.0001f, "analog movement keeps its exact heading");
+
+        var jitter = MovementDirectedEnAvantRules.Observe(
+            MovementDirectedEnAvantState.Initial,
+            Sample(0f, 0f, 2_000));
+        var jitterPositions = new[] { 0.004f, 0f, -0.004f, 0f, 0.004f, 0f, -0.004f, 0f };
+        for (var index = 0; index < jitterPositions.Length; index++)
+        {
+            jitter = MovementDirectedEnAvantRules.Observe(
+                jitter,
+                Sample(0f, jitterPositions[index], 2_016 + (index * 16)));
+        }
+
+        False(jitter.HasDirection, "bounded sub-threshold jitter cannot manufacture movement");
+        False(
+            MovementDirectedEnAvantRules.TryCapture(jitter, fingerprint, 2_128, out _),
+            "bounded jitter exposes no dash direction");
+    }
+
     public static void TeleportAndNonFiniteSamplesFailClosed()
     {
         var fingerprint = Fingerprint();

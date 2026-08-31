@@ -15,6 +15,10 @@ internal sealed partial class SettingsWindow
             changed |= DrawWolvesDenRotationControls();
 
         ImGui.Separator();
+        if (ImGui.CollapsingHeader("CC medicine kits", ImGuiTreeNodeFlags.DefaultOpen))
+            changed |= DrawCrystallineConflictMedicineKitControls();
+
+        ImGui.Separator();
         if (ImGui.CollapsingHeader("PvP range helper", ImGuiTreeNodeFlags.DefaultOpen))
             changed |= DrawPvpRangeHelperControls();
 
@@ -107,6 +111,32 @@ internal sealed partial class SettingsWindow
                 "%.2f");
         }
 
+        return changed;
+    }
+
+    private bool DrawCrystallineConflictMedicineKitControls()
+    {
+        var changed = false;
+        changed |= Checkbox(
+            "Show countdown to the first medicine kits",
+            configuration.ShowCrystallineConflictMedicineKitCountdown,
+            value => configuration.ShowCrystallineConflictMedicineKitCountdown = value);
+        changed |= Checkbox(
+            "Experimental: show green beacons for detected medicine kits",
+            configuration.ShowCrystallineConflictMedicineKitBeacons,
+            value => configuration.ShowCrystallineConflictMedicineKitBeacons = value);
+        changed |= Slider(
+            "Medicine-kit overlay scale",
+            configuration.CrystallineConflictMedicineKitOverlayScale,
+            0.6f,
+            2f,
+            value => configuration.CrystallineConflictMedicineKitOverlayScale = value,
+            "%.2f x");
+        ImGui.TextDisabled(
+            "Public Crystalline Conflict only. The opening countdown follows the native 5:00 match timer. " +
+            "Localized ready-to-draw medicine-kit objects are checked only in Dalamud's bounded event-object slices " +
+            "at 10 Hz; the foreground beacon stays visible through terrain and never targets or uses anything. " +
+            "The exact live object fingerprint and claimable state still require one in-match validation.");
         return changed;
     }
 

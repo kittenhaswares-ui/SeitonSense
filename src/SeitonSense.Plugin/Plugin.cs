@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.8";
+    private const string CurrentReleaseVersion = "0.42.0.9";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -59,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NamePlateAnchorTracker namePlateAnchors;
     private readonly ResourceAuraAnchorTracker resourceAuraAnchors;
     private readonly LocalReachRingRenderer localReachRings;
+    private readonly CrystallineConflictMedicineKitRenderer medicineKits;
     private readonly TargetHighlightRenderer targetHighlights;
     private readonly OverlayRenderer overlay;
     private readonly LimitBreakNotificationRenderer limitBreakNotifications;
@@ -310,6 +311,12 @@ public sealed class Plugin : IDalamudPlugin
             clientState,
             objectTable,
             gameGui);
+        medicineKits = new CrystallineConflictMedicineKitRenderer(
+            configuration,
+            pluginInterface,
+            clientState,
+            objectTable,
+            gameGui);
         targetHighlights = new TargetHighlightRenderer(
             configuration,
             pluginInterface,
@@ -415,10 +422,11 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Added /seitonenavant: DNC can make one immediate En Avant along the direction the character is currently moving.",
-                "The direction comes from two fresh world-movement segments, so strafe, diagonals, remapped controls, and Standard or Legacy movement share one path.",
-                "The command uses the existing directional-dash opt-in and exact En Avant boundary. It never changes camera or target and has no queue, retry, or guessed fallback.",
-                "Configuration schema remains 48. Automated source and package checks pass; live cardinal, diagonal, and controller confirmation remains pending.",
+                "Fixed /seitonenavant so the command captures fresh actual character displacement instead of depending on a MOVE signal on the exact macro frame.",
+                "Slow controller or analog movement now accumulates until it forms a real heading; tiny positional jitter still produces no dash.",
+                "Unrelated ReAction Auto Target or Action Stacks no longer block a reviewed self dash; exact or wildcard ownership still fails closed.",
+                "Added public-CC medicine-kit cues: a first-spawn countdown plus optional green through-terrain beacons, with separate visibility toggles and scale.",
+                "The medicine-kit scan is read-only and bounded. Live confirmation of the current client's localized runtime objects and the En Avant paths remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,
@@ -756,6 +764,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         windowSystem.Draw();
         localReachRings.Draw();
+        medicineKits.Draw();
         targetHighlights.Draw();
         overlay.Draw();
         limitBreakNotifications.Draw();
@@ -911,6 +920,7 @@ public sealed class Plugin : IDalamudPlugin
                 var panic = panicShukuchi.Diagnostics;
                 var enAvantMovement = movementDirectedEnAvant.Diagnostics;
                 var instantLeave = crystallineConflictInstantLeave.Diagnostics;
+                var medicineKit = medicineKits.Diagnostics;
                 chatGui.Print(
                     $"[Seiton Sense] {tracker.Diagnostics.ToChatLine()}, native-anchors={overlay.NativeAnchorCount}, " +
                     $"resource-anchors={overlay.ResourceAuraAnchorCount}" +
@@ -995,6 +1005,7 @@ public sealed class Plugin : IDalamudPlugin
                     $"{opponentLimitBreakGauges.Diagnostics.ToChatLine()}");
                 chatGui.Print($"[Seiton Sense] smart-paean[{smartPaean.ToChatLine()}]");
                 chatGui.Print($"[Seiton Sense] {instantLeave.ToChatLine()}");
+                chatGui.Print($"[Seiton Sense] {medicineKit.ToChatLine()}");
                 chatGui.Print(
                     $"[Seiton Sense] ast-orbis[meta={personalStatus.AstrologianHarmonicOrbisMetadataVerified}," +
                     $"phase={astrologianOrbis.Phase},decision={astrologianOrbis.Decision}," +
