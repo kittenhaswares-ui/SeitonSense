@@ -6,9 +6,10 @@ cues, warnings, job helpers, Smart Action, and target highlights.
 Version 0.43.0.1 makes early action presses more forgiving. Tap-to-land can
 remember one supported out-of-range attack for 0–3000 ms (2200 ms by default),
 even after you release the key. It keeps the same action and target, supports
-safe single-target casts, and stops when you press something else, change
-target, use Guard, become crowd-controlled, die, or change area. It does not
-increase range or move your character.
+safe single-target casts, and also covers the visible `<t>` fallback of
+`/smartaction`. It stops when you press something else, change target, use
+Guard, become crowd-controlled, die, or change area. It does not increase range
+or move your character.
 
 PvP Sprint is also safer: pressing Sprint again no longer turns an active
 Sprint off by default. A separate optional Smart Sprint can use Sprint once
@@ -915,7 +916,7 @@ bounded explicit-false retry for its frozen direct Hiebsprung / Plunge `29092`
 Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD
   Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark
   Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo >
-  Emergency Teleport > pressure Sprint > event Kardia
+  Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia
 > event Monk**.
 
 ## Sage Smart Kardia after accepted Eukrasia
@@ -2000,13 +2001,16 @@ with the RDM fresh-Guard engage. Reset Defaults clears previews and restores
 every action, target-
 write, and party-visible communication master to off.
 
-Configuration schema 49 is current. It enables the adaptive response clock,
-sampled readiness-edge wakeups, strict critical-recovery occupied-queue path,
-and exact held chase buffer for fresh, upgraded, and Reset Defaults
-configurations. The latency-response helper defaults on for fresh/reset
-configurations while an existing opt-out is preserved during upgrade. Schema
-49 adds no profiler, traffic capture, position prediction, range extension, or
-direct native-queue write. Schema 48 added the separate default-off instant
+Configuration schema 50 is current. It replaces the held-only chase with the
+release-independent tap-to-land wait, protects active PvP Sprint from a second
+Sprint press by default, and adds the separate optional idle Smart Sprint.
+Smart Sprint measures action-bar activity; WASD, camera movement, and targeting
+do not reset it. Schema 49 enabled the adaptive response clock, sampled
+readiness-edge wakeups, strict critical-recovery occupied-queue path, and the
+original held chase buffer. The latency-response helper defaults on for
+fresh/reset configurations while an existing opt-out is preserved during
+upgrade. These helpers add no profiler, traffic capture, position prediction,
+range extension, or direct native-queue write. Schema 48 added the separate default-off instant
 public-CC leave option without changing local W/L capture or any action-helper
 opt-in. Schema 47 added default-on, read-only SMN/Chiten
 danger warnings and separate experimental opponent LB bars that remain off by
@@ -2439,10 +2443,11 @@ helpers, and the macro helpers with both normal macros and Turbo Hotbar should b
 rechecked in the relevant live PvP context after FFXIV, Dalamud, macro, network-
 event, or input-handling changes.
 
-For the current source, the exact 599-test Core registry and source checks pin
-configuration schema 49, the shared monotonic response clock and framework
+For the current source, the exact 605-test Core registry and source checks pin
+configuration schema 50, the shared monotonic response clock and framework
 epoch, true not-ready-to-ready wakeups, strict unchanged-queue critical recovery,
-the immutable one-shot held chase buffer, the default-off exact public-CC instant-leave state
+the immutable release-independent tap-to-land buffer, active-Sprint repeat
+protection, optional action-bar-idle Smart Sprint, the default-off exact public-CC instant-leave state
 machine and its single non-forced native request, the independent default-off automatic basic-shot
 cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata,
 automatic/keyless and legacy held Purify/Recuperate intent boundaries, the
@@ -2489,7 +2494,7 @@ Current scheduler verification uses **Purify > Smart Recuperate > automatic Guar
 Zantetsuken > NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
-(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia
+(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia
 > event Monk**. Twenty physical-hold
 option enable edges share the scheduler input. Held-action cast cancellation
 constructs sixteen reviewed request shapes across seventeen ordered selection

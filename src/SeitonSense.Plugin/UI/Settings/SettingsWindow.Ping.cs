@@ -61,7 +61,8 @@ internal sealed partial class SettingsWindow
             ImGui.TextDisabled(
                 "Default 2200 ms; set it to 0 to disable. When a supported attack misses only because the " +
                 "same target is out of range or sight, Seiton keeps trying that exact action briefly — even " +
-                "after you release the key. A new action, target change, Guard, crowd control, death, or area " +
+                "after you release the key. The visible <t> fallback of /smartaction can use the same wait. " +
+                "A new action, target change, Guard, crowd control, death, or area " +
                 "change cancels it. Supported single-target casts wait too, but never cancel another cast or " +
                 "turn toward a target you have switched away from.");
         }

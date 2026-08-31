@@ -320,8 +320,17 @@ $expectedSettingsRelativePaths = @(
     'Settings/SettingsWindow.Targets.cs',
     'Settings/SettingsWindow.Widgets.cs'
 )
+$settingsRootPrefix = $pluginUiRoot.TrimEnd([char[]]@('\', '/')) +
+    [System.IO.Path]::DirectorySeparatorChar
 $settingsRelativePaths = @($settingsSourceFiles | ForEach-Object {
-    [System.IO.Path]::GetRelativePath($pluginUiRoot, $_.FullName).Replace('\', '/')
+    $fullSettingsPath = [System.IO.Path]::GetFullPath($_.FullName)
+    if (-not $fullSettingsPath.StartsWith(
+            $settingsRootPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "SettingsWindow source escaped its expected root: $fullSettingsPath"
+    }
+
+    $fullSettingsPath.Substring($settingsRootPrefix.Length).Replace('\', '/')
 })
 $settingsLayoutDifference = @(
     Compare-Object -ReferenceObject $expectedSettingsRelativePaths -DifferenceObject $settingsRelativePaths
@@ -750,7 +759,7 @@ Assert-Literals $pluginSource @(
 if ($normalizedPluginForIntegratedInput -notmatch 'nearAssist\.Start\(\); personalStatus\.Start\(\); integratedInput\.Start\(\);' -or
     $normalizedPluginForIntegratedInput -notmatch 'integratedInput\.Dispose\(\);.*?criticalUtilityCoordination\.Dispose\(\);.*?nearAssist\.Dispose\(\);' -or
     $normalizedIntegratedInputRuntime -notmatch 'private IntegratedActionBufferDispatchResult DispatchBufferedAction\( IntegratedActionBufferDispatchRequest request\).*?if \(disposed \|\| Volatile\.Read\(ref started\) == 0 \|\| IsInternalPriorityClaimedFailClosed\(\)\).*?var replayIntent = new IntegratedBufferedReplayIntent\( request\.ActionType, request\.RequestedActionId, request\.ResolvedActionId, request\.TargetId, request\.RequiresSmartActionProtectionRecheck\); var replay = nearAssist\.RunExactBufferedReplay\( replayIntent, \(\) => actionManager->UseAction\( request\.ActionType, request\.RequestedActionId, request\.TargetId, request\.ExtraParam, request\.Mode, request\.ComboRouteId\)\); if \(!replay\.NativeBoundaryInvoked\) return IntegratedActionBufferDispatchResult\.NotInvoked;.*?ClientActionAttemptBoundaryRules\.Classify\( replay\.ClientReturnedAccepted, request\.ResolvedActionId, boundaryBefore, boundaryAfter\); return new IntegratedActionBufferDispatchResult\( NativeBoundaryInvoked: true, outcome\);' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'internal IntegratedBufferedReplayResult RunExactBufferedReplay\( IntegratedBufferedReplayIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| integratedBufferedReplayScope is not null\) return default;.*?var scope = new IntegratedBufferedReplayScope\(this, intent\); integratedBufferedReplayScope = scope; integratedBufferReplayDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new IntegratedBufferedReplayResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; integratedBufferReplayDepth--; integratedBufferedReplayScope = previousScope; \}' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'internal IntegratedBufferedReplayResult RunExactBufferedReplay\( IntegratedBufferedReplayIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| integratedBufferedReplayScope is not null\) return default;.*?var scope = new IntegratedBufferedReplayScope\(this, intent\); integratedBufferedReplayScope = scope; integratedBufferReplayDepth\+\+; actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new IntegratedBufferedReplayResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; integratedBufferReplayDepth--; integratedBufferedReplayScope = previousScope; \}' -or
     $normalizedNearAssistForIntegratedInput -notmatch 'TryCaptureSmartKardiaEukrasiaPreflight\( thisPtr, actionType, actionId, mode, targetId, forwardedTargetId, bypassRedirect, integratedBufferReplayDepth > 0, helperTokenConsumed, targetSuppressedByRedirect, out var smartKardiaPreflight\)') {
     throw 'PersonalStatus must publish critical priority before integrated input runs; both Turbo and final buffered dispatch must yield, and integrated hooks must dispose before their NearAssist/coordination dependencies.'
 }
@@ -793,12 +802,19 @@ Assert-Literals $integratedActionBufferRuntime @(
     'dispatching = true;'
 ) 'Immutable action, target/resolver, territory, instance, and one-shot dispatch freeze'
 if ($normalizedNearAssistForIntegratedInput -notmatch 'var integratedAttempt = IntegratedActionBufferAttempt\.None; if \(mode == ActionManager\.UseActionMode\.None && integratedRuntime\?\.TryGetActiveBufferRoot\( actionType, actionId, out var integratedHotbarRoot\) == true\).*?integratedAttempt = integratedRuntime\.ActionBuffer\.BeginExactStandardHotbarRoot\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, integratedHotbarRoot, handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
-    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedMacroInvocationMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'else if \(!bypassRedirect && integratedRuntime is not null && !handlingSmartTarget && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && IsCertifiedSmartActionTapMacroMode\(mode\) && IsExactCurrentHardTarget\(forwardedTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var macroTapGeneration\)\).*?BeginExactSmartActionMacroFallback\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, macroTapGeneration\);.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, targetId, extraParam, mode, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, hotbarRoot, requiresSmartActionProtectionRecheck\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var request = new IntegratedActionBufferDispatchRequest\( actionType, requestedActionId, resolvedActionId, visibleTargetId, extraParam, ActionManager\.UseActionMode\.None, comboRouteId, snapshot\.TerritoryId, snapshot\.InstanceFingerprint, snapshot\.Local\.GameObjectId, snapshot\.Local\.EntityId, snapshot\.Target, macroRoot, RequiresSmartActionProtectionRecheck: true\);' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var visibleHardTarget = ToActorIdentity\(targetManager\.Target\); if \(!IsSafeSnapshot\(snapshot\) \|\| snapshot\.Target\.ExplicitTarget == IntegratedActionBufferActorIdentity\.Empty \|\| visibleHardTarget != snapshot\.Target\.ExplicitTarget\)' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'var current = CaptureSnapshot\( runtime\.Request\.TargetId,.*?if \(!HasStableIdentity\(runtime\.Snapshot, current\) \|\| !ExplicitTargetStillExists\(runtime\.Snapshot\.Target\)\).*?SmartActionBufferCancelReason\.TargetChange') {
     throw 'The generic buffer and exact Smart Action fallback must freeze the final visible target at the sole Original boundary, retain every resolver/local/instance identity, normalize fallback replay to one protected direct action, and cancel rather than retarget or substitute.'
+}
+
+if ($normalizedNearAssistForIntegratedInput -notmatch 'private static bool IsCertifiedSmartActionTapMacroMode\( ActionManager\.UseActionMode mode\) => mode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)mode == 100;' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'internal IntegratedActionBufferAttempt BeginExactSmartActionMacroFallback\(.*?var macroMode = sourceMode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)sourceMode == 100; if \(!macroMode \|\| sourceMode == ActionManager\.UseActionMode\.Queue\) return IntegratedActionBufferAttempt\.None;' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'internal bool ShouldSuppressOwnedSmartActionMacroTail\(.*?var macroMode = sourceMode == ActionManager\.UseActionMode\.Macro \|\| \(uint\)sourceMode == 100; if \(!macroMode \|\| sourceMode == ActionManager\.UseActionMode\.Queue\) return false;' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'ShouldSuppressOwnedSmartActionMacroTail\( actionType, actionId, resolvedTailActionId, inspectedSmartActionTargetId, mode, safetyTapGeneration\)') {
+    throw 'Tap-to-land Smart Action ownership must require explicit Macro/raw-100 provenance at admission and tail suppression; mode None cannot reserve or suppress and therefore falls through to the newer-external-action cancellation path.'
 }
 
 # Pin all retained buffer/repeat/compatibility suites and the exact current
@@ -2627,7 +2643,7 @@ Assert-Literals $panicShukuchiService @(
     'BackwardDashRules.TryResolveActorFacing(',
     'ClientActionAttemptBoundaryRules.Classify(',
     'ExplicitAutoGuardBreakBoundary.StandardAction',
-    'nearAssist.RunWithoutRedirect(() =>',
+    'nearAssist.EnterUserAuthoredActionWithoutRedirect();',
     'actionManager->UseAction(',
     'ActionType.Action',
     'PanicShukuchiRules.ActionId',
@@ -2652,6 +2668,7 @@ $backwardDirectional = $backwardDirectionalMatch.Value
 $normalizedBackwardDirectional = $backwardDirectional -replace '\s+', ' '
 if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '(?<!Location)\bUseAction\s*\(').Count -ne 1 -or
+    [regex]::Matches($panicShukuchiService, '\bEnterUserAuthoredActionWithoutRedirect\s*\(').Count -ne 2 -or
     [regex]::Matches($panicShukuchiService, '\bRaycastMaterialFilter\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bGetActiveCamera\s*\(').Count -ne 1 -or
     [regex]::Matches($panicShukuchiService, '\bTryCreateBackwardCameraProbe\s*\(').Count -ne 2 -or
@@ -2668,7 +2685,7 @@ if ([regex]::Matches($panicShukuchiService, '\bUseActionLocation\s*\(').Count -n
 }
 if ($normalizedPanicShukuchiService -notmatch 'private void SetRotationDetour\(GameObject\* actor, float requestedHeading\).*?var scope = Volatile\.Read\(ref directionalRotationOverride\);.*?BackwardDashRules\.ShouldOverrideRotation\( scope\.Lease, Environment\.CurrentManagedThreadId, \(ulong\)\(nuint\)actor, actor->EntityId\).*?effectiveHeading = scope\.Lease\.DesiredActorHeading;.*?setRotationHook!\.Original\(actor, effectiveHeading\);' -or
     $normalizedPanicShukuchiService -notmatch 'internal void Start\(\) \{ if \(started \|\| disposed\) return; started = true; \}.*?private bool EnsureDirectionalRotationHookEnabled\(\).*?if \(!started \|\| disposed \|\| setRotationHook is null\) return false;.*?if \(setRotationHook\.IsEnabled\) return true;.*?setRotationHook\.Enable\(\);.*?return setRotationHook\.IsEnabled;' -or
-    $normalizedPanicShukuchiService -notmatch 'using var rotationOverride = EnterDirectionalRotationOverride\(.*?using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\(.*?actionBuffer\.CanDispatchExactReviewedSelfAction\( profile\.ActionId, adjustedActionId, out compatibilityReason\).*?accepted = false;.*?nativeBoundaryEntered = true; accepted = nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?\)\);.*?if \(!compatibilityPassed\).*?RecordRefused\(\$"\{command\} foreign action ownership blocked: \{compatibilityReason\}"\);' -or
+    $normalizedPanicShukuchiService -notmatch 'using var rotationOverride = EnterDirectionalRotationOverride\(.*?using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\(.*?actionBuffer\.CanDispatchExactReviewedSelfAction\( profile\.ActionId, adjustedActionId, out compatibilityReason\).*?accepted = false;.*?nativeBoundaryEntered = true; using var userAuthoredAction = nearAssist\.EnterUserAuthoredActionWithoutRedirect\(\); accepted = actionManager->UseAction\(.*?\);.*?if \(!compatibilityPassed\).*?RecordRefused\(\$"\{command\} foreign action ownership blocked: \{compatibilityReason\}"\);' -or
     $panicShukuchiService -match '\bCanDispatchExactExternalAction\b' -or
     $normalizedPanicShukuchiService -notmatch 'private IDisposable EnterDirectionalRotationOverride\( GameObject\* local, uint localEntityId, uint actionId, float desiredActorHeading\).*?setRotationHook\?\.IsEnabled != true.*?new BackwardDashRotationOverrideLease\( Environment\.CurrentManagedThreadId, actionId, \(ulong\)\(nuint\)local, localEntityId, desiredActorHeading\).*?Interlocked\.CompareExchange\( ref directionalRotationOverride, scope, comparand: null\) is not null.*?return scope;' -or
     $normalizedPanicShukuchiService -notmatch 'public void Dispose\(\).*?Interlocked\.Exchange\(ref directionalRotationOverride, null\)\?\.Retire\(\); setRotationHook\?\.Dispose\(\);') {
@@ -2685,7 +2702,7 @@ if ([regex]::Matches($backwardDirectional, '(?<!Location)\bUseAction\s*\(').Coun
     [regex]::Matches($panicShukuchiService, '\bExecuteBackwardDirectional\s*\(').Count -ne 3 -or
     $normalizedBackwardDirectional -notmatch 'var movementDirected = movementSnapshot\.HasValue; var command = movementDirected \? MovementEnAvantCommand : BackwardCameraCommand;.*?TryGetDirectionalProfile\(localJobId, out var profile\).*?if \(movementDirected && \(profile\.JobId != BackwardDashRules\.DancerJobId \|\| profile\.ActionId != MovementDirectedEnAvantRules\.ActionId\)\).*?backwardDashMetadata\.Contains\(profile\.ActionId\)' -or
     $normalizedBackwardDirectional -notmatch 'if \(movementDirected\).*?MovementDirectedEnAvantRules\.MatchesCurrentIdentity\( snapshot, clientState\.TerritoryType, \(ulong\)\(nuint\)local\.Address, local\.GameObjectId, local\.EntityId, localJobId\) \|\| !MovementDirectedEnAvantRules\.IsFreshSnapshot\( snapshot, Environment\.TickCount64\).*?requestedWorldHeading = snapshot\.HeadingRadians;.*?else.*?CaptureBackwardCameraObservation\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\( origin, cameraObservation, out requestedWorldHeading, out _\).*?BackwardDashRules\.TryResolveActorFacing\( requestedWorldHeading, profile\.MovementKind, out var desiredActorHeading\)' -or
-    $normalizedBackwardDirectional -notmatch 'GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?movementDirected && \(!MovementDirectedEnAvantRules\.MatchesCurrentIdentity\( movementSnapshot!\.Value, clientState\.TerritoryType, \(ulong\)\(nuint\)finalLocal\.Address, finalLocal\.GameObjectId, finalLocal\.EntityId, finalLocal\.ClassJob\.RowId\) \|\| !MovementDirectedEnAvantRules\.IsFreshSnapshot\( movementSnapshot\.Value, Environment\.TickCount64\)\).*?EnterDirectionalRotationOverride\( nativeLocal, local\.EntityId, profile\.ActionId, desiredActorHeading\);.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?nearAssist\.RunWithoutRedirect\(\(\) => actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
+    $normalizedBackwardDirectional -notmatch 'GetAdjustedActionId\(profile\.ActionId\).*?GetCurrentCharges\(profile\.ActionId\).*?GetActionStatus\(.*?nativeLocal->SetRotation\(desiredActorHeading\);.*?AreHeadingsEquivalent\(.*?var before = ClientActionAttemptBoundary\.Capture\(.*?movementDirected && \(!MovementDirectedEnAvantRules\.MatchesCurrentIdentity\( movementSnapshot!\.Value, clientState\.TerritoryType, \(ulong\)\(nuint\)finalLocal\.Address, finalLocal\.GameObjectId, finalLocal\.EntityId, finalLocal\.ClassJob\.RowId\) \|\| !MovementDirectedEnAvantRules\.IsFreshSnapshot\( movementSnapshot\.Value, Environment\.TickCount64\)\).*?EnterDirectionalRotationOverride\( nativeLocal, local\.EntityId, profile\.ActionId, desiredActorHeading\);.*?EnterExplicitAutoGuardBreak\( profile\.ActionId, ExplicitAutoGuardBreakBoundary\.StandardAction\).*?EnterUserAuthoredActionWithoutRedirect\(\); accepted = actionManager->UseAction\(.*?ClientActionAttemptBoundaryRules\.Classify\(.*?if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?TryRestoreHeading\(nativeLocal, originalHeading\);') {
     throw 'The generalized directional boundary must freeze one reviewed base action, admit /seitonenavant only for an exact fresh identity-bound DNC En Avant snapshot, otherwise require the reviewed camera path, make exactly one shared self-action call, and restore facing only on a proven clean rejection.'
 }
 $panicDecisionIndex = $panicShukuchiService.IndexOf(
@@ -2700,7 +2717,7 @@ $panicNativeCallIndex = $panicShukuchiService.IndexOf(
 if ($panicDecisionIndex -lt 0 -or $panicAttemptCountIndex -lt 0 -or
     $panicNativeCallIndex -lt 0 -or $panicDecisionIndex -ge $panicAttemptCountIndex -or
     $panicAttemptCountIndex -ge $panicNativeCallIndex -or
-    ($panicImmediate -replace '\s+', ' ') -notmatch 'private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?var adjustedActionId = actionManager->GetAdjustedActionId\( PanicShukuchiRules\.ActionId\);.*?var readiness = ClientActionAttemptBoundary\.Capture\(.*?var recastGroup = actionManager->GetRecastGroup\(.*?recast->IsActive.*?GetAdjustedRecastTime\(.*?ExpectedAdjustedRecastMilliseconds.*?if \(mode == DestinationMode\.CharacterFacingForward\).*?CaptureBackwardCameraObservation\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\(.*?BGCollisionModule\.RaycastMaterialFilter\(.*?var decision = PanicShukuchiRules\.Evaluate\(.*?if \(mode == DestinationMode\.CameraFacingBackward && !configuration\.EnableBackwardPanicShukuchiCommand\).*?lock \(diagnosticsGate\) attemptCount\+\+; bool accepted; try \{ using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\( PanicShukuchiRules\.ActionId\); accepted = actionManager->UseActionLocation\(') {
+    ($panicImmediate -replace '\s+', ' ') -notmatch 'private unsafe void ExecuteImmediate\(string arguments, DestinationMode mode\).*?var adjustedActionId = actionManager->GetAdjustedActionId\( PanicShukuchiRules\.ActionId\);.*?var readiness = ClientActionAttemptBoundary\.Capture\(.*?var recastGroup = actionManager->GetRecastGroup\(.*?recast->IsActive.*?GetAdjustedRecastTime\(.*?ExpectedAdjustedRecastMilliseconds.*?if \(mode == DestinationMode\.CharacterFacingForward\).*?CaptureBackwardCameraObservation\(\).*?BackwardPanicShukuchiRules\.TryCreateBackwardCameraProbe\(.*?BGCollisionModule\.RaycastMaterialFilter\(.*?var decision = PanicShukuchiRules\.Evaluate\(.*?if \(mode == DestinationMode\.CameraFacingBackward && !configuration\.EnableBackwardPanicShukuchiCommand\).*?lock \(diagnosticsGate\) attemptCount\+\+; bool accepted; try \{ using var explicitGuardBreak = nearAssist\.EnterExplicitAutoGuardBreak\( PanicShukuchiRules\.ActionId\); using var userAuthoredAction = nearAssist\.EnterUserAuthoredActionWithoutRedirect\(\); accepted = actionManager->UseActionLocation\(') {
     throw 'Both explicit Panic Shukuchi commands must share one synchronous readiness, exact geometry, terrain, accounting, Guard-release, and native location boundary.'
 }
 
@@ -5154,6 +5171,8 @@ if ($normalizedPurifyProbe -notmatch 'UseAction\s*\(\s*ActionType\.Action\s*,\s*
     throw 'Purify must use ActionType.Action, the verified Purify constant, the local player GameObjectId, and UseActionMode.None.'
 }
 Assert-Literals $purifyProbe @(
+    'private readonly NearAssistRedirector nearAssist;',
+    'this.nearAssist = nearAssist ??',
     'EmergencyPurifyBufferRules.Observe',
     'EmergencyPurifyBufferRules.ClaimsSchedulerPriority(',
     'EmergencyPurifyBufferRules.ApplyNativeAttemptOutcome(',
@@ -5168,6 +5187,9 @@ Assert-Literals $purifyProbe @(
     'criticalBoundary.IsCriticalRecoveryActionReady(',
     'HeldActionRetryRules.IsNativeBoundaryNearQueueable(',
     'ClientActionAttemptBoundary.Capture(',
+    'nearAssist.RunExactAutomaticActionWithoutRedirect(',
+    'new ExactAutomaticActionBoundaryIntent(',
+    'attempted = invocation.NativeBoundaryInvoked;',
     'ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(',
     'ClientActionAttemptBoundaryRules.BecameCriticalRecoveryReady(',
     'Purify waiting without spending retry budget',
@@ -5219,8 +5241,9 @@ if (-not $tryUsePurify.Success -or
     $tryUsePurify.Groups['Body'].Value -match 'return ClientActionAttemptOutcome\.NotInvoked;' -or
     [regex]::Matches(
         $tryUsePurify.Groups['Body'].Value,
-        'return ClientActionAttemptOutcome\.SoftUnavailable;').Count -ne 6) {
-    throw 'Emergency Purify pre-native validation must retain the exact CC episode as one of six budget-free SoftUnavailable waits; only a crossed native boundary may spend or terminate it.'
+        'return ClientActionAttemptOutcome\.SoftUnavailable;').Count -ne 8 -or
+    $normalizedPurifyProbe -notmatch 'var boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, EnemyCombatConstants\.PurifyActionId\); Exception\? nativeException = null; var invocation = nearAssist\.RunExactAutomaticActionWithoutRedirect\( new ExactAutomaticActionBoundaryIntent\( ActionType\.Action, EnemyCombatConstants\.PurifyActionId, localPlayer\.GameObjectId, ActionManager\.UseActionMode\.None\), \(\) => \{ try \{ return actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.PurifyActionId, localPlayer\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); \} catch \(Exception exception\) \{ nativeException = exception; return false; \} \}\); attempted = invocation\.NativeBoundaryInvoked; if \(nativeException is not null\) \{ if \(!attempted\) return ClientActionAttemptOutcome\.SoftUnavailable; throw nativeException; \} if \(!attempted\) return ClientActionAttemptOutcome\.SoftUnavailable; return ClientActionAttemptBoundaryRules\.ClassifyCriticalRecovery\( invocation\.ClientReturnedAccepted, EnemyCombatConstants\.PurifyActionId, boundaryBefore,') {
+    throw 'Emergency Purify pre-native validation and exact automatic hook ownership must retain the exact CC episode through eight budget-free SoftUnavailable exits; only NativeBoundaryInvoked may classify, spend, or terminate it.'
 }
 Assert-Literals $ninjaShukuchiStealthGate @(
     'internal sealed class NinjaShukuchiHiddenStatusCatalog',
@@ -6708,12 +6731,12 @@ if ($normalizedDefensiveUtility -notmatch 'var guardActionSpecificallyReady = gu
     throw 'Automatic Guard must fail closed before dispatch unless both central protection hooks are enabled.'
 }
 if ($normalizedNearAssistAutoGuard -notmatch 'internal bool CanProtectAutomaticGuard => !disposed && started && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true;' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?var forwardedTargetId' -or
-    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0;.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.StandardAction\)\).*?ClearAutoGuardProtection\("Released: explicit camera-back dash command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?var forwardedTargetId' -or
+    $normalizedNearAssistAutoGuard -notmatch 'private bool UseActionLocationDetour\(.*?var bypassRedirect = internalRedirectBypassDepth > 0; if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(!bypassRedirect && integratedInputRuntime is \{ \} integratedRuntime && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ integratedRuntime\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer external location action request"\); \}.*?if \(TryConsumeExplicitAutoGuardBreak\( actionType, actionId, ExplicitAutoGuardBreakBoundary\.LocationAction\)\).*?ClearAutoGuardProtection\("Released: explicit Panic Shukuchi command override"\);.*?else if \(TryBlockOwnedAutoGuardCancellation\(thisPtr, actionType, actionId\)\).*?return false;.*?return useActionLocationHook!\.Original' -or
     $normalizedNearAssistAutoGuard -notmatch 'private bool TryConsumeExplicitAutoGuardBreak\( ActionType actionType, uint actionId, ExplicitAutoGuardBreakBoundary boundary\).*?var scope = Volatile\.Read\(ref explicitAutoGuardBreakScope\); if \(scope is null \|\| !ReferenceEquals\(scope\.Owner, this\) \|\| scope\.ManagedThreadId != Environment\.CurrentManagedThreadId \|\| scope\.Boundary != boundary \|\| actionType != ActionType\.Action \|\| actionId != scope\.ExpectedActionId \|\| !scope\.TryConsume\(\)\).*?return false;.*?return ReferenceEquals\( Interlocked\.CompareExchange\( ref explicitAutoGuardBreakScope, value: null, comparand: scope\), scope\);' -or
     $normalizedNearAssistAutoGuard -notmatch 'private static bool IsSupportedActionType\(ActionType actionType\) => actionType is ActionType\.Action or ActionType\.PvPAction;' -or
     $normalizedNearAssistAutoGuard -notmatch 'var explicitGuardReuse = supportedActionType && \(actionId == EnemyCombatConstants\.GuardActionId \|\| resolvedActionId == EnemyCombatConstants\.GuardActionId\);.*?var actionCanCancelGuard = supportedActionType && resolvedActionId != 0 && TryGetActionMetadata\(.*?action\.IsPvP && !explicitGuardReuse;.*?ApplyAutoGuardProtectionObservation') {
-    throw 'Both central action boundaries must protect owned Auto-Guard before redirect tokens, allow raw/resolved Guard reuse, cover location calls, and fail open for unknown or non-PvP actions.'
+    throw 'Both central action boundaries must retire older tap intent and record external player activity before any owned-Guard veto, allow raw/resolved Guard reuse, cover location calls, and fail open for unknown or non-PvP actions.'
 }
 $runWithoutRedirectRegion = [regex]::Match(
     $normalizedNearAssistAutoGuard,
@@ -8674,7 +8697,7 @@ if ([regex]::Matches($pluginSource, '\bnew\s+CcImmunityBrakeService\s*\(').Count
 
 $useActionDetourMatch = [regex]::Match(
     $nearAssist,
-    '(?s)private bool UseActionDetour\(.*?\r?\n    \}\r?\n\r?\n    private ulong TryResolveRedirect')
+    '(?s)private bool UseActionDetour\(.*?\r?\n    \}\r?\n\r?\n    private CastedMacroRedirectDecision TryConsumeCastedMacroRedirect')
 if (-not $useActionDetourMatch.Success) {
     throw 'The shared UseAction detour could not be isolated for CC-brake ordering review.'
 }
@@ -8691,7 +8714,10 @@ if (-not $guardAttemptObserverMatch.Success) {
 }
 $guardAttemptObserver = $guardAttemptObserverMatch.Value
 $normalizedGuardAttemptObserver = $guardAttemptObserver -replace '\s+', ' '
-if ($normalizedUseActionDetour -notmatch 'var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\); if \(integratedBufferReplayDepth == 1 && integratedBufferedReplayScope is \{ Consumed: true \} replayScope && ReferenceEquals\(replayScope\.Owner, this\)\) \{ replayScope\.NativeBoundaryInvoked = true; \} bool clientAccepted; try \{ clientAccepted = useActionHook!\.Original\(.*?forwardedTargetId.*?\); \} catch \{ integratedRuntime\?\.ActionBuffer\.AbandonExactStandardHotbarRoot\( integratedAttempt, "Native action boundary threw; buffer observation retired"\); throw; \} if \(clientAccepted && actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) RecordActionBarActivity\(\); if \(localGuardBoundary\.IsObserved\) \{ var guardOutcome = ClientActionAttemptBoundaryRules\.Classify\( clientAccepted, EnemyCombatConstants\.GuardActionId, localGuardBoundary\.BoundaryBefore, ClientActionAttemptBoundary\.Capture\( thisPtr, EnemyCombatConstants\.GuardActionId\)\); if \(guardOutcome == ClientActionAttemptOutcome\.ClientRejected\) \{ TryRetractClientRejectedLocalGuardAttempt\( localGuardBoundary\.LocalGameObjectId, localGuardBoundary\.LocalEntityId, localGuardBoundary\.GenerationBeforeCall\); \} \}.*?CompleteExactStandardHotbarRoot\( thisPtr, integratedAttempt, clientAccepted\);.*?if \(clientAccepted && \(handlingSmartTarget \|\| smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe\)\) \{ ClearSmartActionSafetyLease\(\); \} smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\); if \(clientAccepted && hasSmartKardiaPreflight\) ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
+if ($normalizedUseActionDetour -notmatch 'var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?replayScope\.NativeBoundaryInvoked = true;.*?clientAccepted = useActionHook!\.Original\( thisPtr, actionType, actionId, forwardedTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted\);' -or
+    $normalizedUseActionDetour -notmatch 'catch \{ integratedRuntime\?\.ActionBuffer\.AbandonExactStandardHotbarRoot\( integratedAttempt, "Native action boundary threw; buffer observation retired"\); throw; \}' -or
+    $normalizedUseActionDetour -notmatch 'if \(localGuardBoundary\.IsObserved\).*?ClientActionAttemptBoundaryRules\.Classify\( clientAccepted, EnemyCombatConstants\.GuardActionId, localGuardBoundary\.BoundaryBefore, ClientActionAttemptBoundary\.Capture\( thisPtr, EnemyCombatConstants\.GuardActionId\)\);.*?TryRetractClientRejectedLocalGuardAttempt\( localGuardBoundary\.LocalGameObjectId, localGuardBoundary\.LocalEntityId, localGuardBoundary\.GenerationBeforeCall\);' -or
+    $normalizedUseActionDetour -notmatch 'CompleteExactStandardHotbarRoot\( thisPtr, integratedAttempt, clientAccepted\);.*?ClearSmartActionSafetyLease\(\);.*?smartWardensPaean\.RecordNativeResult\(smartPaeanResult, clientAccepted\);.*?ArmAcceptedSmartKardiaTrigger\(smartKardiaPreflight\); return clientAccepted;' -or
     $normalizedGuardAttemptObserver -notmatch 'ResolveActionId\(actionManager, actionType, actionId\) != EnemyCombatConstants\.GuardActionId.*?var local = objectTable\.LocalPlayer; if \(!IsLivePlayer\(local\) \|\| DefensiveUtilityProbe\.HasActiveGuard\(local\)\) return default; var boundaryBefore = ClientActionAttemptBoundary\.Capture\( actionManager, EnemyCombatConstants\.GuardActionId\); if \(!boundaryBefore\.Captured\) return default; var attempt = new LocalGuardActionAttempt\( clientState\.TerritoryType, local!\.GameObjectId, local\.EntityId, Environment\.TickCount64, 0\); lock \(guardAttemptGate\).*?var generationBeforeCall = localGuardActionAttemptGeneration; localGuardActionAttemptGeneration = localGuardActionAttemptGeneration == long\.MaxValue \? 1 : localGuardActionAttemptGeneration \+ 1; latestLocalGuardActionAttempt = attempt with \{ Generation = localGuardActionAttemptGeneration, \}; return new LocalGuardActionBoundaryObservation\( local\.GameObjectId, local\.EntityId, generationBeforeCall, boundaryBefore\);' -or
     $normalizedNearAssist -notmatch 'TryGetRecentExactLocalGuardAttempt\( uint territoryId, ulong localGameObjectId, uint localEntityId, long nowMilliseconds, long maximumAgeMilliseconds, out long observedAtMilliseconds\).*?attempt\.TerritoryId != territoryId \|\| attempt\.LocalGameObjectId != localGameObjectId \|\| attempt\.LocalEntityId != localEntityId.*?nowMilliseconds - attempt\.ObservedAtMilliseconds >= maximumAgeMilliseconds.*?observedAtMilliseconds = attempt\.ObservedAtMilliseconds; return true;') {
     throw 'The detour must observe exact Guard 29054 immediately before its sole Original and expose it only to the same live local identity in the same territory within the bounded age.'
@@ -9003,11 +9029,17 @@ Assert-Literals $nearAssist @(
     'var bypassRedirect = internalRedirectBypassDepth > 0',
     'if (!bypassRedirect &&'
 ) 'Near Help shared redirector'
-if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 8) {
-    throw 'Plugin-owned direct helper calls must bypass legacy Far Help suppression, Near Assist, Near Help, Far Help, passive Smart Paean, and the exact Smart Action final recheck without consuming a macro token or recursively transforming the plugin-owned action.'
+$useActionLocationDetourMatch = [regex]::Match(
+    $nearAssist,
+    '(?s)private bool UseActionLocationDetour\(.*?\r?\n    \}\r?\n\r?\n    private bool TryCaptureSmartKardiaEukrasiaPreflight')
+if (-not $useActionLocationDetourMatch.Success -or
+    [regex]::Matches($useActionDetour, 'if\s*\(!bypassRedirect\s*&&').Count -ne 11 -or
+    [regex]::Matches($useActionLocationDetourMatch.Value, 'if\s*\(!bypassRedirect\s*&&').Count -ne 1 -or
+    [regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*&&').Count -ne 12) {
+    throw 'Plugin-owned direct helper calls must bypass the eleven reviewed UseAction redirect/transform branches without consuming or recursively transforming a token, while the separately pinned UseActionLocation branch bypasses only external tap-reservation replacement for automatic/internal calls.'
 }
 if ([regex]::Matches($nearAssist, 'if\s*\(!bypassRedirect\s*\)').Count -ne 0) {
-    throw 'The redirect bypass may guard only the eight reviewed redirect/transform/safety branches; it must never wrap or skip the unconditional final CC brake or Auto-Guard protector.'
+    throw 'The redirect bypass may guard only the eleven reviewed UseAction branches plus the one external-location replacement branch; it must never wrap or skip the unconditional final CC brake or Auto-Guard protector.'
 }
 $nearHelpSelection = Read-RequiredSource (Join-Path $coreRoot 'NearHelpSelectionRules.cs') 'Near Help selection rules'
 $normalizedNearHelpSelection = $nearHelpSelection -replace '\s+', ' '
@@ -10675,69 +10707,62 @@ Assert-Literals $settingsWindow @(
     'Play local MP threshold sounds',
     '4,000 MP warning sound',
     '2,000 MP critical sound',
-    'A direct drop through both thresholds plays only the urgent 2,000-MP cue.',
+    'at once, only the urgent 2,000 MP sound plays.',
     'Show my LB ACTIVATED banner',
     'Show ally LB damage cards on the left',
-    'Show active enemy LB icons above exact native nameplates',
-    'unknown duration is never guessed.',
+    'Show active enemy LB icons above enemy nameplates',
+    'or duration, it shows nothing instead of guessing.',
     'Replace FFXIV''s forward Tab targeting with Smart Targeting',
-    'Toggle OFF is fully vanilla.',
-    'retry, rerank, or alternate target.',
+    'Turn it off for normal FFXIV targeting.',
+    'cycle from there. Smart Tab changes only your target; it never uses an action.',
     'Enable one-shot /nearassist, /nearhelp, and /farhelp targeting',
     'Enable optional /smartaction and /seitonfar harmful-action targeting',
     'Smart Action macro',
-    'optional harmful-action redirect',
+    'Smart Action chooses a safe enemy for your next attack. If it cannot find one, the macro uses your normal <t> target.',
     'Use /seitonfar instead of /smartaction to choose the farthest reachable safe enemy.',
-    '/smartaction or /seitonfar arms one 750 ms token',
-    'instead ranks every action-reachable safe enemy by farthest hitbox-edge distance, then stable S-slot.',
-    'invalidates that carrier and leaves the following <t> line as the only fallback.',
-    'Generic cast-time actions are never invisibly redirected.',
-    'A hidden <e1>/<2> carrier is suppressed, consumes',
-    'the one-shot token, and lets the following authored <t> fallback use your visible target;',
-    '<t> cast remains vanilla. Instant actions keep Smart Action targeting.',
-    'FFXIV''s delayed native auto-face turning you toward a',
-    'hidden target after you manually switch targets.',
+    'Crystalline Conflict only. Seiton chooses a living, reachable, safe enemy.',
+    'farthest safe enemy instead. Your visible target does not change.',
+    'Most cast-time attacks keep your visible target so FFXIV does not turn you unexpectedly.',
+    'attacks use Smart Action. Ogi Namikiri and Tendo Setsugekka are the supported cast exceptions.',
     'Use /autoseiton (or click the movable action-bar tile) to switch this availability ON/OFF.',
     'ON is fully automatic',
     'and needs no held or freshly pressed gameplay key.',
-    'If the frozen actor drifts',
-    'before any native request, no call was made and the still-open epoch may choose a new exact actor on the next frame.',
-    'Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian >',
-    'DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk.',
-    'The job-specific helpers use this deterministic order;',
+    'Each ready Seiton keeps one enemy and checks their HP and protection again before use.',
+    'to 50% HP or gain immunity, it stops. The Unsealed follow-up is a new chance.',
+    'Purify > Recuperate > automatic Guard > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi >',
+    'SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event',
+    'Kardia > event Monk.',
+    'The job-specific helpers use that deterministic order;',
     'Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent.',
-    'Smart Recuperate runs directly after Purify, automatic Guard follows recovery, AST follows defense, RDM follows AST, and SAM follows RDM;',
-    'Only Purify keeps priority over Smart Recuperate.',
-    'automatic Guard, then every later job helper, Emergency Teleport, and pressure Sprint',
-    'budget frozen from the current PvP latency-response setting (eight calls by default).',
-    'validation drift and temporary readiness/MP',
+    'AST runs directly after automatic recovery and Guard, then RDM and SAM,',
+    'and reactive stays before BRD/WHM cleanse because its windows are shorter.',
+    'One continuous physical hold may authorize later distinct exact held episodes, including Guard after',
+    'Purify; only one held native boundary is allowed per framework frame.',
+    'When a held helper is almost ready, Seiton keeps its action and target for this long and uses it',
+    'as soon as FFXIV allows it.',
+    'It does not increase range, move your character, or change the chosen action or target.',
     'Harmonischer Orbis + optional Zweifacher Zauber on held key (includes WASD)',
     'configuration.EnableAstrologianHarmonicOrbisOnHeldKey',
-    'Default off and PvP Astrologian only.',
-    'same exact friendly selection as /nearhelp',
-    '60% HP or lower.',
-    'No hard, soft, focus, or mouseover target is changed.',
-    'Harmonischer Orbis / Aspected Benefic (29243)',
-    'Zweifacher Zauber was already locally available before that Orbis',
-    'raw Double Cast carrier',
-    '(29245) only while that carrier resolves exactly to the adjusted Orbis repeat (29247)',
-    'raise the player above 60%; that does not rerank or cancel the planned repeat.',
-    'If Double Cast was not ready, the sequence deliberately ends after Orbis.',
-    'Purify remains absolute priority. Your own Guard suppresses the full sequence',
-    'cancelled by this helper or its optional cast-cancel path.',
-    'melee and ranged DPS jobs',
-    'Default off. Available in exact Crystalline Conflict and, only with the separate Wolves'' Den testing',
+    'Off by default and AST only. While you hold a gameplay key, Seiton uses Harmonischer Orbis on a',
+    'reachable party member at 60% HP or lower. It uses the same choice as /nearhelp and does not change',
+    'your selected or mouseover target.',
+    'If Double Cast was ready before Orbis, Seiton uses the second heal on the same player as soon as it',
+    'can. If Double Cast was not ready, it stops after Orbis. The second heal keeps the original player',
+    'even if the first heal raises them above 60%.',
+    'Purify stays first, and your Guard blocks the whole sequence.',
+    'attempt and stops if they become invalid or unreachable.',
+    'current cast only when Orbis is otherwise ready.',
+    'BRD, MCH, BLM, SMN, RDM, and PCT use 25 yalms. DNC uses 15 yalms.',
+    'Dead, untargetable, out-of-range,',
     'Use transformed Serpentiner Geist while a gameplay key is held (includes WASD)',
     'configuration.EnableViperSerpentTailOnHeldKey',
-    'checks FFXIV''s currently transformed Serpent''s Tail / Serpentiner Geist carrier (39183)',
-    'When FFXIV exposes one reviewed follow-up (39174-39182)',
-    'does not record, require, or try to prove a preceding Viper action.',
-    'Carrier 39183 itself is never dispatched.',
-    'Own Guard blocks it,',
-    'otherwise-ready native-boundary or retry-throttle wait keeps Viper''s priority.',
-    'deliberately unavailable. A clean client rejection',
-    'restricted to your exact current hard target (<t>): the live hostile duel opponent or the reviewed',
-    'striking dummy (NameId 541). Arbitrary NPCs and synthetic enemy slots are rejected.'
+    'Off by default and Viper only. While you hold a gameplay key, Seiton uses the currently available',
+    'Serpent''s Tail follow-up on Smart Action''s best reachable enemy.',
+    'unavailable Guard, and low MP. Your visible target does not change.',
+    'Purify stays first. Your Guard, Chiten, Covered, Paladin LB, or Dark Knight LB blocks it.',
+    'is allowed only for follow-ups that naturally deal damage through Guard.',
+    'your cast and keeps the same action and enemy for each attempt.',
+    'Works in CC. Wolves'' Den testing uses only your current duel target or a supported striking dummy.'
 ) 'Current AST Near Help, direct-carrier VPR, replacement LB, ranged Smart Tab, Den helpers, Auto-Seiton, and expanded priority Settings copy'
 if ($settingsWindow -match 'DrawCombatFramesPage|SettingsPage\.CombatFrames|Show fixed Combat Frames') {
     throw 'Retired Combat Frames must not retain a Settings page or runtime toggle.'
@@ -10804,25 +10829,17 @@ if ($settingsBindingFailures.Count -ne 0) {
 }
 Assert-Literals $settingsWindow @(
     'NATIVE FOCUS TARGET SETTER (OPT-IN)',
-    'Set an empty Focus Target to an exact enemy at 2,000 MP or lower',
+    'Set an empty Focus Target to an enemy at 2,000 MP or lower',
     'configuration.EnableAutoLowMpFocusTarget',
-    'Default off and exact Crystalline Conflict only',
-    'complete unique native S1-S5 view',
-    '150 ms of trusted MP at 2,000 or lower',
-    'native 20-yalm range/line-of-sight result',
-    'clears only after 150 ms at 2,300 MP or higher',
-    'fill only an empty native Focus Target and never clears, replaces, restores, or retries',
-    'occupied or manually changed Focus always wins',
-    'latches the manual override',
-    'feeds FFXIV''s Focus Target HUD and <f>',
-    'independent of the party-visible',
-    'Attack1 sign and never changes your hard or soft target',
-    'no atomic compare-and-set API',
-    'requires a live current-patch CC',
-    'A/B test.',
+    'Off by default and CC only. If your Focus Target is empty, Seiton can set it to a visible enemy within',
+    '20 yalms who has 2,000 MP or less. It prefers lower MP, then lower HP.',
+    'It never replaces or clears an existing Focus Target.',
+    'leaves it alone until the next match or until you turn this option off and on again.',
+    'This uses FFXIV''s normal Focus Target and <f>. It does not change your selected target or the shared',
+    'Attack1 team marker.',
     'Enable Wolves'' Den testing for supported Seiton Sense features and helpers',
     'configuration.EnableWolvesDenTesting',
-    'Smart Recuperate is self-only.'
+    'At 16,000+ missing HP and at least 2,000 MP, Seiton can use Recuperate on you.'
 ) 'Survival, held NIN, cast cancellation, Combat Frames interaction/LB, Auto Focus, DRK Hiebsprung, post-Guard, and Wolves Den Settings bindings and safety copy'
 
 $settingsConfigurationMethodBindings = @(
@@ -11076,10 +11093,9 @@ Assert-Literals $settingsWindow @(
     'Show MCH-on-you and airborne DRG LB warnings',
     'Show enemy Summoner Bahamut / Phoenix LB warning',
     'Show enemy Samurai Chiten warning and nameplate icon',
-    'Play a sound for verified enemy danger warnings',
-    'MCH requires its exact early marker on you; DRG, SMN, and Chiten require exact activation/status evidence.',
-    'Chiten also draws its verified timer above the Samurai''s native nameplate. Sound is one-shot per episode;',
-    'none of these warnings presses Guard or another action.'
+    'Play a sound for confirmed enemy danger warnings',
+    'Shows only dangers Seiton can confirm. Chiten also gets a timer above the Samurai''s nameplate.',
+    'plays once per danger, and these warnings never press an action for you.'
 ) 'Shared MCH, DRG, SMN, and Chiten warning settings copy'
 if ($personalStatus -match 'WolvesDenOpponentResolver\.Resolve') {
     throw 'Self warnings and self-Purify must not depend on resolving an enemy HUD actor.'
@@ -11162,9 +11178,13 @@ Assert-Literals $physicalKeyRules @(
 $adaptiveResponseTimeRules = Read-RequiredSource $adaptiveResponseTimeRulesPath 'Adaptive response time rules'
 $adaptiveResponseTimeSelfTests = Read-RequiredSource $adaptiveResponseTimeSelfTestsPath 'Adaptive response time self-tests'
 $heldChaseBufferRules = Read-RequiredSource $heldChaseBufferRulesPath 'Held chase-buffer rules'
+$normalizedHeldChaseBufferRules = $heldChaseBufferRules -replace '\s+', ' '
 $heldChaseBufferSelfTests = Read-RequiredSource $heldChaseBufferSelfTestsPath 'Held chase-buffer self-tests'
+$normalizedHeldChaseBufferSelfTests = $heldChaseBufferSelfTests -replace '\s+', ' '
 $smartSprintRules = Read-RequiredSource $smartSprintRulesPath 'Smart Sprint rules'
+$normalizedSmartSprintRules = $smartSprintRules -replace '\s+', ' '
 $smartSprintSelfTests = Read-RequiredSource $smartSprintSelfTestsPath 'Smart Sprint self-tests'
+$normalizedSmartSprintSelfTests = $smartSprintSelfTests -replace '\s+', ' '
 $smartSprintProbe = Read-RequiredSource $smartSprintProbePath 'Smart Sprint runtime'
 $normalizedSmartSprintProbe = $smartSprintProbe -replace '\s+', ' '
 $seitonResponseClock = Read-RequiredSource $seitonResponseClockPath 'Shared high-resolution response clock'
@@ -11222,6 +11242,11 @@ if ($normalizedClientActionAttemptOutcome -notmatch 'public static bool BecameCr
 }
 Assert-Literals $heldChaseBufferRules @(
     'public readonly record struct HeldChaseBufferIntent(',
+    'uint RequestedActionId,',
+    'uint ResolvedActionId,',
+    'ulong TargetFingerprint,',
+    'uint TerritoryId,',
+    'ulong InstanceFingerprint,',
     'long PressGeneration)',
     'public const int DefaultMilliseconds = 2_200;',
     'public const int MinimumMilliseconds = 0;',
@@ -11231,6 +11256,8 @@ Assert-Literals $heldChaseBufferRules @(
     'ReservationWindowMilliseconds =',
     'bool WithinDeadline = true,',
     'long NowMilliseconds = 0);',
+    'bool IsCertifiedSmartActionMacroFallback = false);',
+    'HeldChaseBufferCancelReason.AmbiguousInputOrigin;',
     'if (reason == HeldChaseBufferCancelReason.Released)',
     'return;',
     'if (!input.WithinDeadline)',
@@ -11245,12 +11272,39 @@ Assert-Literals $heldChaseBufferRules @(
     'if (outcome == ClientActionAttemptOutcome.ClientRejected)',
     'HeldActionRetryDisposition.RetryScheduled',
     'ClientActionAttemptOutcome.ClientAccepted =>',
-    'ClientActionAttemptOutcome.AcceptanceUnknown =>'
-) 'Immutable release-independent deadline-bounded tap-to-land intent and clean-false retry policy'
+    'HeldActionRetryDisposition.AcceptedTerminal,',
+    'ClientActionAttemptOutcome.AcceptanceUnknown =>',
+    'HeldActionRetryDisposition.AmbiguousTerminal,',
+    '_ => HeldActionRetryDisposition.CancelledTerminal,'
+) 'Immutable release-independent exact tap-to-land intent, exclusive origin, and clean-false-only retry policy'
 if ([regex]::Matches($heldChaseBufferRules, 'HeldChaseBufferDecisionKind\.Dispatch').Count -ne 1 -or
-    $heldChaseBufferRules -match '\b(?:UseAction|TargetManager|SetTarget|AlternateAction|AlternateTarget|RetryAction|QueueAction|Timer|Stopwatch|DateTime)\b' -or
-    $heldChaseBufferRules -match '\bInputHeld\b|IsGameplayKeyPhysicallyDown') {
-    throw 'Tap-to-land Core may freeze, cancel, and classify only one immutable action-target-context generation; key release is absent and it owns no native call, retarget, alternate, clock, or input read.'
+    $normalizedHeldChaseBufferRules -notmatch 'public bool IsValid => RequestedActionId != 0 && ResolvedActionId != 0 && TargetFingerprint != 0 && TerritoryId != 0 && InstanceFingerprint != 0 && PressGeneration > 0;' -or
+    $normalizedHeldChaseBufferRules -notmatch 'if \(input\.IsCertifiedPhysicalStandardHotbarRoot && input\.IsCertifiedSmartActionMacroFallback\).*?HeldChaseBufferCancelReason\.AmbiguousInputOrigin;.*?if \(!input\.IsCertifiedPhysicalStandardHotbarRoot && !input\.IsCertifiedSmartActionMacroFallback\).*?HeldChaseBufferCancelReason\.NotPhysicalStandardHotbar;' -or
+    $normalizedHeldChaseBufferRules -notmatch 'if \(reason == HeldChaseBufferCancelReason\.Released\) return;.*?lock \(gate\).*?ClearPending\(\); LastCancelReason = reason;' -or
+    $normalizedHeldChaseBufferRules -notmatch 'if \(input\.PressGeneration != intent\.PressGeneration\).*?HeldChaseBufferCancelReason\.Replaced;.*?input\.RequestedActionId != intent\.RequestedActionId \|\| input\.ResolvedActionId != intent\.ResolvedActionId.*?HeldChaseBufferCancelReason\.ActionChanged;.*?input\.TargetFingerprint != intent\.TargetFingerprint.*?HeldChaseBufferCancelReason\.TargetChanged;.*?input\.TerritoryId != intent\.TerritoryId \|\| input\.InstanceFingerprint != intent\.InstanceFingerprint.*?HeldChaseBufferCancelReason\.ContextChanged;.*?!input\.SafetyValid.*?HeldChaseBufferCancelReason\.SafetyDrift;' -or
+    $normalizedHeldChaseBufferRules -notmatch 'if \(outcome == ClientActionAttemptOutcome\.ClientRejected\).*?attemptCount >= previous\.NativeAttemptLimit.*?HeldActionRetryDisposition\.RejectedTerminal.*?HeldActionRetryDisposition\.RetryScheduled.*?return TerminalAttempt\(outcome switch.*?ClientActionAttemptOutcome\.ClientAccepted => HeldActionRetryDisposition\.AcceptedTerminal, ClientActionAttemptOutcome\.AcceptanceUnknown => HeldActionRetryDisposition\.AmbiguousTerminal, _ => HeldActionRetryDisposition\.CancelledTerminal,' -or
+    $heldChaseBufferRules -match '\b(?:UseAction|UseActionLocation|TargetManager|SetTarget|FaceTarget|SetFacing|SetRotation|AlternateAction|AlternateTarget|RetryAction|QueueAction|Timer|Stopwatch|DateTime)\b' -or
+    $heldChaseBufferRules -match '\.Rotation\s*=|\bInputHeld\b|IsGameplayKeyPhysicallyDown') {
+    throw 'Tap-to-land Core must retain exactly one immutable action/visible-target/context generation, ignore release, admit exactly one of direct-hotbar or certified Smart Action fallback provenance, retry only clean native false, and terminate every accepted, ambiguous, or cancelled outcome without native, target, facing, clock, or held-key ownership.'
+}
+Assert-Literals $heldChaseBufferSelfTests @(
+    'Equal(0, HeldChaseBufferWindowRules.Normalize(0), "zero window disables");',
+    'Equal(2_200, HeldChaseBufferWindowRules.Normalize(2_200), "default window remains exact");',
+    'Equal(3_000, HeldChaseBufferWindowRules.Normalize(9_000), "window is capped");',
+    'True(macroEngine.Arm(macroFallback), "certified Smart Action fallback can arm");',
+    'True(released.Pending.HasValue, "legacy release callback is explicitly ignored");',
+    'HeldChaseBufferCancelReason.ActionChanged',
+    'HeldChaseBufferCancelReason.TargetChanged',
+    'HeldChaseBufferCancelReason.ContextChanged',
+    'HeldChaseBufferCancelReason.SafetyDrift',
+    'True(rejected.RetryScheduled, "only clean client false schedules retry");',
+    'Equal(HeldActionRetryDisposition.AcceptedTerminal, accepted.Disposition, "native true is terminal");',
+    'Equal(HeldActionRetryDisposition.AmbiguousTerminal, ambiguous.Disposition, "ambiguity is terminal");',
+    'Equal(HeldActionRetryDisposition.RejectedTerminal, completion.Disposition, "45th false exhausts default cap");'
+) 'Executable tap-to-land release, provenance, drift, and terminal-outcome regressions'
+if ([regex]::Matches($heldChaseBufferSelfTests, '\binternal static void\s+\w+\s*\(').Count -ne 4 -or
+    [regex]::Matches($integratedCoreTestProgram, '\bHeldChaseBufferSelfTests\.\w+').Count -ne 4) {
+    throw 'Exactly four tap-to-land Core regressions must remain implemented and registered.'
 }
 Assert-Literals $settingsPing @(
     'React as soon as recovery becomes usable',
@@ -11281,11 +11335,18 @@ Assert-Literals $criticalUtilityCoordination @(
 if ($normalizedIntegratedActionBufferRuntime -notmatch 'var chaseWindow = CurrentTapToLandReservationMilliseconds;.*?pendingChase = new HeldChaseRuntimeAction\( candidate\.Request, candidate\.Snapshot, candidate\.NativeBefore\.LastUsedActionSequence, SaturatingAdd\(candidate\.CapturedAtMilliseconds, chaseWindow\)' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'WithinDeadline: nowMilliseconds >= 0 && nowMilliseconds < runtime\.ExpiresAtMilliseconds' -or
     $normalizedIntegratedActionBufferRuntime -notmatch 'ReservationWindowMilliseconds: CurrentTapToLandReservationMilliseconds' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'currentProfile\.IsCastTimeAction.*?visibleHardTarget != candidate\.Snapshot\.Target\.ExplicitTarget.*?Tap-to-land cast rejected hidden or changed visible hard target' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'visibleCastTargetStable = !runtime\.Profile\.IsCastTimeAction \|\|.*?ToActorIdentity\(targetManager\.Target\) == runtime\.VisibleHardTarget' -or
-    $normalizedIntegratedActionBufferRuntime -notmatch 'dispatchResult\.NativeBoundaryInvoked && dispatchResult\.Outcome == ClientActionAttemptOutcome\.ClientRejected.*?postLive = CreateChaseLiveInput\(.*?postLiveCaptured = true;.*?var completion = chaseEngine\.CompleteNativeAttempt\(' -or
-    (Read-RequiredSource $integratedInputRuntimePath 'Integrated input startup order' | ForEach-Object { $_ -replace '\s+', ' ' }) -notmatch 'framework\.Update \+= OnFrameworkUpdate; ActionBuffer\.Start\(\);') {
-    throw 'Tap-to-land must use its independent 0-3000-ms deadline, preserve visible-target continuity for casts, retry only a post-revalidated native clean false, and start after integrated input state is available.'
+    $normalizedIntegratedActionBufferRuntime -notmatch 'candidate\.Request\.Mode != ActionManager\.UseActionMode\.None \|\| !candidate\.Request\.HotbarRoot\.IsCertifiedExactTapRoot \|\| candidate\.Request\.TargetId is 0 or InvalidObjectId \|\| candidate\.Snapshot\.Target\.IncludesResolverTargets \|\| candidate\.Snapshot\.Target\.ExplicitTarget == IntegratedActionBufferActorIdentity\.Empty.*?currentProfile != candidate\.ChaseProfile' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'candidate\.NativeBefore\.LastUsedActionSequence != after\.LastUsedActionSequence \|\| after\.ResolvedActionId != candidate\.Request\.ResolvedActionId \|\| !HasStableIdentity\(candidate\.Snapshot, snapshotAfter\) \|\| !IsSafeSnapshot\(snapshotAfter\) \|\| !ExplicitTargetStillExists\(candidate\.Snapshot\.Target\).*?var visibleHardTarget = ToActorIdentity\(targetManager\.Target\); if \(visibleHardTarget != candidate\.Snapshot\.Target\.ExplicitTarget\)' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'IsCertifiedPhysicalStandardHotbarRoot: candidate\.Request\.HotbarRoot\.IsCertifiedDirectStandardHotbarRoot.*?IsCertifiedSmartActionMacroFallback: candidate\.Request\.HotbarRoot\.IsCertifiedSmartActionMacroFallback' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'var identityStable = HasStableIdentity\(runtime\.Snapshot, current\) && ExplicitTargetStillExists\(runtime\.Snapshot\.Target\); var sequenceStable = native\.Captured && !native\.ActionQueued && native\.LastUsedActionSequence == runtime\.SequenceAtCapture && native\.ResolvedActionId == runtime\.Request\.ResolvedActionId; var visibleTargetStable = runtime\.VisibleHardTarget != IntegratedActionBufferActorIdentity\.Empty && runtime\.VisibleHardTarget == runtime\.Snapshot\.Target\.ExplicitTarget && ToActorIdentity\(targetManager\.Target\) == runtime\.VisibleHardTarget; var safetyValid = identityStable && IsSafeSnapshot\(current\) && sequenceStable && visibleTargetStable;' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'private bool HasStableIdentity\(RuntimeSnapshot expected, RuntimeSnapshot current\) => expected\.TerritoryId == current\.TerritoryId && expected\.MapId == current\.MapId && expected\.Instance == current\.Instance && expected\.JobId == current\.JobId && expected\.IsPvP == current\.IsPvP && expected\.InstanceFingerprint == current\.InstanceFingerprint && expected\.Local == current\.Local && expected\.Target == current\.Target && expected\.ResolvedActionId == current\.ResolvedActionId;' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'private bool IsSafeSnapshot\(RuntimeSnapshot snapshot\) =>.*?!snapshot\.IsStunned && !snapshot\.HasActionBlockingCrowdControl && !snapshot\.HasOwnGuard && !snapshot\.IsBeingMoved' -or
+    $normalizedIntegratedActionBufferRuntime -notmatch 'dispatchResult\.NativeBoundaryInvoked && dispatchResult\.Outcome == ClientActionAttemptOutcome\.ClientRejected.*?postLive = CreateChaseLiveInput\(.*?postLiveCaptured = true;.*?if \(!postLiveCaptured\).*?outcome = ClientActionAttemptOutcome\.AcceptanceUnknown;.*?HeldChaseBufferRules\.GetLiveCancellation\( dispatchedIntent, postLive\).*?if \(postCancellation != HeldChaseBufferCancelReason\.None\).*?return;.*?var completion = chaseEngine\.CompleteNativeAttempt\(' -or
+    $normalizedUseActionDetour -notmatch 'if \(!bypassRedirect && smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Safe && integratedRuntime is not null && IsExactCurrentHardTarget\(inspectedSmartActionTargetId\) && TryGetSmartActionFallbackTapGeneration\(out var safetyTapGeneration\)\).*?ShouldSuppressOwnedSmartActionMacroTail\(.*?safetyTapGeneration\).*?return false;.*?if \(!bypassRedirect && integratedBufferReplayDepth == 0 && integratedRuntime is not null && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ integratedRuntime\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer external action request"\); \} if \(smartActionSafetyInspection == SmartActionSafetyInspectionOutcome\.Unsafe\) return false;.*?if \(ShouldBlockActiveSprintRepeatPress\(thisPtr, actionType, actionId\)\) return false;.*?if \(TryConsumeExplicitAutoGuardBreak\(' -or
+    $normalizedIntegratedInputRuntime -notmatch 'framework\.Update \+= OnFrameworkUpdate; ActionBuffer\.Start\(\);' -or
+    $integratedActionBufferRuntime -match '(?:targetManager|TargetManager)\.(?:Target|SoftTarget|FocusTarget)\s*=|\b(?:SetTarget|FaceTarget|SetFacing|SetRotation|TurnTo|LookAt)\s*\(|\.Rotation\s*=' -or
+    $nearAssist -match '(?:targetManager|TargetManager)\.(?:Target|SoftTarget|FocusTarget)\s*=|\b(?:FaceTarget|SetFacing|SetRotation|TurnTo|LookAt)\s*\(|\.Rotation\s*=') {
+    throw 'Tap-to-land must use its independent 0-3000-ms deadline, freeze one exact action and visible hard target from exactly one certified origin, cancel Guard/CC/action/target/context drift, retry only a post-revalidated native clean false, perform no target or facing write, and start after integrated input state is available.'
 }
 foreach ($method in @('RawTickConversionsAreExactAndSaturating','DeadlineAndRemainingBoundariesAreExact','AnchoredLegacyProjectionIsIncrementalAndMonotonic','EqualRawTimestampsRemainTotallyOrdered')) {
     Assert-Literals $adaptiveResponseTimeSelfTests @("internal static void $method()") "Adaptive response test $method"
@@ -11298,7 +11359,9 @@ foreach ($method in @('OnlyRangeOrLineOfSightCanArm','ReleaseNewInputAndFrozenId
 
 # Smart Sprint is two independent policies: exact active-Sprint repeat
 # protection is default on and fail-open on uncertainty; the action-bar-idle
-# helper remains opt-in and uses only accepted Action/PvPAction activity.
+# helper remains opt-in and resets on attempted action-bar activity, including
+# client-rejected presses. Movement, camera, and targeting input stay outside
+# that activity boundary, and the helper's own Sprint may never re-arm itself.
 Assert-Literals $smartSprintRules @(
     'public const uint PvPSprintActionId = 29057;',
     'public const uint PvPSprintStatusId = 1342;',
@@ -11313,55 +11376,132 @@ Assert-Literals $smartSprintRules @(
     'observation.SprintStatusKnown &&',
     'observation.ActiveSprintStatusId == PvPSprintStatusId &&',
     'observation.SprintActive;',
-    'AcceptedActionActivityToken',
-    'LastAcceptedActionAtMilliseconds',
-    'previous.AcceptedActionActivityToken != observation.AcceptedActionActivityToken',
+    'ActionBarActivityToken',
+    'LastActionBarActivityAtMilliseconds',
+    'previous.ActionBarActivityToken != observation.ActionBarActivityToken',
+    'observation.HeldGameplayKeyEligible &&',
+    'observation.GuardStateKnown &&',
+    '!observation.GuardActive &&',
+    'observation.IncapacitationStateKnown &&',
+    '!observation.Incapacitated &&',
+    '!observation.HigherPriorityClaimed &&',
+    'observation.SprintLocallyReady;',
     'previous with { IdleEpisodeSpent = true }'
-) 'Exact Sprint repeat protection and accepted-action-only idle Sprint policy'
-if ($smartSprintRules -match '\b(?:VirtualKey|WASD|Camera|TargetManager|UseAction|Timer|Stopwatch|DateTime)\b') {
-    throw 'Smart Sprint Core must depend only on the explicit accepted-action token and supplied gates, never movement, camera, target, native action, or clock APIs.'
+) 'Exact Sprint repeat protection and attempted-action-bar idle Sprint policy'
+if ($normalizedSmartSprintRules -notmatch 'observation\.Enabled && observation\.IsActionRequest && observation\.RequestedActionId == PvPSprintActionId && observation\.AdjustedActionId == PvPSprintActionId && observation\.SprintMetadataVerified && observation\.SprintStatusKnown && observation\.ActiveSprintStatusId == PvPSprintStatusId && observation\.SprintActive;' -or
+    $normalizedSmartSprintRules -notmatch 'if \(observation\.HardReset \|\| !observation\.Enabled \|\| !observation\.IsSupportedPvpContext \|\| !observation\.IsLocalPlayerValidAndAlive \|\| !observation\.ActionBarActivityKnown \|\| observation\.NowMilliseconds < 0\).*?SmartSprintIdleState\.Initial' -or
+    $normalizedSmartSprintRules -notmatch 'var baselineInvalid = !previous\.HasActionBarActivityBaseline \|\| previous\.LastActionBarActivityAtMilliseconds < 0 \|\| previous\.LastActionBarActivityAtMilliseconds > observation\.NowMilliseconds; var activityChanged = previous\.HasActionBarActivityBaseline && previous\.ActionBarActivityToken != observation\.ActionBarActivityToken; if \(baselineInvalid \|\| activityChanged\).*?HasActionBarActivityBaseline: true, observation\.ActionBarActivityToken, observation\.NowMilliseconds, IdleEpisodeSpent: false' -or
+    $normalizedSmartSprintRules -notmatch 'var eligible = observation\.HeldGameplayKeyEligible && observation\.GuardStateKnown && !observation\.GuardActive && observation\.IncapacitationStateKnown && !observation\.Incapacitated && !observation\.HigherPriorityClaimed && observation\.SprintMetadataVerified && observation\.SprintStatusKnown && !observation\.SprintActive && observation\.SprintLocallyReady; if \(!eligible\).*?new SmartSprintIdleDecision\( previous, ShouldDispatch: false, ActionBarActivityChanged: false, IdleThresholdReached: true\);.*?previous with \{ IdleEpisodeSpent = true \}, ShouldDispatch: true' -or
+    $smartSprintRules -match 'ActionBarActivityToken\s*(?:>|!=)\s*0' -or
+    $smartSprintRules -match '\bVirtualKey\b|\bTargetManager\b|\bUseAction(?:Location)?\s*\(|\b(?:Timer|Stopwatch|DateTime)\b') {
+    throw 'Smart Sprint Core must accept known activity token zero, reset only on an explicit action-bar token change, require the held-key/Guard/CC/priority/readiness gates without spending while blocked, and own no movement, camera, target, native action, or clock API.'
 }
 foreach ($method in @(
     'ExactIdsDefaultsAndBoundsArePinned',
     'RepeatProtectionNeedsAnExactPositiveSprint',
     'MovementDoesNotResetActionBarInactivity',
-    'AcceptedActionActivityResetsAndRearms',
+    'ActionBarActivityResetsAndRearms',
     'EveryDispatchGateWaitsWithoutSpending',
     'UnknownActivityAndContextDriftResetSafely'
 )) {
     Assert-Literals $smartSprintSelfTests @("public static void $method()") "Smart Sprint self-test $method"
     Assert-Literals $integratedCoreTestProgram @("SmartSprintSelfTests.$method") "Smart Sprint registration $method"
 }
+Assert-Literals $smartSprintSelfTests @(
+    'ValidObservation(now: 1_000, activityToken: 0, heldGameplayKey: false)',
+    'known token zero establishes the initial action-bar baseline',
+    'held movement/input does not reset action-bar inactivity',
+    'new action-bar input starts a new idle clock',
+    'gate does not spend:',
+    'cleared gates use the still-open idle episode'
+) 'Known-zero, movement-independent, activity-reset, and non-spending Smart Sprint regressions'
+Assert-Literals $settingsConfiguration @(
+    'public bool Enabled { get; set; } = true;',
+    'public bool ProtectActiveSprintFromRepeatPress { get; set; } =',
+    'SmartSprintRules.RepeatProtectionDefaultEnabled;',
+    'public bool EnableIdleSmartSprintOnHeldKey { get; set; } =',
+    'SmartSprintRules.IdleSprintDefaultEnabled;',
+    'public int SmartSprintInactivityMilliseconds { get; set; } =',
+    'SmartSprintRules.DefaultInactivityMilliseconds;'
+) 'Master-on/default-on repeat protection plus independent default-off idle Sprint configuration'
 Assert-Literals $normalizedNearAssistForIntegratedInput @(
     'pvpSprintMetadataVerified = PressureEscapeSprintProbe.ValidateMetadata(dataManager, log);',
-    'internal AcceptedActionActivitySnapshot AcceptedActionActivitySnapshot',
-    'Known: token > 0',
+    'internal ActionBarActivitySnapshot ActionBarActivitySnapshot',
+    'Known: Volatile.Read(ref started) &&',
+    'Token: token > 0 ? (ulong)token : 0);',
     'internal bool PvPSprintMetadataVerified => pvpSprintMetadataVerified;',
     'private bool ShouldBlockActiveSprintRepeatPress(',
+    'internal void RecordActionBarActivity()',
+    'if (actionBarActivitySuppressionDepth == 0 &&',
+    'RecordActionBarActivity();',
     'if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId)) return false;',
-    'if (clientAccepted && actionType is ActionType.Action or ActionType.PvPAction) RecordAcceptedActionActivity();'
-) 'Sole native action owner exact Sprint protection and accepted action-bar activity token'
+    'internal T RunWithoutRedirect<T>(',
+    'internal IDisposable EnterUserAuthoredActionWithoutRedirect()',
+    'internal ExactAutomaticActionBoundaryResult RunExactAutomaticActionWithoutRedirect(',
+    'ExactAutomaticActionBoundaryIntent intent,',
+    'actionBarActivitySuppressionDepth++;',
+    'actionBarActivitySuppressionDepth--;'
+) 'Sole native action owner exact Sprint protection, known-zero attempted-activity token, automatic suppression, and explicit-command accounting'
+$actionBarActivityReferences = @(Select-String -LiteralPath $sourceFiles.FullName -Pattern '\bRecordActionBarActivity\s*\(')
+$unexpectedActionBarActivityReferences = @($actionBarActivityReferences | Where-Object {
+    $_.Path -notin @($nearAssistPath, $integratedInputRuntimePath)
+})
 if ($normalizedNearAssistForIntegratedInput -notmatch 'private bool ShouldBlockActiveSprintRepeatPress\(.*?configuration\.ProtectActiveSprintFromRepeatPress.*?pvpSprintMetadataVerified.*?requestedActionId != SmartSprintRules\.PvPSprintActionId.*?adjustedActionId != SmartSprintRules\.PvPSprintActionId.*?status\.StatusId != SmartSprintRules\.PvPSprintStatusId.*?!float\.IsFinite\(status\.RemainingTime\) \|\| status\.RemainingTime <= 0f.*?SmartSprintRules\.ShouldBlockRepeatPress\(' -or
-    [regex]::Matches($normalizedNearAssistForIntegratedInput, 'RecordAcceptedActionActivity\(\);').Count -ne 1) {
-    throw 'Sprint repeat protection must require exact positive metadata, adjusted action, and live finite status evidence, fail open otherwise, and accepted action activity must advance only at the sole successful native Action/PvPAction boundary.'
+    $normalizedNearAssistForIntegratedInput -notmatch 'if \(!configuration\.Enabled \|\| !configuration\.ProtectActiveSprintFromRepeatPress' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'var token = Volatile\.Read\(ref actionBarActivityToken\); return new ActionBarActivitySnapshot\( Known: Volatile\.Read\(ref started\) && !disposed && useActionHook\?\.IsEnabled == true && useActionLocationHook\?\.IsEnabled == true && integratedInputRuntime\?\.CanObserveCompleteActionBarActivity == true, Token: token > 0 \? \(ulong\)token : 0\);' -or
+    $normalizedIntegratedInputRuntime -notmatch 'internal bool CanObserveCompleteActionBarActivity => !disposed && Volatile\.Read\(ref available\) != 0 && Volatile\.Read\(ref started\) != 0 && executeSlotHook\?\.IsEnabled == true && executeSlotByIdHook\?\.IsEnabled == true && hotbarInput\?\.IsOperational == true;' -or
+    $normalizedIntegratedHotbarInputSource -notmatch 'internal bool IsOperational => started && !disposed && pressedHook\.IsEnabled && checkHotbarBindingsHook\.IsEnabled;' -or
+    $normalizedUseActionDetour -notmatch 'if \(actionBarActivitySuppressionDepth == 0 && actionType is \(ActionType\.Action or ActionType\.PvPAction\)\) \{ RecordActionBarActivity\(\); \}.*?if \(ShouldBlockActiveSprintRepeatPress\(thisPtr, actionType, actionId\)\) return false;.*?clientAccepted = useActionHook!\.Original\(' -or
+    $normalizedIntegratedInputRuntime -notmatch 'private void OnCertifiedPhysicalPress\(IntegratedHotbarPress press\).*?nearAssist\.RecordActionBarActivity\(\);.*?ActionBuffer\.Cancel\(' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'internal T RunWithoutRedirect<T>\( Func<T> action, PredictiveCcBrakeBypassIntent\? predictiveCcBrakeBypass = null\).*?actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ return action\(\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; predictiveCcBrakeBypassScope = previousPredictiveScope; \}' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'internal IDisposable EnterUserAuthoredActionWithoutRedirect\(\) \{ var scope = new UserAuthoredActionBypassScope\(this\); RecordActionBarActivity\(\); integratedInputRuntime\?\.ActionBuffer\.Cancel\( SmartActionBufferCancelReason\.Replaced, "Replaced by a newer explicit command action"\); actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; return scope; \} private void ReleaseUserAuthoredActionBypass\(\) \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; \}' -or
+    $normalizedNearAssistForIntegratedInput -notmatch 'internal ExactAutomaticActionBoundaryResult RunExactAutomaticActionWithoutRedirect\( ExactAutomaticActionBoundaryIntent intent, Func<bool> action\).*?if \(!intent\.IsValid \|\| useActionHook is null \|\| !useActionHook\.IsEnabled \|\| exactAutomaticActionBoundaryScope is not null \|\| integratedBufferedReplayScope is not null\).*?var scope = new ExactAutomaticActionBoundaryScope\(this, intent\); exactAutomaticActionBoundaryScope = scope; actionBarActivitySuppressionDepth\+\+; internalRedirectBypassDepth\+\+; try \{ var clientReturnedAccepted = action\(\); return new ExactAutomaticActionBoundaryResult\( scope\.NativeBoundaryInvoked, clientReturnedAccepted\); \} finally \{ internalRedirectBypassDepth--; actionBarActivitySuppressionDepth--; exactAutomaticActionBoundaryScope = previousScope; \}' -or
+    [regex]::Matches($normalizedNearAssistForIntegratedInput, 'RecordActionBarActivity\(\);').Count -ne 3 -or
+    [regex]::Matches($normalizedIntegratedInputRuntime, 'nearAssist\.RecordActionBarActivity\(\);').Count -ne 1 -or
+    $actionBarActivityReferences.Count -ne 5 -or
+    $unexpectedActionBarActivityReferences.Count -ne 0) {
+    $locations = $unexpectedActionBarActivityReferences | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
+    throw "Sprint repeat protection must require the enabled master plus exact positive metadata, adjusted action, and live finite status evidence; external Action/PvPAction, location, certified-hotbar, and explicit command intent must advance exactly once through the reviewed boundaries, while automatic helpers and replay suppress their own activity: $($locations -join ', ')"
+}
+Assert-Literals $nearAssist @(
+    'internal readonly record struct ExactAutomaticActionBoundaryIntent(',
+    'Mode == ActionManager.UseActionMode.None;',
+    'internal readonly record struct ExactAutomaticActionBoundaryResult(',
+    'private static ExactAutomaticActionBoundaryScope? exactAutomaticActionBoundaryScope;',
+    'exactAutomaticScope.NativeBoundaryInvoked = true;'
+) 'Exact automatic action ownership and native-boundary proof'
+if ($normalizedNearAssistForIntegratedInput -notmatch 'internal bool IsValid => ActionType is ActionType\.Action or ActionType\.PvPAction && RequestedActionId != 0 && TargetId is not \(0 or 0xE0000000\) && Mode == ActionManager\.UseActionMode\.None;' -or
+    $normalizedUseActionDetour -notmatch 'var exactAutomaticScope = exactAutomaticActionBoundaryScope; if \(exactAutomaticScope is not null\) \{ if \(!ReferenceEquals\(exactAutomaticScope\.Owner, this\) \|\| exactAutomaticScope\.Consumed \|\| exactAutomaticScope\.Intent\.ActionType != actionType \|\| exactAutomaticScope\.Intent\.RequestedActionId != actionId \|\| exactAutomaticScope\.Intent\.TargetId != forwardedTargetId \|\| exactAutomaticScope\.Intent\.Mode != mode\) \{ return false; \} exactAutomaticScope\.Consumed = true; \}.*?var localGuardBoundary = ObserveExactLocalGuardActivationAttempt\( thisPtr, actionType, actionId\);.*?if \(exactAutomaticScope is \{ Consumed: true \} && ReferenceEquals\(exactAutomaticScope\.Owner, this\)\) \{ exactAutomaticScope\.NativeBoundaryInvoked = true; \} bool clientAccepted; try \{ clientAccepted = useActionHook!\.Original\(' -or
+    [regex]::Matches($normalizedUseActionDetour, 'exactAutomaticScope\.NativeBoundaryInvoked = true;').Count -ne 1) {
+    throw 'An exact automatic owner may classify or spend only after the sole UseAction detour proves its immutable Action/PvPAction, raw action, target, and mode tuple and marks NativeBoundaryInvoked immediately before Original.'
 }
 Assert-Literals $smartSprintProbe @(
-    'nearAssist.AcceptedActionActivitySnapshot',
+    'nearAssist.ActionBarActivitySnapshot',
     'nearAssist.PvPSprintMetadataVerified',
     'SmartSprintRules.ObserveIdle(idleState, observation)',
     'inputFrame.Consume();',
+    'idleState = idleState with { IdleEpisodeSpent = false };',
     'private unsafe ClientActionAttemptOutcome TryUseSprintOnce(',
     'HasActiveStatus(localPlayer!, EnemyCombatConstants.PvPSprintStatusId)',
     'HasEscapeBlockingCrowdControl(localPlayer!)',
     'defensiveUtility.ObserveGuardSuppression(',
-    'nearAssist.RunWithoutRedirect(() =>',
+    'inputFrame.IsGameplayKeyPhysicallyDown(expectedHeldKey)',
+    'inputFrame.IsGameplayKeyGenerationEligible(expectedHeldKey)',
+    'nearAssist.RunExactAutomaticActionWithoutRedirect(',
+    'new ExactAutomaticActionBoundaryIntent(',
+    'attempted = invocation.NativeBoundaryInvoked;',
+    'invocation.ClientReturnedAccepted',
     'EnemyCombatConstants.PvPSprintActionId',
     'ActionManager.UseActionMode.None'
-) 'Opt-in one-shot idle Sprint runtime with final identity, Guard, CC, readiness, and held-key checks'
+) 'Opt-in one-shot idle Sprint runtime with non-spending late waits, final identity, Guard, CC, readiness, and held-key checks'
 if ([regex]::Matches($smartSprintProbe, '->UseAction\s*\(').Count -ne 1 -or
-    [regex]::Matches($smartSprintProbe, '\bnearAssist\.RunWithoutRedirect\s*\(').Count -ne 1 -or
+    [regex]::Matches($smartSprintProbe, '\bnearAssist\.RunExactAutomaticActionWithoutRedirect\s*\(').Count -ne 1 -or
+    $normalizedSmartSprintProbe -notmatch 'if \(decision\.ShouldDispatch\).*?inputFrame\.Consume\(\); var outcome = TryUseSprintOnce\(.*?if \(!attempted && outcome is \(ClientActionAttemptOutcome\.NotInvoked or ClientActionAttemptOutcome\.SoftUnavailable\)\).*?idleState = idleState with \{ IdleEpisodeSpent = false \};' -or
+    $normalizedSmartSprintProbe -notmatch 'expectedHeldKey == VirtualKey\.NO_KEY \|\| clientState\.TerritoryType != expectedTerritoryId \|\| ResolveCurrentContext\(\) != expectedContext \|\| !HasSameActionBarActivity\(expectedActionBarActivityToken\) \|\| !inputFrame\.IsGameplayKeyPhysicallyDown\(expectedHeldKey\) \|\| !inputFrame\.IsGameplayKeyGenerationEligible\(expectedHeldKey\).*?currentIdentity != expectedLocalIdentity \|\| HasActiveStatus\(localPlayer!, EnemyCombatConstants\.PvPSprintStatusId\) \|\| HasEscapeBlockingCrowdControl\(localPlayer!\).*?IsGuardActiveOrPropagating\(localPlayer!, finalNow\).*?ClientActionAttemptBoundary\.IsExactActionReady\( actionManager, EnemyCombatConstants\.PvPSprintActionId\).*?HeldActionRetryRules\.IsNativeBoundaryNearQueueable\( actionManager->AnimationLock, localPlayer!\.IsCasting, actionManager->CastActionId, actionManager->ActionQueued\).*?clientState\.TerritoryType != expectedTerritoryId \|\| ResolveCurrentContext\(\) != expectedContext \|\| !HasSameActionBarActivity\(expectedActionBarActivityToken\) \|\| !inputFrame\.IsGameplayKeyPhysicallyDown\(expectedHeldKey\) \|\| !inputFrame\.IsGameplayKeyGenerationEligible\(expectedHeldKey\)' -or
+    $normalizedSmartSprintProbe -notmatch 'private static unsafe bool IsSprintActionSpecificallyReady\(.*?GetAdjustedActionId\(EnemyCombatConstants\.PvPSprintActionId\) == EnemyCombatConstants\.PvPSprintActionId.*?IsActionOffCooldown\( ActionType\.Action, EnemyCombatConstants\.PvPSprintActionId\).*?CheckActionResources\( ActionType\.Action, EnemyCombatConstants\.PvPSprintActionId\) == 0.*?HeldActionRetryRules\.IsNativeBoundaryNearQueueable\( actionManager->AnimationLock, localPlayer\.IsCasting, actionManager->CastActionId, actionManager->ActionQueued\);' -or
+    $normalizedSmartSprintProbe -notmatch 'var invocation = nearAssist\.RunExactAutomaticActionWithoutRedirect\( new ExactAutomaticActionBoundaryIntent\( ActionType\.Action, EnemyCombatConstants\.PvPSprintActionId, expectedLocalIdentity\.GameObjectId, ActionManager\.UseActionMode\.None\), \(\) => \{ try \{ return actionManager->UseAction\( ActionType\.Action, EnemyCombatConstants\.PvPSprintActionId, expectedLocalIdentity\.GameObjectId, 0, ActionManager\.UseActionMode\.None, 0\); \} catch \(Exception exception\) \{ nativeException = exception; return false; \} \}\); attempted = invocation\.NativeBoundaryInvoked; if \(nativeException is not null\).*?return attempted \? ClientActionAttemptOutcome\.AcceptanceUnknown : ClientActionAttemptOutcome\.NotInvoked;.*?if \(!attempted\) return ClientActionAttemptOutcome\.NotInvoked; return ClientActionAttemptBoundaryRules\.Classify\( invocation\.ClientReturnedAccepted, EnemyCombatConstants\.PvPSprintActionId, before,' -or
     $smartSprintProbe -match '\b(?:TargetManager|SetTarget|UseActionLocation|Thread\.Sleep|Task\.Delay|DateTime)\b') {
-    throw 'Idle Smart Sprint must own exactly one ordinary self-Sprint call, with no target mutation, location action, wait loop, or wall-clock path.'
+    throw 'Idle Smart Sprint must wait without spending through held-key, Guard, CC, cast, priority, readiness, and late native gates; only a proven exact automatic native boundary may spend/classify its sole self-Sprint call, which suppresses its own activity and owns no target mutation, location action, wait loop, or wall-clock path.'
 }
 
 $projectFile = Read-RequiredSource (Join-Path $sourceRoot 'SeitonSense.Plugin\SeitonSense.Plugin.csproj') 'Plugin project'
@@ -11441,12 +11581,13 @@ if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row
 }
 Assert-Literals $repositoryIndex @(
     '"AssemblyVersion": "0.43.0.1"',
-    'Tap-to-land now remembers one supported out-of-range attack after the key is released',
+    'Tap-to-land remembers one supported out-of-range attack after you release the key for up to 3000 ms',
     '2200 ms by default',
-    'safe single-target casts',
-    'Pressing Sprint again no longer cancels an active PvP Sprint by default.',
+    'including supported single-target casts and the visible <t> fallback of /smartaction.',
+    'It keeps the same action and target and stops on a new action, target change, Guard, crowd control, death, or area change.',
+    'Pressing Sprint again no longer cancels active PvP Sprint by default.',
     'Optional Smart Sprint',
-    'movement does not reset that timer.',
+    'Any action-bar press resets that timer; movement, camera, and targeting do not.',
     'Live in-game confirmation remains separate from build checks.',
     '"IsHide": false'
 ) 'v0.43.0.1 custom-repository metadata'
@@ -11521,8 +11662,12 @@ Assert-Literals $normalizedPrivacy @(
     'Acceptance starts an exact metadata-verified 1.0-second recast floor. A sampled unavailable edge is retained when visible, but after that floor current positive readiness may rearm without requiring the brief negative frame, preventing an indefinite latch.',
     'Configuration schema 50 is current. It replaces held-only chase behavior with one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),',
     'adds default-on exact active-Sprint repeat protection, and adds a separate default-off 3000-5000 ms idle Smart Sprint option.',
-    'movement, camera, and target input are not stored as activity.',
-    'These features are memory-only; there is no latency profiler, traffic capture, upload, position prediction, range extension, animation-lock write, or direct native-queue edit.',
+    'Smart Sprint retains only a monotonic action-bar activity token and its local time baseline; rejected',
+    'action-bar requests still count, while movement, camera, and target input are',
+    'not stored as activity.',
+    'These features are memory-only; there is no latency profiler, traffic capture, upload,',
+    'position prediction, range extension, animation-lock write, or direct native-',
+    'queue edit.',
     'The latency-response helper defaults on for fresh/ reset configurations while an existing opt-out is preserved on upgrade.',
     'while retaining the separate automatic basic-shot cast-cancel permission as default-off for every upgrade and Reset Defaults',
     'Schema 44 keeps the RDM fresh-Guard engage and `/seitonbw` command off for every upgrade',
@@ -11584,12 +11729,15 @@ Assert-Literals $normalizedReadme @(
     'Tap-to-land can remember one supported out-of-range attack',
     '2200 ms by default',
     'even after you release the key.',
-    'It keeps the same action and target, supports safe single-target casts, and stops when you press something else, change target, use Guard, become crowd-controlled, die, or change area.',
+    'It keeps the same action and target, supports safe single-target casts,',
+    'and also covers the visible `<t>` fallback of `/smartaction`.',
+    'It stops when you press something else, change target, use Guard, become crowd-controlled, die, or change area.',
     'It does not increase range or move your character.',
     'PvP Sprint is also safer: pressing Sprint again no longer turns an active Sprint off by default.',
     'A separate optional Smart Sprint can use Sprint once',
-    'without an action-bar ability while you keep a gameplay key held.',
-    'Running, camera movement, and target changes do not reset that timer.',
+    'without action-bar input while you keep a gameplay key held.',
+    'Only action-bar input resets that timer; the action does not have to succeed.',
+    'Running, camera movement, and target changes do not reset it.',
     'Settings and update notes now use shorter player-friendly explanations.',
     'Version 0.43.0.0 introduced the Ping Helpers page and the clear recovery order',
     'Version 0.42.0.9 improved slow analog sampling, ReAction coexistence, and added configurable public-CC medicine-kit cues.',
@@ -11718,9 +11866,9 @@ Assert-Literals $normalizedReadme @(
     'Compatibility is assessed in memory on plugin-change events and at a bounded five-second cadence, with one final live check when the buffer arms and when it is actually ready to replay; Seiton does not scan plugin files.',
     'Enabling the outside-combat test scope also starts a new lifecycle, so a key which was already held cannot be inherited.',
     'Configuration schema 50 is current.',
-    'release-independent tap-to-land reservation',
-    'default-on exact active-Sprint repeat protection',
-    'default-off 3000-5000 ms idle Smart Sprint option',
+    'release-independent tap-to-land wait',
+    'protects active PvP Sprint from a second Sprint press by default',
+    'adds the separate optional idle Smart Sprint.',
     'For the current source, the exact 605-test Core registry and source checks pin configuration schema 50',
     'the independent default-off automatic basic-shot cast-cancel permission, exact BRD/MCH job/cast/adjusted identity and metadata',
     'metadata-verified native range/line-of-sight admission',
@@ -11741,12 +11889,15 @@ Assert-Literals $normalizedChangelog @(
     '**Tap-to-land no longer needs the key to stay held.**',
     'adjustable from 0 to 3000 ms;',
     'the default is 2200 ms and 0 disables it.',
+    'the visible `<t>` fallback of `/smartaction` can use the same wait without changing your selected target.',
     'Supported single-target spells can wait as well.',
-    'A rejected try can be repeated briefly, but only when FFXIV clearly reports that nothing happened.',
+    'If FFXIV rejects the try, Seiton may repeat that same action briefly.',
+    'It stops as soon as the action might have gone through, so it will not deliberately send it twice.',
     '**Active PvP Sprint is protected by default.**',
     'Added a separate optional **Smart Sprint**.',
-    'WASD, camera movement, and target changes do not reset the inactivity timer.',
-    'Configuration schema is now `50`.',
+    'Any action-bar press resets the timer even if that action fails; WASD, camera movement, and',
+    'target changes do not.',
+    'Saved settings now use schema `50`.',
     '## 0.43.0.0',
     'Added a dedicated **Ping Helpers** settings page',
     'one shared monotonic high-resolution clock plus an exact framework-frame epoch',
@@ -12745,7 +12896,7 @@ Assert-Literals $privacy @(
     'Configuration schema 50 is current'
 ) 'Retained pressure escape, Smart Paean, Guardian, Scholar, and current schema local-data/live-boundary disclosure'
 Assert-Literals $normalizedPrivacy @(
-    'The current action-request priority is **Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event Kardia > event Monk**',
+    'The current action-request priority is **Purify > Smart Recuperate > automatic Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event Kardia > event Monk**',
     'automatic Zantetsuken and Auto-Seiton need no key, while physical-hold helpers retain explicit consent.',
     'One framework frame permits at most one helper native boundary',
     'continuously held key remains consent for later distinct exact episodes'
@@ -13172,7 +13323,7 @@ Assert-Literals $settingsWindow @(
     'Enable automatic action buffer',
     'Buffer window',
     'Works in PvE and PvP.',
-    'Ground-targeted skills, movement skills, mouse clicks, controllers, and cross hotbars are not supported here.',
+    'skills, movement skills, mouse clicks, controllers, and cross hotbars are not supported here.',
     'Show buffer timing helper',
     'Lock the timing helper position',
     'Reset timing helper position',
@@ -13196,7 +13347,8 @@ Assert-Literals $bufferLearningWindow @(
     'configuration.BufferLearningWindowLocked',
     'public void ResetWindowPosition()',
     'Available in PvE, PvP, and the Wolves'' Den.',
-    'otherwise the exact standard-hotbar slot is shown.'
+    'otherwise it shows the matching standard-hotbar slot.',
+    'Tap-to-land: waits for the same target to enter range after a supported out-of-range tap.'
 ) 'Movable read-only buffer learning window contract'
 Assert-Literals $configuration @(
     'public int EmergencyTeleportHpPercent { get; set; } = 50;',
@@ -13425,7 +13577,9 @@ Assert-Literals $redMageGuardEngageJobsUi @(
     'configuration.EnableRedMageGuardEngageOnHeldKey',
     'Minimum own HP for Guard engage',
     'Minimum own MP for Guard engage',
-    'is no automatic melee follow-up, fallback target, or rerank.'
+    'Corps-a-corps uses its normal 25-yalm range. After FFXIV accepts the dash, Seiton selects that same',
+    'enemy once so you can continue the combo. It does not perform the melee combo for you or switch to',
+    'another enemy.'
 ) 'RDM non-technical settings disclosure'
 Assert-Literals $redMageGuardEngageDiagnosticsUi @(
     'personalStatus.RedMageGuardEngageDiagnostics',
@@ -13463,4 +13617,4 @@ foreach ($pair in @(
     }
 }
 
-Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 49 and the exact 599-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, Recuperate, then Auto-Guard own priority in that order. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Held Chase is a deadline-bounded, certified physical standard-hotbar one-shot which freezes action, target, context, and press generation, revalidates exact held state before dispatch, and consumes before its sole later request. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned."
+Write-Host "Seiton Sense source safety contract verified across $($sourceFiles.Count) source files with schema 50 and the exact 605-test Core registry. Adaptive response uses one rollback-safe high-resolution monotonic clock with exact framework-frame identity; real not-ready-to-ready edges can wake only a later-frame bounded retry, while already-ready timer drift cannot. Purify, Recuperate, then Auto-Guard own priority in that order. Their explicit occupied-queue option is a deliberate response-priority override: accepted recovery may replace FFXIV's queued action, while a rejected retry requires the complete queue fingerprint to remain bit-identical; ordinary actions stay strict. Tap-to-land is one release-independent 0-3000-ms (default 2200-ms) exact-action/exact-visible-target reservation from either a certified direct standard hotbar press or the Macro/raw-100-certified /smartaction visible-<t> fallback. Release cannot cancel it; new action, target, context, Guard, CC, identity, or action drift does, only a post-revalidated clean native false may retry, accepted or ambiguous outcomes are terminal, and it writes no target or facing. Smart Sprint keeps default-on active-Sprint repeat protection plus a separate default-off 3000-5000-ms (default 4000-ms) held-key idle helper: known activity token zero is valid, every reviewed action-bar request including a rejected press resets the timer, movement/camera/targeting do not, Guard/CC/cast/priority/native waits do not spend, and automatic Sprint/replay cannot rearm themselves. All retained action, target, protection, metadata, privacy, buffer, Turbo, warning, and release contracts remain pinned; live in-game confirmation remains separate."

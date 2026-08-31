@@ -33,9 +33,11 @@ try {
             $committedStream = $committedEntry.Open()
             $builtStream = $builtEntry.Open()
             try {
-                $committedHash = [Convert]::ToHexString($sha.ComputeHash($committedStream))
+                $committedHash = [System.BitConverter]::ToString(
+                    $sha.ComputeHash($committedStream)).Replace('-', '')
                 $sha.Initialize()
-                $builtHash = [Convert]::ToHexString($sha.ComputeHash($builtStream))
+                $builtHash = [System.BitConverter]::ToString(
+                    $sha.ComputeHash($builtStream)).Replace('-', '')
                 $sha.Initialize()
             }
             finally {

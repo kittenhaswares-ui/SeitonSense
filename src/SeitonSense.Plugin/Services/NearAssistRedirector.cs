@@ -169,6 +169,23 @@ internal readonly record struct IntegratedBufferedReplayResult(
     bool NativeBoundaryInvoked,
     bool ClientReturnedAccepted);
 
+internal readonly record struct ExactAutomaticActionBoundaryIntent(
+    ActionType ActionType,
+    uint RequestedActionId,
+    ulong TargetId,
+    ActionManager.UseActionMode Mode)
+{
+    internal bool IsValid =>
+        ActionType is ActionType.Action or ActionType.PvPAction &&
+        RequestedActionId != 0 &&
+        TargetId is not (0 or 0xE0000000) &&
+        Mode == ActionManager.UseActionMode.None;
+}
+
+internal readonly record struct ExactAutomaticActionBoundaryResult(
+    bool NativeBoundaryInvoked,
+    bool ClientReturnedAccepted);
+
 /// <summary>
 /// Owns mutually exclusive, short-lived target redirects selected by the /nearassist,
 /// /smartaction, /nearhelp, and /farhelp macro lines.
@@ -191,6 +208,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
 
     [ThreadStatic]
     private static IntegratedBufferedReplayScope? integratedBufferedReplayScope;
+
+    [ThreadStatic]
+    private static ExactAutomaticActionBoundaryScope? exactAutomaticActionBoundaryScope;
 
     [ThreadStatic]
     private static PredictiveCcBrakeBypassScope? predictiveCcBrakeBypassScope;
@@ -432,7 +452,9 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return new ActionBarActivitySnapshot(
                 Known: Volatile.Read(ref started) &&
                        !disposed &&
-                       useActionHook?.IsEnabled == true,
+                       useActionHook?.IsEnabled == true &&
+                       useActionLocationHook?.IsEnabled == true &&
+                       integratedInputRuntime?.CanObserveCompleteActionBarActivity == true,
                 Token: token > 0 ? (ulong)token : 0);
         }
     }
@@ -592,6 +614,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             PredictiveCcBrakeBypassRules.IsValidIntent(intent)
                 ? new PredictiveCcBrakeBypassScope(this, intent)
                 : null;
+        actionBarActivitySuppressionDepth++;
         internalRedirectBypassDepth++;
         try
         {
@@ -600,26 +623,71 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         finally
         {
             internalRedirectBypassDepth--;
+            actionBarActivitySuppressionDepth--;
             predictiveCcBrakeBypassScope = previousPredictiveScope;
         }
     }
 
     /// <summary>
-    /// Runs the optional idle-Sprint request without treating that automatic
-    /// request as fresh player activity. Otherwise Smart Sprint would re-arm
-    /// its own idle episode after every accepted Sprint.
+    /// Runs one explicit user-authored command without consuming a redirect
+    /// token. Unlike automatic helpers, the command is recorded as one fresh
+    /// action-bar intent and retires an older tap-to-land reservation even when
+    /// a later local or native boundary rejects it.
     /// </summary>
-    internal T RunWithoutRedirectAndWithoutActionBarActivity<T>(Func<T> action)
+    internal IDisposable EnterUserAuthoredActionWithoutRedirect()
+    {
+        var scope = new UserAuthoredActionBypassScope(this);
+        RecordActionBarActivity();
+        integratedInputRuntime?.ActionBuffer.Cancel(
+            SmartActionBufferCancelReason.Replaced,
+            "Replaced by a newer explicit command action");
+        actionBarActivitySuppressionDepth++;
+        internalRedirectBypassDepth++;
+        return scope;
+    }
+
+    private void ReleaseUserAuthoredActionBypass()
+    {
+        internalRedirectBypassDepth--;
+        actionBarActivitySuppressionDepth--;
+    }
+
+    /// <summary>
+    /// Owns one exact automatic action call and reports whether it reached this
+    /// detour's final native boundary. A local veto is therefore distinguishable
+    /// from a clean native false and cannot accidentally spend an idle episode.
+    /// </summary>
+    internal ExactAutomaticActionBoundaryResult RunExactAutomaticActionWithoutRedirect(
+        ExactAutomaticActionBoundaryIntent intent,
+        Func<bool> action)
     {
         ArgumentNullException.ThrowIfNull(action);
+        if (!intent.IsValid ||
+            useActionHook is null ||
+            !useActionHook.IsEnabled ||
+            exactAutomaticActionBoundaryScope is not null ||
+            integratedBufferedReplayScope is not null)
+        {
+            return default;
+        }
+
+        var previousScope = exactAutomaticActionBoundaryScope;
+        var scope = new ExactAutomaticActionBoundaryScope(this, intent);
+        exactAutomaticActionBoundaryScope = scope;
         actionBarActivitySuppressionDepth++;
+        internalRedirectBypassDepth++;
         try
         {
-            return RunWithoutRedirect(action);
+            var clientReturnedAccepted = action();
+            return new ExactAutomaticActionBoundaryResult(
+                scope.NativeBoundaryInvoked,
+                clientReturnedAccepted);
         }
         finally
         {
+            internalRedirectBypassDepth--;
             actionBarActivitySuppressionDepth--;
+            exactAutomaticActionBoundaryScope = previousScope;
         }
     }
 
@@ -794,6 +862,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         var scope = new IntegratedBufferedReplayScope(this, intent);
         integratedBufferedReplayScope = scope;
         integratedBufferReplayDepth++;
+        actionBarActivitySuppressionDepth++;
         internalRedirectBypassDepth++;
         try
         {
@@ -805,6 +874,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         finally
         {
             internalRedirectBypassDepth--;
+            actionBarActivitySuppressionDepth--;
             integratedBufferReplayDepth--;
             integratedBufferedReplayScope = previousScope;
         }
@@ -1531,27 +1601,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             RecordActionBarActivity();
         }
 
-        // Protect the exact PvP Sprint press before any redirect, helper token,
-        // or automatic-Guard work can observe it. Metadata, adjusted ID, local
-        // identity, and the live status must all be positively known; every
-        // uncertainty deliberately preserves the native call.
-        if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
-            return false;
-
-        // This runs before any redirect/token work. A random action cannot both
-        // cancel an automatically owned Guard and consume a macro one-shot.
-        if (TryConsumeExplicitAutoGuardBreak(
-                actionType,
-                actionId,
-                ExplicitAutoGuardBreakBoundary.StandardAction))
-        {
-            ClearAutoGuardProtection("Released: explicit camera-back dash command override");
-        }
-        else if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
-        {
-            return false;
-        }
-
         var bypassRedirect = internalRedirectBypassDepth > 0;
         var integratedRuntime = integratedInputRuntime;
         var inspectedSmartActionTargetId = targetId;
@@ -1564,9 +1613,6 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                 mode,
                 out inspectedSmartActionTargetId)
             : SmartActionSafetyInspectionOutcome.NotApplicable;
-        if (smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Unsafe)
-            return false;
-
         // Once the exact authored <t> fallback has become a tap-to-land
         // reservation, later lines from that same /smartaction invocation must
         // not reach native Original a second time. This check has no generic
@@ -1602,6 +1648,44 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                     "Seiton Sense Smart Action macro-tail classification failed closed.");
                 return false;
             }
+        }
+
+        // Every other authored Action/PvPAction request is newer intent, even
+        // when a local veto or native false means it never advances the action
+        // sequence. The exact owned Smart Action macro tail above is the sole
+        // exception; an internal helper or this buffer's own replay is not new
+        // player intent and must not cancel its reservation.
+        if (!bypassRedirect &&
+            integratedBufferReplayDepth == 0 &&
+            integratedRuntime is not null &&
+            actionType is (ActionType.Action or ActionType.PvPAction))
+        {
+            integratedRuntime.ActionBuffer.Cancel(
+                SmartActionBufferCancelReason.Replaced,
+                "Replaced by a newer external action request");
+        }
+
+        if (smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Unsafe)
+            return false;
+
+        // Protect the exact PvP Sprint press before redirect, helper-token, or
+        // automatic-Guard work can observe it. It has already retired any older
+        // tap reservation because the press itself is newer player intent.
+        if (ShouldBlockActiveSprintRepeatPress(thisPtr, actionType, actionId))
+            return false;
+
+        // This runs before redirect/token work. A random action cannot both
+        // cancel an automatically owned Guard and consume a macro one-shot.
+        if (TryConsumeExplicitAutoGuardBreak(
+                actionType,
+                actionId,
+                ExplicitAutoGuardBreakBoundary.StandardAction))
+        {
+            ClearAutoGuardProtection("Released: explicit camera-back dash command override");
+        }
+        else if (TryBlockOwnedAutoGuardCancellation(thisPtr, actionType, actionId))
+        {
+            return false;
         }
 
         // Native zero/default carriers are mutable references to the selected
@@ -2191,7 +2275,7 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
                  integratedRuntime is not null &&
                  !handlingSmartTarget &&
                  smartActionSafetyInspection == SmartActionSafetyInspectionOutcome.Safe &&
-                 IsCertifiedMacroInvocationMode(mode) &&
+                 IsCertifiedSmartActionTapMacroMode(mode) &&
                  IsExactCurrentHardTarget(forwardedTargetId) &&
                  TryGetSmartActionFallbackTapGeneration(out var macroTapGeneration))
         {
@@ -2236,6 +2320,26 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             return false;
         }
 
+        // Exact automatic owners are allowed to interpret a false result only
+        // after this final hook boundary proves the raw action, target, and mode
+        // are still the one call they authored. Any mismatch fails closed and
+        // never spends the caller's episode as a native rejection.
+        var exactAutomaticScope = exactAutomaticActionBoundaryScope;
+        if (exactAutomaticScope is not null)
+        {
+            if (!ReferenceEquals(exactAutomaticScope.Owner, this) ||
+                exactAutomaticScope.Consumed ||
+                exactAutomaticScope.Intent.ActionType != actionType ||
+                exactAutomaticScope.Intent.RequestedActionId != actionId ||
+                exactAutomaticScope.Intent.TargetId != forwardedTargetId ||
+                exactAutomaticScope.Intent.Mode != mode)
+            {
+                return false;
+            }
+
+            exactAutomaticScope.Consumed = true;
+        }
+
         // Observe Guard only after every redirect, brake, replay, and final
         // helper veto has passed. Capture the exact native boundary so a clean
         // client rejection can retract only the just-created generation.
@@ -2253,6 +2357,11 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
             ReferenceEquals(replayScope.Owner, this))
         {
             replayScope.NativeBoundaryInvoked = true;
+        }
+        if (exactAutomaticScope is { Consumed: true } &&
+            ReferenceEquals(exactAutomaticScope.Owner, this))
+        {
+            exactAutomaticScope.NativeBoundaryInvoked = true;
         }
 
         bool clientAccepted;
@@ -2815,6 +2924,25 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         uint extraParam,
         byte a7)
     {
+        var bypassRedirect = internalRedirectBypassDepth > 0;
+        if (actionBarActivitySuppressionDepth == 0 &&
+            actionType is (ActionType.Action or ActionType.PvPAction))
+        {
+            RecordActionBarActivity();
+        }
+
+        // Location actions are newer player intent too. Retire a pending exact
+        // tap before owned Guard can reject the command, while automatic helper
+        // calls remain isolated by their redirect/activity scope.
+        if (!bypassRedirect &&
+            integratedInputRuntime is { } integratedRuntime &&
+            actionType is (ActionType.Action or ActionType.PvPAction))
+        {
+            integratedRuntime.ActionBuffer.Cancel(
+                SmartActionBufferCancelReason.Replaced,
+                "Replaced by a newer external location action request");
+        }
+
         if (TryConsumeExplicitAutoGuardBreak(
                 actionType,
                 actionId,
@@ -5330,6 +5458,15 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         mode == ActionManager.UseActionMode.None ||
         (uint)mode == 100;
 
+    // Tap-to-land retains an action after the originating call returns. Mode
+    // None cannot prove that a later identical call is another line from that
+    // macro rather than newer manual mouse/direct intent, so it is deliberately
+    // excluded from this narrower ownership contract.
+    private static bool IsCertifiedSmartActionTapMacroMode(
+        ActionManager.UseActionMode mode) =>
+        mode == ActionManager.UseActionMode.Macro ||
+        (uint)mode == 100;
+
     private static bool IsSupportedActionType(ActionType actionType) =>
         actionType is ActionType.Action or ActionType.PvPAction;
 
@@ -5674,6 +5811,28 @@ internal sealed unsafe class NearAssistRedirector : IDisposable
         internal IntegratedBufferedReplayIntent Intent { get; } = intent;
         internal bool Consumed { get; set; }
         internal bool NativeBoundaryInvoked { get; set; }
+    }
+
+    private sealed class ExactAutomaticActionBoundaryScope(
+        NearAssistRedirector owner,
+        ExactAutomaticActionBoundaryIntent intent)
+    {
+        internal NearAssistRedirector Owner { get; } = owner;
+        internal ExactAutomaticActionBoundaryIntent Intent { get; } = intent;
+        internal bool Consumed { get; set; }
+        internal bool NativeBoundaryInvoked { get; set; }
+    }
+
+    private sealed class UserAuthoredActionBypassScope(
+        NearAssistRedirector owner) : IDisposable
+    {
+        private int disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+                owner.ReleaseUserAuthoredActionBypass();
+        }
     }
 
     private static NearAssistAllyRole GetRolePreference(IPlayerCharacter player)

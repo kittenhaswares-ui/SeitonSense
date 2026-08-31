@@ -398,6 +398,8 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
             {
                 using var explicitGuardBreak = nearAssist.EnterExplicitAutoGuardBreak(
                     PanicShukuchiRules.ActionId);
+                using var userAuthoredAction =
+                    nearAssist.EnterUserAuthoredActionWithoutRedirect();
                 accepted = actionManager->UseActionLocation(
                     ActionType.Action,
                     PanicShukuchiRules.ActionId,
@@ -815,14 +817,15 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                     }
 
                     nativeBoundaryEntered = true;
-                    accepted = nearAssist.RunWithoutRedirect(() =>
-                        actionManager->UseAction(
+                    using var userAuthoredAction =
+                        nearAssist.EnterUserAuthoredActionWithoutRedirect();
+                    accepted = actionManager->UseAction(
                         ActionType.Action,
                         profile.ActionId,
                         local.GameObjectId,
                         0,
                         ActionManager.UseActionMode.None,
-                        0));
+                        0);
                 }
             }
             catch (Exception exception)

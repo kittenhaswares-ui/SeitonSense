@@ -290,10 +290,14 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
                     return BufferLearningSnapshot.Empty(configured);
 
                 var now = Environment.TickCount64;
-                var pending = pendingRuntime is not null || pendingChase is not null;
+                var pendingKind = pendingRuntime is not null
+                    ? BufferLearningPendingKind.EarlyTiming
+                    : pendingChase is not null
+                        ? BufferLearningPendingKind.TapToLand
+                        : BufferLearningPendingKind.None;
                 return new BufferLearningSnapshot(
                     HasInput: true,
-                    BufferPending: pending,
+                    PendingKind: pendingKind,
                     InputHeld: input.HotbarRoot.InputHeld,
                     InputLabel: SafeLabel(input.HotbarRoot.InputLabel, SlotLabel(input.HotbarRoot)),
                     LogicalInputName: SafeLabel(
@@ -574,8 +578,10 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
             if (disposed || dispatching || tapGeneration <= 0)
                 return IntegratedActionBufferAttempt.None;
 
-            var macroMode = sourceMode is ActionManager.UseActionMode.Macro or
-                                ActionManager.UseActionMode.None ||
+            // None is indistinguishable from a fresh manual mouse/direct
+            // UseAction call. It cannot certify ownership of the preceding
+            // /smartaction tap, so only explicit macro carriers are admitted.
+            var macroMode = sourceMode == ActionManager.UseActionMode.Macro ||
                             (uint)sourceMode == 100;
             if (!macroMode || sourceMode == ActionManager.UseActionMode.Queue)
                 return IntegratedActionBufferAttempt.None;
@@ -1154,8 +1160,9 @@ internal sealed unsafe class IntegratedActionBufferRuntime :
         ActionManager.UseActionMode sourceMode,
         long tapGeneration)
     {
-        var macroMode = sourceMode is ActionManager.UseActionMode.Macro or
-                            ActionManager.UseActionMode.None ||
+        // A mode-None call may be a new manual mouse/direct action with the
+        // same tuple. Suppressing it as a macro tail would erase newer intent.
+        var macroMode = sourceMode == ActionManager.UseActionMode.Macro ||
                         (uint)sourceMode == 100;
         if (!macroMode || sourceMode == ActionManager.UseActionMode.Queue)
             return false;

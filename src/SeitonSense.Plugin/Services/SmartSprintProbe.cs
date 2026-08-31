@@ -287,19 +287,46 @@ internal sealed class SmartSprintProbe
         var before = ClientActionAttemptBoundary.Capture(
             actionManager,
             EnemyCombatConstants.PvPSprintActionId);
-        attempted = true;
         try
         {
-            var clientAccepted = nearAssist.RunWithoutRedirectAndWithoutActionBarActivity(() =>
-                actionManager->UseAction(
+            Exception? nativeException = null;
+            var invocation = nearAssist.RunExactAutomaticActionWithoutRedirect(
+                new ExactAutomaticActionBoundaryIntent(
                     ActionType.Action,
                     EnemyCombatConstants.PvPSprintActionId,
                     expectedLocalIdentity.GameObjectId,
-                    0,
-                    ActionManager.UseActionMode.None,
-                    0));
+                    ActionManager.UseActionMode.None),
+                () =>
+                {
+                    try
+                    {
+                        return actionManager->UseAction(
+                            ActionType.Action,
+                            EnemyCombatConstants.PvPSprintActionId,
+                            expectedLocalIdentity.GameObjectId,
+                            0,
+                            ActionManager.UseActionMode.None,
+                            0);
+                    }
+                    catch (Exception exception)
+                    {
+                        nativeException = exception;
+                        return false;
+                    }
+                });
+            attempted = invocation.NativeBoundaryInvoked;
+            if (nativeException is not null)
+            {
+                LogFailure(nativeException, finalNow);
+                return attempted
+                    ? ClientActionAttemptOutcome.AcceptanceUnknown
+                    : ClientActionAttemptOutcome.NotInvoked;
+            }
+            if (!attempted)
+                return ClientActionAttemptOutcome.NotInvoked;
+
             return ClientActionAttemptBoundaryRules.Classify(
-                clientAccepted,
+                invocation.ClientReturnedAccepted,
                 EnemyCombatConstants.PvPSprintActionId,
                 before,
                 ClientActionAttemptBoundary.Capture(
@@ -309,7 +336,9 @@ internal sealed class SmartSprintProbe
         catch (Exception exception)
         {
             LogFailure(exception, finalNow);
-            return ClientActionAttemptOutcome.AcceptanceUnknown;
+            return attempted
+                ? ClientActionAttemptOutcome.AcceptanceUnknown
+                : ClientActionAttemptOutcome.NotInvoked;
         }
     }
 

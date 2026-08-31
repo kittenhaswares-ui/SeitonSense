@@ -136,6 +136,7 @@ internal sealed class PersonalStatusService : IDisposable
             automaticRecoveryShotCastMetadata);
         emergencyPurify = new EmergencyPurifyProbe(
             log,
+            nearAssist,
             nearAssist.IsExactLocalGuardActive);
         astrologianHarmonicOrbis = new AstrologianHarmonicOrbisProbe(
             clientState,

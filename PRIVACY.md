@@ -379,7 +379,7 @@ Guard > AST same-target heal chain > RDM fresh-Guard engage > SAM staged
 counter-CC / automatic Zantetsuken > automatic NIN Seiton > VPR Serpentiner Geist > GNB Continuation > reactive
 counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > SCH Critical
 Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer
-(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event
+(safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event
 Kardia > event Monk**. The job-specific helpers use that deterministic urgency
 order; automatic Zantetsuken and Auto-Seiton need no key, while physical-hold
 helpers retain explicit consent. Reactive counter-CC leads ally cleanse because
@@ -1420,8 +1420,8 @@ view cannot manufacture that fallback, and an unknown or already-owned Kardion
 state on the chosen actor ends the opportunity without selecting another actor.
 
 Smart Kardia waits for the current animation lock to clear while the trigger
-remains valid. It follows pressure Sprint and precedes only event Monk in the
-current request order.
+remains valid. It follows pressure Sprint and idle Smart Sprint, and precedes
+only event Monk in the current request order.
 Before at most one direct-GOID Kardia `29264` request, the trigger and frozen
 actor are spent and exact configuration, context, local Sage, causal Eukrasia,
 fresh pressure, Kardia readiness, own Guard, frozen identity, Kardion state, and
@@ -1863,8 +1863,9 @@ Configuration schema 50 is current. It replaces held-only chase behavior with
 one release-independent tap-to-land reservation (0-3000 ms, 2200 ms default),
 adds default-on exact active-Sprint repeat protection, and adds a separate
 default-off 3000-5000 ms idle Smart Sprint option. Smart Sprint retains only a
-monotonic accepted-action activity token and its local time baseline; movement,
-camera, and target input are not stored as activity. Schema 49 enabled the local
+monotonic action-bar activity token and its local time baseline; rejected
+action-bar requests still count, while movement, camera, and target input are
+not stored as activity. Schema 49 enabled the local
 adaptive response clock, sampled readiness-edge wakeups, unchanged-queue
 critical recovery, and the original held chase buffer. The latency-response helper defaults on for fresh/
 reset configurations while an existing opt-out is preserved on upgrade. These

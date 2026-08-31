@@ -6,9 +6,16 @@ using SeitonSense.Plugin.Models;
 
 namespace SeitonSense.Plugin.UI;
 
+internal enum BufferLearningPendingKind
+{
+    None = 0,
+    EarlyTiming = 1,
+    TapToLand = 2,
+}
+
 internal readonly record struct BufferLearningSnapshot(
     bool HasInput,
-    bool BufferPending,
+    BufferLearningPendingKind PendingKind,
     bool InputHeld,
     string InputLabel,
     string LogicalInputName,
@@ -18,9 +25,11 @@ internal readonly record struct BufferLearningSnapshot(
     int RemainingBufferMilliseconds,
     int CapturedEarlyMilliseconds)
 {
+    public bool BufferPending => PendingKind != BufferLearningPendingKind.None;
+
     public static BufferLearningSnapshot Empty(int configuredMilliseconds) => new(
         HasInput: false,
-        BufferPending: false,
+        PendingKind: BufferLearningPendingKind.None,
         InputHeld: false,
         InputLabel: "NO INPUT",
         LogicalInputName: "Waiting for a standard-hotbar input",
@@ -99,6 +108,8 @@ internal sealed class BufferLearningWindow : Window
     public override void Draw()
     {
         var snapshot = snapshotSource.BufferLearningSnapshot;
+        var tapToLandPending =
+            snapshot.PendingKind == BufferLearningPendingKind.TapToLand;
         var scale = Math.Max(0.5f, ImGuiHelpers.GlobalScale);
         var width = 286f * scale;
         var accent = snapshot.BufferPending
@@ -109,11 +120,13 @@ internal sealed class BufferLearningWindow : Window
 
         ImGui.TextColored(
             accent,
-            snapshot.BufferPending
-                ? "BUFFERED"
-                : snapshot.InputHeld
-                    ? "HELD INPUT"
-                    : "LATEST INPUT");
+            tapToLandPending
+                ? "TAP-TO-LAND"
+                : snapshot.BufferPending
+                    ? "EARLY TIMING BUFFER"
+                    : snapshot.InputHeld
+                        ? "HELD INPUT"
+                        : "LATEST INPUT");
 
         ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.08f, 0.10f, 0.15f, 1f));
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.10f, 0.13f, 0.20f, 1f));
@@ -145,8 +158,11 @@ internal sealed class BufferLearningWindow : Window
             : $"Ready · {configured} ms window";
         ImGui.ProgressBar(fraction, new Vector2(width, 18f * scale), overlay);
 
-        if (snapshot.BufferPending)
-            ImGui.TextDisabled($"Pressed {snapshot.CapturedEarlyMilliseconds} ms before ready");
+        if (tapToLandPending)
+            ImGui.TextDisabled("Waiting for the same target to enter range");
+        else if (snapshot.BufferPending)
+            ImGui.TextDisabled(
+                $"Slightly early press · {snapshot.CapturedEarlyMilliseconds} ms before ready");
         else if (!snapshot.HasInput)
             ImGui.TextDisabled("Waiting for a logical standard-hotbar press");
         else
@@ -164,7 +180,11 @@ internal sealed class BufferLearningWindow : Window
         ImGui.TextUnformatted(
             "Shows your key when possible; otherwise it shows the matching standard-hotbar slot.");
         ImGui.TextUnformatted(
-            "Buffers only clean local GCD, cooldown, or animation timing; never range, line of sight, resources, or server rejections.");
+            "Normal buffer: remembers a slightly early GCD, cooldown, or animation-timing press.");
+        ImGui.TextUnformatted(
+            "Tap-to-land: waits for the same target to enter range after a supported out-of-range tap.");
+        ImGui.TextUnformatted(
+            "Neither mode changes targets or buffers resource and server-rejection failures.");
         ImGui.EndTooltip();
     }
 

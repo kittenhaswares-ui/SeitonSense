@@ -240,6 +240,12 @@ internal sealed unsafe class IntegratedHotbarInputSource : IDisposable
         }
     }
 
+    internal bool IsOperational =>
+        started &&
+        !disposed &&
+        pressedHook.IsEnabled &&
+        checkHotbarBindingsHook.IsEnabled;
+
     public IntegratedHotbarInputSnapshot Snapshot
     {
         get

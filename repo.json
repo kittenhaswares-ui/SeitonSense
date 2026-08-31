@@ -6,7 +6,7 @@
     "Description": "A local PvP HUD with nameplate cues, Limit Break alerts, pressure and CC information, Ping Helpers, medicine-kit beacons, range rings, a Wolves' Den map panel, recovery and job helpers, Smart Tab, assist macros, MP sounds, and target highlights.",
     "InternalName": "SeitonSense.Plugin",
     "AssemblyVersion": "0.43.0.1",
-    "Changelog": "Tap-to-land remembers one supported out-of-range attack after you release the key for up to 3000 ms (2200 ms by default), including supported single-target casts. It keeps the same action and target and stops on a new action, target change, Guard, crowd control, death, or area change. Pressing Sprint again no longer cancels active PvP Sprint by default. Optional Smart Sprint can use Sprint once after 3–5 seconds without action-bar input while a gameplay key stays held. Any action-bar press resets that timer; movement, camera, and targeting do not. Settings and update notes are now easier to read. Live in-game confirmation remains separate from build checks.",
+    "Changelog": "Tap-to-land remembers one supported out-of-range attack after you release the key for up to 3000 ms (2200 ms by default), including supported single-target casts and the visible <t> fallback of /smartaction. It keeps the same action and target and stops on a new action, target change, Guard, crowd control, death, or area change. Pressing Sprint again no longer cancels active PvP Sprint by default. Optional Smart Sprint can use Sprint once after 3–5 seconds without action-bar input while a gameplay key stays held. Any action-bar press resets that timer; movement, camera, and targeting do not. Settings and update notes are now easier to read. Live in-game confirmation remains separate from build checks.",
     "RepoUrl": "https://github.com/kittenhaswares-ui/SeitonSense",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -36,6 +36,6 @@
     "DownloadLinkInstall": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
     "DownloadLinkTesting": "https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/dist/latest.zip",
-    "LastUpdate": "1788192838"
+    "LastUpdate": "1788205610"
   }
 ]

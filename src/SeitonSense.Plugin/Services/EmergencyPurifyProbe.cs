@@ -56,6 +56,7 @@ internal sealed record EmergencyPurifyProbeSnapshot(
 internal sealed class EmergencyPurifyProbe
 {
     private readonly IPluginLog log;
+    private readonly NearAssistRedirector nearAssist;
     private readonly Func<TargetPressureActorIdentity, bool>
         finalOwnGuardActiveOrPropagating;
     private EmergencyPurifyBufferState state = EmergencyPurifyBufferState.Initial;
@@ -72,10 +73,13 @@ internal sealed class EmergencyPurifyProbe
 
     internal EmergencyPurifyProbe(
         IPluginLog log,
+        NearAssistRedirector nearAssist,
         Func<TargetPressureActorIdentity, bool>
             finalOwnGuardActiveOrPropagating)
     {
         this.log = log;
+        this.nearAssist = nearAssist ??
+            throw new ArgumentNullException(nameof(nearAssist));
         this.finalOwnGuardActiveOrPropagating =
             finalOwnGuardActiveOrPropagating ??
             throw new ArgumentNullException(
@@ -493,16 +497,41 @@ internal sealed class EmergencyPurifyProbe
         var boundaryBefore = ClientActionAttemptBoundary.Capture(
             actionManager,
             EnemyCombatConstants.PurifyActionId);
-        attempted = true;
-        var accepted = actionManager->UseAction(
-            ActionType.Action,
-            EnemyCombatConstants.PurifyActionId,
-            localPlayer.GameObjectId,
-            0,
-            ActionManager.UseActionMode.None,
-            0);
+        Exception? nativeException = null;
+        var invocation = nearAssist.RunExactAutomaticActionWithoutRedirect(
+            new ExactAutomaticActionBoundaryIntent(
+                ActionType.Action,
+                EnemyCombatConstants.PurifyActionId,
+                localPlayer.GameObjectId,
+                ActionManager.UseActionMode.None),
+            () =>
+            {
+                try
+                {
+                    return actionManager->UseAction(
+                        ActionType.Action,
+                        EnemyCombatConstants.PurifyActionId,
+                        localPlayer.GameObjectId,
+                        0,
+                        ActionManager.UseActionMode.None,
+                        0);
+                }
+                catch (Exception exception)
+                {
+                    nativeException = exception;
+                    return false;
+                }
+            });
+        attempted = invocation.NativeBoundaryInvoked;
+        if (nativeException is not null)
+        {
+            if (!attempted) return ClientActionAttemptOutcome.SoftUnavailable;
+            throw nativeException;
+        }
+        if (!attempted) return ClientActionAttemptOutcome.SoftUnavailable;
+
         return ClientActionAttemptBoundaryRules.ClassifyCriticalRecovery(
-            accepted,
+            invocation.ClientReturnedAccepted,
             EnemyCombatConstants.PurifyActionId,
             boundaryBefore,
             ClientActionAttemptBoundary.Capture(

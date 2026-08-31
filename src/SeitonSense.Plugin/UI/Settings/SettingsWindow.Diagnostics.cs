@@ -20,6 +20,7 @@ internal sealed partial class SettingsWindow
         var personal = personalStatus.Snapshot;
         var mchLimitBreak = personalStatus.MachinistLimitBreakDiagnostics;
         var pressureEscape = personalStatus.PressureEscapeDiagnostics;
+        var smartSprint = personalStatus.SmartSprintDiagnostics;
         var defense = personalStatus.DefensiveUtilityDiagnostics;
         var autoGuardProtection = personalStatus.AutoGuardProtectionDiagnostics;
         var recuperate = personalStatus.SmartRecuperateDiagnostics;
@@ -102,6 +103,15 @@ internal sealed partial class SettingsWindow
             $"{pressureEscape.HeldGameplayKey}, claim={pressureEscape.InputClaimed}, attempt=" +
             $"{pressureEscape.UseActionAttempted}/{pressureEscape.UseActionAccepted}, " +
             $"last={pressureEscape.LastEvent}");
+        ImGui.TextWrapped(
+            $"Smart Sprint: configured/context={smartSprint.Configured}/{smartSprint.Context}, " +
+            $"metadata/activity={smartSprint.MetadataVerified}/{smartSprint.ActionBarActivityKnown}, " +
+            $"token={smartSprint.ActionBarActivityToken}, idle={smartSprint.IdleForMilliseconds}/" +
+            $"{smartSprint.InactivityMilliseconds} ms, key={smartSprint.HeldGameplayKey}, " +
+            $"guard/CC/sprint/ready/spent={smartSprint.GuardActive}/{smartSprint.Incapacitated}/" +
+            $"{smartSprint.SprintActive}/{smartSprint.SprintReady}/{smartSprint.IdleEpisodeSpent}, " +
+            $"claim/attempt/accepted={smartSprint.InputClaimed}/{smartSprint.Attempted}/" +
+            $"{smartSprint.Accepted}, last={smartSprint.LastEvent}");
         ImGui.TextWrapped(
             $"Defensive utility: active={defense.Active}, action/trigger={defense.Action}/{defense.Trigger}, " +
             $"pressure={defense.PressureKnown}/{defense.IncomingEnemyCount}, guard={defense.GuardActive}, " +
@@ -365,7 +375,7 @@ internal sealed partial class SettingsWindow
             "the target ID on one armed macro action. The optional CC brake can invalidate only one already incoming, " +
             "enabled action attempt against an exact protected enemy; it adds no action, repeat, or retry. " +
             "The current request order is Purify > Recuperate > automatic Guard > AST held Near Help > RDM fresh-Guard Corps-a-corps > SAM staged counter-CC / automatic Zantetsuken > NIN Auto-Seiton > VPR Serpentiner Geist > GNB Continuation > reactive counter-CC > Ally Rescue > PLD Guardian > NIN Guard-Shukuchi > " +
-            "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > event " +
+            "SCH Critical Strategy > DRK Shadowbringer (Dark Arts) > DRK Hiebsprung > DRK Shadowbringer (safe fallback) > Monk combo > Emergency Teleport > pressure Sprint > idle Smart Sprint > event " +
             "Kardia > event Monk. The job-specific helpers use that deterministic order; Auto-Seiton and Zantetsuken are automatic in their job slots while held helpers keep explicit key consent. AST runs directly after automatic recovery and Guard, then RDM and SAM, " +
             "and reactive stays before BRD/WHM cleanse because its windows are shorter. Kardia still requires its separate " +
             "accepted-Eukrasia trigger. Viper instead polls only FFXIV's currently transformed Serpent's Tail carrier; " +

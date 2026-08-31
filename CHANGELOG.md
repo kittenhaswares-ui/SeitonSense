@@ -5,7 +5,8 @@
 - **Tap-to-land no longer needs the key to stay held.** Press a supported attack
   while its target is out of range, release the key, and Seiton keeps that same
   action and target for a short time. The time is adjustable from 0 to 3000 ms;
-  the default is 2200 ms and 0 disables it.
+  the default is 2200 ms and 0 disables it. The visible `<t>` fallback of
+  `/smartaction` can use the same wait without changing your selected target.
 - Supported single-target spells can wait as well. Seiton will not cancel your
   current cast, change your target, or turn you toward a target you switched
   away from. A new action, target change, Guard, crowd control, death, or area

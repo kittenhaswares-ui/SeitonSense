@@ -133,6 +133,14 @@ internal sealed unsafe class IntegratedInputRuntime : IDisposable
 
     internal IntegratedActionBufferRuntime ActionBuffer { get; }
 
+    internal bool CanObserveCompleteActionBarActivity =>
+        !disposed &&
+        Volatile.Read(ref available) != 0 &&
+        Volatile.Read(ref started) != 0 &&
+        executeSlotHook?.IsEnabled == true &&
+        executeSlotByIdHook?.IsEnabled == true &&
+        hotbarInput?.IsOperational == true;
+
     internal IntegratedInputRuntimeDiagnostics Diagnostics
     {
         get
