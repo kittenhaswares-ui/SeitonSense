@@ -108,12 +108,11 @@ internal sealed class MovementDirectedEnAvantTracker : IDisposable
             // The macro callback can land between framework samples. Fold in
             // the current position once so the command never depends on the
             // previous frame having observed the final movement segment.
-            if (!state.LastSample.IsValid ||
-                state.LastSample.Fingerprint != sample.Fingerprint ||
-                sample.ObservedAtMilliseconds > state.LastSample.ObservedAtMilliseconds)
-            {
-                state = MovementDirectedEnAvantRules.Observe(state, sample);
-            }
+            // TickCount64 can repeat across several high-FPS frames. Always
+            // fold the command-frame position through the pure rules so a
+            // real same-tick displacement is not lost. A same-position sample
+            // is a no-op there and cannot manufacture a direction.
+            state = MovementDirectedEnAvantRules.Observe(state, sample);
 
             if (!MovementDirectedEnAvantRules.TryCapture(
                     state,

@@ -2503,7 +2503,7 @@ if ($movementDirectedEnAvantRules -match '\b(?:UseAction|UseActionLocation)\s*\(
     [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool TryCapture\s*\(').Count -ne 1 -or
     [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool MatchesCurrentIdentity\s*\(').Count -ne 1 -or
     [regex]::Matches($movementDirectedEnAvantRules, '(?m)^\s*public static bool IsFreshSnapshot\s*\(').Count -ne 1 -or
-    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!sample\.IsValid\) return MovementDirectedEnAvantState\.Initial;.*?if \(!previous\.LastSample\.IsValid \|\| previous\.LastSample\.Fingerprint != sample\.Fingerprint\).*?return Baseline\(sample\);.*?if \(elapsed <= 0 \|\| elapsed > MaximumSampleGapMilliseconds\).*?return Baseline\(sample\);' -or
+    $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!sample\.IsValid\) return MovementDirectedEnAvantState\.Initial;.*?if \(!previous\.LastSample\.IsValid \|\| previous\.LastSample\.Fingerprint != sample\.Fingerprint\).*?return Baseline\(sample\);.*?if \(elapsed < 0 \|\| elapsed > MaximumSampleGapMilliseconds\).*?return Baseline\(sample\);' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'if \(!double\.IsFinite\(distanceSquared\)\) return Baseline\(sample\);.*?if \(!double\.IsFinite\(distance\) \|\| distance > MaximumSegmentDistanceYalms\).*?return Baseline\(sample\);.*?if \(distance < MinimumSegmentDistanceYalms\).*?var directionAge = sample\.ObservedAtMilliseconds - previous\.LastMovementAtMilliseconds;.*?var isCleanBaseline = previous\.ConsistentSegmentCount == 0 && previous\.ConsistentDistanceYalms == 0f && !float\.IsFinite\(previous\.HeadingRadians\) && previous\.LastMovementAtMilliseconds < 0;.*?var hasFreshPartialDirection = previous\.ConsistentSegmentCount > 0 && float\.IsFinite\(previous\.HeadingRadians\) && previous\.LastMovementAtMilliseconds >= 0;.*?if \(isCleanBaseline \|\| \(hasFreshPartialDirection && directionAge >= 0 && directionAge <= MaximumDirectionAgeMilliseconds\)\).*?return previous;.*?return Baseline\(sample\);' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'var heading = NormalizeRadians\(\(float\)Math\.Atan2\(deltaX, deltaZ\)\);.*?HeadingDistance\(previous\.HeadingRadians, heading\) <= MaximumSegmentHeadingDeltaRadians;.*?Math\.Min\( RequiredConsistentSegmentCount, previous\.ConsistentSegmentCount \+ 1\).*?Math\.Min\( MinimumConsistentDistanceYalms \+ MaximumSegmentDistanceYalms, previous\.ConsistentDistanceYalms \+ \(float\)distance\)' -or
     $normalizedMovementDirectedEnAvantRules -notmatch 'snapshot = default; if \(!state\.HasDirection \|\| !currentFingerprint\.IsValid \|\| state\.LastSample\.Fingerprint != currentFingerprint\).*?var age = nowMilliseconds - state\.LastMovementAtMilliseconds; if \(age < 0 \|\| age > MaximumDirectionAgeMilliseconds\) return false;.*?snapshot = new MovementDirectedEnAvantSnapshot\( currentFingerprint, state\.HeadingRadians, state\.LastMovementAtMilliseconds, state\.ConsistentSegmentCount, state\.ConsistentDistanceYalms\); return snapshot\.IsValid;' -or
@@ -2519,7 +2519,6 @@ Assert-Literals $movementDirectedEnAvantTracker @(
     'framework.Update -= OnFrameworkUpdate',
     'private bool TryCreateCurrentSample(out MovementDirectedEnAvantSample sample)',
     'if (!started || disposed || !TryCreateCurrentSample(out var sample))',
-    'sample.ObservedAtMilliseconds > state.LastSample.ObservedAtMilliseconds',
     'MovementDirectedEnAvantRules.TryCapture(',
     'MovementDirectedEnAvantRules.Observe(state, sample)',
     'condition[ConditionFlag.BetweenAreas]',
@@ -2540,7 +2539,7 @@ if ($movementDirectedEnAvantTracker -match '\b(?:ActionManager|UseAction|UseActi
     [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.Observe\s*\(').Count -ne 2 -or
     [regex]::Matches($movementDirectedEnAvantTracker, '\bMovementDirectedEnAvantRules\.TryCapture\s*\(').Count -ne 1 -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'internal void Start\(\).*?if \(started \|\| disposed\) return; started = true; framework\.Update \+= OnFrameworkUpdate;' -or
-    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal MovementDirectedEnAvantSnapshot Capture\(\).*?if \(!started \|\| disposed \|\| !TryCreateCurrentSample\(out var sample\)\).*?return default;.*?if \(!state\.LastSample\.IsValid \|\| state\.LastSample\.Fingerprint != sample\.Fingerprint \|\| sample\.ObservedAtMilliseconds > state\.LastSample\.ObservedAtMilliseconds\).*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);.*?MovementDirectedEnAvantRules\.TryCapture\( state, sample\.Fingerprint, Environment\.TickCount64, out var snapshot\).*?return default;.*?return snapshot;' -or
+    $normalizedMovementDirectedEnAvantTracker -notmatch 'internal MovementDirectedEnAvantSnapshot Capture\(\).*?if \(!started \|\| disposed \|\| !TryCreateCurrentSample\(out var sample\)\).*?return default;.*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);.*?MovementDirectedEnAvantRules\.TryCapture\( state, sample\.Fingerprint, Environment\.TickCount64, out var snapshot\).*?return default;.*?return snapshot;' -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'private void OnFrameworkUpdate\(IFramework _\).*?if \(disposed\) return; try \{ ObserveCurrentMovement\(\); \} catch \{ Reset\("Tracking reset: movement sampling faulted closed\."\); \}' -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'private void ObserveCurrentMovement\(\).*?if \(!TryCreateCurrentSample\(out var sample\)\).*?Reset\(.*?state = MovementDirectedEnAvantRules\.Observe\(state, sample\);' -or
     $normalizedMovementDirectedEnAvantTracker -notmatch 'private bool TryCreateCurrentSample\(out MovementDirectedEnAvantSample sample\).*?sample = default; if \(!TryCaptureCurrentFingerprint\(out var fingerprint\)\) return false; var local = objectTable\.LocalPlayer; if \(local is null\) return false; var position = local\.Position; sample = new MovementDirectedEnAvantSample\( fingerprint, position\.X, position\.Z, Environment\.TickCount64\); return sample\.IsValid;' -or
@@ -11119,18 +11118,17 @@ $whatsNewWindow = Read-RequiredSource $whatsNewWindowPath 'What''s New window'
 $releaseNotesContentRules = Read-RequiredSource $releaseNotesContentRulesPath 'Release-note content rules'
 $releaseNotesContentSelfTests = Read-RequiredSource $releaseNotesContentSelfTestsPath 'Release-note content self-tests'
 Assert-Literals $projectFile @(
-    '<Version>0.42.0.9</Version>',
-    '<AssemblyVersion>0.42.0.9</AssemblyVersion>',
-    '<FileVersion>0.42.0.9</FileVersion>'
-) 'v0.42.0.9 project version'
+    '<Version>0.42.0.10</Version>',
+    '<AssemblyVersion>0.42.0.10</AssemblyVersion>',
+    '<FileVersion>0.42.0.10</FileVersion>'
+) 'v0.42.0.10 project version'
 Assert-Literals $pluginSource @(
-    'private const string CurrentReleaseVersion = "0.42.0.9";',
-    'Fixed /seitonenavant so the command captures fresh actual character displacement instead of depending on a MOVE signal on the exact macro frame.',
-    'Slow controller or analog movement now accumulates until it forms a real heading; tiny positional jitter still produces no dash.',
-    'Unrelated ReAction Auto Target or Action Stacks no longer block a reviewed self dash; exact or wildcard ownership still fails closed.',
-    'Added public-CC medicine-kit cues: a first-spawn countdown plus optional green through-terrain beacons, with separate visibility toggles and scale.',
-    'The medicine-kit scan is read-only and bounded. Live confirmation of the current client''s localized runtime objects and the En Avant paths remains pending.'
-) 'v0.42.0.9 version-acknowledged En Avant and medicine-kit What''s New content'
+    'private const string CurrentReleaseVersion = "0.42.0.10";',
+    'Fixed an intermittent high-FPS /seitonenavant race where several real movement frames could share one clock timestamp and erase the detected direction.',
+    'Real same-timestamp displacement now contributes to the heading, while stationary samples, jitter, stale movement, and identity changes remain blocked.',
+    '/seiton debug now names the exact En Avant readiness blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources.',
+    'The command remains one immediate En Avant attempt with no wait, reservation, queue, or retry. Live in-game confirmation remains pending.'
+) 'v0.42.0.10 version-acknowledged En Avant race and diagnostic What''s New content'
 Assert-Literals $releaseNotesContentRules @(
     'public const int MaximumBulletCount = 5;',
     'if (bullets is null) return [];',
@@ -11183,20 +11181,20 @@ Assert-Literals $pluginManifest @(
     '"targeting"',
     '"survival"',
     '"viper"'
-) 'v0.42.0.9 plugin manifest metadata'
+) 'v0.42.0.10 plugin manifest metadata'
 if ($pluginManifest -match 'combat frames|combat-frames|calibrated LB gauges|row targeting and mouseover') {
     throw 'Current plugin metadata must not advertise the retired Combat Frames runtime.'
 }
 Assert-Literals $repositoryIndex @(
-    '"AssemblyVersion": "0.42.0.9"',
-    'Fixes /seitonenavant by deriving its heading from fresh actual character displacement instead of requiring a MOVE signal on the exact macro frame;',
-    'slow analog movement accumulates while positional jitter remains rejected.',
-    'Unrelated ReAction Auto Target or Action Stacks no longer block reviewed self dashes, while exact/wildcard ownership still fails closed.',
-    'Adds configurable public-CC medicine-kit cues: an opening first-spawn countdown and read-only bounded event-object green beacons visible through terrain.',
+    '"AssemblyVersion": "0.42.0.10"',
+    'Fixes an intermittent high-FPS /seitonenavant race:',
+    'real movement samples that share one coarse clock timestamp now contribute to the direction instead of clearing it, while stationary samples and jitter remain rejected.',
+    '/seiton debug now identifies the exact En Avant blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources.',
+    'The command remains one immediate attempt with no wait, reservation, queue, or retry.',
     'Schema 48;',
-    'exact live En Avant behavior and current-client medicine-kit runtime-object detection remain pending in-game confirmation.',
+    'exact live En Avant behavior remains pending in-game confirmation.',
     '"IsHide": false'
-) 'v0.42.0.9 custom-repository metadata'
+) 'v0.42.0.10 custom-repository metadata'
 if ($repositoryIndex -notmatch '"LastUpdate"\s*:\s*"\d+"' -or
     [regex]::Matches($repositoryIndex, '"LastUpdate"').Count -ne 1) {
     throw 'The custom repository entry must retain one numeric LastUpdate field without pinning its release-time value.'
@@ -11323,11 +11321,11 @@ Assert-Literals $normalizedPrivacy @(
     'Automatic Zantetsuken and Auto-Seiton never use this permission.'
 ) 'v0.42.0.8 retained required-Kuzushi Zantetsuken, Auto-Seiton/Namikiri, and safety/privacy disclosure'
 Assert-Literals $normalizedReadme @(
-    'Version 0.42.0.9 fixes `/seitonenavant` so one explicit DNC macro press uses fresh actual character displacement instead of requiring a MOVE signal on that exact frame.',
-    'Slow analog movement now accumulates into a real heading while positional jitter still fails closed.',
-    'It also stops unrelated ReAction Auto Target or Action Stack settings from silently refusing the exact reviewed self dash; only a stack that can actually own the requested dash remains a hard block.',
-    'It also adds configurable public-CC medicine-kit cues: an opening first-spawn countdown and read-only green foreground beacons for bounded localized event-object matches.',
-    'Exact current-client runtime-object detection and live En Avant behavior remain pending in-game confirmation.',
+    'Version 0.42.0.10 fixes an intermittent high-FPS `/seitonenavant` race:',
+    'real movement samples that share one coarse clock timestamp now contribute to the direction instead of clearing it, while stationary samples and positional jitter still fail closed.',
+    '`/seiton debug` now names the exact En Avant readiness blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources.',
+    'The command remains one immediate attempt with no wait, reservation, queue, or retry; live En Avant behavior remains pending in-game confirmation.',
+    'Version 0.42.0.9 improved slow analog sampling, ReAction coexistence, and added configurable public-CC medicine-kit cues.',
     'Version 0.42.0.8 originally added the DNC-only command and its audited one-call boundary without moving the camera or changing a target.',
     'Version 0.42.0.7 fixes the 0.42.0.6 update-load failure where six What''s New bullets exceeded the window''s five-entry contract and aborted plugin construction after the prior version had already unloaded.',
     'Release-note content is now bounded and non-fatal, while Smart Buffer, Turbo, recovery helpers, Smart Action, and CC behavior remain unchanged by the hotfix.',
@@ -11466,8 +11464,15 @@ Assert-Literals $normalizedReadme @(
     'constructs sixteen reviewed request shapes across seventeen ordered selection slots',
     'frame consumption only after final commit, and one committed native request with no fallback or retry.',
     'https://raw.githubusercontent.com/kittenhaswares-ui/SeitonSense/main/repo.json'
-) 'v0.42.0.9 current README En Avant/medicine-kit release plus retained history and safety contract'
+) 'v0.42.0.10 current README En Avant race release plus retained history and safety contract'
 Assert-Literals $normalizedChangelog @(
+    '## 0.42.0.10',
+    'Fixed an intermittent high-FPS `/seitonenavant` race.',
+    'equal timestamps no longer erase a valid heading or hide real displacement.',
+    'Real same-timestamp movement can complete the required two-segment proof, while same-position samples are a no-op and cannot manufacture a direction.',
+    'Expanded `/seiton debug` for directional dashes.',
+    'current/max charges, action cooldown/status, animation lock, cast and queued-action state, recast groups, resources, and adjusted action/recast values.',
+    'still makes at most one immediate En Avant `29430` request and owns no wait, reservation, queue, or retry.',
     '## 0.42.0.9',
     'Fixed `/seitonenavant` input sampling.',
     'It folds one fresh local-position sample into the existing world-displacement observation before resolving the heading',
@@ -11630,7 +11635,7 @@ Assert-Literals $normalizedChangelog @(
     'restricted to the exact current `<t>` duel opponent or striking dummy and treats unavailable CC team-pressure telemetry as known zero',
     'The expanded Wolves'' Den rotation panel now shows the complete seven-map current-to-next deck with local FFXIV duty artwork.',
     'Configuration schema is `43`;'
-) 'v0.42.0.9 release notes and retained v0.42.0.8/v0.42.0.7/v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
+) 'v0.42.0.10 release notes and retained v0.42.0.9/v0.42.0.8/v0.42.0.7/v0.42.0.6/v0.42.0.5/v0.42.0.4/v0.42.0.3/v0.42.0.2/v0.42.0.1/v0.42.0.0/v0.41.0.0/v0.40.0.2/v0.40.0.1/v0.40.0.0/v0.39.0.2/v0.39.0.1/v0.39.0.0/v0.38.0.0 history'
 Assert-Literals $thirdPartyNotices @(
     'PvP Tracker / PvpStats by SaMo (`wrath16/PvpStats`)',
     'https://github.com/wrath16/PvpStats',

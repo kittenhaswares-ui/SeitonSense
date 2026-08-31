@@ -657,6 +657,13 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 ? actionManager->GetRecastGroupDetail(recastGroup)
                 : null;
             var currentCharges = actionManager->GetCurrentCharges(profile.ActionId);
+            var adjustedRecastMilliseconds = ActionManager.GetAdjustedRecastTime(
+                ActionType.Action,
+                profile.ActionId,
+                true);
+            var additionalRecastGroup = actionManager->GetAdditionalRecastGroup(
+                ActionType.Action,
+                profile.ActionId);
             var targetStatus = actionManager->GetActionStatus(
                 ActionType.Action,
                 profile.ActionId,
@@ -679,15 +686,34 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                     BackwardDashRules.MaximumImmediateAnimationLockSeconds ||
                 local.IsCasting ||
                 recast == null ||
-                ActionManager.GetAdjustedRecastTime(
-                    ActionType.Action,
-                    profile.ActionId,
-                    true) != profile.AdjustedRecastMilliseconds ||
+                adjustedRecastMilliseconds != profile.AdjustedRecastMilliseconds ||
                 currentCharges is 0 ||
                 currentCharges > profile.MaximumAccessibleCharges ||
                 targetStatus != 0)
             {
-                RecordRefused($"{profile.Name} is not positively ready for one immediate attempt");
+                var blocker = DescribeDirectionalReadinessBlocker(
+                    profile,
+                    adjustedActionId,
+                    readiness,
+                    local.IsCasting,
+                    recast != null,
+                    adjustedRecastMilliseconds,
+                    currentCharges,
+                    targetStatus);
+                RecordRefused(
+                    $"{profile.Name} readiness blocked ({blocker}): " +
+                    $"charges={currentCharges}/{profile.MaximumAccessibleCharges}," +
+                    $"off-cd={readiness.IsActionOffCooldown},status={targetStatus}," +
+                    $"lock={readiness.AnimationLockSeconds:0.000}," +
+                    $"cast={local.IsCasting}/{readiness.CastActionId}," +
+                    $"queue={readiness.ActionQueued}/{readiness.QueuedActionId}," +
+                    $"recast={recastGroup}/{profile.RuntimeRecastGroupIndex}/" +
+                    $"{(recast != null && recast->IsActive)}," +
+                    $"additional={additionalRecastGroup}/sheet-{profile.SheetAdditionalCooldownGroup}," +
+                    $"resources={readiness.ResourceStatus}," +
+                    $"adjusted={adjustedActionId}/{readiness.AdjustedActionId}/" +
+                    $"{profile.ActionId},recast-ms={adjustedRecastMilliseconds}/" +
+                    $"{profile.AdjustedRecastMilliseconds}");
                 return;
             }
 
@@ -894,6 +920,53 @@ internal sealed unsafe class PanicShukuchiService : IDisposable
                 "Seiton Sense immediate directional {Command} command failed closed.",
                 command);
         }
+    }
+
+    private static string DescribeDirectionalReadinessBlocker(
+        ReviewedBackwardDashProfile profile,
+        uint adjustedActionId,
+        ClientActionAttemptFingerprint readiness,
+        bool localIsCasting,
+        bool recastAvailable,
+        int adjustedRecastMilliseconds,
+        uint currentCharges,
+        uint targetStatus)
+    {
+        if (adjustedActionId != profile.ActionId) return "adjusted-action";
+        if (!readiness.Captured) return "snapshot-unavailable";
+        if (readiness.ActionQueued) return "action-queued";
+        if (!float.IsFinite(readiness.AnimationLockSeconds) ||
+            readiness.AnimationLockSeconds < 0f)
+        {
+            return "invalid-animation-lock";
+        }
+
+        if (readiness.AnimationLockSeconds >
+            HeldActionRetryRules.MaximumNearQueueableAnimationLockSeconds)
+        {
+            return "native-boundary-animation-lock";
+        }
+
+        if (readiness.CastActionId != 0) return "native-cast-active";
+        if (readiness.AdjustedActionId != profile.ActionId)
+            return "boundary-adjusted-action";
+        if (!readiness.IsActionOffCooldown) return "cooldown-or-internal-recast";
+        if (readiness.ResourceStatus != 0) return "resources";
+        if (readiness.AnimationLockSeconds >
+            BackwardDashRules.MaximumImmediateAnimationLockSeconds)
+        {
+            return "immediate-animation-lock";
+        }
+
+        if (localIsCasting) return "local-casting";
+        if (!recastAvailable) return "recast-group";
+        if (adjustedRecastMilliseconds != profile.AdjustedRecastMilliseconds)
+            return "adjusted-recast";
+        if (currentCharges == 0) return "no-charges";
+        if (currentCharges > profile.MaximumAccessibleCharges)
+            return "invalid-charge-count";
+        if (targetStatus != 0) return $"action-status-{targetStatus}";
+        return "unknown";
     }
 
     private void SetRotationDetour(GameObject* actor, float requestedHeading)

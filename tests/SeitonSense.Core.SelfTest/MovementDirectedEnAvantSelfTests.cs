@@ -140,10 +140,33 @@ internal static class MovementDirectedEnAvantSelfTests
         Equal(0, delayed.ConsistentSegmentCount, "sample-gap discontinuity starts a new baseline");
         False(delayed.HasDirection, "sample-gap discontinuity clears the old direction");
 
-        var duplicateClock = MovementDirectedEnAvantRules.Observe(
+        var duplicateStationaryClock = MovementDirectedEnAvantRules.Observe(
             fresh,
-            Sample(0f, 0.09f, 1_300));
-        False(duplicateClock.HasDirection, "duplicate observation time breaks continuity");
+            Sample(0f, 0.06f, 1_300));
+        True(
+            duplicateStationaryClock.HasDirection,
+            "same-timestamp stationary sampling preserves a fresh proven direction");
+
+        var sameTickMovement = MovementDirectedEnAvantRules.Observe(
+            MovementDirectedEnAvantState.Initial,
+            Sample(0f, 0f, 3_000));
+        sameTickMovement = MovementDirectedEnAvantRules.Observe(
+            sameTickMovement,
+            Sample(0f, 0.015f, 3_000));
+        sameTickMovement = MovementDirectedEnAvantRules.Observe(
+            sameTickMovement,
+            Sample(0f, 0.030f, 3_000));
+        True(
+            sameTickMovement.HasDirection,
+            "two real same-timestamp displacements prove movement at high FPS");
+        True(
+            MovementDirectedEnAvantRules.TryCapture(
+                sameTickMovement,
+                fingerprint,
+                3_000,
+                out _),
+            "same-timestamp high-FPS movement is immediately capturable");
+
         var regressedClock = MovementDirectedEnAvantRules.Observe(
             fresh,
             Sample(0f, 0.09f, 1_299));

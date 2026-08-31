@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.42.0.10
+
+- Fixed an intermittent high-FPS `/seitonenavant` race. The movement sampler's
+  monotonic clock can legitimately repeat across several framework frames;
+  equal timestamps no longer erase a valid heading or hide real displacement.
+- The command-frame sample is now always folded through the pure movement
+  policy. Real same-timestamp movement can complete the required two-segment
+  proof, while same-position samples are a no-op and cannot manufacture a
+  direction. Regressed clocks, stale motion, jitter, teleports, and identity
+  drift still fail closed.
+- Expanded `/seiton debug` for directional dashes. A refusal now identifies the
+  first exact blocker and reports current/max charges, action cooldown/status,
+  animation lock, cast and queued-action state, recast groups, resources, and
+  adjusted action/recast values.
+- Dispatch behavior is unchanged: `/seitonenavant` still makes at most one
+  immediate En Avant `29430` request and owns no wait, reservation, queue, or
+  retry. Configuration schema remains `48`; live-game confirmation remains
+  pending.
+
 ## 0.42.0.9
 
 - Fixed `/seitonenavant` input sampling. The explicit DNC command no longer

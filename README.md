@@ -2,17 +2,16 @@
 
 Seiton Sense is a local PvP awareness HUD that combines pressure tracking,
 stable native-nameplate cues, personal warnings, job tools, one-shot macro
-assistance, and target highlights. Version 0.42.0.9 fixes `/seitonenavant` so
-one explicit DNC macro press uses fresh actual character displacement instead
-of requiring a MOVE signal on that exact frame. Slow analog movement now
-accumulates into a real heading while positional jitter still fails closed. It
-also stops unrelated ReAction Auto Target or Action Stack settings from
-silently refusing the exact reviewed self dash; only a stack that can actually
-own the requested dash remains a hard block. It
-also adds configurable public-CC medicine-kit cues: an opening first-spawn
-countdown and read-only green foreground beacons for bounded localized
-event-object matches. Exact current-client runtime-object detection and live En
-Avant behavior remain pending in-game confirmation. Version 0.42.0.8 originally
+assistance, and target highlights. Version 0.42.0.10 fixes an intermittent
+high-FPS `/seitonenavant` race: real movement samples that share one coarse
+clock timestamp now contribute to the direction instead of clearing it, while
+stationary samples and positional jitter still fail closed. `/seiton debug`
+now names the exact En Avant readiness blocker and reports charges,
+cooldown/status, animation lock, cast, queue, and resources. The command remains
+one immediate attempt with no wait, reservation, queue, or retry; live En Avant
+behavior remains pending in-game confirmation. Version 0.42.0.9 improved slow
+analog sampling, ReAction coexistence, and added configurable public-CC
+medicine-kit cues. Version 0.42.0.8 originally
 added the DNC-only command and its audited one-call boundary without moving the
 camera or changing a target. Version 0.42.0.7 fixes the 0.42.0.6
 update-load failure where six What's New bullets exceeded the window's

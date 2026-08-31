@@ -13,7 +13,7 @@ namespace SeitonSense.Plugin;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string CurrentReleaseVersion = "0.42.0.9";
+    private const string CurrentReleaseVersion = "0.42.0.10";
     private const string Command = "/seiton";
     private const string AliasCommand = "/ssense";
     private const string NearAssistCommand = "/nearassist";
@@ -422,11 +422,10 @@ public sealed class Plugin : IDalamudPlugin
         whatsNew = new WhatsNewWindow(
             CurrentReleaseVersion,
             [
-                "Fixed /seitonenavant so the command captures fresh actual character displacement instead of depending on a MOVE signal on the exact macro frame.",
-                "Slow controller or analog movement now accumulates until it forms a real heading; tiny positional jitter still produces no dash.",
-                "Unrelated ReAction Auto Target or Action Stacks no longer block a reviewed self dash; exact or wildcard ownership still fails closed.",
-                "Added public-CC medicine-kit cues: a first-spawn countdown plus optional green through-terrain beacons, with separate visibility toggles and scale.",
-                "The medicine-kit scan is read-only and bounded. Live confirmation of the current client's localized runtime objects and the En Avant paths remains pending.",
+                "Fixed an intermittent high-FPS /seitonenavant race where several real movement frames could share one clock timestamp and erase the detected direction.",
+                "Real same-timestamp displacement now contributes to the heading, while stationary samples, jitter, stale movement, and identity changes remain blocked.",
+                "/seiton debug now names the exact En Avant readiness blocker and reports charges, cooldown/status, animation lock, cast, queue, and resources.",
+                "The command remains one immediate En Avant attempt with no wait, reservation, queue, or retry. Live in-game confirmation remains pending.",
             ],
             () => !string.Equals(
                 configuration.LastSeenReleaseNotesVersion,

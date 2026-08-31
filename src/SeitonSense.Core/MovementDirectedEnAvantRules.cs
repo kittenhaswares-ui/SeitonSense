@@ -107,7 +107,11 @@ public static class MovementDirectedEnAvantRules
 
         var elapsed = sample.ObservedAtMilliseconds -
                       previous.LastSample.ObservedAtMilliseconds;
-        if (elapsed <= 0 || elapsed > MaximumSampleGapMilliseconds)
+        // The runtime clock can be coarser than a high-FPS framework loop, so
+        // multiple valid position observations can share one timestamp.
+        // Only a clock regression is discontinuous; equal-time displacement
+        // is still real movement and must not erase the accumulated heading.
+        if (elapsed < 0 || elapsed > MaximumSampleGapMilliseconds)
             return Baseline(sample);
 
         var deltaX = (double)sample.PositionX - previous.LastSample.PositionX;
